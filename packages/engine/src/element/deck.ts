@@ -36,5 +36,10 @@ export class Deck<G extends Game = any, P extends Player = any> extends Space<G,
 
     // Decks default to stacking order (new items go on top)
     this.setOrder('stacking');
+
+    // Default layout: stacked with heavy overlap (deck appearance)
+    this.$direction = 'vertical';
+    this.$overlap = 0.95;
+    this.$align = 'center';
   }
 }

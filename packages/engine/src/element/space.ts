@@ -14,6 +14,16 @@ export type ElementEventHandler<T extends GameElement> = {
 };
 
 /**
+ * Layout direction for Space children
+ */
+export type LayoutDirection = 'horizontal' | 'vertical';
+
+/**
+ * Alignment options for Space children
+ */
+export type LayoutAlignment = 'start' | 'center' | 'end' | 'stretch';
+
+/**
  * Spaces are static areas of the game board. They act as containers for Pieces
  * and other elements. Spaces are created during setup and their structure
  * doesn't change during play (though their contents do).
@@ -22,9 +32,55 @@ export type ElementEventHandler<T extends GameElement> = {
  * The Space itself is always visible - only the contents get the visibility rules.
  * Children inherit the zone visibility unless they explicitly override it.
  *
+ * Layout properties: Spaces can define how their children are arranged using
+ * $ prefixed properties that AutoUI reads for rendering.
+ *
  * Examples: a deck, a player's hand, a discard pile, a board region
  */
 export class Space<G extends Game = any, P extends Player = any> extends GameElement<G, P> {
+  // ============================================
+  // Layout Properties (for AutoUI rendering)
+  // ============================================
+
+  /**
+   * Layout direction for children
+   * @default 'horizontal'
+   */
+  $direction?: LayoutDirection;
+
+  /**
+   * Gap between children (CSS value like '8px' or '0.5rem')
+   */
+  $gap?: string;
+
+  /**
+   * Overlap ratio for stacked elements (0-1)
+   * 0 = no overlap, 0.5 = 50% overlap, 0.9 = 90% overlap (deck-like)
+   */
+  $overlap?: number;
+
+  /**
+   * Whether to fan children (like a hand of cards)
+   * When true, children are rotated around a central point
+   */
+  $fan?: boolean;
+
+  /**
+   * Fan angle in degrees for the entire spread
+   * @default 30
+   */
+  $fanAngle?: number;
+
+  /**
+   * Alignment of children within the space
+   * @default 'center'
+   */
+  $align?: LayoutAlignment;
+
+  // ============================================
+  // Internal State
+  // ============================================
+
   /** Event handlers for enter/exit events */
   private _eventHandlers: {
     enter: ElementEventHandler<GameElement>[];

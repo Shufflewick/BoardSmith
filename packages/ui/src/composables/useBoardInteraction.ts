@@ -56,6 +56,15 @@ export interface BoardInteractionState {
 
   /** Callback to invoke when a valid element is clicked */
   onElementSelect: ((elementId: number) => void) | null;
+
+  /** Currently dragged element (for drag-and-drop actions) */
+  draggedElement: ElementRef | null;
+
+  /** Valid drop targets for the dragged element */
+  dropTargets: ValidElement[];
+
+  /** Whether drag mode is active */
+  isDragging: boolean;
 }
 
 /**
@@ -88,6 +97,24 @@ export interface BoardInteractionActions {
 
   /** Trigger element selection (called by board when clicking a valid element) */
   triggerElementSelect: (element: { id?: number; name?: string; notation?: string }) => void;
+
+  /** Start dragging an element (called by board when drag starts) */
+  startDrag: (element: ElementRef) => void;
+
+  /** End drag operation (called when drag ends or is cancelled) */
+  endDrag: () => void;
+
+  /** Set valid drop targets for current drag operation */
+  setDropTargets: (targets: ValidElement[], onDrop: (elementId: number) => void) => void;
+
+  /** Check if an element is a valid drop target */
+  isDropTarget: (element: { id?: number; name?: string; notation?: string }) => boolean;
+
+  /** Check if an element is the currently dragged element */
+  isDraggedElement: (element: { id?: number; name?: string; notation?: string }) => boolean;
+
+  /** Trigger drop on target (called by board when element is dropped) */
+  triggerDrop: (target: { id?: number; name?: string; notation?: string }) => void;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -103,7 +130,13 @@ export function createBoardInteraction(): BoardInteraction {
     selectedElement: null,
     validElements: [],
     onElementSelect: null,
+    draggedElement: null,
+    dropTargets: [],
+    isDragging: false,
   });
+
+  // Callback for when element is dropped on valid target
+  let onDropCallback: ((elementId: number) => void) | null = null;
 
   function matchesRef(element: { id?: number; name?: string; notation?: string }, ref: ElementRef): boolean {
     if (ref.id !== undefined && element.id === ref.id) return true;
@@ -137,6 +170,10 @@ export function createBoardInteraction(): BoardInteraction {
       state.selectedElement = null;
       state.validElements = [];
       state.onElementSelect = null;
+      state.draggedElement = null;
+      state.dropTargets = [];
+      state.isDragging = false;
+      onDropCallback = null;
     },
 
     isHighlighted(element) {
@@ -166,6 +203,45 @@ export function createBoardInteraction(): BoardInteraction {
       const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
       if (validElem && state.onElementSelect) {
         state.onElementSelect(validElem.id);
+      }
+    },
+
+    startDrag(element) {
+      state.draggedElement = element;
+      state.isDragging = true;
+      // Clear hover state when starting drag
+      state.hoveredChoice = null;
+    },
+
+    endDrag() {
+      state.draggedElement = null;
+      state.isDragging = false;
+      state.dropTargets = [];
+      onDropCallback = null;
+    },
+
+    setDropTargets(targets, onDrop) {
+      state.dropTargets = targets;
+      onDropCallback = onDrop;
+    },
+
+    isDropTarget(element) {
+      if (!state.isDragging) return false;
+      return state.dropTargets.some(dt => matchesRef(element, dt.ref));
+    },
+
+    isDraggedElement(element) {
+      if (!state.draggedElement) return false;
+      return matchesRef(element, state.draggedElement);
+    },
+
+    triggerDrop(target) {
+      // Find the matching drop target and trigger the callback
+      const dropTarget = state.dropTargets.find(dt => matchesRef(target, dt.ref));
+      if (dropTarget && onDropCallback) {
+        onDropCallback(dropTarget.id);
+        // End drag after successful drop
+        this.endDrag();
       }
     },
   };

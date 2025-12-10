@@ -8,6 +8,8 @@ export {
   Deck,
   Grid,
   GridCell,
+  HexGrid,
+  HexCell,
   Game,
   ElementCollection,
 } from './element/index.js';
@@ -23,6 +25,10 @@ export type {
   GameOptions,
   GamePhase,
   ElementLayout,
+  HexOrientation,
+  HexCoordSystem,
+  LayoutDirection,
+  LayoutAlignment,
 } from './element/index.js';
 
 // Player system

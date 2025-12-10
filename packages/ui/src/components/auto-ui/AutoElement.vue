@@ -15,7 +15,7 @@
  * - Highlights elements when hovered in ActionPanel
  * - Click to select and filter ActionPanel choices
  */
-import { computed, inject, provide, type Ref } from 'vue';
+import { computed, inject, provide, ref, watchEffect, type Ref } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
 
 export interface GameElement {
@@ -95,7 +95,10 @@ const elementType = computed(() => {
   // Use $layout property set by engine element classes
   // Grid, HexGrid, etc. set this explicitly - NO GUESSING
   if (layout === 'grid') return 'board';
-  if (layout === 'hex-grid') return 'hex-board'; // For future implementation
+  if (layout === 'hex-grid') return 'hex-board';
+
+  // HexCell detection via $type
+  if (type === 'hex-cell') return 'hex-cell';
 
   // GridCell children are positioned cells
   // They have numeric coordinates but don't render as boards themselves
@@ -131,6 +134,25 @@ const elementNotation = computed(() => {
   // The game designer sets element names - use them directly
   // Examples: "a1", "b6", "center", "home-base", etc.
   return props.element.name || null;
+});
+
+// Drag state
+const isDragged = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDraggedElement({
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value || undefined,
+  });
+});
+
+const isDropTarget = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDropTarget({
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value || undefined,
+  });
 });
 
 // Board interaction states
@@ -192,6 +214,61 @@ const childCountDisplay = computed(() => {
     return props.element.childCount;
   }
   return visibleChildren.value.length;
+});
+
+// Layout properties from element attributes
+const layoutProps = computed(() => {
+  const attrs = props.element.attributes ?? {};
+  return {
+    direction: attrs.$direction as 'horizontal' | 'vertical' | undefined,
+    gap: attrs.$gap as string | undefined,
+    overlap: attrs.$overlap as number | undefined,
+    fan: attrs.$fan as boolean | undefined,
+    fanAngle: attrs.$fanAngle as number | undefined,
+    align: attrs.$align as 'start' | 'center' | 'end' | 'stretch' | undefined,
+  };
+});
+
+// Compute layout styles for containers
+const layoutStyles = computed(() => {
+  const { direction, gap, overlap, fan, fanAngle, align } = layoutProps.value;
+  const styles: Record<string, string> = {};
+
+  // Direction determines flex-direction
+  if (direction) {
+    styles['--layout-direction'] = direction === 'vertical' ? 'column' : 'row';
+  }
+
+  // Gap between children
+  if (gap) {
+    styles['--layout-gap'] = gap;
+  }
+
+  // Overlap for stacked elements
+  if (overlap !== undefined) {
+    // Overlap as negative margin percentage (based on element width/height)
+    const overlapPercent = Math.round(overlap * 100);
+    styles['--layout-overlap'] = `${overlapPercent}%`;
+  }
+
+  // Fan properties
+  if (fan) {
+    styles['--layout-fan'] = '1';
+    styles['--layout-fan-angle'] = `${fanAngle ?? 30}deg`;
+  }
+
+  // Alignment
+  if (align) {
+    const alignMap: Record<string, string> = {
+      start: 'flex-start',
+      center: 'center',
+      end: 'flex-end',
+      stretch: 'stretch',
+    };
+    styles['--layout-align'] = alignMap[align] || 'center';
+  }
+
+  return styles;
 });
 
 function handleClick(event: MouseEvent) {
@@ -299,6 +376,204 @@ const boardSize = computed(() => {
     columns: maxSecond + 1,
   };
 });
+
+// Hex grid properties
+const hexGridProps = computed(() => {
+  const attrs = props.element.attributes ?? {};
+  return {
+    orientation: (attrs.$hexOrientation as 'flat' | 'pointy') ?? 'pointy',
+    coordSystem: (attrs.$coordSystem as 'offset' | 'axial' | 'cube') ?? 'axial',
+    qCoord: (attrs.$qCoord as string) ?? 'q',
+    rCoord: (attrs.$rCoord as string) ?? 'r',
+    sCoord: attrs.$sCoord as string | undefined,
+    hexSize: (attrs.$hexSize as number) ?? 50,
+  };
+});
+
+// Calculate hex cell position in pixels based on axial coordinates
+const hexCellPosition = computed(() => {
+  if (elementType.value !== 'hex-cell') return null;
+
+  const attrs = props.element.attributes ?? {};
+  // Get coordinate names from parent (injected)
+  const hexProps = inject<{ qCoord: string; rCoord: string; hexSize: number; orientation: 'flat' | 'pointy' } | null>('hexGridProps', null);
+  if (!hexProps) return null;
+
+  const q = attrs[hexProps.qCoord] as number ?? 0;
+  const r = attrs[hexProps.rCoord] as number ?? 0;
+  const size = hexProps.hexSize;
+  const orientation = hexProps.orientation;
+
+  // Axial to pixel conversion
+  // https://www.redblobgames.com/grids/hexagons/#hex-to-pixel
+  let x: number, y: number;
+
+  if (orientation === 'pointy') {
+    // Pointy-top hex
+    x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r);
+    y = size * (3 / 2 * r);
+  } else {
+    // Flat-top hex
+    x = size * (3 / 2 * q);
+    y = size * (Math.sqrt(3) / 2 * q + Math.sqrt(3) * r);
+  }
+
+  return { x, y };
+});
+
+// Provide hex grid props to children
+const hexPropsProvided = ref(false);
+watchEffect(() => {
+  if (elementType.value === 'hex-board' && !hexPropsProvided.value) {
+    provide('hexGridProps', hexGridProps.value);
+    hexPropsProvided.value = true;
+  }
+});
+
+// Calculate hex grid bounds (for SVG viewBox)
+const hexGridBounds = computed(() => {
+  if (elementType.value !== 'hex-board' || !visibleChildren.value.length) {
+    return { minX: 0, minY: 0, width: 400, height: 400 };
+  }
+
+  const { qCoord, rCoord, hexSize, orientation } = hexGridProps.value;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+  for (const child of visibleChildren.value) {
+    const attrs = child.attributes ?? {};
+    const q = (attrs[qCoord] as number) ?? 0;
+    const r = (attrs[rCoord] as number) ?? 0;
+
+    let x: number, y: number;
+    if (orientation === 'pointy') {
+      x = hexSize * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r);
+      y = hexSize * (3 / 2 * r);
+    } else {
+      x = hexSize * (3 / 2 * q);
+      y = hexSize * (Math.sqrt(3) / 2 * q + Math.sqrt(3) * r);
+    }
+
+    minX = Math.min(minX, x - hexSize);
+    maxX = Math.max(maxX, x + hexSize);
+    minY = Math.min(minY, y - hexSize);
+    maxY = Math.max(maxY, y + hexSize);
+  }
+
+  // Add padding
+  const padding = hexSize;
+  return {
+    minX: minX - padding,
+    minY: minY - padding,
+    width: maxX - minX + padding * 2,
+    height: maxY - minY + padding * 2,
+  };
+});
+
+// Generate hex polygon points for SVG
+const hexPoints = computed(() => {
+  const size = hexGridProps.value.hexSize;
+  const orientation = hexGridProps.value.orientation;
+  const points: string[] = [];
+
+  for (let i = 0; i < 6; i++) {
+    const angleDeg = orientation === 'pointy' ? 60 * i - 30 : 60 * i;
+    const angleRad = Math.PI / 180 * angleDeg;
+    const x = size * Math.cos(angleRad);
+    const y = size * Math.sin(angleRad);
+    points.push(`${x},${y}`);
+  }
+
+  return points.join(' ');
+});
+
+// Helper to get hex position for a child element
+function getHexPosition(child: GameElement): { x: number; y: number } {
+  const attrs = child.attributes ?? {};
+  const { qCoord, rCoord, hexSize, orientation } = hexGridProps.value;
+
+  const q = (attrs[qCoord] as number) ?? 0;
+  const r = (attrs[rCoord] as number) ?? 0;
+
+  let x: number, y: number;
+  if (orientation === 'pointy') {
+    x = hexSize * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r);
+    y = hexSize * (3 / 2 * r);
+  } else {
+    x = hexSize * (3 / 2 * q);
+    y = hexSize * (Math.sqrt(3) / 2 * q + Math.sqrt(3) * r);
+  }
+
+  return { x, y };
+}
+
+// Handle click on hex cell
+function handleHexClick(child: GameElement) {
+  if (!boardInteraction) return;
+
+  const isSelectable = boardInteraction.isSelectableElement({
+    id: child.id,
+    name: child.name,
+  });
+
+  if (isSelectable) {
+    boardInteraction.triggerElementSelect({
+      id: child.id,
+      name: child.name,
+    });
+  } else if (child.name) {
+    boardInteraction.selectElement({
+      id: child.id,
+      name: child.name,
+    });
+  }
+}
+
+// Drag and drop handlers
+function handleDragStart(event: DragEvent) {
+  if (!boardInteraction || !isActionSelectable.value) {
+    event.preventDefault();
+    return;
+  }
+
+  event.dataTransfer?.setData('boardsmith/element', JSON.stringify({
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value,
+  }));
+  event.dataTransfer!.effectAllowed = 'move';
+
+  boardInteraction.startDrag({
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value || undefined,
+  });
+}
+
+function handleDragEnd() {
+  if (boardInteraction?.isDragging) {
+    boardInteraction.endDrag();
+  }
+}
+
+function handleDragOver(event: DragEvent) {
+  if (!boardInteraction?.isDragging) return;
+  if (!isDropTarget.value) return;
+
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = 'move';
+}
+
+function handleDrop(event: DragEvent) {
+  if (!boardInteraction?.isDragging) return;
+
+  event.preventDefault();
+
+  boardInteraction.triggerDrop({
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value || undefined,
+  });
+}
 </script>
 
 <template>
@@ -323,8 +598,15 @@ const boardSize = computed(() => {
     <template v-if="elementType === 'card'">
       <div
         class="card-container"
-        :class="{ 'action-selectable': isActionSelectable }"
+        :class="{
+          'action-selectable': isActionSelectable,
+          'is-draggable': isActionSelectable,
+          'is-dragging': isDragged,
+        }"
+        :draggable="isActionSelectable"
         @click="handleClick"
+        @dragstart="handleDragStart"
+        @dragend="handleDragEnd"
       >
         <div class="card-face">
           {{ displayLabel }}
@@ -334,14 +616,14 @@ const boardSize = computed(() => {
 
     <!-- HAND RENDERING -->
     <template v-else-if="elementType === 'hand'">
-      <div class="hand-container">
+      <div class="hand-container" :style="layoutStyles">
         <div class="hand-header">
           <span class="hand-label">
             {{ isOwned ? 'Your Hand' : `${playerName}'s Hand` }}
           </span>
           <span class="hand-count">{{ childCountDisplay }} cards</span>
         </div>
-        <div class="hand-cards">
+        <div class="hand-cards" :class="{ 'has-fan': layoutProps.fan, 'has-overlap': layoutProps.overlap !== undefined }">
           <template v-if="visibleChildren.length > 0">
             <AutoElement
               v-for="(child, index) in visibleChildren"
@@ -368,25 +650,26 @@ const boardSize = computed(() => {
 
     <!-- DECK RENDERING -->
     <template v-else-if="elementType === 'deck'">
-      <div class="deck-container">
+      <div class="deck-container" :style="layoutStyles">
         <div class="deck-header">
           <span class="deck-label">{{ displayLabel }}</span>
           <span class="deck-count" v-if="childCountDisplay">{{ childCountDisplay }} cards</span>
         </div>
         <!-- Show stack visualization when contents hidden or count-only -->
         <template v-if="visibleChildren.length === 0 && childCountDisplay > 0">
-          <div class="deck-stack">
+          <div class="deck-stack" :class="{ 'has-overlap': layoutProps.overlap !== undefined }">
             <div v-for="i in Math.min(childCountDisplay, 5)" :key="i" class="deck-card" :style="{ '--stack-index': i }"></div>
           </div>
         </template>
         <!-- Show actual cards when visible -->
         <template v-else-if="visibleChildren.length > 0">
-          <div class="deck-cards">
+          <div class="deck-cards" :class="{ 'has-overlap': layoutProps.overlap !== undefined }">
             <AutoElement
-              v-for="child in visibleChildren"
+              v-for="(child, index) in visibleChildren"
               :key="child.id"
               :element="child"
               :depth="depth + 1"
+              :style="{ '--card-index': index }"
               @element-click="handleChildClick"
             />
           </div>
@@ -437,12 +720,15 @@ const boardSize = computed(() => {
           'has-children': visibleChildren.length > 0,
           'is-clickable': visibleChildren.length > 0,
           'action-selectable': isActionSelectable,
+          'is-drop-target': isDropTarget,
         }"
         :style="parentGridCoords ? {
           'grid-row': (element.attributes?.[parentGridCoords.rowCoord] as number) + 1,
           'grid-column': (element.attributes?.[parentGridCoords.colCoord] as number) + 1,
         } : {}"
         @click.stop="handleCellClick"
+        @dragover="handleDragOver"
+        @drop="handleDrop"
         :title="elementNotation || undefined"
       >
         <!-- Notation label shown on hover -->
@@ -457,17 +743,105 @@ const boardSize = computed(() => {
       </div>
     </template>
 
+    <!-- HEX BOARD RENDERING -->
+    <template v-else-if="elementType === 'hex-board'">
+      <div class="hex-board-container">
+        <div class="hex-board-header">{{ displayLabel }}</div>
+        <svg
+          class="hex-board"
+          :viewBox="`${hexGridBounds.minX} ${hexGridBounds.minY} ${hexGridBounds.width} ${hexGridBounds.height}`"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <!-- Render hex cells as groups with polygon + content -->
+          <g
+            v-for="child in visibleChildren"
+            :key="child.id"
+            class="hex-cell-group"
+            :transform="`translate(${getHexPosition(child).x}, ${getHexPosition(child).y})`"
+          >
+            <polygon
+              :points="hexPoints"
+              class="hex-polygon"
+              :class="{
+                'has-children': (child.children?.length ?? 0) > 0,
+                'action-selectable': boardInteraction?.isSelectableElement({ id: child.id, name: child.name }),
+                'is-board-highlighted': boardInteraction?.isHighlighted({ id: child.id, name: child.name }),
+                'is-board-selected': boardInteraction?.isSelected({ id: child.id, name: child.name }),
+              }"
+              @click="handleHexClick(child)"
+            />
+            <!-- Child content centered in hex -->
+            <foreignObject
+              v-if="child.children?.length"
+              :x="-hexGridProps.hexSize * 0.6"
+              :y="-hexGridProps.hexSize * 0.6"
+              :width="hexGridProps.hexSize * 1.2"
+              :height="hexGridProps.hexSize * 1.2"
+              class="hex-content"
+            >
+              <div class="hex-content-wrapper">
+                <AutoElement
+                  v-for="grandchild in child.children"
+                  :key="grandchild.id"
+                  :element="grandchild"
+                  :depth="depth + 2"
+                  @element-click="handleChildClick"
+                />
+              </div>
+            </foreignObject>
+            <!-- Cell label -->
+            <text
+              v-if="child.name"
+              class="hex-label"
+              text-anchor="middle"
+              dominant-baseline="middle"
+              :y="hexGridProps.hexSize * 0.7"
+            >{{ child.name }}</text>
+          </g>
+        </svg>
+      </div>
+    </template>
+
+    <!-- HEX CELL RENDERING (standalone, outside SVG context) -->
+    <template v-else-if="elementType === 'hex-cell'">
+      <div
+        class="hex-cell"
+        :class="{
+          'has-children': visibleChildren.length > 0,
+          'action-selectable': isActionSelectable,
+        }"
+        @click.stop="handleCellClick"
+      >
+        <AutoElement
+          v-for="child in visibleChildren"
+          :key="child.id"
+          :element="child"
+          :depth="depth + 1"
+          @element-click="handleChildClick"
+        />
+      </div>
+    </template>
+
     <!-- LEAF ELEMENT RENDERING -->
     <!-- Clicks on leaf elements bubble to parent grid-cell for selection -->
     <template v-else-if="elementType === 'piece'">
-      <div class="piece">
+      <div
+        class="piece"
+        :class="{
+          'is-draggable': isActionSelectable,
+          'is-dragging': isDragged,
+        }"
+        :draggable="isActionSelectable"
+        @dragstart="handleDragStart"
+        @dragend="handleDragEnd"
+      >
         {{ displayLabel }}
       </div>
     </template>
 
     <!-- GENERIC SPACE RENDERING -->
     <template v-else>
-      <div class="space-container">
+      <div class="space-container" :style="layoutStyles">
         <div class="space-header">
           <span class="space-label">
             <template v-if="props.element.attributes?.player">
@@ -479,12 +853,13 @@ const boardSize = computed(() => {
           </span>
           <span v-if="childCountDisplay > 0" class="space-count">({{ childCountDisplay }})</span>
         </div>
-        <div v-if="visibleChildren.length > 0" class="space-children">
+        <div v-if="visibleChildren.length > 0" class="space-children" :class="{ 'has-overlap': layoutProps.overlap !== undefined, 'has-fan': layoutProps.fan }">
           <AutoElement
-            v-for="child in visibleChildren"
+            v-for="(child, index) in visibleChildren"
             :key="child.id"
             :element="child"
             :depth="depth + 1"
+            :style="{ '--card-index': index, '--card-count': visibleChildren.length }"
             @element-click="handleChildClick"
           />
         </div>
@@ -610,18 +985,41 @@ const boardSize = computed(() => {
 
 .hand-cards {
   display: flex;
-  gap: 8px;
+  gap: var(--layout-gap, 8px);
   flex-wrap: wrap;
   min-height: 90px;
+  flex-direction: var(--layout-direction, row);
+  align-items: var(--layout-align, center);
+  justify-content: var(--layout-align, center);
+}
+
+/* Overlap layout - negative margins based on overlap percentage */
+.hand-cards.has-overlap .hand-card {
+  margin-right: calc(-1 * var(--layout-overlap, 50%) * 0.7); /* 70px card width * overlap */
+}
+
+.hand-cards.has-overlap .hand-card:last-child {
+  margin-right: 0;
+}
+
+/* Fan layout - rotates cards around a pivot point */
+.hand-cards.has-fan .hand-card {
+  --fan-angle: var(--layout-fan-angle, 30deg);
+  --half-count: calc((var(--card-count, 1) - 1) / 2);
+  --angle-step: calc(var(--fan-angle) / max(var(--card-count, 1) - 1, 1));
+  --rotation: calc((var(--card-index, 0) - var(--half-count)) * var(--angle-step));
+  transform: rotate(var(--rotation));
+  transform-origin: center 150%;
+  transition: transform 0.2s ease;
+}
+
+.hand-cards.has-fan .hand-card:hover {
+  transform: rotate(var(--rotation)) translateY(-10px);
+  z-index: 10;
 }
 
 .hand-card {
-  /* Fan effect for cards */
-  margin-right: -20px;
-}
-
-.hand-card:last-child {
-  margin-right: 0;
+  /* Default - no overlap */
 }
 
 .card-back-small {
@@ -689,9 +1087,19 @@ const boardSize = computed(() => {
 
 .deck-cards {
   display: flex;
-  gap: 4px;
+  gap: var(--layout-gap, 4px);
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: var(--layout-align, center);
+  flex-direction: var(--layout-direction, row);
+}
+
+/* Deck overlap layout - stacked appearance */
+.deck-cards.has-overlap > * {
+  margin-top: calc(-1 * var(--layout-overlap, 95%) * 0.98); /* 98px card height * overlap */
+}
+
+.deck-cards.has-overlap > *:first-child {
+  margin-top: 0;
 }
 
 .empty-deck {
@@ -805,6 +1213,116 @@ const boardSize = computed(() => {
   opacity: 1;
 }
 
+/* HEX BOARD STYLES */
+.hex-board-container {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.hex-board-header {
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+.hex-board {
+  width: 100%;
+  max-height: 500px;
+  overflow: visible;
+}
+
+.hex-cell-group {
+  cursor: pointer;
+}
+
+.hex-polygon {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.3);
+  stroke-width: 1.5;
+  transition: all 0.15s ease;
+}
+
+.hex-polygon:hover {
+  fill: rgba(0, 217, 255, 0.2);
+  stroke: rgba(0, 217, 255, 0.6);
+}
+
+.hex-polygon.has-children {
+  fill: rgba(255, 255, 255, 0.15);
+}
+
+.hex-polygon.action-selectable {
+  fill: rgba(46, 204, 113, 0.2);
+  stroke: rgba(46, 204, 113, 0.8);
+  stroke-width: 2;
+  animation: pulse-hex 2s ease-in-out infinite;
+}
+
+.hex-polygon.action-selectable:hover {
+  fill: rgba(46, 204, 113, 0.4);
+}
+
+@keyframes pulse-hex {
+  0%, 100% {
+    stroke: rgba(46, 204, 113, 0.6);
+  }
+  50% {
+    stroke: rgba(46, 204, 113, 1);
+  }
+}
+
+.hex-polygon.is-board-highlighted {
+  fill: rgba(0, 217, 255, 0.3);
+  stroke: rgba(0, 217, 255, 0.8);
+  stroke-width: 2;
+}
+
+.hex-polygon.is-board-selected {
+  fill: rgba(0, 255, 136, 0.3);
+  stroke: rgba(0, 255, 136, 0.8);
+  stroke-width: 2.5;
+}
+
+.hex-content {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.hex-content-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hex-label {
+  font-size: 10px;
+  fill: #666;
+  pointer-events: none;
+}
+
+/* Standalone hex cell (outside SVG) */
+.hex-cell {
+  width: 60px;
+  height: 52px;
+  background: rgba(255, 255, 255, 0.1);
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.hex-cell:hover {
+  background: rgba(0, 217, 255, 0.2);
+}
+
+.hex-cell.action-selectable {
+  background: rgba(46, 204, 113, 0.2);
+  outline: 2px solid rgba(46, 204, 113, 0.6);
+}
+
 /* LEAF ELEMENT STYLES */
 .piece {
   width: 40px;
@@ -849,7 +1367,29 @@ const boardSize = computed(() => {
 .space-children {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--layout-gap, 8px);
+  flex-direction: var(--layout-direction, row);
+  align-items: var(--layout-align, flex-start);
+  justify-content: var(--layout-align, flex-start);
+}
+
+/* Space overlap layout */
+.space-children.has-overlap > * {
+  margin-right: calc(-1 * var(--layout-overlap, 50%) * 70px); /* Assume card-like width */
+}
+
+.space-children.has-overlap > *:last-child {
+  margin-right: 0;
+}
+
+/* Space fan layout */
+.space-children.has-fan > * {
+  --fan-angle: var(--layout-fan-angle, 30deg);
+  --half-count: calc((var(--card-count, 1) - 1) / 2);
+  --angle-step: calc(var(--fan-angle) / max(var(--card-count, 1) - 1, 1));
+  --rotation: calc((var(--card-index, 0) - var(--half-count)) * var(--angle-step));
+  transform: rotate(var(--rotation));
+  transform-origin: center 150%;
 }
 
 /* OWNED ELEMENT STYLES */
@@ -944,5 +1484,65 @@ const boardSize = computed(() => {
 .is-board-selected .cell-notation {
   opacity: 1;
   color: #fff;
+}
+
+/* DRAG AND DROP STYLES */
+.is-draggable {
+  cursor: grab;
+}
+
+.is-draggable:active {
+  cursor: grabbing;
+}
+
+.is-dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+.is-drop-target {
+  background: rgba(0, 255, 136, 0.3) !important;
+  box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.6);
+  animation: pulse-drop-target 1s ease-in-out infinite;
+}
+
+.is-drop-target::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed rgba(0, 255, 136, 0.8);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+@keyframes pulse-drop-target {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(0, 255, 136, 0.8);
+  }
+}
+
+/* Piece dragging styles */
+.piece.is-draggable {
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.piece.is-dragging {
+  opacity: 0.4;
+  transform: scale(0.8);
+  box-shadow: none;
+}
+
+/* Card dragging styles */
+.card-container.is-draggable {
+  cursor: grab;
+}
+
+.card-container.is-dragging {
+  opacity: 0.4;
+  transform: scale(0.95) rotate(5deg);
 }
 </style>

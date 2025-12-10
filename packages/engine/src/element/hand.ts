@@ -32,5 +32,12 @@ export class Hand<G extends Game = any, P extends Player = any> extends Space<G,
     super(ctx);
     // Explicitly set as instance property for serialization
     this.$type = 'hand';
+
+    // Default layout: horizontal fan with overlap
+    this.$direction = 'horizontal';
+    this.$fan = true;
+    this.$fanAngle = 30;
+    this.$overlap = 0.5;
+    this.$align = 'center';
   }
 }
