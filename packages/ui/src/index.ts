@@ -1,8 +1,12 @@
 // Core components
 export { default as GameShell } from './components/GameShell.vue';
 export { default as DebugPanel } from './components/DebugPanel.vue';
+export { default as GameHeader } from './components/GameHeader.vue';
 export { default as GameHistory } from './components/GameHistory.vue';
+export { default as GameLobby } from './components/GameLobby.vue';
 export { default as HamburgerMenu } from './components/HamburgerMenu.vue';
+export { default as PlayersPanel } from './components/PlayersPanel.vue';
+export { default as WaitingRoom } from './components/WaitingRoom.vue';
 
 // Helper components
 export {

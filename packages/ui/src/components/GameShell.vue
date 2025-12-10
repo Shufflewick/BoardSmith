@@ -4,8 +4,11 @@ import { MeepleClient, audioService } from '@boardsmith/client';
 import { useGame } from '@boardsmith/client/vue';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import DebugPanel from './DebugPanel.vue';
+import GameHeader from './GameHeader.vue';
 import GameHistory from './GameHistory.vue';
-import HamburgerMenu from './HamburgerMenu.vue';
+import GameLobby from './GameLobby.vue';
+import PlayersPanel from './PlayersPanel.vue';
+import WaitingRoom from './WaitingRoom.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 
@@ -315,86 +318,48 @@ defineExpose({
 <template>
   <div class="game-shell">
     <!-- LOBBY SCREEN -->
-    <div v-if="currentScreen === 'lobby'" class="game-shell__lobby">
-      <h1>{{ displayName || gameType }}</h1>
-
-      <div class="lobby-form">
-        <div class="form-group">
-          <label>Your Name:</label>
-          <input v-model="playerName" type="text" placeholder="Enter your name" />
-        </div>
-
-        <div class="lobby-actions">
-          <div class="action-box">
-            <h3>Create New Game</h3>
-            <p>Start a new game and invite friends</p>
-            <button @click="createGame" class="btn primary">Create Game</button>
-          </div>
-
-          <div class="divider">OR</div>
-
-          <div class="action-box">
-            <h3>Join Existing Game</h3>
-            <p>Enter the game code from your friend</p>
-            <input v-model="joinGameId" type="text" placeholder="Enter game code" class="game-code-input" />
-            <button @click="joinGame" class="btn secondary">Join Game</button>
-          </div>
-        </div>
-      </div>
-
+    <GameLobby
+      v-if="currentScreen === 'lobby'"
+      :display-name="displayName || gameType"
+      v-model:player-name="playerName"
+      v-model:join-game-id="joinGameId"
+      @create="createGame"
+      @join="joinGame"
+    >
       <slot name="lobby-extra"></slot>
-    </div>
+    </GameLobby>
 
     <!-- WAITING SCREEN -->
-    <div v-if="currentScreen === 'waiting'" class="game-shell__waiting">
-      <h2>Waiting for other players...</h2>
-      <div class="share-code">
-        <p>Share this code with your friends:</p>
-        <div class="code-display">
-          <span class="code">{{ createdGameId }}</span>
-          <button @click="copyGameCode" class="btn small">Copy</button>
-        </div>
-      </div>
-      <button @click="() => { gameId = createdGameId; currentScreen = 'game'; if (createdGameId) updateUrl(createdGameId, 0); }" class="btn secondary">
-        Start Playing
-      </button>
-      <button @click="leaveGame" class="btn text">Cancel</button>
-    </div>
+    <WaitingRoom
+      v-if="currentScreen === 'waiting'"
+      :game-id="createdGameId || ''"
+      @start="() => { gameId = createdGameId; currentScreen = 'game'; if (createdGameId) updateUrl(createdGameId, 0); }"
+      @cancel="leaveGame"
+    />
 
     <!-- GAME SCREEN -->
     <div v-if="currentScreen === 'game'" class="game-shell__game">
       <!-- Top Header Bar -->
-      <header class="game-shell__header">
-        <div class="header-left">
-          <HamburgerMenu
-            :game-title="displayName || gameType"
-            :game-id="gameId"
-            :connection-status="connectionStatus"
-            @menu-item-click="handleMenuItemClick"
-          />
-          <h1>{{ displayName || gameType }}</h1>
-        </div>
-        <div class="header-right">
-          <span v-if="gameId" class="game-code">Game: <strong>{{ gameId }}</strong></span>
-          <span class="connection-badge" :class="connectionStatus">{{ connectionStatus }}</span>
-        </div>
-      </header>
+      <GameHeader
+        :game-title="displayName || gameType"
+        :game-id="gameId"
+        :connection-status="connectionStatus"
+        @menu-item-click="handleMenuItemClick"
+      />
 
       <!-- Main Content Area -->
       <div class="game-shell__main">
         <!-- Left Sidebar: Players, Stats & History (on desktop) -->
         <aside class="game-shell__sidebar">
-          <div class="sidebar-section">
-            <h3>Players</h3>
-            <div v-for="player in players" :key="player.position" class="player-card" :class="{ current: player.position === state?.state.currentPlayer }">
-              <div class="player-name-row">
-                <span v-if="player.position === state?.state.currentPlayer" class="turn-indicator-dot"></span>
-                <span class="player-name">{{ player.name }}</span>
-                <span v-if="player.position === playerPosition" class="you-badge">(You)</span>
-              </div>
+          <PlayersPanel
+            :players="players"
+            :player-position="playerPosition"
+            :current-player-position="state?.state.currentPlayer"
+          >
+            <template #player-stats="{ player }">
               <slot name="player-stats" :player="player" :game-view="gameView"></slot>
-            </div>
-          </div>
+            </template>
+          </PlayersPanel>
 
           <slot name="sidebar-extra"
             :state="state"
@@ -475,270 +440,11 @@ defineExpose({
   color: #fff;
 }
 
-/* Lobby */
-.game-shell__lobby {
-  max-width: 500px;
-  margin: 0 auto;
-  padding: 40px 20px;
-  text-align: center;
-}
-
-.game-shell__lobby h1 {
-  font-size: 2.5rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 30px;
-}
-
-.lobby-form {
-  max-width: 500px;
-  margin: 0 auto;
-}
-
-.form-group {
-  margin-bottom: 30px;
-  text-align: left;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  color: #aaa;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 15px;
-  border: 2px solid #ccc;
-  border-radius: 8px;
-  background: #fff;
-  color: #333;
-  font-size: 1.1rem;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #00d9ff;
-  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.2);
-}
-
-.form-group input::placeholder {
-  color: #999;
-}
-
-.lobby-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.action-box {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 25px;
-  border-radius: 12px;
-  text-align: center;
-}
-
-.action-box h3 {
-  margin-bottom: 10px;
-}
-
-.action-box p {
-  color: #aaa;
-  margin-bottom: 15px;
-  font-size: 0.9rem;
-}
-
-.game-code-input {
-  width: 100%;
-  padding: 12px;
-  margin-bottom: 15px;
-  border: 2px solid #ccc;
-  border-radius: 8px;
-  background: #fff;
-  color: #333;
-  font-size: 1rem;
-  font-family: monospace;
-}
-
-.game-code-input:focus {
-  outline: none;
-  border-color: #00d9ff;
-  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.2);
-}
-
-.game-code-input::placeholder {
-  color: #999;
-}
-
-.divider {
-  color: #666;
-  font-size: 0.9rem;
-}
-
-/* Waiting */
-.game-shell__waiting {
-  max-width: 500px;
-  margin: 0 auto;
-  text-align: center;
-  padding: 40px 20px;
-}
-
-.game-shell__waiting h2 {
-  margin-bottom: 30px;
-}
-
-.share-code {
-  background: rgba(0, 217, 255, 0.1);
-  padding: 30px;
-  border-radius: 12px;
-  margin-bottom: 20px;
-}
-
-.share-code p {
-  margin-bottom: 15px;
-  color: #aaa;
-}
-
-.code-display {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 15px;
-}
-
-.code {
-  font-family: monospace;
-  font-size: 2rem;
-  color: #00d9ff;
-  letter-spacing: 3px;
-}
-
-/* Buttons */
-.btn {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn.primary {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
-  font-weight: bold;
-}
-
-.btn.primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.4);
-}
-
-.btn.secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-}
-
-.btn.secondary:hover {
-  border-color: #00d9ff;
-}
-
-.btn.text {
-  background: transparent;
-  color: #888;
-}
-
-.btn.text:hover {
-  color: #fff;
-}
-
-.btn.small {
-  padding: 8px 16px;
-  font-size: 0.9rem;
-}
-
 /* Game Screen */
 .game-shell__game {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-}
-
-/* Header - Mobile First */
-.game-shell__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  gap: 10px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Hide game title on mobile - it's in the hamburger menu */
-.game-shell__header h1 {
-  display: none;
-  font-size: 1.3rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin: 0;
-}
-
-/* Hide header-right on mobile - info is in hamburger menu */
-.header-right {
-  display: none;
-  align-items: center;
-  gap: 15px;
-}
-
-.game-code {
-  font-size: 0.85rem;
-  color: #aaa;
-}
-
-.game-code strong {
-  color: #00d9ff;
-  font-family: monospace;
-}
-
-.connection-badge {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-}
-
-.connection-badge.connected { background: #27ae60; }
-.connection-badge.connecting, .connection-badge.reconnecting { background: #f39c12; }
-.connection-badge.disconnected, .connection-badge.error { background: #e74c3c; }
-
-/* Desktop: Show header elements */
-@media (min-width: 768px) {
-  .game-shell__header {
-    padding: 12px 20px;
-  }
-
-  .header-left {
-    gap: 20px;
-  }
-
-  .game-shell__header h1 {
-    display: block;
-  }
-
-  .header-right {
-    display: flex;
-  }
 }
 
 /* Main Content Area - Mobile First */
@@ -789,67 +495,6 @@ defineExpose({
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     padding: 20px;
     order: 1; /* Sidebar on left on desktop */
-  }
-}
-
-.sidebar-section {
-  margin-bottom: 25px;
-}
-
-.sidebar-section h3 {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  color: #888;
-  margin-bottom: 15px;
-  letter-spacing: 0.5px;
-}
-
-.player-card {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  transition: all 0.2s;
-}
-
-.player-card.current {
-  background: rgba(0, 217, 255, 0.15);
-  border: 1px solid rgba(0, 217, 255, 0.3);
-}
-
-.player-name {
-  font-weight: 600;
-}
-
-.you-badge {
-  color: #00d9ff;
-  font-size: 0.8rem;
-  margin-left: 8px;
-}
-
-.player-name-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.turn-indicator-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  animation: pulse-glow 1.5s ease-in-out infinite;
-  flex-shrink: 0;
-}
-
-@keyframes pulse-glow {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 8px rgba(0, 217, 255, 0.6);
-  }
-  50% {
-    transform: scale(1.15);
-    box-shadow: 0 0 16px rgba(0, 255, 136, 0.8);
   }
 }
 
