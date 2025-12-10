@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, provide } from 'vue';
+import { ref, reactive, computed, watch, watchEffect, onMounted, provide } from 'vue';
 import { MeepleClient, audioService } from '@boardsmith/client';
 import { useGame } from '@boardsmith/client/vue';
 import ActionPanel from './auto-ui/ActionPanel.vue';
@@ -50,6 +50,7 @@ const playerPosition = ref<number>(0);
 // UI state
 const historyCollapsed = ref(false);
 const debugExpanded = ref(false);
+const zoomLevel = ref(1.0);
 
 // Create client
 const client = new MeepleClient({
@@ -351,6 +352,7 @@ defineExpose({
         :game-title="displayName || gameType"
         :game-id="gameId"
         :connection-status="connectionStatus"
+        v-model:zoom="zoomLevel"
         @menu-item-click="handleMenuItemClick"
       />
 
@@ -385,24 +387,26 @@ defineExpose({
 
         <!-- Center: Game Board -->
         <main class="game-shell__content">
-          <slot
-            name="game-board"
-            :state="state"
-            :game-view="gameView"
-            :players="players"
-            :my-player="myPlayer"
-            :player-position="playerPosition"
-            :is-my-turn="isMyTurn"
-            :available-actions="availableActions"
-            :action="action"
-            :action-args="actionArgs"
-            :execute-action="executeAction"
-            :set-board-prompt="setBoardPrompt"
-          >
-            <div class="empty-game-area">
-              <p>Add your game board in the #game-board slot</p>
-            </div>
-          </slot>
+          <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
+              <slot
+                name="game-board"
+                :state="state"
+                :game-view="gameView"
+                :players="players"
+                :my-player="myPlayer"
+                :player-position="playerPosition"
+                :is-my-turn="isMyTurn"
+                :available-actions="availableActions"
+                :action="action"
+                :action-args="actionArgs"
+                :execute-action="executeAction"
+                :set-board-prompt="setBoardPrompt"
+              >
+                <div class="empty-game-area">
+                  <p>Add your game board in the #game-board slot</p>
+                </div>
+              </slot>
+          </div>
         </main>
       </div>
 
@@ -466,9 +470,18 @@ defineExpose({
   flex: 1;
   padding: 15px;
   padding-bottom: 80px; /* Space for sticky action bar */
-  overflow-y: auto;
+  overflow: auto;
   min-height: 300px;
   order: 1; /* Content first on mobile */
+}
+
+.game-shell__zoom-container {
+  --zoom-level: 1;
+  transform: scale(var(--zoom-level));
+  transform-origin: top left;
+  /* Width/height at 100% divided by zoom to reserve correct space */
+  width: calc(100% / var(--zoom-level));
+  min-height: calc(100% / var(--zoom-level));
 }
 
 /* Sidebar - Mobile (below content) */
