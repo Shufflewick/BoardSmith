@@ -1,0 +1,40 @@
+{
+  "name": "@boardsmith/testing",
+  "version": "0.0.1",
+  "description": "Testing utilities for BoardSmith games - provides createTestGame, simulateAction, assertActionSucceeds/Fails, and simulateRandomGames for game logic verification",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@boardsmith/engine": "workspace:*",
+    "@boardsmith/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "vitest": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "boardsmith",
+    "testing",
+    "board-game",
+    "card-game"
+  ]
+}

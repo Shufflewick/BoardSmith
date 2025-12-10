@@ -1,0 +1,12 @@
+{
+  "name": "cribbage",
+  "displayName": "Cribbage",
+  "version": "0.1.0",
+  "minPlayers": 2,
+  "maxPlayers": 2,
+  "rulesPackage": "@boardsmith/cribbage-rules",
+  "paths": {
+    "rules": "./rules/src",
+    "ui": "./ui"
+  }
+}

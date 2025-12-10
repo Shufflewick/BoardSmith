@@ -1,0 +1,27 @@
+{
+  "name": "@boardsmith/worker",
+  "version": "0.1.0",
+  "description": "Cloudflare Worker runtime for BoardSmith - handles game hosting via Durable Objects, WebSocket connections, and KV-based matchmaking (internal package)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@boardsmith/ai": "workspace:*",
+    "@boardsmith/engine": "workspace:*",
+    "@boardsmith/session": "workspace:*",
+    "@boardsmith/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@boardsmith/ai",
+  "version": "0.0.1",
+  "description": "MCTS AI bot for BoardSmith games - provides generic AI opponents that work with any game",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@boardsmith/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@boardsmith/checkers-rules": "workspace:*",
+    "@boardsmith/cribbage-rules": "workspace:*",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}
