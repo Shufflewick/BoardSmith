@@ -102,7 +102,6 @@ function handleElementClick(element: GameElement) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px;
   min-height: 300px;
 }
 
