@@ -771,24 +771,27 @@ const otherPlayers = computed(() => {
 
 <style scoped>
 .action-panel {
-  background: rgba(0, 217, 255, 0.1);
-  border-radius: 12px;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
 }
 
 .action-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  justify-content: center;
+  gap: 10px;
 }
 
 .action-btn {
-  padding: 12px 24px;
+  padding: 10px 20px;
   background: linear-gradient(90deg, #00d9ff, #00ff88);
   color: #1a1a2e;
   border: none;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.2s;
@@ -804,30 +807,36 @@ const otherPlayers = computed(() => {
   cursor: not-allowed;
 }
 
+/* Action configuration - horizontal flow layout */
 .action-config {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
 }
 
 .config-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
 .config-title {
   font-weight: bold;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  white-space: nowrap;
 }
 
 .cancel-btn {
   background: transparent;
   border: none;
   color: #888;
-  font-size: 1.2rem;
+  font-size: 1rem;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 2px 6px;
+  line-height: 1;
 }
 
 .cancel-btn:hover {
@@ -837,14 +846,15 @@ const otherPlayers = computed(() => {
 .selected-values {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
 .selected-value {
   background: rgba(255, 255, 255, 0.1);
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .value-label {
@@ -861,7 +871,7 @@ const otherPlayers = computed(() => {
   border: 1px solid rgba(0, 255, 136, 0.3);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .selected-value.from-board .value-display {
@@ -873,7 +883,7 @@ const otherPlayers = computed(() => {
   background: transparent;
   border: none;
   color: #888;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
@@ -883,36 +893,37 @@ const otherPlayers = computed(() => {
   color: #fff;
 }
 
+/* Selection input - flows inline */
 .selection-input {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .selection-prompt {
-  font-size: 0.95rem;
-  color: #ccc;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: #aaa;
+  white-space: nowrap;
 }
 
 .choice-buttons,
 .player-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
 }
 
 .choice-btn,
 .player-btn {
-  padding: 10px 16px;
+  padding: 8px 14px;
   background: rgba(255, 255, 255, 0.1);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
   color: #fff;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -921,7 +932,6 @@ const otherPlayers = computed(() => {
 .player-btn:hover {
   border-color: #00d9ff;
   background: rgba(0, 217, 255, 0.2);
-  transform: translateY(-1px);
 }
 
 /* Element selection buttons */
@@ -944,29 +954,30 @@ const otherPlayers = computed(() => {
 .no-choices {
   color: #888;
   font-style: italic;
+  font-size: 0.85rem;
 }
 
 .element-instruction {
-  padding: 16px;
+  padding: 10px 16px;
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+  border-radius: 6px;
   text-align: center;
 }
 
 .instruction-text {
   color: #00d9ff;
+  font-size: 0.9rem;
 }
 
 .number-input input,
 .text-input input {
-  padding: 10px 16px;
+  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.1);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
   color: #fff;
-  font-size: 1rem;
-  width: 100%;
-  max-width: 200px;
+  font-size: 0.9rem;
+  width: 120px;
 }
 
 .number-input input:focus,
@@ -976,21 +987,19 @@ const otherPlayers = computed(() => {
 }
 
 .submit-btn {
-  padding: 12px 24px;
+  padding: 8px 16px;
   background: linear-gradient(90deg, #00ff88, #00d9ff);
   color: #1a1a2e;
   border: none;
-  border-radius: 8px;
-  font-size: 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.2s;
-  align-self: flex-start;
 }
 
 .submit-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 255, 136, 0.4);
+  box-shadow: 0 2px 10px rgba(0, 255, 136, 0.4);
 }
 
 .submit-btn:disabled {
@@ -999,10 +1008,11 @@ const otherPlayers = computed(() => {
 }
 
 .waiting-message {
-  padding: 16px;
+  padding: 10px 20px;
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  border-radius: 8px;
   text-align: center;
   color: #888;
+  font-size: 0.9rem;
 }
 </style>
