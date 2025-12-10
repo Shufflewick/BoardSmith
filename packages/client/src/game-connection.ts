@@ -221,6 +221,7 @@ export class GameConnection {
 
       switch (message.type) {
         case 'state':
+        case 'restart':
           if (message.state && message.flowState !== undefined) {
             this.lastState = {
               flowState: message.flowState,

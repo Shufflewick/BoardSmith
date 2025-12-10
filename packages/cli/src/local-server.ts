@@ -45,6 +45,16 @@ class WsBroadcastAdapter implements BroadcastAdapter<WsSession> {
       session.ws.send(JSON.stringify(message));
     }
   }
+
+  /** Broadcast a message to all connected sessions */
+  broadcast(message: unknown): void {
+    const json = JSON.stringify(message);
+    for (const session of this.#sessions.values()) {
+      if (session.ws.readyState === WebSocket.OPEN) {
+        session.ws.send(json);
+      }
+    }
+  }
 }
 
 // ============================================
@@ -213,6 +223,26 @@ export class LocalServer {
         return;
       }
 
+      // POST /games/:gameId/restart - Restart game with same players
+      const restartMatch = path.match(/^\/games\/([^/]+)\/restart$/);
+      if (restartMatch && req.method === 'POST') {
+        const gameId = restartMatch[1];
+
+        const gameData = this.#games.get(gameId);
+        if (!gameData) {
+          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
+          return;
+        }
+
+        const result = this.#restartGame(gameId, gameData);
+        if (result.success) {
+          this.#sendJson(res, 200, result);
+        } else {
+          this.#sendJson(res, 400, result);
+        }
+        return;
+      }
+
       // GET /health - Health check
       if (path === '/health') {
         this.#sendJson(res, 200, { status: 'ok', environment: 'development' });
@@ -277,6 +307,64 @@ export class LocalServer {
     return {
       success: true,
       gameId,
+      flowState: state.flowState,
+      state: state.state,
+    };
+  }
+
+  #restartGame(
+    gameId: string,
+    oldGameData: { session: GameSession<any>; broadcaster: WsBroadcastAdapter }
+  ): {
+    success: boolean;
+    error?: string;
+    flowState?: unknown;
+    state?: unknown;
+  } {
+    // Get the original game configuration
+    const oldSession = oldGameData.session;
+    const gameType = oldSession.gameType;
+    const playerNames = oldSession.playerNames;
+    const playerCount = playerNames.length;
+
+    const definition = this.#gameRegistry.get(gameType);
+    if (!definition) {
+      return {
+        success: false,
+        error: `Unknown game type: ${gameType}`,
+      };
+    }
+
+    // Create a new session with the same configuration but fresh state
+    const session = GameSession.create({
+      gameType,
+      GameClass: definition.gameClass,
+      playerCount,
+      playerNames,
+      // Use a new random seed for variety
+      seed: undefined,
+      aiConfig: this.#aiConfig,
+    });
+
+    // Reuse the existing broadcaster so connected clients get updates
+    const broadcaster = oldGameData.broadcaster;
+    session.setBroadcaster(broadcaster);
+
+    // Replace the old game with the new one
+    this.#games.set(gameId, { session, broadcaster });
+
+    // Get the initial state and broadcast to all connected clients
+    const state = session.getState(0);
+
+    // Broadcast the restart to all connected clients
+    broadcaster.broadcast({
+      type: 'restart',
+      flowState: state.flowState,
+      state: state.state,
+    });
+
+    return {
+      success: true,
       flowState: state.flowState,
       state: state.state,
     };

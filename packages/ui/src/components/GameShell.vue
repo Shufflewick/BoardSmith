@@ -285,9 +285,16 @@ function handleSwitchPlayer(position: number) {
 }
 
 async function handleRestartGame() {
-  // For now, just leave and start fresh
-  // In the future, this could call a restart API
-  leaveGame();
+  if (!gameId.value) return;
+
+  try {
+    await client.restartGame(gameId.value);
+    // The server broadcasts the restart to all clients via WebSocket,
+    // so the state will update automatically
+  } catch (err) {
+    console.error('Failed to restart game:', err);
+    error.value = err instanceof Error ? err : new Error('Failed to restart game');
+  }
 }
 
 // Menu handlers

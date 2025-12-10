@@ -190,7 +190,7 @@ export interface WebSocketOutgoingMessage {
 }
 
 export interface WebSocketIncomingMessage {
-  type: 'state' | 'error' | 'pong';
+  type: 'state' | 'restart' | 'error' | 'pong';
   flowState?: FlowState;
   state?: PlayerState;
   playerPosition?: number;

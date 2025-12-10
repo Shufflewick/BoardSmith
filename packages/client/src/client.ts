@@ -288,6 +288,27 @@ export class MeepleClient {
   }
 
   /**
+   * Restart a game with the same players.
+   * Creates a fresh game state while keeping the same game ID and player setup.
+   */
+  async restartGame(gameId: string): Promise<{ flowState: FlowState; state: PlayerState }> {
+    const response = await this.fetch(`/games/${gameId}/restart`, {
+      method: 'POST',
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to restart game');
+    }
+
+    return {
+      flowState: data.flowState,
+      state: data.state,
+    };
+  }
+
+  /**
    * Health check.
    */
   async health(): Promise<{ status: string; environment: string }> {
