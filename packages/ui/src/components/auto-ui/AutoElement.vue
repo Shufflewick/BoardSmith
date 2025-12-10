@@ -191,11 +191,23 @@ const isActionSelectable = computed(() => {
   // Don't show as action-selectable if already selected
   if (isBoardSelected.value) return false;
 
-  return boardInteraction.isSelectableElement({
+  const elementRef = {
     id: props.element.id,
     name: props.element.name,
     notation: elementNotation.value || undefined,
-  });
+  };
+
+  // Check if this element is in valid elements for current selection
+  if (boardInteraction.isSelectableElement(elementRef)) {
+    return true;
+  }
+
+  // Also check if this is the draggable selected element (for skipIfOnlyOne scenarios)
+  if (boardInteraction.isDraggableSelectedElement(elementRef)) {
+    return true;
+  }
+
+  return false;
 });
 
 // Get display label for element

@@ -65,6 +65,9 @@ export interface BoardInteractionState {
 
   /** Whether drag mode is active */
   isDragging: boolean;
+
+  /** Element that is selected and can be dragged (for skipIfOnlyOne scenarios) */
+  draggableSelectedElement: ElementRef | null;
 }
 
 /**
@@ -115,6 +118,12 @@ export interface BoardInteractionActions {
 
   /** Trigger drop on target (called by board when element is dropped) */
   triggerDrop: (target: { id?: number; name?: string; notation?: string }) => void;
+
+  /** Set the element that is selected and can be dragged (for skipIfOnlyOne) */
+  setDraggableSelectedElement: (element: ElementRef | null) => void;
+
+  /** Check if an element is the draggable selected element */
+  isDraggableSelectedElement: (element: { id?: number; name?: string; notation?: string }) => boolean;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -133,6 +142,7 @@ export function createBoardInteraction(): BoardInteraction {
     draggedElement: null,
     dropTargets: [],
     isDragging: false,
+    draggableSelectedElement: null,
   });
 
   // Callback for when element is dropped on valid target
@@ -173,6 +183,7 @@ export function createBoardInteraction(): BoardInteraction {
       state.draggedElement = null;
       state.dropTargets = [];
       state.isDragging = false;
+      state.draggableSelectedElement = null;
       onDropCallback = null;
     },
 
@@ -243,6 +254,15 @@ export function createBoardInteraction(): BoardInteraction {
         // End drag after successful drop
         this.endDrag();
       }
+    },
+
+    setDraggableSelectedElement(element) {
+      state.draggableSelectedElement = element;
+    },
+
+    isDraggableSelectedElement(element) {
+      if (!state.draggableSelectedElement) return false;
+      return matchesRef(element, state.draggableSelectedElement);
     },
   };
 

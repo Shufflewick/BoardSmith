@@ -358,6 +358,7 @@ watch(() => props.availableActions, (actions) => {
 watch(currentSelection, (selection) => {
   if (!selection || !boardInteraction) {
     boardInteraction?.setValidElements([], () => {});
+    boardInteraction?.setDraggableSelectedElement(null);
     return;
   }
 
@@ -374,6 +375,9 @@ watch(currentSelection, (selection) => {
     onSelect = (elementId: number) => {
       setSelectionValue(selection.name, elementId);
     };
+
+    // Clear draggable selected element when we're on element selection
+    boardInteraction.setDraggableSelectedElement(null);
   }
   // Handle choice selections with board refs - support board-direct clicking
   else if (selection.type === 'choice' && selection.choices) {
@@ -405,6 +409,18 @@ watch(currentSelection, (selection) => {
           setSelectionValue(selection.name, entry.value);
         }
       };
+    }
+
+    // If this choice selection has filterBy and previous element selection was auto-filled,
+    // set the selected piece as draggable
+    if (selection.filterBy && currentActionMeta.value) {
+      const firstSel = currentActionMeta.value.selections[0];
+      if (firstSel?.type === 'element' && currentArgs.value[firstSel.name] !== undefined) {
+        const selectedPieceId = currentArgs.value[firstSel.name] as number;
+        // Find the ref for this piece from the first selection's validElements
+        const pieceRef = firstSel.validElements?.find(ve => ve.id === selectedPieceId)?.ref;
+        boardInteraction.setDraggableSelectedElement(pieceRef || { id: selectedPieceId });
+      }
     }
   }
   // Handle player selections with board refs - support board-direct clicking
@@ -492,6 +508,138 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
       currentArgs.value[firstSel.name] = validElem.id;
     }
   }
+});
+
+// Watch for drag start - set up drop targets for the dragged element
+watch(() => boardInteraction?.isDragging, (isDragging) => {
+  if (!isDragging || !boardInteraction?.draggedElement) {
+    return;
+  }
+
+  const dragged = boardInteraction.draggedElement;
+
+  // Case 1: Action already in progress with piece selected (e.g., skipIfOnlyOne triggered)
+  // Check if the dragged element matches the already-selected piece
+  if (currentAction.value && currentActionMeta.value) {
+    const firstSel = currentActionMeta.value.selections[0];
+    const secondSel = currentActionMeta.value.selections[1];
+
+    // If first selection is element and already filled, and second is choice with filterBy
+    if (firstSel?.type === 'element' &&
+        currentArgs.value[firstSel.name] !== undefined &&
+        secondSel?.type === 'choice' &&
+        secondSel.filterBy) {
+
+      const selectedPieceId = currentArgs.value[firstSel.name] as number;
+
+      // Check if dragged element matches the selected piece
+      if (dragged.id === selectedPieceId) {
+        // Set up drop targets for destinations
+        const allChoices = secondSel.choices || [];
+        const filterBy = secondSel.filterBy!;
+        const filteredDestinations = allChoices.filter((choice: any) => {
+          const choiceValue = choice.value as Record<string, unknown>;
+          return choiceValue[filterBy.key] === selectedPieceId;
+        });
+
+        const dropTargets: { id: number; ref: ElementRef }[] = [];
+        const choiceByTargetId = new Map<number, any>();
+
+        filteredDestinations.forEach((choice: any) => {
+          const ref = choice.targetRef;
+          if (ref?.id !== undefined) {
+            dropTargets.push({ id: ref.id, ref });
+            choiceByTargetId.set(ref.id, choice);
+          }
+        });
+
+        boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
+          const choice = choiceByTargetId.get(targetId);
+          if (choice && currentAction.value) {
+            executeAction(currentAction.value, {
+              ...currentArgs.value,
+              [secondSel.name]: choice.value
+            });
+          }
+        });
+        return;
+      }
+    }
+  }
+
+  // Case 2: No action in progress - find and start an action
+  // Find an action that has element selection followed by choice selection with filterBy
+  // This is the pattern for drag-and-drop: select piece, then select destination
+  const dragAction = actionsWithMetadata.value.find(action => {
+    const firstSel = action.selections[0];
+    const secondSel = action.selections[1];
+
+    // First selection must be element type
+    if (firstSel?.type !== 'element') return false;
+
+    // Check if the dragged element is valid for this action
+    const isValidPiece = firstSel.validElements?.some(e => {
+      if (dragged.id !== undefined && e.id === dragged.id) return true;
+      if (dragged.notation && e.ref?.notation === dragged.notation) return true;
+      return false;
+    });
+
+    if (!isValidPiece) return false;
+
+    // Second selection must be choice type with filterBy (destinations filtered by piece)
+    return secondSel?.type === 'choice' && secondSel.filterBy;
+  });
+
+  if (!dragAction) return;
+
+  // Start the action and set the piece
+  const firstSel = dragAction.selections[0];
+  const secondSel = dragAction.selections[1];
+
+  // Find the valid element that matches
+  const validPiece = firstSel.validElements?.find(e => {
+    if (dragged.id !== undefined && e.id === dragged.id) return true;
+    if (dragged.notation && e.ref?.notation === dragged.notation) return true;
+    return false;
+  });
+
+  if (!validPiece) return;
+
+  // Set up the action state
+  currentAction.value = dragAction.name;
+  currentArgs.value = { [firstSel.name]: validPiece.id };
+
+  // Get filtered choices for this piece (destinations)
+  const allChoices = secondSel.choices || [];
+  const filterBy = secondSel.filterBy!;
+  const filteredDestinations = allChoices.filter((choice: any) => {
+    const choiceValue = choice.value as Record<string, unknown>;
+    return choiceValue[filterBy.key] === validPiece.id;
+  });
+
+  // Convert choices to drop targets
+  const dropTargets: { id: number; ref: ElementRef }[] = [];
+  const choiceByTargetId = new Map<number, any>();
+
+  filteredDestinations.forEach((choice: any) => {
+    // Use targetRef for drop targets (the destination square)
+    const ref = choice.targetRef;
+    if (ref?.id !== undefined) {
+      dropTargets.push({ id: ref.id, ref });
+      choiceByTargetId.set(ref.id, choice);
+    }
+  });
+
+  // Set drop targets with callback to execute the action
+  boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
+    const choice = choiceByTargetId.get(targetId);
+    if (choice && currentAction.value) {
+      executeAction(currentAction.value, {
+        ...currentArgs.value,
+        [secondSel.name]: choice.value
+      });
+    }
+  });
 });
 
 // Watch for external element selection prop
