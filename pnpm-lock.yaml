@@ -228,6 +228,34 @@ importers:
       vite: 5.4.21
       vue-tsc: 2.2.12_typescript@5.9.3
 
+  packages/games/hex/rules:
+    specifiers:
+      '@boardsmith/engine': workspace:*
+      typescript: ^5.6.3
+    dependencies:
+      '@boardsmith/engine': link:../../../engine
+    devDependencies:
+      typescript: 5.9.3
+
+  packages/games/hex/ui:
+    specifiers:
+      '@boardsmith/client': workspace:*
+      '@boardsmith/ui': workspace:*
+      '@vitejs/plugin-vue': ^5.0.0
+      typescript: ^5.3.0
+      vite: ^5.0.0
+      vue: ^3.4.0
+      vue-tsc: ^2.0.0
+    dependencies:
+      '@boardsmith/client': link:../../../client
+      '@boardsmith/ui': link:../../../ui
+      vue: 3.5.25_typescript@5.9.3
+    devDependencies:
+      '@vitejs/plugin-vue': 5.2.4_vite@5.4.21+vue@3.5.25
+      typescript: 5.9.3
+      vite: 5.4.21
+      vue-tsc: 2.2.12_typescript@5.9.3
+
   packages/runtime:
     specifiers:
       '@boardsmith/engine': workspace:*

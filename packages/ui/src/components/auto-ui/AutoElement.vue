@@ -31,6 +31,8 @@ export interface GameElement {
 const props = defineProps<{
   element: GameElement;
   depth: number;
+  /** Size override for pieces inside hex cells */
+  hexPieceSize?: number;
 }>();
 
 const emit = defineEmits<{
@@ -200,6 +202,14 @@ const isActionSelectable = computed(() => {
 const displayLabel = computed(() => {
   // Use element name or className
   return props.element.name || props.element.className;
+});
+
+// Piece style - size for hex pieces, visibility control
+const pieceStyle = computed(() => {
+  if (props.hexPieceSize) {
+    return `width: ${props.hexPieceSize}px !important; height: ${props.hexPieceSize}px !important;`;
+  }
+  return undefined;
 });
 
 // Get children (or empty if hidden)
@@ -380,7 +390,7 @@ const boardSize = computed(() => {
 // Hex grid properties
 const hexGridProps = computed(() => {
   const attrs = props.element.attributes ?? {};
-  return {
+  const result = {
     orientation: (attrs.$hexOrientation as 'flat' | 'pointy') ?? 'pointy',
     coordSystem: (attrs.$coordSystem as 'offset' | 'axial' | 'cube') ?? 'axial',
     qCoord: (attrs.$qCoord as string) ?? 'q',
@@ -388,6 +398,7 @@ const hexGridProps = computed(() => {
     sCoord: attrs.$sCoord as string | undefined,
     hexSize: (attrs.$hexSize as number) ?? 50,
   };
+  return result;
 });
 
 // Calculate hex cell position in pixels based on axial coordinates
@@ -749,7 +760,10 @@ function handleDrop(event: DragEvent) {
         <div class="hex-board-header">{{ displayLabel }}</div>
         <svg
           class="hex-board"
+          :key="`hex-svg-${props.element.id}`"
           :viewBox="`${hexGridBounds.minX} ${hexGridBounds.minY} ${hexGridBounds.width} ${hexGridBounds.height}`"
+          :width="hexGridBounds.width"
+          :height="hexGridBounds.height"
           preserveAspectRatio="xMidYMid meet"
         >
           <!-- Render hex cells as groups with polygon + content -->
@@ -770,25 +784,19 @@ function handleDrop(event: DragEvent) {
               }"
               @click="handleHexClick(child)"
             />
-            <!-- Child content centered in hex -->
-            <foreignObject
-              v-if="child.children?.length"
-              :x="-hexGridProps.hexSize * 0.6"
-              :y="-hexGridProps.hexSize * 0.6"
-              :width="hexGridProps.hexSize * 1.2"
-              :height="hexGridProps.hexSize * 1.2"
-              class="hex-content"
+            <!-- Child content as SVG circle (no foreignObject) -->
+            <circle
+              v-for="grandchild in (child.children || [])"
+              :key="grandchild.id"
+              :r="hexGridProps.hexSize * 0.35"
+              class="hex-piece-circle"
+              :class="{
+                'player-0': (grandchild.attributes?.player as any)?.position === 0,
+                'player-1': (grandchild.attributes?.player as any)?.position === 1,
+              }"
             >
-              <div class="hex-content-wrapper">
-                <AutoElement
-                  v-for="grandchild in child.children"
-                  :key="grandchild.id"
-                  :element="grandchild"
-                  :depth="depth + 2"
-                  @element-click="handleChildClick"
-                />
-              </div>
-            </foreignObject>
+              <title>{{ grandchild.name }}</title>
+            </circle>
             <!-- Cell label -->
             <text
               v-if="child.name"
@@ -826,11 +834,8 @@ function handleDrop(event: DragEvent) {
     <!-- Clicks on leaf elements bubble to parent grid-cell for selection -->
     <template v-else-if="elementType === 'piece'">
       <div
-        class="piece"
-        :class="{
-          'is-draggable': isActionSelectable,
-          'is-dragging': isDragged,
-        }"
+        :class="['piece', { 'is-draggable': isActionSelectable, 'is-dragging': isDragged, 'hex-piece': !!props.hexPieceSize }]"
+        :style="pieceStyle"
         :draggable="isActionSelectable"
         @dragstart="handleDragStart"
         @dragend="handleDragEnd"
@@ -1218,6 +1223,12 @@ function handleDrop(event: DragEvent) {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  max-height: 80vh;
+  position: relative;
 }
 
 .hex-board-header {
@@ -1226,9 +1237,9 @@ function handleDrop(event: DragEvent) {
 }
 
 .hex-board {
-  width: 100%;
-  max-height: 500px;
-  overflow: visible;
+  /* Let SVG be its natural size based on width/height attributes */
+  max-width: 100%;
+  height: auto;
 }
 
 .hex-cell-group {
@@ -1283,22 +1294,32 @@ function handleDrop(event: DragEvent) {
   stroke-width: 2.5;
 }
 
-.hex-content {
-  overflow: visible;
-  pointer-events: none;
+/* SVG circle pieces for hex grid */
+.hex-piece-circle {
+  fill: #888;
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 2;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  transition: transform 0.15s ease;
 }
 
-.hex-content-wrapper {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.hex-piece-circle.player-0 {
+  fill: url(#redGradient);
+  fill: #e74c3c;
+}
+
+.hex-piece-circle.player-1 {
+  fill: url(#blueGradient);
+  fill: #3498db;
+}
+
+.hex-piece-circle:hover {
+  transform: scale(1.05);
 }
 
 .hex-label {
-  font-size: 10px;
-  fill: #666;
+  font-size: 12px;
+  fill: #888;
   pointer-events: none;
 }
 
@@ -1337,6 +1358,26 @@ function handleDrop(event: DragEvent) {
   font-weight: bold;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Vue transition for hex pieces - start invisible */
+.hex-piece-enter-from {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.hex-piece-enter-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.hex-piece-enter-to {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Ensure pieces inside hex-content-wrapper ARE visible */
+.hex-content-wrapper .piece {
+  display: flex !important;
 }
 
 /* GENERIC SPACE STYLES */
