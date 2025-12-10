@@ -228,10 +228,9 @@ function downloadState() {
   right: 0;
   transform: translateY(-50%);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 6px;
+  gap: 6px;
+  padding: 10px 6px;
   cursor: pointer;
   background: rgba(0, 217, 255, 0.9);
   border-radius: 8px 0 0 8px;
@@ -247,7 +246,7 @@ function downloadState() {
 }
 
 .toggle-icon {
-  font-size: 14px;
+  font-size: 12px;
   color: #1a1a2e;
   font-weight: bold;
 }
