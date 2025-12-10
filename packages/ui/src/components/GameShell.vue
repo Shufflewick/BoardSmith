@@ -374,16 +374,6 @@ defineExpose({
           />
           <h1>{{ displayName || gameType }}</h1>
         </div>
-        <div class="header-center">
-          <ActionPanel
-            :available-actions="availableActions"
-            :action-metadata="actionMetadata"
-            :players="players"
-            :player-position="playerPosition"
-            :is-my-turn="isMyTurn"
-            @execute="handleActionExecute"
-          />
-        </div>
         <div class="header-right">
           <span v-if="gameId" class="game-code">Game: <strong>{{ gameId }}</strong></span>
           <span class="connection-badge" :class="connectionStatus">{{ connectionStatus }}</span>
@@ -443,6 +433,18 @@ defineExpose({
           </slot>
         </main>
       </div>
+
+      <!-- Bottom Action Bar -->
+      <footer class="game-shell__action-bar">
+        <ActionPanel
+          :available-actions="availableActions"
+          :action-metadata="actionMetadata"
+          :players="players"
+          :player-position="playerPosition"
+          :is-my-turn="isMyTurn"
+          @execute="handleActionExecute"
+        />
+      </footer>
 
       <!-- Debug Panel (bottom) -->
       <DebugPanel
@@ -663,7 +665,6 @@ defineExpose({
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding-bottom: 40px; /* Space for debug panel */
 }
 
 /* Header - Mobile First */
@@ -691,12 +692,6 @@ defineExpose({
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin: 0;
-}
-
-.header-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
 }
 
 /* Hide header-right on mobile - info is in hamburger menu */
@@ -741,10 +736,6 @@ defineExpose({
     display: block;
   }
 
-  .header-center {
-    max-width: 600px;
-  }
-
   .header-right {
     display: flex;
   }
@@ -761,6 +752,7 @@ defineExpose({
 .game-shell__content {
   flex: 1;
   padding: 15px;
+  padding-bottom: 80px; /* Space for sticky action bar */
   overflow-y: auto;
   min-height: 300px;
   order: 1; /* Content first on mobile */
@@ -861,16 +853,36 @@ defineExpose({
   }
 }
 
+/* Bottom Action Bar - Fixed at bottom */
+.game-shell__action-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 15px;
+  z-index: 100;
+}
+
+/* Desktop: Wider padding for action bar */
+@media (min-width: 768px) {
+  .game-shell__action-bar {
+    padding: 16px 20px;
+  }
+}
+
 .error-banner {
   position: fixed;
-  bottom: 50px;
+  bottom: 100px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(231, 76, 60, 0.9);
   border: 1px solid #e74c3c;
   padding: 12px 24px;
   border-radius: 8px;
-  z-index: 50;
+  z-index: 150;
 }
 
 .empty-game-area {

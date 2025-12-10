@@ -84,15 +84,22 @@ function downloadState() {
 
 <template>
   <div class="debug-panel" :class="{ expanded: isExpanded }">
-    <!-- Toggle bar (always visible) -->
+    <!-- Toggle tab (always visible on right edge) -->
     <div class="debug-toggle" @click="togglePanel">
-      <span class="toggle-icon">{{ isExpanded ? '▼' : '▲' }}</span>
-      <span class="toggle-label">Debug Panel</span>
-      <span class="toggle-hint">(Dev Mode)</span>
+      <span class="toggle-icon">{{ isExpanded ? '›' : '‹' }}</span>
+      <span class="toggle-label">Debug</span>
     </div>
 
+    <!-- Drawer content -->
+    <div class="debug-drawer" :class="{ open: isExpanded }">
+      <div class="debug-header">
+        <span class="debug-title">Debug Panel</span>
+        <span class="debug-hint">(Dev Mode)</span>
+        <button class="close-btn" @click="togglePanel">✕</button>
+      </div>
+
     <!-- Expanded content -->
-    <div v-if="isExpanded" class="debug-content">
+    <div class="debug-content">
       <!-- Tabs -->
       <div class="debug-tabs">
         <button
@@ -198,54 +205,118 @@ function downloadState() {
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .debug-panel {
   position: fixed;
-  bottom: 0;
-  left: 0;
+  top: 0;
   right: 0;
-  background: #1a1a2e;
-  border-top: 2px solid #00d9ff;
+  bottom: 0;
   z-index: 1000;
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 13px;
+  pointer-events: none;
 }
 
+/* Toggle tab on right edge */
 .debug-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
+  gap: 4px;
+  padding: 12px 6px;
   cursor: pointer;
-  background: rgba(0, 217, 255, 0.1);
-  transition: background 0.2s;
+  background: rgba(0, 217, 255, 0.9);
+  border-radius: 8px 0 0 8px;
+  transition: all 0.2s;
+  pointer-events: auto;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
 }
 
 .debug-toggle:hover {
-  background: rgba(0, 217, 255, 0.2);
+  background: rgba(0, 217, 255, 1);
+  padding-right: 10px;
 }
 
 .toggle-icon {
-  font-size: 10px;
-  color: #00d9ff;
+  font-size: 14px;
+  color: #1a1a2e;
+  font-weight: bold;
 }
 
 .toggle-label {
   font-weight: 600;
+  color: #1a1a2e;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Drawer panel */
+.debug-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  max-width: 90vw;
+  background: #1a1a2e;
+  border-left: 2px solid #00d9ff;
+  transform: translateX(100%);
+  transition: transform 0.3s ease-in-out;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.debug-drawer.open {
+  transform: translateX(0);
+}
+
+.debug-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(0, 217, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.debug-title {
+  font-weight: 600;
   color: #fff;
 }
 
-.toggle-hint {
+.debug-hint {
   color: #666;
   font-size: 11px;
+}
+
+.close-btn {
   margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #fff;
 }
 
 .debug-content {
-  max-height: 300px;
+  flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -282,7 +353,7 @@ function downloadState() {
 .tab-content {
   padding: 16px;
   overflow-y: auto;
-  max-height: 250px;
+  flex: 1;
 }
 
 /* State Tab */
@@ -319,8 +390,7 @@ function downloadState() {
   font-family: 'Monaco', 'Menlo', monospace;
   font-size: 11px;
   color: #00ff88;
-  overflow-x: auto;
-  max-height: 180px;
+  overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
 }
