@@ -77,6 +77,12 @@ export class LocalServer {
   readonly #core: GameServerCore;
   readonly #store: InMemoryGameStore<WsSession>;
   readonly #registry: SimpleGameRegistry;
+  readonly #readyPromise: Promise<void>;
+
+  /** Promise that resolves when the server is ready to accept connections */
+  get ready(): Promise<void> {
+    return this.#readyPromise;
+  }
 
   constructor(options: LocalServerOptions) {
     this.#port = options.port;
@@ -102,16 +108,27 @@ export class LocalServer {
       environment: 'development',
     });
 
-    // Create HTTP server
-    this.#server = createServer((req, res) => this.#handleRequest(req, res));
+    // Create HTTP server with proper async error handling
+    this.#server = createServer((req, res) => {
+      this.#handleRequest(req, res).catch((error) => {
+        console.error('Unhandled request error:', error);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Internal server error' }));
+        }
+      });
+    });
 
     // Create WebSocket server
     this.#wss = new WebSocketServer({ server: this.#server });
     this.#wss.on('connection', (ws, req) => this.#handleWebSocket(ws, req));
 
-    // Start listening
-    this.#server.listen(this.#port, () => {
-      options.onReady?.(this.#port);
+    // Start listening and create ready promise
+    this.#readyPromise = new Promise<void>((resolve) => {
+      this.#server.listen(this.#port, () => {
+        options.onReady?.(this.#port);
+        resolve();
+      });
     });
   }
 
