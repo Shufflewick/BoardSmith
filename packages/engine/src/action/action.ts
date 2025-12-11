@@ -79,6 +79,28 @@ export class Action {
   }
 
   /**
+   * Add a condition with an explanation message for when the action is unavailable.
+   * This is preferred over plain condition() as it provides better UX.
+   *
+   * @example
+   * ```typescript
+   * Action.create('playCard')
+   *   .conditionWithReason(
+   *     (ctx) => ctx.player.hand.count() > 0,
+   *     "You have no cards in hand"
+   *   )
+   * ```
+   */
+  conditionWithReason(
+    fn: (context: ActionContext) => boolean,
+    message: string | ((context: ActionContext) => string)
+  ): this {
+    this.definition.condition = fn;
+    this.definition.conditionMessage = message;
+    return this;
+  }
+
+  /**
    * Mark this action as non-undoable.
    * Use for actions that reveal hidden info, involve randomness, or shouldn't be undone.
    * When executed, undo is disabled for the rest of the turn.
@@ -329,9 +351,38 @@ export class ActionExecutor {
     switch (selection.type) {
       case 'choice': {
         const choiceSel = selection as ChoiceSelection;
-        return typeof choiceSel.choices === 'function'
+        let choices = typeof choiceSel.choices === 'function'
           ? choiceSel.choices(context)
-          : choiceSel.choices;
+          : [...choiceSel.choices];
+
+        // Apply filterBy if present and the dependent selection has a value
+        if (choiceSel.filterBy) {
+          const { key, selectionName } = choiceSel.filterBy;
+          const previousValue = args[selectionName];
+
+          if (previousValue !== undefined) {
+            // Extract the filter value from the previous selection
+            // For elements, use .id as fallback if the key doesn't exist
+            let filterValue: unknown;
+            if (typeof previousValue === 'object' && previousValue !== null) {
+              const prevObj = previousValue as Record<string, unknown>;
+              // Try the key first, then fall back to 'id' (for element selections)
+              filterValue = prevObj[key] !== undefined ? prevObj[key] : prevObj['id'];
+            } else {
+              filterValue = previousValue;
+            }
+
+            // Filter choices where choice[key] matches the filter value
+            choices = choices.filter((choice) => {
+              if (typeof choice === 'object' && choice !== null) {
+                return (choice as Record<string, unknown>)[key] === filterValue;
+              }
+              return choice === filterValue;
+            });
+          }
+        }
+
+        return choices;
       }
 
       case 'player': {
@@ -577,7 +628,9 @@ export class ActionExecutor {
   }
 
   /**
-   * Check if an action is available for a player
+   * Check if an action is available for a player.
+   * For actions with dependent selections (filterBy), this checks if at least
+   * one valid path through all selections exists.
    */
   isActionAvailable(action: ActionDefinition, player: Player): boolean {
     const context: ActionContext = {
@@ -590,21 +643,163 @@ export class ActionExecutor {
       return false;
     }
 
-    // Check if any required selections have at least one valid choice
+    // Check if there's at least one valid path through all selections
+    return this.hasValidSelectionPath(action.selections, player, {}, 0);
+  }
+
+  /**
+   * Check why an action is unavailable for a player.
+   * Returns undefined if action is available, or a reason string if not.
+   */
+  getActionUnavailableReason(action: ActionDefinition, player: Player): string | undefined {
+    const context: ActionContext = {
+      game: this.game,
+      player,
+      args: {},
+    };
+
+    // Check condition first
+    if (action.condition && !action.condition(context)) {
+      if (action.conditionMessage) {
+        return typeof action.conditionMessage === 'function'
+          ? action.conditionMessage(context)
+          : action.conditionMessage;
+      }
+      return 'Action condition not met';
+    }
+
+    // Check selections
     for (const selection of action.selections) {
       if (selection.optional) continue;
-
-      if (selection.type === 'text' || selection.type === 'number') {
-        // Text/number inputs are always potentially available
-        continue;
-      }
+      if (selection.type === 'text' || selection.type === 'number') continue;
 
       const choices = this.getChoices(selection, player, {});
       if (choices.length === 0) {
-        return false;
+        return `No valid choices for "${selection.name}"`;
       }
     }
 
-    return true;
+    // Check for dependent selections with no valid path
+    if (!this.hasValidSelectionPath(action.selections, player, {}, 0)) {
+      return 'No valid combination of selections exists';
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Extract the value used for matching from a choice (for filterBy)
+   */
+  private getChoiceFilterValue(choice: unknown, key: string): unknown {
+    if (typeof choice === 'object' && choice !== null) {
+      return (choice as Record<string, unknown>)[key];
+    }
+    return choice;
+  }
+
+  /**
+   * Check if any selection after the given index depends on a selection by name
+   */
+  private hasDependentSelection(
+    selections: Selection[],
+    afterIndex: number,
+    selectionName: string
+  ): boolean {
+    for (let i = afterIndex; i < selections.length; i++) {
+      const sel = selections[i];
+      if (sel.type === 'choice') {
+        const choiceSel = sel as ChoiceSelection;
+        if (choiceSel.filterBy?.selectionName === selectionName) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Recursively check if there's a valid path through all selections.
+   * For dependent selections, we need to verify at least one choice
+   * leads to valid subsequent selections.
+   *
+   * OPTIMIZATION: We only do full path validation for choice selections
+   * with static choices and filterBy. For element/player selections,
+   * or choice selections with dynamic choices functions, the cost of
+   * repeatedly computing choices is too high.
+   */
+  private hasValidSelectionPath(
+    selections: Selection[],
+    player: Player,
+    args: Record<string, unknown>,
+    index: number
+  ): boolean {
+    // Base case: all selections processed
+    if (index >= selections.length) {
+      return true;
+    }
+
+    const selection = selections[index];
+
+    // Skip optional selections - they don't block availability
+    if (selection.optional) {
+      return this.hasValidSelectionPath(selections, player, args, index + 1);
+    }
+
+    // Text/number inputs are always available
+    if (selection.type === 'text' || selection.type === 'number') {
+      return this.hasValidSelectionPath(selections, player, args, index + 1);
+    }
+
+    // For element and player selections, just check they have choices
+    // (don't do expensive path validation - trust their filter functions)
+    if (selection.type === 'element' || selection.type === 'player') {
+      const choices = this.getChoices(selection, player, args);
+      if (choices.length === 0) {
+        return false;
+      }
+      return this.hasValidSelectionPath(selections, player, args, index + 1);
+    }
+
+    // For choice selections with dynamic choices functions, also skip path validation
+    // (computing dynamic choices repeatedly is too expensive)
+    if (selection.type === 'choice') {
+      const choiceSel = selection as ChoiceSelection;
+      if (typeof choiceSel.choices === 'function') {
+        const choices = this.getChoices(selection, player, args);
+        if (choices.length === 0) {
+          return false;
+        }
+        return this.hasValidSelectionPath(selections, player, args, index + 1);
+      }
+    }
+
+    // Get choices for this selection (static choices only at this point)
+    const choices = this.getChoices(selection, player, args);
+    if (choices.length === 0) {
+      return false;
+    }
+
+    // Check if any later selection depends on this one
+    const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
+
+    if (!hasDependent) {
+      // No dependent selections, just check if subsequent selections are valid
+      return this.hasValidSelectionPath(selections, player, args, index + 1);
+    }
+
+    // Has dependent selections - need to check if at least one choice
+    // leads to a valid path through subsequent selections
+    for (const choice of choices) {
+      // Build new args with this choice
+      const newArgs = { ...args, [selection.name]: choice };
+
+      // Check if this choice leads to a valid path
+      if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+        return true; // Found at least one valid path
+      }
+    }
+
+    // No choice led to a valid path
+    return false;
   }
 }

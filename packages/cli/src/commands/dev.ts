@@ -30,7 +30,11 @@ interface BoardSmithConfig {
 }
 
 async function createGame(workerPort: number, gameType: string, playerCount: number, playerNames: string[]): Promise<string | null> {
+  console.log(chalk.dim(`  Creating game (type: ${gameType}, players: ${playerCount})...`));
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(`http://localhost:${workerPort}/games`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -39,16 +43,26 @@ async function createGame(workerPort: number, gameType: string, playerCount: num
         playerCount,
         playerNames,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
+
     const data = await response.json() as { success: boolean; gameId?: string; error?: string };
     if (data.success && data.gameId) {
       return data.gameId;
     }
     if (data.error) {
       console.error(chalk.red(`  Failed to create game: ${data.error}`));
+    } else {
+      console.error(chalk.red(`  Unexpected response: ${JSON.stringify(data)}`));
     }
   } catch (error) {
-    console.error(chalk.red('Failed to create game:'), error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error(chalk.red('  Game creation timed out'));
+    } else {
+      console.error(chalk.red('Failed to create game:'), error);
+    }
   }
   return null;
 }
@@ -165,6 +179,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
       },
       aiConfig: aiPlayers.length > 0 ? { players: aiPlayers, level: aiLevel } : undefined,
     });
+
+    // Wait for server to be ready before continuing
+    await server.ready;
 
     if (aiPlayers.length > 0) {
       console.log(chalk.cyan(`  AI players enabled: ${aiPlayers.join(', ')} (level: ${aiLevel})`));

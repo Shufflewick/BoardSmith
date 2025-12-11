@@ -266,6 +266,13 @@ export class Game<
   }
 
   /**
+   * Get the action executor (for advanced usage like building action metadata)
+   */
+  getActionExecutor(): ActionExecutor {
+    return this._actionExecutor;
+  }
+
+  /**
    * Get the choices for a selection (for UI)
    */
   getSelectionChoices(

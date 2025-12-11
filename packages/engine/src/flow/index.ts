@@ -40,4 +40,5 @@ export type {
   IfConfig,
   ExecuteConfig,
   PlayerAwaitingState,
+  PlayerAwaitingStateWithDetails,
 } from './types.js';

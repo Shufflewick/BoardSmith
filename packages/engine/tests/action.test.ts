@@ -552,6 +552,265 @@ describe('Action Executor', () => {
   });
 });
 
+describe('Dependent Selection Filtering (filterBy)', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('should filter choices based on previous selection value', () => {
+    // Create an action where destination depends on piece selection
+    // Note: the 'key' in filterBy is used for BOTH:
+    // 1. Extracting the value from the previous selection (if object)
+    // 2. Matching against the choice property
+    const action = Action.create('move')
+      .chooseFrom<{ pieceId: number }>('piece', {
+        choices: [{ pieceId: 1 }, { pieceId: 2 }, { pieceId: 3 }],
+      })
+      .chooseFrom<{ pieceId: number; dest: string }>('destination', {
+        choices: [
+          { pieceId: 1, dest: 'A' },
+          { pieceId: 1, dest: 'B' },
+          { pieceId: 2, dest: 'C' },
+          { pieceId: 3, dest: 'D' },
+        ],
+        filterBy: { key: 'pieceId', selectionName: 'piece' },
+      })
+      .execute(() => {});
+
+    // Without previous selection, all destinations available
+    const allDests = executor.getChoices(
+      action.selections[1],
+      game.players[0],
+      {}
+    );
+    expect(allDests).toHaveLength(4);
+
+    // With piece 1 selected, only A and B should be available
+    const destsForPiece1 = executor.getChoices(
+      action.selections[1],
+      game.players[0],
+      { piece: { pieceId: 1 } }
+    );
+    expect(destsForPiece1).toHaveLength(2);
+    expect(destsForPiece1).toEqual([
+      { pieceId: 1, dest: 'A' },
+      { pieceId: 1, dest: 'B' },
+    ]);
+
+    // With piece 2 selected, only C should be available
+    const destsForPiece2 = executor.getChoices(
+      action.selections[1],
+      game.players[0],
+      { piece: { pieceId: 2 } }
+    );
+    expect(destsForPiece2).toHaveLength(1);
+    expect(destsForPiece2[0]).toEqual({ pieceId: 2, dest: 'C' });
+  });
+
+  it('should handle primitive filter values', () => {
+    const action = Action.create('select')
+      .chooseFrom('category', { choices: ['A', 'B'] })
+      .chooseFrom('item', {
+        choices: [
+          { category: 'A', name: 'Apple' },
+          { category: 'A', name: 'Apricot' },
+          { category: 'B', name: 'Banana' },
+        ],
+        filterBy: { key: 'category', selectionName: 'category' },
+      })
+      .execute(() => {});
+
+    const itemsForA = executor.getChoices(
+      action.selections[1],
+      game.players[0],
+      { category: 'A' }
+    );
+    expect(itemsForA).toHaveLength(2);
+    expect(itemsForA.map((i: any) => i.name)).toEqual(['Apple', 'Apricot']);
+  });
+
+  it('should hide action when no valid selection path exists', () => {
+    // Piece 3 has no valid destinations
+    const action = Action.create('move')
+      .chooseFrom<{ pieceId: number }>('piece', {
+        choices: [{ pieceId: 3 }],
+      })
+      .chooseFrom<{ pieceId: number; dest: string }>('destination', {
+        choices: [
+          { pieceId: 1, dest: 'A' },
+          { pieceId: 2, dest: 'B' },
+        ],
+        filterBy: { key: 'pieceId', selectionName: 'piece' },
+      })
+      .execute(() => {});
+
+    // Action should not be available because piece 3 has no destinations
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+  });
+
+  it('should show action when at least one valid path exists', () => {
+    const action = Action.create('move')
+      .chooseFrom<{ pieceId: number }>('piece', {
+        choices: [{ pieceId: 1 }, { pieceId: 3 }], // 1 has destinations, 3 doesn't
+      })
+      .chooseFrom<{ pieceId: number; dest: string }>('destination', {
+        choices: [
+          { pieceId: 1, dest: 'A' },
+          { pieceId: 1, dest: 'B' },
+        ],
+        filterBy: { key: 'pieceId', selectionName: 'piece' },
+      })
+      .execute(() => {});
+
+    // Action should be available because piece 1 has valid destinations
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+  });
+
+  it('should handle multiple levels of dependent selections', () => {
+    const action = Action.create('complex')
+      .chooseFrom<{ categoryId: number }>('category', {
+        choices: [{ categoryId: 1 }, { categoryId: 2 }],
+      })
+      .chooseFrom<{ categoryId: number; itemId: number }>('item', {
+        choices: [
+          { categoryId: 1, itemId: 10 },
+          { categoryId: 1, itemId: 11 },
+          { categoryId: 2, itemId: 20 },
+        ],
+        filterBy: { key: 'categoryId', selectionName: 'category' },
+      })
+      .chooseFrom<{ itemId: number; action: string }>('action', {
+        choices: [
+          { itemId: 10, action: 'buy' },
+          { itemId: 10, action: 'sell' },
+          { itemId: 20, action: 'trade' },
+        ],
+        filterBy: { key: 'itemId', selectionName: 'item' },
+      })
+      .execute(() => {});
+
+    // Get actions for item 10 (which belongs to category 1)
+    const actionsForItem10 = executor.getChoices(
+      action.selections[2],
+      game.players[0],
+      { category: { categoryId: 1 }, item: { categoryId: 1, itemId: 10 } }
+    );
+    expect(actionsForItem10).toHaveLength(2);
+    expect(actionsForItem10.map((a: any) => a.action)).toEqual(['buy', 'sell']);
+  });
+});
+
+describe('conditionWithReason', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('should set both condition and conditionMessage', () => {
+    const action = Action.create('test')
+      .conditionWithReason(
+        (ctx) => ctx.player.position === 0,
+        'Only player 1 can do this'
+      )
+      .execute(() => {});
+
+    expect(action.condition).toBeDefined();
+    expect(action.conditionMessage).toBe('Only player 1 can do this');
+  });
+
+  it('should support dynamic message function', () => {
+    const action = Action.create('test')
+      .conditionWithReason(
+        () => false,
+        (ctx) => `Player ${ctx.player.name} cannot do this`
+      )
+      .execute(() => {});
+
+    expect(typeof action.conditionMessage).toBe('function');
+  });
+});
+
+describe('getActionUnavailableReason', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('should return undefined for available action', () => {
+    const action = Action.create('test')
+      .condition(() => true)
+      .execute(() => {});
+
+    const reason = executor.getActionUnavailableReason(action, game.players[0]);
+    expect(reason).toBeUndefined();
+  });
+
+  it('should return condition message when condition fails', () => {
+    const action = Action.create('test')
+      .conditionWithReason(() => false, 'Not your turn')
+      .execute(() => {});
+
+    const reason = executor.getActionUnavailableReason(action, game.players[0]);
+    expect(reason).toBe('Not your turn');
+  });
+
+  it('should return dynamic condition message', () => {
+    const action = Action.create('test')
+      .conditionWithReason(
+        () => false,
+        (ctx) => `${ctx.player.name} cannot act`
+      )
+      .execute(() => {});
+
+    const reason = executor.getActionUnavailableReason(action, game.players[0]);
+    expect(reason).toBe('Player 1 cannot act');
+  });
+
+  it('should return generic message when condition fails without message', () => {
+    const action = Action.create('test')
+      .condition(() => false)
+      .execute(() => {});
+
+    const reason = executor.getActionUnavailableReason(action, game.players[0]);
+    expect(reason).toBe('Action condition not met');
+  });
+
+  it('should report when no choices for required selection', () => {
+    const action = Action.create('test')
+      .chooseElement('card', { elementClass: Card })
+      .execute(() => {});
+
+    const reason = executor.getActionUnavailableReason(action, game.players[0]);
+    expect(reason).toContain('No valid choices');
+    expect(reason).toContain('card');
+  });
+
+  it('should report when no valid selection path exists', () => {
+    const action = Action.create('move')
+      .chooseFrom<{ pieceId: number }>('piece', {
+        choices: [{ pieceId: 99 }],
+      })
+      .chooseFrom<{ pieceId: number; dest: string }>('destination', {
+        choices: [{ pieceId: 1, dest: 'A' }],
+        filterBy: { key: 'pieceId', selectionName: 'piece' },
+      })
+      .execute(() => {});
+
+    const reason = executor.getActionUnavailableReason(action, game.players[0]);
+    expect(reason).toContain('No valid combination');
+  });
+});
+
 describe('Game Action Integration', () => {
   let game: TestGame;
 
