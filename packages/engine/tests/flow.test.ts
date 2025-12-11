@@ -19,6 +19,8 @@ import {
   execute,
   setVar,
   noop,
+  phase,
+  TurnOrder,
 } from '../src/index.js';
 import type { FlowContext, FlowDefinition } from '../src/index.js';
 
@@ -806,5 +808,356 @@ describe('Complex Flow Scenarios', () => {
 
     expect(innerCount).toBe(4);
     expect(state.complete).toBe(true);
+  });
+});
+
+describe('Named Phases', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+  });
+
+  it('should create phase node', () => {
+    const node = phase('combat', { do: noop() });
+    expect(node.type).toBe('phase');
+    expect(node.config.name).toBe('combat');
+  });
+
+  it('should track current phase in state', () => {
+    const flow = defineFlow({
+      root: sequence(
+        phase('setup', { do: execute(() => {}) }),
+        phase('main', {
+          do: actionStep({ actions: ['act'] }),
+        })
+      ),
+    });
+
+    game.registerAction(
+      Action.create<TestGame>('act').execute(() => {})
+    );
+
+    const engine = new FlowEngine(game, flow);
+    const state = engine.start();
+
+    expect(state.currentPhase).toBe('main');
+    expect(state.awaitingInput).toBe(true);
+  });
+
+  it('should call onEnterPhase hook', () => {
+    const enteredPhases: string[] = [];
+
+    const flow = defineFlow({
+      root: sequence(
+        phase('setup', { do: execute(() => {}) }),
+        phase('main', { do: execute(() => {}) })
+      ),
+      onEnterPhase: (name) => {
+        enteredPhases.push(name);
+      },
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    expect(enteredPhases).toEqual(['setup', 'main']);
+  });
+
+  it('should call onExitPhase hook', () => {
+    const exitedPhases: string[] = [];
+
+    const flow = defineFlow({
+      root: sequence(
+        phase('setup', { do: execute(() => {}) }),
+        phase('main', { do: execute(() => {}) })
+      ),
+      onExitPhase: (name) => {
+        exitedPhases.push(name);
+      },
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    expect(exitedPhases).toEqual(['setup', 'main']);
+  });
+
+  it('should handle nested phases', () => {
+    const phaseLog: string[] = [];
+
+    const flow = defineFlow({
+      root: phase('outer', {
+        do: sequence(
+          execute(() => phaseLog.push('in outer')),
+          phase('inner', {
+            do: execute(() => phaseLog.push('in inner')),
+          }),
+          execute(() => phaseLog.push('back in outer'))
+        ),
+      }),
+      onEnterPhase: (name) => phaseLog.push(`enter:${name}`),
+      onExitPhase: (name) => phaseLog.push(`exit:${name}`),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    expect(phaseLog).toEqual([
+      'enter:outer',
+      'in outer',
+      'enter:inner',
+      'in inner',
+      'exit:inner',
+      'back in outer',
+      'exit:outer',
+    ]);
+  });
+});
+
+describe('Move Limits', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    game.registerAction(
+      Action.create<TestGame>('act').execute(() => {})
+    );
+  });
+
+  it('should auto-complete after maxMoves', () => {
+    let actionCount = 0;
+    game.registerAction(
+      Action.create<TestGame>('count').execute(() => {
+        actionCount++;
+      })
+    );
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        do: actionStep({
+          actions: ['count'],
+          maxMoves: 2,
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    // Player 0: 2 actions
+    expect(state.awaitingInput).toBe(true);
+    expect(state.moveCount).toBe(0);
+    expect(state.movesRemaining).toBe(2);
+
+    state = engine.resume('count', {});
+    expect(state.moveCount).toBe(1);
+    expect(state.movesRemaining).toBe(1);
+
+    state = engine.resume('count', {});
+    // Should auto-advance to player 1
+    expect(state.moveCount).toBe(0);
+    expect(state.currentPlayer).toBe(1);
+
+    // Player 1: 2 actions
+    state = engine.resume('count', {});
+    state = engine.resume('count', {});
+
+    expect(state.complete).toBe(true);
+    expect(actionCount).toBe(4);
+  });
+
+  it('should track movesRequired until minMoves met', () => {
+    game.registerAction(
+      Action.create<TestGame>('count').execute(() => {})
+    );
+
+    const flow = defineFlow({
+      root: actionStep({
+        actions: ['count'],
+        minMoves: 2,
+        maxMoves: 3,
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    expect(state.movesRequired).toBe(2);
+    expect(state.movesRemaining).toBe(3);
+
+    state = engine.resume('count', {});
+    expect(state.movesRequired).toBe(1);
+
+    state = engine.resume('count', {});
+    expect(state.movesRequired).toBe(0);
+  });
+
+  it('should not complete with repeatUntil if minMoves not met', () => {
+    let shouldEnd = false;
+    let actionCount = 0;
+
+    game.registerAction(
+      Action.create<TestGame>('count').execute(() => {
+        actionCount++;
+      })
+    );
+
+    const flow = defineFlow({
+      root: actionStep({
+        actions: ['count'],
+        minMoves: 3,
+        repeatUntil: () => shouldEnd,
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    // Try to end early
+    shouldEnd = true;
+    state = engine.resume('count', {}); // 1 action
+    expect(state.awaitingInput).toBe(true); // Still waiting, minMoves not met
+
+    state = engine.resume('count', {}); // 2 actions
+    expect(state.awaitingInput).toBe(true); // Still waiting
+
+    state = engine.resume('count', {}); // 3 actions, minMoves met
+    expect(state.complete).toBe(true); // Now complete
+
+    expect(actionCount).toBe(3);
+  });
+});
+
+describe('Turn Order Presets', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 3 });
+  });
+
+  it('should use DEFAULT turn order', () => {
+    const visitedPlayers: number[] = [];
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        ...TurnOrder.DEFAULT,
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.position);
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    expect(visitedPlayers).toEqual([0, 1, 2]);
+  });
+
+  it('should use REVERSE turn order', () => {
+    const visitedPlayers: number[] = [];
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        ...TurnOrder.REVERSE,
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.position);
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    expect(visitedPlayers).toEqual([2, 1, 0]);
+  });
+
+  it('should use ONLY to filter players', () => {
+    const visitedPlayers: number[] = [];
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        ...TurnOrder.ONLY([0, 2]),
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.position);
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    // Only players 0 and 2, in natural order
+    expect(visitedPlayers).toEqual([0, 2]);
+  });
+
+  it('should use START_FROM with position (no wrap-around)', () => {
+    const visitedPlayers: number[] = [];
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        ...TurnOrder.START_FROM(1),
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.position);
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    // Starts from player 1, goes to end (no wrap-around)
+    expect(visitedPlayers).toEqual([1, 2]);
+  });
+
+  it('should use CONTINUE from current player', () => {
+    // Set current player to position 2
+    game.players.setCurrent(game.players[2]);
+
+    const visitedPlayers: number[] = [];
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        ...TurnOrder.CONTINUE,
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.position);
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    // Should start from player 2, goes to end
+    expect(visitedPlayers).toEqual([2]);
+  });
+
+  it('should use ACTIVE_ONLY to skip eliminated players', () => {
+    // Create a game class that tracks eliminated status
+    class EliminablePlayer extends Player {
+      eliminated = false;
+    }
+    class EliminableGame extends Game<EliminableGame, EliminablePlayer> {}
+
+    const eliminableGame = new EliminableGame({ playerCount: 3 });
+    // Mark player 1 as eliminated
+    (eliminableGame.players[1] as any).eliminated = true;
+
+    const visitedPlayers: number[] = [];
+
+    const flow = defineFlow({
+      root: eachPlayer({
+        ...TurnOrder.ACTIVE_ONLY,
+        do: execute((ctx) => {
+          visitedPlayers.push(ctx.player!.position);
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(eliminableGame, flow);
+    engine.start();
+
+    // Player 1 is eliminated, should be skipped
+    expect(visitedPlayers).toEqual([0, 2]);
   });
 });

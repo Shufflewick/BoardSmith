@@ -14,7 +14,8 @@ export type FlowNodeType =
   | 'simultaneous-action-step'
   | 'switch'
   | 'if'
-  | 'execute';
+  | 'execute'
+  | 'phase';
 
 /**
  * Result of a flow step execution
@@ -138,6 +139,10 @@ export interface ActionStepConfig extends BaseFlowConfig {
   skipIf?: (context: FlowContext) => boolean;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /** Minimum number of moves required before step can complete */
+  minMoves?: number;
+  /** Maximum number of moves allowed (auto-completes after this many) */
+  maxMoves?: number;
 }
 
 /**
@@ -193,6 +198,16 @@ export interface ExecuteConfig extends BaseFlowConfig {
 }
 
 /**
+ * Configuration for phase flow (named game phase)
+ */
+export interface PhaseConfig extends BaseFlowConfig {
+  /** Phase name (required, displayed in UI) */
+  name: string;
+  /** Body to execute during this phase */
+  do: FlowNode;
+}
+
+/**
  * Union of all flow node types
  */
 export type FlowNode =
@@ -204,7 +219,8 @@ export type FlowNode =
   | { type: 'simultaneous-action-step'; config: SimultaneousActionStepConfig }
   | { type: 'switch'; config: SwitchConfig }
   | { type: 'if'; config: IfConfig }
-  | { type: 'execute'; config: ExecuteConfig };
+  | { type: 'execute'; config: ExecuteConfig }
+  | { type: 'phase'; config: PhaseConfig };
 
 /**
  * Per-player awaiting state for simultaneous actions
@@ -236,6 +252,14 @@ export interface FlowState {
   prompt?: string;
   /** Multiple players awaiting input (for simultaneous action steps) */
   awaitingPlayers?: PlayerAwaitingState[];
+  /** Current named phase (for UI display) */
+  currentPhase?: string;
+  /** Move count for current action step (if minMoves/maxMoves configured) */
+  moveCount?: number;
+  /** Moves remaining until maxMoves (if configured) */
+  movesRemaining?: number;
+  /** Moves required until minMoves met (if configured) */
+  movesRequired?: number;
 }
 
 /**
@@ -250,4 +274,8 @@ export interface FlowDefinition {
   isComplete?: (context: FlowContext) => boolean;
   /** Determine winners when complete */
   getWinners?: (context: FlowContext) => Player[];
+  /** Called when entering a named phase */
+  onEnterPhase?: (phaseName: string, context: FlowContext) => void;
+  /** Called when exiting a named phase */
+  onExitPhase?: (phaseName: string, context: FlowContext) => void;
 }

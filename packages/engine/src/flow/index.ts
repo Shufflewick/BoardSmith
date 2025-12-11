@@ -5,6 +5,7 @@ export { FlowEngine } from './engine.js';
 export {
   sequence,
   namedSequence,
+  phase,
   loop,
   repeat,
   eachPlayer,
@@ -19,6 +20,10 @@ export {
   execute,
   setVar,
 } from './builders.js';
+
+// Turn order presets
+export { TurnOrder } from './turn-order.js';
+export type { TurnOrderConfig } from './turn-order.js';
 
 // Types
 export type {
@@ -39,5 +44,6 @@ export type {
   SwitchConfig,
   IfConfig,
   ExecuteConfig,
+  PhaseConfig,
   PlayerAwaitingState,
 } from './types.js';

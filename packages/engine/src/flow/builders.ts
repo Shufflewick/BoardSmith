@@ -11,6 +11,7 @@ import type {
   SwitchConfig,
   IfConfig,
   FlowDefinition,
+  PhaseConfig,
 } from './types.js';
 
 /**
@@ -38,6 +39,38 @@ export function namedSequence(name: string, ...steps: FlowNode[]): FlowNode {
   return {
     type: 'sequence',
     config: { name, steps },
+  };
+}
+
+/**
+ * Create a named game phase
+ *
+ * Phases are named sections of the flow that can be displayed in the UI
+ * (e.g., "Combat Phase", "Income Phase"). The onEnterPhase/onExitPhase
+ * hooks in defineFlow will be called when entering/exiting phases.
+ *
+ * @example
+ * ```typescript
+ * sequence(
+ *   phase('setup', {
+ *     do: simultaneousActionStep({ actions: ['chooseCharacter'] })
+ *   }),
+ *   phase('combat', {
+ *     do: eachPlayer({ do: actionStep({ actions: ['attack', 'defend'] }) })
+ *   }),
+ *   phase('income', {
+ *     do: execute({ fn: ctx => ctx.game.distributeIncome() })
+ *   })
+ * )
+ * ```
+ */
+export function phase(name: string, config: { do: FlowNode }): FlowNode {
+  return {
+    type: 'phase',
+    config: {
+      name,
+      do: config.do,
+    },
   };
 }
 
@@ -157,6 +190,16 @@ export function forEach<T>(config: {
  *   prompt: 'Ask another player for cards'
  * })
  * ```
+ *
+ * @example
+ * ```typescript
+ * // With move limits (action points)
+ * actionStep({
+ *   actions: ['move', 'attack', 'heal'],
+ *   minMoves: 1,  // Must take at least 1 action
+ *   maxMoves: 3,  // Can take at most 3 actions
+ * })
+ * ```
  */
 export function actionStep(config: {
   name?: string;
@@ -166,6 +209,8 @@ export function actionStep(config: {
   repeatUntil?: (context: FlowContext) => boolean;
   skipIf?: (context: FlowContext) => boolean;
   timeout?: number;
+  minMoves?: number;
+  maxMoves?: number;
 }): FlowNode {
   return {
     type: 'action-step',
@@ -177,6 +222,8 @@ export function actionStep(config: {
       repeatUntil: config.repeatUntil,
       skipIf: config.skipIf,
       timeout: config.timeout,
+      minMoves: config.minMoves,
+      maxMoves: config.maxMoves,
     },
   };
 }
@@ -327,18 +374,39 @@ export function ifThen(config: {
  *   getWinners: (ctx) => findPlayersWithMostBooks(ctx)
  * })
  * ```
+ *
+ * @example
+ * ```typescript
+ * // With phase hooks
+ * defineFlow({
+ *   root: sequence(
+ *     phase('setup', { do: ... }),
+ *     phase('main', { do: ... })
+ *   ),
+ *   onEnterPhase: (phaseName, ctx) => {
+ *     ctx.game.message(`Entering ${phaseName} phase`);
+ *   },
+ *   onExitPhase: (phaseName, ctx) => {
+ *     ctx.game.message(`Exiting ${phaseName} phase`);
+ *   }
+ * })
+ * ```
  */
 export function defineFlow(config: {
   setup?: (context: FlowContext) => void;
   root: FlowNode;
   isComplete?: (context: FlowContext) => boolean;
   getWinners?: (context: FlowContext) => Player[];
+  onEnterPhase?: (phaseName: string, context: FlowContext) => void;
+  onExitPhase?: (phaseName: string, context: FlowContext) => void;
 }): FlowDefinition {
   return {
     setup: config.setup,
     root: config.root,
     isComplete: config.isComplete,
     getWinners: config.getWinners,
+    onEnterPhase: config.onEnterPhase,
+    onExitPhase: config.onExitPhase,
   };
 }
 

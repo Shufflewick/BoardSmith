@@ -4,7 +4,9 @@ import {
   simultaneousActionStep,
   execute,
   sequence,
+  phase,
   type FlowDefinition,
+  type FlowContext,
 } from '@boardsmith/engine';
 import type { CribbageGame } from './game.js';
 import { Card, CribbagePlayer } from './elements.js';
@@ -24,16 +26,8 @@ import { Card, CribbagePlayer } from './elements.js';
  */
 export function createCribbageFlow(): FlowDefinition {
   // Discard phase - both players discard 2 cards simultaneously
-  const discardPhase = sequence(
-    execute((ctx) => {
-      const game = ctx.game as CribbageGame;
-      game.cribbagePhase = 'discarding'; // Ensure phase is set for action condition
-      game.message('=== DISCARD PHASE ===');
-      game.message('Each player must discard 2 cards to the crib');
-    }),
-
-    // Simultaneous discard - all players can discard at the same time
-    simultaneousActionStep({
+  const discardPhase = phase('discarding', {
+    do: simultaneousActionStep({
       name: 'simultaneous-discard',
       actions: ['discard'],
       prompt: 'Discard 2 cards to the crib',
@@ -49,23 +43,23 @@ export function createCribbageFlow(): FlowDefinition {
         return game.allPlayersDiscarded() || game.isFinished();
       },
     }),
-  );
+  });
 
   // Play phase - players alternate playing cards ONE AT A TIME
-  const playPhase = sequence(
-    execute((ctx) => {
-      const game = ctx.game as CribbageGame;
-      game.cribbagePhase = 'play';
-      game.runningTotal = 0;
-      game.currentPlayCards = [];
-      game.playerSaidGo = [false, false];
-      // Non-dealer plays first
-      game.currentPlayTurn = game.getNonDealer().position;
-      game.message('=== PLAY PHASE ===');
-    }),
+  const playPhase = phase('play', {
+    do: sequence(
+      // Initialize play state
+      execute((ctx) => {
+        const game = ctx.game as CribbageGame;
+        game.runningTotal = 0;
+        game.currentPlayCards = [];
+        game.playerSaidGo = [false, false];
+        // Non-dealer plays first
+        game.currentPlayTurn = game.getNonDealer().position;
+      }),
 
-    // Main play loop - continues until all cards played
-    loop({
+      // Main play loop - continues until all cards played
+      loop({
       name: 'play-loop',
       while: (ctx) => {
         const game = ctx.game as CribbageGame;
@@ -157,55 +151,18 @@ export function createCribbageFlow(): FlowDefinition {
       ),
     }),
 
-    // Award last card point if not already at 31
-    execute((ctx) => {
-      const game = ctx.game as CribbageGame;
-      if (game.lastPlayerToPlay >= 0 && game.runningTotal > 0 && game.runningTotal < 31) {
-        const lastPlayer = game.players[game.lastPlayerToPlay] as CribbagePlayer;
-        game.addPoints(lastPlayer, 1, 'Last card');
-      }
-      // Final reset
-      game.resetCount();
-    }),
-  );
-
-  // Scoring phase - score hands and crib
-  const scoringPhase = sequence(
-    execute((ctx) => {
-      const game = ctx.game as CribbageGame;
-      game.cribbagePhase = 'scoring';
-      game.message('=== SCORING PHASE ===');
-    }),
-
-    // Move played cards back to hands for scoring display
-    execute((ctx) => {
-      const game = ctx.game as CribbageGame;
-
-      // For scoring, we need to know which cards were in each hand
-      // Since cards are in playedCards pile, we need a different approach
-      // Actually, in real cribbage, you keep your 4 cards - let's track this properly
-      // For now, just score based on what we have
-
-      // Non-dealer scores first
-      const nonDealer = game.getNonDealer();
-      game.message(`--- ${nonDealer.name}'s hand ---`);
-      game.scorePlayerHand(nonDealer);
-
-      if (game.isFinished()) return;
-
-      // Dealer scores hand
-      const dealer = game.getDealer();
-      game.message(`--- ${dealer.name}'s hand ---`);
-      game.scorePlayerHand(dealer);
-
-      if (game.isFinished()) return;
-
-      // Dealer scores crib
-      game.message(`--- ${dealer.name}'s crib ---`);
-      game.crib.contentsVisible(); // Reveal crib
-      game.scoreCrib();
-    }),
-  );
+      // Award last card point if not already at 31
+      execute((ctx) => {
+        const game = ctx.game as CribbageGame;
+        if (game.lastPlayerToPlay >= 0 && game.runningTotal > 0 && game.runningTotal < 31) {
+          const lastPlayer = game.players[game.lastPlayerToPlay] as CribbagePlayer;
+          game.addPoints(lastPlayer, 1, 'Last card');
+        }
+        // Final reset
+        game.resetCount();
+      }),
+    ),
+  });
 
   // One complete round
   const playRound = sequence(
@@ -235,27 +192,29 @@ export function createCribbageFlow(): FlowDefinition {
     playPhase,
 
     // Scoring phase - score all hands and show combined summary
-    execute((ctx) => {
-      const game = ctx.game as CribbageGame;
-      if (game.isFinished()) {
-        game.message('Game ended during play!');
-        return;
-      }
-      game.cribbagePhase = 'scoring';
-      game.message('=== SCORING PHASE ===');
-      // Score all hands and crib, build round summary for UI
-      game.scoreRoundAndBuildSummary();
-    }),
+    phase('scoring', {
+      do: sequence(
+        execute((ctx) => {
+          const game = ctx.game as CribbageGame;
+          if (game.isFinished()) {
+            game.message('Game ended during play!');
+            return;
+          }
+          // Score all hands and crib, build round summary for UI
+          game.scoreRoundAndBuildSummary();
+        }),
 
-    // Wait for acknowledgment of round summary (either player can continue)
-    simultaneousActionStep({
-      name: 'acknowledge-round-summary',
-      actions: ['acknowledgeScore'],
-      prompt: 'View round scores and continue',
-      allDone: (ctx) => {
-        const game = ctx.game as CribbageGame;
-        return game.isFinished() || !game.roundSummary.active;
-      },
+        // Wait for acknowledgment of round summary (either player can continue)
+        simultaneousActionStep({
+          name: 'acknowledge-round-summary',
+          actions: ['acknowledgeScore'],
+          prompt: 'View round scores and continue',
+          allDone: (ctx) => {
+            const game = ctx.game as CribbageGame;
+            return game.isFinished() || !game.roundSummary.active;
+          },
+        }),
+      ),
     }),
 
     // Rotate dealer for next round
@@ -318,6 +277,30 @@ export function createCribbageFlow(): FlowDefinition {
     getWinners: (ctx) => {
       const game = ctx.game as CribbageGame;
       return game.getWinners();
+    },
+
+    // Phase lifecycle hooks
+    onEnterPhase: (phaseName, ctx) => {
+      const game = ctx.game as CribbageGame;
+
+      // Set the game's cribbagePhase property (used by actions and UI)
+      if (phaseName === 'discarding' || phaseName === 'play' || phaseName === 'scoring') {
+        game.cribbagePhase = phaseName;
+      }
+
+      // Announce the phase
+      const phaseNames: Record<string, string> = {
+        discarding: 'DISCARD PHASE',
+        play: 'PLAY PHASE',
+        scoring: 'SCORING PHASE',
+      };
+      const displayName = phaseNames[phaseName];
+      if (displayName) {
+        game.message(`=== ${displayName} ===`);
+      }
+      if (phaseName === 'discarding') {
+        game.message('Each player must discard 2 cards to the crib');
+      }
     },
   };
 }

@@ -17,6 +17,7 @@ import type {
   SwitchConfig,
   IfConfig,
   ExecuteConfig,
+  PhaseConfig,
   PlayerAwaitingState,
 } from './types.js';
 
@@ -73,6 +74,12 @@ export class FlowEngine<G extends Game = Game> {
   private lastActionResult?: ActionResult;
   /** For simultaneous action steps - tracks which players can act */
   private awaitingPlayers: PlayerAwaitingState[] = [];
+  /** Current named phase (for UI display) */
+  private currentPhase?: string;
+  /** Move count for current action step with move limits */
+  private moveCount = 0;
+  /** Current action step config (for move limit tracking) */
+  private currentActionConfig?: ActionStepConfig;
 
   constructor(game: G, definition: FlowDefinition) {
     this.game = game;
@@ -130,15 +137,38 @@ export class FlowEngine<G extends Game = Game> {
     // Clear awaiting state
     this.awaitingInput = false;
 
-    // Mark the current ActionStep frame as completed (unless repeatUntil keeps it going)
+    // Handle action step completion logic
     if (currentFrame?.node.type === 'action-step') {
       const config = currentFrame.node.config as ActionStepConfig;
-      // Check if we should repeat
-      if (!config.repeatUntil || config.repeatUntil(this.createContext())) {
+
+      // Increment move count
+      const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
+      const newMoveCount = currentMoveCount + 1;
+      currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };
+
+      // Check if maxMoves reached - auto-complete
+      if (config.maxMoves && newMoveCount >= config.maxMoves) {
         currentFrame.completed = true;
+        this.currentActionConfig = undefined;
+        this.moveCount = 0;
       }
-      // NOTE: Don't clear lastActionResult here - let the flow read it first
-      // It will be overwritten by the next action anyway
+      // Check repeatUntil - only complete if minMoves is met
+      else if (config.repeatUntil) {
+        const minMovesMet = !config.minMoves || newMoveCount >= config.minMoves;
+        if (config.repeatUntil(this.createContext()) && minMovesMet) {
+          currentFrame.completed = true;
+          this.currentActionConfig = undefined;
+          this.moveCount = 0;
+        }
+      }
+      // No repeatUntil and no maxMoves - complete after single action (unless minMoves/maxMoves configured)
+      else if (!config.minMoves && !config.maxMoves) {
+        currentFrame.completed = true;
+        this.currentActionConfig = undefined;
+        this.moveCount = 0;
+      }
+      // Has minMoves but no maxMoves and no repeatUntil - keep going
+      // The executeActionStep will check minMoves when re-entered
     }
 
     return this.run();
@@ -234,7 +264,7 @@ export class FlowEngine<G extends Game = Game> {
    * Get the current flow state
    */
   getState(): FlowState {
-    return {
+    const state: FlowState = {
       position: this.getPosition(),
       complete: this.complete,
       awaitingInput: this.awaitingInput,
@@ -242,7 +272,21 @@ export class FlowEngine<G extends Game = Game> {
       availableActions: this.awaitingInput ? this.availableActions : undefined,
       prompt: this.prompt,
       awaitingPlayers: this.awaitingPlayers.length > 0 ? this.awaitingPlayers : undefined,
+      currentPhase: this.currentPhase,
     };
+
+    // Add move count info if in an action step with limits
+    if (this.currentActionConfig && (this.currentActionConfig.minMoves || this.currentActionConfig.maxMoves)) {
+      state.moveCount = this.moveCount;
+      if (this.currentActionConfig.maxMoves) {
+        state.movesRemaining = this.currentActionConfig.maxMoves - this.moveCount;
+      }
+      if (this.currentActionConfig.minMoves) {
+        state.movesRequired = Math.max(0, this.currentActionConfig.minMoves - this.moveCount);
+      }
+    }
+
+    return state;
   }
 
   /**
@@ -331,6 +375,7 @@ export class FlowEngine<G extends Game = Game> {
       case 'loop':
       case 'each-player':
       case 'for-each':
+      case 'phase':
         return node.config.do;
       case 'if':
         return index === 0 ? node.config.then : (node.config.else ?? node.config.then);
@@ -414,6 +459,8 @@ export class FlowEngine<G extends Game = Game> {
         return this.executeIf(frame, frame.node.config, context);
       case 'execute':
         return this.executeExecute(frame, frame.node.config, context);
+      case 'phase':
+        return this.executePhase(frame, frame.node.config, context);
       default:
         frame.completed = true;
         return { continue: true, awaitingInput: false };
@@ -545,12 +592,31 @@ export class FlowEngine<G extends Game = Game> {
   ): FlowStepResult {
     // Check skip condition
     if (config.skipIf?.(context)) {
+      this.currentActionConfig = undefined;
+      this.moveCount = 0;
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
 
-    // Check repeat-until (if we have a last action result)
-    if (this.lastActionResult && config.repeatUntil?.(context)) {
+    // Initialize move count on first entry
+    if (frame.data?.moveCount === undefined) {
+      frame.data = { ...frame.data, moveCount: 0 };
+    }
+    const moveCount = frame.data.moveCount as number;
+
+    // Check if maxMoves reached
+    if (config.maxMoves && moveCount >= config.maxMoves) {
+      this.currentActionConfig = undefined;
+      this.moveCount = 0;
+      frame.completed = true;
+      return { continue: true, awaitingInput: false };
+    }
+
+    // Check repeat-until (if we have a last action result and minMoves is met)
+    const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
+    if (this.lastActionResult && config.repeatUntil?.(context) && minMovesMet) {
+      this.currentActionConfig = undefined;
+      this.moveCount = 0;
       frame.completed = true;
       this.lastActionResult = undefined;
       return { continue: true, awaitingInput: false };
@@ -574,11 +640,22 @@ export class FlowEngine<G extends Game = Game> {
       return this.game.getAvailableActions(player as any).some((a) => a.name === actionName);
     });
 
-    if (available.length === 0) {
-      // No available actions, complete this step
+    // If no available actions and minMoves met, complete
+    if (available.length === 0 && minMovesMet) {
+      this.currentActionConfig = undefined;
+      this.moveCount = 0;
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
+
+    // If no available actions but minMoves not met, this is an error state
+    if (available.length === 0 && !minMovesMet) {
+      throw new Error(`ActionStep requires ${config.minMoves} moves but only ${moveCount} were possible`);
+    }
+
+    // Store config for getState() move count tracking
+    this.currentActionConfig = config;
+    this.moveCount = moveCount;
 
     // Prompt for input
     this.currentPlayer = player;
@@ -725,6 +802,41 @@ export class FlowEngine<G extends Game = Game> {
     // Update variables in engine from context
     this.variables = { ...context.variables };
     frame.completed = true;
+    return { continue: true, awaitingInput: false };
+  }
+
+  private executePhase(
+    frame: ExecutionFrame,
+    config: PhaseConfig,
+    context: FlowContext
+  ): FlowStepResult {
+    // If we haven't entered this phase yet
+    if (!frame.data?.entered) {
+      // Set current phase
+      const previousPhase = this.currentPhase;
+      this.currentPhase = config.name;
+
+      // Call onEnterPhase hook
+      if (this.definition.onEnterPhase) {
+        this.definition.onEnterPhase(config.name, context);
+      }
+
+      // Push the phase body and mark as entered
+      this.stack.push({ node: config.do, index: 0, completed: false });
+      frame.data = { entered: true, previousPhase };
+
+      return { continue: true, awaitingInput: false };
+    }
+
+    // Phase body has completed - call onExitPhase hook
+    if (this.definition.onExitPhase) {
+      this.definition.onExitPhase(config.name, context);
+    }
+
+    // Restore previous phase (for nested phases)
+    this.currentPhase = frame.data.previousPhase as string | undefined;
+    frame.completed = true;
+
     return { continue: true, awaitingInput: false };
   }
 }

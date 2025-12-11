@@ -93,6 +93,7 @@ export {
   FlowEngine,
   sequence,
   namedSequence,
+  phase,
   loop,
   repeat,
   eachPlayer,
@@ -106,6 +107,7 @@ export {
   noop,
   execute,
   setVar,
+  TurnOrder,
 } from './flow/index.js';
 
 export type {
@@ -126,7 +128,9 @@ export type {
   SwitchConfig,
   IfConfig,
   ExecuteConfig,
+  PhaseConfig,
   PlayerAwaitingState,
+  TurnOrderConfig,
 } from './flow/index.js';
 
 // Utilities (serialization, snapshots, replays)
