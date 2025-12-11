@@ -27,6 +27,22 @@ export type GameOptions = {
 export type GamePhase = 'setup' | 'started' | 'finished';
 
 /**
+ * Function to transform game state for a specific player's view.
+ * Runs AFTER zone-based visibility filtering.
+ * Use for attribute-level filtering that zone visibility can't handle.
+ *
+ * @param state - The zone-filtered state
+ * @param playerPosition - The player position (null for spectators)
+ * @param game - The game instance
+ * @returns The transformed state
+ */
+export type PlayerViewFunction<G extends Game = Game> = (
+  state: ElementJSON,
+  playerPosition: number | null,
+  game: G
+) => ElementJSON;
+
+/**
  * Seeded random number generator
  */
 function createSeededRandom(seed: string): () => number {
@@ -53,6 +69,12 @@ export class Game<
   G extends Game = any,
   P extends Player = any
 > extends Space<G, P> {
+  /**
+   * Optional function to transform state for each player's view.
+   * Override in subclass for custom attribute-level filtering.
+   */
+  static playerView?: PlayerViewFunction;
+
   /** Container for removed elements */
   pile!: GameElement;
 
@@ -578,16 +600,19 @@ export class Game<
   /**
    * Get the game state from the perspective of a specific player
    * (hides elements that player shouldn't see based on zone visibility)
+   * @param player - Player, player position, or null for spectator view
    */
-  toJSONForPlayer(player: P | number): ElementJSON {
-    const position = typeof player === 'number' ? player : player.position;
+  toJSONForPlayer(player: P | number | null): ElementJSON {
+    const position = player === null ? null : (typeof player === 'number' ? player : player.position);
+    // For visibility checks, spectators use -1 (no special access)
+    const visibilityPosition = position ?? -1;
 
     const filterElement = (json: ElementJSON, element: GameElement): ElementJSON | null => {
       const visibility = element.getEffectiveVisibility();
 
       // Handle count-only mode: show count but not contents
       // Preserve element name and $-prefixed system attributes (like $type) for AutoUI rendering
-      if (visibility.mode === 'count-only' && !element.isVisibleTo(position)) {
+      if (visibility.mode === 'count-only' && !element.isVisibleTo(visibilityPosition)) {
         const systemAttrs: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(json.attributes ?? {})) {
           if (key.startsWith('$')) {
@@ -604,7 +629,7 @@ export class Game<
       }
 
       // Check if element is visible to this player
-      if (!element.isVisibleTo(position)) {
+      if (!element.isVisibleTo(visibilityPosition)) {
         // Return a hidden placeholder
         return {
           className: json.className,
@@ -632,12 +657,21 @@ export class Game<
             children: undefined,
             childCount: element._t.children.length,
           };
-        } else if (zoneVisibility.mode === 'owner' && element.player?.position !== position) {
-          // Owner-only zone and this player doesn't own it
+        } else if (zoneVisibility.mode === 'owner' && element.player?.position !== visibilityPosition) {
+          // Owner-only zone and this player doesn't own it - show hidden placeholders
+          const hiddenChildren: ElementJSON[] = [];
+          if (json.children) {
+            for (const childJson of json.children) {
+              hiddenChildren.push({
+                className: childJson.className,
+                id: childJson.id,
+                attributes: { __hidden: true },
+              });
+            }
+          }
           return {
             ...json,
-            children: undefined,
-            childCount: element._t.children.length,
+            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
           };
         }
       }
@@ -662,7 +696,15 @@ export class Game<
     };
 
     const fullJson = this.toJSON();
-    return filterElement(fullJson, this) ?? fullJson;
+    let filteredState = filterElement(fullJson, this) ?? fullJson;
+
+    // Apply playerView transformation if defined
+    const GameClass = this.constructor as typeof Game;
+    if (GameClass.playerView) {
+      filteredState = GameClass.playerView(filteredState, position, this);
+    }
+
+    return filteredState;
   }
 
   /**

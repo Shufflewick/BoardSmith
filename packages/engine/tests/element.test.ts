@@ -7,6 +7,7 @@ import {
   ElementCollection,
   Player,
 } from '../src/index.js';
+import type { ElementJSON, PlayerViewFunction } from '../src/index.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
@@ -507,5 +508,97 @@ describe('Player', () => {
     game.setPlayerContext(game.players[0]);
     const myHand = game.first(Hand, { mine: true });
     expect(myHand).toBe(hand1);
+  });
+});
+
+describe('playerView Function', () => {
+  it('should call playerView after zone-based filtering', () => {
+    class GameWithPlayerView extends Game<GameWithPlayerView, Player> {
+      static playerView = (state: ElementJSON, _pos: number | null) => ({
+        ...state,
+        attributes: { ...state.attributes, transformed: true },
+      });
+    }
+
+    const game = new GameWithPlayerView({ playerCount: 2 });
+    const view = game.toJSONForPlayer(0);
+
+    expect(view.attributes?.transformed).toBe(true);
+  });
+
+  it('should receive correct player position', () => {
+    let receivedPosition: number | null = -999;
+
+    class GameTrackingPosition extends Game<GameTrackingPosition, Player> {
+      static playerView = (state: ElementJSON, pos: number | null) => {
+        receivedPosition = pos;
+        return state;
+      };
+    }
+
+    const game = new GameTrackingPosition({ playerCount: 3 });
+
+    game.toJSONForPlayer(0);
+    expect(receivedPosition).toBe(0);
+
+    game.toJSONForPlayer(2);
+    expect(receivedPosition).toBe(2);
+  });
+
+  it('should handle spectator (null position)', () => {
+    let receivedPosition: number | null = -999;
+
+    class GameWithSpectator extends Game<GameWithSpectator, Player> {
+      static playerView = (state: ElementJSON, pos: number | null) => {
+        receivedPosition = pos;
+        return {
+          ...state,
+          attributes: { ...state.attributes, isSpectator: pos === null },
+        };
+      };
+    }
+
+    const game = new GameWithSpectator({ playerCount: 2 });
+    const view = game.toJSONForPlayer(null);
+
+    expect(receivedPosition).toBe(null);
+    expect(view.attributes?.isSpectator).toBe(true);
+  });
+
+  it('should strip attributes in playerView', () => {
+    class GameWithSecrets extends Game<GameWithSecrets, Player> {
+      secretValue = 42;
+      publicValue = 'visible';
+
+      static playerView = (state: ElementJSON, _pos: number | null) => ({
+        ...state,
+        attributes: {
+          ...state.attributes,
+          secretValue: undefined, // Strip the secret
+        },
+      });
+    }
+
+    const game = new GameWithSecrets({ playerCount: 2 });
+    const view = game.toJSONForPlayer(0);
+
+    expect(view.attributes?.publicValue).toBe('visible');
+    expect(view.attributes?.secretValue).toBeUndefined();
+  });
+
+  it('should not affect games without playerView', () => {
+    const game = new TestGame({ playerCount: 2 });
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(3, Card, 'card', (i) => ({
+      suit: 'H',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+
+    const view = game.toJSONForPlayer(0);
+
+    expect(view.className).toBe('TestGame');
+    expect(view.children?.length).toBe(1);
+    expect(view.children?.[0].children?.length).toBe(3);
   });
 });

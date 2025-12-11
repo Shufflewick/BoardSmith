@@ -19,7 +19,7 @@ export type {
   Sorter,
 } from './types.js';
 
-export type { GameOptions, GamePhase } from './game.js';
+export type { GameOptions, GamePhase, PlayerViewFunction } from './game.js';
 export type { ElementLayout } from './grid.js';
 export type { HexOrientation, HexCoordSystem } from './hex-grid.js';
 export type { LayoutDirection, LayoutAlignment } from './space.js';

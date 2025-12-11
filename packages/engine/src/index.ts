@@ -24,6 +24,7 @@ export type {
   Sorter,
   GameOptions,
   GamePhase,
+  PlayerViewFunction,
   ElementLayout,
   HexOrientation,
   HexCoordSystem,
