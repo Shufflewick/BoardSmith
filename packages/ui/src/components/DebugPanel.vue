@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
+interface SerializedAction {
+  name: string;
+  player: number;
+  args: Record<string, unknown>;
+  timestamp?: number;
+}
+
 interface DebugPanelProps {
   /** Current game state (raw) */
   state: any;
@@ -25,14 +32,27 @@ const emit = defineEmits<{
   'switch-player': [position: number];
   'restart-game': [];
   'update:expanded': [value: boolean];
+  'time-travel': [state: any | null, actionIndex: number | null];
 }>();
 
 // Local state
 const panelExpanded = ref(props.expanded);
-const activeTab = ref<'state' | 'actions' | 'settings'>('state');
+const activeTab = ref<'state' | 'history' | 'actions' | 'settings'>('state');
 const showRawState = ref(false);
 const stateSearchQuery = ref('');
 const expandedPaths = ref<Set<string>>(new Set(['root']));
+
+// History state
+const actionHistory = ref<SerializedAction[]>([]);
+const historyLoading = ref(false);
+const historyError = ref<string | null>(null);
+const historyLastFetched = ref<number>(0);
+
+// Time travel state
+const selectedActionIndex = ref<number | null>(null);
+const historicalState = ref<any>(null);
+const historicalStateLoading = ref(false);
+const historicalStateError = ref<string | null>(null);
 
 // Sync expanded state
 watch(() => props.expanded, (val) => {
@@ -175,6 +195,151 @@ function downloadState() {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// Fetch action history from server
+async function fetchHistory() {
+  if (!props.gameId || historyLoading.value) return;
+
+  historyLoading.value = true;
+  historyError.value = null;
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/history`);
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch history');
+    }
+
+    actionHistory.value = data.actionHistory || [];
+    historyLastFetched.value = Date.now();
+  } catch (e) {
+    historyError.value = e instanceof Error ? e.message : 'Unknown error';
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+// Refresh history when switching to history tab
+watch(activeTab, (tab) => {
+  if (tab === 'history' && props.gameId) {
+    // Refresh if not fetched recently (within 2 seconds)
+    if (Date.now() - historyLastFetched.value > 2000) {
+      fetchHistory();
+    }
+  }
+});
+
+// Refresh history when state changes (new action occurred)
+watch(() => props.state, () => {
+  if (activeTab.value === 'history') {
+    fetchHistory();
+  }
+}, { deep: false });
+
+// Format action for display
+function formatActionName(name: string): string {
+  // Convert camelCase to Title Case with spaces
+  return name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, s => s.toUpperCase());
+}
+
+// Format action arguments for display
+function formatActionArgs(args: Record<string, unknown>): string {
+  if (!args || Object.keys(args).length === 0) return '';
+
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (value !== undefined && value !== null) {
+      // Handle element references
+      if (typeof value === 'object' && value !== null) {
+        const obj = value as Record<string, unknown>;
+        if (obj.__elementRef) {
+          parts.push(`${key}: ${obj.__elementRef}`);
+        } else if (obj.__elementId) {
+          parts.push(`${key}: #${obj.__elementId}`);
+        } else {
+          parts.push(`${key}: ${JSON.stringify(value)}`);
+        }
+      } else {
+        parts.push(`${key}: ${value}`);
+      }
+    }
+  }
+  return parts.join(', ');
+}
+
+// Format timestamp
+function formatTimestamp(timestamp?: number): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString();
+}
+
+// Select an action to view its state
+async function selectAction(index: number) {
+  // If clicking the last action (current state) or toggling off, go to live mode
+  if (index === actionHistory.value.length || selectedActionIndex.value === index) {
+    clearHistoricalState();
+    return;
+  }
+
+  selectedActionIndex.value = index;
+  await fetchStateAtAction(index);
+}
+
+// Fetch state at a specific action
+async function fetchStateAtAction(actionIndex: number) {
+  if (!props.gameId) return;
+
+  historicalStateLoading.value = true;
+  historicalStateError.value = null;
+
+  try {
+    const response = await fetch(
+      `${props.apiUrl}/games/${props.gameId}/state-at/${actionIndex}?player=${props.playerPosition}`
+    );
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch state');
+    }
+
+    historicalState.value = data.state;
+    // Emit to parent so main game UI can show historical state
+    emit('time-travel', data.state, actionIndex);
+  } catch (e) {
+    historicalStateError.value = e instanceof Error ? e.message : 'Unknown error';
+    historicalState.value = null;
+    emit('time-travel', null, null);
+  } finally {
+    historicalStateLoading.value = false;
+  }
+}
+
+// Clear historical state when going back to live view
+function clearHistoricalState() {
+  selectedActionIndex.value = null;
+  historicalState.value = null;
+  historicalStateError.value = null;
+  // Emit to parent to return to live state
+  emit('time-travel', null, null);
+}
+
+// Computed: is viewing historical state?
+const isViewingHistory = computed(() => selectedActionIndex.value !== null);
+
+// Computed: the state to display in the State tab
+// Note: props.state has structure { state: PlayerGameState, flowState: FlowState }
+// historicalState is directly a PlayerGameState
+// We wrap historical state to match the structure
+const displayedState = computed(() => {
+  if (isViewingHistory.value && historicalState.value) {
+    return { state: historicalState.value, flowState: null };
+  }
+  return props.state;
+});
 </script>
 
 <template>
@@ -204,6 +369,12 @@ function downloadState() {
             State
           </button>
           <button
+            :class="{ active: activeTab === 'history' }"
+            @click="activeTab = 'history'"
+          >
+            History
+          </button>
+          <button
             :class="{ active: activeTab === 'actions' }"
             @click="activeTab = 'actions'"
           >
@@ -219,6 +390,13 @@ function downloadState() {
 
         <!-- State Tab -->
         <div v-if="activeTab === 'state'" class="tab-content state-tab">
+          <!-- Historical state banner -->
+          <div v-if="isViewingHistory" class="historical-banner">
+            <span class="historical-icon">&#9200;</span>
+            <span>Viewing state after action {{ selectedActionIndex }}</span>
+            <button class="debug-btn small" @click="clearHistoricalState">Back to Live</button>
+          </div>
+
           <div class="state-actions">
             <button @click="copyState" class="debug-btn small">Copy</button>
             <button @click="downloadState" class="debug-btn small">Download</button>
@@ -240,32 +418,32 @@ function downloadState() {
             />
           </div>
 
-          <div class="state-display">
+          <div class="state-display" :class="{ historical: isViewingHistory }">
             <pre v-if="showRawState">{{ formattedState }}</pre>
 
             <!-- Tree View -->
             <div v-else class="state-tree">
               <!-- Recursive tree component inline -->
-              <template v-if="state">
+              <template v-if="displayedState">
                 <div class="tree-root">
                   <!-- Game info summary -->
-                  <div class="tree-summary">
+                  <div class="tree-summary" :class="{ historical: isViewingHistory }">
                     <span class="summary-item">
                       <span class="summary-label">ID:</span>
                       <span class="summary-value">{{ gameId || 'N/A' }}</span>
                     </span>
                     <span class="summary-item">
                       <span class="summary-label">Phase:</span>
-                      <span class="summary-value">{{ state?.state?.phase || 'N/A' }}</span>
+                      <span class="summary-value">{{ displayedState?.state?.phase || 'N/A' }}</span>
                     </span>
                     <span class="summary-item">
                       <span class="summary-label">Turn:</span>
-                      <span class="summary-value">P{{ (state?.state?.currentPlayer ?? 0) + 1 }}</span>
+                      <span class="summary-value">P{{ (displayedState?.state?.currentPlayer ?? 0) + 1 }}</span>
                     </span>
                   </div>
 
                   <!-- State tree -->
-                  <div class="tree-node" v-for="(value, key) in state" :key="key">
+                  <div class="tree-node" v-for="(value, key) in displayedState" :key="key">
                     <div
                       class="tree-row"
                       :class="{ expandable: isExpandable(value), hidden: !matchesSearch(String(key), value, stateSearchQuery) }"
@@ -340,6 +518,92 @@ function downloadState() {
                 </div>
               </template>
               <div v-else class="no-state">No state available</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- History Tab -->
+        <div v-if="activeTab === 'history'" class="tab-content history-tab">
+          <div class="history-header">
+            <span class="history-count">{{ actionHistory.length }} actions</span>
+            <button @click="fetchHistory" class="debug-btn small" :disabled="historyLoading">
+              {{ historyLoading ? 'Loading...' : 'Refresh' }}
+            </button>
+          </div>
+
+          <div v-if="historyError" class="history-error">
+            {{ historyError }}
+          </div>
+
+          <div v-else-if="historyLoading && actionHistory.length === 0" class="history-loading">
+            Loading history...
+          </div>
+
+          <div v-else-if="actionHistory.length === 0" class="history-empty">
+            No actions yet
+          </div>
+
+          <!-- Timeline slider -->
+          <div v-if="actionHistory.length > 0" class="timeline-controls">
+            <button
+              class="debug-btn small"
+              :disabled="selectedActionIndex === null || selectedActionIndex <= 0"
+              @click="selectAction((selectedActionIndex ?? actionHistory.length) - 1)"
+            >
+              &lt;
+            </button>
+            <input
+              type="range"
+              :min="0"
+              :max="actionHistory.length"
+              :value="selectedActionIndex ?? actionHistory.length"
+              @input="selectAction(parseInt(($event.target as HTMLInputElement).value))"
+              class="timeline-slider"
+            />
+            <button
+              class="debug-btn small"
+              :disabled="selectedActionIndex === null || selectedActionIndex >= actionHistory.length"
+              @click="selectAction((selectedActionIndex ?? actionHistory.length - 1) + 1)"
+            >
+              &gt;
+            </button>
+            <span class="timeline-position">
+              {{ selectedActionIndex ?? actionHistory.length }} / {{ actionHistory.length }}
+            </span>
+            <button
+              v-if="isViewingHistory"
+              class="debug-btn small live-btn"
+              @click="clearHistoricalState"
+            >
+              Live
+            </button>
+          </div>
+
+          <!-- Action list -->
+          <div v-if="actionHistory.length > 0" class="history-list">
+            <div
+              v-for="(action, index) in actionHistory"
+              :key="index"
+              class="history-item"
+              :class="{
+                current: index === actionHistory.length - 1 && !isViewingHistory,
+                selected: selectedActionIndex === index + 1
+              }"
+              @click="selectAction(index + 1)"
+            >
+              <div class="history-item-header">
+                <span class="history-index">{{ index + 1 }}</span>
+                <span class="history-player" :class="`player-${action.player}`">
+                  P{{ action.player + 1 }}
+                </span>
+                <span class="history-action-name">{{ formatActionName(action.name) }}</span>
+                <span v-if="action.timestamp" class="history-time">
+                  {{ formatTimestamp(action.timestamp) }}
+                </span>
+              </div>
+              <div v-if="formatActionArgs(action.args)" class="history-item-args">
+                {{ formatActionArgs(action.args) }}
+              </div>
             </div>
           </div>
         </div>
@@ -881,5 +1145,222 @@ function downloadState() {
 
 .debug-btn.danger:hover {
   background: rgba(231, 76, 60, 0.2);
+}
+
+/* History Tab */
+.history-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-count {
+  color: #888;
+  font-size: 12px;
+}
+
+.history-error {
+  color: #e74c3c;
+  padding: 12px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.history-loading,
+.history-empty {
+  color: #666;
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+}
+
+.history-item {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.history-item:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.history-item.current {
+  border-left-color: #00d9ff;
+  background: rgba(0, 217, 255, 0.1);
+}
+
+.history-item.selected {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.history-item {
+  cursor: pointer;
+}
+
+.history-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-index {
+  min-width: 24px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  font-size: 10px;
+  color: #888;
+}
+
+.history-player {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.history-player.player-0 {
+  background: rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+}
+
+.history-player.player-1 {
+  background: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.history-player.player-2 {
+  background: rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+
+.history-player.player-3 {
+  background: rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+}
+
+.history-action-name {
+  color: #fff;
+  font-weight: 500;
+  flex: 1;
+}
+
+.history-time {
+  color: #666;
+  font-size: 10px;
+}
+
+.history-item-args {
+  margin-top: 4px;
+  padding-left: 32px;
+  font-size: 11px;
+  color: #888;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* Timeline Controls */
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 8px;
+}
+
+.timeline-slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.timeline-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #00d9ff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.timeline-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #00d9ff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.timeline-position {
+  font-size: 11px;
+  color: #888;
+  min-width: 50px;
+  text-align: center;
+}
+
+.live-btn {
+  background: rgba(34, 197, 94, 0.2) !important;
+  border-color: #22c55e !important;
+  color: #22c55e !important;
+}
+
+/* Historical State Banner */
+.historical-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  color: #f59e0b;
+  font-size: 12px;
+}
+
+.historical-icon {
+  font-size: 16px;
+}
+
+.historical-banner button {
+  margin-left: auto;
+}
+
+/* Historical state indicator */
+.state-display.historical {
+  border: 2px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+}
+
+.tree-summary.historical {
+  background: rgba(245, 158, 11, 0.15);
 }
 </style>

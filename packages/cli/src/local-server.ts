@@ -223,6 +223,29 @@ export class LocalServer {
         return;
       }
 
+      // GET /games/:gameId/state-at/:actionIndex - Get state at a specific action (for time travel)
+      const stateAtMatch = path.match(/^\/games\/([^/]+)\/state-at\/(\d+)$/);
+      if (stateAtMatch && req.method === 'GET') {
+        const gameId = stateAtMatch[1];
+        const actionIndex = parseInt(stateAtMatch[2], 10);
+        const urlObj = new URL(req.url || '', `http://localhost:${this.#port}`);
+        const playerPosition = parseInt(urlObj.searchParams.get('player') || '0', 10);
+
+        const gameData = this.#games.get(gameId);
+        if (!gameData) {
+          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
+          return;
+        }
+
+        const result = gameData.session.getStateAtAction(actionIndex, playerPosition);
+        if (result.success) {
+          this.#sendJson(res, 200, { success: true, state: result.state, actionIndex });
+        } else {
+          this.#sendJson(res, 400, { success: false, error: result.error });
+        }
+        return;
+      }
+
       // POST /games/:gameId/restart - Restart game with same players
       const restartMatch = path.match(/^\/games\/([^/]+)\/restart$/);
       if (restartMatch && req.method === 'POST') {

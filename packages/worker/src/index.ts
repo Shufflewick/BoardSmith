@@ -333,6 +333,24 @@ export function createGameWorker(config: WorkerConfig) {
     return Response.json(result, { status: response.status, headers });
   }
 
+  async function handleGetStateAt(
+    gameId: string,
+    actionIndex: number,
+    playerPosition: number,
+    env: Env,
+    headers: Record<string, string>
+  ): Promise<Response> {
+    const id = env.GAME_STATE.idFromName(gameId);
+    const stub = env.GAME_STATE.get(id);
+
+    const response = await stub.fetch(
+      new Request(`http://internal/state-at/${actionIndex}?player=${playerPosition}`)
+    );
+    const result = await response.json();
+
+    return Response.json(result, { status: response.status, headers });
+  }
+
   async function handleMatchmakingJoin(
     body: MatchmakingRequest,
     env: Env,
@@ -538,6 +556,15 @@ export function createGameWorker(config: WorkerConfig) {
           return await handleGetHistory(gameId, env, corsHeaders);
         }
 
+        const stateAtMatch = path.match(/^\/games\/([^/]+)\/state-at\/(\d+)$/);
+        if (stateAtMatch && request.method === 'GET') {
+          const gameId = stateAtMatch[1];
+          const actionIndex = parseInt(stateAtMatch[2], 10);
+          const url = new URL(request.url);
+          const playerPosition = parseInt(url.searchParams.get('player') || '0', 10);
+          return await handleGetStateAt(gameId, actionIndex, playerPosition, env, corsHeaders);
+        }
+
         if (path === '/matchmaking/join' && request.method === 'POST') {
           const body = await request.json() as MatchmakingRequest;
           return await handleMatchmakingJoin(body, env, corsHeaders);
@@ -638,6 +665,14 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
         if (path === '/history' && request.method === 'GET') {
           return await this.#handleGetHistory();
+        }
+
+        const stateAtMatch = path.match(/^\/state-at\/(\d+)$/);
+        if (stateAtMatch && request.method === 'GET') {
+          const actionIndex = parseInt(stateAtMatch[1], 10);
+          const urlObj = new URL(request.url);
+          const playerPosition = parseInt(urlObj.searchParams.get('player') || '0', 10);
+          return await this.#handleGetStateAt(actionIndex, playerPosition);
         }
 
         return Response.json({ success: false, error: 'Not found' }, { status: 404 });
@@ -910,6 +945,32 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         success: true,
         actionHistory: history.actionHistory,
         createdAt: history.createdAt,
+      });
+    }
+
+    async #handleGetStateAt(actionIndex: number, playerPosition: number): Promise<Response> {
+      await this.#ensureLoaded();
+
+      if (!this.#gameSession) {
+        return Response.json(
+          { success: false, error: 'Game not found' },
+          { status: 404 }
+        );
+      }
+
+      const result = this.#gameSession.getStateAtAction(actionIndex, playerPosition);
+
+      if (!result.success) {
+        return Response.json(
+          { success: false, error: result.error },
+          { status: 400 }
+        );
+      }
+
+      return Response.json({
+        success: true,
+        state: result.state,
+        actionIndex,
       });
     }
 

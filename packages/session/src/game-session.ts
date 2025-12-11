@@ -281,6 +281,53 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     };
   }
 
+  /**
+   * Get state at a specific action index (for time travel debugging)
+   * Creates a temporary game and replays actions up to the specified index.
+   */
+  getStateAtAction(actionIndex: number, playerPosition: number): { success: boolean; state?: PlayerGameState; error?: string } {
+    const history = this.#storedState.actionHistory;
+
+    // Validate index
+    if (actionIndex < 0 || actionIndex > history.length) {
+      return { success: false, error: `Invalid action index: ${actionIndex}. History has ${history.length} actions.` };
+    }
+
+    try {
+      // Get subset of actions to replay
+      const actionsToReplay = history.slice(0, actionIndex);
+
+      // Create a temporary runner and replay
+      const tempRunner = GameRunner.replay<G>(
+        {
+          GameClass: this.#GameClass,
+          gameType: this.#storedState.gameType,
+          gameOptions: {
+            playerCount: this.#storedState.playerCount,
+            playerNames: this.#storedState.playerNames,
+            seed: this.#storedState.seed,
+          },
+        },
+        actionsToReplay
+      );
+
+      // Build state for the requested player
+      const state = buildPlayerState(
+        tempRunner,
+        this.#storedState.playerNames,
+        playerPosition,
+        { includeActionMetadata: false }
+      );
+
+      return { success: true, state };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to replay game state',
+      };
+    }
+  }
+
   // ============================================
   // Action Methods
   // ============================================

@@ -52,6 +52,11 @@ const historyCollapsed = ref(false);
 const debugExpanded = ref(false);
 const zoomLevel = ref(1.0);
 
+// Time travel state (for viewing historical game states)
+const timeTravelState = ref<any>(null);
+const timeTravelActionIndex = ref<number | null>(null);
+const isViewingHistory = computed(() => timeTravelState.value !== null);
+
 // Create client
 const client = new MeepleClient({
   baseUrl: props.apiUrl,
@@ -77,7 +82,13 @@ const gameMessages = computed(() => {
 });
 
 // Computed properties for game view
-const gameView = computed(() => state.value?.state.view as any);
+// When viewing historical state, use that instead of live state
+const gameView = computed(() => {
+  if (timeTravelState.value) {
+    return timeTravelState.value.view as any;
+  }
+  return state.value?.state.view as any;
+});
 const players = computed(() => state.value?.state.players || []);
 const myPlayer = computed(() => players.value.find(p => p.position === playerPosition.value));
 const opponentPlayers = computed(() => players.value.filter(p => p.position !== playerPosition.value));
@@ -298,6 +309,12 @@ async function handleRestartGame() {
   }
 }
 
+// Time travel handler - updates the game view to show historical state
+function handleTimeTravel(historicalState: any | null, actionIndex: number | null) {
+  timeTravelState.value = historicalState;
+  timeTravelActionIndex.value = actionIndex;
+}
+
 // Menu handlers
 function handleMenuItemClick(id: string) {
   if (id === 'leave') {
@@ -413,13 +430,18 @@ defineExpose({
       <!-- Bottom Action Bar -->
       <footer class="game-shell__action-bar">
         <ActionPanel
-          :available-actions="availableActions"
-          :action-metadata="actionMetadata"
+          :available-actions="isViewingHistory ? [] : availableActions"
+          :action-metadata="isViewingHistory ? {} : actionMetadata"
           :players="players"
           :player-position="playerPosition"
-          :is-my-turn="isMyTurn"
+          :is-my-turn="isMyTurn && !isViewingHistory"
           @execute="handleActionExecute"
         />
+        <!-- Time travel banner -->
+        <div v-if="isViewingHistory" class="time-travel-banner">
+          <span class="time-travel-icon">⏰</span>
+          Viewing historical state (action {{ timeTravelActionIndex }}) - Actions disabled
+        </div>
       </footer>
 
       <!-- Debug Panel (bottom) -->
@@ -433,6 +455,7 @@ defineExpose({
         v-model:expanded="debugExpanded"
         @switch-player="handleSwitchPlayer"
         @restart-game="handleRestartGame"
+        @time-travel="handleTimeTravel"
       />
 
       <!-- Error display -->
@@ -536,6 +559,24 @@ defineExpose({
   .game-shell__action-bar {
     padding: 16px 20px;
   }
+}
+
+/* Time travel banner */
+.time-travel-banner {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+  padding: 8px 16px;
+  border-radius: 6px;
+  margin-top: 8px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-travel-icon {
+  font-size: 1.1rem;
 }
 
 .error-banner {
