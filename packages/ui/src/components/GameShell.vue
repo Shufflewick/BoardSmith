@@ -51,6 +51,7 @@ const playerPosition = ref<number>(0);
 const historyCollapsed = ref(false);
 const debugExpanded = ref(false);
 const zoomLevel = ref(1.0);
+const autoEndTurn = ref(true); // Auto-end turn after making a move
 
 // Time travel state (for viewing historical game states)
 const timeTravelState = ref<any>(null);
@@ -122,6 +123,11 @@ const actionMetadata = computed(() => {
   return (state.value?.state as any)?.actionMetadata;
 });
 
+// Can undo - from PlayerGameState.canUndo
+const canUndo = computed(() => {
+  return (state.value?.state as any)?.canUndo ?? false;
+});
+
 // Shared action arguments - game boards write to this, ActionPanel reads from it
 const actionArgs = reactive<Record<string, unknown>>({});
 
@@ -135,6 +141,25 @@ function setBoardPrompt(prompt: string | null): void {
 // Execute an action with args (called by ActionPanel)
 async function handleActionExecute(actionName: string, args: Record<string, unknown>): Promise<void> {
   await action(actionName, args);
+}
+
+// Undo actions back to turn start (called by ActionPanel)
+async function handleUndo(): Promise<void> {
+  if (!gameId.value) return;
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${gameId.value}/undo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ player: playerPosition.value }),
+    });
+    const result = await response.json();
+    if (!result.success) {
+      console.error('Undo failed:', result.error);
+    }
+    // State update will come via WebSocket
+  } catch (error) {
+    console.error('Undo error:', error);
+  }
 }
 
 // Execute an action using shared actionArgs (legacy, used by custom game boards)
@@ -377,6 +402,7 @@ defineExpose({
         :game-id="gameId"
         :connection-status="connectionStatus"
         v-model:zoom="zoomLevel"
+        v-model:auto-end-turn="autoEndTurn"
         @menu-item-click="handleMenuItemClick"
       />
 
@@ -442,7 +468,10 @@ defineExpose({
           :players="players"
           :player-position="playerPosition"
           :is-my-turn="isMyTurn && !isViewingHistory"
+          :can-undo="canUndo && !isViewingHistory"
+          :auto-end-turn="autoEndTurn"
           @execute="handleActionExecute"
+          @undo="handleUndo"
         />
         <!-- Time travel banner -->
         <div v-if="isViewingHistory" class="time-travel-banner">

@@ -261,6 +261,41 @@ function buildSelectionMetadata(
 }
 
 /**
+ * Compute turn start action index and actions this turn for a player.
+ * Scans action history backwards to find when the current player's turn started.
+ * Also checks if any non-undoable action was taken this turn (disables undo).
+ */
+export function computeUndoInfo(
+  actionHistory: Array<{ player: number; undoable?: boolean }>,
+  currentPlayer: number | undefined
+): { turnStartActionIndex: number; actionsThisTurn: number; hasNonUndoableAction: boolean } {
+  if (currentPlayer === undefined || actionHistory.length === 0) {
+    return { turnStartActionIndex: 0, actionsThisTurn: 0, hasNonUndoableAction: false };
+  }
+
+  // Scan backwards through action history to find where current player's turn started
+  // Turn started when we find an action by a DIFFERENT player
+  let actionsThisTurn = 0;
+  let hasNonUndoableAction = false;
+
+  for (let i = actionHistory.length - 1; i >= 0; i--) {
+    if (actionHistory[i].player === currentPlayer) {
+      actionsThisTurn++;
+      // Check if this action was non-undoable
+      if (actionHistory[i].undoable === false) {
+        hasNonUndoableAction = true;
+      }
+    } else {
+      // Found action by different player - turn started after this action
+      return { turnStartActionIndex: i + 1, actionsThisTurn, hasNonUndoableAction };
+    }
+  }
+
+  // All actions in history are by current player - turn started at beginning
+  return { turnStartActionIndex: 0, actionsThisTurn, hasNonUndoableAction };
+}
+
+/**
  * Build a player's view of the game state
  */
 export function buildPlayerState(
@@ -281,13 +316,27 @@ export function buildPlayerState(
     availableActions = flowState?.availableActions ?? [];
   }
 
+  const isMyTurn = isPlayersTurn(flowState, playerPosition);
+
+  // Compute undo info
+  const { turnStartActionIndex, actionsThisTurn, hasNonUndoableAction } = computeUndoInfo(
+    runner.actionHistory,
+    flowState?.currentPlayer
+  );
+
+  // Can undo if: it's my turn AND I've made at least one action this turn AND no non-undoable action was taken
+  const canUndo = isMyTurn && actionsThisTurn > 0 && flowState?.currentPlayer === playerPosition && !hasNonUndoableAction;
+
   const state: PlayerGameState = {
     phase: runner.game.phase,
     players: playerNames.map((name, i) => ({ name, position: i })),
     currentPlayer: flowState?.currentPlayer,
     availableActions,
-    isMyTurn: isPlayersTurn(flowState, playerPosition),
+    isMyTurn,
     view: view.state,
+    canUndo,
+    actionsThisTurn: isMyTurn ? actionsThisTurn : 0,
+    turnStartActionIndex: isMyTurn ? turnStartActionIndex : undefined,
   };
 
   // Optionally include action metadata for auto-UI

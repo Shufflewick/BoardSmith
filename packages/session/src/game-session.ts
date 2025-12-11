@@ -14,7 +14,7 @@ import type {
   BroadcastAdapter,
   AIConfig,
 } from './types.js';
-import { buildPlayerState } from './utils.js';
+import { buildPlayerState, computeUndoInfo } from './utils.js';
 import { AIController } from './ai-controller.js';
 
 // ============================================
@@ -44,6 +44,18 @@ export interface ActionResult {
   flowState?: FlowState;
   state?: PlayerGameState;
   serializedAction?: SerializedAction;
+}
+
+/**
+ * Result of undoing actions
+ */
+export interface UndoResult {
+  success: boolean;
+  error?: string;
+  flowState?: FlowState;
+  state?: PlayerGameState;
+  /** Number of actions that were undone */
+  actionsUndone?: number;
 }
 
 /**
@@ -96,7 +108,7 @@ export interface ElementDiff {
  * ```
  */
 export class GameSession<G extends Game = Game, TSession extends SessionInfo = SessionInfo> {
-  readonly #runner: GameRunner<G>;
+  #runner: GameRunner<G>;
   readonly #storedState: StoredGameState;
   readonly #GameClass: GameClass<G>;
   readonly #storage?: StorageAdapter;
@@ -494,6 +506,81 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true }),
       serializedAction: result.serializedAction,
     };
+  }
+
+  /**
+   * Undo actions back to the start of the current player's turn.
+   * Only works if it's the player's turn and they've made at least one action.
+   */
+  async undoToTurnStart(playerPosition: number): Promise<UndoResult> {
+    // Validate player position
+    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player: ${playerPosition}` };
+    }
+
+    // Check if it's this player's turn
+    const flowState = this.#runner.getFlowState();
+    if (flowState?.currentPlayer !== playerPosition) {
+      return { success: false, error: "It's not your turn" };
+    }
+
+    // Compute where the turn started
+    const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
+      this.#storedState.actionHistory,
+      flowState.currentPlayer
+    );
+
+    // Check if there's anything to undo
+    if (actionsThisTurn === 0) {
+      return { success: false, error: 'No actions to undo' };
+    }
+
+    // Replay game to the turn start point
+    const actionsToReplay = this.#storedState.actionHistory.slice(0, turnStartActionIndex);
+
+    try {
+      // Create a new runner replayed to the turn start
+      const newRunner = GameRunner.replay<G>(
+        {
+          GameClass: this.#GameClass,
+          gameType: this.#storedState.gameType,
+          gameOptions: {
+            playerCount: this.#storedState.playerCount,
+            playerNames: this.#storedState.playerNames,
+            seed: this.#storedState.seed,
+          },
+        },
+        actionsToReplay
+      );
+
+      // Replace the current runner
+      this.#runner = newRunner;
+
+      // Update stored action history
+      this.#storedState.actionHistory = actionsToReplay;
+
+      // Persist if storage adapter is provided
+      if (this.#storage) {
+        await this.#storage.save(this.#storedState);
+      }
+
+      // Broadcast to all connected clients
+      this.broadcast();
+
+      const newFlowState = this.#runner.getFlowState();
+
+      return {
+        success: true,
+        flowState: newFlowState,
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true }),
+        actionsUndone: actionsThisTurn,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to undo',
+      };
+    }
   }
 
   // ============================================

@@ -15,11 +15,14 @@ const props = defineProps<{
   connectionStatus: string;
   /** Current zoom level (0.5 to 2.0, default 1.0) */
   zoom?: number;
+  /** Auto-end turn after making a move (default: true) */
+  autoEndTurn?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'menu-item-click', id: string): void;
   (e: 'update:zoom', zoom: number): void;
+  (e: 'update:autoEndTurn', value: boolean): void;
 }>();
 
 function handleZoomChange(event: Event) {
@@ -63,6 +66,14 @@ import { computed } from 'vue';
           title="Zoom level"
         />
       </div>
+      <label class="auto-end-turn-toggle" title="Automatically end turn after making a move">
+        <input
+          type="checkbox"
+          :checked="autoEndTurn ?? true"
+          @change="emit('update:autoEndTurn', ($event.target as HTMLInputElement).checked)"
+        />
+        <span class="toggle-label">Auto</span>
+      </label>
     </div>
     <div class="header-right">
       <span v-if="gameId" class="game-code">Game: <strong>{{ gameId }}</strong></span>
@@ -193,6 +204,60 @@ import { computed } from 'vue';
   border-radius: 50%;
   border: none;
   cursor: pointer;
+}
+
+/* Auto End Turn Toggle */
+.auto-end-turn-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 10px;
+  border-radius: 16px;
+  cursor: pointer;
+  user-select: none;
+  margin-left: 8px;
+}
+
+.auto-end-turn-toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 32px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.auto-end-turn-toggle input[type="checkbox"]::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+}
+
+.auto-end-turn-toggle input[type="checkbox"]:checked {
+  background: #00d9ff;
+}
+
+.auto-end-turn-toggle input[type="checkbox"]:checked::before {
+  transform: translateX(14px);
+}
+
+.toggle-label {
+  font-size: 0.75rem;
+  color: #aaa;
+}
+
+.auto-end-turn-toggle:hover .toggle-label {
+  color: #fff;
 }
 
 /* Desktop: Show header elements */

@@ -270,6 +270,30 @@ export class LocalServer {
         return;
       }
 
+      // POST /games/:gameId/undo - Undo actions to turn start
+      const undoMatch = path.match(/^\/games\/([^/]+)\/undo$/);
+      if (undoMatch && req.method === 'POST') {
+        const gameId = undoMatch[1];
+
+        const gameData = this.#games.get(gameId);
+        if (!gameData) {
+          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
+          return;
+        }
+
+        // Parse request body for player position
+        const body = await this.#readBody<{ player?: number }>(req);
+        const playerPosition = body.player ?? 0;
+        const result = await gameData.session.undoToTurnStart(playerPosition);
+
+        if (result.success) {
+          this.#sendJson(res, 200, result);
+        } else {
+          this.#sendJson(res, 400, result);
+        }
+        return;
+      }
+
       // POST /games/:gameId/restart - Restart game with same players
       const restartMatch = path.match(/^\/games\/([^/]+)\/restart$/);
       if (restartMatch && req.method === 'POST') {

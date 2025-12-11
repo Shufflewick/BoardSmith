@@ -3,6 +3,42 @@ import type { CheckersGame } from './game.js';
 import { CheckerPiece, Square, CheckersPlayer, type CheckersMove } from './elements.js';
 
 /**
+ * Create the endTurn action for Checkers
+ *
+ * This action is available after a player has made a move (and is not in a multi-jump).
+ * It allows the player to confirm their turn is complete, enabling undo before confirmation.
+ */
+export function createEndTurnAction(game: CheckersGame): ActionDefinition {
+  return Action.create('endTurn')
+    .prompt('End Turn')
+    .condition((ctx) => {
+      // Only available if player has made a move this turn
+      // and is not in a multi-jump continuation
+      const player = ctx.player as CheckersPlayer;
+
+      // Can't end turn during a multi-jump
+      if (game.continuingPlayer === player && game.continuingPiece) {
+        return false;
+      }
+
+      // Check if hasMovedThisTurn is set
+      return game.hasMovedThisTurn === true;
+    })
+    .execute((args, ctx) => {
+      const player = ctx.player as CheckersPlayer;
+
+      // Clear the moved flag
+      game.hasMovedThisTurn = false;
+
+      return {
+        success: true,
+        data: { turnEnded: true },
+        message: `${player.name} ended their turn.`,
+      };
+    });
+}
+
+/**
  * Destination choice value - includes piece ID for filtering
  */
 interface DestinationChoice {
@@ -130,6 +166,12 @@ export function createMoveAction(game: CheckersGame): ActionDefinition {
         return false;
       }
 
+      // If player already moved this turn (and not in multi-jump), they can't move again
+      // They must click "End Turn" to pass to opponent
+      if (game.hasMovedThisTurn && !game.continuingPiece) {
+        return false;
+      }
+
       // Check if player has any valid moves
       if (game.continuingPiece) {
         return game.getValidMovesForPiece(game.continuingPiece).length > 0;
@@ -189,15 +231,17 @@ export function createMoveAction(game: CheckersGame): ActionDefinition {
         }
       }
 
-      // Turn ends - clear continuation state
+      // Turn can end - clear continuation state and mark that player has moved
       game.continuingPlayer = null;
       game.continuingPiece = null;
+      game.hasMovedThisTurn = true;
 
       return {
         success: true,
         data: {
           captured: isCapture,
           mustContinue: false,
+          canEndTurn: true, // Signal that player can now end their turn
           from: move.from.notation,
           to: move.to.notation,
           crowned: move.becomesKing,

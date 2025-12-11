@@ -351,6 +351,24 @@ export function createGameWorker(config: WorkerConfig) {
     return Response.json(result, { status: response.status, headers });
   }
 
+  async function handleUndo(
+    gameId: string,
+    body: { player?: number },
+    env: Env,
+    headers: Record<string, string>
+  ): Promise<Response> {
+    const id = env.GAME_STATE.idFromName(gameId);
+    const stub = env.GAME_STATE.get(id);
+
+    const response = await stub.fetch(new Request('http://internal/undo', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }));
+
+    const result = await response.json();
+    return Response.json(result, { status: response.status, headers });
+  }
+
   async function handleMatchmakingJoin(
     body: MatchmakingRequest,
     env: Env,
@@ -565,6 +583,13 @@ export function createGameWorker(config: WorkerConfig) {
           return await handleGetStateAt(gameId, actionIndex, playerPosition, env, corsHeaders);
         }
 
+        const undoMatch = path.match(/^\/games\/([^/]+)\/undo$/);
+        if (undoMatch && request.method === 'POST') {
+          const gameId = undoMatch[1];
+          const body = await request.json() as { player?: number };
+          return await handleUndo(gameId, body, env, corsHeaders);
+        }
+
         if (path === '/matchmaking/join' && request.method === 'POST') {
           const body = await request.json() as MatchmakingRequest;
           return await handleMatchmakingJoin(body, env, corsHeaders);
@@ -673,6 +698,10 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
           const urlObj = new URL(request.url);
           const playerPosition = parseInt(urlObj.searchParams.get('player') || '0', 10);
           return await this.#handleGetStateAt(actionIndex, playerPosition);
+        }
+
+        if (path === '/undo' && request.method === 'POST') {
+          return await this.#handleUndo(request);
         }
 
         return Response.json({ success: false, error: 'Not found' }, { status: 404 });
@@ -971,6 +1000,35 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         success: true,
         state: result.state,
         actionIndex,
+      });
+    }
+
+    async #handleUndo(request: Request): Promise<Response> {
+      await this.#ensureLoaded();
+
+      if (!this.#gameSession) {
+        return Response.json(
+          { success: false, error: 'Game not found' },
+          { status: 404 }
+        );
+      }
+
+      const body = await request.json() as { player?: number };
+      const playerPosition = body.player ?? 0;
+
+      const result = await this.#gameSession.undoToTurnStart(playerPosition);
+
+      if (!result.success) {
+        return Response.json(
+          { success: false, error: result.error },
+          { status: 400 }
+        );
+      }
+
+      return Response.json({
+        success: true,
+        flowState: result.flowState,
+        state: result.state,
       });
     }
 

@@ -1,6 +1,6 @@
 import { Game, type GameOptions } from '@boardsmith/engine';
 import { Board, Square, CheckerPiece, CheckersPlayer, type CheckersMove } from './elements.js';
-import { createMoveAction } from './actions.js';
+import { createMoveAction, createEndTurnAction } from './actions.js';
 import { createCheckersFlow } from './flow.js';
 
 /**
@@ -33,6 +33,9 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
   continuingPlayer: CheckersPlayer | null = null;
   continuingPiece: CheckerPiece | null = null;
 
+  /** Track if the current player has made a move this turn (for undo/endTurn) */
+  hasMovedThisTurn: boolean = false;
+
   constructor(options: CheckersOptions) {
     super(options);
 
@@ -53,6 +56,7 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
 
     // Register actions
     this.registerAction(createMoveAction(this));
+    this.registerAction(createEndTurnAction(this));
 
     // Set up game flow
     this.setFlow(createCheckersFlow(this));

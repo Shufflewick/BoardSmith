@@ -79,6 +79,16 @@ export class Action {
   }
 
   /**
+   * Mark this action as non-undoable.
+   * Use for actions that reveal hidden info, involve randomness, or shouldn't be undone.
+   * When executed, undo is disabled for the rest of the turn.
+   */
+  notUndoable(): this {
+    this.definition.undoable = false;
+    return this;
+  }
+
+  /**
    * Add a choice selection
    */
   chooseFrom<T>(

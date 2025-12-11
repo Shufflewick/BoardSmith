@@ -17,15 +17,19 @@ import type { CheckersPlayer } from './elements.js';
  * 1. Main game loop (while game not finished)
  * 2. Each player takes a turn
  * 3. Player turn: move action, with multi-jump continuation
- * 4. Game ends when a player has no pieces or no valid moves
+ * 4. After a move (non-multi-jump), player can undo or confirm with endTurn
+ * 5. Game ends when a player has no pieces or no valid moves
  */
 export function createCheckersFlow(game: CheckersGame): FlowDefinition {
   // A single turn where the player moves a piece
   const playerTurn = sequence(
     // Reset turn state at start of each turn
     setVar('turnComplete', false),
+    execute(() => {
+      game.hasMovedThisTurn = false;
+    }),
 
-    // The turn loop - keeps going for multi-jump captures
+    // The turn loop - keeps going for multi-jump captures OR until endTurn
     loop({
       name: 'move-loop',
       while: (ctx) => {
@@ -44,6 +48,11 @@ export function createCheckersFlow(game: CheckersGame): FlowDefinition {
           return false;
         }
 
+        // If player has moved and is not in multi-jump, they need to endTurn
+        if (game.hasMovedThisTurn && !game.continuingPiece) {
+          return true; // Keep loop going to offer endTurn action
+        }
+
         if (game.continuingPiece) {
           // Multi-jump in progress - check if more captures available
           return game.getValidMovesForPiece(game.continuingPiece).length > 0;
@@ -53,22 +62,33 @@ export function createCheckersFlow(game: CheckersGame): FlowDefinition {
       },
       maxIterations: 20, // Safety limit for multi-jumps
       do: sequence(
-        // Player makes a move
+        // Player makes a move or ends turn
         actionStep({
           name: 'move-step',
-          actions: ['move'],
+          actions: ['move', 'endTurn'], // Both actions available
           skipIf: (ctx) => {
             // Skip if game is over
             return game.isFinished();
           },
         }),
 
-        // Check if turn should continue (multi-jump) or end
+        // Check if turn should continue (multi-jump), end, or await confirmation
         execute((ctx) => {
-          const mustContinue = ctx.lastActionResult?.data?.mustContinue;
-          if (!mustContinue) {
+          // If endTurn was executed, turn is complete
+          if (ctx.lastActionResult?.data?.turnEnded) {
             ctx.set('turnComplete', true);
+            return;
           }
+
+          // If move resulted in multi-jump, don't end turn yet
+          const mustContinue = ctx.lastActionResult?.data?.mustContinue;
+          if (mustContinue) {
+            // Multi-jump: keep going
+            return;
+          }
+
+          // If move can end turn but player hasn't confirmed, wait for endTurn
+          // (turnComplete remains false, loop continues to offer endTurn)
         }),
       ),
     }),

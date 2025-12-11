@@ -148,6 +148,12 @@ export interface PlayerGameState {
   view: unknown;
   /** Action metadata for auto-UI generation (optional) */
   actionMetadata?: Record<string, ActionMetadata>;
+  /** Whether the player can undo (has made actions this turn) */
+  canUndo?: boolean;
+  /** Number of actions made by this player since turn start */
+  actionsThisTurn?: number;
+  /** Action index where this player's current turn started */
+  turnStartActionIndex?: number;
 }
 
 // ============================================

@@ -117,13 +117,18 @@ export class GameRunner<G extends Game = Game> {
       };
     }
 
+    // Get the action's undoable flag from its definition
+    const actionDef = (this.game as any)._actions?.get(actionName);
+    const isUndoable = actionDef?.undoable;
+
     // Serialize the action before executing (captures current element refs)
     const serializedAction = serializeAction(
       actionName,
       playerObj,
       args,
       this.game,
-      this.serializeOptions
+      this.serializeOptions,
+      isUndoable
     );
 
     // Execute through flow (pass player index for simultaneous actions)

@@ -123,14 +123,22 @@ export function serializeAction(
   player: Player,
   args: Record<string, unknown>,
   game: Game,
-  options: SerializeOptions = {}
+  options: SerializeOptions = {},
+  undoable?: boolean
 ): SerializedAction {
-  return {
+  const serialized: SerializedAction = {
     name: actionName,
     player: player.position,
     args: serializeValue(args, game, options) as Record<string, unknown>,
     timestamp: Date.now(),
   };
+
+  // Only include undoable if explicitly false (default is true)
+  if (undoable === false) {
+    serialized.undoable = false;
+  }
+
+  return serialized;
 }
 
 /**

@@ -156,6 +156,13 @@ export interface ActionDefinition {
   condition?: (context: ActionContext) => boolean;
   /** The effect to execute */
   execute: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void;
+  /**
+   * Whether this action can be undone (default: true).
+   * Set to false for actions that reveal hidden information (e.g., drawing cards),
+   * involve randomness (e.g., dice rolls), or shouldn't be undoable for game reasons.
+   * When a non-undoable action is executed, undo is disabled for the rest of the turn.
+   */
+  undoable?: boolean;
 }
 
 /**
@@ -184,6 +191,8 @@ export interface SerializedAction {
   args: Record<string, unknown>;
   /** Timestamp */
   timestamp?: number;
+  /** Whether this action was undoable (false if action.undoable was false) */
+  undoable?: boolean;
 }
 
 /**

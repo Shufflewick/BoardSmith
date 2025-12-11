@@ -69,6 +69,7 @@ export {
   GameSession,
   type GameSessionOptions,
   type ActionResult,
+  type UndoResult,
 } from './game-session.js';
 
 export { AIController } from './ai-controller.js';

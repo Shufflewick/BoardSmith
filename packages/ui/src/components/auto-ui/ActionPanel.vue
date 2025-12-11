@@ -86,12 +86,16 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   selectedElementId?: number;
+  canUndo?: boolean;
+  /** Auto-execute endTurn action when available (default: true) */
+  autoEndTurn?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'execute', actionName: string, args: Record<string, unknown>): void;
   (e: 'selectingElement', selectionName: string, elementClassName?: string): void;
   (e: 'cancelSelection'): void;
+  (e: 'undo'): void;
 }>();
 
 // Board interaction for hover/selection sync
@@ -350,6 +354,18 @@ watch(() => props.availableActions, (actions) => {
     currentAction.value = null;
     currentArgs.value = {};
     boardInteraction?.clear();
+  }
+
+  // Auto-execute endTurn when enabled and it's the only available action
+  // This skips the confirmation step for convenience
+  if (
+    props.autoEndTurn !== false && // Default to true
+    props.isMyTurn &&
+    actions.length === 1 &&
+    actions[0] === 'endTurn' &&
+    !isExecuting.value
+  ) {
+    executeAction('endTurn', {});
   }
 });
 
@@ -771,6 +787,15 @@ const otherPlayers = computed(() => {
       >
         {{ action.prompt || formatActionName(action.name) }}
       </button>
+      <!-- Undo button - shows when player has made actions this turn -->
+      <button
+        v-if="canUndo"
+        class="action-btn undo-btn"
+        @click="emit('undo')"
+        :disabled="isExecuting"
+      >
+        Undo
+      </button>
     </div>
 
     <!-- Configuring an action -->
@@ -953,6 +978,17 @@ const otherPlayers = computed(() => {
 .action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Undo button - amber/orange color */
+.undo-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-color: #b45309;
+}
+
+.undo-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
 }
 
 /* Action configuration - horizontal flow layout */
