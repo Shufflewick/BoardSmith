@@ -238,6 +238,57 @@ const childCountDisplay = computed(() => {
   return visibleChildren.value.length;
 });
 
+// Threshold for splitting hand into two rows (cards per row)
+const MAX_CARDS_PER_ROW = 10;
+
+// Sort cards alphanumerically by their name/label
+const sortedHandCards = computed(() => {
+  const cards = [...visibleChildren.value];
+  return cards.sort((a, b) => {
+    const nameA = a.name || '';
+    const nameB = b.name || '';
+    // Natural sort: extract rank and suit for proper ordering
+    // Card names are typically like "5H", "10S", "KD", "AC"
+    const parseCard = (name: string) => {
+      const match = name.match(/^(\d+|[AJQK])([CDHS]?)$/i);
+      if (!match) return { rank: 0, suit: name };
+      const rankStr = match[1].toUpperCase();
+      const suit = (match[2] || '').toUpperCase();
+      // Convert rank to number for proper sorting
+      const rankMap: Record<string, number> = { 'A': 1, 'J': 11, 'Q': 12, 'K': 13 };
+      const rank = rankMap[rankStr] ?? parseInt(rankStr, 10);
+      return { rank, suit };
+    };
+    const cardA = parseCard(nameA);
+    const cardB = parseCard(nameB);
+    // Sort by rank first, then by suit
+    if (cardA.rank !== cardB.rank) return cardA.rank - cardB.rank;
+    return cardA.suit.localeCompare(cardB.suit);
+  });
+});
+
+// Whether hand needs to split into two rows
+const handNeedsTwoRows = computed(() => {
+  const count = visibleChildren.value.length || props.element.childCount || 0;
+  return count > MAX_CARDS_PER_ROW;
+});
+
+// Back row cards (first half, displayed behind)
+const backRowCards = computed(() => {
+  if (!handNeedsTwoRows.value) return [];
+  const cards = sortedHandCards.value;
+  const halfPoint = Math.ceil(cards.length / 2);
+  return cards.slice(0, halfPoint);
+});
+
+// Front row cards (second half, or all if single row)
+const frontRowCards = computed(() => {
+  if (!handNeedsTwoRows.value) return sortedHandCards.value;
+  const cards = sortedHandCards.value;
+  const halfPoint = Math.ceil(cards.length / 2);
+  return cards.slice(halfPoint);
+});
+
 // Layout properties from element attributes
 const layoutProps = computed(() => {
   const attrs = props.element.attributes ?? {};
@@ -646,27 +697,52 @@ function handleDrop(event: DragEvent) {
           </span>
           <span class="hand-count">{{ childCountDisplay }} cards</span>
         </div>
-        <div class="hand-cards" :class="{ 'has-fan': layoutProps.fan, 'has-overlap': layoutProps.overlap !== undefined }">
-          <template v-if="visibleChildren.length > 0">
-            <AutoElement
-              v-for="(child, index) in visibleChildren"
-              :key="child.id"
-              :element="child"
-              :depth="depth + 1"
-              class="hand-card"
-              :style="{ '--card-index': index, '--card-count': visibleChildren.length }"
-              @element-click="handleChildClick"
-            />
-          </template>
-          <template v-else-if="element.childCount">
-            <div
-              v-for="i in element.childCount"
-              :key="i"
-              class="hand-card card-back-small"
-              :style="{ '--card-index': i - 1, '--card-count': element.childCount }"
-            ></div>
-          </template>
-          <div v-else class="empty-hand">No cards</div>
+        <div class="hand-cards-wrapper" :class="{ 'has-fan': layoutProps.fan, 'has-overlap': layoutProps.overlap !== undefined, 'two-rows': handNeedsTwoRows }">
+          <!-- Back row (first half of cards when split) -->
+          <div v-if="handNeedsTwoRows" class="hand-cards hand-cards-back">
+            <template v-if="visibleChildren.length > 0">
+              <AutoElement
+                v-for="(child, index) in backRowCards"
+                :key="child.id"
+                :element="child"
+                :depth="depth + 1"
+                class="hand-card"
+                :style="{ '--card-index': index, '--card-count': backRowCards.length, '--row': 'back' }"
+                @element-click="handleChildClick"
+              />
+            </template>
+            <template v-else-if="element.childCount">
+              <div
+                v-for="i in Math.ceil(element.childCount / 2)"
+                :key="i"
+                class="hand-card card-back-small"
+                :style="{ '--card-index': i - 1, '--card-count': Math.ceil(element.childCount / 2), '--row': 'back' }"
+              ></div>
+            </template>
+          </div>
+          <!-- Front row (or all cards when single row) -->
+          <div class="hand-cards hand-cards-front">
+            <template v-if="visibleChildren.length > 0">
+              <AutoElement
+                v-for="(child, index) in frontRowCards"
+                :key="child.id"
+                :element="child"
+                :depth="depth + 1"
+                class="hand-card"
+                :style="{ '--card-index': index, '--card-count': frontRowCards.length, '--row': 'front' }"
+                @element-click="handleChildClick"
+              />
+            </template>
+            <template v-else-if="element.childCount">
+              <div
+                v-for="i in (handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount)"
+                :key="i"
+                class="hand-card card-back-small"
+                :style="{ '--card-index': i - 1, '--card-count': handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount, '--row': 'front' }"
+              ></div>
+            </template>
+            <div v-if="!visibleChildren.length && !element.childCount" class="empty-hand">No cards</div>
+          </div>
         </div>
       </div>
     </template>
@@ -936,8 +1012,9 @@ function handleDrop(event: DragEvent) {
 
 .card-face {
   /* Playing card aspect ratio: 2.5" x 3.5" */
-  width: 70px;
-  height: 98px;
+  width: 60px;
+  min-width: 45px;
+  height: 84px;
   background: #fff;
   border-radius: 8px;
   display: flex;
@@ -946,10 +1023,11 @@ function handleDrop(event: DragEvent) {
   font-weight: bold;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   color: #000;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   text-align: center;
   padding: 4px;
   border: 2px solid #333;
+  flex-shrink: 0;
 }
 
 /* HAND STYLES */
@@ -958,6 +1036,8 @@ function handleDrop(event: DragEvent) {
   border-radius: 12px;
   padding: 16px;
   transition: all 0.2s ease;
+  overflow: visible;
+  position: relative;
 }
 
 .hand-container.action-selectable {
@@ -1000,53 +1080,103 @@ function handleDrop(event: DragEvent) {
   font-size: 0.9rem;
 }
 
+/* Wrapper for hand cards - handles two-row stacking */
+.hand-cards-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+/* Two-row mode: stack rows with overlap */
+.hand-cards-wrapper.two-rows {
+  /* Back row peeks above front row */
+}
+
+.hand-cards-wrapper.two-rows .hand-cards-back {
+  /* Position back row to peek above front row */
+  margin-bottom: -50px; /* Vertical overlap - back row peeks over front */
+  z-index: 1;
+}
+
+.hand-cards-wrapper.two-rows .hand-cards-front {
+  z-index: 2;
+}
+
+/* Base hand-cards row */
 .hand-cards {
   display: flex;
-  gap: var(--layout-gap, 8px);
-  flex-wrap: wrap;
   min-height: 90px;
   flex-direction: var(--layout-direction, row);
-  align-items: var(--layout-align, center);
-  justify-content: var(--layout-align, center);
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-/* Overlap layout - negative margins based on overlap percentage */
-.hand-cards.has-overlap .hand-card {
-  margin-right: calc(-1 * var(--layout-overlap, 50%) * 0.7); /* 70px card width * overlap */
+/* When fan is active, add padding to contain rotated cards */
+.hand-cards-wrapper.has-fan .hand-cards {
+  padding: 20px 30px 10px 30px;
+  gap: 0;
+  flex-wrap: nowrap;
 }
 
-.hand-cards.has-overlap .hand-card:last-child {
+/* Overlap mode */
+.hand-cards-wrapper.has-overlap .hand-cards {
+  gap: 0;
+}
+
+/* Default hand-card layout */
+.hand-card {
+  flex-shrink: 0;
+  transition: transform 0.2s ease, z-index 0s;
+}
+
+.hand-card:hover {
+  z-index: 100 !important; /* Always on top when hovered */
+}
+
+/* Non-fan cards lift on hover */
+.hand-cards-wrapper:not(.has-fan) .hand-card:hover {
+  transform: translateY(-8px);
+}
+
+/* Overlap layout - minimal overlap for readability */
+.hand-cards-wrapper.has-overlap .hand-card {
+  margin-right: -10px;
+}
+
+.hand-cards-wrapper.has-overlap .hand-card:last-child {
   margin-right: 0;
 }
 
-/* Fan layout - rotates cards around a pivot point */
-.hand-cards.has-fan .hand-card {
+/* Fan layout - rotate cards around a point below the card */
+.hand-cards-wrapper.has-fan .hand-card {
   --fan-angle: var(--layout-fan-angle, 30deg);
   --half-count: calc((var(--card-count, 1) - 1) / 2);
   --angle-step: calc(var(--fan-angle) / max(var(--card-count, 1) - 1, 1));
   --rotation: calc((var(--card-index, 0) - var(--half-count)) * var(--angle-step));
   transform: rotate(var(--rotation));
-  transform-origin: center 150%;
-  transition: transform 0.2s ease;
+  /* Rotate around bottom center - creates the fan arc */
+  transform-origin: center bottom;
 }
 
-.hand-cards.has-fan .hand-card:hover {
-  transform: rotate(var(--rotation)) translateY(-10px);
-  z-index: 10;
-}
-
-.hand-card {
-  /* Default - no overlap */
+/* Fan cards lift and un-rotate on hover for readability */
+.hand-cards-wrapper.has-fan .hand-card:hover {
+  transform: rotate(0deg) translateY(-15px) scale(1.05);
+  z-index: 100 !important;
 }
 
 .card-back-small {
   /* Playing card aspect ratio matching card-face */
-  width: 70px;
-  height: 98px;
+  width: 60px;
+  min-width: 45px;
+  height: 84px;
   background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
   border-radius: 8px;
   border: 2px solid #4a6fa5;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
 }
 
 .hidden-cards, .empty-hand {
