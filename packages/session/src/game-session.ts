@@ -46,6 +46,22 @@ export interface ActionResult {
   serializedAction?: SerializedAction;
 }
 
+/**
+ * Element-level diff between two game states
+ */
+export interface ElementDiff {
+  /** Element IDs that were added */
+  added: number[];
+  /** Element IDs that were removed */
+  removed: number[];
+  /** Element IDs that changed (attributes, children, etc.) */
+  changed: number[];
+  /** The from action index */
+  fromIndex: number;
+  /** The to action index */
+  toIndex: number;
+}
+
 // ============================================
 // GameSession Class
 // ============================================
@@ -324,6 +340,114 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to replay game state',
+      };
+    }
+  }
+
+  /**
+   * Compute diff between two action points (for state diff highlighting)
+   * Returns lists of element IDs that were added, removed, or changed
+   */
+  getStateDiff(
+    fromIndex: number,
+    toIndex: number,
+    playerPosition: number
+  ): { success: boolean; diff?: ElementDiff; error?: string } {
+    const history = this.#storedState.actionHistory;
+
+    // Validate indices
+    if (fromIndex < 0 || fromIndex > history.length) {
+      return { success: false, error: `Invalid fromIndex: ${fromIndex}` };
+    }
+    if (toIndex < 0 || toIndex > history.length) {
+      return { success: false, error: `Invalid toIndex: ${toIndex}` };
+    }
+
+    try {
+      // Get states at both points
+      const fromResult = this.getStateAtAction(fromIndex, playerPosition);
+      const toResult = this.getStateAtAction(toIndex, playerPosition);
+
+      if (!fromResult.success || !fromResult.state) {
+        return { success: false, error: fromResult.error || 'Failed to get from state' };
+      }
+      if (!toResult.success || !toResult.state) {
+        return { success: false, error: toResult.error || 'Failed to get to state' };
+      }
+
+      // Extract element IDs from view trees, tracking parent relationships
+      // Map: element id -> { parentId, attributes (without children/player metadata) }
+      const fromElements = new Map<number, { parentId: number | null; attrs: string }>();
+      const toElements = new Map<number, { parentId: number | null; attrs: string }>();
+
+      function getComparableAttrs(obj: Record<string, unknown>): string {
+        // Only compare attributes that represent actual game state, not metadata
+        const attrs = obj.attributes as Record<string, unknown> | undefined;
+        if (!attrs) return '';
+        // Filter out player object (has _isCurrent that changes), keep game-relevant attrs
+        const filtered: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(attrs)) {
+          // Skip player objects and internal metadata
+          if (key === 'player' || key === 'game' || key.startsWith('_')) continue;
+          filtered[key] = value;
+        }
+        return JSON.stringify(filtered);
+      }
+
+      function collectElements(node: unknown, map: Map<number, { parentId: number | null; attrs: string }>, parentId: number | null = null) {
+        if (!node || typeof node !== 'object') return;
+        const obj = node as Record<string, unknown>;
+        if (typeof obj.id === 'number') {
+          map.set(obj.id, {
+            parentId,
+            attrs: getComparableAttrs(obj),
+          });
+          // Recurse into children with this node as parent
+          if (Array.isArray(obj.children)) {
+            for (const child of obj.children) {
+              collectElements(child, map, obj.id);
+            }
+          }
+        } else if (Array.isArray(obj.children)) {
+          // Node without id, just recurse
+          for (const child of obj.children) {
+            collectElements(child, map, parentId);
+          }
+        }
+      }
+
+      collectElements(fromResult.state.view, fromElements);
+      collectElements(toResult.state.view, toElements);
+
+      // Compute diff - focus on elements that moved (parent changed) or whose attributes changed
+      const added: number[] = [];
+      const removed: number[] = [];
+      const changed: number[] = [];
+
+      for (const [id, toData] of toElements.entries()) {
+        const fromData = fromElements.get(id);
+        if (!fromData) {
+          added.push(id);
+        } else if (fromData.parentId !== toData.parentId || fromData.attrs !== toData.attrs) {
+          // Element moved to different parent OR its attributes changed
+          changed.push(id);
+        }
+      }
+
+      for (const id of fromElements.keys()) {
+        if (!toElements.has(id)) {
+          removed.push(id);
+        }
+      }
+
+      return {
+        success: true,
+        diff: { added, removed, changed, fromIndex, toIndex },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to compute diff',
       };
     }
   }

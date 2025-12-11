@@ -8,6 +8,14 @@ interface SerializedAction {
   timestamp?: number;
 }
 
+interface ElementDiff {
+  added: number[];
+  removed: number[];
+  changed: number[];
+  fromIndex: number;
+  toIndex: number;
+}
+
 interface DebugPanelProps {
   /** Current game state (raw) */
   state: any;
@@ -32,7 +40,7 @@ const emit = defineEmits<{
   'switch-player': [position: number];
   'restart-game': [];
   'update:expanded': [value: boolean];
-  'time-travel': [state: any | null, actionIndex: number | null];
+  'time-travel': [state: any | null, actionIndex: number | null, diff: ElementDiff | null];
 }>();
 
 // Local state
@@ -53,6 +61,9 @@ const selectedActionIndex = ref<number | null>(null);
 const historicalState = ref<any>(null);
 const historicalStateLoading = ref(false);
 const historicalStateError = ref<string | null>(null);
+
+// Diff state
+const stateDiff = ref<ElementDiff | null>(null);
 
 // Sync expanded state
 watch(() => props.expanded, (val) => {
@@ -297,22 +308,32 @@ async function fetchStateAtAction(actionIndex: number) {
   historicalStateError.value = null;
 
   try {
-    const response = await fetch(
-      `${props.apiUrl}/games/${props.gameId}/state-at/${actionIndex}?player=${props.playerPosition}`
-    );
-    const data = await response.json();
+    // Fetch state and diff in parallel
+    const [stateResponse, diffResponse] = await Promise.all([
+      fetch(`${props.apiUrl}/games/${props.gameId}/state-at/${actionIndex}?player=${props.playerPosition}`),
+      // Diff from previous action to this action (what changed to get here)
+      actionIndex > 0
+        ? fetch(`${props.apiUrl}/games/${props.gameId}/state-diff/${actionIndex - 1}/${actionIndex}?player=${props.playerPosition}`)
+        : Promise.resolve(null),
+    ]);
 
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to fetch state');
+    const stateData = await stateResponse.json();
+    const diffData = diffResponse ? await diffResponse.json() : null;
+
+    if (!stateData.success) {
+      throw new Error(stateData.error || 'Failed to fetch state');
     }
 
-    historicalState.value = data.state;
-    // Emit to parent so main game UI can show historical state
-    emit('time-travel', data.state, actionIndex);
+    historicalState.value = stateData.state;
+    stateDiff.value = diffData?.success ? diffData.diff : null;
+
+    // Emit to parent so main game UI can show historical state with diff
+    emit('time-travel', stateData.state, actionIndex, stateDiff.value);
   } catch (e) {
     historicalStateError.value = e instanceof Error ? e.message : 'Unknown error';
     historicalState.value = null;
-    emit('time-travel', null, null);
+    stateDiff.value = null;
+    emit('time-travel', null, null, null);
   } finally {
     historicalStateLoading.value = false;
   }
@@ -323,8 +344,9 @@ function clearHistoricalState() {
   selectedActionIndex.value = null;
   historicalState.value = null;
   historicalStateError.value = null;
+  stateDiff.value = null;
   // Emit to parent to return to live state
-  emit('time-travel', null, null);
+  emit('time-travel', null, null, null);
 }
 
 // Computed: is viewing historical state?

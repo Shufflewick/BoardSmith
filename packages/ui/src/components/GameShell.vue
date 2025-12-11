@@ -55,6 +55,7 @@ const zoomLevel = ref(1.0);
 // Time travel state (for viewing historical game states)
 const timeTravelState = ref<any>(null);
 const timeTravelActionIndex = ref<number | null>(null);
+const timeTravelDiff = ref<{ added: number[]; removed: number[]; changed: number[] } | null>(null);
 const isViewingHistory = computed(() => timeTravelState.value !== null);
 
 // Create client
@@ -179,6 +180,7 @@ provide('availableActions', availableActions);
 provide('action', action);
 provide('actionArgs', actionArgs);
 provide('boardInteraction', boardInteraction);
+provide('timeTravelDiff', timeTravelDiff);
 
 // URL routing - check for game ID in URL on mount
 onMounted(() => {
@@ -310,9 +312,14 @@ async function handleRestartGame() {
 }
 
 // Time travel handler - updates the game view to show historical state
-function handleTimeTravel(historicalState: any | null, actionIndex: number | null) {
+function handleTimeTravel(
+  historicalState: any | null,
+  actionIndex: number | null,
+  diff: { added: number[]; removed: number[]; changed: number[] } | null
+) {
   timeTravelState.value = historicalState;
   timeTravelActionIndex.value = actionIndex;
+  timeTravelDiff.value = diff;
 }
 
 // Menu handlers

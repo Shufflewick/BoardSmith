@@ -44,6 +44,18 @@ const playerPosition = inject<number>('playerPosition', 0);
 const selectableElements = inject<Ref<Set<number>>>('selectableElements');
 const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 
+// Time travel diff for highlighting changed elements
+const timeTravelDiff = inject<Ref<{ added: number[]; removed: number[]; changed: number[] } | null>>('timeTravelDiff', ref(null));
+
+// Diff highlighting computed properties
+const isDiffAdded = computed(() => timeTravelDiff?.value?.added?.includes(props.element.id) ?? false);
+const isDiffChanged = computed(() => timeTravelDiff?.value?.changed?.includes(props.element.id) ?? false);
+const diffHighlightClass = computed(() => {
+  if (isDiffAdded.value) return 'diff-added';
+  if (isDiffChanged.value) return 'diff-changed';
+  return '';
+});
+
 // Board interaction for hover highlighting and click selection
 const boardInteraction = useBoardInteraction();
 
@@ -656,6 +668,7 @@ function handleDrop(event: DragEvent) {
     :class="[
       `type-${elementType}`,
       `depth-${Math.min(depth, 3)}`,
+      diffHighlightClass,
       {
         'is-owned': isOwned,
         'is-selectable': isSelectable,
@@ -1727,5 +1740,29 @@ function handleDrop(event: DragEvent) {
 .card-container.is-dragging {
   opacity: 0.4;
   transform: scale(0.95) rotate(5deg);
+}
+
+/* Time travel diff highlighting */
+.diff-added {
+  outline: 3px solid #22c55e !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
+  animation: diff-pulse 1.5s ease-in-out infinite;
+}
+
+.diff-changed {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+  animation: diff-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes diff-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 </style>

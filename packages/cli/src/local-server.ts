@@ -246,6 +246,30 @@ export class LocalServer {
         return;
       }
 
+      // GET /games/:gameId/state-diff/:fromIndex/:toIndex - Get diff between two action points
+      const stateDiffMatch = path.match(/^\/games\/([^/]+)\/state-diff\/(\d+)\/(\d+)$/);
+      if (stateDiffMatch && req.method === 'GET') {
+        const gameId = stateDiffMatch[1];
+        const fromIndex = parseInt(stateDiffMatch[2], 10);
+        const toIndex = parseInt(stateDiffMatch[3], 10);
+        const urlObj = new URL(req.url || '', `http://localhost:${this.#port}`);
+        const playerPosition = parseInt(urlObj.searchParams.get('player') || '0', 10);
+
+        const gameData = this.#games.get(gameId);
+        if (!gameData) {
+          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
+          return;
+        }
+
+        const result = gameData.session.getStateDiff(fromIndex, toIndex, playerPosition);
+        if (result.success) {
+          this.#sendJson(res, 200, { success: true, diff: result.diff });
+        } else {
+          this.#sendJson(res, 400, { success: false, error: result.error });
+        }
+        return;
+      }
+
       // POST /games/:gameId/restart - Restart game with same players
       const restartMatch = path.match(/^\/games\/([^/]+)\/restart$/);
       if (restartMatch && req.method === 'POST') {
