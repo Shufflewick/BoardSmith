@@ -38,6 +38,7 @@ importers:
       '@boardsmith/ai': workspace:*
       '@boardsmith/engine': workspace:*
       '@boardsmith/runtime': workspace:*
+      '@boardsmith/server': workspace:*
       '@boardsmith/session': workspace:*
       '@types/express': ^4.17.21
       '@types/node': ^22.0.0
@@ -58,6 +59,7 @@ importers:
       '@boardsmith/ai': link:../ai
       '@boardsmith/engine': link:../engine
       '@boardsmith/runtime': link:../runtime
+      '@boardsmith/server': link:../server
       '@boardsmith/session': link:../session
       chalk: 5.6.2
       chokidar: 3.6.0
@@ -269,6 +271,15 @@ importers:
       typescript: 5.9.3
       vitest: 2.1.9
 
+  packages/server:
+    specifiers:
+      '@boardsmith/session': workspace:*
+      typescript: ^5.7.0
+    dependencies:
+      '@boardsmith/session': link:../session
+    devDependencies:
+      typescript: 5.9.3
+
   packages/session:
     specifiers:
       '@boardsmith/ai': workspace:*
@@ -319,6 +330,7 @@ importers:
       '@boardsmith/ai': workspace:*
       '@boardsmith/engine': workspace:*
       '@boardsmith/runtime': workspace:*
+      '@boardsmith/server': workspace:*
       '@boardsmith/session': workspace:*
       '@cloudflare/workers-types': ^4.20241127.0
       typescript: ^5.7.0
@@ -326,6 +338,7 @@ importers:
       '@boardsmith/ai': link:../ai
       '@boardsmith/engine': link:../engine
       '@boardsmith/runtime': link:../runtime
+      '@boardsmith/server': link:../server
       '@boardsmith/session': link:../session
     devDependencies:
       '@cloudflare/workers-types': 4.20251128.0

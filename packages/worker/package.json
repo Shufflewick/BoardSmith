@@ -17,6 +17,7 @@
   "dependencies": {
     "@boardsmith/ai": "workspace:*",
     "@boardsmith/engine": "workspace:*",
+    "@boardsmith/server": "workspace:*",
     "@boardsmith/session": "workspace:*",
     "@boardsmith/runtime": "workspace:*"
   },

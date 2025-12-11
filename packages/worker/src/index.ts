@@ -5,6 +5,8 @@
  * Uses Durable Objects for game state persistence and WebSocket connections.
  * Uses KV for matchmaking queues.
  *
+ * Now uses @boardsmith/server for shared routing and matchmaking logic.
+ *
  * Usage:
  * ```typescript
  * import { gameDefinition } from './my-game-rules';
@@ -30,6 +32,16 @@ import {
   type StorageAdapter,
 } from '@boardsmith/session';
 import type { FlowState } from '@boardsmith/engine';
+import {
+  type MatchmakingStore,
+  type QueueEntry,
+  type MatchInfo,
+  type WaitingInfo,
+  type GameRegistry as ServerGameRegistry,
+  handleMatchmakingJoin,
+  handleMatchmakingStatus,
+  handleMatchmakingLeave,
+} from '@boardsmith/server';
 
 // ============================================
 // Re-export types from session for convenience
@@ -83,12 +95,6 @@ export interface MatchmakingRequest {
   playerCount: number;
   playerId: string;
   playerName?: string;
-}
-
-export interface QueueEntry {
-  playerId: string;
-  playerName: string;
-  timestamp: number;
 }
 
 export interface GameResponse {
@@ -211,6 +217,103 @@ class CloudflareBroadcastAdapter implements BroadcastAdapter<WebSocketSession> {
 }
 
 // ============================================
+// Cloudflare KV Matchmaking Store Adapter
+// ============================================
+
+/**
+ * Adapter that implements MatchmakingStore using Cloudflare KV.
+ */
+class CloudflareKVMatchmakingStore implements MatchmakingStore {
+  readonly #kv: KVNamespace;
+
+  constructor(kv: KVNamespace) {
+    this.#kv = kv;
+  }
+
+  #queueKey(gameType: string, playerCount: number): string {
+    return `queue:${gameType}:${playerCount}`;
+  }
+
+  async getQueue(gameType: string, playerCount: number): Promise<QueueEntry[]> {
+    const key = this.#queueKey(gameType, playerCount);
+    const data = await this.#kv.get(key);
+    return data ? JSON.parse(data) : [];
+  }
+
+  async setQueue(gameType: string, playerCount: number, entries: QueueEntry[]): Promise<void> {
+    const key = this.#queueKey(gameType, playerCount);
+    await this.#kv.put(key, JSON.stringify(entries));
+  }
+
+  async getMatch(playerId: string): Promise<MatchInfo | null> {
+    const data = await this.#kv.get(`match:${playerId}`);
+    return data ? JSON.parse(data) : null;
+  }
+
+  async setMatch(playerId: string, match: MatchInfo, ttlSeconds?: number): Promise<void> {
+    const options: KVNamespacePutOptions = ttlSeconds ? { expirationTtl: ttlSeconds } : {};
+    await this.#kv.put(`match:${playerId}`, JSON.stringify(match), options);
+  }
+
+  async deleteMatch(playerId: string): Promise<void> {
+    await this.#kv.delete(`match:${playerId}`);
+  }
+
+  async getWaiting(playerId: string): Promise<WaitingInfo | null> {
+    const data = await this.#kv.get(`waiting:${playerId}`);
+    return data ? JSON.parse(data) : null;
+  }
+
+  async setWaiting(playerId: string, info: WaitingInfo, ttlSeconds?: number): Promise<void> {
+    const options: KVNamespacePutOptions = ttlSeconds ? { expirationTtl: ttlSeconds } : {};
+    await this.#kv.put(`waiting:${playerId}`, JSON.stringify(info), options);
+  }
+
+  async deleteWaiting(playerId: string): Promise<void> {
+    await this.#kv.delete(`waiting:${playerId}`);
+  }
+}
+
+// ============================================
+// Worker Game Registry Adapter
+// ============================================
+
+/**
+ * Adapter that wraps the worker's GameRegistry to implement the server's GameRegistry interface.
+ */
+class WorkerGameRegistryAdapter implements ServerGameRegistry {
+  readonly #registry: GameRegistry;
+  readonly #configRegistry: GameConfigRegistry;
+
+  constructor(registry: GameRegistry, configRegistry: GameConfigRegistry) {
+    this.#registry = registry;
+    this.#configRegistry = configRegistry;
+  }
+
+  get(gameType: string): GameDefinition | undefined {
+    const GameClass = this.#registry[gameType];
+    if (!GameClass) return undefined;
+
+    const config = this.#configRegistry[gameType] || { minPlayers: 2, maxPlayers: 6 };
+    return {
+      gameType,
+      gameClass: GameClass,
+      minPlayers: config.minPlayers,
+      maxPlayers: config.maxPlayers,
+    };
+  }
+
+  getAll(): GameDefinition[] {
+    return Object.keys(this.#registry).map(gameType => this.get(gameType)!).filter(Boolean);
+  }
+
+  set(_definition: GameDefinition): void {
+    // Not supported in worker - registry is read-only
+    throw new Error('Worker game registry is read-only');
+  }
+}
+
+// ============================================
 // Worker Factory
 // ============================================
 
@@ -226,6 +329,9 @@ export function createGameWorker(config: WorkerConfig) {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Upgrade, Connection',
   };
+
+  // Create registry adapter for shared handlers
+  const registryAdapter = new WorkerGameRegistryAdapter(gameRegistry, gameConfigRegistry);
 
   async function handleCreateGame(
     body: CreateGameRequest,
@@ -351,6 +457,25 @@ export function createGameWorker(config: WorkerConfig) {
     return Response.json(result, { status: response.status, headers });
   }
 
+  async function handleGetStateDiff(
+    gameId: string,
+    fromIndex: number,
+    toIndex: number,
+    playerPosition: number,
+    env: Env,
+    headers: Record<string, string>
+  ): Promise<Response> {
+    const id = env.GAME_STATE.idFromName(gameId);
+    const stub = env.GAME_STATE.get(id);
+
+    const response = await stub.fetch(
+      new Request(`http://internal/state-diff/${fromIndex}/${toIndex}?player=${playerPosition}`)
+    );
+    const result = await response.json();
+
+    return Response.json(result, { status: response.status, headers });
+  }
+
   async function handleUndo(
     gameId: string,
     body: { player?: number },
@@ -369,166 +494,47 @@ export function createGameWorker(config: WorkerConfig) {
     return Response.json(result, { status: response.status, headers });
   }
 
-  async function handleMatchmakingJoin(
-    body: MatchmakingRequest,
+  async function handleRestart(
+    gameId: string,
     env: Env,
     headers: Record<string, string>
   ): Promise<Response> {
-    const { gameType, playerCount, playerId, playerName } = body;
+    const id = env.GAME_STATE.idFromName(gameId);
+    const stub = env.GAME_STATE.get(id);
 
-    if (!gameRegistry[gameType]) {
-      return Response.json(
-        { success: false, error: `Unknown game type: ${gameType}` },
-        { status: 400, headers }
-      );
-    }
+    const response = await stub.fetch(new Request('http://internal/restart', {
+      method: 'POST',
+    }));
 
-    const gameConfig = gameConfigRegistry[gameType] || { minPlayers: 2, maxPlayers: 6 };
-    if (playerCount < gameConfig.minPlayers || playerCount > gameConfig.maxPlayers) {
-      return Response.json(
-        { success: false, error: `Player count must be between ${gameConfig.minPlayers} and ${gameConfig.maxPlayers}` },
-        { status: 400, headers }
-      );
-    }
-
-    const queueKey = `queue:${gameType}:${playerCount}`;
-    const queueData = await env.MATCHMAKING.get(queueKey);
-    const queue: QueueEntry[] = queueData ? JSON.parse(queueData) : [];
-
-    const existingIndex = queue.findIndex(e => e.playerId === playerId);
-    if (existingIndex >= 0) {
-      queue[existingIndex].timestamp = Date.now();
-    } else {
-      queue.push({
-        playerId,
-        playerName: playerName || `Player ${playerId.slice(0, 6)}`,
-        timestamp: Date.now(),
-      });
-    }
-
-    const now = Date.now();
-    const activeQueue = queue.filter(e => now - e.timestamp < 5 * 60 * 1000);
-
-    if (activeQueue.length >= playerCount) {
-      const matchedPlayers = activeQueue.splice(0, playerCount);
-      const gameId = generateGameId();
-
-      const id = env.GAME_STATE.idFromName(gameId);
-      const stub = env.GAME_STATE.get(id);
-
-      await stub.fetch(new Request('http://internal/create', {
-        method: 'POST',
-        body: JSON.stringify({
-          gameType,
-          playerCount,
-          playerNames: matchedPlayers.map(p => p.playerName),
-          playerIds: matchedPlayers.map(p => p.playerId),
-        }),
-      }));
-
-      for (let i = 0; i < matchedPlayers.length; i++) {
-        const player = matchedPlayers[i];
-        await env.MATCHMAKING.put(`match:${player.playerId}`, JSON.stringify({
-          gameId,
-          playerPosition: i,
-          gameType,
-          players: matchedPlayers.map(p => p.playerName),
-          matchedAt: Date.now(),
-        }), { expirationTtl: 3600 });
-      }
-
-      await env.MATCHMAKING.put(queueKey, JSON.stringify(activeQueue));
-
-      return Response.json({
-        success: true,
-        matched: true,
-        gameId,
-        playerPosition: matchedPlayers.findIndex(p => p.playerId === playerId),
-        players: matchedPlayers.map(p => p.playerName),
-      }, { headers });
-    }
-
-    await env.MATCHMAKING.put(queueKey, JSON.stringify(activeQueue));
-    await env.MATCHMAKING.put(`waiting:${playerId}`, JSON.stringify({
-      gameType,
-      playerCount,
-      position: activeQueue.findIndex(e => e.playerId === playerId) + 1,
-      queueSize: activeQueue.length,
-      joinedAt: Date.now(),
-    }), { expirationTtl: 600 });
-
-    return Response.json({
-      success: true,
-      matched: false,
-      position: activeQueue.findIndex(e => e.playerId === playerId) + 1,
-      queueSize: activeQueue.length,
-      playersNeeded: playerCount - activeQueue.length,
-    }, { headers });
+    const result = await response.json();
+    return Response.json(result, { status: response.status, headers });
   }
 
-  async function handleMatchmakingStatus(
-    playerId: string,
-    env: Env,
-    headers: Record<string, string>
-  ): Promise<Response> {
-    const matchData = await env.MATCHMAKING.get(`match:${playerId}`);
-    if (matchData) {
-      const match = JSON.parse(matchData);
-      return Response.json({
-        success: true,
-        status: 'matched',
-        ...match,
-      }, { headers });
-    }
+  /**
+   * Game creation callback for matchmaking - creates game in Durable Object
+   */
+  async function createGameForMatchmaking(
+    gameType: string,
+    playerCount: number,
+    playerNames: string[],
+    playerIds: string[],
+    env: Env
+  ): Promise<string> {
+    const gameId = generateGameId();
+    const id = env.GAME_STATE.idFromName(gameId);
+    const stub = env.GAME_STATE.get(id);
 
-    const waitingData = await env.MATCHMAKING.get(`waiting:${playerId}`);
-    if (waitingData) {
-      const waiting = JSON.parse(waitingData);
-      const queueKey = `queue:${waiting.gameType}:${waiting.playerCount}`;
-      const queueData = await env.MATCHMAKING.get(queueKey);
-      const queue: QueueEntry[] = queueData ? JSON.parse(queueData) : [];
-      const position = queue.findIndex(e => e.playerId === playerId) + 1;
+    await stub.fetch(new Request('http://internal/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        gameType,
+        playerCount,
+        playerNames,
+        playerIds,
+      }),
+    }));
 
-      return Response.json({
-        success: true,
-        status: 'waiting',
-        gameType: waiting.gameType,
-        playerCount: waiting.playerCount,
-        position: position || waiting.position,
-        queueSize: queue.length,
-        playersNeeded: waiting.playerCount - queue.length,
-      }, { headers });
-    }
-
-    return Response.json({
-      success: true,
-      status: 'not_in_queue',
-    }, { headers });
-  }
-
-  async function handleMatchmakingLeave(
-    playerId: string,
-    env: Env,
-    headers: Record<string, string>
-  ): Promise<Response> {
-    const waitingData = await env.MATCHMAKING.get(`waiting:${playerId}`);
-    if (!waitingData) {
-      return Response.json({ success: true, message: 'Not in queue' }, { headers });
-    }
-
-    const waiting = JSON.parse(waitingData);
-    const queueKey = `queue:${waiting.gameType}:${waiting.playerCount}`;
-
-    const queueData = await env.MATCHMAKING.get(queueKey);
-    if (queueData) {
-      const queue: QueueEntry[] = JSON.parse(queueData);
-      const filtered = queue.filter(e => e.playerId !== playerId);
-      await env.MATCHMAKING.put(queueKey, JSON.stringify(filtered));
-    }
-
-    await env.MATCHMAKING.delete(`waiting:${playerId}`);
-
-    return Response.json({ success: true, message: 'Left queue' }, { headers });
+    return gameId;
   }
 
   return {
@@ -540,7 +546,11 @@ export function createGameWorker(config: WorkerConfig) {
         return new Response(null, { headers: corsHeaders });
       }
 
+      // Create matchmaking store for this request
+      const matchmakingStore = new CloudflareKVMatchmakingStore(env.MATCHMAKING);
+
       try {
+        // Game routes
         if (path === '/games' && request.method === 'POST') {
           const body = await request.json() as CreateGameRequest;
           return await handleCreateGame(body, env, corsHeaders);
@@ -578,9 +588,17 @@ export function createGameWorker(config: WorkerConfig) {
         if (stateAtMatch && request.method === 'GET') {
           const gameId = stateAtMatch[1];
           const actionIndex = parseInt(stateAtMatch[2], 10);
-          const url = new URL(request.url);
           const playerPosition = parseInt(url.searchParams.get('player') || '0', 10);
           return await handleGetStateAt(gameId, actionIndex, playerPosition, env, corsHeaders);
+        }
+
+        const stateDiffMatch = path.match(/^\/games\/([^/]+)\/state-diff\/(\d+)\/(\d+)$/);
+        if (stateDiffMatch && request.method === 'GET') {
+          const gameId = stateDiffMatch[1];
+          const fromIndex = parseInt(stateDiffMatch[2], 10);
+          const toIndex = parseInt(stateDiffMatch[3], 10);
+          const playerPosition = parseInt(url.searchParams.get('player') || '0', 10);
+          return await handleGetStateDiff(gameId, fromIndex, toIndex, playerPosition, env, corsHeaders);
         }
 
         const undoMatch = path.match(/^\/games\/([^/]+)\/undo$/);
@@ -590,9 +608,23 @@ export function createGameWorker(config: WorkerConfig) {
           return await handleUndo(gameId, body, env, corsHeaders);
         }
 
+        const restartMatch = path.match(/^\/games\/([^/]+)\/restart$/);
+        if (restartMatch && request.method === 'POST') {
+          const gameId = restartMatch[1];
+          return await handleRestart(gameId, env, corsHeaders);
+        }
+
+        // Matchmaking routes - use shared handlers from @boardsmith/server
         if (path === '/matchmaking/join' && request.method === 'POST') {
           const body = await request.json() as MatchmakingRequest;
-          return await handleMatchmakingJoin(body, env, corsHeaders);
+          const result = await handleMatchmakingJoin(
+            matchmakingStore,
+            registryAdapter,
+            body,
+            (gameType, playerCount, playerNames, playerIds) =>
+              createGameForMatchmaking(gameType, playerCount, playerNames, playerIds, env)
+          );
+          return Response.json(result.body, { status: result.status, headers: corsHeaders });
         }
 
         if (path === '/matchmaking/status' && request.method === 'GET') {
@@ -600,14 +632,17 @@ export function createGameWorker(config: WorkerConfig) {
           if (!playerId) {
             return Response.json({ success: false, error: 'playerId required' }, { status: 400, headers: corsHeaders });
           }
-          return await handleMatchmakingStatus(playerId, env, corsHeaders);
+          const result = await handleMatchmakingStatus(matchmakingStore, playerId);
+          return Response.json(result.body, { status: result.status, headers: corsHeaders });
         }
 
         if (path === '/matchmaking/leave' && request.method === 'POST') {
           const body = await request.json() as { playerId: string };
-          return await handleMatchmakingLeave(body.playerId, env, corsHeaders);
+          const result = await handleMatchmakingLeave(matchmakingStore, body.playerId);
+          return Response.json(result.body, { status: result.status, headers: corsHeaders });
         }
 
+        // Health check
         if (path === '/health') {
           return Response.json({ status: 'ok', environment: env.ENVIRONMENT }, { headers: corsHeaders });
         }
@@ -700,8 +735,21 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
           return await this.#handleGetStateAt(actionIndex, playerPosition);
         }
 
+        const stateDiffMatch = path.match(/^\/state-diff\/(\d+)\/(\d+)$/);
+        if (stateDiffMatch && request.method === 'GET') {
+          const fromIndex = parseInt(stateDiffMatch[1], 10);
+          const toIndex = parseInt(stateDiffMatch[2], 10);
+          const urlObj = new URL(request.url);
+          const playerPosition = parseInt(urlObj.searchParams.get('player') || '0', 10);
+          return await this.#handleGetStateDiff(fromIndex, toIndex, playerPosition);
+        }
+
         if (path === '/undo' && request.method === 'POST') {
           return await this.#handleUndo(request);
+        }
+
+        if (path === '/restart' && request.method === 'POST') {
+          return await this.#handleRestart();
         }
 
         return Response.json({ success: false, error: 'Not found' }, { status: 404 });
@@ -765,21 +813,15 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
     }
 
     async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-      console.log('[WebSocket] ===== MESSAGE RECEIVED =====');
-      console.log('[WebSocket] Raw message:', typeof message === 'string' ? message.substring(0, 200) : 'ArrayBuffer');
-
       let session = this.#sessions.get(ws);
       if (!session) {
-        console.log('[WebSocket] Session not in map, trying getWebSocketSession');
         session = getWebSocketSession(ws);
         if (session) {
-          console.log('[WebSocket] Found session via getWebSocketSession');
           this.#sessions.set(ws, session);
         }
       }
 
       if (!session) {
-        console.error('[WebSocket] Session not found!');
         ws.send(JSON.stringify({ type: 'error', error: 'Session expired. Please refresh the page.' }));
         return;
       }
@@ -789,33 +831,25 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
         switch (data.type) {
           case 'action':
-            console.log('[WebSocket] Action received:', data.action, 'args:', JSON.stringify(data.args), 'player:', session.playerPosition);
             if (session.isSpectator) {
-              console.log('[WebSocket] Rejecting: spectator');
               ws.send(JSON.stringify({ type: 'error', error: 'Spectators cannot perform actions' }));
               return;
             }
 
             await this.#ensureLoaded();
             if (!this.#gameSession) {
-              console.log('[WebSocket] Rejecting: no game session');
               ws.send(JSON.stringify({ type: 'error', error: 'Game not found' }));
               return;
             }
 
-            console.log('[WebSocket] Calling performAction...');
             const result = await this.#gameSession.performAction(
               data.action!,
               session.playerPosition,
               data.args || {}
             );
-            console.log('[WebSocket] performAction result:', JSON.stringify(result));
 
             if (!result.success) {
-              console.log('[WebSocket] Action failed:', result.error);
               ws.send(JSON.stringify({ type: 'error', error: result.error }));
-            } else {
-              console.log('[WebSocket] Action succeeded, broadcast should happen automatically');
             }
             // Success case: broadcast happens automatically
             break;
@@ -1003,6 +1037,33 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
       });
     }
 
+    async #handleGetStateDiff(fromIndex: number, toIndex: number, playerPosition: number): Promise<Response> {
+      await this.#ensureLoaded();
+
+      if (!this.#gameSession) {
+        return Response.json(
+          { success: false, error: 'Game not found' },
+          { status: 404 }
+        );
+      }
+
+      const result = this.#gameSession.getStateDiff(fromIndex, toIndex, playerPosition);
+
+      if (!result.success) {
+        return Response.json(
+          { success: false, error: result.error },
+          { status: 400 }
+        );
+      }
+
+      return Response.json({
+        success: true,
+        diff: result.diff,
+        fromIndex,
+        toIndex,
+      });
+    }
+
     async #handleUndo(request: Request): Promise<Response> {
       await this.#ensureLoaded();
 
@@ -1029,6 +1090,50 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         success: true,
         flowState: result.flowState,
         state: result.state,
+      });
+    }
+
+    async #handleRestart(): Promise<Response> {
+      await this.#ensureLoaded();
+
+      if (!this.#gameSession) {
+        return Response.json(
+          { success: false, error: 'Game not found' },
+          { status: 404 }
+        );
+      }
+
+      // Get original game configuration
+      const storedState = this.#gameSession.storedState;
+      const GameClass = this.#registry[storedState.gameType];
+      if (!GameClass) {
+        return Response.json(
+          { success: false, error: `Unknown game type: ${storedState.gameType}` },
+          { status: 400 }
+        );
+      }
+
+      // Create a new game session with the same configuration (but new random seed)
+      this.#gameSession = GameSession.create({
+        gameType: storedState.gameType,
+        GameClass,
+        playerCount: storedState.playerCount,
+        playerNames: storedState.playerNames,
+        playerIds: storedState.playerIds,
+        storage: this.#storage,
+        aiConfig: storedState.aiConfig,
+      });
+
+      // Set up broadcasting
+      const broadcaster = new CloudflareBroadcastAdapter(this.#state, this.#sessions);
+      this.#gameSession.setBroadcaster(broadcaster);
+
+      const state = this.#gameSession.getState(0);
+
+      return Response.json({
+        success: true,
+        flowState: state.flowState,
+        state: state.state,
       });
     }
 

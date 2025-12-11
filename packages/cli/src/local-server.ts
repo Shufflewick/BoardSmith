@@ -1,24 +1,26 @@
 /**
  * Local development server for BoardSmith games
- * Provides the same HTTP/WebSocket API as the production worker
+ * Uses the shared @boardsmith/server core with Node.js HTTP and WebSocket adapters
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'node:http';
 import {
-  GameSession,
-  generateGameId,
+  GameServerCore,
+  InMemoryGameStore,
+  InMemoryMatchmakingStore,
+  SimpleGameRegistry,
+  type ServerRequest,
+  type ServerResponse as CoreResponse,
   type GameDefinition,
+  type AIConfig,
   type SessionInfo,
   type BroadcastAdapter,
-  type AIConfig,
-  type CreateGameRequest,
-  type ActionRequest,
-} from '@boardsmith/session';
+} from '@boardsmith/server';
 
 // ============================================
-// WebSocket Broadcast Adapter
+// WebSocket Broadcast Adapter for Node.js
 // ============================================
 
 interface WsSession extends SessionInfo {
@@ -58,15 +60,6 @@ class WsBroadcastAdapter implements BroadcastAdapter<WsSession> {
 }
 
 // ============================================
-// Game Session Wrapper (adds broadcasting)
-// ============================================
-
-interface GameSessionWithBroadcaster {
-  session: GameSession;
-  broadcaster: WsBroadcastAdapter;
-}
-
-// ============================================
 // Local Server
 // ============================================
 
@@ -81,18 +74,33 @@ export class LocalServer {
   readonly #server: Server;
   readonly #wss: WebSocketServer;
   readonly #port: number;
-  readonly #gameRegistry: Map<string, GameDefinition> = new Map();
-  readonly #games: Map<string, GameSessionWithBroadcaster> = new Map();
-  readonly #aiConfig?: AIConfig;
+  readonly #core: GameServerCore;
+  readonly #store: InMemoryGameStore<WsSession>;
+  readonly #registry: SimpleGameRegistry;
 
   constructor(options: LocalServerOptions) {
     this.#port = options.port;
-    this.#aiConfig = options.aiConfig;
 
-    // Build registry
-    for (const def of options.definitions) {
-      this.#gameRegistry.set(def.gameType, def);
-    }
+    // Build registry from definitions
+    this.#registry = new SimpleGameRegistry(options.definitions);
+
+    // Create in-memory game store with broadcaster factory
+    this.#store = new InMemoryGameStore<WsSession>(
+      this.#registry,
+      () => new WsBroadcastAdapter()
+    );
+
+    // Create in-memory matchmaking store
+    const matchmaking = new InMemoryMatchmakingStore();
+
+    // Create the server core
+    this.#core = new GameServerCore({
+      store: this.#store,
+      registry: this.#registry,
+      matchmaking,
+      aiConfig: options.aiConfig,
+      environment: 'development',
+    });
 
     // Create HTTP server
     this.#server = createServer((req, res) => this.#handleRequest(req, res));
@@ -108,27 +116,15 @@ export class LocalServer {
   }
 
   updateDefinition(definition: GameDefinition): void {
-    // Update the registry
-    this.#gameRegistry.set(definition.gameType, definition);
-
-    // For each active game of this type, reload the game instance
-    for (const [gameId, gameData] of this.#games.entries()) {
-      if (gameData.session.runner.game.constructor.name === definition.gameClass.name) {
-        // Note: We can't hot-swap the running game instance without losing state
-        // Instead, just update the registry so new games use the new definition
-        // Existing games continue with their current instance
-        console.log(`  Game ${gameId} will continue with current rules (restart to apply changes)`);
-      }
-    }
+    this.#registry.set(definition);
+    this.#store.updateRegistry?.(definition);
   }
 
   close(): Promise<void> {
     return new Promise((resolve, reject) => {
       // Close all WebSocket connections
-      for (const { broadcaster } of this.#games.values()) {
-        for (const session of broadcaster.getSessions()) {
-          session.ws.close();
-        }
+      for (const client of this.#wss.clients) {
+        client.close();
       }
 
       this.#wss.close(() => {
@@ -151,294 +147,65 @@ export class LocalServer {
       return;
     }
 
-    const url = new URL(req.url || '/', `http://localhost:${this.#port}`);
-    const path = url.pathname;
-
     try {
-      // POST /games - Create a new game
-      if (path === '/games' && req.method === 'POST') {
-        const body = await this.#readBody<CreateGameRequest>(req);
-        const result = this.#createGame(body);
+      // Convert Node request to platform-agnostic request
+      const serverRequest = await this.#nodeToServerRequest(req);
 
-        if (result.success) {
-          this.#sendJson(res, 201, result);
-        } else {
-          this.#sendJson(res, 400, result);
-        }
-        return;
-      }
+      // Handle request through core
+      const response = await this.#core.handleRequest(serverRequest);
 
-      // GET /games/:gameId - Get game state
-      const getGameMatch = path.match(/^\/games\/([^/]+)$/);
-      if (getGameMatch && req.method === 'GET') {
-        const gameId = getGameMatch[1];
-        const playerParam = url.searchParams.get('player');
-        const player = playerParam ? parseInt(playerParam, 10) : 0;
-
-        const gameData = this.#games.get(gameId);
-        if (!gameData) {
-          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
-          return;
-        }
-
-        const result = gameData.session.getState(player);
-        this.#sendJson(res, 200, result);
-        return;
-      }
-
-      // POST /games/:gameId/action - Perform an action
-      const actionMatch = path.match(/^\/games\/([^/]+)\/action$/);
-      if (actionMatch && req.method === 'POST') {
-        const gameId = actionMatch[1];
-        const body = await this.#readBody<ActionRequest>(req);
-
-        const gameData = this.#games.get(gameId);
-        if (!gameData) {
-          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
-          return;
-        }
-
-        const result = await gameData.session.performAction(body.action, body.player, body.args);
-        if (result.success) {
-          this.#sendJson(res, 200, result);
-        } else {
-          this.#sendJson(res, 400, result);
-        }
-        return;
-      }
-
-      // GET /games/:gameId/history - Get action history
-      const historyMatch = path.match(/^\/games\/([^/]+)\/history$/);
-      if (historyMatch && req.method === 'GET') {
-        const gameId = historyMatch[1];
-
-        const gameData = this.#games.get(gameId);
-        if (!gameData) {
-          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
-          return;
-        }
-
-        const history = gameData.session.getHistory();
-        this.#sendJson(res, 200, { success: true, ...history });
-        return;
-      }
-
-      // GET /games/:gameId/state-at/:actionIndex - Get state at a specific action (for time travel)
-      const stateAtMatch = path.match(/^\/games\/([^/]+)\/state-at\/(\d+)$/);
-      if (stateAtMatch && req.method === 'GET') {
-        const gameId = stateAtMatch[1];
-        const actionIndex = parseInt(stateAtMatch[2], 10);
-        const urlObj = new URL(req.url || '', `http://localhost:${this.#port}`);
-        const playerPosition = parseInt(urlObj.searchParams.get('player') || '0', 10);
-
-        const gameData = this.#games.get(gameId);
-        if (!gameData) {
-          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
-          return;
-        }
-
-        const result = gameData.session.getStateAtAction(actionIndex, playerPosition);
-        if (result.success) {
-          this.#sendJson(res, 200, { success: true, state: result.state, actionIndex });
-        } else {
-          this.#sendJson(res, 400, { success: false, error: result.error });
-        }
-        return;
-      }
-
-      // GET /games/:gameId/state-diff/:fromIndex/:toIndex - Get diff between two action points
-      const stateDiffMatch = path.match(/^\/games\/([^/]+)\/state-diff\/(\d+)\/(\d+)$/);
-      if (stateDiffMatch && req.method === 'GET') {
-        const gameId = stateDiffMatch[1];
-        const fromIndex = parseInt(stateDiffMatch[2], 10);
-        const toIndex = parseInt(stateDiffMatch[3], 10);
-        const urlObj = new URL(req.url || '', `http://localhost:${this.#port}`);
-        const playerPosition = parseInt(urlObj.searchParams.get('player') || '0', 10);
-
-        const gameData = this.#games.get(gameId);
-        if (!gameData) {
-          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
-          return;
-        }
-
-        const result = gameData.session.getStateDiff(fromIndex, toIndex, playerPosition);
-        if (result.success) {
-          this.#sendJson(res, 200, { success: true, diff: result.diff });
-        } else {
-          this.#sendJson(res, 400, { success: false, error: result.error });
-        }
-        return;
-      }
-
-      // POST /games/:gameId/undo - Undo actions to turn start
-      const undoMatch = path.match(/^\/games\/([^/]+)\/undo$/);
-      if (undoMatch && req.method === 'POST') {
-        const gameId = undoMatch[1];
-
-        const gameData = this.#games.get(gameId);
-        if (!gameData) {
-          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
-          return;
-        }
-
-        // Parse request body for player position
-        const body = await this.#readBody<{ player?: number }>(req);
-        const playerPosition = body.player ?? 0;
-        const result = await gameData.session.undoToTurnStart(playerPosition);
-
-        if (result.success) {
-          this.#sendJson(res, 200, result);
-        } else {
-          this.#sendJson(res, 400, result);
-        }
-        return;
-      }
-
-      // POST /games/:gameId/restart - Restart game with same players
-      const restartMatch = path.match(/^\/games\/([^/]+)\/restart$/);
-      if (restartMatch && req.method === 'POST') {
-        const gameId = restartMatch[1];
-
-        const gameData = this.#games.get(gameId);
-        if (!gameData) {
-          this.#sendJson(res, 404, { success: false, error: 'Game not found' });
-          return;
-        }
-
-        const result = this.#restartGame(gameId, gameData);
-        if (result.success) {
-          this.#sendJson(res, 200, result);
-        } else {
-          this.#sendJson(res, 400, result);
-        }
-        return;
-      }
-
-      // GET /health - Health check
-      if (path === '/health') {
-        this.#sendJson(res, 200, { status: 'ok', environment: 'development' });
-        return;
-      }
-
-      this.#sendJson(res, 404, { success: false, error: 'Not found' });
+      // Send response
+      this.#sendResponse(res, response);
     } catch (error) {
       console.error('Server error:', error);
-      this.#sendJson(res, 500, {
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal error',
+      this.#sendResponse(res, {
+        status: 500,
+        body: { success: false, error: error instanceof Error ? error.message : 'Internal error' },
       });
     }
   }
 
-  #createGame(request: CreateGameRequest): {
-    success: boolean;
-    gameId?: string;
-    error?: string;
-    flowState?: unknown;
-    state?: unknown;
-  } {
-    const { gameType, playerCount, playerNames, seed } = request;
+  async #nodeToServerRequest(req: IncomingMessage): Promise<ServerRequest> {
+    const url = new URL(req.url || '/', `http://localhost:${this.#port}`);
 
-    const definition = this.#gameRegistry.get(gameType);
-    if (!definition) {
-      return {
-        success: false,
-        error: `Unknown game type: ${gameType}. Available: ${[...this.#gameRegistry.keys()].join(', ')}`,
-      };
+    // Parse query params
+    const query: Record<string, string> = {};
+    for (const [key, value] of url.searchParams) {
+      query[key] = value;
     }
 
-    if (playerCount < definition.minPlayers || playerCount > definition.maxPlayers) {
-      return {
-        success: false,
-        error: `Player count must be between ${definition.minPlayers} and ${definition.maxPlayers}`,
-      };
+    // Read body for POST requests
+    let body: unknown = {};
+    if (req.method === 'POST') {
+      body = await this.#readBody(req);
     }
-
-    const gameId = generateGameId();
-    const names = playerNames ?? Array.from({ length: playerCount }, (_, i) => `Player ${i + 1}`);
-
-    // Create session using the host package
-    const session = GameSession.create({
-      gameType,
-      GameClass: definition.gameClass,
-      playerCount,
-      playerNames: names,
-      seed,
-      aiConfig: this.#aiConfig,
-    });
-
-    // Set up broadcasting
-    const broadcaster = new WsBroadcastAdapter();
-    session.setBroadcaster(broadcaster);
-
-    this.#games.set(gameId, { session, broadcaster });
-
-    const state = session.getState(0);
 
     return {
-      success: true,
-      gameId,
-      flowState: state.flowState,
-      state: state.state,
+      method: req.method || 'GET',
+      path: url.pathname,
+      query,
+      body,
     };
   }
 
-  #restartGame(
-    gameId: string,
-    oldGameData: { session: GameSession<any>; broadcaster: WsBroadcastAdapter }
-  ): {
-    success: boolean;
-    error?: string;
-    flowState?: unknown;
-    state?: unknown;
-  } {
-    // Get the original game configuration
-    const oldSession = oldGameData.session;
-    const gameType = oldSession.gameType;
-    const playerNames = oldSession.playerNames;
-    const playerCount = playerNames.length;
-
-    const definition = this.#gameRegistry.get(gameType);
-    if (!definition) {
-      return {
-        success: false,
-        error: `Unknown game type: ${gameType}`,
-      };
-    }
-
-    // Create a new session with the same configuration but fresh state
-    const session = GameSession.create({
-      gameType,
-      GameClass: definition.gameClass,
-      playerCount,
-      playerNames,
-      // Use a new random seed for variety
-      seed: undefined,
-      aiConfig: this.#aiConfig,
+  #readBody<T>(req: IncomingMessage): Promise<T> {
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('data', (chunk) => { data += chunk; });
+      req.on('end', () => {
+        try {
+          resolve(data ? JSON.parse(data) : {});
+        } catch (e) {
+          reject(new Error('Invalid JSON'));
+        }
+      });
+      req.on('error', reject);
     });
+  }
 
-    // Reuse the existing broadcaster so connected clients get updates
-    const broadcaster = oldGameData.broadcaster;
-    session.setBroadcaster(broadcaster);
-
-    // Replace the old game with the new one
-    this.#games.set(gameId, { session, broadcaster });
-
-    // Get the initial state and broadcast to all connected clients
-    const state = session.getState(0);
-
-    // Broadcast the restart to all connected clients
-    broadcaster.broadcast({
-      type: 'restart',
-      flowState: state.flowState,
-      state: state.state,
-    });
-
-    return {
-      success: true,
-      flowState: state.flowState,
-      state: state.state,
-    };
+  #sendResponse(res: ServerResponse, response: CoreResponse): void {
+    res.writeHead(response.status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(response.body));
   }
 
   async #handleWebSocket(ws: WebSocket, req: IncomingMessage): Promise<void> {
@@ -455,69 +222,52 @@ export class LocalServer {
     const playerPosition = playerParam ? parseInt(playerParam, 10) : 0;
     const isSpectator = url.searchParams.get('spectator') === 'true';
 
-    const gameData = this.#games.get(gameId);
-    if (!gameData) {
+    // Get the game's broadcaster
+    const broadcaster = this.#store.getBroadcaster(gameId);
+    if (!broadcaster) {
       ws.close(4004, 'Game not found');
       return;
     }
 
-    const { session, broadcaster } = gameData;
     const effectivePosition = isSpectator ? 0 : playerPosition;
 
     // Add session to broadcaster
-    broadcaster.addSession(ws, {
+    (broadcaster as WsBroadcastAdapter).addSession(ws, {
       playerPosition,
       isSpectator,
     });
 
     // Send initial state
-    const initialState = session.getState(effectivePosition);
-    ws.send(JSON.stringify({
-      type: 'state',
-      flowState: initialState.flowState,
-      state: initialState.state,
-      playerPosition,
-      isSpectator,
-    }));
+    const initialState = await this.#core.getWebSocketInitialState(gameId, playerPosition, isSpectator);
+    if (initialState) {
+      ws.send(JSON.stringify(initialState));
+    }
 
     ws.on('message', async (data) => {
       try {
         const message = JSON.parse(data.toString());
 
-        switch (message.type) {
-          case 'action':
-            if (isSpectator) {
-              ws.send(JSON.stringify({ type: 'error', error: 'Spectators cannot perform actions' }));
-              return;
+        // Create a WebSocket adapter for the core
+        const wsAdapter = {
+          send: (msg: unknown) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(msg));
             }
+          },
+          close: (code?: number, reason?: string) => {
+            ws.close(code, reason);
+          },
+        };
 
-            const result = await session.performAction(
-              message.action,
-              playerPosition,
-              message.args || {}
-            );
-
-            if (!result.success) {
-              ws.send(JSON.stringify({ type: 'error', error: result.error }));
-            }
-            // Success case: broadcast happens automatically in GameSession
-            break;
-
-          case 'getState':
-            const state = session.getState(effectivePosition);
-            ws.send(JSON.stringify({
-              type: 'state',
-              flowState: state.flowState,
-              state: state.state,
-              playerPosition,
-              isSpectator,
-            }));
-            break;
-
-          case 'ping':
-            ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
-            break;
-        }
+        await this.#core.handleWebSocketMessage(
+          {
+            ws: wsAdapter,
+            playerPosition,
+            isSpectator,
+          },
+          gameId,
+          message
+        );
       } catch (error) {
         console.error('WebSocket message error:', error);
         ws.send(JSON.stringify({ type: 'error', error: 'Invalid message' }));
@@ -525,28 +275,8 @@ export class LocalServer {
     });
 
     ws.on('close', () => {
-      broadcaster.removeSession(ws);
+      (broadcaster as WsBroadcastAdapter).removeSession(ws);
     });
-  }
-
-  #readBody<T>(req: IncomingMessage): Promise<T> {
-    return new Promise((resolve, reject) => {
-      let data = '';
-      req.on('data', (chunk) => { data += chunk; });
-      req.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(new Error('Invalid JSON'));
-        }
-      });
-      req.on('error', reject);
-    });
-  }
-
-  #sendJson(res: ServerResponse, status: number, data: unknown): void {
-    res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(data));
   }
 }
 
@@ -554,5 +284,5 @@ export function createLocalServer(options: LocalServerOptions): LocalServer {
   return new LocalServer(options);
 }
 
-// Re-export types from host for convenience
+// Re-export types from server for convenience
 export type { GameDefinition, AIConfig };
