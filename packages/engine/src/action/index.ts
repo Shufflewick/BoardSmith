@@ -16,6 +16,4 @@ export type {
   BoardElementRef,
   ChoiceBoardRefs,
   DependentFilter,
-  SelectionMetadata,
-  EvaluatedAction,
 } from './types.js';

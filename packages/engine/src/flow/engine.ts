@@ -1,6 +1,6 @@
 import type { Game } from '../element/game.js';
 import type { Player } from '../player/player.js';
-import type { ActionResult, EvaluatedAction, SelectionMetadata } from '../action/types.js';
+import type { ActionResult } from '../action/types.js';
 import type {
   FlowNode,
   FlowContext,
@@ -234,7 +234,7 @@ export class FlowEngine<G extends Game = Game> {
    * Get the current flow state
    */
   getState(): FlowState {
-    const state: FlowState = {
+    return {
       position: this.getPosition(),
       complete: this.complete,
       awaitingInput: this.awaitingInput,
@@ -243,58 +243,6 @@ export class FlowEngine<G extends Game = Game> {
       prompt: this.prompt,
       awaitingPlayers: this.awaitingPlayers.length > 0 ? this.awaitingPlayers : undefined,
     };
-
-    // Add rich action details if awaiting input
-    if (this.awaitingInput && this.currentPlayer) {
-      state.actionDetails = this.buildActionDetails(this.currentPlayer, this.availableActions);
-    }
-
-    return state;
-  }
-
-  /**
-   * Build rich action details including availability and selection metadata
-   */
-  private buildActionDetails(player: Player, requestedActions: string[]): EvaluatedAction[] {
-    const details: EvaluatedAction[] = [];
-    const executor = this.game.getActionExecutor();
-
-    for (const actionName of requestedActions) {
-      const action = this.game.getAction(actionName);
-      if (!action) continue;
-
-      const isValid = executor.isActionAvailable(action, player);
-      const invalidReason = isValid ? undefined : executor.getActionUnavailableReason(action, player);
-
-      // Build selection metadata
-      const selections: SelectionMetadata[] = action.selections.map((sel) => {
-        const metadata: SelectionMetadata = {
-          name: sel.name,
-          type: sel.type,
-          prompt: sel.prompt,
-          optional: sel.optional,
-          skipIfOnlyOne: sel.skipIfOnlyOne,
-        };
-
-        // Add choice count for choice/player/element types
-        if (sel.type === 'choice' || sel.type === 'player' || sel.type === 'element') {
-          const choices = executor.getChoices(sel, player, {});
-          metadata.choiceCount = choices.length;
-        }
-
-        return metadata;
-      });
-
-      details.push({
-        name: actionName,
-        isValid,
-        invalidReason,
-        prompt: action.prompt,
-        selections,
-      });
-    }
-
-    return details;
   }
 
   /**

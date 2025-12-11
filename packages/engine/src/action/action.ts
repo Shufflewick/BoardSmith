@@ -79,28 +79,6 @@ export class Action {
   }
 
   /**
-   * Add a condition with an explanation message for when the action is unavailable.
-   * This is preferred over plain condition() as it provides better UX.
-   *
-   * @example
-   * ```typescript
-   * Action.create('playCard')
-   *   .conditionWithReason(
-   *     (ctx) => ctx.player.hand.count() > 0,
-   *     "You have no cards in hand"
-   *   )
-   * ```
-   */
-  conditionWithReason(
-    fn: (context: ActionContext) => boolean,
-    message: string | ((context: ActionContext) => string)
-  ): this {
-    this.definition.condition = fn;
-    this.definition.conditionMessage = message;
-    return this;
-  }
-
-  /**
    * Mark this action as non-undoable.
    * Use for actions that reveal hidden info, involve randomness, or shouldn't be undone.
    * When executed, undo is disabled for the rest of the turn.
@@ -645,46 +623,6 @@ export class ActionExecutor {
 
     // Check if there's at least one valid path through all selections
     return this.hasValidSelectionPath(action.selections, player, {}, 0);
-  }
-
-  /**
-   * Check why an action is unavailable for a player.
-   * Returns undefined if action is available, or a reason string if not.
-   */
-  getActionUnavailableReason(action: ActionDefinition, player: Player): string | undefined {
-    const context: ActionContext = {
-      game: this.game,
-      player,
-      args: {},
-    };
-
-    // Check condition first
-    if (action.condition && !action.condition(context)) {
-      if (action.conditionMessage) {
-        return typeof action.conditionMessage === 'function'
-          ? action.conditionMessage(context)
-          : action.conditionMessage;
-      }
-      return 'Action condition not met';
-    }
-
-    // Check selections
-    for (const selection of action.selections) {
-      if (selection.optional) continue;
-      if (selection.type === 'text' || selection.type === 'number') continue;
-
-      const choices = this.getChoices(selection, player, {});
-      if (choices.length === 0) {
-        return `No valid choices for "${selection.name}"`;
-      }
-    }
-
-    // Check for dependent selections with no valid path
-    if (!this.hasValidSelectionPath(action.selections, player, {}, 0)) {
-      return 'No valid combination of selections exists';
-    }
-
-    return undefined;
   }
 
   /**

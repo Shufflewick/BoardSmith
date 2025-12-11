@@ -1,6 +1,6 @@
 import type { Game } from '../element/game.js';
 import type { Player } from '../player/player.js';
-import type { ActionDefinition, ActionResult, EvaluatedAction } from '../action/types.js';
+import type { ActionDefinition, ActionResult } from '../action/types.js';
 
 /**
  * Flow node types
@@ -232,23 +232,10 @@ export interface FlowState {
   currentPlayer?: number;
   /** Available actions if awaiting input (for single-player action steps) */
   availableActions?: string[];
-  /**
-   * Rich action metadata with availability info (for single-player action steps).
-   * Includes why actions are unavailable and selection metadata.
-   */
-  actionDetails?: EvaluatedAction[];
   /** Prompt to display */
   prompt?: string;
   /** Multiple players awaiting input (for simultaneous action steps) */
   awaitingPlayers?: PlayerAwaitingState[];
-}
-
-/**
- * Per-player awaiting state for simultaneous actions (with rich metadata)
- */
-export interface PlayerAwaitingStateWithDetails extends PlayerAwaitingState {
-  /** Rich action metadata with availability info */
-  actionDetails?: EvaluatedAction[];
 }
 
 /**

@@ -154,11 +154,6 @@ export interface ActionDefinition {
   selections: Selection[];
   /** Condition for when this action is available */
   condition?: (context: ActionContext) => boolean;
-  /**
-   * Message explaining why the action is unavailable when condition returns false.
-   * Can be a static string or a function for dynamic messages.
-   */
-  conditionMessage?: string | ((context: ActionContext) => string);
   /** The effect to execute */
   execute: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void;
   /**
@@ -206,39 +201,4 @@ export interface SerializedAction {
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
-}
-
-/**
- * Metadata about a selection for UI rendering
- */
-export interface SelectionMetadata {
-  /** Selection name */
-  name: string;
-  /** Selection type */
-  type: SelectionType;
-  /** User-facing prompt */
-  prompt?: string;
-  /** Whether this selection is optional */
-  optional?: boolean;
-  /** Number of available choices (for choice/player/element types) */
-  choiceCount?: number;
-  /** Whether to skip if only one choice */
-  skipIfOnlyOne?: boolean;
-}
-
-/**
- * Evaluated action with availability information.
- * Used in FlowState to provide rich metadata to clients.
- */
-export interface EvaluatedAction {
-  /** Action name */
-  name: string;
-  /** Whether the action is currently available */
-  isValid: boolean;
-  /** Why the action is unavailable (if not valid) */
-  invalidReason?: string;
-  /** User-facing prompt for the action */
-  prompt?: string;
-  /** Metadata about required selections */
-  selections?: SelectionMetadata[];
 }

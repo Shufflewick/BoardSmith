@@ -85,8 +85,6 @@ export type {
   BoardElementRef,
   ChoiceBoardRefs,
   DependentFilter,
-  SelectionMetadata,
-  EvaluatedAction,
 } from './action/index.js';
 
 // Flow system
@@ -128,7 +126,6 @@ export type {
   IfConfig,
   ExecuteConfig,
   PlayerAwaitingState,
-  PlayerAwaitingStateWithDetails,
 } from './flow/index.js';
 
 // Utilities (serialization, snapshots, replays)
