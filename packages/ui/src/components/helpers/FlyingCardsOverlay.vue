@@ -82,10 +82,13 @@ function getDefaultSuitColor(suit: string): string {
   height: 100%;
   pointer-events: none;
   z-index: 9999;
+  /* Perspective applies to child .flying-card elements */
+  perspective: 1000px;
 }
 
 .flying-card {
-  perspective: 1000px;
+  /* Preserve 3D for child transforms */
+  transform-style: preserve-3d;
 }
 
 .card-inner {
@@ -93,10 +96,14 @@ function getDefaultSuitColor(suit: string): string {
   height: 100%;
   position: relative;
   transform-style: preserve-3d;
-  transition: transform 0.4s ease-in-out;
+  /* No transition - animation is handled by JS via parent transform */
 }
 
 .card-inner.flipped {
+  /* When flipped, rotate 180deg so back face shows initially.
+     The parent's rotateY animation (0→180) then flips it to show front.
+     Without flipped: starts showing front, ends showing back.
+     With flipped: starts showing back, ends showing front. */
   transform: rotateY(180deg);
 }
 

@@ -61,7 +61,11 @@ function getBookCount(playerPosition: number, gameView: any): number {
       </div>
       <div class="player-stat">
         <span class="stat-label">Books:</span>
-        <span class="stat-value books">{{ getBookCount(player.position, gameView) }}</span>
+        <span
+          class="stat-value books"
+          data-player-stat="books"
+          :data-player-position="player.position"
+        >{{ getBookCount(player.position, gameView) }}</span>
       </div>
     </template>
   </GameShell>

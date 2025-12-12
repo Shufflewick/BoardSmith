@@ -10,19 +10,36 @@
  * The animation tracks moving targets in real-time using requestAnimationFrame,
  * so if the target element moves during the animation, the card will follow.
  *
+ * ## Flip Animation
+ *
+ * The `flip` option controls whether the card rotates during flight.
+ * The `cardData.faceUp` controls the STARTING state:
+ *
+ * - `faceUp: true` + `flip: true` → Public to Private (front → back)
+ *   Card starts showing front, flips to show back at end
+ *
+ * - `faceUp: false` + `flip: true` → Private to Public (back → front)
+ *   Card starts showing back, flips to show front at end
+ *
  * Usage:
  * ```typescript
  * const { flyingCards, flyCard } = useFlyingCards();
  *
- * // Capture start position before state change
- * const startRect = cardElement.getBoundingClientRect();
- *
- * // After state change, start animation with a function that returns current target position
+ * // Drawing from deck (private → public): card starts face down, flips to face up
  * await flyCard({
- *   id: 'unique-id',
- *   startRect,
+ *   id: 'draw-card',
+ *   startRect: deckElement.getBoundingClientRect(),
+ *   endRect: () => handElement.getBoundingClientRect(),
+ *   cardData: { rank: 'A', suit: 'S', faceUp: false },
+ *   flip: true,
+ * });
+ *
+ * // Discarding to crib (public → private): card starts face up, flips to face down
+ * await flyCard({
+ *   id: 'discard-card',
+ *   startRect: cardElement.getBoundingClientRect(),
  *   endRect: () => cribElement.getBoundingClientRect(),
- *   cardData: { rank: 'A', suit: 'S' },
+ *   cardData: { rank: 'A', suit: 'S', faceUp: true },
  *   flip: true,
  * });
  * ```
@@ -153,6 +170,13 @@ export function useFlyingCards(): FlyingCardsReturn {
     const startX = startCenterX - cardWidth / 2;
     const startY = startCenterY - cardHeight / 2;
 
+    // Determine starting flip state based on cardData.faceUp
+    // If card starts face DOWN (faceUp=false), we start flipped so back is visible
+    // The rotation animation (0→180) will then flip it to show the front
+    // If card starts face UP (faceUp=true), we start not flipped so front is visible
+    // The rotation animation (0→180) will then flip it to show the back
+    const startFlipped = cardData.faceUp === false;
+
     // Create the flying card at start position
     const flyingCard: FlyingCard = {
       id,
@@ -168,7 +192,7 @@ export function useFlyingCards(): FlyingCardsReturn {
         zIndex,
         pointerEvents: 'none',
       },
-      isFlipped: false,
+      isFlipped: startFlipped,
       progress: 0,
     };
 
@@ -225,6 +249,8 @@ export function useFlyingCards(): FlyingCardsReturn {
         const flipRotation = flip ? progress * 180 : 0;
 
         // Update the card
+        // Note: isFlipped stays constant - it determines starting state
+        // The rotation animation (0→180) handles the visual flip
         const cardIndex = flyingCards.value.findIndex(c => c.id === id);
         if (cardIndex >= 0) {
           const updated = [...flyingCards.value];
@@ -236,7 +262,6 @@ export function useFlyingCards(): FlyingCardsReturn {
               top: `${currentY}px`,
               transform: `rotateY(${flipRotation}deg)`,
             },
-            isFlipped: flip && progress > 0.5,
             progress,
           };
           flyingCards.value = updated;

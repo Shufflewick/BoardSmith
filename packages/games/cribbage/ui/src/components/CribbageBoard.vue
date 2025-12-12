@@ -13,11 +13,14 @@ import {
   getCards,
   getFirstCard,
   getCardData,
+  getSuitSymbol,
+  getSuitColor,
+  getCardPointValue,
+  useFLIPAnimation,
 } from '@boardsmith/ui';
 
 // Animation state - tracks card positions for FLIP animations
 const boardRef = ref<HTMLElement | null>(null);
-const cardPositions = new Map<string, DOMRect>();
 
 // Flying cards animation for discard
 const { flyingCards: discardFlyingCards, flyCard, flyCards } = useFlyingCards();
@@ -25,53 +28,13 @@ const cribStackRef = ref<HTMLElement | null>(null);
 const deckStackRef = ref<HTMLElement | null>(null);
 const starterAreaRef = ref<HTMLElement | null>(null);
 
-// Capture positions of all cards before state changes
-function captureCardPositions() {
-  cardPositions.clear();
-  if (!boardRef.value) return;
-
-  const cards = boardRef.value.querySelectorAll('[data-card-id]');
-  cards.forEach((el) => {
-    const id = el.getAttribute('data-card-id');
-    if (id) {
-      cardPositions.set(id, el.getBoundingClientRect());
-    }
-  });
-}
-
-// Animate cards from old positions to new positions
-function animateCardMovements() {
-  if (prefersReducedMotion.value) return;
-  if (!boardRef.value) return;
-
-  const cards = boardRef.value.querySelectorAll('[data-card-id]');
-
-  cards.forEach((el) => {
-    const id = el.getAttribute('data-card-id');
-    if (!id) return;
-
-    const oldRect = cardPositions.get(id);
-    if (!oldRect) return;
-
-    const newRect = el.getBoundingClientRect();
-    const deltaX = oldRect.left - newRect.left;
-    const deltaY = oldRect.top - newRect.top;
-
-    // Only animate if actually moved
-    if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
-      (el as HTMLElement).animate([
-        { transform: `translate(${deltaX}px, ${deltaY}px)` },
-        { transform: 'translate(0, 0)' }
-      ], {
-        duration: 300,
-        easing: 'ease-out',
-        fill: 'backwards'
-      });
-    }
-  });
-
-  cardPositions.clear();
-}
+// FLIP animation for card movements
+const { capturePositions, animateToNewPositions } = useFLIPAnimation({
+  containerRef: boardRef,
+  selector: '[data-card-id]',
+  duration: 300,
+  easing: 'ease-out',
+});
 
 interface Card {
   id: string;
@@ -346,21 +309,6 @@ async function handleRoundSummaryComplete() {
 }
 
 // Helpers
-function getSuitSymbol(suit: string): string {
-  const symbols: Record<string, string> = { 'H': '\u2665', 'D': '\u2666', 'C': '\u2663', 'S': '\u2660' };
-  return symbols[suit] || suit;
-}
-
-function getSuitColor(suit: string): string {
-  return suit === 'H' || suit === 'D' ? '#e74c3c' : '#2c3e50';
-}
-
-function getCardPointValue(rank: string): number {
-  if (rank === 'A') return 1;
-  if (['J', 'Q', 'K'].includes(rank)) return 10;
-  return parseInt(rank, 10);
-}
-
 function isCardPlayable(rank: string): boolean {
   if (cribbagePhase.value !== 'play') return true;
   const cardValue = getCardPointValue(rank);
@@ -495,13 +443,13 @@ watch(
     if (!oldView) return;
 
     // Capture positions before Vue updates DOM
-    captureCardPositions();
+    capturePositions();
 
     // Wait for DOM to update
     await nextTick();
 
     // Animate to new positions
-    animateCardMovements();
+    animateToNewPositions();
   },
   { deep: false }
 );

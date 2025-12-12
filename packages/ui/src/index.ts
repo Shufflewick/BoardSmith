@@ -71,6 +71,15 @@ export {
   type FlyOnAppearReturn,
 } from './composables/useFlyOnAppear.js';
 
+// Player stat animation utilities
+export {
+  usePlayerStatAnimation,
+  getPlayerStatElement,
+  flyToPlayerStat,
+  type CardForAnimation,
+  type FlyToStatOptions,
+} from './composables/usePlayerStatAnimation.js';
+
 // Game view helpers (for custom UIs)
 export {
   useGameViewHelpers,
@@ -85,6 +94,37 @@ export {
   type GameElement as GameViewElement,
   type FindElementOptions,
 } from './composables/useGameViewHelpers.js';
+
+// Card display utilities
+export {
+  useCardDisplay,
+  getSuitSymbol,
+  getSuitColor,
+  getRankName,
+  getCardPointValue,
+  isRedSuit,
+  isBlackSuit,
+  type SuitAbbreviation,
+  type RankAbbreviation,
+} from './composables/useCardDisplay.js';
+
+// Element change tracking utilities
+export {
+  useElementChangeTracker,
+  useCountTracker,
+  type CardPositionData,
+  type ElementChangeTrackerOptions,
+  type ElementChangeTrackerReturn,
+  type CountTrackerReturn,
+} from './composables/useElementChangeTracker.js';
+
+// FLIP animation utilities
+export {
+  useFLIPAnimation,
+  createFLIPSnapshot,
+  type FLIPAnimationOptions,
+  type FLIPAnimationReturn,
+} from './composables/useFLIPAnimation.js';
 
 // Theming
 export {

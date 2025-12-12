@@ -1,28 +1,26 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import type { BoardInteraction } from '@boardsmith/ui';
+import {
+  findElement,
+  findElements,
+  findPlayerHand,
+  findAllHands,
+  getElementCount,
+  useFlyingCards,
+  FlyingCardsOverlay,
+  prefersReducedMotion,
+  flyToPlayerStat,
+  getSuitSymbol,
+  getSuitColor,
+  getRankName,
+  type GameElement,
+} from '@boardsmith/ui';
 
 interface Card {
   id: number;
   rank: string;
   suit: string;
-}
-
-interface Hand {
-  id: number;
-  className: string;
-  children?: Card[];
-  childCount?: number;
-}
-
-interface GameElement {
-  id: number;
-  className?: string;
-  name?: string;
-  notation?: string;
-  attributes?: Record<string, any>;
-  children?: GameElement[];
-  childCount?: number;
 }
 
 const props = defineProps<{
@@ -39,90 +37,84 @@ const props = defineProps<{
 // Inject board interaction from GameShell
 const boardInteraction = inject<BoardInteraction>('boardInteraction');
 
-// Get player's hand
-const myHand = computed(() => {
+// Refs for animation sources/targets
+const pondRef = ref<HTMLElement | null>(null);
+const myHandRef = ref<HTMLElement | null>(null);
+const opponentHandRef = ref<HTMLElement | null>(null);
+
+// Flying cards animation
+const { flyingCards, flyCard, flyCards } = useFlyingCards();
+
+// Track previous card IDs to detect new cards
+const prevMyCardIds = ref<Set<number>>(new Set());
+const prevOpponentCardCount = ref(0);
+
+// Track for book formation animation
+const prevMyBooksCount = ref(0);
+const prevOpponentBooksCount = ref(0);
+// Store card positions keyed by card ID (captured before state changes)
+const cardPositions = ref<Map<number, { rect: DOMRect; rank: string; suit: string }>>(new Map());
+
+// Get player's hand using utility
+const myHand = computed(() => findPlayerHand(props.gameView, props.playerPosition));
+
+// Get opponent's hand
+const opponentHand = computed(() => {
+  const allHands = findAllHands(props.gameView);
+  return allHands.find(h => (h.attributes as any)?.player?.position !== props.playerPosition);
+});
+
+// Get pond (draw pile) using utility
+const pond = computed(() => findElement(props.gameView, { type: 'deck' }));
+
+// Get Books containers (each player has one Books container that holds their completed books)
+// App.vue counts books as children.length / 4 since each book is 4 cards
+const myBooksContainer = computed(() => {
   if (!props.gameView?.children) return null;
-  return props.gameView.children.find((child: GameElement) =>
-    child.attributes?.$type === 'hand' &&
+  return props.gameView.children.find((child: any) =>
+    child.className === 'Books' &&
     child.attributes?.player?.position === props.playerPosition
   );
 });
 
-// Get opponent's hand
-const opponentHand = computed(() => {
+const opponentBooksContainer = computed(() => {
   if (!props.gameView?.children) return null;
-  return props.gameView.children.find((child: GameElement) =>
-    child.attributes?.$type === 'hand' &&
+  return props.gameView.children.find((child: any) =>
+    child.className === 'Books' &&
     child.attributes?.player?.position !== props.playerPosition
   );
 });
 
-// Get pond (draw pile)
-const pond = computed(() => {
-  if (!props.gameView?.children) return null;
-  return props.gameView.children.find((child: GameElement) =>
-    child.attributes?.$type === 'deck'
-  );
+// Count books (each book is 4 cards)
+const myBooksCount = computed(() => {
+  const container = myBooksContainer.value;
+  return container ? Math.floor((container.children?.length || 0) / 4) : 0;
 });
 
-// Get discard pile (books)
-const books = computed(() => {
-  if (!props.gameView?.children) return null;
-  return props.gameView.children.filter((child: GameElement) =>
-    child.className === 'Book'
-  );
+const opponentBooksCount = computed(() => {
+  const container = opponentBooksContainer.value;
+  return container ? Math.floor((container.children?.length || 0) / 4) : 0;
 });
 
-// Get my books
+// For display in custom UI - keep the old Book element lookup for now
+const books = computed(() => findElements(props.gameView, { className: 'Book' }));
+
+// Get my books for display
 const myBooks = computed(() => {
-  return books.value?.filter(book =>
-    book.attributes?.player?.position === props.playerPosition
-  ) || [];
+  return books.value.filter(book =>
+    (book.attributes as any)?.player?.position === props.playerPosition
+  );
 });
 
-// Get opponent's books
+// Get opponent's books for display
 const opponentBooks = computed(() => {
-  return books.value?.filter(book =>
-    book.attributes?.player?.position !== props.playerPosition
-  ) || [];
+  return books.value.filter(book =>
+    (book.attributes as any)?.player?.position !== props.playerPosition
+  );
 });
 
-// Get card count
-function getCardCount(hand: GameElement | null | undefined): number {
-  if (!hand) return 0;
-  // Use childCount if children are hidden, otherwise use children.length
-  return hand.childCount ?? hand.children?.length ?? 0;
-}
-
-// Get pond count
-const pondCount = computed(() => getCardCount(pond.value));
-
-// Get rank name
-function getRankName(rank: string): string {
-  const names: Record<string, string> = {
-    'A': 'Ace',
-    'J': 'Jack',
-    'Q': 'Queen',
-    'K': 'King'
-  };
-  return names[rank] ?? rank;
-}
-
-// Get suit symbol
-function getSuitSymbol(suit: string): string {
-  const symbols: Record<string, string> = {
-    'H': '♥',
-    'D': '♦',
-    'C': '♣',
-    'S': '♠'
-  };
-  return symbols[suit] ?? suit;
-}
-
-// Get suit color
-function getSuitColor(suit: string): string {
-  return (suit === 'H' || suit === 'D') ? '#e74c3c' : '#2c3e50';
-}
+// Get pond count using utility
+const pondCount = computed(() => getElementCount(pond.value));
 
 // Group cards by rank
 function getCardsByRank(hand: GameElement | null | undefined): Map<string, Card[]> {
@@ -130,14 +122,15 @@ function getCardsByRank(hand: GameElement | null | undefined): Map<string, Card[
   if (!hand?.children) return byRank;
 
   for (const card of hand.children) {
-    const rank = card.attributes?.rank || '';
+    const attrs = card.attributes as Record<string, any> | undefined;
+    const rank = attrs?.rank || '';
     if (!byRank.has(rank)) {
       byRank.set(rank, []);
     }
     byRank.get(rank)!.push({
       id: card.id,
       rank,
-      suit: card.attributes?.suit || ''
+      suit: attrs?.suit || ''
     });
   }
 
@@ -175,7 +168,7 @@ const isSelectingRank = computed(() => {
   if (!boardInteraction || !myHand.value?.children) return false;
 
   // If any card in my hand is selectable, we're selecting rank
-  return myHand.value.children.some((card: GameElement) =>
+  return myHand.value.children.some((card) =>
     boardInteraction.isSelectableElement({ id: card.id })
   );
 });
@@ -199,13 +192,175 @@ async function handleCardClick(rank: string) {
   }
 
   // Find a card of this rank to get its ID
-  const card = myHand.value.children?.find((c: GameElement) => c.attributes?.rank === rank);
+  const card = myHand.value.children?.find((c) => (c.attributes as any)?.rank === rank);
 
   // Use board interaction to trigger selection (this will notify ActionPanel)
   if (boardInteraction && card) {
     boardInteraction.triggerElementSelect({ id: card.id });
   }
 }
+
+// Watch for new cards appearing in my hand and animate them flying in
+watch(
+  () => myHand.value?.children,
+  (newChildren, oldChildren) => {
+    if (prefersReducedMotion.value) return;
+    if (!newChildren || !myHandRef.value) return;
+
+    // Get current card IDs
+    const currentIds = new Set(newChildren.map(c => c.id));
+
+    // Find new cards (cards that weren't in previous state)
+    const newCards = newChildren.filter(c => !prevMyCardIds.value.has(c.id));
+
+    if (newCards.length > 0 && prevMyCardIds.value.size > 0) {
+      // Determine source: if opponent lost cards, they came from opponent; otherwise from pond
+      const opponentCardCount = getElementCount(opponentHand.value);
+      const sourceRef = opponentCardCount < prevOpponentCardCount.value
+        ? opponentHandRef.value
+        : pondRef.value;
+
+      if (sourceRef) {
+        const sourceRect = sourceRef.getBoundingClientRect();
+        const isFromPond = sourceRef === pondRef.value;
+
+        // Fly each new card from source to hand
+        // From pond: private→public (start face down, flip to face up)
+        // From opponent: public→public (stay face up, no flip)
+        flyCards(
+          newCards.map((card, i) => {
+            const attrs = card.attributes as any;
+            return {
+              id: `fly-${card.id}-${Date.now()}`,
+              startRect: sourceRect,
+              endRect: () => myHandRef.value?.getBoundingClientRect() ?? sourceRect,
+              cardData: {
+                rank: attrs?.rank || '',
+                suit: attrs?.suit || '',
+                faceUp: !isFromPond, // Face down if from pond, face up if from opponent
+              },
+              flip: isFromPond, // Only flip when drawing from pond
+              duration: 400,
+              cardSize: { width: 70, height: 100 }, // Match card CSS dimensions
+            };
+          }),
+          80 // Stagger by 80ms
+        );
+      }
+    }
+
+    // Update tracking state
+    prevMyCardIds.value = currentIds;
+    prevOpponentCardCount.value = getElementCount(opponentHand.value);
+  },
+  { deep: true }
+);
+
+// Flag to track if we've initialized
+const isInitialized = ref(false);
+
+// Initialize tracking on first load ONLY
+watch(
+  () => props.gameView,
+  () => {
+    if (!isInitialized.value && props.gameView) {
+      if (myHand.value?.children) {
+        prevMyCardIds.value = new Set(myHand.value.children.map(c => c.id));
+      }
+      prevOpponentCardCount.value = getElementCount(opponentHand.value);
+      prevMyBooksCount.value = myBooksCount.value;
+      prevOpponentBooksCount.value = opponentBooksCount.value;
+      isInitialized.value = true;
+    }
+  },
+  { immediate: true }
+);
+
+// Capture card positions from DOM (call this before state changes)
+function captureCardPositions() {
+  if (!myHandRef.value) return;
+
+  const cards = myHandRef.value.querySelectorAll('[data-card-id]');
+  cards.forEach((el) => {
+    const cardId = parseInt(el.getAttribute('data-card-id') || '0', 10);
+    const rankEl = el.querySelector('.corner-rank');
+    const suitEl = el.querySelector('.corner-suit');
+    if (cardId) {
+      cardPositions.value.set(cardId, {
+        rect: el.getBoundingClientRect(),
+        rank: rankEl?.textContent || '',
+        suit: suitEl?.textContent || '',
+      });
+    }
+  });
+}
+
+// Watch for book formation - detect when cards disappear AND books increase
+// Use flush: 'sync' to run BEFORE other watchers update prevMyCardIds
+watch(
+  () => props.gameView,
+  async (newGameView, oldGameView) => {
+    // Skip if not initialized yet or reduced motion preferred
+    if (!isInitialized.value || prefersReducedMotion.value) return;
+
+    // IMMEDIATELY capture previous values before any other watcher updates them
+    const snapshotPrevCardIds = new Set(prevMyCardIds.value);
+    const snapshotPrevMyBooks = prevMyBooksCount.value;
+    const snapshotPrevOpponentBooks = prevOpponentBooksCount.value;
+
+    // Capture card positions BEFORE Vue updates DOM (DOM still has old layout)
+    captureCardPositions();
+
+    // Wait a tick for Vue to update DOM and other watchers to run
+    await new Promise(r => setTimeout(r, 10));
+
+    // Check if books increased for either player
+    const currentMyBooks = myBooksCount.value;
+    const currentOpponentBooks = opponentBooksCount.value;
+    const currentIds = new Set(myHand.value?.children?.map(c => c.id) || []);
+
+    // My books increased - find cards that disappeared
+    if (currentMyBooks > snapshotPrevMyBooks) {
+      const removedCards: Array<{ rect: DOMRect; rank: string; suit: string }> = [];
+
+      // Find cards that were in my hand but are now gone
+      for (const [cardId, data] of cardPositions.value) {
+        if (snapshotPrevCardIds.has(cardId) && !currentIds.has(cardId)) {
+          removedCards.push(data);
+        }
+      }
+
+      // Fly removed cards to my books stat using the utility
+      flyToPlayerStat(flyCards, {
+        cards: removedCards,
+        playerPosition: props.playerPosition,
+        statName: 'books',
+        duration: 500,
+        cardSize: { width: 70, height: 100 },
+      });
+    }
+
+    // Opponent books increased - fly from opponent hand to their books
+    if (currentOpponentBooks > snapshotPrevOpponentBooks && opponentHandRef.value) {
+      const opponentPosition = props.playerPosition === 0 ? 1 : 0;
+      const sourceRect = opponentHandRef.value.getBoundingClientRect();
+
+      // Fly 4 face-down cards (a book is always 4 cards)
+      flyToPlayerStat(flyCards, {
+        cards: Array.from({ length: 4 }, () => ({ rect: sourceRect, faceUp: false })),
+        playerPosition: opponentPosition,
+        statName: 'books',
+        duration: 500,
+        cardSize: { width: 70, height: 100 },
+      });
+    }
+
+    // Update book tracking
+    prevMyBooksCount.value = currentMyBooks;
+    prevOpponentBooksCount.value = currentOpponentBooks;
+  },
+  { flush: 'sync' } // Run synchronously before other watchers
+);
 </script>
 
 <template>
@@ -217,7 +372,7 @@ async function handleCardClick(rank: string) {
       <!-- My Books -->
       <div v-if="myBooks.length > 0" class="books-area">
         <div v-for="book in myBooks" :key="book.id" class="book">
-          <div class="book-rank">{{ getRankName(book.attributes?.rank || '') }}</div>
+          <div class="book-rank">{{ getRankName((book.attributes?.rank as string) || '') }}</div>
           <div class="book-cards">
             <div v-for="i in 4" :key="i" class="mini-card"></div>
           </div>
@@ -225,7 +380,7 @@ async function handleCardClick(rank: string) {
       </div>
 
       <!-- My Hand -->
-      <div class="hand my-hand">
+      <div ref="myHandRef" class="hand my-hand">
         <div
           v-for="[rank, cards] of myCardsByRank"
           :key="rank"
@@ -233,7 +388,7 @@ async function handleCardClick(rank: string) {
           :class="{ 'selectable': isSelectingRank, 'selected': props.actionArgs.rank === rank }"
           @click="handleCardClick(rank)"
         >
-          <div v-for="card in cards" :key="card.id" class="card card-front">
+          <div v-for="card in cards" :key="card.id" class="card card-front" :data-card-id="card.id">
             <div class="card-corner top-left" :style="{ color: getSuitColor(card.suit) }">
               <div class="corner-rank">{{ card.rank }}</div>
               <div class="corner-suit">{{ getSuitSymbol(card.suit) }}</div>
@@ -258,7 +413,7 @@ async function handleCardClick(rank: string) {
       <!-- Opponent's Books -->
       <div v-if="opponentBooks.length > 0" class="books-area">
         <div v-for="book in opponentBooks" :key="book.id" class="book">
-          <div class="book-rank">{{ getRankName(book.attributes?.rank || '') }}</div>
+          <div class="book-rank">{{ getRankName((book.attributes?.rank as string) || '') }}</div>
           <div class="book-cards">
             <div v-for="i in 4" :key="i" class="mini-card"></div>
           </div>
@@ -267,15 +422,16 @@ async function handleCardClick(rank: string) {
 
       <!-- Opponent's Hand -->
       <div
+        ref="opponentHandRef"
         class="hand opponent-hand"
         :class="{ 'selectable': isSelectingPlayer, 'selected': props.actionArgs.target === opponentPosition }"
         :data-element-id="opponentHand?.id"
         @click="handleOpponentClick"
       >
-        <div v-for="i in getCardCount(opponentHand)" :key="i" class="card card-back">
+        <div v-for="i in getElementCount(opponentHand)" :key="i" class="card card-back">
           <div class="card-pattern"></div>
         </div>
-        <div v-if="getCardCount(opponentHand) === 0" class="empty-hand">No cards</div>
+        <div v-if="getElementCount(opponentHand) === 0" class="empty-hand">No cards</div>
       </div>
     </div>
 
@@ -283,7 +439,7 @@ async function handleCardClick(rank: string) {
     <div class="pond-section">
       <div class="deck-container">
         <div class="deck-label">Pond</div>
-        <div class="deck">
+        <div ref="pondRef" class="deck">
           <div v-if="pondCount > 0" class="card card-back deck-card">
             <div class="card-pattern"></div>
             <div class="deck-count">{{ pondCount }}</div>
@@ -292,6 +448,13 @@ async function handleCardClick(rank: string) {
         </div>
       </div>
     </div>
+
+    <!-- Flying cards animation overlay -->
+    <FlyingCardsOverlay
+      :flying-cards="flyingCards"
+      :get-suit-symbol="getSuitSymbol"
+      :get-suit-color="getSuitColor"
+    />
   </div>
 </template>
 
