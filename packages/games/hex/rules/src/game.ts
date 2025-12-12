@@ -38,9 +38,7 @@ export class HexGame extends Game<HexGame, HexPlayer> {
     this.boardSize = options.boardSize ?? 7;
 
     // Register element classes
-    this._ctx.classRegistry.set('Board', Board as any);
-    this._ctx.classRegistry.set('Cell', Cell as any);
-    this._ctx.classRegistry.set('Stone', Stone as any);
+    this.registerElements([Board, Cell, Stone]);
 
     // Create the hex board
     this.board = this.create(Board, 'board', {

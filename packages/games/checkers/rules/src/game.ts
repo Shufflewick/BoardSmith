@@ -40,9 +40,7 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
     super(options);
 
     // Register element classes
-    this._ctx.classRegistry.set('Board', Board as any);
-    this._ctx.classRegistry.set('Square', Square as any);
-    this._ctx.classRegistry.set('CheckerPiece', CheckerPiece as any);
+    this.registerElements([Board, Square, CheckerPiece]);
 
     // Create the board
     this.board = this.create(Board, 'board');

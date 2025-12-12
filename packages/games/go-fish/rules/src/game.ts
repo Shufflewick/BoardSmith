@@ -39,10 +39,7 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
     super(options);
 
     // Register element classes
-    this._ctx.classRegistry.set('Card', Card as any);
-    this._ctx.classRegistry.set('Hand', Hand as any);
-    this._ctx.classRegistry.set('Pond', Pond as any);
-    this._ctx.classRegistry.set('Books', Books as any);
+    this.registerElements([Card, Hand, Pond, Books]);
 
     // Create pond
     this.pond = this.create(Pond, 'pond');

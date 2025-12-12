@@ -21,9 +21,7 @@ class TestGame extends Game<TestGame, Player> {
     super(options);
 
     // Register classes
-    this._ctx.classRegistry.set('Card', Card as any);
-    this._ctx.classRegistry.set('Hand', Hand as any);
-    this._ctx.classRegistry.set('Deck', Deck as any);
+    this.registerElements([Card, Hand, Deck]);
 
     // Create deck
     this.deck = this.create(Deck, 'deck');

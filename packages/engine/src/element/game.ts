@@ -171,6 +171,30 @@ export class Game<
   }
 
   /**
+   * Register element classes for serialization/deserialization.
+   * Call this in your game constructor before creating elements.
+   *
+   * @example
+   * ```typescript
+   * constructor(options: MyGameOptions) {
+   *   super(options);
+   *   this.registerElements([Card, Hand, Deck, DiscardPile]);
+   *   // ... create elements
+   * }
+   * ```
+   */
+  protected registerElements(
+    classes: (new (...args: any[]) => GameElement)[]
+  ): void {
+    for (const cls of classes) {
+      const className = cls.name;
+      if (!this._ctx.classRegistry.has(className)) {
+        this._ctx.classRegistry.set(className, cls as ElementClass);
+      }
+    }
+  }
+
+  /**
    * Create an element without adding it to the tree (internal use)
    */
   protected createElement<T extends GameElement>(

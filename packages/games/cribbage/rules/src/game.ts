@@ -144,13 +144,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     this.targetScore = options.targetScore ?? 121;
 
     // Register element classes
-    this._ctx.classRegistry.set('Card', Card as any);
-    this._ctx.classRegistry.set('Hand', Hand as any);
-    this._ctx.classRegistry.set('Crib', Crib as any);
-    this._ctx.classRegistry.set('Deck', Deck as any);
-    this._ctx.classRegistry.set('PlayArea', PlayArea as any);
-    this._ctx.classRegistry.set('PlayedCards', PlayedCards as any);
-    this._ctx.classRegistry.set('StarterArea', StarterArea as any);
+    this.registerElements([Card, Hand, Crib, Deck, PlayArea, PlayedCards, StarterArea]);
 
     // Create deck
     this.deck = this.create(Deck, 'deck');
