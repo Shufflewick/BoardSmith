@@ -65,6 +65,27 @@ export {
   type FlyingCardsReturn,
 } from './composables/useFlyingCards.js';
 
+export {
+  useFlyOnAppear,
+  type FlyOnAppearOptions,
+  type FlyOnAppearReturn,
+} from './composables/useFlyOnAppear.js';
+
+// Game view helpers (for custom UIs)
+export {
+  useGameViewHelpers,
+  findElement,
+  findElements,
+  findPlayerHand,
+  findAllHands,
+  getElementCount,
+  getCards,
+  getFirstCard,
+  getCardData,
+  type GameElement as GameViewElement,
+  type FindElementOptions,
+} from './composables/useGameViewHelpers.js';
+
 // Theming
 export {
   applyTheme,

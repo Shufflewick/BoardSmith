@@ -2,14 +2,25 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import ScoringOverlay from './ScoringOverlay.vue';
 import RoundSummary from './RoundSummary.vue';
-import { prefersReducedMotion, useFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
+import {
+  prefersReducedMotion,
+  useFlyingCards,
+  useFlyOnAppear,
+  FlyingCardsOverlay,
+  findElement,
+  findPlayerHand,
+  getElementCount,
+  getCards,
+  getFirstCard,
+  getCardData,
+} from '@boardsmith/ui';
 
 // Animation state - tracks card positions for FLIP animations
 const boardRef = ref<HTMLElement | null>(null);
 const cardPositions = new Map<string, DOMRect>();
 
-// Flying cards animation for discard and starter
-const { flyingCards, flyCard, flyCards } = useFlyingCards();
+// Flying cards animation for discard
+const { flyingCards: discardFlyingCards, flyCard, flyCards } = useFlyingCards();
 const cribStackRef = ref<HTMLElement | null>(null);
 const deckStackRef = ref<HTMLElement | null>(null);
 const starterAreaRef = ref<HTMLElement | null>(null);
@@ -102,130 +113,60 @@ const runningTotal = computed(() => props.gameView?.attributes?.runningTotal || 
 const dealerPosition = computed(() => props.gameView?.attributes?.dealerPosition ?? 0);
 const targetScore = computed(() => props.gameView?.attributes?.targetScore || 121);
 
-const myHand = computed<Card[]>(() => {
-  if (!props.gameView) return [];
-  const handElement = props.gameView.children?.find(
-    (c: any) => c.attributes?.$type === 'hand' && c.attributes?.player?.position === props.playerPosition
-  );
-  return handElement?.children?.filter((c: any) => c.attributes?.rank) || [];
+// Find player hands using helper (searches by $type which handles bundler mangling)
+const myHandElement = computed(() => findPlayerHand(props.gameView, props.playerPosition));
+const myHand = computed<Card[]>(() => getCards(myHandElement.value) as unknown as Card[]);
+
+const opponentHandElement = computed(() => {
+  // Find hand that doesn't belong to current player
+  const hands = props.gameView?.children?.filter(
+    (c: any) => c.attributes?.$type === 'hand'
+  ) || [];
+  return hands.find((h: any) => h.attributes?.player?.position !== props.playerPosition);
+});
+const opponentHand = computed(() => opponentHandElement.value?.children || []);
+
+// Find game elements using name (more stable than className which can be mangled)
+const cribElement = computed(() => findElement(props.gameView, { name: 'crib' }));
+const crib = computed(() => cribElement.value?.children || []);
+const cribCardCount = computed(() => getElementCount(cribElement.value));
+
+const playAreaElement = computed(() => findElement(props.gameView, { name: 'play-area' }));
+const playArea = computed(() => getCards(playAreaElement.value));
+
+const playedCardsElement = computed(() => findElement(props.gameView, { name: 'played-cards' }));
+const playedCards = computed(() => getCards(playedCardsElement.value));
+
+const starterElement = computed(() => findElement(props.gameView, { name: 'starter' }));
+const starterCard = computed(() => getFirstCard(starterElement.value) || null);
+
+// Deck uses $type since it extends base Deck class (className gets mangled to Deck2)
+const deckElement = computed(() => findElement(props.gameView, { type: 'deck', name: 'deck' }));
+const deckCardCount = computed(() => getElementCount(deckElement.value));
+
+// Fly starter card from deck when it appears using the reusable composable
+const { isFlying: starterIsFlying, flyingCards: starterFlyingCards } = useFlyOnAppear({
+  sourceRef: deckStackRef,
+  targetRef: starterAreaRef,
+  element: starterCard,
+  getCardData: (card) => ({
+    rank: (card.attributes as any)?.rank,
+    suit: (card.attributes as any)?.suit,
+  }),
+  flip: true,
+  startFaceUp: false,
+  duration: 500,
 });
 
-const opponentHand = computed(() => {
-  if (!props.gameView) return [];
-  const handElement = props.gameView.children?.find(
-    (c: any) => c.attributes?.$type === 'hand' && c.attributes?.player?.position !== props.playerPosition
-  );
-  return handElement?.children || [];
-});
+// Combine all flying cards for the overlay
+const allFlyingCards = computed(() => [
+  ...discardFlyingCards.value,
+  ...starterFlyingCards.value,
+]);
 
-const cribElement = computed(() => {
-  if (!props.gameView) return null;
-  return props.gameView.children?.find((c: any) => c.className === 'Crib');
-});
-
-const crib = computed(() => {
-  if (!cribElement.value) return [];
-  return cribElement.value.children || [];
-});
-
-// Get crib card count (handles hidden contents which show as childCount)
-const cribCardCount = computed(() => {
-  if (!cribElement.value) return 0;
-  // If there are actual children, count them
-  if (cribElement.value.children?.length > 0) {
-    return cribElement.value.children.length;
-  }
-  // Otherwise use childCount for hidden contents
-  return cribElement.value.childCount || 0;
-});
-
-const playArea = computed(() => {
-  if (!props.gameView) return [];
-  const playElement = props.gameView.children?.find((c: any) => c.className === 'PlayArea');
-  return playElement?.children?.filter((c: any) => c.attributes?.rank) || [];
-});
-
-// Get played cards from the game's PlayedCards zone (cards from completed counts)
-const playedCards = computed(() => {
-  if (!props.gameView) return [];
-  const playedElement = props.gameView.children?.find((c: any) => c.className === 'PlayedCards');
-  return playedElement?.children?.filter((c: any) => c.attributes?.rank) || [];
-});
-
-const starterCard = computed(() => {
-  if (!props.gameView) return null;
-  const starterElement = props.gameView.children?.find((c: any) => c.className === 'StarterArea');
-  const card = starterElement?.children?.find((c: any) => c.attributes?.rank);
-  return card || null;
-});
-
-// Get the deck and its card count
-// Note: We search by $type or name because className can be mangled by bundlers
-const deckElement = computed(() => {
-  if (!props.gameView) return null;
-  return props.gameView.children?.find((c: any) =>
-    c.attributes?.$type === 'deck' || c.name === 'deck'
-  );
-});
-
-const deckCardCount = computed(() => {
-  if (!deckElement.value) return 0;
-  // If there are actual children, count them (unlikely since deck is hidden)
-  if (deckElement.value.children?.length > 0) {
-    return deckElement.value.children.length;
-  }
-  // Otherwise use childCount for hidden contents
-  return deckElement.value.childCount || 0;
-});
-
-// Track when starter card appears to trigger fly animation
-const starterCardVisible = computed(() => !!starterCard.value);
-const starterIsFlying = ref(false);
-
-// Watch for starter card appearing - fly it from deck to starter area
-watch(starterCardVisible, async (isVisible, wasVisible) => {
-  if (isVisible && !wasVisible && !prefersReducedMotion.value) {
-    // Starter just appeared - fly it from deck
-    const deckRect = deckStackRef.value?.getBoundingClientRect();
-    const starterRect = starterAreaRef.value?.getBoundingClientRect();
-
-    if (deckRect && starterRect && starterCard.value) {
-      starterIsFlying.value = true;
-
-      await flyCard({
-        id: `starter-${Date.now()}`,
-        startRect: deckRect,
-        endRect: () => starterAreaRef.value?.getBoundingClientRect() ?? starterRect,
-        cardData: {
-          rank: starterCard.value.attributes?.rank,
-          suit: starterCard.value.attributes?.suit,
-          faceUp: false, // Start face down
-        },
-        flip: true, // Flip to face up
-        duration: 500,
-        cardSize: { width: 60, height: 84 }, // Standard card size
-      });
-
-      starterIsFlying.value = false;
-    }
-  }
-});
-
-const myScore = computed(() => {
-  if (!props.gameView) return 0;
-  const playerData = props.gameView.children?.find(
-    (c: any) => c.attributes?.$type === 'hand' && c.attributes?.player?.position === props.playerPosition
-  );
-  return playerData?.attributes?.player?.score ?? 0;
-});
-
-const opponentScore = computed(() => {
-  if (!props.gameView) return 0;
-  const playerData = props.gameView.children?.find(
-    (c: any) => c.attributes?.$type === 'hand' && c.attributes?.player?.position !== props.playerPosition
-  );
-  return playerData?.attributes?.player?.score ?? 0;
-});
+// Scores come from hand element attributes (already found above)
+const myScore = computed(() => (myHandElement.value?.attributes as any)?.player?.score ?? 0);
+const opponentScore = computed(() => (opponentHandElement.value?.attributes as any)?.player?.score ?? 0);
 
 const isDealer = computed(() => dealerPosition.value === props.playerPosition);
 
@@ -598,10 +539,10 @@ defineExpose({
             :key="card.id"
             class="card"
             :data-card-id="card.name"
-            :style="{ color: getSuitColor(card.attributes?.suit) }"
+            :style="{ color: getSuitColor((card.attributes?.suit as string) || '') }"
           >
             <span class="rank">{{ card.attributes?.rank }}</span>
-            <span class="suit">{{ getSuitSymbol(card.attributes?.suit) }}</span>
+            <span class="suit">{{ getSuitSymbol((card.attributes?.suit as string) || '') }}</span>
           </div>
           <div v-if="playArea.length === 0" class="no-cards">Waiting for play...</div>
         </div>
@@ -634,10 +575,10 @@ defineExpose({
               v-if="starterCard && !starterIsFlying"
               class="card"
               :data-card-id="starterCard.name"
-              :style="{ color: getSuitColor(starterCard.attributes?.suit) }"
+              :style="{ color: getSuitColor((starterCard.attributes?.suit as string) || '') }"
             >
               <span class="rank">{{ starterCard.attributes?.rank }}</span>
-              <span class="suit">{{ getSuitSymbol(starterCard.attributes?.suit) }}</span>
+              <span class="suit">{{ getSuitSymbol((starterCard.attributes?.suit as string) || '') }}</span>
             </div>
             <div v-else-if="!starterCard" class="card-placeholder">
               <span>?</span>
@@ -657,7 +598,7 @@ defineExpose({
                 :data-card-id="card.name"
                 :style="{ '--stack-index': i }"
               >
-                <span v-if="card.attributes?.rank">{{ card.attributes.rank }}{{ getSuitSymbol(card.attributes.suit) }}</span>
+                <span v-if="card.attributes?.rank">{{ card.attributes.rank }}{{ getSuitSymbol((card.attributes.suit as string) || '') }}</span>
                 <span v-else>?</span>
               </div>
             </template>
@@ -687,12 +628,12 @@ defineExpose({
               class="card stacked"
               :data-card-id="card.name"
               :style="{
-                color: getSuitColor(card.attributes?.suit || ''),
+                color: getSuitColor((card.attributes?.suit as string) || ''),
                 '--stack-index': index
               }"
             >
               <span class="rank">{{ card.attributes?.rank }}</span>
-              <span class="suit">{{ getSuitSymbol(card.attributes?.suit || '') }}</span>
+              <span class="suit">{{ getSuitSymbol((card.attributes?.suit as string) || '') }}</span>
             </div>
             <div v-if="playedCards.length === 0" class="card-placeholder">—</div>
           </div>
@@ -790,7 +731,7 @@ defineExpose({
 
     <!-- Flying cards animation overlay -->
     <FlyingCardsOverlay
-      :flying-cards="flyingCards"
+      :flying-cards="allFlyingCards"
       :get-suit-symbol="getSuitSymbol"
       :get-suit-color="getSuitColor"
     />

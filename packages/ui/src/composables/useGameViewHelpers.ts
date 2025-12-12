@@ -1,0 +1,163 @@
+/**
+ * useGameViewHelpers - Utilities for working with game view data in custom UIs
+ *
+ * Provides helper functions for finding elements in the game view tree,
+ * handling the className mangling issue that can occur with bundlers.
+ *
+ * Usage:
+ * ```typescript
+ * const { findElement, findPlayerHand, getElementCount } = useGameViewHelpers();
+ *
+ * const deck = findElement(gameView, { type: 'deck' });
+ * const myHand = findPlayerHand(gameView, playerPosition);
+ * const cardCount = getElementCount(deck);
+ * ```
+ */
+
+export interface GameElement {
+  id: number;
+  name?: string;
+  className: string;
+  attributes?: Record<string, unknown>;
+  children?: GameElement[];
+  childCount?: number;
+}
+
+export interface FindElementOptions {
+  /** Match by $type attribute (most reliable, handles bundler mangling) */
+  type?: string;
+  /** Match by element name */
+  name?: string;
+  /** Match by className (may be mangled by bundlers) */
+  className?: string;
+}
+
+/**
+ * Find an element in the game view by type, name, or className.
+ * Prefers $type and name over className since className can be mangled by bundlers.
+ */
+export function findElement(
+  gameView: GameElement | null | undefined,
+  options: FindElementOptions
+): GameElement | undefined {
+  if (!gameView?.children) return undefined;
+
+  const { type, name, className } = options;
+
+  return gameView.children.find((c) => {
+    if (type && (c.attributes as any)?.$type === type) return true;
+    if (name && c.name === name) return true;
+    if (className && c.className === className) return true;
+    return false;
+  });
+}
+
+/**
+ * Find multiple elements in the game view matching the criteria.
+ */
+export function findElements(
+  gameView: GameElement | null | undefined,
+  options: FindElementOptions
+): GameElement[] {
+  if (!gameView?.children) return [];
+
+  const { type, name, className } = options;
+
+  return gameView.children.filter((c) => {
+    if (type && (c.attributes as any)?.$type === type) return true;
+    if (name && c.name === name) return true;
+    if (className && c.className === className) return true;
+    return false;
+  });
+}
+
+/**
+ * Find a player's hand element by position.
+ */
+export function findPlayerHand(
+  gameView: GameElement | null | undefined,
+  playerPosition: number
+): GameElement | undefined {
+  if (!gameView?.children) return undefined;
+
+  return gameView.children.find(
+    (c) =>
+      (c.attributes as any)?.$type === 'hand' &&
+      (c.attributes as any)?.player?.position === playerPosition
+  );
+}
+
+/**
+ * Find all hand elements in the game view.
+ */
+export function findAllHands(
+  gameView: GameElement | null | undefined
+): GameElement[] {
+  if (!gameView?.children) return [];
+
+  return gameView.children.filter((c) => (c.attributes as any)?.$type === 'hand');
+}
+
+/**
+ * Get the count of children in an element, handling hidden contents.
+ * For elements with hidden contents (like decks), this returns childCount.
+ */
+export function getElementCount(element: GameElement | null | undefined): number {
+  if (!element) return 0;
+
+  // If there are visible children, count them
+  if (element.children && element.children.length > 0) {
+    return element.children.length;
+  }
+
+  // Otherwise use childCount for hidden contents
+  return element.childCount || 0;
+}
+
+/**
+ * Get cards from an element (filters to elements with rank attribute).
+ */
+export function getCards(element: GameElement | null | undefined): GameElement[] {
+  if (!element?.children) return [];
+
+  return element.children.filter((c) => (c.attributes as any)?.rank);
+}
+
+/**
+ * Get the first card from an element.
+ */
+export function getFirstCard(element: GameElement | null | undefined): GameElement | undefined {
+  return getCards(element)[0];
+}
+
+/**
+ * Extract card data (rank, suit) from a game element.
+ */
+export function getCardData(element: GameElement | null | undefined): { rank: string; suit: string } | null {
+  if (!element) return null;
+
+  const attrs = element.attributes as any;
+  if (!attrs?.rank) return null;
+
+  return {
+    rank: attrs.rank,
+    suit: attrs.suit || '',
+  };
+}
+
+/**
+ * Composable that returns all helper functions.
+ * Can be used in Vue components for convenience.
+ */
+export function useGameViewHelpers() {
+  return {
+    findElement,
+    findElements,
+    findPlayerHand,
+    findAllHands,
+    getElementCount,
+    getCards,
+    getFirstCard,
+    getCardData,
+  };
+}
