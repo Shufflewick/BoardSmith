@@ -108,6 +108,19 @@ export {
   type GameGridReturn,
 } from './composables/useGameGrid.js';
 
+// Hex grid utilities
+export {
+  useHexGrid,
+  hexToPixel,
+  getHexPolygonPoints,
+  calculateHexDistance,
+  type HexOrientation,
+  type HexGridOptions,
+  type HexPosition,
+  type HexBounds,
+  type HexGridReturn,
+} from './composables/useHexGrid.js';
+
 // Card display utilities
 export {
   useCardDisplay,

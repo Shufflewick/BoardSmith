@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import { GameShell, AutoUI } from '@boardsmith/ui';
+import { GameShell, AutoUI, findElement, getElementOwner } from '@boardsmith/ui';
+import HexBoard from './components/HexBoard.vue';
 
 // Get player color name
 function getPlayerColor(playerPosition: number): string {
   return playerPosition === 0 ? 'Red' : 'Blue';
 }
 
-// Count stones for a player from gameView
+// Count stones for a player from gameView using shared helpers
 function getStoneCount(playerPosition: number, gameView: any): number {
-  if (!gameView?.children) return 0;
-  const board = gameView.children.find((c: any) => c.className === 'Board');
+  const board = findElement(gameView, { className: 'Board' });
   if (!board?.children) return 0;
 
   let count = 0;
   for (const cell of board.children) {
     if (cell.className !== 'Cell') continue;
     for (const piece of cell.children || []) {
-      if (piece.className === 'Stone' && piece.attributes?.player?.position === playerPosition) {
+      if (piece.className === 'Stone' && getElementOwner(piece) === playerPosition) {
         count++;
       }
     }
@@ -32,17 +32,29 @@ function getStoneCount(playerPosition: number, gameView: any): number {
     :player-count="2"
   >
     <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
-      <div class="board-container">
-        <h2 class="board-title">Hex Board</h2>
-        <p class="board-instructions">
-          <span class="red">Red</span> connects top to bottom.
-          <span class="blue">Blue</span> connects left to right.
-        </p>
-        <AutoUI
-          :game-view="gameView || null"
-          :player-position="playerPosition"
-          :flow-state="state?.flowState as any"
-        />
+      <div class="board-comparison">
+        <div class="board-section">
+          <h2 class="board-title">Custom UI</h2>
+          <p class="board-instructions">
+            <span class="red">Red</span> connects top to bottom.
+            <span class="blue">Blue</span> connects left to right.
+          </p>
+          <HexBoard
+            :game-view="gameView"
+            :player-position="playerPosition"
+            :is-my-turn="isMyTurn"
+            :available-actions="availableActions"
+            :action="action"
+          />
+        </div>
+        <div class="board-section">
+          <h2 class="board-title">Auto-Generated UI</h2>
+          <AutoUI
+            :game-view="gameView || null"
+            :player-position="playerPosition"
+            :flow-state="state?.flowState as any"
+          />
+        </div>
       </div>
     </template>
 
@@ -53,7 +65,11 @@ function getStoneCount(playerPosition: number, gameView: any): number {
       </div>
       <div class="player-stat">
         <span class="stat-label">Stones placed:</span>
-        <span class="stat-value">{{ getStoneCount(player.position, gameView) }}</span>
+        <span
+          class="stat-value"
+          data-player-stat="stones"
+          :data-player-position="player.position"
+        >{{ getStoneCount(player.position, gameView) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Goal:</span>
@@ -64,12 +80,19 @@ function getStoneCount(playerPosition: number, gameView: any): number {
 </template>
 
 <style scoped>
-.board-container {
+.board-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+  height: 100%;
+}
+
+.board-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 100%;
-  height: 100%;
+  min-height: 0;
 }
 
 .board-title {
