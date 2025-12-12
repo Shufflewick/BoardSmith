@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/yamadashy/repomix/main/schema/repomix.config.json",
+  "output": {
+    "filePath": "llms.txt",
+    "style": "markdown",
+    "headerText": "# BoardSmith - Turn-Based Game Framework\n\nThis file contains the BoardSmith codebase optimized for LLM consumption.\n\nBoardSmith is a TypeScript framework for building multiplayer turn-based board and card games.\n\n## Quick Reference\n\n- Start with `docs/llm-overview.md` for a comprehensive summary\n- See `docs/getting-started.md` for CLI and project setup\n- See `docs/core-concepts.md` for element tree, actions, commands\n- See `packages/games/hex/` for the simplest complete example\n- See `packages/games/cribbage/` for a complex multi-phase example",
+    "removeComments": false,
+    "showLineNumbers": true,
+    "topFilesLength": 20,
+    "fileSummary": true,
+    "directoryStructure": true
+  },
+  "include": [
+    "docs/**/*.md",
+    "packages/engine/src/**/*.ts",
+    "packages/engine/ARCHITECTURE.md",
+    "packages/runtime/src/**/*.ts",
+    "packages/ai/src/**/*.ts",
+    "packages/ui/src/index.ts",
+    "packages/ui/src/composables/**/*.ts",
+    "packages/ui/src/types.ts",
+    "packages/cli/src/**/*.ts",
+    "packages/session/src/**/*.ts",
+    "packages/testing/src/**/*.ts",
+    "packages/games/hex/rules/src/**/*.ts",
+    "packages/games/go-fish/rules/src/**/*.ts",
+    "packages/games/checkers/rules/src/**/*.ts",
+    "packages/games/cribbage/rules/src/**/*.ts",
+    "package.json",
+    "packages/*/package.json"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "node_modules/**",
+      "dist/**",
+      "**/dist/**",
+      "**/*.d.ts",
+      "**/*.test.ts",
+      "**/*.spec.ts",
+      "pnpm-lock.yaml",
+      ".git/**",
+      "coverage/**",
+      "*.log"
+    ]
+  },
+  "security": {
+    "enableSecurityCheck": true
+  }
+}

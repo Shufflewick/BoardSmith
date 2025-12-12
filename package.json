@@ -11,7 +11,8 @@
     "build": "npm run build --workspaces --if-present",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "cli": "npm run cli --workspace=@boardsmith/cli"
+    "cli": "npm run cli --workspace=@boardsmith/cli",
+    "regen:llms": "npx repomix"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
