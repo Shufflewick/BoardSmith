@@ -690,12 +690,17 @@ function handleDrop(event: DragEvent) {
           'is-draggable': isActionSelectable,
           'is-dragging': isDragged,
         }"
+        :data-element-id="element.id"
+        :data-animatable="true"
         :draggable="isActionSelectable"
         @click="handleClick"
         @dragstart="handleDragStart"
         @dragend="handleDragEnd"
       >
-        <div class="card-face">
+        <!-- Hidden card shows card back -->
+        <div v-if="element.__hidden || element.attributes?.__hidden" class="card-back"></div>
+        <!-- Visible card shows face -->
+        <div v-else class="card-face">
           {{ displayLabel }}
         </div>
       </div>
@@ -703,7 +708,7 @@ function handleDrop(event: DragEvent) {
 
     <!-- HAND RENDERING -->
     <template v-else-if="elementType === 'hand'">
-      <div class="hand-container" :style="layoutStyles">
+      <div class="hand-container" :style="layoutStyles" :data-zone="element.name" :data-zone-id="element.id">
         <div class="hand-header">
           <span class="hand-label">
             {{ isOwned ? 'Your Hand' : `${playerName}'s Hand` }}
@@ -734,7 +739,7 @@ function handleDrop(event: DragEvent) {
             </template>
           </div>
           <!-- Front row (or all cards when single row) -->
-          <div class="hand-cards hand-cards-front">
+          <div class="hand-cards hand-cards-front" :data-zone="element.name">
             <template v-if="visibleChildren.length > 0">
               <AutoElement
                 v-for="(child, index) in frontRowCards"
@@ -762,14 +767,14 @@ function handleDrop(event: DragEvent) {
 
     <!-- DECK RENDERING -->
     <template v-else-if="elementType === 'deck'">
-      <div class="deck-container" :style="layoutStyles">
+      <div class="deck-container" :style="layoutStyles" :data-zone="element.name" :data-zone-id="element.id">
         <div class="deck-header">
           <span class="deck-label">{{ displayLabel }}</span>
           <span class="deck-count" v-if="childCountDisplay">{{ childCountDisplay }} cards</span>
         </div>
         <!-- Show stack visualization when contents hidden or count-only -->
         <template v-if="visibleChildren.length === 0 && childCountDisplay > 0">
-          <div class="deck-stack" :class="{ 'has-overlap': layoutProps.overlap !== undefined }">
+          <div class="deck-stack" :class="{ 'has-overlap': layoutProps.overlap !== undefined }" :data-zone="element.name">
             <div v-for="i in Math.min(childCountDisplay, 5)" :key="i" class="deck-card" :style="{ '--stack-index': i }"></div>
           </div>
         </template>
@@ -937,6 +942,8 @@ function handleDrop(event: DragEvent) {
       <div
         :class="['piece', { 'is-draggable': isActionSelectable, 'is-dragging': isDragged, 'hex-piece': !!props.hexPieceSize }]"
         :style="pieceStyle"
+        :data-element-id="element.id"
+        :data-animatable="true"
         :draggable="isActionSelectable"
         @dragstart="handleDragStart"
         @dragend="handleDragEnd"
@@ -1180,6 +1187,7 @@ function handleDrop(event: DragEvent) {
   z-index: 100 !important;
 }
 
+.card-back,
 .card-back-small {
   /* Playing card aspect ratio matching card-face */
   width: 60px;

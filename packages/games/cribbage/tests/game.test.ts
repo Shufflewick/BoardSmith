@@ -3,6 +3,28 @@ import { createTestGame } from '@boardsmith/testing';
 import { CribbageGame, Card, CribbagePlayer, scoreHand, scoreHandDetailed } from '@boardsmith/cribbage-rules';
 
 describe('CribbageGame', () => {
+  describe('GameView Structure', () => {
+    it('should include deck with childCount in gameView', () => {
+      const testGame = createTestGame(CribbageGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'test-seed',
+      });
+
+      // Get game view for player 0
+      const gameView = testGame.game.toJSONForPlayer(0);
+
+      // Find deck in gameView - search by $type or name (className can be mangled by bundlers)
+      const deck = gameView.children?.find(c =>
+        (c.attributes as any)?.$type === 'deck' || c.name === 'deck'
+      );
+
+      expect(deck).toBeDefined();
+      expect(deck?.childCount).toBe(40); // 52 - 12 dealt
+      expect(deck?.children).toBeUndefined(); // Children should be hidden
+    });
+  });
+
   describe('Game Setup', () => {
     it('should create a 2-player game', () => {
       const testGame = createTestGame(CribbageGame, {

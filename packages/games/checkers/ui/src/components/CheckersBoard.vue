@@ -1,9 +1,60 @@
 <script setup lang="ts">
-import { ref, computed, watch, watchEffect } from 'vue';
-import { useBoardInteraction } from '@boardsmith/ui';
+import { ref, computed, watch, watchEffect, nextTick } from 'vue';
+import { useBoardInteraction, prefersReducedMotion } from '@boardsmith/ui';
 
 // Board interaction for syncing with ActionPanel
 const boardInteraction = useBoardInteraction();
+
+// Animation state - tracks piece positions for FLIP animations
+const boardRef = ref<HTMLElement | null>(null);
+const piecePositions = new Map<number, DOMRect>();
+
+// Capture positions of all pieces before state changes
+function capturePositions() {
+  piecePositions.clear();
+  if (!boardRef.value) return;
+
+  const pieces = boardRef.value.querySelectorAll('[data-piece-id]');
+  pieces.forEach((el) => {
+    const id = parseInt(el.getAttribute('data-piece-id') || '0', 10);
+    if (id) {
+      piecePositions.set(id, el.getBoundingClientRect());
+    }
+  });
+}
+
+// Animate pieces from old positions to new positions
+function animateMovements() {
+  if (prefersReducedMotion.value) return;
+  if (!boardRef.value) return;
+
+  const pieces = boardRef.value.querySelectorAll('[data-piece-id]');
+
+  pieces.forEach((el) => {
+    const id = parseInt(el.getAttribute('data-piece-id') || '0', 10);
+    const oldRect = piecePositions.get(id);
+
+    if (!oldRect) return;
+
+    const newRect = el.getBoundingClientRect();
+    const deltaX = oldRect.left - newRect.left;
+    const deltaY = oldRect.top - newRect.top;
+
+    // Only animate if actually moved
+    if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+      (el as HTMLElement).animate([
+        { transform: `translate(${deltaX}px, ${deltaY}px)` },
+        { transform: 'translate(0, 0)' }
+      ], {
+        duration: 300,
+        easing: 'ease-out',
+        fill: 'backwards'
+      });
+    }
+  });
+
+  piecePositions.clear();
+}
 
 interface CheckerPiece {
   id: number;
@@ -487,6 +538,24 @@ const currentPlayerColor = computed(() => {
   const currentPos = props.gameView?.currentPlayer;
   return currentPos === 0 ? 'Dark' : 'Light';
 });
+
+// Watch for gameView changes and animate piece movements
+watch(
+  () => props.gameView,
+  async (newView, oldView) => {
+    if (!oldView) return;
+
+    // Capture positions before Vue updates DOM
+    capturePositions();
+
+    // Wait for DOM to update
+    await nextTick();
+
+    // Animate to new positions
+    animateMovements();
+  },
+  { deep: false }
+);
 </script>
 
 <template>
@@ -512,7 +581,7 @@ const currentPlayerColor = computed(() => {
           <span v-for="row in 8" :key="row" class="label">{{ 9 - row }}</span>
         </div>
 
-        <div class="board">
+        <div ref="boardRef" class="board">
           <template v-for="row in 8" :key="row">
             <div
               v-for="col in 8"
@@ -540,6 +609,7 @@ const currentPlayerColor = computed(() => {
                     movable: movablePieceIds.has(getPieceAt(row - 1, col - 1)!.id)
                   }
                 ]"
+                :data-piece-id="getPieceAt(row - 1, col - 1)!.id"
               >
                 <span v-if="getPieceAt(row - 1, col - 1)?.attributes?.isKing" class="crown">&#9813;</span>
               </div>

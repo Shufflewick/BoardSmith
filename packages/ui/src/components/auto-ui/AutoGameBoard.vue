@@ -5,6 +5,13 @@
  * This component recursively renders the game state tree, using
  * default renderers for different element types (Space, Piece, Card, etc.)
  *
+ * Features:
+ * - Automatic FLIP animations for element movements
+ * - Smart fly vs move animation based on visibility changes:
+ *   - Public → Private: fly animation (card flips face-down as it travels)
+ *   - Private → Private or Public → Public: regular move animation
+ * - Respects prefers-reduced-motion accessibility setting
+ *
  * Usage:
  * <AutoGameBoard
  *   :game-view="gameView"
@@ -13,8 +20,11 @@
  *   @element-click="handleElementClick"
  * />
  */
-import { computed, provide } from 'vue';
+import { computed, provide, ref, watch, nextTick } from 'vue';
 import AutoElement from './AutoElement.vue';
+import { prefersReducedMotion } from '../../composables/useElementAnimation.js';
+import { useFlyingCards, type FlyCardOptions } from '../../composables/useFlyingCards.js';
+import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 
 export interface GameElement {
   id: number;
@@ -77,10 +87,304 @@ const layoutClass = computed(() => {
 function handleElementClick(element: GameElement) {
   emit('elementClick', element);
 }
+
+// ============================================
+// Flying Cards Animation System
+// ============================================
+const { flyingCards, flyCard } = useFlyingCards();
+
+// ============================================
+// FLIP Animation System with Smart Fly Detection
+// ============================================
+
+const containerRef = ref<HTMLElement | null>(null);
+const elementPositions = new Map<number, DOMRect>();
+// Track visibility state: true = public (visible), false = private (hidden)
+const elementVisibility = new Map<number, boolean>();
+// Track parent container NAME for each element (more stable than ID)
+const elementParentName = new Map<number, string>();
+// Track card data for flying animations
+const elementCardData = new Map<number, { rank?: string; suit?: string }>();
+// Track childCount for zones (to detect where cards went when hidden)
+const zoneChildCount = new Map<string, number>();
+
+// Recursively collect visibility, parent info, and card data from game element tree
+function collectElementState(
+  element: GameElement,
+  parentName: string | null,
+  stateMap: Map<number, boolean>,
+  parentNameMap: Map<number, string>,
+  cardDataMap: Map<number, { rank?: string; suit?: string }>,
+  childCountMap: Map<string, number>
+) {
+  // Check if this is a card
+  const isCard = element.attributes?.$type === 'card';
+  // Element is "public" if it's not hidden
+  const isPublic = !element.__hidden && !element.attributes?.__hidden;
+
+  stateMap.set(element.id, isPublic);
+  if (parentName !== null) {
+    parentNameMap.set(element.id, parentName);
+  }
+
+  // Track childCount for zones (decks, hands, spaces with hidden contents)
+  if (element.name && element.childCount !== undefined) {
+    childCountMap.set(element.name, element.childCount);
+  }
+
+  // Extract card data from element name (e.g., "5H" → { rank: '5', suit: 'H' })
+  if (isCard && element.name) {
+    const match = element.name.match(/^(\d+|[AJQK])([CDHS]?)$/i);
+    if (match) {
+      cardDataMap.set(element.id, {
+        rank: match[1].toUpperCase(),
+        suit: (match[2] || '').toUpperCase(),
+      });
+    }
+  }
+
+  // Process children - use current element's name as parent for children
+  if (element.children) {
+    for (const child of element.children) {
+      collectElementState(child, element.name ?? null, stateMap, parentNameMap, cardDataMap, childCountMap);
+    }
+  }
+}
+
+// Capture positions of all animatable elements AND container elements
+function capturePositions() {
+  elementPositions.clear();
+  if (!containerRef.value) return;
+
+  // Capture animatable elements (cards, pieces)
+  const animatableElements = containerRef.value.querySelectorAll('[data-animatable="true"]');
+  animatableElements.forEach((el) => {
+    const id = parseInt(el.getAttribute('data-element-id') || '0', 10);
+    if (id) {
+      elementPositions.set(id, el.getBoundingClientRect());
+    }
+  });
+}
+
+// Capture visibility state from game view
+function captureVisibilityState(gameView: GameElement | null | undefined) {
+  elementVisibility.clear();
+  elementParentName.clear();
+  elementCardData.clear();
+  zoneChildCount.clear();
+  if (!gameView) return;
+  collectElementState(gameView, null, elementVisibility, elementParentName, elementCardData, zoneChildCount);
+}
+
+// Find a container element in the DOM by zone name
+// Prefers inner stack elements (deck-stack, hand-cards) over outer containers
+function findContainerByName(zoneName: string): HTMLElement | null {
+  if (!containerRef.value) return null;
+
+  // First, try to find a deck-stack or hand-cards element (the actual stack, not container)
+  const stackElement = containerRef.value.querySelector(
+    `.deck-stack[data-zone="${zoneName}"], .hand-cards[data-zone="${zoneName}"], .deck-cards[data-zone="${zoneName}"]`
+  );
+  if (stackElement) return stackElement as HTMLElement;
+
+  // Fall back to any element with data-zone attribute
+  const element = containerRef.value.querySelector(`[data-zone="${zoneName}"]`);
+  if (element) return element as HTMLElement;
+
+  return null;
+}
+
+// Animate elements from old positions to new positions
+// Elements that went from public→private use fly animation to their new parent container
+async function animateMovements(
+  oldVisibility: Map<number, boolean>,
+  oldParentName: Map<number, string>,
+  oldCardData: Map<number, { rank?: string; suit?: string }>,
+  oldZoneChildCount: Map<string, number>
+) {
+  if (prefersReducedMotion.value) return;
+  if (!containerRef.value) return;
+
+  const flyPromises: Promise<void>[] = [];
+  const animatedIds = new Set<number>();
+
+  // Find zones that gained children (childCount increased) - these are destinations for hidden cards
+  const zonesGainedChildren: string[] = [];
+  // Find zones that lost children (childCount decreased) - these are sources for appearing cards
+  const zonesLostChildren: string[] = [];
+  for (const [zoneName, newCount] of zoneChildCount) {
+    const oldCount = oldZoneChildCount.get(zoneName) ?? 0;
+    if (newCount > oldCount) {
+      zonesGainedChildren.push(zoneName);
+    } else if (newCount < oldCount) {
+      zonesLostChildren.push(zoneName);
+    }
+  }
+  // Also check old zones that might have disappeared
+  for (const [zoneName, oldCount] of oldZoneChildCount) {
+    if (!zoneChildCount.has(zoneName) && oldCount > 0) {
+      zonesLostChildren.push(zoneName);
+    }
+  }
+
+  // First, check for cards that were visible but are now hidden (moved to hidden zone)
+  // These need fly animations to their new parent container
+  for (const [id, wasPublic] of oldVisibility) {
+    if (!wasPublic) continue; // Skip cards that were already hidden
+
+    const isStillInTree = elementVisibility.has(id);
+    const isPublic = elementVisibility.get(id) ?? false;
+    const oldRect = elementPositions.get(id);
+    const cardData = oldCardData.get(id);
+
+    // Card went from public to private (or disappeared from tree entirely)?
+    const becameHidden = !isPublic || !isStillInTree;
+
+    if (becameHidden && oldRect && cardData) {
+      // Try to find destination: first check if card is still in tree with new parent
+      let targetZoneName = elementParentName.get(id);
+
+      // If card disappeared from tree, find a zone that gained children
+      if (!isStillInTree && zonesGainedChildren.length > 0) {
+        // Use the first zone that gained children as destination
+        targetZoneName = zonesGainedChildren[0];
+      }
+
+      if (targetZoneName) {
+        // Find the target container element by zone name
+        const targetElement = findContainerByName(targetZoneName);
+
+        if (targetElement) {
+          animatedIds.add(id);
+          flyPromises.push(
+            flyCard({
+              id: `fly-${id}-${Date.now()}`,
+              startRect: oldRect,
+              // Track the target container in real-time
+              endRect: () => targetElement.getBoundingClientRect(),
+              cardData: { ...cardData, faceUp: true },
+              flip: true,
+              duration: 400,
+            })
+          );
+        }
+      }
+    }
+  }
+
+  // Check for cards that APPEARED (weren't visible before, now are) - these came from hidden zones
+  // Only fly these if they came from a zone that lost children
+  if (zonesLostChildren.length > 0) {
+    // Find cards that are now visible but weren't before
+    for (const [id, isPublic] of elementVisibility) {
+      if (!isPublic) continue; // Skip hidden cards
+      if (oldVisibility.has(id)) continue; // Skip cards that were already in tree
+
+      const cardData = elementCardData.get(id);
+      if (!cardData) continue;
+
+      // Find the source zone (one that lost children)
+      const sourceZoneName = zonesLostChildren[0];
+      const sourceElement = findContainerByName(sourceZoneName);
+
+      if (sourceElement) {
+        // Find the card's new DOM element
+        const cardElement = containerRef.value?.querySelector(`[data-element-id="${id}"]`);
+        if (cardElement) {
+          const sourceRect = sourceElement.getBoundingClientRect();
+          // Get the actual card dimensions from the target element
+          const targetRect = cardElement.getBoundingClientRect();
+          animatedIds.add(id);
+          flyPromises.push(
+            flyCard({
+              id: `fly-appear-${id}-${Date.now()}`,
+              startRect: sourceRect,
+              endRect: () => cardElement.getBoundingClientRect(),
+              cardData: { ...cardData, faceUp: false }, // Start face down
+              flip: true, // Flip to face up
+              duration: 400,
+              // Use target card dimensions, not source (deck) dimensions
+              cardSize: { width: targetRect.width, height: targetRect.height },
+            })
+          );
+        }
+      }
+    }
+  }
+
+  // Now handle regular FLIP animations for elements that are still visible
+  const animatableElements = containerRef.value.querySelectorAll('[data-animatable="true"]');
+
+  animatableElements.forEach((el) => {
+    const id = parseInt(el.getAttribute('data-element-id') || '0', 10);
+
+    // Skip if we already handled this with a fly animation
+    if (animatedIds.has(id)) return;
+
+    const oldRect = elementPositions.get(id);
+    if (!oldRect) return;
+
+    const newRect = el.getBoundingClientRect();
+    const deltaX = oldRect.left - newRect.left;
+    const deltaY = oldRect.top - newRect.top;
+
+    // Only animate if actually moved (threshold of 1px)
+    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+
+    // Regular move animation
+    (el as HTMLElement).animate([
+      { transform: `translate(${deltaX}px, ${deltaY}px)` },
+      { transform: 'translate(0, 0)' }
+    ], {
+      duration: 300,
+      easing: 'ease-out',
+      fill: 'backwards'
+    });
+  });
+
+  elementPositions.clear();
+
+  // Wait for all fly animations to complete
+  if (flyPromises.length > 0) {
+    await Promise.all(flyPromises);
+  }
+}
+
+// Watch for gameView changes and animate
+watch(
+  () => props.gameView,
+  async (newView, oldView) => {
+    // Skip if no previous view (initial load)
+    if (!oldView) {
+      // Initialize visibility state for first view
+      captureVisibilityState(newView);
+      return;
+    }
+
+    // Capture positions before Vue updates DOM
+    capturePositions();
+
+    // Save old state before updating
+    const oldVisibility = new Map(elementVisibility);
+    const oldParentName = new Map(elementParentName);
+    const oldCardData = new Map(elementCardData);
+    const oldZoneChildCount = new Map(zoneChildCount);
+
+    // Wait for DOM to update
+    await nextTick();
+
+    // Capture new visibility state from updated view
+    captureVisibilityState(newView);
+
+    // Animate with smart fly detection
+    await animateMovements(oldVisibility, oldParentName, oldCardData, oldZoneChildCount);
+  },
+  { deep: false } // Only watch reference changes, not deep mutations
+);
 </script>
 
 <template>
-  <div class="auto-game-board" :class="layoutClass">
+  <div ref="containerRef" class="auto-game-board" :class="layoutClass">
     <div v-if="!gameView" class="loading">
       Loading game...
     </div>
@@ -94,6 +398,9 @@ function handleElementClick(element: GameElement) {
         @element-click="handleElementClick"
       />
     </div>
+
+    <!-- Flying cards overlay for public→private transitions -->
+    <FlyingCardsOverlay :flying-cards="flyingCards" />
   </div>
 </template>
 

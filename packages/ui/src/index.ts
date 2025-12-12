@@ -14,6 +14,7 @@ export {
   DiceRoller,
   CardFan,
   DeckPile,
+  FlyingCardsOverlay,
 } from './components/helpers/index.js';
 
 // Auto-UI components (automatic game UI generation)
@@ -39,6 +40,30 @@ export {
   type ElementRef,
   type HighlightableChoice,
 } from './composables/useBoardInteraction.js';
+
+// Animation composables
+export {
+  useElementAnimation,
+  createAnimationCoordinator,
+  prefersReducedMotion,
+  type AnimationOptions,
+  type AnimationCoordinator,
+} from './composables/useElementAnimation.js';
+
+export {
+  useCardFlip,
+  useCardReveal,
+  type CardFlipOptions,
+  type CardFlipReturn,
+} from './composables/useCardFlip.js';
+
+export {
+  useFlyingCards,
+  type FlyingCard,
+  type FlyingCardData,
+  type FlyCardOptions,
+  type FlyingCardsReturn,
+} from './composables/useFlyingCards.js';
 
 // Theming
 export {

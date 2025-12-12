@@ -659,13 +659,20 @@ export class Game<
           };
         } else if (zoneVisibility.mode === 'owner' && element.player?.position !== visibilityPosition) {
           // Owner-only zone and this player doesn't own it - show hidden placeholders
+          // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
           const hiddenChildren: ElementJSON[] = [];
           if (json.children) {
             for (const childJson of json.children) {
+              const systemAttrs: Record<string, unknown> = { __hidden: true };
+              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
+                if (key.startsWith('$')) {
+                  systemAttrs[key] = value;
+                }
+              }
               hiddenChildren.push({
                 className: childJson.className,
                 id: childJson.id,
-                attributes: { __hidden: true },
+                attributes: systemAttrs,
               });
             }
           }

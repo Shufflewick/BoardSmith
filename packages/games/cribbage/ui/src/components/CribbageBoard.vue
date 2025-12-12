@@ -1,7 +1,66 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import ScoringOverlay from './ScoringOverlay.vue';
 import RoundSummary from './RoundSummary.vue';
+import { prefersReducedMotion, useFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
+
+// Animation state - tracks card positions for FLIP animations
+const boardRef = ref<HTMLElement | null>(null);
+const cardPositions = new Map<string, DOMRect>();
+
+// Flying cards animation for discard and starter
+const { flyingCards, flyCard, flyCards } = useFlyingCards();
+const cribStackRef = ref<HTMLElement | null>(null);
+const deckStackRef = ref<HTMLElement | null>(null);
+const starterAreaRef = ref<HTMLElement | null>(null);
+
+// Capture positions of all cards before state changes
+function captureCardPositions() {
+  cardPositions.clear();
+  if (!boardRef.value) return;
+
+  const cards = boardRef.value.querySelectorAll('[data-card-id]');
+  cards.forEach((el) => {
+    const id = el.getAttribute('data-card-id');
+    if (id) {
+      cardPositions.set(id, el.getBoundingClientRect());
+    }
+  });
+}
+
+// Animate cards from old positions to new positions
+function animateCardMovements() {
+  if (prefersReducedMotion.value) return;
+  if (!boardRef.value) return;
+
+  const cards = boardRef.value.querySelectorAll('[data-card-id]');
+
+  cards.forEach((el) => {
+    const id = el.getAttribute('data-card-id');
+    if (!id) return;
+
+    const oldRect = cardPositions.get(id);
+    if (!oldRect) return;
+
+    const newRect = el.getBoundingClientRect();
+    const deltaX = oldRect.left - newRect.left;
+    const deltaY = oldRect.top - newRect.top;
+
+    // Only animate if actually moved
+    if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+      (el as HTMLElement).animate([
+        { transform: `translate(${deltaX}px, ${deltaY}px)` },
+        { transform: 'translate(0, 0)' }
+      ], {
+        duration: 300,
+        easing: 'ease-out',
+        fill: 'backwards'
+      });
+    }
+  });
+
+  cardPositions.clear();
+}
 
 interface Card {
   id: string;
@@ -59,10 +118,25 @@ const opponentHand = computed(() => {
   return handElement?.children || [];
 });
 
+const cribElement = computed(() => {
+  if (!props.gameView) return null;
+  return props.gameView.children?.find((c: any) => c.className === 'Crib');
+});
+
 const crib = computed(() => {
-  if (!props.gameView) return [];
-  const cribElement = props.gameView.children?.find((c: any) => c.className === 'Crib');
-  return cribElement?.children || [];
+  if (!cribElement.value) return [];
+  return cribElement.value.children || [];
+});
+
+// Get crib card count (handles hidden contents which show as childCount)
+const cribCardCount = computed(() => {
+  if (!cribElement.value) return 0;
+  // If there are actual children, count them
+  if (cribElement.value.children?.length > 0) {
+    return cribElement.value.children.length;
+  }
+  // Otherwise use childCount for hidden contents
+  return cribElement.value.childCount || 0;
 });
 
 const playArea = computed(() => {
@@ -71,11 +145,70 @@ const playArea = computed(() => {
   return playElement?.children?.filter((c: any) => c.attributes?.rank) || [];
 });
 
+// Get played cards from the game's PlayedCards zone (cards from completed counts)
+const playedCards = computed(() => {
+  if (!props.gameView) return [];
+  const playedElement = props.gameView.children?.find((c: any) => c.className === 'PlayedCards');
+  return playedElement?.children?.filter((c: any) => c.attributes?.rank) || [];
+});
+
 const starterCard = computed(() => {
   if (!props.gameView) return null;
   const starterElement = props.gameView.children?.find((c: any) => c.className === 'StarterArea');
   const card = starterElement?.children?.find((c: any) => c.attributes?.rank);
   return card || null;
+});
+
+// Get the deck and its card count
+// Note: We search by $type or name because className can be mangled by bundlers
+const deckElement = computed(() => {
+  if (!props.gameView) return null;
+  return props.gameView.children?.find((c: any) =>
+    c.attributes?.$type === 'deck' || c.name === 'deck'
+  );
+});
+
+const deckCardCount = computed(() => {
+  if (!deckElement.value) return 0;
+  // If there are actual children, count them (unlikely since deck is hidden)
+  if (deckElement.value.children?.length > 0) {
+    return deckElement.value.children.length;
+  }
+  // Otherwise use childCount for hidden contents
+  return deckElement.value.childCount || 0;
+});
+
+// Track when starter card appears to trigger fly animation
+const starterCardVisible = computed(() => !!starterCard.value);
+const starterIsFlying = ref(false);
+
+// Watch for starter card appearing - fly it from deck to starter area
+watch(starterCardVisible, async (isVisible, wasVisible) => {
+  if (isVisible && !wasVisible && !prefersReducedMotion.value) {
+    // Starter just appeared - fly it from deck
+    const deckRect = deckStackRef.value?.getBoundingClientRect();
+    const starterRect = starterAreaRef.value?.getBoundingClientRect();
+
+    if (deckRect && starterRect && starterCard.value) {
+      starterIsFlying.value = true;
+
+      await flyCard({
+        id: `starter-${Date.now()}`,
+        startRect: deckRect,
+        endRect: () => starterAreaRef.value?.getBoundingClientRect() ?? starterRect,
+        cardData: {
+          rank: starterCard.value.attributes?.rank,
+          suit: starterCard.value.attributes?.suit,
+          faceUp: false, // Start face down
+        },
+        flip: true, // Flip to face up
+        duration: 500,
+        cardSize: { width: 60, height: 84 }, // Standard card size
+      });
+
+      starterIsFlying.value = false;
+    }
+  }
 });
 
 const myScore = computed(() => {
@@ -320,14 +453,58 @@ async function performDiscard() {
   if (selectedCards.value.length !== 2 || isPerformingAction.value) return;
 
   isPerformingAction.value = true;
+
+  // Capture card positions BEFORE the action (cards will be gone after)
+  const cardsToFly: Array<{
+    id: string;
+    startRect: DOMRect;
+    cardData: { rank: string; suit: string };
+  }> = [];
+
+  for (const cardName of selectedCards.value) {
+    const cardEl = boardRef.value?.querySelector(`[data-card-id="${cardName}"]`);
+    const card = myHand.value.find((c: Card) => c.name === cardName);
+    if (cardEl && card?.attributes?.rank && card?.attributes?.suit) {
+      cardsToFly.push({
+        id: cardName,
+        startRect: cardEl.getBoundingClientRect(),
+        cardData: {
+          rank: card.attributes.rank,
+          suit: card.attributes.suit,
+        },
+      });
+    }
+  }
+
   try {
     // Discard action expects card1 and card2 parameters
     const result = await props.action('discard', {
       card1: selectedCards.value[0],
       card2: selectedCards.value[1],
     });
+
     if (result.success) {
       selectedCards.value = [];
+
+      // Start flying animations from old card positions to crib
+      // Pass a function for endRect so it tracks the crib position as it moves
+      if (cardsToFly.length > 0) {
+        flyCards(
+          cardsToFly.map((card) => ({
+            id: `discard-${card.id}-${Date.now()}`,
+            startRect: card.startRect,
+            endRect: () => boardRef.value?.querySelector('[data-zone="crib"]') as HTMLElement | null,
+            cardData: {
+              rank: card.cardData.rank,
+              suit: card.cardData.suit,
+              faceUp: true,
+            },
+            flip: true,
+            duration: 400,
+          })),
+          100 // stagger by 100ms
+        );
+      }
     }
   } finally {
     isPerformingAction.value = false;
@@ -370,6 +547,24 @@ async function sayGo() {
   }
 }
 
+// Watch for gameView changes and animate card movements
+watch(
+  () => props.gameView,
+  async (newView, oldView) => {
+    if (!oldView) return;
+
+    // Capture positions before Vue updates DOM
+    captureCardPositions();
+
+    // Wait for DOM to update
+    await nextTick();
+
+    // Animate to new positions
+    animateCardMovements();
+  },
+  { deep: false }
+);
+
 // Expose for parent
 defineExpose({
   selectedCards,
@@ -382,7 +577,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="cribbage-board">
+  <div ref="boardRef" class="cribbage-board">
     <!-- Game Over -->
     <div v-if="gameOver" class="game-over">
       <h2>Game Over!</h2>
@@ -391,52 +586,115 @@ defineExpose({
     </div>
 
     <template v-else>
-      <!-- Phase indicator -->
-      <div class="phase-indicator">
-        <span class="phase-badge">{{ cribbagePhase }}</span>
-        <span v-if="cribbagePhase === 'play'" class="running-total">Count: {{ runningTotal }}</span>
-      </div>
-
-      <!-- Play Area (during play phase) -->
-      <div v-if="cribbagePhase === 'play' || playArea.length > 0" class="play-area">
+      <!-- Play Area (current count, up to 31) -->
+      <div v-if="cribbagePhase === 'play'" class="play-area">
         <div class="play-area-header">
-          <span>Play Area</span>
+          <span>Current Count</span>
+          <span class="running-total-inline">{{ runningTotal }}/31</span>
         </div>
-        <div class="played-cards">
+        <div class="current-count-cards">
           <div
-            v-for="card in playArea"
+            v-for="(card, index) in playArea"
             :key="card.id"
-            class="card small"
+            class="card"
+            :data-card-id="card.name"
             :style="{ color: getSuitColor(card.attributes?.suit) }"
           >
             <span class="rank">{{ card.attributes?.rank }}</span>
             <span class="suit">{{ getSuitSymbol(card.attributes?.suit) }}</span>
           </div>
-          <div v-if="playArea.length === 0" class="no-cards">No cards played yet</div>
+          <div v-if="playArea.length === 0" class="no-cards">Waiting for play...</div>
         </div>
       </div>
 
-      <!-- Middle Area: Starter & Crib -->
+      <!-- Middle Area: Deck, Starter, Crib & Played Stack -->
       <div class="middle-area">
+        <!-- Deck -->
+        <div class="deck-area" data-zone="deck">
+          <div class="area-label">Deck</div>
+          <div ref="deckStackRef" class="deck-stack">
+            <template v-if="deckCardCount > 0">
+              <div
+                v-for="i in Math.min(deckCardCount, 5)"
+                :key="'deck-' + i"
+                class="card-back stacked"
+                :style="{ '--stack-index': i - 1 }"
+              ></div>
+            </template>
+            <div v-else class="card-placeholder">Empty</div>
+          </div>
+          <div class="deck-count">{{ deckCardCount }}</div>
+        </div>
+
         <div class="starter-area">
           <div class="area-label">Starter</div>
-          <div v-if="starterCard" class="card" :style="{ color: getSuitColor(starterCard.attributes?.suit) }">
-            <span class="rank">{{ starterCard.attributes?.rank }}</span>
-            <span class="suit">{{ getSuitSymbol(starterCard.attributes?.suit) }}</span>
-          </div>
-          <div v-else class="card-placeholder">
-            <span>?</span>
+          <div ref="starterAreaRef" class="starter-card-container">
+            <!-- Hide actual card while flying animation is active -->
+            <div
+              v-if="starterCard && !starterIsFlying"
+              class="card"
+              :data-card-id="starterCard.name"
+              :style="{ color: getSuitColor(starterCard.attributes?.suit) }"
+            >
+              <span class="rank">{{ starterCard.attributes?.rank }}</span>
+              <span class="suit">{{ getSuitSymbol(starterCard.attributes?.suit) }}</span>
+            </div>
+            <div v-else-if="!starterCard" class="card-placeholder">
+              <span>?</span>
+            </div>
           </div>
         </div>
 
         <div class="crib-area">
           <div class="area-label">Crib ({{ isDealer ? 'Yours' : "Opponent's" }})</div>
-          <div class="crib-cards">
-            <div v-for="(card, i) in crib" :key="i" class="card-back small">
-              <span v-if="card.attributes?.rank">{{ card.attributes.rank }}{{ getSuitSymbol(card.attributes.suit) }}</span>
-              <span v-else>?</span>
+          <div ref="cribStackRef" data-zone="crib" class="crib-stack">
+            <!-- Show actual cards if visible -->
+            <template v-if="crib.length > 0">
+              <div
+                v-for="(card, i) in crib"
+                :key="i"
+                class="card-back stacked"
+                :data-card-id="card.name"
+                :style="{ '--stack-index': i }"
+              >
+                <span v-if="card.attributes?.rank">{{ card.attributes.rank }}{{ getSuitSymbol(card.attributes.suit) }}</span>
+                <span v-else>?</span>
+              </div>
+            </template>
+            <!-- Show card backs for hidden cards based on childCount -->
+            <template v-else-if="cribCardCount > 0">
+              <div
+                v-for="i in cribCardCount"
+                :key="'hidden-' + i"
+                class="card-back stacked"
+                :style="{ '--stack-index': i - 1 }"
+              >
+                <span>?</span>
+              </div>
+            </template>
+            <!-- Empty placeholder when no cards -->
+            <div v-else class="card-placeholder">0 cards</div>
+          </div>
+        </div>
+
+        <!-- Played Stack (cards from completed counts, visible during play phase) -->
+        <div v-if="cribbagePhase === 'play'" class="played-stack-area">
+          <div class="area-label">Played ({{ playedCards.length }})</div>
+          <div class="played-stack">
+            <div
+              v-for="(card, index) in playedCards"
+              :key="card.name || card.id"
+              class="card stacked"
+              :data-card-id="card.name"
+              :style="{
+                color: getSuitColor(card.attributes?.suit || ''),
+                '--stack-index': index
+              }"
+            >
+              <span class="rank">{{ card.attributes?.rank }}</span>
+              <span class="suit">{{ getSuitSymbol(card.attributes?.suit || '') }}</span>
             </div>
-            <div v-if="crib.length === 0" class="card-placeholder small">{{ crib.length }} cards</div>
+            <div v-if="playedCards.length === 0" class="card-placeholder">—</div>
           </div>
         </div>
       </div>
@@ -454,6 +712,7 @@ defineExpose({
               clickable: isMyTurn && !isPerformingAction && isCardPlayable(card.attributes?.rank || ''),
               unplayable: cribbagePhase === 'play' && !isCardPlayable(card.attributes?.rank || '')
             }"
+            :data-card-id="card.name"
             :style="{ color: getSuitColor(card.attributes?.suit || '') }"
             @click="toggleCardSelection(card.name)"
           >
@@ -528,6 +787,13 @@ defineExpose({
       :crib="roundSummaryCrib"
       @complete="handleRoundSummaryComplete"
     />
+
+    <!-- Flying cards animation overlay -->
+    <FlyingCardsOverlay
+      :flying-cards="flyingCards"
+      :get-suit-symbol="getSuitSymbol"
+      :get-suit-color="getSuitColor"
+    />
   </div>
 </template>
 
@@ -585,31 +851,6 @@ defineExpose({
   font-size: 1.2rem;
 }
 
-/* Phase indicator */
-.phase-indicator {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 15px;
-}
-
-.phase-badge {
-  background: rgba(139, 90, 43, 0.3);
-  color: #d4a574;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-}
-
-.running-total {
-  background: rgba(139, 90, 43, 0.3);
-  color: #d4a574;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-weight: bold;
-}
-
 /* Play Area */
 .play-area {
   background: rgba(0, 100, 0, 0.2);
@@ -622,13 +863,30 @@ defineExpose({
   margin-bottom: 10px;
   color: #aaa;
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.played-cards {
+.play-area-header .card-count {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.play-area-header .running-total-inline {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  color: #d4a574;
+}
+
+.current-count-cards {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  min-height: 60px;
+  min-height: 65px;
+  align-items: center;
 }
 
 /* Middle Area */
@@ -638,20 +896,69 @@ defineExpose({
   gap: 40px;
 }
 
-.starter-area, .crib-area {
+.starter-area, .crib-area, .played-stack-area, .deck-area {
   text-align: center;
 }
 
 .area-label {
   color: #aaa;
   font-size: 0.85rem;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
-.crib-cards {
+.deck-stack, .crib-stack {
+  position: relative;
+  width: 60px;
+  height: 84px;
+  margin: 0 auto;
+}
+
+.deck-stack .card-back.stacked,
+.crib-stack .card-back.stacked {
+  position: absolute;
+  top: calc(var(--stack-index, 0) * -2px);
+  left: calc(var(--stack-index, 0) * 2px);
+  z-index: calc(var(--stack-index, 0) + 1);
+  box-shadow: -1px 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.deck-stack .card-placeholder,
+.crib-stack .card-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.deck-count {
+  color: #888;
+  font-size: 0.75rem;
+  margin-top: 8px;
+}
+
+/* Played Stack */
+.played-stack {
+  position: relative;
+  width: 60px;
+  height: 84px;
+  margin: 0 auto;
+}
+
+.played-stack .card.stacked {
+  position: absolute;
+  top: calc(var(--stack-index, 0) * -2px);
+  left: calc(var(--stack-index, 0) * 2px);
+  z-index: calc(var(--stack-index, 0) + 1);
+  box-shadow: -1px 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.played-stack .card-placeholder {
+  width: 100%;
+  height: 100%;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
   display: flex;
-  gap: 4px;
+  align-items: center;
   justify-content: center;
+  color: #666;
 }
 
 /* My Hand */
@@ -854,5 +1161,80 @@ defineExpose({
   font-size: 1.5rem;
   color: #d4a574;
   margin-bottom: 10px;
+}
+
+/* Starter card container */
+.starter-card-container {
+  width: 60px;
+  height: 84px;
+}
+
+/* Card flip animation (legacy) */
+.card-flip-container {
+  perspective: 1000px;
+}
+
+.card.card-flippable {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.5s ease-in-out;
+}
+
+.card.card-face-down {
+  transform: rotateY(180deg);
+}
+
+.card.card-face-up {
+  transform: rotateY(0deg);
+}
+
+.card .card-front,
+.card .card-back-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.card .card-front {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.card .card-back-face {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotateY(180deg);
+  background: linear-gradient(135deg, #8b5a2b, #6b4423);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card .card-back-face::before {
+  content: '';
+  width: 60%;
+  height: 70%;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(212, 165, 116, 0.3),
+    rgba(212, 165, 116, 0.3) 2px,
+    transparent 2px,
+    transparent 8px
+  );
+  border-radius: 4px;
+}
+
+/* Reduced motion: instant flip */
+@media (prefers-reduced-motion: reduce) {
+  .card.card-flippable {
+    transition: none;
+  }
 }
 </style>

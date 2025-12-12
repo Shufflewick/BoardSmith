@@ -1,0 +1,153 @@
+/**
+ * Card Flip Animation Styles
+ *
+ * Usage:
+ * ```html
+ * <div class="card-flip-container">
+ *   <div class="card-flippable card-face-up">
+ *     <div class="card-front">Card content</div>
+ *     <div class="card-back"></div>
+ *   </div>
+ * </div>
+ * ```
+ *
+ * Classes:
+ * - .card-flip-container: Parent element that provides 3D perspective
+ * - .card-flippable: The card element that rotates
+ * - .card-face-up: Card showing front face
+ * - .card-face-down: Card showing back face (rotated 180deg)
+ * - .card-flipping: Applied during flip animation
+ * - .card-front: Front face of the card
+ * - .card-back: Back face of the card
+ */
+
+/* Container provides 3D perspective */
+.card-flip-container {
+  perspective: 1000px;
+}
+
+/* The flippable card element */
+.card-flippable {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.4s ease-in-out;
+}
+
+/* Face-down state: rotated 180 degrees */
+.card-flippable.card-face-down {
+  transform: rotateY(180deg);
+}
+
+/* Face-up state: no rotation */
+.card-flippable.card-face-up {
+  transform: rotateY(0deg);
+}
+
+/* During flip animation - add slight scale for emphasis */
+.card-flippable.card-flipping {
+  /* Animation is handled by the transition, but we can add extra effects */
+}
+
+/* Both faces share these properties */
+.card-front,
+.card-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 8px;
+}
+
+/* Front face - visible when card is face-up */
+.card-front {
+  /* Front face is at 0deg rotation, visible by default */
+  transform: rotateY(0deg);
+}
+
+/* Back face - visible when card is face-down */
+.card-back {
+  /* Back face is pre-rotated 180deg so it shows when parent rotates */
+  transform: rotateY(180deg);
+
+  /* Default card back styling - can be overridden */
+  background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+  border: 2px solid #4a6fa5;
+
+  /* Decorative pattern */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-back::before {
+  content: '';
+  width: 60%;
+  height: 70%;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(58, 58, 90, 0.5),
+    rgba(58, 58, 90, 0.5) 2px,
+    transparent 2px,
+    transparent 8px
+  );
+  border-radius: 4px;
+}
+
+/* Reduced motion: instant flip, no transition */
+@media (prefers-reduced-motion: reduce) {
+  .card-flippable {
+    transition: none;
+  }
+
+  /* Still show correct face, just without animation */
+  .card-flippable.card-face-down {
+    transform: rotateY(180deg);
+  }
+
+  .card-flippable.card-face-up {
+    transform: rotateY(0deg);
+  }
+}
+
+/* ============================================
+   Alternative: Inline card (no absolute positioning)
+   Use when cards need to flow in layout
+   ============================================ */
+
+.card-flip-inline {
+  perspective: 1000px;
+  display: inline-block;
+}
+
+.card-flip-inline .card-flippable {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.4s ease-in-out;
+}
+
+.card-flip-inline .card-flippable.card-face-down {
+  transform: rotateY(180deg);
+}
+
+/* For inline mode, front and back are siblings that overlap */
+.card-flip-inline .card-inner {
+  position: relative;
+}
+
+.card-flip-inline .card-front {
+  position: relative;
+  backface-visibility: hidden;
+}
+
+.card-flip-inline .card-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  transform: rotateY(180deg);
+}
