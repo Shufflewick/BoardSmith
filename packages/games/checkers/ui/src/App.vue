@@ -93,15 +93,27 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
       </div>
       <div class="player-stat">
         <span class="stat-label">Pieces:</span>
-        <span class="stat-value">{{ getPieceCount(player.position, gameView) }}</span>
+        <span
+          class="stat-value"
+          data-player-stat="pieces"
+          :data-player-position="player.position"
+        >{{ getPieceCount(player.position, gameView) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Kings:</span>
-        <span class="stat-value kings">{{ getKingCount(player.position, gameView) }}</span>
+        <span
+          class="stat-value kings"
+          data-player-stat="kings"
+          :data-player-position="player.position"
+        >{{ getKingCount(player.position, gameView) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Captured:</span>
-        <span class="stat-value captured">{{ getCapturedCount(player.position, gameView) }}</span>
+        <span
+          class="stat-value captured"
+          data-player-stat="captured"
+          :data-player-position="player.position"
+        >{{ getCapturedCount(player.position, gameView) }}</span>
       </div>
     </template>
   </GameShell>

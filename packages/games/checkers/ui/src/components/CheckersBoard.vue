@@ -1,59 +1,57 @@
 <script setup lang="ts">
 import { ref, computed, watch, watchEffect, nextTick } from 'vue';
-import { useBoardInteraction, prefersReducedMotion } from '@boardsmith/ui';
+import {
+  useBoardInteraction,
+  prefersReducedMotion,
+  useFLIPAnimation,
+  useFlyingCards,
+  FlyingCardsOverlay,
+  flyToPlayerStat,
+  findElement,
+} from '@boardsmith/ui';
 
 // Board interaction for syncing with ActionPanel
 const boardInteraction = useBoardInteraction();
 
 // Animation state - tracks piece positions for FLIP animations
 const boardRef = ref<HTMLElement | null>(null);
-const piecePositions = new Map<number, DOMRect>();
 
-// Capture positions of all pieces before state changes
-function capturePositions() {
-  piecePositions.clear();
+// FLIP animation for piece movements
+const { capturePositions, animateToNewPositions } = useFLIPAnimation({
+  containerRef: boardRef,
+  selector: '[data-piece-id]',
+  duration: 300,
+  easing: 'ease-out',
+});
+
+// Flying animation for captured pieces
+const { flyingCards, flyCards } = useFlyingCards();
+
+// Track piece positions and ownership for capture animations
+interface PieceCaptureData {
+  rect: DOMRect;
+  playerPosition: number; // Owner of the piece (0 = dark, 1 = light)
+}
+const pieceRects = ref<Map<number, PieceCaptureData>>(new Map());
+
+// Capture piece positions and ownership from DOM (before state changes)
+function capturePieceRects() {
   if (!boardRef.value) return;
+  pieceRects.value.clear();
 
+  // Capture from DOM positions
   const pieces = boardRef.value.querySelectorAll('[data-piece-id]');
   pieces.forEach((el) => {
     const id = parseInt(el.getAttribute('data-piece-id') || '0', 10);
     if (id) {
-      piecePositions.set(id, el.getBoundingClientRect());
-    }
-  });
-}
-
-// Animate pieces from old positions to new positions
-function animateMovements() {
-  if (prefersReducedMotion.value) return;
-  if (!boardRef.value) return;
-
-  const pieces = boardRef.value.querySelectorAll('[data-piece-id]');
-
-  pieces.forEach((el) => {
-    const id = parseInt(el.getAttribute('data-piece-id') || '0', 10);
-    const oldRect = piecePositions.get(id);
-
-    if (!oldRect) return;
-
-    const newRect = el.getBoundingClientRect();
-    const deltaX = oldRect.left - newRect.left;
-    const deltaY = oldRect.top - newRect.top;
-
-    // Only animate if actually moved
-    if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
-      (el as HTMLElement).animate([
-        { transform: `translate(${deltaX}px, ${deltaY}px)` },
-        { transform: 'translate(0, 0)' }
-      ], {
-        duration: 300,
-        easing: 'ease-out',
-        fill: 'backwards'
+      // Determine owner from piece class (dark = player 0, light = player 1)
+      const isDark = el.classList.contains('dark');
+      pieceRects.value.set(id, {
+        rect: el.getBoundingClientRect(),
+        playerPosition: isDark ? 0 : 1,
       });
     }
   });
-
-  piecePositions.clear();
 }
 
 interface CheckerPiece {
@@ -104,11 +102,8 @@ const props = defineProps<{
 const selectedPieceId = ref<number | null>(null);
 const isMoving = ref(false);
 
-// Get the board from gameView
-const board = computed(() => {
-  if (!props.gameView?.children) return null;
-  return props.gameView.children.find((c: any) => c.className === 'Board');
-});
+// Get the board from gameView using helper
+const board = computed(() => findElement(props.gameView, { className: 'Board' }));
 
 // Get all squares organized in a map for fast lookup
 const squaresMap = computed<Map<string, Square>>(() => {
@@ -118,7 +113,7 @@ const squaresMap = computed<Map<string, Square>>(() => {
   for (const child of board.value.children) {
     if (child.className === 'Square') {
       const key = `${child.attributes?.row}-${child.attributes?.col}`;
-      map.set(key, child);
+      map.set(key, child as unknown as Square);
     }
   }
   return map;
@@ -539,22 +534,85 @@ const currentPlayerColor = computed(() => {
   return currentPos === 0 ? 'Dark' : 'Light';
 });
 
-// Watch for gameView changes and animate piece movements
+// Track previous piece IDs to detect captures
+const prevPieceIds = ref<Set<number>>(new Set());
+const isInitialized = ref(false);
+
+// Initialize tracking
+watch(
+  () => props.gameView,
+  () => {
+    if (!isInitialized.value && props.gameView) {
+      // Collect all piece IDs on first load
+      const ids = new Set<number>();
+      for (const [, square] of squaresMap.value) {
+        const piece = getPiece(square);
+        if (piece) {
+          ids.add(piece.id);
+        }
+      }
+      prevPieceIds.value = ids;
+      isInitialized.value = true;
+    }
+  },
+  { immediate: true }
+);
+
+// Watch for gameView changes and animate piece movements + captures
 watch(
   () => props.gameView,
   async (newView, oldView) => {
-    if (!oldView) return;
+    if (!oldView || !isInitialized.value) return;
+
+    // Snapshot previous state
+    const snapshotPrevIds = new Set(prevPieceIds.value);
 
     // Capture positions before Vue updates DOM
     capturePositions();
+    capturePieceRects();
 
     // Wait for DOM to update
     await nextTick();
 
-    // Animate to new positions
-    animateMovements();
+    // Get current piece IDs
+    const currentIds = new Set<number>();
+    for (const [, square] of squaresMap.value) {
+      const piece = getPiece(square);
+      if (piece) {
+        currentIds.add(piece.id);
+      }
+    }
+
+    // Animate pieces to new positions
+    animateToNewPositions();
+
+    // Detect captured pieces (were in previous, not in current)
+    if (!prefersReducedMotion.value) {
+      for (const id of snapshotPrevIds) {
+        if (!currentIds.has(id)) {
+          // This piece was captured - fly it to the capturing player's stats
+          const pieceData = pieceRects.value.get(id);
+          if (pieceData) {
+            // The capturing player is the opponent of the piece owner
+            const capturingPlayer = pieceData.playerPosition === 0 ? 1 : 0;
+
+            // Use faceUp to encode piece color (true = dark, false = light)
+            flyToPlayerStat(flyCards, {
+              cards: [{ rect: pieceData.rect, faceUp: pieceData.playerPosition === 0 }],
+              playerPosition: capturingPlayer,
+              statName: 'captured',
+              duration: 400,
+              cardSize: { width: 40, height: 40 },
+            });
+          }
+        }
+      }
+    }
+
+    // Update tracking
+    prevPieceIds.value = currentIds;
   },
-  { deep: false }
+  { flush: 'sync' }
 );
 </script>
 
@@ -623,6 +681,16 @@ watch(
         Captures are mandatory - you must jump!
       </div>
     </div>
+
+    <!-- Flying pieces animation overlay -->
+    <FlyingCardsOverlay :flying-cards="flyingCards">
+      <template #card="{ card }">
+        <div
+          class="flying-piece"
+          :class="card.cardData.faceUp ? 'dark' : 'light'"
+        ></div>
+      </template>
+    </FlyingCardsOverlay>
   </div>
 </template>
 
@@ -837,5 +905,23 @@ watch(
   font-size: 1.5rem;
   color: #00ff88;
   margin-bottom: 10px;
+}
+
+/* Flying piece animation */
+.flying-piece {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.flying-piece.dark {
+  background: linear-gradient(145deg, #4a4a4a, #2a2a2a);
+  border: 2px solid #1a1a1a;
+}
+
+.flying-piece.light {
+  background: linear-gradient(145deg, #f5f5f5, #d0d0d0);
+  border: 2px solid #aaa;
 }
 </style>
