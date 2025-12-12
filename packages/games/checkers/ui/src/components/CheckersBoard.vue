@@ -7,7 +7,12 @@ import {
   useFlyingCards,
   FlyingCardsOverlay,
   flyToPlayerStat,
-  findElement,
+  useGameGrid,
+  useElementChangeTracker,
+  isMyElement,
+  isOpponentElement,
+  toAlgebraicNotation,
+  type GameViewElement,
 } from '@boardsmith/ui';
 
 // Board interaction for syncing with ActionPanel
@@ -27,32 +32,16 @@ const { capturePositions, animateToNewPositions } = useFLIPAnimation({
 // Flying animation for captured pieces
 const { flyingCards, flyCards } = useFlyingCards();
 
-// Track piece positions and ownership for capture animations
-interface PieceCaptureData {
-  rect: DOMRect;
-  playerPosition: number; // Owner of the piece (0 = dark, 1 = light)
-}
-const pieceRects = ref<Map<number, PieceCaptureData>>(new Map());
-
-// Capture piece positions and ownership from DOM (before state changes)
-function capturePieceRects() {
-  if (!boardRef.value) return;
-  pieceRects.value.clear();
-
-  // Capture from DOM positions
-  const pieces = boardRef.value.querySelectorAll('[data-piece-id]');
-  pieces.forEach((el) => {
-    const id = parseInt(el.getAttribute('data-piece-id') || '0', 10);
-    if (id) {
-      // Determine owner from piece class (dark = player 0, light = player 1)
-      const isDark = el.classList.contains('dark');
-      pieceRects.value.set(id, {
-        rect: el.getBoundingClientRect(),
-        playerPosition: isDark ? 0 : 1,
-      });
-    }
-  });
-}
+// Track piece positions and ownership for capture animations using shared utility
+const pieceTracker = useElementChangeTracker<number>({
+  containerRef: boardRef,
+  selector: '[data-piece-id]',
+  getElementId: (el) => parseInt(el.getAttribute('data-piece-id') || '0', 10),
+  getElementData: (el) => ({
+    // Track which player owns this piece (dark = player 0, light = player 1)
+    playerPosition: el.classList.contains('dark') ? 0 : 1,
+  }),
+});
 
 interface CheckerPiece {
   id: number;
@@ -102,27 +91,22 @@ const props = defineProps<{
 const selectedPieceId = ref<number | null>(null);
 const isMoving = ref(false);
 
-// Get the board from gameView using helper
-const board = computed(() => findElement(props.gameView, { className: 'Board' }));
-
-// Get all squares organized in a map for fast lookup
-const squaresMap = computed<Map<string, Square>>(() => {
-  const map = new Map<string, Square>();
-  if (!board.value?.children) return map;
-
-  for (const child of board.value.children) {
-    if (child.className === 'Square') {
-      const key = `${child.attributes?.row}-${child.attributes?.col}`;
-      map.set(key, child as unknown as Square);
-    }
-  }
-  return map;
+// Use game grid utilities for board operations
+const {
+  board,
+  grid: squaresMap,
+  getCellAt: getSquare,
+  getChildAt,
+  toNotation: squareToNotation,
+} = useGameGrid<Square>({
+  gameView: () => props.gameView,
+  boardClassName: 'Board',
+  cellClassName: 'Square',
+  rowAttr: 'row',
+  colAttr: 'col',
+  rows: 8,
+  cols: 8,
 });
-
-// Get square at position
-function getSquare(row: number, col: number): Square | undefined {
-  return squaresMap.value.get(`${row}-${col}`);
-}
 
 // Get piece on a square
 function getPiece(square: Square | undefined): CheckerPiece | undefined {
@@ -132,19 +116,17 @@ function getPiece(square: Square | undefined): CheckerPiece | undefined {
 
 // Get piece at position
 function getPieceAt(row: number, col: number): CheckerPiece | undefined {
-  return getPiece(getSquare(row, col));
+  return getChildAt(row, col, 'CheckerPiece') as CheckerPiece | undefined;
 }
 
-// Check if a piece belongs to the current player
+// Check if a piece belongs to the current player (using shared utility)
 function isMyPiece(piece: CheckerPiece | undefined): boolean {
-  if (!piece) return false;
-  return piece.attributes?.player?.position === props.playerPosition;
+  return isMyElement(piece as GameViewElement | undefined, props.playerPosition);
 }
 
-// Check if a piece belongs to the opponent
+// Check if a piece belongs to the opponent (using shared utility)
 function isOpponentPiece(piece: CheckerPiece | undefined): boolean {
-  if (!piece) return false;
-  return piece.attributes?.player?.position !== props.playerPosition;
+  return isOpponentElement(piece as GameViewElement | undefined, props.playerPosition);
 }
 
 // Get forward direction for current player
@@ -355,13 +337,6 @@ function handleSquareClick(row: number, col: number) {
   }
 }
 
-// Convert row/col to algebraic notation (a1-h8)
-function squareToNotation(row: number, col: number): string {
-  const colLetter = String.fromCharCode(97 + col); // a-h
-  const rowNumber = 8 - row; // 1-8 (row 0 = 8, row 7 = 1)
-  return `${colLetter}${rowNumber}`;
-}
-
 // Check if a square is highlighted from ActionPanel hover
 function isHighlightedFromPanel(row: number, col: number): boolean {
   if (!boardInteraction) return false;
@@ -534,15 +509,11 @@ const currentPlayerColor = computed(() => {
   return currentPos === 0 ? 'Dark' : 'Light';
 });
 
-// Track previous piece IDs to detect captures
-const prevPieceIds = ref<Set<number>>(new Set());
-const isInitialized = ref(false);
-
-// Initialize tracking
+// Initialize piece tracking on first load
 watch(
   () => props.gameView,
   () => {
-    if (!isInitialized.value && props.gameView) {
+    if (!pieceTracker.isInitialized.value && props.gameView) {
       // Collect all piece IDs on first load
       const ids = new Set<number>();
       for (const [, square] of squaresMap.value) {
@@ -551,8 +522,7 @@ watch(
           ids.add(piece.id);
         }
       }
-      prevPieceIds.value = ids;
-      isInitialized.value = true;
+      pieceTracker.initialize(ids);
     }
   },
   { immediate: true }
@@ -562,14 +532,14 @@ watch(
 watch(
   () => props.gameView,
   async (newView, oldView) => {
-    if (!oldView || !isInitialized.value) return;
+    if (!oldView || !pieceTracker.isInitialized.value) return;
 
-    // Snapshot previous state
-    const snapshotPrevIds = new Set(prevPieceIds.value);
+    // Snapshot previous state using shared tracker
+    const snapshotPrevIds = new Set(pieceTracker.prevIds.value);
 
     // Capture positions before Vue updates DOM
     capturePositions();
-    capturePieceRects();
+    pieceTracker.capturePositions();
 
     // Wait for DOM to update
     await nextTick();
@@ -586,31 +556,30 @@ watch(
     // Animate pieces to new positions
     animateToNewPositions();
 
-    // Detect captured pieces (were in previous, not in current)
+    // Detect captured pieces using shared tracker utility
     if (!prefersReducedMotion.value) {
-      for (const id of snapshotPrevIds) {
-        if (!currentIds.has(id)) {
-          // This piece was captured - fly it to the capturing player's stats
-          const pieceData = pieceRects.value.get(id);
-          if (pieceData) {
-            // The capturing player is the opponent of the piece owner
-            const capturingPlayer = pieceData.playerPosition === 0 ? 1 : 0;
+      const removedIds = pieceTracker.getRemovedIds(snapshotPrevIds, currentIds);
+      for (const id of removedIds) {
+        // This piece was captured - fly it to the capturing player's stats
+        const pieceData = pieceTracker.positions.value.get(id);
+        if (pieceData) {
+          // The capturing player is the opponent of the piece owner
+          const capturingPlayer = pieceData.playerPosition === 0 ? 1 : 0;
 
-            // Use faceUp to encode piece color (true = dark, false = light)
-            flyToPlayerStat(flyCards, {
-              cards: [{ rect: pieceData.rect, faceUp: pieceData.playerPosition === 0 }],
-              playerPosition: capturingPlayer,
-              statName: 'captured',
-              duration: 400,
-              cardSize: { width: 40, height: 40 },
-            });
-          }
+          // Use faceUp to encode piece color (true = dark, false = light)
+          flyToPlayerStat(flyCards, {
+            cards: [{ rect: pieceData.rect, faceUp: pieceData.playerPosition === 0 }],
+            playerPosition: capturingPlayer,
+            statName: 'captured',
+            duration: 400,
+            cardSize: { width: 40, height: 40 },
+          });
         }
       }
     }
 
-    // Update tracking
-    prevPieceIds.value = currentIds;
+    // Update tracking using shared tracker
+    pieceTracker.updateIds(currentIds);
   },
   { flush: 'sync' }
 );

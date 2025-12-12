@@ -7,9 +7,10 @@
  * This is useful for:
  * - Flying cards from source to destination when cards are dealt
  * - Detecting when cards leave a hand (e.g., for book formation animations)
+ * - Animating captured pieces in checkers/chess
  * - Tracking counts (e.g., opponent card count, deck count)
  *
- * ## Usage
+ * ## Basic Usage (Cards)
  *
  * ```typescript
  * import { useElementChangeTracker } from '@boardsmith/ui';
@@ -25,63 +26,60 @@
  *   updateIds,
  * } = useElementChangeTracker({
  *   containerRef: handRef,
- *   cardSelector: '[data-card-id]',
- *   getCardId: (el) => parseInt(el.getAttribute('data-card-id') || '0', 10),
+ *   selector: '[data-card-id]',
+ *   getElementId: (el) => parseInt(el.getAttribute('data-card-id') || '0', 10),
+ * });
+ * ```
+ *
+ * ## With Element Metadata (Checkers Example)
+ *
+ * Track piece ownership so you can animate captured pieces correctly:
+ *
+ * ```typescript
+ * const { positions, capturePositions } = useElementChangeTracker({
+ *   containerRef: boardRef,
+ *   selector: '[data-piece-id]',
+ *   getElementId: (el) => parseInt(el.getAttribute('data-piece-id') || '0', 10),
+ *   getElementData: (el) => ({
+ *     // Track which player owns this piece (dark = 0, light = 1)
+ *     playerPosition: el.classList.contains('dark') ? 0 : 1,
+ *     isKing: el.classList.contains('king'),
+ *   }),
  * });
  *
- * // In a watcher
- * watch(
- *   () => props.gameView,
- *   () => {
- *     const snapshot = new Set(prevIds.value);
- *     capturePositions();
- *
- *     await nextTick();
- *
- *     const currentIds = new Set(myHand.value?.children?.map(c => c.id));
- *     const removed = getRemovedIds(snapshot, currentIds);
- *     const added = getAddedIds(snapshot, currentIds);
- *
- *     if (removed.size > 0) {
- *       // Animate removed cards using positions.value
- *     }
- *
- *     updateIds(currentIds);
- *   },
- *   { flush: 'sync' }
- * );
+ * // Later, when detecting captures:
+ * const pieceData = positions.value.get(capturedId);
+ * // pieceData.rect - position for animation
+ * // pieceData.playerPosition - owner for correct styling
  * ```
  */
 
 import { ref, type Ref } from 'vue';
 
-export interface CardPositionData {
-  /** Bounding rectangle of the card element */
+export interface ElementPositionData {
+  /** Bounding rectangle of the element */
   rect: DOMRect;
-  /** Card rank (if available) */
-  rank?: string;
-  /** Card suit (if available) */
-  suit?: string;
   /** Any additional data captured from the element */
   [key: string]: any;
 }
 
+
 export interface ElementChangeTrackerOptions<T = number> {
-  /** Ref to the container element to query for cards */
+  /** Ref to the container element to query for elements */
   containerRef: Ref<HTMLElement | null>;
-  /** CSS selector to find card elements (default: '[data-card-id]') */
-  cardSelector?: string;
-  /** Function to extract ID from a card element */
-  getCardId: (el: Element) => T;
-  /** Optional function to extract additional data from a card element */
-  getCardData?: (el: Element) => Omit<CardPositionData, 'rect'>;
+  /** CSS selector to find elements (default: '[data-card-id]') */
+  selector?: string;
+  /** Function to extract ID from an element */
+  getElementId: (el: Element) => T;
+  /** Optional function to extract additional data from an element (e.g., ownership, type) */
+  getElementData?: (el: Element) => Omit<ElementPositionData, 'rect'>;
 }
 
 export interface ElementChangeTrackerReturn<T = number> {
   /** Previous set of element IDs (before state change) */
   prevIds: Ref<Set<T>>;
   /** Map of captured positions keyed by element ID */
-  positions: Ref<Map<T, CardPositionData>>;
+  positions: Ref<Map<T, ElementPositionData>>;
   /** Capture current positions from DOM */
   capturePositions: () => void;
   /** Get IDs that were added (in current but not in previous) */
@@ -109,17 +107,17 @@ export function useElementChangeTracker<T = number>(
 ): ElementChangeTrackerReturn<T> {
   const {
     containerRef,
-    cardSelector = '[data-card-id]',
-    getCardId,
-    getCardData,
+    selector = '[data-card-id]',
+    getElementId,
+    getElementData,
   } = options;
 
   const prevIds = ref<Set<T>>(new Set()) as Ref<Set<T>>;
-  const positions = ref<Map<T, CardPositionData>>(new Map()) as Ref<Map<T, CardPositionData>>;
+  const positions = ref<Map<T, ElementPositionData>>(new Map()) as Ref<Map<T, ElementPositionData>>;
   const isInitialized = ref(false);
 
   /**
-   * Capture current positions of all card elements from the DOM.
+   * Capture current positions of all elements from the DOM.
    * Call this BEFORE Vue updates the DOM (in a sync watcher).
    */
   function capturePositions(): void {
@@ -127,12 +125,12 @@ export function useElementChangeTracker<T = number>(
 
     if (!containerRef.value) return;
 
-    const cards = containerRef.value.querySelectorAll(cardSelector);
-    cards.forEach((el) => {
-      const id = getCardId(el);
+    const elements = containerRef.value.querySelectorAll(selector);
+    elements.forEach((el) => {
+      const id = getElementId(el);
       if (id !== null && id !== undefined) {
         const rect = el.getBoundingClientRect();
-        const extraData = getCardData ? getCardData(el) : {};
+        const extraData = getElementData ? getElementData(el) : {};
         positions.value.set(id, { rect, ...extraData });
       }
     });

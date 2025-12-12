@@ -146,6 +146,46 @@ export function getCardData(element: GameElement | null | undefined): { rank: st
 }
 
 /**
+ * Get the player position that owns an element.
+ * Returns undefined if the element has no player owner.
+ */
+export function getElementOwner(element: GameElement | null | undefined): number | undefined {
+  if (!element) return undefined;
+  return (element.attributes as any)?.player?.position;
+}
+
+/**
+ * Check if an element belongs to a specific player.
+ */
+export function isOwnedByPlayer(
+  element: GameElement | null | undefined,
+  playerPosition: number
+): boolean {
+  return getElementOwner(element) === playerPosition;
+}
+
+/**
+ * Check if an element belongs to the specified player (convenience for "my" checks).
+ */
+export function isMyElement(
+  element: GameElement | null | undefined,
+  myPlayerPosition: number
+): boolean {
+  return isOwnedByPlayer(element, myPlayerPosition);
+}
+
+/**
+ * Check if an element belongs to an opponent (any player that isn't the specified player).
+ */
+export function isOpponentElement(
+  element: GameElement | null | undefined,
+  myPlayerPosition: number
+): boolean {
+  const owner = getElementOwner(element);
+  return owner !== undefined && owner !== myPlayerPosition;
+}
+
+/**
  * Composable that returns all helper functions.
  * Can be used in Vue components for convenience.
  */
@@ -159,5 +199,9 @@ export function useGameViewHelpers() {
     getCards,
     getFirstCard,
     getCardData,
+    getElementOwner,
+    isOwnedByPlayer,
+    isMyElement,
+    isOpponentElement,
   };
 }

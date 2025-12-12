@@ -91,9 +91,22 @@ export {
   getCards,
   getFirstCard,
   getCardData,
+  getElementOwner,
+  isOwnedByPlayer,
+  isMyElement,
+  isOpponentElement,
   type GameElement as GameViewElement,
   type FindElementOptions,
 } from './composables/useGameViewHelpers.js';
+
+// Grid/board game utilities
+export {
+  useGameGrid,
+  toAlgebraicNotation,
+  fromAlgebraicNotation,
+  type GameGridOptions,
+  type GameGridReturn,
+} from './composables/useGameGrid.js';
 
 // Card display utilities
 export {
@@ -112,7 +125,7 @@ export {
 export {
   useElementChangeTracker,
   useCountTracker,
-  type CardPositionData,
+  type ElementPositionData,
   type ElementChangeTrackerOptions,
   type ElementChangeTrackerReturn,
   type CountTrackerReturn,
