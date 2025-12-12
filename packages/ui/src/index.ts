@@ -44,10 +44,8 @@ export {
 // Animation composables
 export {
   useElementAnimation,
-  createAnimationCoordinator,
   prefersReducedMotion,
   type AnimationOptions,
-  type AnimationCoordinator,
 } from './composables/useElementAnimation.js';
 
 export {
@@ -159,3 +157,10 @@ export {
   themeCSS,
   type ThemeConfig,
 } from './theme.js';
+
+// Shared types
+export type {
+  BaseElementAttributes,
+  ElementMatchOptions,
+  PlayerRef,
+} from './types.js';

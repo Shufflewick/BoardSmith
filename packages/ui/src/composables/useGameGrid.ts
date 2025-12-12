@@ -39,7 +39,11 @@
  */
 
 import { computed, type ComputedRef } from 'vue';
-import { findElement, type GameElement } from './useGameViewHelpers.js';
+import { findElement } from './useGameViewHelpers.js';
+import type { GameElement, BaseElementAttributes } from '../types.js';
+
+// Re-export GameElement for backwards compatibility
+export type { GameElement };
 
 export interface GameGridOptions {
   /** Function that returns the current game view */
@@ -109,6 +113,11 @@ export function useGameGrid<TCell = GameElement>(
     return findElement(view, { className: boardClassName });
   });
 
+  /** Helper to get typed attributes */
+  function getAttrs(element: GameElement): BaseElementAttributes & Record<string, unknown> {
+    return (element.attributes ?? {}) as BaseElementAttributes & Record<string, unknown>;
+  }
+
   // Build a map of cells keyed by "row-col"
   const grid = computed<Map<string, TCell>>(() => {
     const map = new Map<string, TCell>();
@@ -116,8 +125,9 @@ export function useGameGrid<TCell = GameElement>(
 
     for (const child of board.value.children) {
       if (child.className === cellClassName) {
-        const row = (child.attributes as any)?.[rowAttr];
-        const col = (child.attributes as any)?.[colAttr];
+        const attrs = getAttrs(child);
+        const row = attrs[rowAttr as keyof typeof attrs];
+        const col = attrs[colAttr as keyof typeof attrs];
         if (row !== undefined && col !== undefined) {
           map.set(`${row}-${col}`, child as unknown as TCell);
         }

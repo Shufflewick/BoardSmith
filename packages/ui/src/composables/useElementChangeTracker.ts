@@ -60,7 +60,7 @@ export interface ElementPositionData {
   /** Bounding rectangle of the element */
   rect: DOMRect;
   /** Any additional data captured from the element */
-  [key: string]: any;
+  [key: string]: DOMRect | string | number | boolean | undefined;
 }
 
 

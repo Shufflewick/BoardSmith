@@ -44,7 +44,11 @@
  */
 
 import { computed, type ComputedRef } from 'vue';
-import { findElement, type GameElement } from './useGameViewHelpers.js';
+import { findElement } from './useGameViewHelpers.js';
+import type { GameElement, BaseElementAttributes } from '../types.js';
+
+// Re-export GameElement for backwards compatibility
+export type { GameElement };
 
 export type HexOrientation = 'pointy' | 'flat';
 
@@ -151,15 +155,22 @@ export function useHexGrid<TCell = GameElement>(
     return findElement(view, { className: boardClassName });
   });
 
+  /** Helper to get typed attributes */
+  function getAttrs(element: GameElement): BaseElementAttributes & Record<string, unknown> {
+    return (element.attributes ?? {}) as BaseElementAttributes & Record<string, unknown>;
+  }
+
   // Get hex properties from board attributes
   const hexSize = computed(() => {
-    const attrs = board.value?.attributes as any;
-    return attrs?.$hexSize ?? defaultHexSize;
+    if (!board.value) return defaultHexSize;
+    const attrs = getAttrs(board.value);
+    return attrs.$hexSize ?? defaultHexSize;
   });
 
   const orientation = computed<HexOrientation>(() => {
-    const attrs = board.value?.attributes as any;
-    return attrs?.$hexOrientation ?? defaultOrientation;
+    if (!board.value) return defaultOrientation;
+    const attrs = getAttrs(board.value);
+    return attrs.$hexOrientation ?? defaultOrientation;
   });
 
   // Get all cells
@@ -174,9 +185,9 @@ export function useHexGrid<TCell = GameElement>(
   const cellMap = computed<Map<string, TCell>>(() => {
     const map = new Map<string, TCell>();
     for (const cell of cells.value) {
-      const attrs = (cell as any).attributes;
-      const q = attrs?.[qAttr];
-      const r = attrs?.[rAttr];
+      const attrs = getAttrs(cell as unknown as GameElement);
+      const q = attrs[qAttr as keyof typeof attrs];
+      const r = attrs[rAttr as keyof typeof attrs];
       if (q !== undefined && r !== undefined) {
         map.set(`${q},${r}`, cell);
       }
@@ -262,9 +273,9 @@ export function useHexGrid<TCell = GameElement>(
     let maxY = -Infinity;
 
     for (const cell of cellList) {
-      const attrs = (cell as any).attributes;
-      const q = attrs?.[qAttr] ?? 0;
-      const r = attrs?.[rAttr] ?? 0;
+      const attrs = getAttrs(cell as unknown as GameElement);
+      const q = (attrs[qAttr as keyof typeof attrs] as number | undefined) ?? 0;
+      const r = (attrs[rAttr as keyof typeof attrs] as number | undefined) ?? 0;
       const pos = getHexPosition(q, r);
 
       minX = Math.min(minX, pos.x - size);

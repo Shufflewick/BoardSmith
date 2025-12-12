@@ -14,22 +14,15 @@
  * ```
  */
 
-export interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement, ElementMatchOptions, BaseElementAttributes } from '../types.js';
 
-export interface FindElementOptions {
-  /** Match by $type attribute (most reliable, handles bundler mangling) */
-  type?: string;
-  /** Match by element name */
-  name?: string;
-  /** Match by className (may be mangled by bundlers) */
-  className?: string;
+// Re-export for backwards compatibility
+export type { GameElement };
+export type { ElementMatchOptions as FindElementOptions };
+
+/** Helper to get typed attributes from an element */
+function getAttrs(element: GameElement): BaseElementAttributes & Record<string, unknown> {
+  return (element.attributes ?? {}) as BaseElementAttributes & Record<string, unknown>;
 }
 
 /**
@@ -38,14 +31,14 @@ export interface FindElementOptions {
  */
 export function findElement(
   gameView: GameElement | null | undefined,
-  options: FindElementOptions
+  options: ElementMatchOptions
 ): GameElement | undefined {
   if (!gameView?.children) return undefined;
 
   const { type, name, className } = options;
 
   return gameView.children.find((c) => {
-    if (type && (c.attributes as any)?.$type === type) return true;
+    if (type && getAttrs(c).$type === type) return true;
     if (name && c.name === name) return true;
     if (className && c.className === className) return true;
     return false;
@@ -57,14 +50,14 @@ export function findElement(
  */
 export function findElements(
   gameView: GameElement | null | undefined,
-  options: FindElementOptions
+  options: ElementMatchOptions
 ): GameElement[] {
   if (!gameView?.children) return [];
 
   const { type, name, className } = options;
 
   return gameView.children.filter((c) => {
-    if (type && (c.attributes as any)?.$type === type) return true;
+    if (type && getAttrs(c).$type === type) return true;
     if (name && c.name === name) return true;
     if (className && c.className === className) return true;
     return false;
@@ -80,11 +73,10 @@ export function findPlayerHand(
 ): GameElement | undefined {
   if (!gameView?.children) return undefined;
 
-  return gameView.children.find(
-    (c) =>
-      (c.attributes as any)?.$type === 'hand' &&
-      (c.attributes as any)?.player?.position === playerPosition
-  );
+  return gameView.children.find((c) => {
+    const attrs = getAttrs(c);
+    return attrs.$type === 'hand' && attrs.player?.position === playerPosition;
+  });
 }
 
 /**
@@ -95,7 +87,7 @@ export function findAllHands(
 ): GameElement[] {
   if (!gameView?.children) return [];
 
-  return gameView.children.filter((c) => (c.attributes as any)?.$type === 'hand');
+  return gameView.children.filter((c) => getAttrs(c).$type === 'hand');
 }
 
 /**
@@ -120,7 +112,7 @@ export function getElementCount(element: GameElement | null | undefined): number
 export function getCards(element: GameElement | null | undefined): GameElement[] {
   if (!element?.children) return [];
 
-  return element.children.filter((c) => (c.attributes as any)?.rank);
+  return element.children.filter((c) => getAttrs(c).rank !== undefined);
 }
 
 /**
@@ -132,16 +124,17 @@ export function getFirstCard(element: GameElement | null | undefined): GameEleme
 
 /**
  * Extract card data (rank, suit) from a game element.
+ * Returns undefined if the element has no rank attribute.
  */
-export function getCardData(element: GameElement | null | undefined): { rank: string; suit: string } | null {
-  if (!element) return null;
+export function getCardData(element: GameElement | null | undefined): { rank: string; suit: string } | undefined {
+  if (!element) return undefined;
 
-  const attrs = element.attributes as any;
-  if (!attrs?.rank) return null;
+  const attrs = getAttrs(element);
+  if (attrs.rank === undefined) return undefined;
 
   return {
     rank: attrs.rank,
-    suit: attrs.suit || '',
+    suit: attrs.suit ?? '',
   };
 }
 
@@ -151,7 +144,7 @@ export function getCardData(element: GameElement | null | undefined): { rank: st
  */
 export function getElementOwner(element: GameElement | null | undefined): number | undefined {
   if (!element) return undefined;
-  return (element.attributes as any)?.player?.position;
+  return getAttrs(element).player?.position;
 }
 
 /**
