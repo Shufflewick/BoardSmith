@@ -223,13 +223,13 @@ const filteredChoices = computed(() => {
 function selectElement(elementId: number, ref?: ElementRef) {
   if (!currentSelection.value || currentSelection.value.type !== 'element') return;
 
-  // Set the element in args
-  currentArgs.value[currentSelection.value.name] = elementId;
-
   // Update board interaction to highlight the selected element
   if (boardInteraction && ref) {
     boardInteraction.selectElement(ref);
   }
+
+  // Use setSelectionValue which handles auto-execute
+  setSelectionValue(currentSelection.value.name, elementId);
 }
 
 // Execute a choice directly (no confirm step for filtered selections)
@@ -490,7 +490,8 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
     });
 
     if (validElem) {
-      currentArgs.value[currentSelection.value.name] = validElem.id;
+      // Use setSelectionValue which handles auto-execute
+      setSelectionValue(currentSelection.value.name, validElem.id);
     }
     return;
   }
@@ -744,11 +745,6 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   }
 }
 
-function submitAction() {
-  if (currentAction.value && isActionReady.value) {
-    executeAction(currentAction.value, { ...currentArgs.value });
-  }
-}
 
 // Hover handlers for choice buttons
 function handleChoiceHover(choice: ChoiceWithRefs) {
@@ -923,16 +919,6 @@ const otherPlayers = computed(() => {
           />
         </div>
       </div>
-
-      <!-- Submit button -->
-      <button
-        v-if="isActionReady"
-        class="submit-btn"
-        @click="submitAction"
-        :disabled="isExecuting"
-      >
-        {{ isExecuting ? 'Executing...' : 'Confirm' }}
-      </button>
     </div>
   </div>
 
@@ -1168,27 +1154,6 @@ const otherPlayers = computed(() => {
 .text-input input:focus {
   outline: none;
   border-color: #00d9ff;
-}
-
-.submit-btn {
-  padding: 8px 16px;
-  background: linear-gradient(90deg, #00ff88, #00d9ff);
-  color: #1a1a2e;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.submit-btn:hover:not(:disabled) {
-  box-shadow: 0 2px 10px rgba(0, 255, 136, 0.4);
-}
-
-.submit-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .waiting-message {
