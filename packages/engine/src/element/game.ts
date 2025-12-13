@@ -668,10 +668,27 @@ export class Game<
       // If zone has hidden or count-only visibility, handle children specially
       if (zoneVisibility) {
         if (zoneVisibility.mode === 'hidden') {
-          // Don't show children at all
+          // Send children as hidden placeholders with $-prefixed attributes preserved
+          // This allows the UI to render actual card backs with proper images
+          const hiddenChildren: ElementJSON[] = [];
+          if (json.children) {
+            for (const childJson of json.children) {
+              const systemAttrs: Record<string, unknown> = { __hidden: true };
+              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
+                if (key.startsWith('$')) {
+                  systemAttrs[key] = value;
+                }
+              }
+              hiddenChildren.push({
+                className: childJson.className,
+                id: childJson.id,
+                attributes: systemAttrs,
+              });
+            }
+          }
           return {
             ...json,
-            children: undefined,
+            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
         } else if (zoneVisibility.mode === 'count-only') {

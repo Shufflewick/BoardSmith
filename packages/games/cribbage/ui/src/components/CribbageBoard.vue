@@ -145,6 +145,30 @@ function getFaceSpriteStyle(card: Card | null | undefined): Record<string, strin
   return {};
 }
 
+// Helper to generate card preview data for zoom preview feature
+// Returns JSON string for data-card-preview attribute
+function getCardPreviewJson(card: Card | null | undefined, showBack: boolean = false): string {
+  if (!card) return '';
+  return JSON.stringify({
+    rank: card.attributes?.rank,
+    suit: card.attributes?.suit,
+    faceImage: card.attributes?.$images?.face,
+    backImage: card.attributes?.$images?.back,
+    showBack,
+    label: card.name,
+  });
+}
+
+// Helper to generate preview data for card backs (deck/crib stacks)
+function getCardBackPreviewJson(backImage: ImageInfo | null): string {
+  if (!backImage) return '';
+  return JSON.stringify({
+    backImage: backImage,
+    showBack: true,
+    label: 'Card',
+  });
+}
+
 interface ScoringCardData {
   id: string;
   rank: string;
@@ -605,6 +629,7 @@ defineExpose({
             class="card"
             :class="{ 'has-image': getCardImageInfo(card as Card, 'face') }"
             :data-card-id="card.name"
+            :data-card-preview="getCardPreviewJson(card as Card)"
             :style="{ color: getSuitColor((card.attributes?.suit as string) || '') }"
           >
             <img v-if="isUrlFace(card as Card)" :src="getFaceSrc(card as Card)" class="card-image" :alt="`${card.attributes?.rank}${card.attributes?.suit}`" />
@@ -635,6 +660,7 @@ defineExpose({
                 class="card-back stacked"
                 :class="{ 'has-image': cardBackImageInfo }"
                 :style="{ '--stack-index': i - 1 }"
+                :data-card-preview="getCardBackPreviewJson(cardBackImageInfo)"
               >
                 <img v-if="cardBackImageInfo?.type === 'url'" :src="cardBackImageInfo.src" class="card-image" alt="Card back" />
                 <div
@@ -658,6 +684,7 @@ defineExpose({
               class="card"
               :class="{ 'has-image': getCardImageInfo(starterCard as any, 'face') }"
               :data-card-id="starterCard.name"
+              :data-card-preview="getCardPreviewJson(starterCard as any)"
               :style="{ color: getSuitColor((starterCard.attributes?.suit as string) || '') }"
             >
               <img v-if="isUrlFace(starterCard as any)" :src="getFaceSrc(starterCard as any)" class="card-image" :alt="`${starterCard.attributes?.rank}${starterCard.attributes?.suit}`" />
@@ -688,6 +715,7 @@ defineExpose({
                 class="card-back stacked"
                 :class="{ 'has-image': cardBackImageInfo }"
                 :data-card-id="card.name"
+                :data-card-preview="getCardBackPreviewJson(cardBackImageInfo)"
                 :style="{ '--stack-index': i }"
               >
                 <img v-if="cardBackImageInfo?.type === 'url'" :src="cardBackImageInfo.src" class="card-image" alt="Card back" />
@@ -710,6 +738,7 @@ defineExpose({
                 class="card-back stacked"
                 :class="{ 'has-image': cardBackImageInfo }"
                 :style="{ '--stack-index': i - 1 }"
+                :data-card-preview="getCardBackPreviewJson(cardBackImageInfo)"
               >
                 <img v-if="cardBackImageInfo?.type === 'url'" :src="cardBackImageInfo.src" class="card-image" alt="Card back" />
                 <div
@@ -735,6 +764,7 @@ defineExpose({
               class="card stacked"
               :class="{ 'has-image': getCardImageInfo(card as Card, 'face') }"
               :data-card-id="card.name"
+              :data-card-preview="getCardPreviewJson(card as Card)"
               :style="{
                 color: getSuitColor((card.attributes?.suit as string) || ''),
                 '--stack-index': index
@@ -771,6 +801,7 @@ defineExpose({
               unplayable: cribbagePhase === 'play' && !isCardPlayable(card.attributes?.rank || '')
             }"
             :data-card-id="card.name"
+            :data-card-preview="getCardPreviewJson(card)"
             :style="{ color: getSuitColor(card.attributes?.suit || '') }"
             @click="toggleCardSelection(card.name)"
           >
@@ -784,7 +815,6 @@ defineExpose({
               <span class="rank">{{ card.attributes?.rank }}</span>
               <span class="suit">{{ getSuitSymbol(card.attributes?.suit || '') }}</span>
             </template>
-            <span class="point-value">{{ getCardPointValue(card.attributes?.rank || '') }}</span>
           </div>
           <div v-if="myHand.length === 0" class="no-cards">No cards in hand</div>
         </div>

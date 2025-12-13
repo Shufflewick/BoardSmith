@@ -9,7 +9,9 @@ import GameHistory from './GameHistory.vue';
 import GameLobby from './GameLobby.vue';
 import PlayersPanel from './PlayersPanel.vue';
 import WaitingRoom from './WaitingRoom.vue';
+import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
+import { useZoomPreview } from '../composables/useZoomPreview';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 
 interface GameShellProps {
@@ -193,6 +195,9 @@ async function executeAction(actionName: string): Promise<void> {
 // Board interaction state (shared between ActionPanel and game board)
 const boardInteraction = createBoardInteraction();
 provideBoardInteraction(boardInteraction);
+
+// Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards
+const { previewState } = useZoomPreview();
 
 // Provide context to child components
 provide('gameState', state);
@@ -499,6 +504,9 @@ defineExpose({
         {{ error.message }}
       </div>
     </div>
+
+    <!-- Zoom preview overlay (Alt+hover to enlarge cards) -->
+    <ZoomPreviewOverlay :preview-state="previewState" />
   </div>
 </template>
 

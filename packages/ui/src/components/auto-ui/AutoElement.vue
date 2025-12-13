@@ -792,6 +792,48 @@ function handleDrop(event: DragEvent) {
     notation: elementNotation.value || undefined,
   });
 }
+
+// ============================================
+// Zoom Preview Data Attribute (for event delegation)
+// ============================================
+// Standard card display size (used for preview calculations)
+const CARD_DISPLAY_WIDTH = 60;
+const CARD_DISPLAY_HEIGHT = 84;
+
+const cardPreviewData = computed(() => {
+  if (elementType.value !== 'card') return null;
+
+  // Parse card name for rank/suit (e.g., "5H" → { rank: '5', suit: 'H' })
+  const match = props.element.name?.match(/^(\d+|[AJQK])([CDHS]?)$/i);
+  const rank = match?.[1]?.toUpperCase();
+  const suit = (match?.[2] || '').toUpperCase();
+
+  // Get current visibility state
+  const isHidden = props.element.__hidden || props.element.attributes?.__hidden;
+
+  return JSON.stringify({
+    rank,
+    suit,
+    faceImage: cardImages.value?.face,
+    backImage: cardImages.value?.back,
+    showBack: !!isHidden,
+    label: props.element.name || displayLabel.value,
+    width: CARD_DISPLAY_WIDTH,
+    height: CARD_DISPLAY_HEIGHT,
+  });
+});
+
+// Preview data for deck/hand card backs (hidden cards showing backs)
+// Always returns data so zoom preview works even without images
+const cardBackPreviewData = computed(() => {
+  return JSON.stringify({
+    backImage: childBackImage.value || undefined,
+    showBack: true,
+    label: 'Card',
+    width: CARD_DISPLAY_WIDTH,
+    height: CARD_DISPLAY_HEIGHT,
+  });
+});
 </script>
 
 <template>
@@ -825,6 +867,7 @@ function handleDrop(event: DragEvent) {
         }"
         :data-element-id="element.id"
         :data-animatable="true"
+        :data-card-preview="cardPreviewData"
         :draggable="isActionSelectable"
         @click="handleClick"
         @dragstart="handleDragStart"
@@ -894,6 +937,7 @@ function handleDrop(event: DragEvent) {
                 class="hand-card card-back-small"
                 :class="{ 'has-image': childBackImage }"
                 :style="{ '--card-index': i - 1, '--card-count': Math.ceil(element.childCount / 2), '--row': 'back' }"
+                :data-card-preview="cardBackPreviewData"
               >
                 <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
                 <div
@@ -924,6 +968,7 @@ function handleDrop(event: DragEvent) {
                 class="hand-card card-back-small"
                 :class="{ 'has-image': childBackImage }"
                 :style="{ '--card-index': i - 1, '--card-count': handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount, '--row': 'front' }"
+                :data-card-preview="cardBackPreviewData"
               >
                 <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
                 <div
@@ -946,28 +991,17 @@ function handleDrop(event: DragEvent) {
           <span class="deck-label">{{ displayLabel }}</span>
           <span class="deck-count" v-if="childCountDisplay">{{ childCountDisplay }} cards</span>
         </div>
-        <!-- Show stack visualization when contents hidden or count-only -->
-        <template v-if="visibleChildren.length === 0 && childCountDisplay > 0">
-          <div class="deck-stack" :class="{ 'has-overlap': layoutProps.overlap !== undefined }" :data-zone="element.name">
-            <div v-for="i in Math.min(childCountDisplay, 5)" :key="i" class="deck-card" :class="{ 'has-image': childBackImage }" :style="{ '--stack-index': i }">
-              <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
-              <div
-                v-else-if="childBackImage?.type === 'sprite'"
-                class="card-image card-sprite"
-                :style="getSpriteStyle(childBackImage)"
-              ></div>
-            </div>
-          </div>
-        </template>
-        <!-- Show actual cards when visible -->
-        <template v-else-if="visibleChildren.length > 0">
-          <div class="deck-cards" :class="{ 'has-overlap': layoutProps.overlap !== undefined }">
+        <!-- Show stacked cards (hidden or visible) -->
+        <template v-if="visibleChildren.length > 0">
+          <div class="deck-stack" :data-zone="element.name">
+            <!-- Only show up to 5 cards in the visual stack -->
             <AutoElement
-              v-for="(child, index) in visibleChildren"
+              v-for="(child, index) in visibleChildren.slice(0, 5)"
               :key="child.id"
               :element="child"
               :depth="depth + 1"
-              :style="{ '--card-index': index }"
+              class="deck-card-element"
+              :style="{ '--stack-index': index + 1 }"
               @element-click="handleChildClick"
             />
           </div>
@@ -1459,54 +1493,30 @@ function handleDrop(event: DragEvent) {
   align-self: flex-start;
 }
 
-.deck-card {
+/* Actual card elements rendered in deck stack */
+.deck-card-element {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
-  border-radius: 8px;
-  border: 2px solid #4a6fa5;
   top: calc(var(--stack-index, 0) * -2px);
   left: calc(var(--stack-index, 0) * 1px);
 }
 
-.deck-card.has-image {
-  background: transparent;
-  border: none;
+/* Size the card container within the deck */
+.deck-card-element :deep(.card-container) {
+  width: 60px;
+  height: 84px;
 }
 
-.deck-card .card-image {
+.deck-card-element :deep(.card-image) {
   width: 100%;
   height: 100%;
   border-radius: 8px;
-  object-fit: contain;
+  object-fit: cover;
 }
 
-.deck-card .card-sprite {
-  position: absolute;
-  top: 0;
-  left: 0;
+.deck-card-element :deep(.card-back) {
   width: 100%;
   height: 100%;
   border-radius: 8px;
-  background-repeat: no-repeat;
-}
-
-.deck-cards {
-  display: flex;
-  gap: var(--layout-gap, 4px);
-  flex-wrap: wrap;
-  justify-content: var(--layout-align, center);
-  flex-direction: var(--layout-direction, row);
-}
-
-/* Deck overlap layout - stacked appearance */
-.deck-cards.has-overlap > * {
-  margin-top: calc(-1 * var(--layout-overlap, 95%) * 0.98); /* 98px card height * overlap */
-}
-
-.deck-cards.has-overlap > *:first-child {
-  margin-top: 0;
 }
 
 .empty-deck {

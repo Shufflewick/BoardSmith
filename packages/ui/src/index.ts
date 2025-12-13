@@ -15,6 +15,7 @@ export {
   CardFan,
   DeckPile,
   FlyingCardsOverlay,
+  ZoomPreviewOverlay,
 } from './components/helpers/index.js';
 
 // Auto-UI components (automatic game UI generation)
@@ -68,6 +69,13 @@ export {
   type FlyOnAppearOptions,
   type FlyOnAppearReturn,
 } from './composables/useFlyOnAppear.js';
+
+export {
+  useZoomPreview,
+  type CardPreviewData,
+  type PreviewState,
+  type ZoomPreviewReturn,
+} from './composables/useZoomPreview.js';
 
 // Player stat animation utilities
 export {
