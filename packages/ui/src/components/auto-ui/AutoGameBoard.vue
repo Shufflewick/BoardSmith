@@ -58,6 +58,49 @@ provide('playerPosition', props.playerPosition);
 provide('selectableElements', computed(() => props.selectableElements ?? new Set()));
 provide('selectedElements', computed(() => props.selectedElements ?? new Set()));
 
+// Type for parsed image info (matches AutoElement's ImageInfo type)
+type ImageInfo =
+  | { type: 'url'; src: string }
+  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
+
+// Find default back image from any card in the game view
+// Returns full ImageInfo object including sprite coordinates for proper rendering
+function findDefaultBackImage(element: GameElement | null | undefined): ImageInfo | null {
+  if (!element) return null;
+
+  // Check this element's $images
+  const images = element.attributes?.$images as { back?: string | { sprite: string; x?: number; y?: number; width?: number; height?: number } } | undefined;
+  if (images?.back) {
+    if (typeof images.back === 'string') {
+      return { type: 'url', src: images.back };
+    }
+    // For coordinate-based sprites, return the FULL sprite object with coordinates
+    if (typeof images.back === 'object' && images.back.sprite && typeof images.back.x === 'number' && typeof images.back.y === 'number') {
+      return {
+        type: 'sprite',
+        sprite: images.back.sprite,
+        x: images.back.x,
+        y: images.back.y,
+        width: images.back.width ?? 238,
+        height: images.back.height ?? 333,
+      };
+    }
+  }
+
+  // Recursively check children
+  if (element.children) {
+    for (const child of element.children) {
+      const found = findDefaultBackImage(child);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+const defaultBackImage = computed(() => findDefaultBackImage(props.gameView));
+provide('defaultBackImage', defaultBackImage);
+
 // Get top-level children (excluding the root game element itself)
 const topLevelChildren = computed(() => {
   if (!props.gameView) return [];
@@ -104,7 +147,7 @@ const elementVisibility = new Map<number, boolean>();
 // Track parent container NAME for each element (more stable than ID)
 const elementParentName = new Map<number, string>();
 // Track card data for flying animations
-const elementCardData = new Map<number, { rank?: string; suit?: string }>();
+const elementCardData = new Map<number, { rank?: string; suit?: string; faceImage?: string; backImage?: string }>();
 // Track childCount for zones (to detect where cards went when hidden)
 const zoneChildCount = new Map<string, number>();
 
@@ -114,7 +157,7 @@ function collectElementState(
   parentName: string | null,
   stateMap: Map<number, boolean>,
   parentNameMap: Map<number, string>,
-  cardDataMap: Map<number, { rank?: string; suit?: string }>,
+  cardDataMap: Map<number, { rank?: string; suit?: string; faceImage?: unknown; backImage?: unknown }>,
   childCountMap: Map<string, number>
 ) {
   // Check if this is a card
@@ -132,13 +175,19 @@ function collectElementState(
     childCountMap.set(element.name, element.childCount);
   }
 
-  // Extract card data from element name (e.g., "5H" → { rank: '5', suit: 'H' })
+  // Extract card data from element name (e.g., "5H" → { rank: '5', suit: 'H' }) and images
   if (isCard && element.name) {
     const match = element.name.match(/^(\d+|[AJQK])([CDHS]?)$/i);
     if (match) {
+      // Get images from $images attribute - pass through as-is for flying cards
+      // The flying cards overlay handles both string URLs and sprite objects
+      const images = element.attributes?.$images as { face?: unknown; back?: unknown } | undefined;
+
       cardDataMap.set(element.id, {
         rank: match[1].toUpperCase(),
         suit: (match[2] || '').toUpperCase(),
+        faceImage: images?.face,
+        backImage: images?.back,
       });
     }
   }

@@ -45,6 +45,10 @@ export interface CardForAnimation {
   suit?: string;
   /** Whether card is face up (default: true) */
   faceUp?: boolean;
+  /** Face image URL (optional) */
+  faceImage?: string;
+  /** Back image URL (optional) */
+  backImage?: string;
 }
 
 export interface FlyToStatOptions {
@@ -118,6 +122,8 @@ export function flyToPlayerStat(
         rank: card.rank || '',
         suit: card.suit || '',
         faceUp: card.faceUp ?? true,
+        faceImage: card.faceImage,
+        backImage: card.backImage,
       },
       flip,
       duration,

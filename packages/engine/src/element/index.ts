@@ -17,6 +17,7 @@ export type {
   ElementFinder,
   ElementAttributes,
   Sorter,
+  ImageRef,
 } from './types.js';
 
 export type { GameOptions, GamePhase, PlayerViewFunction } from './game.js';

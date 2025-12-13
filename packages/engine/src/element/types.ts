@@ -4,6 +4,26 @@ import type { Player } from '../player/player.js';
 import type { VisibilityState } from '../command/visibility.js';
 
 /**
+ * Reference to an image for rendering game elements.
+ * Can be a simple path string or an object for sprite sheets.
+ * Sprite sheets use CSS background-position and work with any image format (SVG, PNG, JPG, etc.)
+ */
+export type ImageRef =
+  | string // Simple path: '/cards/AH.svg' or '/cards/AH.png'
+  | {
+      /** Path to sprite sheet file */
+      sprite: string;
+      /** X position in sprite sheet (pixels) */
+      x: number;
+      /** Y position in sprite sheet (pixels) */
+      y: number;
+      /** Width of the sprite (pixels) */
+      width: number;
+      /** Height of the sprite (pixels) */
+      height: number;
+    };
+
+/**
  * Constructor type for GameElement subclasses
  */
 export type ElementClass<T extends GameElement = GameElement> = {

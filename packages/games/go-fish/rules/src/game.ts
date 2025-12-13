@@ -45,6 +45,8 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
     this.pond = this.create(Pond, 'pond');
     this.pond.setOrder('stacking');
     this.pond.contentsHidden(); // Cards in pond are hidden from all
+    // Set back image on deck itself so UI can display it even when contents are hidden
+    this.pond.$images = { back: '/cards/back.svg' };
 
     // Create hands and books for each player
     for (const player of this.players) {
@@ -84,7 +86,12 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
   private createDeck(): void {
     for (const suit of GoFishGame.SUITS) {
       for (const rank of GoFishGame.RANKS) {
-        this.pond.create(Card, `${rank}${suit}`, { suit, rank });
+        const card = this.pond.create(Card, `${rank}${suit}`, { suit, rank });
+        // Set card images - face and back
+        card.$images = {
+          face: `/cards/${rank}${suit}.svg`,
+          back: '/cards/back.svg',
+        };
       }
     }
   }

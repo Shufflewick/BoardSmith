@@ -43,6 +43,7 @@ const emit = defineEmits<{
 const playerPosition = inject<number>('playerPosition', 0);
 const selectableElements = inject<Ref<Set<number>>>('selectableElements');
 const selectedElements = inject<Ref<Set<number>>>('selectedElements');
+const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
 
 // Time travel diff for highlighting changed elements
 const timeTravelDiff = inject<Ref<{ added: number[]; removed: number[]; changed: number[] } | null>>('timeTravelDiff', ref(null));
@@ -228,6 +229,48 @@ const displayLabel = computed(() => {
   return props.element.name || props.element.className;
 });
 
+// Card image handling - get face/back image from $images attribute
+const cardImages = computed(() => {
+  const attrs = props.element.attributes;
+  if (!attrs?.$images) return null;
+
+  const images = attrs.$images as Record<string, string | { sprite: string; x: number; y: number; width?: number; height?: number }>;
+  return {
+    face: images.face,
+    back: images.back,
+  };
+});
+
+// Get the current card image based on visibility
+const currentCardImage = computed((): ImageInfo | null => {
+  if (!cardImages.value) return null;
+
+  const isHidden = props.element.__hidden || props.element.attributes?.__hidden;
+  const image = isHidden ? cardImages.value.back : cardImages.value.face;
+
+  if (!image) return null;
+
+  // Handle simple string path (individual image file)
+  if (typeof image === 'string') {
+    return { type: 'url' as const, src: image };
+  }
+
+  // Handle CSS sprite sheet with coordinates
+  if (typeof image === 'object' && 'sprite' in image && 'x' in image && 'y' in image) {
+    const sprite = image as { sprite: string; x: number; y: number; width: number; height: number };
+    return {
+      type: 'sprite' as const,
+      sprite: sprite.sprite,
+      x: sprite.x,
+      y: sprite.y,
+      width: sprite.width,
+      height: sprite.height,
+    };
+  }
+
+  return null;
+});
+
 // Piece style - size for hex pieces, visibility control
 const pieceStyle = computed(() => {
   if (props.hexPieceSize) {
@@ -248,6 +291,95 @@ const childCountDisplay = computed(() => {
     return props.element.childCount;
   }
   return visibleChildren.value.length;
+});
+
+// Type for parsed image info (either URL or sprite with coordinates)
+type ImageInfo =
+  | { type: 'url'; src: string }
+  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
+
+// Helper to extract image info from $images value (handles string and sprite sheet formats)
+function getImageInfo(image: unknown): ImageInfo | null {
+  if (!image) return null;
+  if (typeof image === 'string') return { type: 'url', src: image };
+  if (typeof image === 'object' && image !== null) {
+    const spriteObj = image as { sprite?: string; x?: number; y?: number; width?: number; height?: number };
+    if (spriteObj.sprite && typeof spriteObj.x === 'number' && typeof spriteObj.y === 'number') {
+      return {
+        type: 'sprite',
+        sprite: spriteObj.sprite,
+        x: spriteObj.x,
+        y: spriteObj.y,
+        width: spriteObj.width ?? 238,
+        height: spriteObj.height ?? 333,
+      };
+    }
+    if (spriteObj.sprite) {
+      return { type: 'url', src: spriteObj.sprite };
+    }
+  }
+  return null;
+}
+
+// Sprite sheet layout constants
+// Standard card dimensions in the sprite sheet (face cards)
+const NATIVE_CARD_WIDTH = 238;
+const NATIVE_CARD_HEIGHT = 333;
+const SPRITE_COLS = 13;
+const SPRITE_ROWS = 5;
+
+// Helper to compute scaled CSS sprite styles for a given display size
+// IMPORTANT: Scale based on native face card dimensions (238x333), not the individual
+// card's dimensions, because card backs may have different sizes in the sprite
+function getSpriteStyle(info: ImageInfo, displayWidth: number = 60, displayHeight: number = 84): Record<string, string> {
+  if (info.type !== 'sprite') return {};
+
+  // Scale based on standard card size, not individual card's dimensions
+  // This ensures consistent scaling for both face cards and back cards
+  const scaleX = displayWidth / NATIVE_CARD_WIDTH;
+  const scaleY = displayHeight / NATIVE_CARD_HEIGHT;
+
+  // Total sprite sheet dimensions
+  const sheetWidth = SPRITE_COLS * NATIVE_CARD_WIDTH;
+  const sheetHeight = SPRITE_ROWS * NATIVE_CARD_HEIGHT;
+
+  // Scaled sprite sheet size
+  const scaledSheetWidth = sheetWidth * scaleX;
+  const scaledSheetHeight = sheetHeight * scaleY;
+
+  // Scale the position coordinates
+  const scaledX = info.x * scaleX;
+  const scaledY = info.y * scaleY;
+
+  return {
+    backgroundImage: `url(${info.sprite})`,
+    backgroundPosition: `-${scaledX}px -${scaledY}px`,
+    backgroundSize: `${scaledSheetWidth}px ${scaledSheetHeight}px`,
+    backgroundRepeat: 'no-repeat',
+  };
+}
+
+// Get back image info from any child's $images (for deck stacks and hidden cards)
+const childBackImage = computed((): ImageInfo | null => {
+  // Check visible children first
+  for (const child of (props.element.children ?? [])) {
+    const images = child.attributes?.$images as Record<string, unknown> | undefined;
+    if (images?.back) {
+      const info = getImageInfo(images.back);
+      if (info) return info;
+    }
+  }
+  // Also check this element's own $images (for deck containers that have $images set directly)
+  const ownImages = props.element.attributes?.$images as Record<string, unknown> | undefined;
+  if (ownImages?.back) {
+    const info = getImageInfo(ownImages.back);
+    if (info) return info;
+  }
+  // Fall back to the default back image from the game view (includes sprite coordinates)
+  if (defaultBackImage.value) {
+    return defaultBackImage.value;
+  }
+  return null;
 });
 
 // Threshold for splitting hand into two rows (cards per row)
@@ -689,6 +821,7 @@ function handleDrop(event: DragEvent) {
           'action-selectable': isActionSelectable,
           'is-draggable': isActionSelectable,
           'is-dragging': isDragged,
+          'has-image': !!currentCardImage,
         }"
         :data-element-id="element.id"
         :data-animatable="true"
@@ -697,9 +830,34 @@ function handleDrop(event: DragEvent) {
         @dragstart="handleDragStart"
         @dragend="handleDragEnd"
       >
-        <!-- Hidden card shows card back -->
-        <div v-if="element.__hidden || element.attributes?.__hidden" class="card-back"></div>
-        <!-- Visible card shows face -->
+        <!-- Card with image -->
+        <template v-if="currentCardImage">
+          <!-- Regular image file -->
+          <img
+            v-if="currentCardImage.type === 'url'"
+            :src="currentCardImage.src"
+            class="card-image"
+            :class="{ 'card-image-back': element.__hidden || element.attributes?.__hidden }"
+            :alt="displayLabel"
+          />
+          <!-- CSS sprite sheet with background-position -->
+          <div
+            v-else-if="currentCardImage.type === 'sprite'"
+            class="card-image card-sprite"
+            :class="{ 'card-image-back': element.__hidden || element.attributes?.__hidden }"
+            :style="getSpriteStyle(currentCardImage)"
+          ></div>
+        </template>
+        <!-- Fallback: Hidden card shows card back -->
+        <div v-else-if="element.__hidden || element.attributes?.__hidden" class="card-back" :class="{ 'has-image': childBackImage }">
+          <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
+          <div
+            v-else-if="childBackImage?.type === 'sprite'"
+            class="card-image card-sprite"
+            :style="getSpriteStyle(childBackImage)"
+          ></div>
+        </div>
+        <!-- Fallback: Visible card shows face with label -->
         <div v-else class="card-face">
           {{ displayLabel }}
         </div>
@@ -734,8 +892,16 @@ function handleDrop(event: DragEvent) {
                 v-for="i in Math.ceil(element.childCount / 2)"
                 :key="i"
                 class="hand-card card-back-small"
+                :class="{ 'has-image': childBackImage }"
                 :style="{ '--card-index': i - 1, '--card-count': Math.ceil(element.childCount / 2), '--row': 'back' }"
-              ></div>
+              >
+                <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
+                <div
+                  v-else-if="childBackImage?.type === 'sprite'"
+                  class="card-image card-sprite"
+                  :style="getSpriteStyle(childBackImage)"
+                ></div>
+              </div>
             </template>
           </div>
           <!-- Front row (or all cards when single row) -->
@@ -756,8 +922,16 @@ function handleDrop(event: DragEvent) {
                 v-for="i in (handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount)"
                 :key="i"
                 class="hand-card card-back-small"
+                :class="{ 'has-image': childBackImage }"
                 :style="{ '--card-index': i - 1, '--card-count': handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount, '--row': 'front' }"
-              ></div>
+              >
+                <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
+                <div
+                  v-else-if="childBackImage?.type === 'sprite'"
+                  class="card-image card-sprite"
+                  :style="getSpriteStyle(childBackImage)"
+                ></div>
+              </div>
             </template>
             <div v-if="!visibleChildren.length && !element.childCount" class="empty-hand">No cards</div>
           </div>
@@ -775,7 +949,14 @@ function handleDrop(event: DragEvent) {
         <!-- Show stack visualization when contents hidden or count-only -->
         <template v-if="visibleChildren.length === 0 && childCountDisplay > 0">
           <div class="deck-stack" :class="{ 'has-overlap': layoutProps.overlap !== undefined }" :data-zone="element.name">
-            <div v-for="i in Math.min(childCountDisplay, 5)" :key="i" class="deck-card" :style="{ '--stack-index': i }"></div>
+            <div v-for="i in Math.min(childCountDisplay, 5)" :key="i" class="deck-card" :class="{ 'has-image': childBackImage }" :style="{ '--stack-index': i }">
+              <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
+              <div
+                v-else-if="childBackImage?.type === 'sprite'"
+                class="card-image card-sprite"
+                :style="getSpriteStyle(childBackImage)"
+              ></div>
+            </div>
           </div>
         </template>
         <!-- Show actual cards when visible -->
@@ -1050,6 +1231,28 @@ function handleDrop(event: DragEvent) {
   flex-shrink: 0;
 }
 
+/* Card image styles */
+.card-image {
+  width: 60px;
+  min-width: 45px;
+  height: 84px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+/* CSS sprite sheet (uses background-position) */
+.card-sprite {
+  width: 60px;
+  min-width: 45px;
+  height: 84px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+}
+
 /* HAND STYLES */
 .hand-container {
   background: rgba(255, 255, 255, 0.05);
@@ -1200,6 +1403,20 @@ function handleDrop(event: DragEvent) {
   flex-shrink: 0;
 }
 
+.card-back.has-image,
+.card-back-small.has-image {
+  background: transparent;
+  border: none;
+}
+
+.card-back .card-image,
+.card-back-small .card-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
 .hidden-cards, .empty-hand {
   color: #666;
   font-style: italic;
@@ -1251,6 +1468,28 @@ function handleDrop(event: DragEvent) {
   border: 2px solid #4a6fa5;
   top: calc(var(--stack-index, 0) * -2px);
   left: calc(var(--stack-index, 0) * 1px);
+}
+
+.deck-card.has-image {
+  background: transparent;
+  border: none;
+}
+
+.deck-card .card-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.deck-card .card-sprite {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background-repeat: no-repeat;
 }
 
 .deck-cards {

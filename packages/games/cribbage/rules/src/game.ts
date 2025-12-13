@@ -199,9 +199,44 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * Create a standard 52-card deck
    */
   createDeck(): void {
+    // Sprite sheet layout: 13 columns (ranks), 5 rows (4 suits + back)
+    // Card size: 238x333, Back size: 223x311
+    const CARD_WIDTH = 238;
+    const CARD_HEIGHT = 333;
+    const BACK_WIDTH = 223;
+    const BACK_HEIGHT = 311;
+
+    // Suit row order in sprite: C=0, D=1, H=2, S=3
+    const suitRows: Record<string, number> = { C: 0, D: 1, H: 2, S: 3 };
+
+    // Rank column order: A=0, 2-10=1-9, J=10, Q=11, K=12
+    const rankCols: Record<string, number> = {
+      A: 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6,
+      '8': 7, '9': 8, '10': 9, J: 10, Q: 11, K: 12,
+    };
+
     for (const suit of CribbageGame.SUITS) {
       for (const rank of CribbageGame.RANKS) {
-        this.deck.create(Card, `${rank}${suit}`, { suit, rank });
+        const card = this.deck.create(Card, `${rank}${suit}`, { suit, rank });
+        // Set card images - using CSS sprite sheet with coordinates
+        const col = rankCols[rank];
+        const row = suitRows[suit];
+        card.$images = {
+          face: {
+            sprite: '/cards/deck-sprite.svg',
+            x: col * CARD_WIDTH,
+            y: row * CARD_HEIGHT,
+            width: CARD_WIDTH,
+            height: CARD_HEIGHT,
+          },
+          back: {
+            sprite: '/cards/deck-sprite.svg',
+            x: 0,
+            y: 4 * CARD_HEIGHT, // Back is on row 4 (5th row, 0-indexed)
+            width: BACK_WIDTH,
+            height: BACK_HEIGHT,
+          },
+        };
       }
     }
   }

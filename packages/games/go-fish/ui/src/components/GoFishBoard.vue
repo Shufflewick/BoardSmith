@@ -17,10 +17,33 @@ import {
   type GameElement,
 } from '@boardsmith/ui';
 
+interface CardImages {
+  face?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  back?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+}
+
 interface Card {
   id: number;
   rank: string;
   suit: string;
+  $images?: CardImages;
+}
+
+// Helper to get image URL from $images attribute
+// For Go Fish, we use simple string URLs (individual image files)
+// This also supports CSS sprite objects for future compatibility
+function getCardImageUrl(images: CardImages | undefined, side: 'face' | 'back'): string | null {
+  if (!images) return null;
+  const image = images[side];
+  if (!image) return null;
+
+  if (typeof image === 'string') {
+    return image;
+  }
+
+  // For CSS sprite objects, return the sprite URL
+  // (The rendering component handles the positioning)
+  return image.sprite || null;
 }
 
 const props = defineProps<{
@@ -53,7 +76,7 @@ const prevOpponentCardCount = ref(0);
 const prevMyBooksCount = ref(0);
 const prevOpponentBooksCount = ref(0);
 // Store card positions keyed by card ID (captured before state changes)
-const cardPositions = ref<Map<number, { rect: DOMRect; rank: string; suit: string }>>(new Map());
+const cardPositions = ref<Map<number, { rect: DOMRect; rank: string; suit: string; faceImage?: string; backImage?: string }>>(new Map());
 
 // Get player's hand using utility
 const myHand = computed(() => findPlayerHand(props.gameView, props.playerPosition));
@@ -130,12 +153,24 @@ function getCardsByRank(hand: GameElement | null | undefined): Map<string, Card[
     byRank.get(rank)!.push({
       id: card.id,
       rank,
-      suit: attrs?.suit || ''
+      suit: attrs?.suit || '',
+      $images: attrs?.$images,
     });
   }
 
   return byRank;
 }
+
+// Get back image URL from any card (they all use the same back)
+const cardBackImageUrl = computed(() => {
+  // Find any card with $images to get the back URL
+  for (const cards of myCardsByRank.value.values()) {
+    if (cards.length > 0 && cards[0].$images) {
+      return getCardImageUrl(cards[0].$images, 'back');
+    }
+  }
+  return null;
+});
 
 const myCardsByRank = computed(() => getCardsByRank(myHand.value));
 
@@ -230,6 +265,7 @@ watch(
         flyCards(
           newCards.map((card, i) => {
             const attrs = card.attributes as any;
+            const images = attrs?.$images;
             return {
               id: `fly-${card.id}-${Date.now()}`,
               startRect: sourceRect,
@@ -238,6 +274,8 @@ watch(
                 rank: attrs?.rank || '',
                 suit: attrs?.suit || '',
                 faceUp: !isFromPond, // Face down if from pond, face up if from opponent
+                faceImage: typeof images?.face === 'string' ? images.face : undefined,
+                backImage: typeof images?.back === 'string' ? images.back : undefined,
               },
               flip: isFromPond, // Only flip when drawing from pond
               duration: 400,
@@ -280,16 +318,27 @@ watch(
 function captureCardPositions() {
   if (!myHandRef.value) return;
 
+  // Build a map of card ID to card data from the reactive hand
+  const cardDataMap = new Map<number, Card>();
+  for (const cards of myCardsByRank.value.values()) {
+    for (const card of cards) {
+      cardDataMap.set(card.id, card);
+    }
+  }
+
   const cards = myHandRef.value.querySelectorAll('[data-card-id]');
   cards.forEach((el) => {
     const cardId = parseInt(el.getAttribute('data-card-id') || '0', 10);
-    const rankEl = el.querySelector('.corner-rank');
-    const suitEl = el.querySelector('.corner-suit');
+    const cardData = cardDataMap.get(cardId);
     if (cardId) {
+      const faceImage = cardData?.$images ? getCardImageUrl(cardData.$images, 'face') : null;
+      const backImage = cardData?.$images ? getCardImageUrl(cardData.$images, 'back') : null;
       cardPositions.value.set(cardId, {
         rect: el.getBoundingClientRect(),
-        rank: rankEl?.textContent || '',
-        suit: suitEl?.textContent || '',
+        rank: cardData?.rank || '',
+        suit: cardData?.suit || '',
+        faceImage: faceImage || undefined,
+        backImage: backImage || undefined,
       });
     }
   });
@@ -321,7 +370,7 @@ watch(
 
     // My books increased - find cards that disappeared
     if (currentMyBooks > snapshotPrevMyBooks) {
-      const removedCards: Array<{ rect: DOMRect; rank: string; suit: string }> = [];
+      const removedCards: Array<{ rect: DOMRect; rank: string; suit: string; faceImage?: string; backImage?: string }> = [];
 
       // Find cards that were in my hand but are now gone
       for (const [cardId, data] of cardPositions.value) {
@@ -347,7 +396,11 @@ watch(
 
       // Fly 4 face-down cards (a book is always 4 cards)
       flyToPlayerStat(flyCards, {
-        cards: Array.from({ length: 4 }, () => ({ rect: sourceRect, faceUp: false })),
+        cards: Array.from({ length: 4 }, () => ({
+          rect: sourceRect,
+          faceUp: false,
+          backImage: cardBackImageUrl.value || undefined,
+        })),
         playerPosition: opponentPosition,
         statName: 'books',
         duration: 500,
@@ -389,17 +442,27 @@ watch(
           @click="handleCardClick(rank)"
         >
           <div v-for="card in cards" :key="card.id" class="card card-front" :data-card-id="card.id">
-            <div class="card-corner top-left" :style="{ color: getSuitColor(card.suit) }">
-              <div class="corner-rank">{{ card.rank }}</div>
-              <div class="corner-suit">{{ getSuitSymbol(card.suit) }}</div>
-            </div>
-            <div class="card-center" :style="{ color: getSuitColor(card.suit) }">
-              {{ getSuitSymbol(card.suit) }}
-            </div>
-            <div class="card-corner bottom-right" :style="{ color: getSuitColor(card.suit) }">
-              <div class="corner-rank">{{ card.rank }}</div>
-              <div class="corner-suit">{{ getSuitSymbol(card.suit) }}</div>
-            </div>
+            <!-- Card with image -->
+            <img
+              v-if="getCardImageUrl(card.$images, 'face')"
+              :src="getCardImageUrl(card.$images, 'face')!"
+              class="card-image"
+              :alt="`${card.rank}${card.suit}`"
+            />
+            <!-- Fallback: text-based card face -->
+            <template v-else>
+              <div class="card-corner top-left" :style="{ color: getSuitColor(card.suit) }">
+                <div class="corner-rank">{{ card.rank }}</div>
+                <div class="corner-suit">{{ getSuitSymbol(card.suit) }}</div>
+              </div>
+              <div class="card-center" :style="{ color: getSuitColor(card.suit) }">
+                {{ getSuitSymbol(card.suit) }}
+              </div>
+              <div class="card-corner bottom-right" :style="{ color: getSuitColor(card.suit) }">
+                <div class="corner-rank">{{ card.rank }}</div>
+                <div class="corner-suit">{{ getSuitSymbol(card.suit) }}</div>
+              </div>
+            </template>
           </div>
         </div>
         <div v-if="myCardsByRank.size === 0" class="empty-hand">No cards</div>
@@ -428,8 +491,9 @@ watch(
         :data-element-id="opponentHand?.id"
         @click="handleOpponentClick"
       >
-        <div v-for="i in getElementCount(opponentHand)" :key="i" class="card card-back">
-          <div class="card-pattern"></div>
+        <div v-for="i in getElementCount(opponentHand)" :key="i" class="card card-back" :class="{ 'has-image': cardBackImageUrl }">
+          <img v-if="cardBackImageUrl" :src="cardBackImageUrl" class="card-image" alt="Card back" />
+          <div v-else class="card-pattern"></div>
         </div>
         <div v-if="getElementCount(opponentHand) === 0" class="empty-hand">No cards</div>
       </div>
@@ -440,8 +504,9 @@ watch(
       <div class="deck-container">
         <div class="deck-label">Pond</div>
         <div ref="pondRef" class="deck">
-          <div v-if="pondCount > 0" class="card card-back deck-card">
-            <div class="card-pattern"></div>
+          <div v-if="pondCount > 0" class="card card-back deck-card" :class="{ 'has-image': cardBackImageUrl }">
+            <img v-if="cardBackImageUrl" :src="cardBackImageUrl" class="card-image deck-card-image" alt="Card back" />
+            <div v-else class="card-pattern"></div>
             <div class="deck-count">{{ pondCount }}</div>
           </div>
           <div v-else class="empty-deck">Empty</div>
@@ -628,6 +693,11 @@ watch(
   border: 2px solid #fff;
 }
 
+.card-back.has-image {
+  background: transparent;
+  border: none;
+}
+
 .card-pattern {
   width: 100%;
   height: 100%;
@@ -645,6 +715,18 @@ watch(
   background: #fff;
   border: 2px solid #333;
   position: relative;
+}
+
+/* Card image styles */
+.card-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.deck-card-image {
+  border-radius: 6px;
 }
 
 .card-corner {

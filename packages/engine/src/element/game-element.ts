@@ -6,6 +6,7 @@ import type {
   ElementJSON,
   ElementFinder,
   ElementAttributes,
+  ImageRef,
 } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
@@ -28,6 +29,20 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
   /** Column position in grid layout */
   column?: number;
+
+  /**
+   * Image for single-sided elements (boards, mats, tokens).
+   * For multi-sided elements (cards, dice), use $images instead.
+   * System property - $ prefix indicates this is for the rendering system.
+   */
+  $image?: ImageRef;
+
+  /**
+   * Images for multi-sided elements, keyed by side name.
+   * Common keys: 'face', 'back' for cards; 'side1'-'side6' for dice.
+   * System property - $ prefix indicates this is for the rendering system.
+   */
+  $images?: Record<string, ImageRef>;
 
   /** Reference to the root game */
   game!: G;

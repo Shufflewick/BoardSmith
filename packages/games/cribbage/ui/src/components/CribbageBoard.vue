@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect, nextTick } from 'vue';
 import ScoringOverlay from './ScoringOverlay.vue';
 import RoundSummary from './RoundSummary.vue';
 import {
@@ -36,13 +36,113 @@ const { capturePositions, animateToNewPositions } = useFLIPAnimation({
   easing: 'ease-out',
 });
 
+// Type for parsed image info (either URL string or sprite with coordinates)
+type ImageInfo =
+  | { type: 'url'; src: string }
+  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
+
+interface CardImages {
+  face?: string | { sprite: string; x: number; y: number; width: number; height: number };
+  back?: string | { sprite: string; x: number; y: number; width: number; height: number };
+}
+
 interface Card {
-  id: string;
+  id: number | string;
   name: string;
   attributes?: {
     rank?: string;
     suit?: string;
+    $images?: CardImages;
   };
+}
+
+// Helper to parse image info from $images attribute
+function getCardImageInfo(card: Card | null | undefined, side: 'face' | 'back'): ImageInfo | null {
+  if (!card?.attributes?.$images) return null;
+  const image = card.attributes.$images[side];
+  if (!image) return null;
+
+  if (typeof image === 'string') {
+    return { type: 'url', src: image };
+  }
+
+  // Handle coordinate-based sprite sheet
+  if (typeof image === 'object' && image.sprite && typeof image.x === 'number' && typeof image.y === 'number') {
+    return {
+      type: 'sprite',
+      sprite: image.sprite,
+      x: image.x,
+      y: image.y,
+      width: image.width ?? 238,
+      height: image.height ?? 333,
+    };
+  }
+
+  return null;
+}
+
+// Helper to check if card face is URL image
+function isUrlFace(card: Card | null | undefined): boolean {
+  return getCardImageInfo(card, 'face')?.type === 'url';
+}
+
+// Helper to check if card face is sprite
+function isSpriteFace(card: Card | null | undefined): boolean {
+  return getCardImageInfo(card, 'face')?.type === 'sprite';
+}
+
+// Helper to get face URL src
+function getFaceSrc(card: Card | null | undefined): string {
+  const info = getCardImageInfo(card, 'face');
+  if (info?.type === 'url') return info.src;
+  return '';
+}
+
+// Sprite sheet layout constants
+// Standard card dimensions in the sprite sheet (face cards)
+const NATIVE_CARD_WIDTH = 238;
+const NATIVE_CARD_HEIGHT = 333;
+const SPRITE_COLS = 13;
+const SPRITE_ROWS = 5;
+
+// Helper to get sprite style with proper scaling
+// IMPORTANT: Scale based on native face card dimensions (238x333), not the individual
+// card's dimensions, because card backs may have different sizes in the sprite
+// Default display size matches CSS: .card { width: 60px; height: 84px; }
+function getSpriteStyle(info: ImageInfo, displayWidth: number = 60, displayHeight: number = 84): Record<string, string> {
+  if (info.type !== 'sprite') return {};
+
+  // Scale based on standard card size, not individual card's dimensions
+  const scaleX = displayWidth / NATIVE_CARD_WIDTH;
+  const scaleY = displayHeight / NATIVE_CARD_HEIGHT;
+
+  // Total sprite sheet dimensions
+  const sheetWidth = SPRITE_COLS * NATIVE_CARD_WIDTH;
+  const sheetHeight = SPRITE_ROWS * NATIVE_CARD_HEIGHT;
+
+  // Scaled sprite sheet size
+  const scaledSheetWidth = sheetWidth * scaleX;
+  const scaledSheetHeight = sheetHeight * scaleY;
+
+  // Scale the position coordinates
+  const scaledX = info.x * scaleX;
+  const scaledY = info.y * scaleY;
+
+  return {
+    backgroundImage: `url(${info.sprite})`,
+    backgroundPosition: `-${scaledX}px -${scaledY}px`,
+    backgroundSize: `${scaledSheetWidth}px ${scaledSheetHeight}px`,
+    backgroundRepeat: 'no-repeat',
+  };
+}
+
+// Helper to get face sprite style
+function getFaceSpriteStyle(card: Card | null | undefined): Record<string, string> {
+  const info = getCardImageInfo(card, 'face');
+  if (info?.type === 'sprite') {
+    return getSpriteStyle(info);
+  }
+  return {};
 }
 
 interface ScoringCardData {
@@ -115,6 +215,9 @@ const { isFlying: starterIsFlying, flyingCards: starterFlyingCards } = useFlyOnA
   getCardData: (card) => ({
     rank: (card.attributes as any)?.rank,
     suit: (card.attributes as any)?.suit,
+    // Pass the full image info object for sprites (FlyingCardsOverlay handles both URL and sprite formats)
+    faceImage: getCardImageInfo(card as Card, 'face') ?? undefined,
+    backImage: getCardImageInfo(card as Card, 'back') ?? undefined,
   }),
   flip: true,
   startFaceUp: false,
@@ -132,6 +235,15 @@ const myScore = computed(() => (myHandElement.value?.attributes as any)?.player?
 const opponentScore = computed(() => (opponentHandElement.value?.attributes as any)?.player?.score ?? 0);
 
 const isDealer = computed(() => dealerPosition.value === props.playerPosition);
+
+// Get card back image info from any card with $images (for deck/crib display)
+const cardBackImageInfo = computed((): ImageInfo | null => {
+  // Try to find a card with $images
+  if (myHand.value.length > 0) {
+    return getCardImageInfo(myHand.value[0], 'back');
+  }
+  return null;
+});
 
 const needsToDiscard = computed(() => {
   if (cribbagePhase.value !== 'discarding') return false;
@@ -347,7 +459,7 @@ async function performDiscard() {
   const cardsToFly: Array<{
     id: string;
     startRect: DOMRect;
-    cardData: { rank: string; suit: string };
+    cardData: { rank: string; suit: string; faceImage?: unknown; backImage?: unknown };
   }> = [];
 
   for (const cardName of selectedCards.value) {
@@ -360,6 +472,9 @@ async function performDiscard() {
         cardData: {
           rank: card.attributes.rank,
           suit: card.attributes.suit,
+          // Pass full image info object for sprites
+          faceImage: getCardImageInfo(card, 'face') ?? undefined,
+          backImage: getCardImageInfo(card, 'back') ?? undefined,
         },
       });
     }
@@ -387,6 +502,8 @@ async function performDiscard() {
               rank: card.cardData.rank,
               suit: card.cardData.suit,
               faceUp: true,
+              faceImage: card.cardData.faceImage,
+              backImage: card.cardData.backImage,
             },
             flip: true,
             duration: 400,
@@ -416,7 +533,7 @@ async function performPlayCard() {
   try {
     // Send numeric ID for chooseElement selection
     await props.action('playCard', {
-      card: parseInt(card.id, 10),
+      card: typeof card.id === 'number' ? card.id : parseInt(card.id, 10),
     });
   } finally {
     // Always clear selection after action (server will send updated state)
@@ -486,11 +603,20 @@ defineExpose({
             v-for="(card, index) in playArea"
             :key="card.id"
             class="card"
+            :class="{ 'has-image': getCardImageInfo(card as Card, 'face') }"
             :data-card-id="card.name"
             :style="{ color: getSuitColor((card.attributes?.suit as string) || '') }"
           >
-            <span class="rank">{{ card.attributes?.rank }}</span>
-            <span class="suit">{{ getSuitSymbol((card.attributes?.suit as string) || '') }}</span>
+            <img v-if="isUrlFace(card as Card)" :src="getFaceSrc(card as Card)" class="card-image" :alt="`${card.attributes?.rank}${card.attributes?.suit}`" />
+            <div
+              v-else-if="isSpriteFace(card as Card)"
+              class="card-image card-sprite"
+              :style="getFaceSpriteStyle(card as Card)"
+            ></div>
+            <template v-else>
+              <span class="rank">{{ card.attributes?.rank }}</span>
+              <span class="suit">{{ getSuitSymbol((card.attributes?.suit as string) || '') }}</span>
+            </template>
           </div>
           <div v-if="playArea.length === 0" class="no-cards">Waiting for play...</div>
         </div>
@@ -507,8 +633,16 @@ defineExpose({
                 v-for="i in Math.min(deckCardCount, 5)"
                 :key="'deck-' + i"
                 class="card-back stacked"
+                :class="{ 'has-image': cardBackImageInfo }"
                 :style="{ '--stack-index': i - 1 }"
-              ></div>
+              >
+                <img v-if="cardBackImageInfo?.type === 'url'" :src="cardBackImageInfo.src" class="card-image" alt="Card back" />
+                <div
+                  v-else-if="cardBackImageInfo?.type === 'sprite'"
+                  class="card-image card-sprite"
+                  :style="getSpriteStyle(cardBackImageInfo)"
+                ></div>
+              </div>
             </template>
             <div v-else class="card-placeholder">Empty</div>
           </div>
@@ -522,11 +656,20 @@ defineExpose({
             <div
               v-if="starterCard && !starterIsFlying"
               class="card"
+              :class="{ 'has-image': getCardImageInfo(starterCard as any, 'face') }"
               :data-card-id="starterCard.name"
               :style="{ color: getSuitColor((starterCard.attributes?.suit as string) || '') }"
             >
-              <span class="rank">{{ starterCard.attributes?.rank }}</span>
-              <span class="suit">{{ getSuitSymbol((starterCard.attributes?.suit as string) || '') }}</span>
+              <img v-if="isUrlFace(starterCard as any)" :src="getFaceSrc(starterCard as any)" class="card-image" :alt="`${starterCard.attributes?.rank}${starterCard.attributes?.suit}`" />
+              <div
+                v-else-if="isSpriteFace(starterCard as any)"
+                class="card-image card-sprite"
+                :style="getFaceSpriteStyle(starterCard as any)"
+              ></div>
+              <template v-else>
+                <span class="rank">{{ starterCard.attributes?.rank }}</span>
+                <span class="suit">{{ getSuitSymbol((starterCard.attributes?.suit as string) || '') }}</span>
+              </template>
             </div>
             <div v-else-if="!starterCard" class="card-placeholder">
               <span>?</span>
@@ -543,11 +686,20 @@ defineExpose({
                 v-for="(card, i) in crib"
                 :key="i"
                 class="card-back stacked"
+                :class="{ 'has-image': cardBackImageInfo }"
                 :data-card-id="card.name"
                 :style="{ '--stack-index': i }"
               >
-                <span v-if="card.attributes?.rank">{{ card.attributes.rank }}{{ getSuitSymbol((card.attributes.suit as string) || '') }}</span>
-                <span v-else>?</span>
+                <img v-if="cardBackImageInfo?.type === 'url'" :src="cardBackImageInfo.src" class="card-image" alt="Card back" />
+                <div
+                  v-else-if="cardBackImageInfo?.type === 'sprite'"
+                  class="card-image card-sprite"
+                  :style="getSpriteStyle(cardBackImageInfo)"
+                ></div>
+                <template v-else>
+                  <span v-if="card.attributes?.rank">{{ card.attributes.rank }}{{ getSuitSymbol((card.attributes.suit as string) || '') }}</span>
+                  <span v-else>?</span>
+                </template>
               </div>
             </template>
             <!-- Show card backs for hidden cards based on childCount -->
@@ -556,9 +708,16 @@ defineExpose({
                 v-for="i in cribCardCount"
                 :key="'hidden-' + i"
                 class="card-back stacked"
+                :class="{ 'has-image': cardBackImageInfo }"
                 :style="{ '--stack-index': i - 1 }"
               >
-                <span>?</span>
+                <img v-if="cardBackImageInfo?.type === 'url'" :src="cardBackImageInfo.src" class="card-image" alt="Card back" />
+                <div
+                  v-else-if="cardBackImageInfo?.type === 'sprite'"
+                  class="card-image card-sprite"
+                  :style="getSpriteStyle(cardBackImageInfo)"
+                ></div>
+                <span v-else>?</span>
               </div>
             </template>
             <!-- Empty placeholder when no cards -->
@@ -574,14 +733,23 @@ defineExpose({
               v-for="(card, index) in playedCards"
               :key="card.name || card.id"
               class="card stacked"
+              :class="{ 'has-image': getCardImageInfo(card as Card, 'face') }"
               :data-card-id="card.name"
               :style="{
                 color: getSuitColor((card.attributes?.suit as string) || ''),
                 '--stack-index': index
               }"
             >
-              <span class="rank">{{ card.attributes?.rank }}</span>
-              <span class="suit">{{ getSuitSymbol((card.attributes?.suit as string) || '') }}</span>
+              <img v-if="isUrlFace(card as Card)" :src="getFaceSrc(card as Card)" class="card-image" :alt="`${card.attributes?.rank}${card.attributes?.suit}`" />
+              <div
+                v-else-if="isSpriteFace(card as Card)"
+                class="card-image card-sprite"
+                :style="getFaceSpriteStyle(card as Card)"
+              ></div>
+              <template v-else>
+                <span class="rank">{{ card.attributes?.rank }}</span>
+                <span class="suit">{{ getSuitSymbol((card.attributes?.suit as string) || '') }}</span>
+              </template>
             </div>
             <div v-if="playedCards.length === 0" class="card-placeholder">—</div>
           </div>
@@ -597,6 +765,7 @@ defineExpose({
             :key="card.name"
             class="card"
             :class="{
+              'has-image': getCardImageInfo(card, 'face'),
               selected: selectedCards.includes(card.name),
               clickable: isMyTurn && !isPerformingAction && isCardPlayable(card.attributes?.rank || ''),
               unplayable: cribbagePhase === 'play' && !isCardPlayable(card.attributes?.rank || '')
@@ -605,8 +774,16 @@ defineExpose({
             :style="{ color: getSuitColor(card.attributes?.suit || '') }"
             @click="toggleCardSelection(card.name)"
           >
-            <span class="rank">{{ card.attributes?.rank }}</span>
-            <span class="suit">{{ getSuitSymbol(card.attributes?.suit || '') }}</span>
+            <img v-if="isUrlFace(card)" :src="getFaceSrc(card)" class="card-image" :alt="`${card.attributes?.rank}${card.attributes?.suit}`" />
+            <div
+              v-else-if="isSpriteFace(card)"
+              class="card-image card-sprite"
+              :style="getFaceSpriteStyle(card)"
+            ></div>
+            <template v-else>
+              <span class="rank">{{ card.attributes?.rank }}</span>
+              <span class="suit">{{ getSuitSymbol(card.attributes?.suit || '') }}</span>
+            </template>
             <span class="point-value">{{ getCardPointValue(card.attributes?.rank || '') }}</span>
           </div>
           <div v-if="myHand.length === 0" class="no-cards">No cards in hand</div>
@@ -932,6 +1109,33 @@ defineExpose({
   right: 4px;
   font-size: 0.6rem;
   color: #999;
+}
+
+/* Card image styles */
+.card-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+/* CSS sprite sheet (uses background-position) */
+.card-sprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  background-repeat: no-repeat;
+}
+
+.card.has-image,
+.card-back.has-image {
+  padding: 0;
+  background: transparent;
+}
+
+.card-back.has-image {
+  background: transparent;
 }
 
 .card-back {

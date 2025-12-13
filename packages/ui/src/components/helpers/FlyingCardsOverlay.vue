@@ -16,6 +16,7 @@
  * ```
  */
 import type { FlyingCard } from '../../composables/useFlyingCards.js';
+import type { CSSProperties } from 'vue';
 
 defineProps<{
   /** Array of flying cards from useFlyingCards composable */
@@ -25,6 +26,90 @@ defineProps<{
   /** Optional custom suit color */
   getSuitColor?: (suit: string) => string;
 }>();
+
+// Type for parsed image info (either URL string or sprite with coordinates)
+type ImageInfo =
+  | { type: 'url'; src: string }
+  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
+
+// Parse image data from cardData - handles both string URLs and sprite objects
+function parseImageInfo(image: unknown): ImageInfo | null {
+  if (!image) return null;
+  if (typeof image === 'string') return { type: 'url', src: image };
+  if (typeof image === 'object' && image !== null) {
+    const spriteObj = image as { sprite?: string; x?: number; y?: number; width?: number; height?: number };
+    if (spriteObj.sprite && typeof spriteObj.x === 'number' && typeof spriteObj.y === 'number') {
+      return {
+        type: 'sprite',
+        sprite: spriteObj.sprite,
+        x: spriteObj.x,
+        y: spriteObj.y,
+        width: spriteObj.width ?? 238,
+        height: spriteObj.height ?? 333,
+      };
+    }
+    if (spriteObj.sprite) {
+      return { type: 'url', src: spriteObj.sprite };
+    }
+  }
+  return null;
+}
+
+// Helper to check if image is URL type
+function isUrlImage(image: unknown): boolean {
+  return parseImageInfo(image)?.type === 'url';
+}
+
+// Helper to check if image is sprite type
+function isSpriteImage(image: unknown): boolean {
+  return parseImageInfo(image)?.type === 'sprite';
+}
+
+// Helper to get URL src
+function getImageSrc(image: unknown): string {
+  const info = parseImageInfo(image);
+  if (info?.type === 'url') return info.src;
+  return '';
+}
+
+// Sprite sheet layout constants
+// Standard card dimensions in the sprite sheet (face cards)
+const NATIVE_CARD_WIDTH = 238;
+const NATIVE_CARD_HEIGHT = 333;
+const SPRITE_COLS = 13;
+const SPRITE_ROWS = 5;
+
+// Helper to get sprite style object with proper scaling
+// IMPORTANT: Scale based on native face card dimensions (238x333), not the individual
+// card's dimensions, because card backs may have different sizes in the sprite
+function getSpriteStyle(image: unknown, displayWidth: number = 60, displayHeight: number = 84): CSSProperties {
+  const info = parseImageInfo(image);
+  if (info?.type === 'sprite') {
+    // Scale based on standard card size, not individual card's dimensions
+    const scaleX = displayWidth / NATIVE_CARD_WIDTH;
+    const scaleY = displayHeight / NATIVE_CARD_HEIGHT;
+
+    // Total sprite sheet dimensions
+    const sheetWidth = SPRITE_COLS * NATIVE_CARD_WIDTH;
+    const sheetHeight = SPRITE_ROWS * NATIVE_CARD_HEIGHT;
+
+    // Scaled sprite sheet size
+    const scaledSheetWidth = sheetWidth * scaleX;
+    const scaledSheetHeight = sheetHeight * scaleY;
+
+    // Scale the position coordinates
+    const scaledX = info.x * scaleX;
+    const scaledY = info.y * scaleY;
+
+    return {
+      backgroundImage: `url(${info.sprite})`,
+      backgroundPosition: `-${scaledX}px -${scaledY}px`,
+      backgroundSize: `${scaledSheetWidth}px ${scaledSheetHeight}px`,
+      backgroundRepeat: 'no-repeat',
+    };
+  }
+  return {};
+}
 
 // Default suit symbols
 const defaultSuitSymbols: Record<string, string> = {
@@ -59,13 +144,43 @@ function getDefaultSuitColor(suit: string): string {
             <!-- Front face -->
             <div
               class="card-face card-front"
+              :class="{ 'has-image': card.cardData.faceImage }"
               :style="{ color: (getSuitColor || getDefaultSuitColor)(card.cardData.suit || '') }"
             >
-              <span class="rank">{{ card.cardData.rank }}</span>
-              <span class="suit">{{ (getSuitSymbol || getDefaultSuitSymbol)(card.cardData.suit || '') }}</span>
+              <!-- URL image -->
+              <img
+                v-if="isUrlImage(card.cardData.faceImage)"
+                :src="getImageSrc(card.cardData.faceImage)"
+                class="card-image"
+                :alt="`${card.cardData.rank}${card.cardData.suit}`"
+              />
+              <!-- CSS sprite sheet with background-position -->
+              <div
+                v-else-if="isSpriteImage(card.cardData.faceImage)"
+                class="card-image card-sprite"
+                :style="getSpriteStyle(card.cardData.faceImage)"
+              ></div>
+              <template v-else>
+                <span class="rank">{{ card.cardData.rank }}</span>
+                <span class="suit">{{ (getSuitSymbol || getDefaultSuitSymbol)(card.cardData.suit || '') }}</span>
+              </template>
             </div>
             <!-- Back face -->
-            <div class="card-face card-back"></div>
+            <div class="card-face card-back" :class="{ 'has-image': card.cardData.backImage }">
+              <!-- URL image -->
+              <img
+                v-if="isUrlImage(card.cardData.backImage)"
+                :src="getImageSrc(card.cardData.backImage)"
+                class="card-image"
+                alt="Card back"
+              />
+              <!-- CSS sprite sheet with background-position -->
+              <div
+                v-else-if="isSpriteImage(card.cardData.backImage)"
+                class="card-image card-sprite"
+                :style="getSpriteStyle(card.cardData.backImage)"
+              ></div>
+            </div>
           </div>
         </slot>
       </div>
@@ -141,7 +256,7 @@ function getDefaultSuitColor(suit: string): string {
   transform: rotateY(180deg);
 }
 
-.card-back::before {
+.card-back:not(.has-image)::before {
   content: '';
   width: 60%;
   height: 70%;
@@ -153,6 +268,42 @@ function getDefaultSuitColor(suit: string): string {
     transparent 8px
   );
   border-radius: 4px;
+}
+
+/* Card image styles */
+.card-face.has-image {
+  background: transparent;
+  padding: 0;
+  /* Override flex centering to let image fill container */
+  display: block;
+}
+
+.card-back.has-image {
+  background: transparent;
+  /* Override flex centering to let image fill container */
+  display: block;
+}
+
+.card-image {
+  /* Fill the entire card face */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+/* CSS sprite sheet (uses background-position) */
+.card-sprite {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background-repeat: no-repeat;
 }
 
 /* Reduced motion: instant transitions */

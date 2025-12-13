@@ -39,7 +39,7 @@ export interface FlyOnAppearOptions<T> {
   /** Reactive element that triggers the animation when it becomes truthy */
   element: ComputedRef<T | null | undefined> | Ref<T | null | undefined>;
   /** Function to extract card data from the element */
-  getCardData: (element: T) => { rank?: string; suit?: string };
+  getCardData: (element: T) => { rank?: string; suit?: string; faceImage?: unknown; backImage?: unknown };
   /** Whether to flip the card during flight (default: true) */
   flip?: boolean;
   /** Whether the card starts face up (default: false - starts face down) */
