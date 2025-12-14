@@ -110,12 +110,14 @@ const currentArgs = ref<Record<string, unknown>>({});
 const isExecuting = ref(false);
 
 // Get metadata for available actions
-// When autoEndTurn is enabled, filter out endTurn action (it will auto-complete when no other actions available)
+// When autoEndTurn is enabled, filter out endTurn action only if other actions are available
+// (so player can still manually end turn if stuck with no valid actions)
 const actionsWithMetadata = computed(() => {
   let actions = props.availableActions;
 
-  // In auto mode, hide endTurn - the flow will auto-progress
-  if (props.autoEndTurn !== false) {
+  // In auto mode, hide endTurn only if there are other actions available
+  // This allows the loop to progress naturally while still letting player end turn if stuck
+  if (props.autoEndTurn !== false && actions.length > 1) {
     actions = actions.filter(name => name !== 'endTurn');
   }
 
@@ -454,17 +456,10 @@ watch(() => props.availableActions, (actions) => {
     boardInteraction?.clear();
   }
 
-  // Auto-execute endTurn when enabled and it's the only available action
-  // This skips the confirmation step for convenience
-  if (
-    props.autoEndTurn !== false && // Default to true
-    props.isMyTurn &&
-    actions.length === 1 &&
-    actions[0] === 'endTurn' &&
-    !isExecuting.value
-  ) {
-    executeAction('endTurn', {});
-  }
+  // Note: We intentionally do NOT auto-execute endTurn anymore.
+  // Auto-executing endTurn caused turns to be skipped when it was the only
+  // available action at the start of a turn (before player could take actions).
+  // Instead, if endTurn is the only option, we show it and let the player click it.
 });
 
 // Watch for pending action start from external UI (e.g., custom game board buttons)
