@@ -110,25 +110,15 @@ const currentArgs = ref<Record<string, unknown>>({});
 const isExecuting = ref(false);
 
 // Get metadata for available actions
-// When autoEndTurn is enabled, filter out endTurn action only if other actions are available
-// (so player can still manually end turn if stuck with no valid actions)
 const actionsWithMetadata = computed(() => {
-  let actions = props.availableActions;
-
-  // In auto mode, hide endTurn only if there are other actions available
-  // This allows the loop to progress naturally while still letting player end turn if stuck
-  if (props.autoEndTurn !== false && actions.length > 1) {
-    actions = actions.filter(name => name !== 'endTurn');
-  }
-
   if (!props.actionMetadata) {
-    return actions.map(name => ({
+    return props.availableActions.map(name => ({
       name,
       prompt: formatActionName(name),
       selections: [] as Selection[],
     }));
   }
-  return actions
+  return props.availableActions
     .map(name => props.actionMetadata![name])
     .filter(Boolean);
 });
@@ -456,10 +446,17 @@ watch(() => props.availableActions, (actions) => {
     boardInteraction?.clear();
   }
 
-  // Note: We intentionally do NOT auto-execute endTurn anymore.
-  // Auto-executing endTurn caused turns to be skipped when it was the only
-  // available action at the start of a turn (before player could take actions).
-  // Instead, if endTurn is the only option, we show it and let the player click it.
+  // Auto-execute endTurn when enabled and it's the only available action
+  // This skips the confirmation step for convenience
+  if (
+    props.autoEndTurn !== false && // Default to true
+    props.isMyTurn &&
+    actions.length === 1 &&
+    actions[0] === 'endTurn' &&
+    !isExecuting.value
+  ) {
+    executeAction('endTurn', {});
+  }
 });
 
 // Watch for pending action start from external UI (e.g., custom game board buttons)
@@ -901,9 +898,9 @@ const otherPlayers = computed(() => {
       >
         {{ action.prompt || formatActionName(action.name) }}
       </button>
-      <!-- Undo button - shows when player has made actions this turn (hidden in auto mode) -->
+      <!-- Undo button - shows when player has made actions this turn -->
       <button
-        v-if="canUndo && autoEndTurn === false"
+        v-if="canUndo"
         class="action-btn undo-btn"
         @click="emit('undo')"
         :disabled="isExecuting"
