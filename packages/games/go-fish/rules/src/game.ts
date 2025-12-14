@@ -104,13 +104,10 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
   private dealCards(): void {
     const cardsPerPlayer = this.players.length <= 3 ? 7 : 5;
 
+    // Deal one card at a time to each player, rotating
     for (let i = 0; i < cardsPerPlayer; i++) {
       for (const player of this.players) {
-        const card = this.pond.first(Card);
-        if (card) {
-          const hand = this.getPlayerHand(player);
-          card.putInto(hand);
-        }
+        this.pond.drawTo(this.getPlayerHand(player), 1, Card);
       }
     }
   }
@@ -199,11 +196,7 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
    * Returns the drawn card, or undefined if pond is empty
    */
   drawFromPond(player: GoFishPlayer): Card | undefined {
-    const card = this.pond.first(Card);
-    if (card) {
-      const hand = this.getPlayerHand(player);
-      card.putInto(hand);
-    }
+    const [card] = this.pond.drawTo(this.getPlayerHand(player), 1, Card);
     return card;
   }
 

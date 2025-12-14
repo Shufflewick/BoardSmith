@@ -1,6 +1,6 @@
 import { Space } from './space.js';
-import { GameElement, type ElementClass } from './game-element.js';
-import type { ElementContext } from './types.js';
+import { Piece } from './piece.js';
+import type { ElementContext, ElementClass } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 
@@ -48,27 +48,48 @@ export class Deck<G extends Game = any, P extends Player = any> extends Space<G,
   }
 
   /**
-   * Draw a card from the deck (get and remove the top card)
+   * Draw cards from the deck directly to a destination
    *
-   * Unlike `first()` which only queries, `draw()` removes the card from the deck.
-   * The caller is responsible for placing the card somewhere (hand, discard, etc).
+   * This is a convenience method that combines `first()` + `putInto()` for the
+   * common pattern of drawing cards to a player's hand or another space.
    *
-   * @param elementClass - Optional class to filter by (e.g., Card, MercCard)
-   * @returns The drawn card, or undefined if deck is empty
+   * @param destination - Where to put the drawn cards
+   * @param count - Number of cards to draw (default: 1)
+   * @param elementClass - Optional class to filter by (default: Piece)
+   * @returns Array of drawn cards (may be fewer than count if deck runs out)
    *
    * @example
    * ```ts
-   * const card = deck.draw(Card);
-   * if (card) {
-   *   card.putInto(player.hand);
+   * // Draw 1 card to hand
+   * deck.drawTo(player.hand);
+   *
+   * // Draw 5 cards to hand
+   * deck.drawTo(player.hand, 5);
+   *
+   * // Draw 5 cards with type safety
+   * const cards = deck.drawTo(player.hand, 5, Card);
+   *
+   * // Deal to multiple players
+   * for (const player of game.players) {
+   *   deck.drawTo(player.hand, 7);
    * }
    * ```
    */
-  draw<T extends GameElement>(elementClass?: ElementClass<T>): T | undefined {
-    const card = elementClass ? this.first(elementClass) : this.first() as T | undefined;
-    if (card) {
-      card.remove();
+  drawTo<T extends Piece>(
+    destination: Space<G, P>,
+    count: number = 1,
+    elementClass?: ElementClass<T>
+  ): T[] {
+    const drawn: T[] = [];
+    const cls = elementClass ?? (Piece as unknown as ElementClass<T>);
+
+    for (let i = 0; i < count; i++) {
+      const card = this.first(cls);
+      if (!card) break; // Deck is empty
+      card.putInto(destination);
+      drawn.push(card);
     }
-    return card;
+
+    return drawn;
   }
 }

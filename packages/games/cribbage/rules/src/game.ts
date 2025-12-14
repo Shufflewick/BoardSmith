@@ -287,17 +287,9 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     const dealer = this.getDealer();
 
     for (let i = 0; i < 6; i++) {
-      // Non-dealer first
-      const card1 = this.deck.first(Card);
-      if (card1) {
-        card1.putInto(this.getPlayerHand(nonDealer));
-      }
-
-      // Then dealer
-      const card2 = this.deck.first(Card);
-      if (card2) {
-        card2.putInto(this.getPlayerHand(dealer));
-      }
+      // Non-dealer first, then dealer
+      this.deck.drawTo(this.getPlayerHand(nonDealer), 1, Card);
+      this.deck.drawTo(this.getPlayerHand(dealer), 1, Card);
     }
   }
 
@@ -349,9 +341,8 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * Cut the starter card
    */
   cutStarterCard(): void {
-    const starter = this.deck.first(Card);
+    const [starter] = this.deck.drawTo(this.starterArea, 1, Card);
     if (starter) {
-      starter.putInto(this.starterArea);
       this.message(`Starter card: ${starter.rank}${starter.suit}`);
 
       // His Heels: Jack as starter = 2 points for dealer
