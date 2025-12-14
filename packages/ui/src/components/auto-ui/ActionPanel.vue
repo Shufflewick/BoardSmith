@@ -110,15 +110,23 @@ const currentArgs = ref<Record<string, unknown>>({});
 const isExecuting = ref(false);
 
 // Get metadata for available actions
+// When autoEndTurn is enabled, filter out endTurn action (it will auto-complete when no other actions available)
 const actionsWithMetadata = computed(() => {
+  let actions = props.availableActions;
+
+  // In auto mode, hide endTurn - the flow will auto-progress
+  if (props.autoEndTurn !== false) {
+    actions = actions.filter(name => name !== 'endTurn');
+  }
+
   if (!props.actionMetadata) {
-    return props.availableActions.map(name => ({
+    return actions.map(name => ({
       name,
       prompt: formatActionName(name),
       selections: [] as Selection[],
     }));
   }
-  return props.availableActions
+  return actions
     .map(name => props.actionMetadata![name])
     .filter(Boolean);
 });
@@ -898,9 +906,9 @@ const otherPlayers = computed(() => {
       >
         {{ action.prompt || formatActionName(action.name) }}
       </button>
-      <!-- Undo button - shows when player has made actions this turn -->
+      <!-- Undo button - shows when player has made actions this turn (hidden in auto mode) -->
       <button
-        v-if="canUndo"
+        v-if="canUndo && autoEndTurn === false"
         class="action-btn undo-btn"
         @click="emit('undo')"
         :disabled="isExecuting"
