@@ -7,6 +7,37 @@ import type { GameRunner } from '@boardsmith/runtime';
 import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
 
 /**
+ * Generate a default display string for a choice value.
+ * Handles objects with name property, primitives, etc.
+ */
+function defaultChoiceDisplay(value: unknown): string {
+  if (value === null || value === undefined) {
+    return String(value);
+  }
+
+  // Primitives: use String directly
+  if (typeof value !== 'object') {
+    return String(value);
+  }
+
+  // Objects: prefer 'name' or 'label' property if present
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.name === 'string') {
+    return obj.name;
+  }
+  if (typeof obj.label === 'string') {
+    return obj.label;
+  }
+
+  // Fallback to JSON for objects without name/label
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
  * Generate a random 8-character game ID
  */
 export function generateGameId(): string {
@@ -113,7 +144,7 @@ function buildSelectionMetadata(
       base.choices = choices.map(value => {
         const choice: any = {
           value,
-          display: choiceSel.display ? choiceSel.display(value) : String(value),
+          display: choiceSel.display ? choiceSel.display(value) : defaultChoiceDisplay(value),
         };
 
         // Add board refs if provided

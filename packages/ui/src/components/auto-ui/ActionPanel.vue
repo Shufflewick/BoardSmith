@@ -236,24 +236,43 @@ const selectedElementRef = computed(() => {
 });
 
 // Filter choices based on filterBy and previous selections
+// Also excludes choices that were already selected in previous choice selections
 const filteredChoices = computed(() => {
   if (!currentSelection.value?.choices) return [];
 
-  const choices = currentSelection.value.choices;
+  let choices = currentSelection.value.choices;
   const filterBy = currentSelection.value.filterBy;
 
-  // If no filterBy, return all choices
-  if (!filterBy) return choices;
+  // If filterBy is specified, filter to only matching choices
+  if (filterBy) {
+    const filterValue = currentArgs.value[filterBy.selectionName];
+    if (filterValue !== undefined) {
+      choices = choices.filter(choice => {
+        const choiceValue = choice.value as Record<string, unknown>;
+        return choiceValue[filterBy.key] === filterValue;
+      });
+    }
+  }
 
-  // Get the value from the previous selection
-  const filterValue = currentArgs.value[filterBy.selectionName];
-  if (filterValue === undefined) return choices;
+  // Exclude choices that were already selected in previous choice selections
+  // This handles sequential choice selections where user shouldn't pick the same thing twice
+  if (currentActionMeta.value) {
+    const alreadySelectedValues = new Set<unknown>();
+    for (const sel of currentActionMeta.value.selections) {
+      if (sel.type === 'choice' && sel.name !== currentSelection.value.name) {
+        const selectedValue = currentArgs.value[sel.name];
+        if (selectedValue !== undefined) {
+          alreadySelectedValues.add(selectedValue);
+        }
+      }
+    }
 
-  // Filter choices where choice.value[filterBy.key] matches filterValue
-  return choices.filter(choice => {
-    const choiceValue = choice.value as Record<string, unknown>;
-    return choiceValue[filterBy.key] === filterValue;
-  });
+    if (alreadySelectedValues.size > 0) {
+      choices = choices.filter(choice => !alreadySelectedValues.has(choice.value));
+    }
+  }
+
+  return choices;
 });
 
 // Filtered valid elements - excludes elements already selected in previous selections
