@@ -36,7 +36,33 @@ export type {
 } from './element/index.js';
 
 // Player system
-export { Player, PlayerCollection } from './player/index.js';
+export {
+  Player,
+  PlayerCollection,
+  AbilityManager,
+  createAbilityDisplayMap,
+} from './player/index.js';
+
+export type {
+  Ability,
+  AbilityDisplayInfo,
+} from './player/index.js';
+
+// Scoring system (tracks for dice/roll-and-write games)
+export {
+  Track,
+  MonotonicTrack,
+  UniqueTrack,
+  CounterTrack,
+} from './scoring/index.js';
+
+export type {
+  TrackEntry,
+  TrackConfig,
+  MonotonicTrackConfig,
+  UniqueTrackConfig,
+  CounterTrackConfig,
+} from './scoring/index.js';
 
 // Command system (event sourcing)
 export {

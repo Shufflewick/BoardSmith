@@ -9,6 +9,7 @@ This folder contains documentation for the BoardSmith game framework.
 | [Getting Started](./getting-started.md) | CLI setup, project creation, and basic development |
 | [Core Concepts](./core-concepts.md) | Element tree, visibility, actions vs commands |
 | [Actions & Flow](./actions-and-flow.md) | Action builder API and declarative flow system |
+| [Dice & Scoring](./dice-and-scoring.md) | Dice elements, 3D rendering, abilities, and scoring tracks |
 | [UI Components](./ui-components.md) | Vue components and composables |
 | [AI System](./ai-system.md) | MCTS bot and AI integration |
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |

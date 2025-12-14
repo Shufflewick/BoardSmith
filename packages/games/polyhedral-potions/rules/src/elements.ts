@@ -1,5 +1,13 @@
-import { Die, DicePool, Space, Player } from '@boardsmith/engine';
-import type { DieSides } from '@boardsmith/engine';
+import {
+  Die,
+  DicePool,
+  Space,
+  Player,
+  AbilityManager,
+  MonotonicTrack,
+  CounterTrack,
+} from '@boardsmith/engine';
+import type { DieSides, TrackEntry } from '@boardsmith/engine';
 
 // Forward declare for circular reference
 import type { PolyPotionsGame } from './game.js';
@@ -28,7 +36,7 @@ export class IngredientShelf extends DicePool<PolyPotionsGame, PolyPotionsPlayer
 export class DraftArea extends Space<PolyPotionsGame, PolyPotionsPlayer> {}
 
 /**
- * Ability types that can be earned and used
+ * Ability types that can be earned and used in Polyhedral Potions
  */
 export type AbilityType =
   | 'subtract'      // Subtract instead of add
@@ -37,22 +45,6 @@ export type AbilityType =
   | 'draft-again'   // Take another full turn
   | 'refresh'       // Reroll all dice on shelf
   | 'adjust';       // +/- 1 or 2 to final value
-
-/**
- * An ability a player has earned
- */
-export interface PlayerAbility {
-  type: AbilityType;
-  used: boolean;
-}
-
-/**
- * Track entry for distillation or fulminate
- */
-export interface TrackEntry {
-  value: number;
-  points: number;
-}
 
 /**
  * Ingredient track box with optional ability unlock
@@ -133,7 +125,52 @@ export const POTION_ROWS: { potions: number[]; stars: number }[] = [
 export const POISON_SKULLS_FOR_STAR = 6;
 
 /**
+ * Create distillation track for a column
+ */
+function createDistillationTrack(columnIndex: number): MonotonicTrack {
+  return new MonotonicTrack({
+    id: `distill-${columnIndex}`,
+    name: `Distillation ${columnIndex + 1}`,
+    direction: 'decreasing',
+    maxEntries: DISTILLATION_ROWS[columnIndex],
+    pointsPerEntry: DISTILLATION_POINTS[columnIndex],
+    completionBonus: DISTILLATION_COMPLETION_BONUS[columnIndex],
+    allowSpecialEntries: true, // Poison can equal previous value
+  });
+}
+
+/**
+ * Create fulminate track
+ */
+function createFulminateTrack(): MonotonicTrack {
+  return new MonotonicTrack({
+    id: 'fulminate',
+    name: 'Fulminate',
+    direction: 'increasing',
+    maxEntries: FULMINATE_POINTS.length,
+    pointsPerEntry: FULMINATE_POINTS,
+    completionBonus: FULMINATE_COMPLETION_BONUS,
+    allowSpecialEntries: true, // Poison can equal previous value
+  });
+}
+
+/**
+ * Create poison track
+ */
+function createPoisonTrack(): CounterTrack {
+  return new CounterTrack({
+    id: 'poison',
+    name: 'Poison',
+    maxEntries: POISON_SKULLS_FOR_STAR,
+    pointsPerCount: 2,
+    completionBonus: 10, // Star worth 10 points
+  });
+}
+
+/**
  * Polyhedral Potions player with score sheet tracking
+ *
+ * Uses the engine's AbilityManager and Track systems for reusable patterns.
  */
 export class PolyPotionsPlayer extends Player {
   /**
@@ -148,30 +185,24 @@ export class PolyPotionsPlayer extends Player {
   potionsCrafted: boolean[] = new Array(32).fill(false);
 
   /**
-   * Number of poison skulls (crafted when potion already made or out of range)
+   * Poison track - uses CounterTrack from engine
    */
-  poisonSkulls: number = 0;
+  poisonTrack: CounterTrack;
 
   /**
-   * Whether the poison star has been earned
+   * Distillation tracks - 4 columns using MonotonicTrack
    */
-  poisonStarEarned: boolean = false;
+  distillationTracks: MonotonicTrack[];
 
   /**
-   * Distillation track - 4 columns, values must decrease
-   * Each entry is { value, points }
+   * Fulminate track - uses MonotonicTrack
    */
-  distillations: TrackEntry[][] = [[], [], [], []];
+  fulminateTrack: MonotonicTrack;
 
   /**
-   * Fulminate track - 1 column, values must increase
+   * Abilities - uses AbilityManager from engine
    */
-  fulminates: TrackEntry[] = [];
-
-  /**
-   * Abilities earned (from drafting specific dice)
-   */
-  abilities: PlayerAbility[] = [];
+  abilityManager: AbilityManager<AbilityType>;
 
   /**
    * Stars earned (10 points each, from completing rows)
@@ -189,6 +220,11 @@ export class PolyPotionsPlayer extends Player {
   potionStars: number = 0;
 
   /**
+   * Whether the poison star has been earned
+   */
+  poisonStarEarned: boolean = false;
+
+  /**
    * Whether this player crafted a poison this turn (allows duplicate values)
    */
   craftedPoisonThisTurn: boolean = false;
@@ -196,26 +232,35 @@ export class PolyPotionsPlayer extends Player {
   constructor(position: number, name: string) {
     super(position, name);
 
-    // Initialize ingredient tracks
+    // Initialize ability manager with starting reroll ability
+    this.abilityManager = new AbilityManager<AbilityType>();
+    this.abilityManager.add('reroll-2', 'starting');
+
+    // Initialize scoring tracks using engine abstractions
+    this.distillationTracks = [
+      createDistillationTrack(0),
+      createDistillationTrack(1),
+      createDistillationTrack(2),
+      createDistillationTrack(3),
+    ];
+    this.fulminateTrack = createFulminateTrack();
+    this.poisonTrack = createPoisonTrack();
+
+    // Initialize ingredient tracks (game-specific unlock system)
     for (const [dieType, config] of Object.entries(INGREDIENT_TRACK_CONFIG)) {
       this.ingredientTracks[dieType] = [];
       for (let i = 0; i < config.boxes; i++) {
         const box: IngredientBox = { marked: false };
-        // Check if this position has an ability
         const abilityConfig = config.abilities.find(a => a.position === i);
         if (abilityConfig) {
           box.ability = abilityConfig.type;
         }
-        // Check if this is the last box (star position)
         if (i === config.boxes - 1 && config.starAtEnd) {
           box.star = true;
         }
         this.ingredientTracks[dieType].push(box);
       }
     }
-
-    // Each player starts with one Reroll ability
-    this.abilities.push({ type: 'reroll-2', used: false });
   }
 
   /**
@@ -224,36 +269,131 @@ export class PolyPotionsPlayer extends Player {
   get score(): number {
     let total = 0;
 
-    // Distillation points - sum of all entries plus completion bonuses
-    for (let col = 0; col < 4; col++) {
-      for (const entry of this.distillations[col]) {
-        total += entry.points;
-      }
-      // Check for column completion bonus
-      if (this.distillations[col].length >= DISTILLATION_ROWS[col]) {
-        total += DISTILLATION_COMPLETION_BONUS[col];
-      }
+    // Distillation points from tracks
+    for (const track of this.distillationTracks) {
+      total += track.calculatePoints();
     }
 
-    // Fulminate points - cumulative based on position
-    if (this.fulminates.length > 0) {
-      const position = this.fulminates.length - 1;
-      total += FULMINATE_POINTS[Math.min(position, FULMINATE_POINTS.length - 1)];
-    }
+    // Fulminate points from track
+    total += this.fulminateTrack.calculatePoints();
 
-    // Fulminate completion bonus
-    if (this.fulminates.length >= FULMINATE_POINTS.length) {
-      total += FULMINATE_COMPLETION_BONUS;
-    }
+    // Poison points from track
+    total += this.poisonTrack.calculatePoints();
 
-    // Poison skulls (2 points each)
-    total += this.poisonSkulls * 2;
-
-    // Stars (10 points each)
-    total += this.stars * 10;
+    // Stars (10 points each) - note: poison track completion bonus already included
+    // So we only add stars not from poison here
+    total += (this.stars - (this.poisonStarEarned ? 1 : 0)) * 10;
 
     return total;
   }
+
+  // ============================================
+  // Ability methods (delegating to AbilityManager)
+  // ============================================
+
+  /**
+   * Get abilities for serialization (backwards compatible)
+   */
+  get abilities() {
+    return this.abilityManager.toJSON();
+  }
+
+  /**
+   * Check if player has an unused ability of a given type
+   */
+  hasAbility(type: AbilityType): boolean {
+    return this.abilityManager.hasUnused(type);
+  }
+
+  /**
+   * Count unused abilities of a given type
+   */
+  countAbility(type: AbilityType): number {
+    return this.abilityManager.countUnused(type);
+  }
+
+  /**
+   * Use an ability (marks it as used)
+   */
+  useAbility(type: AbilityType): boolean {
+    return this.abilityManager.use(type);
+  }
+
+  // ============================================
+  // Track methods (delegating to Track classes)
+  // ============================================
+
+  /**
+   * Get distillations for serialization (backwards compatible)
+   */
+  get distillations(): TrackEntry[][] {
+    return this.distillationTracks.map(track =>
+      track.getEntries().map(e => ({ value: e.value, points: e.points }))
+    );
+  }
+
+  /**
+   * Get fulminates for serialization (backwards compatible)
+   */
+  get fulminates(): TrackEntry[] {
+    return this.fulminateTrack.getEntries().map(e => ({ value: e.value, points: e.points }));
+  }
+
+  /**
+   * Get poison skulls count for serialization (backwards compatible)
+   */
+  get poisonSkulls(): number {
+    return this.poisonTrack.count;
+  }
+
+  /**
+   * Check if a value can be added to a distillation column
+   */
+  canAddToDistillation(columnIndex: number, value: number, isPoison: boolean = false): boolean {
+    if (columnIndex < 0 || columnIndex >= 4) return false;
+    return this.distillationTracks[columnIndex].canAdd(value, isPoison);
+  }
+
+  /**
+   * Add a value to distillation track
+   */
+  addDistillation(columnIndex: number, value: number): number {
+    return this.distillationTracks[columnIndex].add(value);
+  }
+
+  /**
+   * Check if a value can be added to fulminate track
+   */
+  canAddToFulminate(value: number, isPoison: boolean = false): boolean {
+    return this.fulminateTrack.canAdd(value, isPoison);
+  }
+
+  /**
+   * Add a value to fulminate track
+   */
+  addFulminate(value: number): number {
+    return this.fulminateTrack.add(value);
+  }
+
+  /**
+   * Add a poison skull and check for star
+   */
+  addPoisonSkull(): boolean {
+    this.craftedPoisonThisTurn = true;
+    this.poisonTrack.increment();
+
+    // Check for poison star (completing all 6)
+    if (this.poisonTrack.isComplete() && !this.poisonStarEarned) {
+      this.poisonStarEarned = true;
+      this.stars++;
+      return true;
+    }
+    return false;
+  }
+
+  // ============================================
+  // Ingredient tracking (game-specific)
+  // ============================================
 
   /**
    * Mark an ingredient as used and check for ability unlocks
@@ -265,7 +405,7 @@ export class PolyPotionsPlayer extends Player {
 
     // Find the first unmarked box
     const boxIndex = track.findIndex(b => !b.marked);
-    if (boxIndex === -1) return null; // Track already complete
+    if (boxIndex === -1) return null;
 
     const box = track[boxIndex];
     box.marked = true;
@@ -278,7 +418,7 @@ export class PolyPotionsPlayer extends Player {
 
     // Check for ability unlock
     if (box.ability) {
-      this.abilities.push({ type: box.ability, used: false });
+      this.abilityManager.add(box.ability, `${dieType}-track`);
       return box.ability;
     }
 
@@ -305,6 +445,10 @@ export class PolyPotionsPlayer extends Player {
     return track.every(b => b.marked);
   }
 
+  // ============================================
+  // Potion crafting (game-specific row system)
+  // ============================================
+
   /**
    * Check if a potion value can be crafted
    */
@@ -326,7 +470,6 @@ export class PolyPotionsPlayer extends Player {
     for (const row of POTION_ROWS) {
       const isComplete = row.potions.every(p => this.potionsCrafted[p - 1]);
       if (isComplete) {
-        // Count how many stars this row should give that we haven't counted yet
         const rowStars = row.stars;
         const alreadyCounted = this.countPotionRowStarsFor(row);
         if (alreadyCounted < rowStars) {
@@ -344,8 +487,6 @@ export class PolyPotionsPlayer extends Player {
    * Helper to count stars already awarded for a potion row
    */
   private countPotionRowStarsFor(row: { potions: number[]; stars: number }): number {
-    // This is tracked by checking if all potions in the row were already crafted before
-    // We'll use a simpler approach - recalculate total potion stars
     let totalPotionStars = 0;
     for (const r of POTION_ROWS) {
       if (r === row) break;
@@ -356,106 +497,9 @@ export class PolyPotionsPlayer extends Player {
     return this.potionStars - totalPotionStars > 0 ? row.stars : 0;
   }
 
-  /**
-   * Add a poison skull and check for star
-   */
-  addPoisonSkull(): boolean {
-    this.poisonSkulls++;
-    this.craftedPoisonThisTurn = true;
-
-    // Check for poison star (completing all 6)
-    if (this.poisonSkulls >= POISON_SKULLS_FOR_STAR && !this.poisonStarEarned) {
-      this.poisonStarEarned = true;
-      this.stars++;
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Check if a value can be added to a distillation column
-   * (must be less than previous value, or column must be empty)
-   * Poison allows equal values!
-   */
-  canAddToDistillation(columnIndex: number, value: number, isPoison: boolean = false): boolean {
-    if (columnIndex < 0 || columnIndex >= 4) return false;
-    const col = this.distillations[columnIndex];
-
-    // Check if column is already full
-    if (col.length >= DISTILLATION_ROWS[columnIndex]) return false;
-
-    if (col.length === 0) return true;
-
-    const lastValue = col[col.length - 1].value;
-    // Poison can equal the previous value
-    if (isPoison) {
-      return value <= lastValue;
-    }
-    return value < lastValue;
-  }
-
-  /**
-   * Add a value to distillation track
-   */
-  addDistillation(columnIndex: number, value: number): number {
-    const row = this.distillations[columnIndex].length;
-    const points = DISTILLATION_POINTS[columnIndex]?.[row] ?? 0;
-    this.distillations[columnIndex].push({ value, points });
-    return points;
-  }
-
-  /**
-   * Check if a value can be added to fulminate track
-   * (must be greater than previous value, or track must be empty)
-   * Poison allows equal values!
-   */
-  canAddToFulminate(value: number, isPoison: boolean = false): boolean {
-    if (this.fulminates.length >= FULMINATE_POINTS.length) return false;
-    if (this.fulminates.length === 0) return true;
-
-    const lastValue = this.fulminates[this.fulminates.length - 1].value;
-    // Poison can equal the previous value
-    if (isPoison) {
-      return value >= lastValue;
-    }
-    return value > lastValue;
-  }
-
-  /**
-   * Add a value to fulminate track
-   */
-  addFulminate(value: number): number {
-    const position = this.fulminates.length;
-    const points = FULMINATE_POINTS[Math.min(position, FULMINATE_POINTS.length - 1)];
-    this.fulminates.push({ value, points });
-    return points;
-  }
-
-  /**
-   * Check if player has an unused ability of a given type
-   */
-  hasAbility(type: AbilityType): boolean {
-    return this.abilities.some(a => a.type === type && !a.used);
-  }
-
-  /**
-   * Count unused abilities of a given type
-   */
-  countAbility(type: AbilityType): number {
-    return this.abilities.filter(a => a.type === type && !a.used).length;
-  }
-
-  /**
-   * Use an ability (marks it as used)
-   */
-  useAbility(type: AbilityType): boolean {
-    const ability = this.abilities.find(a => a.type === type && !a.used);
-    if (ability) {
-      ability.used = true;
-      return true;
-    }
-    return false;
-  }
+  // ============================================
+  // Turn state
+  // ============================================
 
   /**
    * Reset turn state
@@ -464,9 +508,12 @@ export class PolyPotionsPlayer extends Player {
     this.craftedPoisonThisTurn = false;
   }
 
+  // ============================================
+  // Serialization
+  // ============================================
+
   /**
    * Serialize player to JSON for the game view
-   * Override to include all custom properties
    */
   override toJSON(): Record<string, unknown> {
     return {
@@ -475,12 +522,14 @@ export class PolyPotionsPlayer extends Player {
       name: this.name,
       color: this.color,
       avatar: this.avatar,
-      // Custom game properties
+      // Computed properties
       score: this.score,
       stars: this.stars,
       ingredientStars: this.ingredientStars,
       potionStars: this.potionStars,
+      // Ability manager data (backwards compatible format)
       abilities: this.abilities,
+      // Track data (backwards compatible format)
       ingredientTracks: this.ingredientTracks,
       potionsCrafted: this.potionsCrafted,
       poisonSkulls: this.poisonSkulls,

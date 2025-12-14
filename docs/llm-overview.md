@@ -247,6 +247,69 @@ sequence(
 - `useGameGrid`, `useHexGrid` - Grid utilities
 - `useCardDisplay` - Card formatting
 
+## Dice & Scoring Systems
+
+### Dice Elements
+
+```typescript
+// Die extends Piece with sides/value
+class MyDie extends Die<MyGame, MyPlayer> {
+  color?: 'red' | 'blue';
+}
+
+// DicePool is a Space for holding dice
+this.shelf = this.create(DicePool, 'shelf');
+this.shelf.create(MyDie, 'd6-1', { sides: 6 });
+```
+
+### Ability System
+
+```typescript
+import { AbilityManager } from '@boardsmith/engine';
+
+type PowerUp = 'reroll' | 'flip' | 'bonus';
+
+class MyPlayer extends Player<MyGame, MyPlayer> {
+  abilities = new AbilityManager<PowerUp>();
+
+  constructor() {
+    this.abilities.add('reroll', 'starting');
+  }
+}
+
+// Usage
+if (player.abilities.hasUnused('reroll')) {
+  player.abilities.use('reroll');
+}
+```
+
+### Scoring Tracks
+
+```typescript
+import { MonotonicTrack, UniqueTrack, CounterTrack } from '@boardsmith/engine';
+
+// Increasing/decreasing sequence tracks
+const track = new MonotonicTrack({
+  id: 'score',
+  direction: 'increasing',  // or 'decreasing'
+  maxEntries: 10,
+  pointsPerEntry: [0, 1, 3, 6, 11, 16, 23, 30, 40, 50],
+});
+
+track.canAdd(15);   // Check if value fits sequence
+track.add(15);      // Add value, returns points earned
+
+// Simple counter tracks
+const counter = new CounterTrack({
+  id: 'bonus',
+  maxEntries: 6,
+  pointsPerCount: 10,
+});
+
+counter.increment();
+counter.calculatePoints();  // Returns total points
+```
+
 ## AI System
 
 ```typescript
@@ -290,6 +353,7 @@ boardsmith publish        # Publish to boardsmith.io
 | Go Fish | `packages/games/go-fish/rules/src/` | Cards, hidden info, conditional turns |
 | Checkers | `packages/games/checkers/rules/src/` | Grid, multi-step jumps, promotion |
 | Cribbage | `packages/games/cribbage/rules/src/` | Multi-phase, simultaneous, scoring |
+| Polyhedral Potions | `packages/games/polyhedral-potions/rules/src/` | Dice, 3D rendering, abilities, scoring tracks |
 
 ## Key Files to Understand
 

@@ -8,8 +8,6 @@ export {
   DraftArea,
   PolyPotionsPlayer,
   type AbilityType,
-  type PlayerAbility,
-  type TrackEntry,
   type IngredientBox,
   // Constants for scoring/configuration
   INGREDIENT_TRACK_CONFIG,
@@ -21,6 +19,9 @@ export {
   POTION_ROWS,
   POISON_SKULLS_FOR_STAR,
 } from './elements.js';
+
+// Re-export engine types used by this game for convenience
+export type { Ability, TrackEntry } from '@boardsmith/engine';
 
 // Actions
 export {
