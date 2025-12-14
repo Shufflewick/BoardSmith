@@ -141,7 +141,8 @@ export interface ActionMetadata {
  */
 export interface PlayerGameState {
   phase: string;
-  players: Array<{ name: string; position: number }>;
+  /** Full player data including custom properties (abilities, score, etc.) */
+  players: Array<{ name: string; position: number; [key: string]: unknown }>;
   currentPlayer?: number;
   availableActions?: string[];
   isMyTurn: boolean;

@@ -17,6 +17,7 @@
  */
 import { computed, inject, provide, ref, watchEffect, type Ref } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
+import { Die3D } from '../dice';
 
 export interface GameElement {
   id: number;
@@ -102,10 +103,12 @@ const elementType = computed(() => {
   const type = attrs.$type as string | undefined;
   const layout = attrs.$layout as string | undefined;
 
-  // Check $type property set by engine element classes (Card, Hand, Deck, etc.)
+  // Check $type property set by engine element classes (Card, Hand, Deck, Die, DicePool, etc.)
   if (type === 'card') return 'card';
   if (type === 'hand') return 'hand';
   if (type === 'deck') return 'deck';
+  if (type === 'die') return 'die';
+  if (type === 'dice-pool') return 'dice-pool';
 
   // Use $layout property set by engine element classes
   // Grid, HexGrid, etc. set this explicitly - NO GUESSING
@@ -433,6 +436,21 @@ const frontRowCards = computed(() => {
   return cards.slice(halfPoint);
 });
 
+// Die properties from element attributes
+const dieProps = computed(() => {
+  if (elementType.value !== 'die') return null;
+  const attrs = props.element.attributes ?? {};
+  return {
+    sides: (attrs.sides as 4 | 6 | 8 | 10 | 12 | 20) ?? 6,
+    value: (attrs.value as number) ?? 1,
+    color: attrs.color as string | undefined,
+    rolling: (attrs.rolling as boolean) ?? false,
+    rollCount: (attrs.rollCount as number) ?? 0,
+    faceLabels: attrs.faceLabels as string[] | undefined,
+    faceImages: attrs.faceImages as string[] | undefined,
+  };
+});
+
 // Layout properties from element attributes
 const layoutProps = computed(() => {
   const attrs = props.element.attributes ?? {};
@@ -569,28 +587,56 @@ function handleCellClick() {
 }
 
 // Board size detection (for dynamic grid rendering)
-// Generic - works with any two numeric attributes
+// Uses $rowCoord and $colCoord from Grid element to find correct attributes
 const boardSize = computed(() => {
-  if (elementType.value !== 'board' || !visibleChildren.value.length || !gridCoordNames.value) {
+  if (elementType.value !== 'board' || !visibleChildren.value.length) {
     return { rows: 8, columns: 8 }; // Default fallback
   }
 
-  const { first, second } = gridCoordNames.value;
-  let maxFirst = 0;
-  let maxSecond = 0;
+  const attrs = props.element.attributes ?? {};
+  const rowCoord = attrs.$rowCoord as string | undefined;
+  const colCoord = attrs.$colCoord as string | undefined;
+
+  // Fall back to gridCoordNames if $rowCoord/$colCoord not specified
+  if (!rowCoord || !colCoord) {
+    if (!gridCoordNames.value) {
+      return { rows: 8, columns: 8 };
+    }
+    const { first, second } = gridCoordNames.value;
+    let maxFirst = 0;
+    let maxSecond = 0;
+
+    for (const child of visibleChildren.value) {
+      const childAttrs = child.attributes ?? {};
+      const firstVal = childAttrs[first];
+      const secondVal = childAttrs[second];
+
+      if (typeof firstVal === 'number') maxFirst = Math.max(maxFirst, firstVal);
+      if (typeof secondVal === 'number') maxSecond = Math.max(maxSecond, secondVal);
+    }
+
+    return {
+      rows: maxFirst + 1,
+      columns: maxSecond + 1,
+    };
+  }
+
+  // Use explicit $rowCoord and $colCoord
+  let maxRow = 0;
+  let maxCol = 0;
 
   for (const child of visibleChildren.value) {
-    const attrs = child.attributes ?? {};
-    const firstVal = attrs[first];
-    const secondVal = attrs[second];
+    const childAttrs = child.attributes ?? {};
+    const rowVal = childAttrs[rowCoord];
+    const colVal = childAttrs[colCoord];
 
-    if (typeof firstVal === 'number') maxFirst = Math.max(maxFirst, firstVal);
-    if (typeof secondVal === 'number') maxSecond = Math.max(maxSecond, secondVal);
+    if (typeof rowVal === 'number') maxRow = Math.max(maxRow, rowVal);
+    if (typeof colVal === 'number') maxCol = Math.max(maxCol, colVal);
   }
 
   return {
-    rows: maxFirst + 1,
-    columns: maxSecond + 1,
+    rows: maxRow + 1,
+    columns: maxCol + 1,
   };
 });
 
@@ -1015,6 +1061,50 @@ const cardBackPreviewData = computed(() => {
       </div>
     </template>
 
+    <!-- DIE RENDERING -->
+    <template v-else-if="elementType === 'die'">
+      <div
+        class="die-container"
+        :class="{ 'action-selectable': isActionSelectable }"
+        :data-element-id="props.element.id"
+        :data-animatable="true"
+        :data-die-preview="dieProps ? JSON.stringify(dieProps) : undefined"
+        @click="handleClick"
+      >
+        <Die3D
+          v-if="dieProps"
+          :sides="dieProps.sides"
+          :value="dieProps.value"
+          :color="dieProps.color"
+          :roll-count="dieProps.rollCount"
+          :die-id="props.element.id"
+          :face-labels="dieProps.faceLabels"
+          :face-images="dieProps.faceImages"
+          :size="60"
+        />
+        <span class="die-label">{{ displayLabel }}</span>
+      </div>
+    </template>
+
+    <!-- DICE POOL RENDERING -->
+    <template v-else-if="elementType === 'dice-pool'">
+      <div class="dice-pool-container" :style="layoutStyles">
+        <div class="dice-pool-header">
+          <span class="dice-pool-label">{{ displayLabel }}</span>
+          <span class="dice-pool-count" v-if="visibleChildren.length">{{ visibleChildren.length }} dice</span>
+        </div>
+        <div class="dice-pool-dice">
+          <AutoElement
+            v-for="child in visibleChildren"
+            :key="child.id"
+            :element="child"
+            :depth="depth + 1"
+            @element-click="handleChildClick"
+          />
+        </div>
+      </div>
+    </template>
+
     <!-- BOARD RENDERING -->
     <template v-else-if="elementType === 'board'">
       <div class="board-container">
@@ -1053,11 +1143,19 @@ const cardBackPreviewData = computed(() => {
           'is-clickable': visibleChildren.length > 0,
           'action-selectable': isActionSelectable,
           'is-drop-target': isDropTarget,
+          'has-image': !!(element.attributes?.image || element.attributes?.$image),
         }"
-        :style="parentGridCoords ? {
-          'grid-row': (element.attributes?.[parentGridCoords.rowCoord] as number) + 1,
-          'grid-column': (element.attributes?.[parentGridCoords.colCoord] as number) + 1,
-        } : {}"
+        :style="{
+          ...(parentGridCoords ? {
+            'grid-row': (element.attributes?.[parentGridCoords.rowCoord] as number) + 1,
+            'grid-column': (element.attributes?.[parentGridCoords.colCoord] as number) + 1,
+          } : {}),
+          ...(element.attributes?.image || element.attributes?.$image ? {
+            'background-image': `url(${element.attributes?.image || element.attributes?.$image})`,
+            'background-size': 'cover',
+            'background-position': 'center',
+          } : {}),
+        }"
         @click.stop="handleCellClick"
         @dragover="handleDragOver"
         @drop="handleDrop"
@@ -2021,5 +2119,81 @@ const cardBackPreviewData = computed(() => {
   50% {
     opacity: 0.7;
   }
+}
+
+/* DIE STYLES */
+.die-container {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.die-container.action-selectable {
+  cursor: pointer;
+  background: rgba(46, 204, 113, 0.1);
+  outline: 2px solid rgba(46, 204, 113, 0.6);
+  animation: pulse-die 2s ease-in-out infinite;
+}
+
+.die-container.action-selectable:hover {
+  background: rgba(46, 204, 113, 0.2);
+  outline-color: rgba(46, 204, 113, 1);
+  transform: scale(1.05);
+}
+
+@keyframes pulse-die {
+  0%, 100% {
+    outline-color: rgba(46, 204, 113, 0.6);
+  }
+  50% {
+    outline-color: rgba(46, 204, 113, 1);
+  }
+}
+
+.die-label {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+}
+
+/* DICE POOL STYLES */
+.dice-pool-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+.dice-pool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dice-pool-label {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #fff;
+}
+
+.dice-pool-count {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.dice-pool-dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--layout-gap, 12px);
+  flex-direction: var(--layout-direction, row);
+  align-items: var(--layout-align, center);
+  justify-content: flex-start;
 }
 </style>

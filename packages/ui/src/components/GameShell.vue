@@ -133,6 +133,14 @@ const canUndo = computed(() => {
 // Shared action arguments - game boards write to this, ActionPanel reads from it
 const actionArgs = reactive<Record<string, unknown>>({});
 
+// Pending action to start (set by custom UI, consumed by ActionPanel)
+const pendingActionStart = ref<string | null>(null);
+
+// Start an action's selection flow (called by custom UI)
+function startAction(actionName: string): void {
+  pendingActionStart.value = actionName;
+}
+
 // Board-provided prompt (for dynamic prompts based on UI state)
 const boardPrompt = ref<string | null>(null);
 
@@ -421,7 +429,7 @@ defineExpose({
             :current-player-position="state?.state.currentPlayer"
           >
             <template #player-stats="{ player }">
-              <slot name="player-stats" :player="player" :game-view="gameView"></slot>
+              <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>
             </template>
           </PlayersPanel>
 
@@ -456,6 +464,7 @@ defineExpose({
                 :action-args="actionArgs"
                 :execute-action="executeAction"
                 :set-board-prompt="setBoardPrompt"
+                :start-action="startAction"
               >
                 <div class="empty-game-area">
                   <p>Add your game board in the #game-board slot</p>
@@ -475,8 +484,10 @@ defineExpose({
           :is-my-turn="isMyTurn && !isViewingHistory"
           :can-undo="canUndo && !isViewingHistory"
           :auto-end-turn="autoEndTurn"
+          :pending-action-start="pendingActionStart"
           @execute="handleActionExecute"
           @undo="handleUndo"
+          @action-started="pendingActionStart = null"
         />
         <!-- Time travel banner -->
         <div v-if="isViewingHistory" class="time-travel-banner">

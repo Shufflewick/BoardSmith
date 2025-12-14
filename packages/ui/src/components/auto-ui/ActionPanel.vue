@@ -89,6 +89,8 @@ const props = defineProps<{
   canUndo?: boolean;
   /** Auto-execute endTurn action when available (default: true) */
   autoEndTurn?: boolean;
+  /** Action to start (set by external UI, consumed and cleared via action-started event) */
+  pendingActionStart?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -96,6 +98,7 @@ const emit = defineEmits<{
   (e: 'selectingElement', selectionName: string, elementClassName?: string): void;
   (e: 'cancelSelection'): void;
   (e: 'undo'): void;
+  (e: 'action-started'): void;
 }>();
 
 // Board interaction for hover/selection sync
@@ -139,12 +142,21 @@ function getAvailableChoices(selection: any): unknown[] {
   return [];
 }
 
-// Current selection
+// Check if a selection needs user input (undefined = not filled, null = explicitly skipped)
+function selectionNeedsInput(sel: { name: string }): boolean {
+  const value = currentArgs.value[sel.name];
+  // undefined = not filled yet, null = explicitly skipped (counts as filled)
+  return value === undefined;
+}
+
+// Current selection - returns next selection that needs user input
+// First returns required selections, then optional ones (so user can fill or skip them)
 const currentSelection = computed(() => {
   if (!currentActionMeta.value) return null;
 
+  // First pass: find first required selection without value
   for (const sel of currentActionMeta.value.selections) {
-    if (currentArgs.value[sel.name] === undefined && !sel.optional) {
+    if (selectionNeedsInput(sel) && !sel.optional) {
       // Check if we should skip this selection (skipIfOnlyOne)
       if ((sel as any).skipIfOnlyOne) {
         const choices = getAvailableChoices(sel);
@@ -167,6 +179,31 @@ const currentSelection = computed(() => {
       return sel;
     }
   }
+
+  // Second pass: find first optional selection without value
+  // This gives the user a chance to fill optional selections before auto-executing
+  for (const sel of currentActionMeta.value.selections) {
+    if (selectionNeedsInput(sel) && sel.optional) {
+      // Check if we should skip this selection (skipIfOnlyOne)
+      if ((sel as any).skipIfOnlyOne) {
+        const choices = getAvailableChoices(sel);
+        if (choices.length === 1) {
+          // Auto-fill and continue
+          const choice = choices[0];
+          if (sel.type === 'player') {
+            currentArgs.value[sel.name] = (choice as any).position;
+          } else if (sel.type === 'element') {
+            currentArgs.value[sel.name] = (choice as any).id;
+          } else {
+            currentArgs.value[sel.name] = (choice as any).value ?? choice;
+          }
+          continue;
+        }
+      }
+      return sel;
+    }
+  }
+
   return null;
 });
 
@@ -219,17 +256,54 @@ const filteredChoices = computed(() => {
   });
 });
 
+// Filtered valid elements - excludes elements already selected in previous selections
+// This handles the case where an action has multiple element selections and the filter
+// depends on previous selections (e.g., "select second die, excluding the first")
+const filteredValidElements = computed(() => {
+  if (!currentSelection.value || currentSelection.value.type !== 'element') return [];
+  if (!currentSelection.value.validElements) return [];
+
+  // Get IDs of elements already selected in previous element selections
+  const alreadySelectedIds = new Set<number>();
+  if (currentActionMeta.value) {
+    for (const sel of currentActionMeta.value.selections) {
+      if (sel.type === 'element' && sel.name !== currentSelection.value.name) {
+        const selectedId = currentArgs.value[sel.name];
+        if (typeof selectedId === 'number') {
+          alreadySelectedIds.add(selectedId);
+        }
+      }
+    }
+  }
+
+  // Filter out already-selected elements
+  if (alreadySelectedIds.size === 0) {
+    return currentSelection.value.validElements;
+  }
+
+  return currentSelection.value.validElements.filter(elem => !alreadySelectedIds.has(elem.id));
+});
+
+// Skip an optional selection
+function skipOptionalSelection() {
+  if (!currentSelection.value || !currentSelection.value.optional) return;
+  // Mark as explicitly skipped by setting to null (not undefined)
+  currentArgs.value[currentSelection.value.name] = null;
+}
+
 // Select an element (from element selection buttons)
 function selectElement(elementId: number, ref?: ElementRef) {
   if (!currentSelection.value || currentSelection.value.type !== 'element') return;
 
-  // Update board interaction to highlight the selected element
-  if (boardInteraction && ref) {
-    boardInteraction.selectElement(ref);
-  }
+  // Get the selection name BEFORE calling setSelectionValue
+  // (because setSelectionValue will change currentSelection)
+  const selectionName = currentSelection.value.name;
 
   // Use setSelectionValue which handles auto-execute
-  setSelectionValue(currentSelection.value.name, elementId);
+  setSelectionValue(selectionName, elementId);
+
+  // Note: We don't call boardInteraction.selectElement here because it triggers the watch
+  // which would try to fill the NEXT selection with the same element
 }
 
 // Execute a choice directly (no confirm step for filtered selections)
@@ -319,12 +393,9 @@ function clearSelection(selectionName: string) {
 // Check if action is ready
 const isActionReady = computed(() => {
   if (!currentActionMeta.value) return false;
-  for (const sel of currentActionMeta.value.selections) {
-    if (!sel.optional && currentArgs.value[sel.name] === undefined) {
-      return false;
-    }
-  }
-  return true;
+  // Ready when all required selections have values AND no selection needs input
+  // (currentSelection is null means all selections are filled or skipped)
+  return currentSelection.value === null;
 });
 
 // Auto-start board-interactive actions when they become available
@@ -369,9 +440,18 @@ watch(() => props.availableActions, (actions) => {
   }
 });
 
+// Watch for pending action start from external UI (e.g., custom game board buttons)
+watch(() => props.pendingActionStart, (actionName) => {
+  if (actionName && props.availableActions.includes(actionName)) {
+    startAction(actionName);
+    emit('action-started');
+  }
+});
+
 // Watch for current selection changes - update board interaction for element selections
 // and choice selections with board refs
-watch(currentSelection, (selection) => {
+// Also watch filteredValidElements to update when selected elements change
+watch([currentSelection, filteredValidElements], ([selection]) => {
   if (!selection || !boardInteraction) {
     boardInteraction?.setValidElements([], () => {});
     boardInteraction?.setDraggableSelectedElement(null);
@@ -383,7 +463,8 @@ watch(currentSelection, (selection) => {
 
   // Handle element selections - always support board-direct clicking
   if (selection.type === 'element') {
-    validElems = (selection.validElements || []).map(ve => ({
+    // Use filteredValidElements which excludes already-selected elements
+    validElems = filteredValidElements.value.map(ve => ({
       id: ve.id,
       ref: ve.ref || { id: ve.id }
     }));
@@ -482,8 +563,15 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
   // If we're configuring an action with an element selection, update the arg
   if (currentSelection.value && currentSelection.value.type === 'element') {
-    // Find the valid element that matches the selection
-    const validElem = currentSelection.value.validElements?.find(e => {
+    // Check if this element was already selected in a previous selection
+    // (prevents double-selection bug when clicking elements)
+    const alreadySelected = Object.values(currentArgs.value).includes(selected.id);
+    if (alreadySelected) {
+      return;
+    }
+
+    // Find the valid element that matches the selection (use filtered list)
+    const validElem = filteredValidElements.value.find(e => {
       if (selected.id !== undefined && e.id === selected.id) return true;
       if (selected.notation && e.ref?.notation === selected.notation) return true;
       return false;
@@ -735,7 +823,15 @@ function setSelectionValue(name: string, value: unknown, display?: string) {
 async function executeAction(actionName: string, args: Record<string, unknown>) {
   isExecuting.value = true;
   try {
-    emit('execute', actionName, args);
+    // Filter out null values (explicitly skipped optional selections)
+    // Server expects undefined for missing optional args, not null
+    const filteredArgs: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(args)) {
+      if (value !== null) {
+        filteredArgs[key] = value;
+      }
+    }
+    emit('execute', actionName, filteredArgs);
   } finally {
     isExecuting.value = false;
     currentAction.value = null;
@@ -819,10 +915,11 @@ const otherPlayers = computed(() => {
         <template v-if="currentSelection.type === 'element' && currentSelection.validElements?.length">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.elementClassName || 'element'}` }}
+            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons element-selection">
             <button
-              v-for="element in currentSelection.validElements"
+              v-for="element in filteredValidElements"
               :key="element.id"
               class="choice-btn element-btn"
               @click="selectElement(element.id, element.ref)"
@@ -830,6 +927,13 @@ const otherPlayers = computed(() => {
               @mouseleave="handleElementLeave"
             >
               {{ element.display || element.id }}
+            </button>
+            <button
+              v-if="currentSelection.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              Skip
             </button>
           </div>
         </template>
@@ -1107,7 +1211,27 @@ const otherPlayers = computed(() => {
 /* Element selection buttons */
 .element-btn {
   font-weight: bold;
-  text-transform: uppercase;
+}
+
+/* Skip button for optional selections */
+.skip-btn {
+  background: rgba(128, 128, 128, 0.2);
+  border-color: rgba(128, 128, 128, 0.4);
+  color: #999;
+}
+
+.skip-btn:hover {
+  background: rgba(128, 128, 128, 0.3);
+  border-color: rgba(128, 128, 128, 0.6);
+  color: #ccc;
+}
+
+/* Optional label */
+.optional-label {
+  color: #888;
+  font-style: italic;
+  font-size: 0.85em;
+  margin-left: 6px;
 }
 
 /* Filtered choice buttons */

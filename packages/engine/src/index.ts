@@ -6,6 +6,8 @@ export {
   Card,
   Hand,
   Deck,
+  Die,
+  DicePool,
   Grid,
   GridCell,
   HexGrid,
@@ -30,6 +32,7 @@ export type {
   HexCoordSystem,
   LayoutDirection,
   LayoutAlignment,
+  DieSides,
 } from './element/index.js';
 
 // Player system

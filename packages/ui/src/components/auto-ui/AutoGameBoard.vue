@@ -25,6 +25,12 @@ import AutoElement from './AutoElement.vue';
 import { prefersReducedMotion } from '../../composables/useElementAnimation.js';
 import { useFlyingCards, type FlyCardOptions } from '../../composables/useFlyingCards.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
+import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
+
+// Create and provide animation context for dice in this UI tree
+// This ensures dice animate independently from dice in other UIs (like custom game UIs)
+const dieAnimationContext = createDieAnimationContext();
+provide(DIE_ANIMATION_CONTEXT_KEY, dieAnimationContext);
 
 export interface GameElement {
   id: number;

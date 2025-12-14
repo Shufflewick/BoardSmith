@@ -254,13 +254,12 @@ export class GameServerCore {
         }
 
         const effectivePosition = session.isSpectator ? 0 : session.playerPosition;
-        const state = gameSession.getState(effectivePosition);
+        const stateResult = gameSession.getState(effectivePosition);
         const flowState = gameSession.getFlowState();
-
         session.ws.send({
           type: 'state',
           flowState,
-          state: state.state,
+          state: stateResult.state,
           playerPosition: session.playerPosition,
           isSpectator: session.isSpectator,
         });
@@ -286,13 +285,14 @@ export class GameServerCore {
     }
 
     const effectivePosition = isSpectator ? 0 : playerPosition;
-    const state = gameSession.getState(effectivePosition);
+    const stateResult = gameSession.getState(effectivePosition);
     const flowState = gameSession.getFlowState();
 
+    // Send PlayerGameState (stateResult.state contains players, view, canUndo, etc.)
     return {
       type: 'state',
       flowState,
-      state: state.state,
+      state: stateResult.state,
       playerPosition,
       isSpectator,
     };

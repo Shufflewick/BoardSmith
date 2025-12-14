@@ -36,6 +36,19 @@ export interface CardPreviewData {
   height?: number;
 }
 
+export interface DiePreviewData {
+  /** Number of sides (4, 6, 8, 10, 12, or 20) */
+  sides: 4 | 6 | 8 | 10 | 12 | 20;
+  /** Current face value */
+  value: number;
+  /** Die color (CSS color string) */
+  color?: string;
+  /** Custom face labels (optional) */
+  faceLabels?: string[];
+  /** Custom face images (optional) */
+  faceImages?: string[];
+}
+
 export interface PreviewState {
   /** Whether the preview is currently visible */
   visible: boolean;
@@ -45,7 +58,9 @@ export interface PreviewState {
   y: number;
   /** The card data to display (if using data-card-preview) */
   cardData: CardPreviewData | null;
-  /** The cloned element to display (if no card data) */
+  /** The die data to display (if using data-die-preview) */
+  dieData: DiePreviewData | null;
+  /** The cloned element to display (if no card/die data) */
   clonedElement: HTMLElement | null;
   /** Scale factor for the preview */
   scale: number;
@@ -132,6 +147,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     x: 0,
     y: 0,
     cardData: null,
+    dieData: null,
     clonedElement: null,
     scale,
     originalWidth: 0,
@@ -154,6 +170,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     if (!isAltPressed.value) return;
 
     previewState.cardData = cardData;
+    previewState.dieData = null;
     previewState.clonedElement = null;
     previewState.visible = true;
     updatePosition(event);
@@ -234,14 +251,31 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
   function showPreviewFromElement(element: HTMLElement, event: MouseEvent) {
     if (!isAltPressed.value) return;
 
-    // First check for explicit card data
-    const dataAttr = element.getAttribute('data-card-preview');
-    if (dataAttr) {
+    // First check for explicit die data (dice need special handling - can't clone WebGL canvas)
+    const dieDataAttr = element.getAttribute('data-die-preview');
+    if (dieDataAttr) {
       try {
-        previewState.cardData = JSON.parse(dataAttr);
+        previewState.dieData = JSON.parse(dieDataAttr);
+        previewState.cardData = null;
+        previewState.clonedElement = null;
+        previewState.visible = true;
+        updatePosition(event);
+        return;
+      } catch {
+        // Fall through to clone mode if parse fails
+      }
+    }
+
+    // Check for explicit card data
+    const cardDataAttr = element.getAttribute('data-card-preview');
+    if (cardDataAttr) {
+      try {
+        previewState.cardData = JSON.parse(cardDataAttr);
+        previewState.dieData = null;
         previewState.clonedElement = null;
       } catch {
-        previewState.cardData = { label: dataAttr };
+        previewState.cardData = { label: cardDataAttr };
+        previewState.dieData = null;
         previewState.clonedElement = null;
       }
     } else {
@@ -293,6 +327,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
       });
 
       previewState.cardData = null;
+      previewState.dieData = null;
       previewState.clonedElement = clone;
     }
 
@@ -303,6 +338,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
   function hidePreview() {
     previewState.visible = false;
     previewState.cardData = null;
+    previewState.dieData = null;
     previewState.clonedElement = null;
   }
 
@@ -338,11 +374,13 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     previewState.y = y;
   }
 
-  // Find card element from event target
+  // Find zoomable element from event target
   // Detects cards by: data-card-preview, data-card-id, or various card classes
+  // Detects dice by: data-die-preview, data-die-id, or dice classes
   function findCardElement(target: EventTarget | null): HTMLElement | null {
     let element = target as HTMLElement | null;
     while (element && element !== document.body) {
+      // === CARD DETECTION ===
       // Check for explicit card preview data
       if (element.hasAttribute('data-card-preview')) {
         return element;
@@ -371,6 +409,24 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
       if (element.classList.contains('hand-card')) {
         return element;
       }
+
+      // === DICE DETECTION ===
+      // Check for explicit die preview data (must check this first - it has the data we need)
+      if (element.hasAttribute('data-die-preview')) {
+        return element;
+      }
+      // Check for die ID (Auto-UI)
+      if (element.hasAttribute('data-die-id')) {
+        return element;
+      }
+      // Check for .die-container class (Auto-UI wrapper - has data-die-preview)
+      if (element.classList.contains('die-container')) {
+        return element;
+      }
+      // Note: We intentionally don't detect .die-3d-container here because
+      // it doesn't have the data-die-preview attribute. We need to keep
+      // walking up to find .die-container which has the die data.
+
       element = element.parentElement;
     }
     return null;

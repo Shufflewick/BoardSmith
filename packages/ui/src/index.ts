@@ -18,6 +18,14 @@ export {
   ZoomPreviewOverlay,
 } from './components/helpers/index.js';
 
+// 3D Dice components (Three.js with chamfered geometry)
+export { Die3D } from './components/dice/index.js';
+export {
+  DIE_ANIMATION_CONTEXT_KEY,
+  createDieAnimationContext,
+  type DieAnimationContext,
+} from './components/dice/die3d-state.js';
+
 // Auto-UI components (automatic game UI generation)
 export {
   AutoUI,
@@ -73,6 +81,7 @@ export {
 export {
   useZoomPreview,
   type CardPreviewData,
+  type DiePreviewData,
   type PreviewState,
   type ZoomPreviewReturn,
 } from './composables/useZoomPreview.js';

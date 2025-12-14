@@ -327,9 +327,21 @@ export function buildPlayerState(
   // Can undo if: it's my turn AND I've made at least one action this turn AND no non-undoable action was taken
   const canUndo = isMyTurn && actionsThisTurn > 0 && flowState?.currentPlayer === playerPosition && !hasNonUndoableAction;
 
+  // Get the full player data including custom properties (abilities, score, etc.)
+  // from the game's player objects via their toJSON methods
+  // IMPORTANT: Use spread [...] to convert from PlayerCollection to plain Array,
+  // because PlayerCollection extends Array and has its own toJSON that would strip data
+  const fullPlayerData = [...runner.game.players.map((player: Player) => {
+    if (typeof player.toJSON === 'function') {
+      return player.toJSON() as { name: string; position: number; [key: string]: unknown };
+    }
+    // Fallback for players without toJSON
+    return { name: player.name, position: player.position };
+  })];
+
   const state: PlayerGameState = {
     phase: runner.game.phase,
-    players: playerNames.map((name, i) => ({ name, position: i })),
+    players: fullPlayerData,
     currentPlayer: flowState?.currentPlayer,
     availableActions,
     isMyTurn,

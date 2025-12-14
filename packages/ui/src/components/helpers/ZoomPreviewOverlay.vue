@@ -1,13 +1,14 @@
 <script setup lang="ts">
 /**
- * ZoomPreviewOverlay - Renders an enlarged card preview
+ * ZoomPreviewOverlay - Renders an enlarged card or die preview
  *
- * Shows a larger version of a card when the user holds Alt and hovers.
+ * Shows a larger version of a card or die when the user holds Alt and hovers.
  * Uses Teleport to render above all other content.
  *
- * Supports two modes:
- * 1. Data-based: Renders card from explicit cardData (rank, suit, images)
- * 2. Clone-based: Displays a scaled clone of the actual DOM element
+ * Supports three modes:
+ * 1. Card data-based: Renders card from explicit cardData (rank, suit, images)
+ * 2. Die data-based: Renders die from explicit dieData (sides, value, color)
+ * 3. Clone-based: Displays a scaled clone of the actual DOM element
  *
  * Usage:
  * ```vue
@@ -16,6 +17,7 @@
  */
 import { computed, ref, watchEffect } from 'vue';
 import type { PreviewState } from '../../composables/useZoomPreview.js';
+import { Die3D } from '../dice/index.js';
 
 const props = defineProps<{
   /** Preview state from useZoomPreview */
@@ -139,7 +141,11 @@ const positionStyle = computed(() => ({
 
 // Check which mode we're in
 const isCloneMode = computed(() => props.previewState.clonedElement !== null);
-const isDataMode = computed(() => props.previewState.cardData !== null);
+const isCardDataMode = computed(() => props.previewState.cardData !== null);
+const isDieDataMode = computed(() => props.previewState.dieData !== null);
+
+// Die preview size (larger than default die size)
+const DIE_PREVIEW_SIZE = 150;
 
 // Ref for the clone container
 const cloneContainer = ref<HTMLElement | null>(null);
@@ -182,7 +188,7 @@ const previewCardStyle = computed(() => ({
   <Teleport to="body">
     <Transition name="zoom-preview">
       <div
-        v-if="previewState.visible && (previewState.cardData || previewState.clonedElement)"
+        v-if="previewState.visible && (previewState.cardData || previewState.dieData || previewState.clonedElement)"
         class="zoom-preview-overlay"
         :style="positionStyle"
       >
@@ -195,8 +201,20 @@ const previewCardStyle = computed(() => ({
           ></div>
         </div>
 
-        <!-- Data-based mode: render from card data -->
-        <div v-else-if="isDataMode" class="zoom-preview-card" :style="previewCardStyle">
+        <!-- Die data-based mode: render Die3D component -->
+        <div v-else-if="isDieDataMode && previewState.dieData" class="zoom-preview-die">
+          <Die3D
+            :sides="previewState.dieData.sides"
+            :value="previewState.dieData.value"
+            :color="previewState.dieData.color"
+            :face-labels="previewState.dieData.faceLabels"
+            :face-images="previewState.dieData.faceImages"
+            :size="DIE_PREVIEW_SIZE"
+          />
+        </div>
+
+        <!-- Card data-based mode: render from card data -->
+        <div v-else-if="isCardDataMode" class="zoom-preview-card" :style="previewCardStyle">
           <!-- Image-based card -->
           <template v-if="imageInfo">
             <!-- URL image -->
@@ -259,7 +277,15 @@ const previewCardStyle = computed(() => ({
   /* The cloned element will be appended here and scaled */
 }
 
-/* Data-based preview - dimensions set via inline style for shape flexibility */
+/* Die preview */
+.zoom-preview-die {
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.2);
+  background: rgba(30, 30, 50, 0.95);
+  padding: 10px;
+}
+
+/* Card data-based preview - dimensions set via inline style for shape flexibility */
 .zoom-preview-card {
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.2);

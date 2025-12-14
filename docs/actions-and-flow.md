@@ -156,6 +156,13 @@ The execute function performs the actual game logic:
 });
 ```
 
+> **Important:** When using `chooseElement`, the `args` contain the **full serialized element object**, not just the ID. To find the element by ID:
+> ```typescript
+> const elementId = typeof args.piece === 'object' ? (args.piece as any).id : args.piece;
+> const piece = game.all(Piece).find(p => p.id === elementId);
+> ```
+> Also, always use `ctx.game` instead of a closure reference to the game variable in execute functions to avoid stale references during hot-reload.
+
 ### Action Options
 
 ```typescript

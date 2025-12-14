@@ -207,6 +207,7 @@ Commands are generic state mutations that happen automatically when you call ele
 export class MyPlayer extends Player<MyGame, MyPlayer> {
   hand!: Hand;
   score: number = 0;
+  abilities: Record<string, number> = { reroll: 1 };
 
   constructor(position: number, name: string, game: MyGame) {
     super(position, name);
@@ -217,8 +218,19 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
     this.hand.player = this;
     this.hand.contentsVisibleToOwner();
   }
+
+  // IMPORTANT: Override toJSON() to include custom properties in network state
+  override toJSON(): Record<string, unknown> {
+    return {
+      ...super.toJSON(),
+      score: this.score,
+      abilities: this.abilities,
+    };
+  }
 }
 ```
+
+> **Important**: If your custom Player class has properties that need to be visible to the UI (like `score`, `abilities`, custom stats), you **must** override `toJSON()` to include them. The base `Player.toJSON()` only serializes `position`, `name`, `color`, and `avatar`.
 
 ### Player Properties
 
@@ -244,6 +256,25 @@ BoardSmith automatically handles serialization for:
 - Network transmission
 - State persistence
 - Replays
+
+### PlayerCollection Serialization Warning
+
+`game.players` is a `PlayerCollection` (an Array subclass), not a plain Array. This has important implications when working with player data:
+
+```typescript
+// ❌ WRONG: Returns a PlayerCollection, not a plain Array
+// When JSON.stringify() is called, PlayerCollection.toJSON() re-serializes
+// the elements, losing any custom properties
+const playerData = game.players.map(p => p.toJSON());
+
+// ✅ CORRECT: Spread to convert to plain Array
+const playerData = [...game.players.map(p => p.toJSON())];
+
+// ✅ ALSO CORRECT: Use Array.from()
+const playerData = Array.from(game.players.map(p => p.toJSON()));
+```
+
+This is a JavaScript quirk: when you call `.map()` on an Array subclass, the result is an instance of the same subclass, not a plain Array. The `PlayerCollection.toJSON()` method then gets called during serialization, which re-processes the already-serialized data.
 
 ### Registering Elements
 

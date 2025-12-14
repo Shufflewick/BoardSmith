@@ -525,6 +525,7 @@ constructor(options) {
 export class MyPlayer extends Player<MyGame, MyPlayer> {
   hand!: Hand;
   score: number = 0;
+  abilities: Record<string, number> = {};
 
   constructor(position: number, name: string, game: MyGame) {
     super(position, name);
@@ -532,8 +533,19 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
     this.hand = game.create(Hand, `hand-${position}`);
     this.hand.player = this;
   }
+
+  // Required to send custom properties to the UI
+  override toJSON(): Record<string, unknown> {
+    return {
+      ...super.toJSON(),
+      score: this.score,
+      abilities: this.abilities,
+    };
+  }
 }
 ```
+
+> **Note**: Always override `toJSON()` if you have custom properties that the UI needs to display (scores, abilities, etc.). See [Core Concepts - Serialization](./core-concepts.md#playercollection-serialization-warning) for details.
 
 ### 3. Win Condition Checking
 

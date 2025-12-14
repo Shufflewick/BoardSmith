@@ -326,3 +326,85 @@ User Action → Action System → Commands → State Change
 - **State** is an element tree, serializable to JSON
 - **Player Views** filter state by visibility rules
 - **UI** renders views and submits actions
+
+## Common Pitfalls
+
+### Custom Player Properties Not Showing in UI
+
+If your custom Player class has properties (score, abilities, etc.) that aren't appearing in the UI, you need to override `toJSON()`:
+
+```typescript
+export class MyPlayer extends Player<MyGame, MyPlayer> {
+  score: number = 0;
+  abilities: Record<string, number> = { reroll: 1 };
+
+  // REQUIRED: Include custom properties in serialization
+  override toJSON(): Record<string, unknown> {
+    return {
+      ...super.toJSON(),
+      score: this.score,
+      abilities: this.abilities,
+    };
+  }
+}
+```
+
+The base `Player.toJSON()` only serializes `position`, `name`, `color`, `avatar`.
+
+### PlayerCollection Array Subclass Gotcha
+
+`game.players` is a `PlayerCollection` (Array subclass). When mapping player data, **always spread to a plain Array**:
+
+```typescript
+// ❌ WRONG: map() returns PlayerCollection, which has its own toJSON()
+const data = game.players.map(p => p.toJSON());
+
+// ✅ CORRECT: Spread converts to plain Array
+const data = [...game.players.map(p => p.toJSON())];
+```
+
+This is because JavaScript's `.map()` on an Array subclass returns an instance of the same subclass, and `PlayerCollection.toJSON()` will re-serialize the data, losing custom properties.
+
+### chooseElement Args Are Objects, Not IDs
+
+When using `chooseElement` in actions, the args passed to `execute()` contain the **full serialized element object**, not just the element ID:
+
+```typescript
+// ❌ WRONG: args.die is an object, not a number
+.chooseElement<Die>('die', { ... })
+.execute((args, ctx) => {
+  const dieId = args.die as number;  // This is actually an object!
+  const die = game.all(Die).find(d => d.id === dieId);  // Never finds it
+});
+
+// ✅ CORRECT: Extract the ID from the object
+.execute((args, ctx) => {
+  const dieId = typeof args.die === 'object' ? (args.die as any).id : args.die as number;
+  const die = game.all(Die).find(d => d.id === dieId);
+});
+```
+
+The args object looks like: `{ die: { className: "Die", id: 3, attributes: {...} } }`
+
+### Action Closures and ctx.game
+
+In action execute functions, always use `ctx.game` instead of a closure reference to the game:
+
+```typescript
+// ❌ WRONG: Closure reference can become stale
+export function createMyAction(game: MyGame): ActionDefinition {
+  return Action.create('myAction')
+    .execute((args, ctx) => {
+      game.doSomething();  // Uses closure - may be stale after hot-reload
+    });
+}
+
+// ✅ CORRECT: Use ctx.game for the current game instance
+export function createMyAction(game: MyGame): ActionDefinition {
+  return Action.create('myAction')
+    .execute((args, ctx) => {
+      const currentGame = ctx.game as MyGame;
+      currentGame.doSomething();  // Always uses current game
+    });
+}
+```
