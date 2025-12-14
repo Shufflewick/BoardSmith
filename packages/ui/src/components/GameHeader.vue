@@ -17,12 +17,15 @@ const props = defineProps<{
   zoom?: number;
   /** Auto-end turn after making a move (default: true) */
   autoEndTurn?: boolean;
+  /** Show undo button when undo is available (default: true) */
+  showUndo?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'menu-item-click', id: string): void;
   (e: 'update:zoom', zoom: number): void;
   (e: 'update:autoEndTurn', value: boolean): void;
+  (e: 'update:showUndo', value: boolean): void;
 }>();
 
 function handleZoomChange(event: Event) {
@@ -73,6 +76,14 @@ import { computed } from 'vue';
           @change="emit('update:autoEndTurn', ($event.target as HTMLInputElement).checked)"
         />
         <span class="toggle-label">Auto</span>
+      </label>
+      <label class="auto-end-turn-toggle" title="Show undo button when undo is available">
+        <input
+          type="checkbox"
+          :checked="showUndo ?? true"
+          @change="emit('update:showUndo', ($event.target as HTMLInputElement).checked)"
+        />
+        <span class="toggle-label">Undo</span>
       </label>
     </div>
     <div class="header-right">

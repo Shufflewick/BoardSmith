@@ -89,6 +89,8 @@ const props = defineProps<{
   canUndo?: boolean;
   /** Auto-execute endTurn action when available (default: true) */
   autoEndTurn?: boolean;
+  /** Show undo button when undo is available (default: true) */
+  showUndo?: boolean;
   /** Action to start (set by external UI, consumed and cleared via action-started event) */
   pendingActionStart?: string | null;
 }>();
@@ -121,6 +123,16 @@ const actionsWithMetadata = computed(() => {
   return props.availableActions
     .map(name => props.actionMetadata![name])
     .filter(Boolean);
+});
+
+// Actions to display in the UI (filtered based on autoEndTurn setting)
+// When autoEndTurn is enabled, hide the endTurn button since it will auto-execute
+// when it's the only available action
+const visibleActions = computed(() => {
+  if (props.autoEndTurn !== false) {
+    return actionsWithMetadata.value.filter(a => a.name !== 'endTurn');
+  }
+  return actionsWithMetadata.value;
 });
 
 // Current action metadata
@@ -890,7 +902,7 @@ const otherPlayers = computed(() => {
     <!-- No action being configured -->
     <div v-if="!currentAction" class="action-buttons">
       <button
-        v-for="action in actionsWithMetadata"
+        v-for="action in visibleActions"
         :key="action.name"
         class="action-btn"
         @click="startAction(action.name)"
@@ -898,9 +910,9 @@ const otherPlayers = computed(() => {
       >
         {{ action.prompt || formatActionName(action.name) }}
       </button>
-      <!-- Undo button - shows when player has made actions this turn -->
+      <!-- Undo button - shows when player has made actions this turn and showUndo is enabled -->
       <button
-        v-if="canUndo"
+        v-if="canUndo && showUndo !== false"
         class="action-btn undo-btn"
         @click="emit('undo')"
         :disabled="isExecuting"

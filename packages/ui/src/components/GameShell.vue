@@ -54,6 +54,7 @@ const historyCollapsed = ref(false);
 const debugExpanded = ref(false);
 const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
+const showUndo = ref(true); // Show undo button when undo is available
 
 // Time travel state (for viewing historical game states)
 const timeTravelState = ref<any>(null);
@@ -416,6 +417,7 @@ defineExpose({
         :connection-status="connectionStatus"
         v-model:zoom="zoomLevel"
         v-model:auto-end-turn="autoEndTurn"
+        v-model:show-undo="showUndo"
         @menu-item-click="handleMenuItemClick"
       />
 
@@ -484,6 +486,7 @@ defineExpose({
           :is-my-turn="isMyTurn && !isViewingHistory"
           :can-undo="canUndo && !isViewingHistory"
           :auto-end-turn="autoEndTurn"
+          :show-undo="showUndo"
           :pending-action-start="pendingActionStart"
           @execute="handleActionExecute"
           @undo="handleUndo"
