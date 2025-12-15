@@ -139,10 +139,13 @@ const actionArgs = reactive<Record<string, unknown>>({});
 
 // Pending action to start (set by custom UI, consumed by ActionPanel)
 const pendingActionStart = ref<string | null>(null);
+const pendingActionArgs = ref<Record<string, unknown>>({});
 
 // Start an action's selection flow (called by custom UI)
-function startAction(actionName: string): void {
+// Optional initialArgs are applied to actionArgs after clearing, avoiding timing issues
+function startAction(actionName: string, initialArgs?: Record<string, unknown>): void {
   pendingActionStart.value = actionName;
+  pendingActionArgs.value = initialArgs ?? {};
 }
 
 // Board-provided prompt (for dynamic prompts based on UI state)
@@ -493,9 +496,10 @@ defineExpose({
           :auto-end-turn="autoEndTurn"
           :show-undo="showUndo"
           :pending-action-start="pendingActionStart"
+          :pending-action-args="pendingActionArgs"
           @execute="handleActionExecute"
           @undo="handleUndo"
-          @action-started="pendingActionStart = null"
+          @action-started="pendingActionStart = null; pendingActionArgs = {}"
         />
         <!-- Time travel banner -->
         <div v-if="isViewingHistory" class="time-travel-banner">

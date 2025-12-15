@@ -104,6 +104,8 @@ const props = defineProps<{
   showUndo?: boolean;
   /** Action to start (set by external UI, consumed and cleared via action-started event) */
   pendingActionStart?: string | null;
+  /** Initial args to apply when starting the pending action (applied after clearing) */
+  pendingActionArgs?: Record<string, unknown>;
 }>();
 
 const emit = defineEmits<{
@@ -491,6 +493,12 @@ watch(() => props.availableActions, (actions) => {
 watch(() => props.pendingActionStart, (actionName) => {
   if (actionName && props.availableActions.includes(actionName)) {
     startAction(actionName);
+    // Apply initial args after clearing (avoids timing issues with write-then-start pattern)
+    if (props.pendingActionArgs) {
+      for (const [key, value] of Object.entries(props.pendingActionArgs)) {
+        currentArgs.value[key] = value;
+      }
+    }
     emit('action-started');
   }
 });

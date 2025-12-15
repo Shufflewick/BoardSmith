@@ -401,7 +401,7 @@ import GameBoard from './components/GameBoard.vue';
     display-name="${display}"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
+    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt, startAction }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
@@ -414,6 +414,7 @@ import GameBoard from './components/GameBoard.vue';
             :action-args="actionArgs"
             :execute-action="executeAction"
             :set-board-prompt="setBoardPrompt"
+            :start-action="startAction"
           />
         </div>
         <div class="board-section">
@@ -504,7 +505,8 @@ interface Card {
 
 // Props from GameShell
 // - actionArgs: Shared reactive object with ActionPanel for bidirectional sync
-//   Write to it to pre-fill selections, read from it to see ActionPanel selections
+// - startAction: Trigger ActionPanel to start an action, with optional initial selections
+//   Example: startAction('move', { piece: pieceId }) - pre-fills the piece selection
 const props = defineProps<{
   gameView: any;
   playerPosition: number;
@@ -514,6 +516,7 @@ const props = defineProps<{
   actionArgs: Record<string, unknown>;  // Bidirectional sync with ActionPanel
   executeAction: (name: string) => Promise<void>;
   setBoardPrompt: (prompt: string | null) => void;
+  startAction: (name: string, initialArgs?: Record<string, unknown>) => void;
 }>();
 
 // Computed properties to extract data from gameView

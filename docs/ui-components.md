@@ -82,18 +82,18 @@ The `actionArgs` object provides **bidirectional synchronization** between custo
 
 This enables powerful hybrid UIs where users can interact with either the game board or the action panel.
 
-**Example: Board writing to actionArgs**
+**Example: Board pre-filling selections with startAction**
 ```vue
 <script setup lang="ts">
 const props = defineProps<{
   actionArgs: Record<string, unknown>;
-  startAction: (name: string) => void;
+  startAction: (name: string, initialArgs?: Record<string, unknown>) => void;
 }>();
 
-// When user clicks a card on the board, pre-fill the selection
-function onCardClick(cardId: number) {
-  props.actionArgs.card = cardId;  // ActionPanel immediately reflects this
-  props.startAction('play');        // Let ActionPanel handle remaining selections
+// When user clicks a piece on the board, start the action with that piece pre-selected
+function onPieceClick(pieceId: number) {
+  // Pass initial args to startAction - they're applied after clearing
+  props.startAction('move', { piece: pieceId });
 }
 </script>
 ```
@@ -122,15 +122,20 @@ const selectedCards = computed({
 });
 ```
 
-**Important: ActionPanel owns the clear lifecycle**
+**ActionPanel owns the clear lifecycle**
 
-ActionPanel clears `actionArgs` at these points:
-- When starting a new action
-- When canceling an action
-- After executing an action
-- When the current action becomes unavailable
+ActionPanel clears `actionArgs` when starting, canceling, or completing actions. To pre-fill selections when starting an action, use the `initialArgs` parameter:
 
-Custom boards should treat `actionArgs` as "current action state", not persistent storage. Write to it as part of an active action flow, and expect it to be cleared when actions complete or change.
+```typescript
+// Correct: Pass initial values to startAction
+startAction('move', { piece: pieceId });
+
+// Incorrect: Writing then starting loses the value (cleared on start)
+actionArgs.piece = pieceId;
+startAction('move');  // piece gets cleared!
+```
+
+For ongoing updates during an action (after it's started), write directly to `actionArgs`.
 
 ### AutoUI
 
