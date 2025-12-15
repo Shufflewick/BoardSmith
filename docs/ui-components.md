@@ -122,6 +122,16 @@ const selectedCards = computed({
 });
 ```
 
+**Important: ActionPanel owns the clear lifecycle**
+
+ActionPanel clears `actionArgs` at these points:
+- When starting a new action
+- When canceling an action
+- After executing an action
+- When the current action becomes unavailable
+
+Custom boards should treat `actionArgs` as "current action state", not persistent storage. Write to it as part of an active action flow, and expect it to be cleared when actions complete or change.
+
 ### AutoUI
 
 Automatic UI generation from game state. Useful for prototyping or as a reference implementation.
