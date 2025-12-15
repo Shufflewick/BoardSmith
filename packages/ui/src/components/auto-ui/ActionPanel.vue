@@ -10,8 +10,19 @@
  * - Element selections show buttons for valid elements
  * - Choice selections can filter based on previous selections (filterBy)
  */
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, inject, reactive } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
+
+/**
+ * Helper to clear all keys from a reactive object while preserving reactivity.
+ * This is needed because we share actionArgs with custom game boards,
+ * and they may have watchers on it.
+ */
+function clearReactiveObject(obj: Record<string, unknown>): void {
+  for (const key of Object.keys(obj)) {
+    delete obj[key];
+  }
+}
 
 /**
  * Reference to a board element for highlighting
@@ -108,8 +119,13 @@ const boardInteraction = useBoardInteraction();
 
 // Current action state
 const currentAction = ref<string | null>(null);
-const currentArgs = ref<Record<string, unknown>>({});
 const isExecuting = ref(false);
+
+// Inject shared actionArgs from GameShell (enables bidirectional sync with custom game boards)
+// Falls back to local state for standalone usage (testing, storybook, etc.)
+const injectedActionArgs = inject<Record<string, unknown> | undefined>('actionArgs', undefined);
+const fallbackArgs = reactive<Record<string, unknown>>({});
+const currentArgs = computed(() => injectedActionArgs ?? fallbackArgs);
 
 // Get metadata for available actions
 const actionsWithMetadata = computed(() => {
@@ -454,7 +470,7 @@ watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
 watch(() => props.availableActions, (actions) => {
   if (currentAction.value && !actions.includes(currentAction.value)) {
     currentAction.value = null;
-    currentArgs.value = {};
+    clearReactiveObject(currentArgs.value);
     boardInteraction?.clear();
   }
 
@@ -630,7 +646,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
   if (elementAction) {
     currentAction.value = elementAction.name;
-    currentArgs.value = {};
+    clearReactiveObject(currentArgs.value);
 
     // Find and set the element in args
     const firstSel = elementAction.selections[0];
@@ -743,7 +759,8 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
   // Set up the action state
   currentAction.value = dragAction.name;
-  currentArgs.value = { [firstSel.name]: validPiece.id };
+  clearReactiveObject(currentArgs.value);
+  currentArgs.value[firstSel.name] = validPiece.id;
 
   // Get filtered choices for this piece (destinations)
   const allChoices = secondSel.choices || [];
@@ -801,7 +818,7 @@ function startAction(actionName: string) {
   }
 
   currentAction.value = actionName;
-  currentArgs.value = {};
+  clearReactiveObject(currentArgs.value);
   boardInteraction?.clear();
 
   const firstSel = meta.selections[0];
@@ -812,7 +829,7 @@ function startAction(actionName: string) {
 
 function cancelAction() {
   currentAction.value = null;
-  currentArgs.value = {};
+  clearReactiveObject(currentArgs.value);
   boardInteraction?.clear();
   emit('cancelSelection');
 }
@@ -866,7 +883,7 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   } finally {
     isExecuting.value = false;
     currentAction.value = null;
-    currentArgs.value = {};
+    clearReactiveObject(currentArgs.value);
     boardInteraction?.clear();
     emit('cancelSelection');
   }

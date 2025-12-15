@@ -131,7 +131,10 @@ const canUndo = computed(() => {
   return (state.value?.state as any)?.canUndo ?? false;
 });
 
-// Shared action arguments - game boards write to this, ActionPanel reads from it
+// Shared action arguments - bidirectional sync between ActionPanel and custom game boards
+// - ActionPanel writes here when user makes selections in the UI
+// - Custom boards can write here and ActionPanel will reflect those values
+// - Both systems share the same reactive object via provide/inject
 const actionArgs = reactive<Record<string, unknown>>({});
 
 // Pending action to start (set by custom UI, consumed by ActionPanel)
@@ -173,7 +176,9 @@ async function handleUndo(): Promise<void> {
   }
 }
 
-// Execute an action using shared actionArgs (legacy, used by custom game boards)
+// Execute an action using shared actionArgs
+// This bypasses ActionPanel and executes directly - use for custom UIs that handle their own selection flow
+// For most cases, prefer: write to actionArgs, then call startAction() to let ActionPanel handle it
 async function executeAction(actionName: string): Promise<void> {
   const cards = actionArgs.cards as string[] | undefined;
 

@@ -502,13 +502,16 @@ interface Card {
   };
 }
 
+// Props from GameShell
+// - actionArgs: Shared reactive object with ActionPanel for bidirectional sync
+//   Write to it to pre-fill selections, read from it to see ActionPanel selections
 const props = defineProps<{
   gameView: any;
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
   action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
-  actionArgs: Record<string, unknown>;
+  actionArgs: Record<string, unknown>;  // Bidirectional sync with ActionPanel
   executeAction: (name: string) => Promise<void>;
   setBoardPrompt: (prompt: string | null) => void;
 }>();

@@ -67,9 +67,60 @@ The `#game-board` slot receives:
 | `isMyTurn` | `boolean` | Whether it's this player's turn |
 | `availableActions` | `string[]` | Actions available to the player |
 | `action` | `function` | Execute an action: `(name, args) => Promise` |
-| `actionArgs` | `object` | Current action arguments |
+| `actionArgs` | `object` | Shared reactive object for action selections (bidirectional sync with ActionPanel) |
 | `executeAction` | `function` | Execute current action: `(name) => Promise` |
 | `setBoardPrompt` | `function` | Set a prompt message: `(text) => void` |
+| `startAction` | `function` | Trigger ActionPanel to start an action: `(name) => void` |
+
+#### Shared Action State (actionArgs)
+
+The `actionArgs` object provides **bidirectional synchronization** between custom game boards and ActionPanel:
+
+- **ActionPanel writes** to `actionArgs` when users make selections in the auto-generated UI
+- **Custom boards can write** to `actionArgs` to pre-fill selections or respond to board interactions
+- **Both see updates** immediately due to Vue's reactivity
+
+This enables powerful hybrid UIs where users can interact with either the game board or the action panel.
+
+**Example: Board writing to actionArgs**
+```vue
+<script setup lang="ts">
+const props = defineProps<{
+  actionArgs: Record<string, unknown>;
+  startAction: (name: string) => void;
+}>();
+
+// When user clicks a card on the board, pre-fill the selection
+function onCardClick(cardId: number) {
+  props.actionArgs.card = cardId;  // ActionPanel immediately reflects this
+  props.startAction('play');        // Let ActionPanel handle remaining selections
+}
+</script>
+```
+
+**Example: Board reading from actionArgs**
+```vue
+<template>
+  <div
+    v-for="card in cards"
+    :key="card.id"
+    class="card"
+    :class="{ selected: actionArgs.card === card.id }"
+  >
+    <!-- Card shows selected state from ActionPanel selections -->
+  </div>
+</template>
+```
+
+**Example: Writable computed for card selection**
+```typescript
+const selectedCards = computed({
+  get: () => (props.actionArgs.cards as string[]) || [],
+  set: (value: string[]) => {
+    props.actionArgs.cards = value;
+  }
+});
+```
 
 ### AutoUI
 
