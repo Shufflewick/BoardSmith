@@ -1,7 +1,18 @@
 import { Game, type GameOptions } from '@boardsmith/engine';
+import { DEFAULT_PLAYER_COLORS } from '@boardsmith/session';
 import { Board, Cell, Stone, HexPlayer } from './elements.js';
 import { createPlaceStoneAction } from './actions.js';
 import { createHexFlow } from './flow.js';
+
+/**
+ * Player configuration from lobby
+ */
+interface PlayerConfig {
+  name?: string;
+  isAI?: boolean;
+  aiLevel?: string;
+  color?: string;
+}
 
 /**
  * Configuration options for a Hex game
@@ -9,6 +20,8 @@ import { createHexFlow } from './flow.js';
 export interface HexOptions extends GameOptions {
   /** Board size (default: 7 for testing, standard is 11) */
   boardSize?: number;
+  /** Per-player configurations from lobby */
+  playerConfigs?: PlayerConfig[];
 }
 
 /**
@@ -37,6 +50,9 @@ export class HexGame extends Game<HexGame, HexPlayer> {
     // Apply options
     this.boardSize = options.boardSize ?? 7;
 
+    // Apply player colors from config
+    this.applyPlayerColors(options.playerConfigs);
+
     // Register element classes
     this.registerElements([Board, Cell, Stone]);
 
@@ -63,7 +79,7 @@ export class HexGame extends Game<HexGame, HexPlayer> {
 
     this.message('Hex game started!');
     this.message(`Board size: ${this.boardSize}x${this.boardSize}`);
-    this.message('Red connects top to bottom, Blue connects left to right.');
+    this.message(`${this.players[0].name} connects top to bottom, ${this.players[1].name} connects left to right.`);
   }
 
   /**
@@ -71,6 +87,20 @@ export class HexGame extends Game<HexGame, HexPlayer> {
    */
   protected override createPlayer(position: number, name: string): HexPlayer {
     return new HexPlayer(position, name);
+  }
+
+  /**
+   * Apply colors from player configs
+   */
+  private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
+    for (let i = 0; i < this.players.length; i++) {
+      const config = playerConfigs?.[i];
+      if (config?.color) {
+        this.players[i].color = config.color;
+      } else {
+        this.players[i].color = DEFAULT_PLAYER_COLORS[i] ?? DEFAULT_PLAYER_COLORS[0];
+      }
+    }
   }
 
   /**

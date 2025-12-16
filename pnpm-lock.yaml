@@ -155,6 +155,9 @@ importers:
       '@boardsmith/engine':
         specifier: workspace:*
         version: link:../../../engine
+      '@boardsmith/session':
+        specifier: workspace:*
+        version: link:../../../session
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -313,6 +316,9 @@ importers:
       '@boardsmith/engine':
         specifier: workspace:*
         version: link:../../../engine
+      '@boardsmith/session':
+        specifier: workspace:*
+        version: link:../../../session
     devDependencies:
       typescript:
         specifier: ^5.6.3
@@ -444,6 +450,9 @@ importers:
       '@boardsmith/client':
         specifier: workspace:*
         version: link:../client
+      '@boardsmith/session':
+        specifier: workspace:*
+        version: link:../session
       three:
         specifier: ^0.160.0
         version: 0.160.1

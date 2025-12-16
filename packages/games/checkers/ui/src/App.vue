@@ -2,34 +2,29 @@
 import { GameShell, AutoUI } from '@boardsmith/ui';
 import CheckersBoard from './components/CheckersBoard.vue';
 
-// Color name mapping for display
-const colorNames: Record<string, string> = {
-  red: 'Red',
-  black: 'Black',
-  white: 'White',
-};
+// Default checkers colors
+const DEFAULT_CHECKERS_COLORS = ['#e74c3c', '#2c3e50'] as const;
 
-// Get player color from player data (falls back to position-based default)
-function getPlayerColor(player: { position: number; color?: string }): string {
-  if (player.color && colorNames[player.color]) {
-    return colorNames[player.color];
+// Get player color hex code (falls back to position-based default)
+function getPlayerColorHex(player: { position: number; color?: string }): string {
+  if (player.color) {
+    return player.color;
   }
-  // Fallback for backward compatibility
-  return player.position === 0 ? 'Dark' : 'Light';
+  // Fallback to default colors
+  return DEFAULT_CHECKERS_COLORS[player.position] ?? DEFAULT_CHECKERS_COLORS[0];
 }
 
-// Get CSS color value for a player's checker color
-function getColorValue(player: { position: number; color?: string }): string {
-  const colorMap: Record<string, string> = {
-    red: '#c0392b',
-    black: '#2c3e50',
-    white: '#ecf0f1',
+// Get display name for a color
+function getColorDisplayName(hex: string): string {
+  const colorNames: Record<string, string> = {
+    '#e74c3c': 'Red',
+    '#2c3e50': 'Black',
+    '#ecf0f1': 'White',
+    '#e67e22': 'Orange',
+    '#27ae60': 'Green',
+    '#3498db': 'Blue',
   };
-  if (player.color && colorMap[player.color]) {
-    return colorMap[player.color];
-  }
-  // Fallback
-  return player.position === 0 ? '#2c3e50' : '#ecf0f1';
+  return colorNames[hex.toLowerCase()] || 'Custom';
 }
 
 // Count pieces for a player from gameView
@@ -113,8 +108,8 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
 
     <template #player-stats="{ player, gameView }">
       <div class="player-color">
-        <span class="color-indicator" :style="{ backgroundColor: getColorValue(player) }"></span>
-        <span class="color-name">{{ getPlayerColor(player) }} pieces</span>
+        <span class="color-indicator" :style="{ backgroundColor: getPlayerColorHex(player) }"></span>
+        <span class="color-name">{{ getColorDisplayName(getPlayerColorHex(player)) }} pieces</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Pieces:</span>

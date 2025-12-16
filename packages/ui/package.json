@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@boardsmith/client": "workspace:*",
+    "@boardsmith/session": "workspace:*",
     "three": "^0.160.0",
     "vue": "^3.4.0"
   },

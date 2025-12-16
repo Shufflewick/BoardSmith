@@ -9,7 +9,8 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@boardsmith/engine": "workspace:*"
+    "@boardsmith/engine": "workspace:*",
+    "@boardsmith/session": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

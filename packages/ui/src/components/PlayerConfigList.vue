@@ -64,8 +64,24 @@ watch(
 );
 
 function updatePlayer(index: number, field: string, value: unknown) {
-  const updated = [...configs.value];
-  updated[index] = { ...updated[index], [field]: value };
+  // Deep clone to avoid reactivity issues
+  const updated = props.modelValue.map((config, i) => {
+    if (i === index) {
+      return { ...config, [field]: value };
+    }
+    return { ...config };
+  });
+
+  // Ensure we have configs for all player slots
+  while (updated.length < props.playerCount) {
+    const i = updated.length;
+    updated.push({
+      name: `Player ${i + 1}`,
+      isAI: false,
+      aiLevel: 'medium',
+    });
+  }
+
   emit('update:modelValue', updated);
 }
 
@@ -75,32 +91,44 @@ function getPlayerOptionChoices(opt: PlayerOptionDefinition): Array<{ value: str
 }
 
 /**
- * Get available choices for a player option, filtering out values already chosen by other players.
- * This prevents two players from selecting the same color, for example.
+ * Get values taken by OTHER players for a given option key
  */
-function getAvailableChoices(playerIndex: number, key: string, opt: PlayerOptionDefinition): Array<{ value: string; label: string }> {
-  const allChoices = getPlayerOptionChoices(opt);
-
-  // Get values chosen by OTHER players
+function getTakenValues(playerIndex: number, key: string): Set<string> {
   const takenValues = new Set<string>();
-  for (let i = 0; i < configs.value.length; i++) {
+  for (let i = 0; i < props.modelValue.length; i++) {
     if (i !== playerIndex) {
-      const val = configs.value[i][key];
+      const val = props.modelValue[i]?.[key];
       if (val !== undefined) {
         takenValues.add(String(val));
       }
     }
   }
+  return takenValues;
+}
 
-  // Filter out taken values (but keep the current player's selection visible)
-  const currentValue = configs.value[playerIndex][key];
+/**
+ * Check if a choice is taken by another player
+ */
+function isChoiceTaken(playerIndex: number, key: string, choiceValue: string): boolean {
+  return getTakenValues(playerIndex, key).has(choiceValue);
+}
+
+/**
+ * Get all choices for a player option (for select dropdowns, filter out taken)
+ */
+function getAvailableChoices(playerIndex: number, key: string, opt: PlayerOptionDefinition): Array<{ value: string; label: string }> {
+  const allChoices = getPlayerOptionChoices(opt);
+  const takenValues = getTakenValues(playerIndex, key);
+  const currentValue = props.modelValue[playerIndex]?.[key];
+
+  // For select dropdowns, filter out taken values (but keep the current player's selection visible)
   return allChoices.filter(
     (choice) => !takenValues.has(choice.value) || choice.value === String(currentValue)
   );
 }
 
 function getPlayerOptionValue(index: number, key: string, opt: PlayerOptionDefinition): string {
-  const value = configs.value[index][key];
+  const value = props.modelValue[index]?.[key];
   if (value !== undefined) return String(value);
   return opt.default ?? '';
 }
@@ -164,16 +192,20 @@ function getPlayerOptionValue(index: number, key: string, opt: PlayerOptionDefin
             </option>
           </select>
 
-          <!-- Color type -->
+          <!-- Color type - show ALL colors, disable taken ones -->
           <div v-else-if="opt.type === 'color'" class="color-picker">
             <button
-              v-for="color in getAvailableChoices(i, key, opt)"
+              v-for="color in getPlayerOptionChoices(opt)"
               :key="color.value"
               class="color-swatch"
-              :class="{ selected: getPlayerOptionValue(i, key, opt) === color.value }"
+              :class="{
+                selected: getPlayerOptionValue(i, key, opt) === color.value,
+                taken: isChoiceTaken(i, key, color.value)
+              }"
               :style="{ backgroundColor: color.value }"
-              :title="color.label"
-              @click="updatePlayer(i, key, color.value)"
+              :title="isChoiceTaken(i, key, color.value) ? `${color.label} (taken)` : color.label"
+              :disabled="isChoiceTaken(i, key, color.value)"
+              @click="!isChoiceTaken(i, key, color.value) && updatePlayer(i, key, color.value)"
             />
           </div>
 
@@ -314,14 +346,61 @@ function getPlayerOptionValue(index: number, key: string, opt: PlayerOptionDefin
   border: 2px solid transparent;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
 }
 
-.color-swatch:hover {
+.color-swatch:hover:not(.taken) {
   transform: scale(1.1);
 }
 
 .color-swatch.selected {
   border-color: #fff;
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+
+.color-swatch.taken {
+  cursor: not-allowed;
+}
+
+/* X mark over taken colors */
+.color-swatch.taken::before,
+.color-swatch.taken::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+  border-radius: 1px;
+}
+
+.color-swatch.taken::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.color-swatch.taken::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+/* Add outline for light colors (like white/off-white) so they're visible */
+.color-swatch[style*="ffffff"],
+.color-swatch[style*="FFFFFF"],
+.color-swatch[style*="ecf0f1"],
+.color-swatch[style*="ECF0F1"],
+.color-swatch[style*="f1c40f"],
+.color-swatch[style*="F1C40F"] {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.color-swatch[style*="ffffff"].selected,
+.color-swatch[style*="FFFFFF"].selected,
+.color-swatch[style*="ecf0f1"].selected,
+.color-swatch[style*="ECF0F1"].selected,
+.color-swatch[style*="f1c40f"].selected,
+.color-swatch[style*="F1C40F"].selected {
+  border-color: #00d9ff;
 }
 </style>

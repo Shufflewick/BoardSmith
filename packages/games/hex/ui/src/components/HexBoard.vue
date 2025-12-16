@@ -8,6 +8,7 @@ import {
   useHexGrid,
   isMyElement,
   isOpponentElement,
+  DEFAULT_PLAYER_COLORS,
   type GameViewElement,
 } from '@boardsmith/ui';
 
@@ -122,8 +123,49 @@ function isOpponentStone(stone: Stone | undefined): boolean {
   return isOpponentElement(stone as GameViewElement | undefined, props.playerPosition);
 }
 
-// Get player color for theming
-const myColor = computed(() => props.playerPosition === 0 ? 'red' : 'blue');
+// Get player colors from game state
+const getPlayerColors = computed(() => {
+  const board = props.gameView?.children?.find((c: any) => c.className === 'Board');
+  if (!board) return [...DEFAULT_PLAYER_COLORS];
+
+  // Extract player colors from the game state
+  // Players are available in the parent game view
+  const players = props.gameView?.players || [];
+  return players.map((p: any, i: number) => p.color || DEFAULT_PLAYER_COLORS[i] || DEFAULT_PLAYER_COLORS[0]);
+});
+
+const myColor = computed(() => getPlayerColors.value[props.playerPosition] || DEFAULT_PLAYER_COLORS[0]);
+const opponentColor = computed(() => getPlayerColors.value[1 - props.playerPosition] || DEFAULT_PLAYER_COLORS[1]);
+
+// Helper to lighten a hex color
+function lightenColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, (num >> 16) + Math.round(255 * percent));
+  const g = Math.min(255, ((num >> 8) & 0x00FF) + Math.round(255 * percent));
+  const b = Math.min(255, (num & 0x0000FF) + Math.round(255 * percent));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Helper to darken a hex color
+function darkenColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, (num >> 16) - Math.round(255 * percent));
+  const g = Math.max(0, ((num >> 8) & 0x00FF) - Math.round(255 * percent));
+  const b = Math.max(0, (num & 0x0000FF) - Math.round(255 * percent));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Get stone fill color
+function getStoneColor(stone: Stone): string {
+  const playerPos = stone.attributes?.player?.position ?? 0;
+  return getPlayerColors.value[playerPos] || '#888888';
+}
+
+// Get stone glow color (lighter version)
+function getStoneGlowColor(stone: Stone): string {
+  const color = getStoneColor(stone);
+  return lightenColor(color, 0.3);
+}
 
 // Watch for game view changes and animate
 watch(
@@ -156,24 +198,24 @@ watch(
 </script>
 
 <template>
-  <div class="hex-board-wrapper" ref="boardRef" :class="myColor">
+  <div class="hex-board-wrapper" ref="boardRef" :style="{ '--my-color': myColor }">
     <!-- Scanline overlay -->
     <div class="scanlines"></div>
 
     <!-- SVG Definitions for gradients -->
     <svg width="0" height="0" style="position: absolute;">
       <defs>
-        <!-- Red player gradient -->
-        <radialGradient id="redStoneGradient" cx="30%" cy="30%">
-          <stop offset="0%" stop-color="#ff6b6b" />
-          <stop offset="50%" stop-color="#e74c3c" />
-          <stop offset="100%" stop-color="#c0392b" />
+        <!-- Player 0 gradient (dynamic) -->
+        <radialGradient id="player0StoneGradient" cx="30%" cy="30%">
+          <stop offset="0%" :stop-color="lightenColor(getPlayerColors[0], 0.2)" />
+          <stop offset="50%" :stop-color="getPlayerColors[0]" />
+          <stop offset="100%" :stop-color="darkenColor(getPlayerColors[0], 0.15)" />
         </radialGradient>
-        <!-- Blue player gradient -->
-        <radialGradient id="blueStoneGradient" cx="30%" cy="30%">
-          <stop offset="0%" stop-color="#74b9ff" />
-          <stop offset="50%" stop-color="#3498db" />
-          <stop offset="100%" stop-color="#2980b9" />
+        <!-- Player 1 gradient (dynamic) -->
+        <radialGradient id="player1StoneGradient" cx="30%" cy="30%">
+          <stop offset="0%" :stop-color="lightenColor(getPlayerColors[1], 0.2)" />
+          <stop offset="50%" :stop-color="getPlayerColors[1]" />
+          <stop offset="100%" :stop-color="darkenColor(getPlayerColors[1], 0.15)" />
         </radialGradient>
       </defs>
     </svg>
@@ -222,20 +264,18 @@ watch(
           <circle
             :r="hexSize * 0.4"
             class="stone-glow"
-            :class="getStoneClass(stone)"
+            :style="{ fill: getStoneGlowColor(stone).replace('rgb', 'rgba').replace(')', ', 0.4)') }"
           />
           <!-- Main stone -->
           <circle
             :data-stone-id="stone.id"
             :r="hexSize * 0.32"
             class="hex-stone"
-            :class="[
-              getStoneClass(stone),
-              {
-                'is-mine': isMyStone(stone),
-                'is-opponent': isOpponentStone(stone),
-              }
-            ]"
+            :class="{ 'is-mine': isMyStone(stone), 'is-opponent': isOpponentStone(stone) }"
+            :style="{
+              fill: `url(#player${stone.attributes?.player?.position ?? 0}StoneGradient)`,
+              stroke: lightenColor(getStoneColor(stone), 0.2),
+            }"
           />
           <!-- Stone highlight -->
           <ellipse
@@ -377,28 +417,9 @@ watch(
   pointer-events: none;
 }
 
-.stone-glow.player-0 {
-  fill: rgba(255, 107, 107, 0.4);
-}
-
-.stone-glow.player-1 {
-  fill: rgba(116, 185, 255, 0.4);
-}
-
 .hex-stone {
   pointer-events: none;
   filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
-}
-
-.hex-stone.player-0 {
-  fill: url(#redStoneGradient);
-  stroke: #ff6b6b;
-  stroke-width: 2;
-}
-
-.hex-stone.player-1 {
-  fill: url(#blueStoneGradient);
-  stroke: #74b9ff;
   stroke-width: 2;
 }
 
@@ -477,18 +498,15 @@ watch(
   text-transform: uppercase;
 }
 
-/* Player color theme variations */
-.hex-board-wrapper.red {
-  border-color: rgba(255, 107, 107, 0.3);
-  box-shadow:
-    0 0 30px rgba(255, 107, 107, 0.1),
-    inset 0 0 60px rgba(0, 0, 0, 0.5);
+/* Dynamic player color theming via CSS variable */
+.hex-board-wrapper {
+  --my-color-rgb: 0, 255, 204; /* Default fallback */
 }
 
-.hex-board-wrapper.blue {
-  border-color: rgba(116, 185, 255, 0.3);
+.hex-board-wrapper[style*="--my-color"] {
+  border-color: color-mix(in srgb, var(--my-color) 30%, transparent);
   box-shadow:
-    0 0 30px rgba(116, 185, 255, 0.1),
+    0 0 30px color-mix(in srgb, var(--my-color) 10%, transparent),
     inset 0 0 60px rgba(0, 0, 0, 0.5);
 }
 </style>

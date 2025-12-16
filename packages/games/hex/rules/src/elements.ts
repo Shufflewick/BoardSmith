@@ -1,13 +1,17 @@
 import { Piece, HexGrid, HexCell, Player } from '@boardsmith/engine';
+import { DEFAULT_PLAYER_COLORS } from '@boardsmith/session';
 import type { HexGame } from './game.js';
 
 /**
- * A stone piece in Hex - either Red or Blue
+ * A stone piece in Hex
  */
 export class Stone extends Piece<HexGame, HexPlayer> {
-  /** Color of this stone (matches player) */
-  getColor(): 'red' | 'blue' {
-    return this.player?.position === 0 ? 'red' : 'blue';
+  /**
+   * Get the color of this stone (hex code)
+   * Uses the player's configured color
+   */
+  getColorHex(): string {
+    return this.player?.getColorHex() ?? '#888888';
   }
 }
 
@@ -187,8 +191,11 @@ export class HexPlayer extends Player {
   /** Number of stones this player has placed */
   stonesPlaced: number = 0;
 
-  /** Player color */
-  getColor(): 'red' | 'blue' {
-    return this.position === 0 ? 'red' : 'blue';
+  /**
+   * Get the player's color (hex code)
+   * Uses configured color or defaults based on position
+   */
+  getColorHex(): string {
+    return this.color ?? DEFAULT_PLAYER_COLORS[this.position] ?? DEFAULT_PLAYER_COLORS[0];
   }
 }

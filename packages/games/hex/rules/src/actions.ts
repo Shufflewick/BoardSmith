@@ -38,7 +38,7 @@ export function createPlaceStoneAction(game: HexGame): ActionDefinition {
       player.stonesPlaced++;
 
       // Add game message
-      game.message(`${player.name} placed a ${player.getColor()} stone at (${cell.q}, ${cell.r})`);
+      game.message(`${player.name} placed a stone at (${cell.q}, ${cell.r})`);
 
       // Check for win
       const board = game.board;

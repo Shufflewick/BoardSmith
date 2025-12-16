@@ -465,33 +465,46 @@ function isSelectablePiece(row: number, col: number): boolean {
   return piece !== undefined && movablePieceIds.value.has(piece.id);
 }
 
-// Color mapping for checker colors
-const colorMap: Record<string, { bg: string; border: string; gradient: string }> = {
-  red: {
-    bg: '#c0392b',
-    border: '#922b21',
-    gradient: 'linear-gradient(145deg, #e74c3c, #c0392b)',
-  },
-  black: {
-    bg: '#2c3e50',
-    border: '#1a252f',
-    gradient: 'linear-gradient(145deg, #4a4a4a, #2a2a2a)',
-  },
-  white: {
-    bg: '#ecf0f1',
-    border: '#bdc3c7',
-    gradient: 'linear-gradient(145deg, #f5f5f5, #d0d0d0)',
-  },
-};
+// Default checkers colors
+const DEFAULT_CHECKERS_COLORS = ['#e74c3c', '#2c3e50'] as const;
 
-// Get player color from gameView
-function getPlayerColorName(playerPosition: number): string {
+// Get player color (hex code) from gameView
+function getPlayerColor(playerPosition: number): string {
   const players = props.gameView?.players;
   if (players && players[playerPosition]?.color) {
     return players[playerPosition].color;
   }
   // Fallback to default colors
-  return playerPosition === 0 ? 'black' : 'white';
+  return DEFAULT_CHECKERS_COLORS[playerPosition] ?? DEFAULT_CHECKERS_COLORS[0];
+}
+
+// Helper to lighten a hex color
+function lightenColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, (num >> 16) + Math.round(255 * percent));
+  const g = Math.min(255, ((num >> 8) & 0x00FF) + Math.round(255 * percent));
+  const b = Math.min(255, (num & 0x0000FF) + Math.round(255 * percent));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Helper to darken a hex color
+function darkenColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, (num >> 16) - Math.round(255 * percent));
+  const g = Math.max(0, ((num >> 8) & 0x00FF) - Math.round(255 * percent));
+  const b = Math.max(0, (num & 0x0000FF) - Math.round(255 * percent));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Check if a color is light (for determining crown color)
+function isLightColor(hex: string): boolean {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = (num >> 16) & 0xFF;
+  const g = (num >> 8) & 0xFF;
+  const b = num & 0xFF;
+  // Using perceived luminance formula
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5;
 }
 
 // Get piece color class (for fallback/compatibility)
@@ -506,34 +519,32 @@ function getPieceColorClass(piece: CheckerPiece): string {
   return `player-${playerPos}`;
 }
 
-// Get piece style for dynamic coloring
+// Get piece style for dynamic coloring using hex colors
 function getPieceStyle(piece: CheckerPiece): Record<string, string> {
   const playerPos = piece.attributes?.player?.position ??
     (piece.name?.startsWith('p0-') ? 0 : piece.name?.startsWith('p1-') ? 1 : 0);
-  const colorName = getPlayerColorName(playerPos);
-  const colors = colorMap[colorName] || colorMap.black;
+  const color = getPlayerColor(playerPos);
 
   return {
-    background: colors.gradient,
-    borderColor: colors.border,
+    background: `linear-gradient(145deg, ${lightenColor(color, 0.1)}, ${darkenColor(color, 0.1)})`,
+    borderColor: darkenColor(color, 0.2),
   };
 }
 
 // Check if piece color is light (for crown color)
 function isPieceLight(piece: CheckerPiece): boolean {
   const playerPos = piece.attributes?.player?.position ?? 0;
-  const colorName = getPlayerColorName(playerPos);
-  return colorName === 'white';
+  const color = getPlayerColor(playerPos);
+  return isLightColor(color);
 }
 
 // Get style for flying piece animation (uses same color as board pieces)
 function getFlyingPieceStyle(playerPosition: number): Record<string, string> {
-  const colorName = getPlayerColorName(playerPosition ?? 0);
-  const colors = colorMap[colorName] || colorMap.black;
+  const color = getPlayerColor(playerPosition ?? 0);
 
   return {
-    background: colors.gradient,
-    borderColor: colors.border,
+    background: `linear-gradient(145deg, ${lightenColor(color, 0.1)}, ${darkenColor(color, 0.1)})`,
+    borderColor: darkenColor(color, 0.2),
   };
 }
 

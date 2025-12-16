@@ -190,3 +190,10 @@ export type {
   ElementMatchOptions,
   PlayerRef,
 } from './types.js';
+
+// Re-export color utilities from session package
+export {
+  STANDARD_PLAYER_COLORS,
+  DEFAULT_PLAYER_COLORS,
+  type ColorChoice,
+} from '@boardsmith/session';

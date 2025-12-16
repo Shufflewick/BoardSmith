@@ -7,6 +7,20 @@ export { getCheckersObjectives } from './ai.js';
 
 import { CheckersGame } from './game.js';
 import { getCheckersObjectives } from './ai.js';
+import { createColorOption, type ColorChoice } from '@boardsmith/session';
+
+/**
+ * Traditional checkers piece colors
+ * Using hex codes that match the standard BoardSmith palette
+ */
+export const CHECKERS_COLORS: readonly ColorChoice[] = [
+  { value: '#e74c3c', label: 'Red' },
+  { value: '#2c3e50', label: 'Black' },
+  { value: '#ecf0f1', label: 'White' },
+  { value: '#e67e22', label: 'Orange' },
+  { value: '#27ae60', label: 'Green' },
+  { value: '#3498db', label: 'Blue' },
+] as const;
 
 /**
  * Game definition for the worker to register this game.
@@ -22,16 +36,7 @@ export const gameDefinition = {
     objectives: getCheckersObjectives,
   },
   playerOptions: {
-    color: {
-      type: 'select' as const,
-      label: 'Checker Color',
-      choices: [
-        { value: 'red', label: 'Red' },
-        { value: 'black', label: 'Black' },
-        { value: 'white', label: 'White' },
-      ],
-      default: 'red',
-    },
+    color: createColorOption(CHECKERS_COLORS, 'Checker Color'),
   },
   presets: [
     {
@@ -39,8 +44,8 @@ export const gameDefinition = {
       description: 'Red vs Black',
       options: {},
       players: [
-        { color: 'red' },
-        { color: 'black' },
+        { color: '#e74c3c' },
+        { color: '#2c3e50' },
       ],
     },
     {
@@ -48,8 +53,8 @@ export const gameDefinition = {
       description: 'Play against AI',
       options: {},
       players: [
-        { isAI: false, color: 'red' },
-        { isAI: true, aiLevel: 'medium', color: 'black' },
+        { isAI: false, color: '#e74c3c' },
+        { isAI: true, aiLevel: 'medium', color: '#2c3e50' },
       ],
     },
   ],

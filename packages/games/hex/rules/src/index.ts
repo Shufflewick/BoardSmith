@@ -7,6 +7,7 @@ export { getHexObjectives } from './ai.js';
 
 import { HexGame } from './game.js';
 import { getHexObjectives } from './ai.js';
+import { createColorOption } from '@boardsmith/session';
 
 /**
  * Game definition for the worker to register this game.
@@ -25,31 +26,42 @@ export const gameDefinition = {
     boardSize: {
       type: 'number' as const,
       label: 'Board Size',
-      description: 'Size of the hex board (NxN)',
+      description: 'Number of hexes per side',
       min: 5,
       max: 19,
       step: 1,
       default: 11,
     },
   },
+  playerOptions: {
+    color: createColorOption(),
+  },
   presets: [
     {
       name: 'Quick Game',
       description: '7x7 board',
       options: { boardSize: 7 },
+      players: [
+        { color: '#e74c3c' },
+        { color: '#3498db' },
+      ],
     },
     {
       name: 'Standard',
       description: '11x11 board',
       options: { boardSize: 11 },
+      players: [
+        { color: '#e74c3c' },
+        { color: '#3498db' },
+      ],
     },
     {
       name: 'vs AI',
       description: 'Play against AI',
       options: { boardSize: 9 },
       players: [
-        { isAI: false },
-        { isAI: true, aiLevel: 'medium' },
+        { isAI: false, color: '#e74c3c' },
+        { isAI: true, aiLevel: 'medium', color: '#3498db' },
       ],
     },
   ],

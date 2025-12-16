@@ -1,7 +1,11 @@
 import { Game, type GameOptions } from '@boardsmith/engine';
+import { DEFAULT_PLAYER_COLORS } from '@boardsmith/session';
 import { Board, Square, CheckerPiece, CheckersPlayer, type CheckersMove } from './elements.js';
 import { createMoveAction, createEndTurnAction } from './actions.js';
 import { createCheckersFlow } from './flow.js';
+
+/** Default checkers colors - red and black */
+const CHECKERS_DEFAULT_COLORS = ['#e74c3c', '#2c3e50'] as const;
 
 /**
  * Player configuration from lobby
@@ -88,8 +92,8 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
       if (config?.color) {
         this.players[i].color = config.color;
       } else {
-        // Default colors: Player 0 = red, Player 1 = black
-        this.players[i].color = i === 0 ? 'red' : 'black';
+        // Default colors: Player 0 = red (#e74c3c), Player 1 = black (#2c3e50)
+        this.players[i].color = CHECKERS_DEFAULT_COLORS[i] ?? CHECKERS_DEFAULT_COLORS[0];
       }
     }
   }

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { GameShell, AutoUI, findElement, getElementOwner } from '@boardsmith/ui';
+import { GameShell, AutoUI, findElement, getElementOwner, DEFAULT_PLAYER_COLORS } from '@boardsmith/ui';
 import HexBoard from './components/HexBoard.vue';
 
-// Get player color name
-function getPlayerColor(playerPosition: number): string {
-  return playerPosition === 0 ? 'Red' : 'Blue';
+// Get player color from player object or fallback
+function getPlayerColorHex(player: any): string {
+  return player?.color || DEFAULT_PLAYER_COLORS[player?.position ?? 0];
 }
 
 // Count stones for a player from gameView using shared helpers
@@ -31,13 +31,13 @@ function getStoneCount(playerPosition: number, gameView: any): number {
     display-name="Hex"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
+    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <p class="board-instructions">
-            <span class="red">Red</span> connects top to bottom.
-            <span class="blue">Blue</span> connects left to right.
+            <span :style="{ color: getPlayerColorHex(players?.[0]) }">{{ players?.[0]?.name || 'Player 1' }}</span> connects top to bottom.
+            <span :style="{ color: getPlayerColorHex(players?.[1]) }">{{ players?.[1]?.name || 'Player 2' }}</span> connects left to right.
           </p>
           <HexBoard
             :game-view="gameView"
@@ -60,8 +60,11 @@ function getStoneCount(playerPosition: number, gameView: any): number {
 
     <template #player-stats="{ player, gameView }">
       <div class="player-color">
-        <span class="color-indicator" :class="getPlayerColor(player.position).toLowerCase()"></span>
-        <span class="color-name">{{ getPlayerColor(player.position) }} stones</span>
+        <span
+          class="color-indicator"
+          :style="{ background: `linear-gradient(145deg, ${getPlayerColorHex(player)}, ${getPlayerColorHex(player)}cc)`, borderColor: getPlayerColorHex(player) }"
+        ></span>
+        <span class="color-name">Stones</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Stones placed:</span>
@@ -110,13 +113,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
   margin-bottom: 12px;
 }
 
-.board-instructions .red {
-  color: #ff6b6b;
-  font-weight: bold;
-}
-
-.board-instructions .blue {
-  color: #4dabf7;
+.board-instructions span {
   font-weight: bold;
 }
 
@@ -134,16 +131,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
   height: 20px;
   border-radius: 50%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.color-indicator.red {
-  background: linear-gradient(145deg, #ff6b6b, #c92a2a);
-  border: 2px solid #a01a1a;
-}
-
-.color-indicator.blue {
-  background: linear-gradient(145deg, #4dabf7, #228be6);
-  border: 2px solid #1864ab;
+  border: 2px solid;
 }
 
 .color-name {

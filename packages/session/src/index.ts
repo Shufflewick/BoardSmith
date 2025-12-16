@@ -62,6 +62,18 @@ export {
 } from './utils.js';
 
 // ============================================
+// Player Colors
+// ============================================
+
+export {
+  STANDARD_PLAYER_COLORS,
+  DEFAULT_PLAYER_COLORS,
+  createColorOption,
+  type ColorChoice,
+  type ColorOptionDefinition,
+} from './colors.js';
+
+// ============================================
 // Core Classes
 // ============================================
 
