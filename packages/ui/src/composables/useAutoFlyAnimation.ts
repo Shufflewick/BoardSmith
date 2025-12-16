@@ -79,10 +79,10 @@ import { prefersReducedMotion } from './useElementAnimation.js';
 export interface CapturedElementData {
   /** Element's bounding rectangle */
   rect: DOMRect;
-  /** Face image URL (from data-face-image) */
-  faceImage?: string;
-  /** Back image URL (from data-back-image) */
-  backImage?: string;
+  /** Face image - URL string or sprite object (from data-face-image) */
+  faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  /** Back image - URL string or sprite object (from data-back-image) */
+  backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
   /** Card rank (from data-rank) */
   rank?: string;
   /** Card suit (from data-suit) */
@@ -170,6 +170,31 @@ export interface AutoFlyAnimationReturn {
   }) => Promise<void>;
 }
 
+/** Sprite object type for card images */
+type SpriteInfo = { sprite: string; x: number; y: number; width?: number; height?: number };
+
+/**
+ * Parse image attribute value - handles both URL strings and JSON sprite objects
+ */
+function parseImageAttr(value: string | null): string | SpriteInfo | undefined {
+  if (!value) return undefined;
+
+  // Try to parse as JSON (for sprite objects)
+  if (value.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(value);
+      // Validate it has the expected sprite properties
+      if (parsed && typeof parsed.sprite === 'string' && typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+        return parsed as SpriteInfo;
+      }
+    } catch {
+      // Not valid JSON, treat as URL string
+    }
+  }
+
+  return value;
+}
+
 /**
  * Capture visual data from a DOM element using standard data attributes
  */
@@ -177,8 +202,9 @@ function captureElementFromDOM(el: Element, extraData?: Record<string, unknown>)
   const rect = el.getBoundingClientRect();
 
   // Extract standard data attributes
-  const faceImage = el.getAttribute('data-face-image') || undefined;
-  const backImage = el.getAttribute('data-back-image') || undefined;
+  // Image attributes can be URL strings or JSON sprite objects
+  const faceImage = parseImageAttr(el.getAttribute('data-face-image'));
+  const backImage = parseImageAttr(el.getAttribute('data-back-image'));
   const rank = el.getAttribute('data-rank') || undefined;
   const suit = el.getAttribute('data-suit') || undefined;
   const playerPosAttr = el.getAttribute('data-player-position');

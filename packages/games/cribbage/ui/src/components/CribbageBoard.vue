@@ -99,13 +99,19 @@ function getFaceSrc(card: Card | null | undefined): string {
 }
 
 // Helper to get image data for data attribute (works with animation system)
-// Returns URL string for URL images, or JSON string for sprites
+// Returns URL string for URL images, or JSON string for sprite info
 function getImageDataAttr(card: Card | null | undefined, side: 'face' | 'back'): string | undefined {
   const info = getCardImageInfo(card, side);
   if (!info) return undefined;
   if (info.type === 'url') return info.src;
-  // For sprites, return the sprite URL (animation system will use default card appearance)
-  return info.sprite;
+  // For sprites, return JSON with sprite coordinates so animation system can render correctly
+  return JSON.stringify({
+    sprite: info.sprite,
+    x: info.x,
+    y: info.y,
+    width: info.width,
+    height: info.height,
+  });
 }
 
 // Sprite sheet layout constants
@@ -271,10 +277,32 @@ const opponentScore = computed(() => (opponentHandElement.value?.attributes as a
 const isDealer = computed(() => dealerPosition.value === props.playerPosition);
 
 // Get card back image info from any card with $images (for deck/crib display)
+// Check multiple sources since hands can be empty at end of round
 const cardBackImageInfo = computed((): ImageInfo | null => {
-  // Try to find a card with $images
+  // Try myHand first
   if (myHand.value.length > 0) {
-    return getCardImageInfo(myHand.value[0], 'back');
+    const info = getCardImageInfo(myHand.value[0], 'back');
+    if (info) return info;
+  }
+  // Try starter card
+  if (starterCard.value) {
+    const info = getCardImageInfo(starterCard.value as Card, 'back');
+    if (info) return info;
+  }
+  // Try crib cards
+  if (crib.value.length > 0) {
+    const info = getCardImageInfo(crib.value[0] as Card, 'back');
+    if (info) return info;
+  }
+  // Try play area
+  if (playArea.value.length > 0) {
+    const info = getCardImageInfo(playArea.value[0] as Card, 'back');
+    if (info) return info;
+  }
+  // Try played cards
+  if (playedCards.value.length > 0) {
+    const info = getCardImageInfo(playedCards.value[0] as Card, 'back');
+    if (info) return info;
   }
   return null;
 });

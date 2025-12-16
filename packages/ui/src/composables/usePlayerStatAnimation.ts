@@ -45,10 +45,10 @@ export interface CardForAnimation {
   suit?: string;
   /** Whether card is face up (default: true) */
   faceUp?: boolean;
-  /** Face image URL (optional) */
-  faceImage?: string;
-  /** Back image URL (optional) */
-  backImage?: string;
+  /** Face image - URL string or sprite object (optional) */
+  faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  /** Back image - URL string or sprite object (optional) */
+  backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
   /** Player position who owns this card/piece (for piece rendering) */
   playerPosition?: number;
   /** Allow additional custom properties */
