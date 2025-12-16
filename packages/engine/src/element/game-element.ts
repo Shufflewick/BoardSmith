@@ -540,6 +540,75 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
+   * Resolve element references in this element's attributes after deserialization.
+   * Called after the entire element tree is restored to convert
+   * { __elementRef: "path" } objects back to actual element references.
+   */
+  resolveElementReferences(game: Game): void {
+    const unserializable = new Set(
+      (this.constructor as typeof GameElement).unserializableAttributes
+    );
+
+    // Resolve references in own attributes
+    for (const key of Object.keys(this)) {
+      if (!unserializable.has(key) && !key.startsWith('_')) {
+        const value = (this as Record<string, unknown>)[key];
+        if (value !== undefined) {
+          (this as Record<string, unknown>)[key] = this.deserializeValue(value, game);
+        }
+      }
+    }
+
+    // Recursively resolve references in children
+    for (const child of this._t.children) {
+      child.resolveElementReferences(game);
+    }
+  }
+
+  /**
+   * Deserialize a value that may contain element references
+   */
+  protected deserializeValue(value: unknown, game: Game): unknown {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    // Handle element reference by branch path
+    if (typeof value === 'object' && value !== null && '__elementRef' in value) {
+      const ref = value as { __elementRef: string };
+      return game.atBranch(ref.__elementRef);
+    }
+
+    // Handle element reference by ID
+    if (typeof value === 'object' && value !== null && '__elementId' in value) {
+      const ref = value as { __elementId: number };
+      return game.getElementById(ref.__elementId);
+    }
+
+    // Handle player reference
+    if (typeof value === 'object' && value !== null && '__playerRef' in value) {
+      const ref = value as { __playerRef: number };
+      return game.players[ref.__playerRef];
+    }
+
+    // Handle arrays
+    if (Array.isArray(value)) {
+      return value.map(item => this.deserializeValue(item, game));
+    }
+
+    // Handle plain objects (but not element references)
+    if (typeof value === 'object' && value !== null) {
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value)) {
+        result[k] = this.deserializeValue(v, game);
+      }
+      return result;
+    }
+
+    return value;
+  }
+
+  /**
    * Create an element tree from JSON
    */
   static fromJSON<T extends GameElement>(

@@ -26,6 +26,93 @@ export interface GameDefinition {
   minPlayers: number;
   maxPlayers: number;
   displayName?: string;
+  /** AI configuration */
+  ai?: {
+    objectives: (...args: unknown[]) => unknown;
+  };
+  /** Game-level configurable options */
+  gameOptions?: Record<string, GameOptionDefinition>;
+  /** Per-player configurable options */
+  playerOptions?: Record<string, PlayerOptionDefinition>;
+  /** Preset configurations for quick setup */
+  presets?: GamePreset[];
+}
+
+// ============================================
+// Game Option Metadata Types
+// ============================================
+
+/**
+ * Number option definition
+ */
+export interface NumberOption {
+  type: 'number';
+  label: string;
+  description?: string;
+  default?: number;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+/**
+ * Select option definition
+ */
+export interface SelectOption {
+  type: 'select';
+  label: string;
+  description?: string;
+  default?: string | number;
+  choices: Array<{ value: string | number; label: string }>;
+}
+
+/**
+ * Boolean option definition
+ */
+export interface BooleanOption {
+  type: 'boolean';
+  label: string;
+  description?: string;
+  default?: boolean;
+}
+
+/**
+ * Union type for game-level options
+ */
+export type GameOptionDefinition = NumberOption | SelectOption | BooleanOption;
+
+/**
+ * Per-player option definition (shown for each player slot)
+ */
+export interface PlayerOptionDefinition {
+  type: 'select' | 'color' | 'text';
+  label: string;
+  description?: string;
+  default?: string;
+  choices?: Array<{ value: string; label: string }> | string[];
+}
+
+/**
+ * Per-player configuration in requests
+ */
+export interface PlayerConfig {
+  name?: string;
+  isAI?: boolean;
+  aiLevel?: string;
+  /** Custom player options (color, role, etc.) */
+  [key: string]: unknown;
+}
+
+/**
+ * Preset configuration for quick game setup
+ */
+export interface GamePreset {
+  name: string;
+  description?: string;
+  /** Game options to apply */
+  options: Record<string, unknown>;
+  /** Per-player configurations */
+  players?: PlayerConfig[];
 }
 
 /**
@@ -52,6 +139,8 @@ export interface StoredGameState {
   actionHistory: SerializedAction[];
   createdAt: number;
   aiConfig?: AIConfig;
+  /** Game-specific options (for restart) */
+  gameOptions?: Record<string, unknown>;
 }
 
 /**
@@ -228,6 +317,10 @@ export interface CreateGameRequest {
   seed?: string;
   aiPlayers?: number[];
   aiLevel?: string;
+  /** Game-specific options (boardSize, targetScore, etc.) */
+  gameOptions?: Record<string, unknown>;
+  /** Per-player configurations (for lobby UI) */
+  playerConfigs?: PlayerConfig[];
 }
 
 /**

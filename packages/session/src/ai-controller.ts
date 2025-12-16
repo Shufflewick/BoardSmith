@@ -69,10 +69,15 @@ export class AIController<G extends Game = Game> {
     onMove: (action: string, player: number, args: Record<string, unknown>) => Promise<boolean>
   ): Promise<{ action: string; player: number; args: Record<string, unknown> } | null> {
     // Prevent concurrent AI thinking
-    if (this.#thinking) return null;
+    if (this.#thinking) {
+      return null;
+    }
 
     const flowState = runner.getFlowState();
-    if (!flowState?.awaitingInput || flowState.complete) return null;
+
+    if (!flowState?.awaitingInput || flowState.complete) {
+      return null;
+    }
 
     // Find which AI player should act
     let aiPlayer: number | undefined;
@@ -95,13 +100,39 @@ export class AIController<G extends Game = Game> {
     }
 
     // No AI player needs to act
-    if (aiPlayer === undefined) return null;
+    if (aiPlayer === undefined) {
+      return null;
+    }
 
     this.#thinking = true;
 
     try {
       // Small delay so humans can see the state change
       await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Re-validate that it's still this player's turn after the delay
+      // (another action might have changed the game state)
+      const currentFlowState = runner.getFlowState();
+
+      if (!currentFlowState?.awaitingInput || currentFlowState.complete) {
+        return null;
+      }
+
+      // Check if the current player changed
+      let stillOurTurn = false;
+      if (currentFlowState.awaitingPlayers && currentFlowState.awaitingPlayers.length > 0) {
+        const playerState = currentFlowState.awaitingPlayers.find(
+          p => p.playerIndex === aiPlayer && !p.completed && p.availableActions.length > 0
+        );
+        stillOurTurn = playerState !== undefined;
+      } else if (currentFlowState.currentPlayer === aiPlayer) {
+        stillOurTurn = true;
+      }
+
+      if (!stillOurTurn) {
+        // Turn changed during the delay - skip this AI check
+        return null;
+      }
 
       // Create bot for this player
       const difficulty = parseAILevel(this.#aiLevel);

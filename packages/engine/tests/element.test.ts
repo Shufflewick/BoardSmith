@@ -602,3 +602,128 @@ describe('playerView Function', () => {
     expect(view.children?.[0].children?.length).toBe(3);
   });
 });
+
+describe('Game Restoration', () => {
+  // Test class with element references
+  class Squad extends Space<TestGame> {
+    sectorId?: number;
+    linkedSquad?: Squad;
+  }
+
+  class RebelPlayer extends Space<TestGame> {
+    primarySquad?: Squad;
+  }
+
+  class RefTestGame extends Game<RefTestGame, Player> {}
+
+  it('should resolve element references after restoration', () => {
+    // Create original game with element references
+    const game = new RefTestGame({ playerCount: 2 });
+    game._ctx.classRegistry.set('Squad', Squad);
+    game._ctx.classRegistry.set('RebelPlayer', RebelPlayer);
+
+    const rebel = game.create(RebelPlayer, 'rebel1');
+    const squad1 = game.create(Squad, 'squad1', { sectorId: 5 });
+    const squad2 = game.create(Squad, 'squad2', { sectorId: 10 });
+
+    // Set element references
+    rebel.primarySquad = squad1;
+    squad1.linkedSquad = squad2;
+
+    // Serialize
+    const json = game.toJSON();
+
+    // Verify serialization encoded references correctly
+    const rebelJson = json.children?.find(c => c.name === 'rebel1');
+    expect(rebelJson?.attributes.primarySquad).toEqual({ __elementRef: '1' }); // squad1 is at index 1
+
+    // Restore game
+    const classRegistry = new Map<string, any>();
+    classRegistry.set('RefTestGame', RefTestGame);
+    classRegistry.set('Squad', Squad);
+    classRegistry.set('RebelPlayer', RebelPlayer);
+
+    const restored = Game.restoreGame(json, RefTestGame, classRegistry);
+
+    // Verify references were resolved
+    const restoredRebel = restored.first({ name: 'rebel1' }) as RebelPlayer;
+    const restoredSquad1 = restored.first({ name: 'squad1' }) as Squad;
+    const restoredSquad2 = restored.first({ name: 'squad2' }) as Squad;
+
+    expect(restoredRebel.primarySquad).toBe(restoredSquad1);
+    expect(restoredSquad1.linkedSquad).toBe(restoredSquad2);
+    expect(restoredSquad1.sectorId).toBe(5);
+    expect(restoredSquad2.sectorId).toBe(10);
+  });
+
+  it('should resolve nested element references in objects', () => {
+    class DataHolder extends Space<TestGame> {
+      data?: {
+        target?: GameElement;
+        nested?: {
+          anotherTarget?: GameElement;
+        };
+      };
+    }
+
+    const game = new RefTestGame({ playerCount: 2 });
+    game._ctx.classRegistry.set('DataHolder', DataHolder);
+    game._ctx.classRegistry.set('Squad', Squad);
+
+    const holder = game.create(DataHolder, 'holder');
+    const target1 = game.create(Squad, 'target1');
+    const target2 = game.create(Squad, 'target2');
+
+    holder.data = {
+      target: target1,
+      nested: {
+        anotherTarget: target2,
+      },
+    };
+
+    const json = game.toJSON();
+    const classRegistry = new Map<string, any>();
+    classRegistry.set('RefTestGame', RefTestGame);
+    classRegistry.set('DataHolder', DataHolder);
+    classRegistry.set('Squad', Squad);
+
+    const restored = Game.restoreGame(json, RefTestGame, classRegistry);
+    const restoredHolder = restored.first({ name: 'holder' }) as DataHolder;
+    const restoredTarget1 = restored.first({ name: 'target1' }) as Squad;
+    const restoredTarget2 = restored.first({ name: 'target2' }) as Squad;
+
+    expect(restoredHolder.data?.target).toBe(restoredTarget1);
+    expect(restoredHolder.data?.nested?.anotherTarget).toBe(restoredTarget2);
+  });
+
+  it('should resolve element references in arrays', () => {
+    class Container extends Space<TestGame> {
+      items?: Squad[];
+    }
+
+    const game = new RefTestGame({ playerCount: 2 });
+    game._ctx.classRegistry.set('Container', Container);
+    game._ctx.classRegistry.set('Squad', Squad);
+
+    const container = game.create(Container, 'container');
+    const item1 = game.create(Squad, 'item1');
+    const item2 = game.create(Squad, 'item2');
+
+    container.items = [item1, item2];
+
+    const json = game.toJSON();
+    const classRegistry = new Map<string, any>();
+    classRegistry.set('RefTestGame', RefTestGame);
+    classRegistry.set('Container', Container);
+    classRegistry.set('Squad', Squad);
+
+    const restored = Game.restoreGame(json, RefTestGame, classRegistry);
+    const restoredContainer = restored.first({ name: 'container' }) as Container;
+    const restoredItem1 = restored.first({ name: 'item1' }) as Squad;
+    const restoredItem2 = restored.first({ name: 'item2' }) as Squad;
+
+    expect(restoredContainer.items).toHaveLength(2);
+    expect(restoredContainer.items?.[0]).toBe(restoredItem1);
+    expect(restoredContainer.items?.[1]).toBe(restoredItem2);
+  });
+});

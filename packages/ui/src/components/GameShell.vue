@@ -41,7 +41,6 @@ type Screen = 'lobby' | 'waiting' | 'game';
 const currentScreen = ref<Screen>('lobby');
 
 // Lobby state
-const playerName = ref('');
 const joinGameId = ref('');
 const createdGameId = ref<string | null>(null);
 
@@ -237,7 +236,6 @@ onMounted(() => {
     const urlGameId = match[1];
     const urlPosition = match[2] ? parseInt(match[2], 10) : 0;
 
-    playerName.value = localStorage.getItem('playerName') || 'Player';
     playerPosition.value = urlPosition;
     setTimeout(() => {
       gameId.value = urlGameId;
@@ -256,31 +254,71 @@ function clearUrl() {
   window.history.pushState({}, '', '/');
 }
 
-// Actions
-async function createGame() {
-  if (!playerName.value.trim()) {
-    alert('Please enter your name');
-    return;
-  }
-  localStorage.setItem('playerName', playerName.value.trim());
+// Lobby config type
+interface LobbyConfig {
+  playerCount: number;
+  gameOptions: Record<string, unknown>;
+  playerConfigs: Array<{
+    name: string;
+    isAI: boolean;
+    aiLevel: string;
+    [key: string]: unknown;
+  }>;
+}
 
+// Actions
+async function createGame(config?: LobbyConfig) {
   try {
-    const playerNames = [playerName.value.trim()];
-    for (let i = 1; i < props.playerCount; i++) {
-      playerNames.push(`Waiting for player ${i + 1}...`);
+    // Use config from lobby if provided, otherwise fallback to props
+    const effectivePlayerCount = config?.playerCount ?? props.playerCount;
+
+    // Build player names and AI config from lobby config
+    let playerNames: string[];
+    let aiPlayers: number[] = [];
+    let aiLevel = 'medium';
+
+    if (config?.playerConfigs?.length) {
+      playerNames = config.playerConfigs.map((pc, i) =>
+        pc.name || (pc.isAI ? 'Bot' : `Player ${i + 1}`)
+      );
+      // Extract AI players
+      aiPlayers = config.playerConfigs
+        .map((pc, i) => (pc.isAI ? i : -1))
+        .filter((i) => i >= 0);
+      // Get AI level from first AI player
+      const firstAI = config.playerConfigs.find((pc) => pc.isAI);
+      if (firstAI) {
+        aiLevel = firstAI.aiLevel || 'medium';
+      }
+    } else {
+      // Fallback when no config provided
+      playerNames = Array.from({ length: effectivePlayerCount }, (_, i) => `Player ${i + 1}`);
     }
 
     const result = await client.createGame({
       gameType: props.gameType,
-      playerCount: props.playerCount,
+      playerCount: effectivePlayerCount,
       playerNames,
+      aiPlayers: aiPlayers.length > 0 ? aiPlayers : undefined,
+      aiLevel: aiPlayers.length > 0 ? aiLevel : undefined,
+      gameOptions: config?.gameOptions,
+      playerConfigs: config?.playerConfigs,
     });
 
     if (result.success && result.gameId) {
       createdGameId.value = result.gameId;
       playerPosition.value = 0;
-      currentScreen.value = 'waiting';
-      pollForOtherPlayers(result.gameId);
+
+      // If all other players are AI, skip waiting room
+      const humanCount = config?.playerConfigs?.filter((p) => !p.isAI).length ?? 1;
+      if (humanCount <= 1) {
+        gameId.value = result.gameId;
+        currentScreen.value = 'game';
+        updateUrl(result.gameId, 0);
+      } else {
+        currentScreen.value = 'waiting';
+        pollForOtherPlayers(result.gameId);
+      }
     }
   } catch (err) {
     console.error('Failed to create game:', err);
@@ -294,19 +332,24 @@ async function pollForOtherPlayers(gid: string) {
   updateUrl(gid, 0);
 }
 
-async function joinGame() {
-  if (!playerName.value.trim()) {
-    alert('Please enter your name');
-    return;
-  }
+async function joinGame(playerName?: string) {
   if (!joinGameId.value.trim()) {
     alert('Please enter a game code');
     return;
   }
-  localStorage.setItem('playerName', playerName.value.trim());
 
   try {
     const gid = joinGameId.value.trim();
+
+    // If player provided a name, update it on the server
+    if (playerName) {
+      await fetch(`${props.apiUrl || window.location.origin.replace(/:\d+$/, ':8787')}/games/${gid}/players/1/name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: playerName }),
+      });
+    }
+
     const stateResult = await client.getGameState(gid, 1);
 
     if (stateResult) {
@@ -400,7 +443,7 @@ defineExpose({
     <GameLobby
       v-if="currentScreen === 'lobby'"
       :display-name="displayName || gameType"
-      v-model:player-name="playerName"
+      :api-url="apiUrl"
       v-model:join-game-id="joinGameId"
       @create="createGame"
       @join="joinGame"

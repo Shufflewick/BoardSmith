@@ -21,4 +21,36 @@ export const gameDefinition = {
   ai: {
     objectives: getHexObjectives,
   },
-} as const;
+  gameOptions: {
+    boardSize: {
+      type: 'number' as const,
+      label: 'Board Size',
+      description: 'Size of the hex board (NxN)',
+      min: 5,
+      max: 19,
+      step: 1,
+      default: 11,
+    },
+  },
+  presets: [
+    {
+      name: 'Quick Game',
+      description: '7x7 board',
+      options: { boardSize: 7 },
+    },
+    {
+      name: 'Standard',
+      description: '11x11 board',
+      options: { boardSize: 11 },
+    },
+    {
+      name: 'vs AI',
+      description: 'Play against AI',
+      options: { boardSize: 9 },
+      players: [
+        { isAI: false },
+        { isAI: true, aiLevel: 'medium' },
+      ],
+    },
+  ],
+};

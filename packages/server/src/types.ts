@@ -60,6 +60,8 @@ export interface CreateGameOptions {
   playerIds?: string[];
   seed?: string;
   aiConfig?: AIConfig;
+  /** Game-specific options (boardSize, targetScore, etc.) */
+  gameOptions?: Record<string, unknown>;
 }
 
 /**

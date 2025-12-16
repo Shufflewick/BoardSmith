@@ -14,6 +14,7 @@ interface DevOptions {
   workerPort: string;
   ai?: string[];
   aiLevel?: string;
+  lobby?: boolean;
 }
 
 interface BoardSmithConfig {
@@ -204,37 +205,45 @@ export async function devCommand(options: DevOptions): Promise<void> {
     await vite.listen();
     console.log(chalk.green(`  UI server running on http://localhost:${port}`));
 
-    // Create a game with appropriate names for AI and human players
-    const playerNames = Array.from({ length: playerCount }, (_, i) =>
-      aiPlayers.includes(i) ? 'Bot' : `Player ${i + 1}`
-    );
-    const gameId = await createGame(workerPort, gameDefinition.gameType, playerCount, playerNames);
-
-    if (gameId) {
-      console.log(chalk.cyan(`\n  Game created: ${gameId}`));
-
-      // Only open browser tabs for human players
-      const humanPlayers = Array.from({ length: playerCount }, (_, i) => i)
-        .filter(i => !aiPlayers.includes(i));
-
-      if (humanPlayers.length > 0) {
-        console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
-        for (const i of humanPlayers) {
-          const url = `http://localhost:${port}/game/${gameId}/${i}`;
-          await open(url);
-          console.log(chalk.dim(`  Player ${i + 1}: ${url}`));
-        }
-      }
-
-      // Log AI player info
-      for (const i of aiPlayers) {
-        if (i < playerCount) {
-          console.log(chalk.dim(`  Player ${i + 1}: AI (${aiLevel})`));
-        }
-      }
+    if (options.lobby) {
+      // Open the lobby for manual game configuration
+      console.log(chalk.cyan('\n  Opening game lobby...'));
+      const lobbyUrl = `http://localhost:${port}`;
+      await open(lobbyUrl);
+      console.log(chalk.dim(`  Lobby: ${lobbyUrl}`));
     } else {
-      console.log(chalk.yellow('\n  Could not auto-create game. Open the UI manually.'));
-      await open(`http://localhost:${port}`);
+      // Create a game with appropriate names for AI and human players
+      const playerNames = Array.from({ length: playerCount }, (_, i) =>
+        aiPlayers.includes(i) ? 'Bot' : `Player ${i + 1}`
+      );
+      const gameId = await createGame(workerPort, gameDefinition.gameType, playerCount, playerNames);
+
+      if (gameId) {
+        console.log(chalk.cyan(`\n  Game created: ${gameId}`));
+
+        // Only open browser tabs for human players
+        const humanPlayers = Array.from({ length: playerCount }, (_, i) => i)
+          .filter(i => !aiPlayers.includes(i));
+
+        if (humanPlayers.length > 0) {
+          console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
+          for (const i of humanPlayers) {
+            const url = `http://localhost:${port}/game/${gameId}/${i}`;
+            await open(url);
+            console.log(chalk.dim(`  Player ${i + 1}: ${url}`));
+          }
+        }
+
+        // Log AI player info
+        for (const i of aiPlayers) {
+          if (i < playerCount) {
+            console.log(chalk.dim(`  Player ${i + 1}: AI (${aiLevel})`));
+          }
+        }
+      } else {
+        console.log(chalk.yellow('\n  Could not auto-create game. Open the UI manually.'));
+        await open(`http://localhost:${port}`);
+      }
     }
 
     console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));

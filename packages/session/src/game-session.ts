@@ -33,6 +33,8 @@ export interface GameSessionOptions<G extends Game = Game> {
   seed?: string;
   storage?: StorageAdapter;
   aiConfig?: AIConfig;
+  /** Game-specific options (boardSize, targetScore, etc.) */
+  gameOptions?: Record<string, unknown>;
 }
 
 /**
@@ -146,6 +148,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       seed,
       storage,
       aiConfig,
+      gameOptions: customGameOptions,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -153,7 +156,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const runner = new GameRunner<G>({
       GameClass,
       gameType,
-      gameOptions: { playerCount, playerNames, seed: gameSeed },
+      gameOptions: { playerCount, playerNames, seed: gameSeed, ...customGameOptions },
     });
 
     const storedState: StoredGameState = {
@@ -165,6 +168,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       actionHistory: [],
       createdAt: Date.now(),
       aiConfig,
+      gameOptions: customGameOptions,
     };
 
     runner.start();
@@ -199,6 +203,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           playerCount: storedState.playerCount,
           playerNames: storedState.playerNames,
           seed: storedState.seed,
+          ...storedState.gameOptions,
         },
       },
       storedState.actionHistory
@@ -300,6 +305,21 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
+   * Update a player's name
+   * @param position Player position (0-indexed)
+   * @param name New name for the player
+   */
+  updatePlayerName(position: number, name: string): void {
+    if (position < 0 || position >= this.#storedState.playerCount) {
+      throw new Error(`Invalid player position: ${position}`);
+    }
+    this.#storedState.playerNames[position] = name;
+
+    // Broadcast the update to all connected clients
+    this.broadcast();
+  }
+
+  /**
    * Get action history
    */
   getHistory(): { actionHistory: SerializedAction[]; createdAt: number } {
@@ -334,6 +354,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             playerCount: this.#storedState.playerCount,
             playerNames: this.#storedState.playerNames,
             seed: this.#storedState.seed,
+            ...this.#storedState.gameOptions,
           },
         },
         actionsToReplay
@@ -548,6 +569,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             playerCount: this.#storedState.playerCount,
             playerNames: this.#storedState.playerNames,
             seed: this.#storedState.seed,
+            ...this.#storedState.gameOptions,
           },
         },
         actionsToReplay
@@ -660,6 +682,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // If AI made a move, check again (might be multi-step or next AI player)
     if (move) {
       this.#scheduleAICheck();
+    } else {
+      // Even if no move was made (e.g., turn changed during delay, or blocked by #thinking),
+      // we should still check if another AI player needs to act
+      const flowState = this.#runner.getFlowState();
+      if (flowState?.awaitingInput && !flowState.complete) {
+        this.#scheduleAICheck();
+      }
     }
   }
 }

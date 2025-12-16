@@ -124,6 +124,10 @@ export function flyToPlayerStat(
         faceUp: card.faceUp ?? true,
         faceImage: card.faceImage,
         backImage: card.backImage,
+        // Pass through any extra custom properties (like playerPosition for checkers)
+        ...Object.fromEntries(
+          Object.entries(card).filter(([k]) => !['rect', 'rank', 'suit', 'faceUp', 'faceImage', 'backImage'].includes(k))
+        ),
       },
       flip,
       duration,

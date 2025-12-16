@@ -10,6 +10,7 @@ import type {
   CreateGameRequest,
   ActionRequest,
   AIConfig,
+  GameDefinition,
 } from '../types.js';
 
 // ============================================
@@ -25,6 +26,41 @@ function error(message: string, status = 400): ServerResponse {
 }
 
 // ============================================
+// Helpers
+// ============================================
+
+/**
+ * Build effective game options by applying defaults from definition
+ */
+function buildEffectiveGameOptions(
+  definition: GameDefinition,
+  provided?: Record<string, unknown>
+): Record<string, unknown> | undefined {
+  if (!definition.gameOptions) {
+    return provided;
+  }
+
+  const result: Record<string, unknown> = {};
+
+  for (const [key, optDef] of Object.entries(definition.gameOptions)) {
+    if (provided && key in provided) {
+      // Use provided value
+      result[key] = provided[key];
+    } else if (optDef.default !== undefined) {
+      // Use default from definition
+      result[key] = optDef.default;
+    }
+  }
+
+  // If nothing set, return undefined
+  if (Object.keys(result).length === 0) {
+    return undefined;
+  }
+
+  return result;
+}
+
+// ============================================
 // Game Handlers
 // ============================================
 
@@ -37,7 +73,17 @@ export async function handleCreateGame(
   request: CreateGameRequest,
   aiConfig?: AIConfig
 ): Promise<ServerResponse> {
-  const { gameType, playerCount, playerNames, playerIds, seed, aiPlayers, aiLevel } = request;
+  const {
+    gameType,
+    playerCount,
+    playerNames,
+    playerIds,
+    seed,
+    aiPlayers,
+    aiLevel,
+    gameOptions,
+    playerConfigs,
+  } = request;
 
   const definition = registry.get(gameType);
   if (!definition) {
@@ -52,13 +98,39 @@ export async function handleCreateGame(
   }
 
   const gameId = generateGameId();
-  const names = playerNames ?? Array.from({ length: playerCount }, (_, i) => `Player ${i + 1}`);
+
+  // Build player names from playerConfigs or fallback to playerNames
+  let names: string[];
+  let effectiveAiPlayers: number[] = aiPlayers ?? [];
+
+  if (playerConfigs && playerConfigs.length > 0) {
+    names = playerConfigs.map((config, i) =>
+      config.name || (config.isAI ? 'Bot' : `Player ${i + 1}`)
+    );
+    // Extract AI players from configs
+    effectiveAiPlayers = playerConfigs
+      .map((config, i) => (config.isAI ? i : -1))
+      .filter((i) => i >= 0);
+  } else {
+    names = playerNames ?? Array.from({ length: playerCount }, (_, i) => `Player ${i + 1}`);
+  }
 
   // Merge AI config from request with default
   const effectiveAiConfig: AIConfig | undefined =
-    aiPlayers && aiPlayers.length > 0
-      ? { players: aiPlayers, level: aiLevel ?? aiConfig?.level ?? 'medium' }
+    effectiveAiPlayers.length > 0
+      ? { players: effectiveAiPlayers, level: aiLevel ?? aiConfig?.level ?? 'medium' }
       : aiConfig;
+
+  // Apply defaults from game definition to options
+  let effectiveGameOptions = buildEffectiveGameOptions(definition, gameOptions);
+
+  // Include playerConfigs in game options so games can access per-player settings
+  if (playerConfigs && playerConfigs.length > 0) {
+    if (!effectiveGameOptions) {
+      effectiveGameOptions = {};
+    }
+    effectiveGameOptions.playerConfigs = playerConfigs;
+  }
 
   const session = await store.createGame(gameId, {
     gameType,
@@ -67,6 +139,7 @@ export async function handleCreateGame(
     playerIds,
     seed,
     aiConfig: effectiveAiConfig,
+    gameOptions: effectiveGameOptions,
   });
 
   const state = session.getState(0);
@@ -236,6 +309,7 @@ export async function handleRestart(
     playerNames: storedState.playerNames,
     playerIds: storedState.playerIds,
     aiConfig: storedState.aiConfig ?? aiConfig,
+    gameOptions: storedState.gameOptions,
   });
 
   const state = newSession.getState(0);

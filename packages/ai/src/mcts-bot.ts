@@ -93,12 +93,10 @@ export class MCTSBot<G extends Game = Game> {
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
     const timeout = this.config.timeout ?? 2000;
-    const chunkSize = 1; // Check timeout after each iteration
 
     for (let i = 0; i < this.config.iterations; i++) {
       // Check timeout before each iteration
       if (Date.now() - startTime > timeout) {
-        console.log(`MCTS timeout after ${i} iterations`);
         break;
       }
 

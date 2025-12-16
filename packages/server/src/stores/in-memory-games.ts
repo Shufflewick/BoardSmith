@@ -89,6 +89,7 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
       playerIds: options.playerIds,
       seed: options.seed,
       aiConfig: options.aiConfig,
+      gameOptions: options.gameOptions,
     });
 
     // Create and attach broadcaster

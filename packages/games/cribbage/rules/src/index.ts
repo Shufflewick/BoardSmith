@@ -35,4 +35,36 @@ export const gameDefinition = {
   ai: {
     objectives: getCribbageObjectives,
   },
-} as const;
+  gameOptions: {
+    targetScore: {
+      type: 'number' as const,
+      label: 'Target Score',
+      description: 'Points needed to win the game',
+      min: 31,
+      max: 121,
+      step: 10,
+      default: 121,
+    },
+  },
+  presets: [
+    {
+      name: 'Full Game',
+      description: '121 points',
+      options: { targetScore: 121 },
+    },
+    {
+      name: 'Short Game',
+      description: '61 points',
+      options: { targetScore: 61 },
+    },
+    {
+      name: 'vs AI',
+      description: 'Play against AI',
+      options: { targetScore: 121 },
+      players: [
+        { isAI: false },
+        { isAI: true, aiLevel: 'medium' },
+      ],
+    },
+  ],
+};

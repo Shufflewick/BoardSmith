@@ -92,6 +92,11 @@ export class GameServerCore {
     const { method, path, query, body } = request;
 
     try {
+      // GET /games/definitions - Get game definitions for lobby UI
+      if (path === '/games/definitions' && method === 'GET') {
+        return this.#handleGetDefinitions();
+      }
+
       // POST /games - Create a new game
       if (path === '/games' && method === 'POST') {
         return await handleCreateGame(
@@ -156,6 +161,18 @@ export class GameServerCore {
       if (restartMatch && method === 'POST') {
         const gameId = restartMatch[1];
         return await handleRestart(this.#store, this.#registry, gameId, this.#aiConfig);
+      }
+
+      // PUT /games/:gameId/players/:position/name - Update player name
+      const updateNameMatch = path.match(/^\/games\/([^/]+)\/players\/(\d+)\/name$/);
+      if (updateNameMatch && method === 'PUT') {
+        const gameId = updateNameMatch[1];
+        const position = parseInt(updateNameMatch[2], 10);
+        const newName = (body as { name?: string })?.name;
+        if (!newName) {
+          return { status: 400, body: { success: false, error: 'Name is required' } };
+        }
+        return await this.#handleUpdatePlayerName(gameId, position, newName);
       }
 
       // Matchmaking routes (only if matchmaking store is provided)
@@ -310,5 +327,43 @@ export class GameServerCore {
    */
   get registry(): GameRegistry {
     return this.#registry;
+  }
+
+  /**
+   * Handle PUT /games/:gameId/players/:position/name - Update player name
+   */
+  async #handleUpdatePlayerName(gameId: string, position: number, name: string): Promise<ServerResponse> {
+    const gameSession = await this.#store.getGame(gameId);
+    if (!gameSession) {
+      return { status: 404, body: { success: false, error: 'Game not found' } };
+    }
+
+    try {
+      gameSession.updatePlayerName(position, name);
+      return { status: 200, body: { success: true } };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update player name';
+      return { status: 400, body: { success: false, error: message } };
+    }
+  }
+
+  #handleGetDefinitions(): ServerResponse {
+    const allDefinitions = this.#registry.getAll();
+
+    const definitions = allDefinitions.map((def) => ({
+      gameType: def.gameType,
+      displayName: def.displayName ?? def.gameType,
+      minPlayers: def.minPlayers,
+      maxPlayers: def.maxPlayers,
+      hasAI: !!def.ai,
+      gameOptions: def.gameOptions ?? {},
+      playerOptions: def.playerOptions ?? {},
+      presets: def.presets ?? [],
+    }));
+
+    return {
+      status: 200,
+      body: { success: true, definitions },
+    };
   }
 }

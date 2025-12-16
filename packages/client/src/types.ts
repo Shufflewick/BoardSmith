@@ -214,6 +214,19 @@ export interface CreateGameRequest {
   playerCount: number;
   playerNames?: string[];
   seed?: string;
+  /** AI player positions */
+  aiPlayers?: number[];
+  /** AI difficulty level */
+  aiLevel?: string;
+  /** Game-specific options (boardSize, targetScore, etc.) */
+  gameOptions?: Record<string, unknown>;
+  /** Per-player configuration (name, color, role, etc.) */
+  playerConfigs?: Array<{
+    name?: string;
+    isAI?: boolean;
+    aiLevel?: string;
+    [key: string]: unknown;
+  }>;
 }
 
 export interface CreateGameResponse {

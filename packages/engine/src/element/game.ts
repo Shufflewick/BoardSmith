@@ -789,6 +789,10 @@ export class Game<
       }
     }
 
+    // Resolve element references in all restored elements
+    // This converts { __elementRef: "path" } objects back to actual element references
+    game.resolveElementReferences(game);
+
     return game;
   }
 }
