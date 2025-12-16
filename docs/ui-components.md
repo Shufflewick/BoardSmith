@@ -251,6 +251,7 @@ Features:
 - AI toggle with level selector (when game has AI)
 - Dynamic rendering of per-player options (color picker, role select, etc.)
 - Shows taken options as disabled with visual indicator
+- Exclusive options render as radio buttons (exactly one player can be selected)
 
 ### PresetsPanel
 

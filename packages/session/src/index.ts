@@ -49,6 +49,12 @@ export type {
   CreateGameRequest,
   ActionRequest,
   WebSocketMessage,
+  // Player option types
+  PlayerOptionDefinition,
+  StandardPlayerOption,
+  ExclusivePlayerOption,
+  PlayerConfig,
+  GamePreset,
 } from './types.js';
 
 // ============================================

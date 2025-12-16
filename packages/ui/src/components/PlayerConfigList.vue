@@ -6,17 +6,26 @@
  * - Player name input
  * - AI toggle
  * - AI level dropdown (when AI is on)
- * - Custom player options (color, role, etc.)
+ * - Custom player options (color, role, exclusive selections, etc.)
  */
-import { computed, watch } from 'vue';
+import { computed, watch, onMounted } from 'vue';
 
-interface PlayerOptionDefinition {
+interface StandardPlayerOption {
   type: 'select' | 'color' | 'text';
   label: string;
   description?: string;
   default?: string;
   choices?: Array<{ value: string; label: string }> | string[];
 }
+
+interface ExclusivePlayerOption {
+  type: 'exclusive';
+  label: string;
+  description?: string;
+  default?: 'first' | 'last' | number;
+}
+
+type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption;
 
 interface PlayerConfig {
   name: string;
@@ -86,8 +95,10 @@ function updatePlayer(index: number, field: string, value: unknown) {
 }
 
 function getPlayerOptionChoices(opt: PlayerOptionDefinition): Array<{ value: string; label: string }> {
-  if (!opt.choices) return [];
-  return opt.choices.map((c) => (typeof c === 'string' ? { value: c, label: c } : c));
+  if (opt.type === 'exclusive') return [];
+  const stdOpt = opt as StandardPlayerOption;
+  if (!stdOpt.choices) return [];
+  return stdOpt.choices.map((c) => (typeof c === 'string' ? { value: c, label: c } : c));
 }
 
 /**
@@ -130,8 +141,124 @@ function getAvailableChoices(playerIndex: number, key: string, opt: PlayerOption
 function getPlayerOptionValue(index: number, key: string, opt: PlayerOptionDefinition): string {
   const value = props.modelValue[index]?.[key];
   if (value !== undefined) return String(value);
-  return opt.default ?? '';
+  if (opt.type === 'exclusive') {
+    // For exclusive options, don't return default here - handled separately
+    return '';
+  }
+  return (opt as StandardPlayerOption).default ?? '';
 }
+
+/**
+ * Get the player option choices (only for non-exclusive options)
+ */
+function getStandardPlayerOptionChoices(opt: PlayerOptionDefinition): Array<{ value: string; label: string }> {
+  if (opt.type === 'exclusive') return [];
+  return getPlayerOptionChoices(opt as StandardPlayerOption);
+}
+
+/**
+ * Check if this is an exclusive option type
+ */
+function isExclusiveOption(opt: PlayerOptionDefinition): opt is ExclusivePlayerOption {
+  return opt.type === 'exclusive';
+}
+
+/**
+ * Get the default player index for an exclusive option
+ */
+function getExclusiveDefaultIndex(opt: ExclusivePlayerOption): number {
+  if (opt.default === 'first' || opt.default === undefined) return 0;
+  if (opt.default === 'last') return props.playerCount - 1;
+  return opt.default;
+}
+
+/**
+ * Check if a player has the exclusive option selected
+ */
+function hasExclusiveOption(playerIndex: number, key: string, opt: ExclusivePlayerOption): boolean {
+  // Check if any player has it explicitly set
+  for (let i = 0; i < props.modelValue.length; i++) {
+    const value = props.modelValue[i]?.[key];
+    if (value === true) {
+      return i === playerIndex;
+    }
+  }
+  // No one has it set - use default
+  return playerIndex === getExclusiveDefaultIndex(opt);
+}
+
+/**
+ * Set the exclusive option for a specific player (and clear from all others)
+ */
+function setExclusiveOption(playerIndex: number, key: string) {
+  // Deep clone all configs
+  const updated = props.modelValue.map((config, i) => {
+    return { ...config, [key]: i === playerIndex };
+  });
+
+  // Ensure we have configs for all player slots
+  while (updated.length < props.playerCount) {
+    const i = updated.length;
+    updated.push({
+      name: `Player ${i + 1}`,
+      isAI: false,
+      aiLevel: 'medium',
+      [key]: i === playerIndex,
+    });
+  }
+
+  emit('update:modelValue', updated);
+}
+
+/**
+ * Initialize exclusive options with their default values on mount
+ */
+function initializeExclusiveDefaults() {
+  if (!props.playerOptions) return;
+
+  let needsUpdate = false;
+  const updated = [...props.modelValue.map(c => ({ ...c }))];
+
+  // Ensure we have configs for all player slots
+  while (updated.length < props.playerCount) {
+    const i = updated.length;
+    updated.push({
+      name: `Player ${i + 1}`,
+      isAI: false,
+      aiLevel: 'medium',
+    });
+    needsUpdate = true;
+  }
+
+  // Check each exclusive option
+  for (const [key, opt] of Object.entries(props.playerOptions)) {
+    if (opt.type !== 'exclusive') continue;
+
+    // Check if any player already has this option set
+    const hasAnySet = updated.some(config => config[key] === true);
+    if (hasAnySet) continue;
+
+    // Set the default
+    const defaultIndex = getExclusiveDefaultIndex(opt);
+    if (defaultIndex >= 0 && defaultIndex < updated.length) {
+      updated[defaultIndex][key] = true;
+      needsUpdate = true;
+    }
+  }
+
+  if (needsUpdate) {
+    emit('update:modelValue', updated);
+  }
+}
+
+// Initialize exclusive defaults on mount and when player count changes
+onMounted(() => {
+  initializeExclusiveDefaults();
+});
+
+watch(() => props.playerCount, () => {
+  initializeExclusiveDefaults();
+});
 </script>
 
 <template>
@@ -215,9 +342,25 @@ function getPlayerOptionValue(index: number, key: string, opt: PlayerOptionDefin
             type="text"
             class="player-option-input"
             :value="getPlayerOptionValue(i, key, opt)"
-            :placeholder="opt.default"
+            :placeholder="(opt as StandardPlayerOption).default"
             @input="updatePlayer(i, key, ($event.target as HTMLInputElement).value)"
           />
+
+          <!-- Exclusive type (radio button) -->
+          <label
+            v-else-if="opt.type === 'exclusive'"
+            class="exclusive-option"
+            :class="{ selected: hasExclusiveOption(i, key, opt as ExclusivePlayerOption) }"
+          >
+            <input
+              type="radio"
+              :name="`exclusive-${key}`"
+              :checked="hasExclusiveOption(i, key, opt as ExclusivePlayerOption)"
+              @change="setExclusiveOption(i, key)"
+            />
+            <span class="exclusive-indicator"></span>
+            <span class="exclusive-label">{{ opt.label }}</span>
+          </label>
         </div>
       </div>
     </div>
@@ -402,5 +545,73 @@ function getPlayerOptionValue(index: number, key: string, opt: PlayerOptionDefin
 .color-swatch[style*="f1c40f"].selected,
 .color-swatch[style*="F1C40F"].selected {
   border-color: #00d9ff;
+}
+
+/* Exclusive option (radio button) */
+.exclusive-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.exclusive-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.exclusive-option.selected {
+  background: rgba(0, 217, 255, 0.1);
+  border-color: #00d9ff;
+}
+
+.exclusive-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.exclusive-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  position: relative;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.exclusive-option.selected .exclusive-indicator {
+  border-color: #00d9ff;
+}
+
+.exclusive-option.selected .exclusive-indicator::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00d9ff, #00ff88);
+}
+
+.exclusive-label {
+  font-size: 0.9rem;
+  color: #ccc;
+  transition: color 0.2s;
+}
+
+.exclusive-option.selected .exclusive-label {
+  color: #fff;
+  font-weight: 500;
 }
 </style>

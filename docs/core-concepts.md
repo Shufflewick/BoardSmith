@@ -406,7 +406,7 @@ playerOptions: {
     { value: '#0000ff', label: 'Blue Team' },
   ], 'Team'),
 
-  // Role selector (for asymmetric games)
+  // Role selector (for symmetric options)
   role: {
     type: 'select',
     label: 'Role',
@@ -415,6 +415,21 @@ playerOptions: {
       { value: 'defender', label: 'Defender' },
     ],
     default: 'attacker',
+  },
+}
+```
+
+### Exclusive Player Options
+
+For asymmetric games where exactly one player must have a specific role (e.g., 1 Dictator vs many Rebels), use the `exclusive` type. This renders as a radio button on each player row.
+
+```typescript
+playerOptions: {
+  isDictator: {
+    type: 'exclusive',
+    label: 'Dictator',
+    description: 'Select which player is the dictator',
+    default: 'last',  // 'first', 'last', or player index number
   },
 }
 ```

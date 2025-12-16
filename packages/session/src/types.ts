@@ -82,15 +82,50 @@ export interface BooleanOption {
 export type GameOptionDefinition = NumberOption | SelectOption | BooleanOption;
 
 /**
- * Per-player option definition (shown for each player slot)
+ * Standard per-player option definition (shown for each player slot)
  */
-export interface PlayerOptionDefinition {
+export interface StandardPlayerOption {
   type: 'select' | 'color' | 'text';
   label: string;
   description?: string;
   default?: string;
   choices?: Array<{ value: string; label: string }> | string[];
 }
+
+/**
+ * Exclusive player option - renders as radio button, exactly one player can have this
+ *
+ * Use for asymmetric games where exactly one player must have a specific role.
+ *
+ * @example
+ * ```typescript
+ * playerOptions: {
+ *   isDictator: {
+ *     type: 'exclusive',
+ *     label: 'Dictator',
+ *     description: 'Select which player is the dictator',
+ *     default: 'last',  // 'first', 'last', or player index number
+ *   },
+ * }
+ * ```
+ */
+export interface ExclusivePlayerOption {
+  type: 'exclusive';
+  label: string;
+  description?: string;
+  /**
+   * Which player has this option by default.
+   * - 'first': Player 0 (first player)
+   * - 'last': Last player (player count - 1)
+   * - number: Specific player index
+   */
+  default?: 'first' | 'last' | number;
+}
+
+/**
+ * Per-player option definition (shown for each player slot)
+ */
+export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption;
 
 /**
  * Per-player configuration in requests
