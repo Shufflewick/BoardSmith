@@ -192,6 +192,17 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
+  // Clear Vite cache to prevent stale file references when switching games
+  const viteCacheDir = join(uiPath, 'node_modules', '.vite');
+  if (existsSync(viteCacheDir)) {
+    console.log(chalk.dim('  Clearing Vite cache...'));
+    try {
+      rmSync(viteCacheDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cache cleanup errors
+    }
+  }
+
   // Start Vite dev server for UI
   try {
     const vite = await createViteServer({
