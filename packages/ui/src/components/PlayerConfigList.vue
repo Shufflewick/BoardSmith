@@ -39,8 +39,6 @@ const props = defineProps<{
   playerCount: number;
   /** Current player configurations */
   modelValue: PlayerConfig[];
-  /** Whether AI is available */
-  hasAI: boolean;
   /** Per-player option definitions */
   playerOptions?: Record<string, PlayerOptionDefinition>;
 }>();
@@ -268,7 +266,7 @@ watch(() => props.playerCount, () => {
     <div v-for="(config, i) in configs" :key="i" class="player-row">
       <div class="player-header">
         <span class="player-label">Player {{ i + 1 }}</span>
-        <label v-if="hasAI" class="ai-toggle">
+        <label class="ai-toggle">
           <input
             type="checkbox"
             :checked="config.isAI"

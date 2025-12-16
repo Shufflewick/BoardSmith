@@ -355,7 +355,6 @@ export class GameServerCore {
       displayName: def.displayName ?? def.gameType,
       minPlayers: def.minPlayers,
       maxPlayers: def.maxPlayers,
-      hasAI: !!def.ai,
       gameOptions: def.gameOptions ?? {},
       playerOptions: def.playerOptions ?? {},
       presets: def.presets ?? [],

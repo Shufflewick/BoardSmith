@@ -51,4 +51,8 @@ export const gameDefinition = {
   displayName: 'Polyhedral Potions',
   minPlayers: 1,
   maxPlayers: 5,
+  // Explicitly mark AI support with a no-op objective set so bots can run
+  ai: {
+    objectives: () => ({}),
+  },
 } as const;

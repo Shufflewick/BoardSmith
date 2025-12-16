@@ -75,7 +75,6 @@ interface GameDefinitionMeta {
   displayName: string;
   minPlayers: number;
   maxPlayers: number;
-  hasAI: boolean;
   gameOptions: Record<string, GameOptionDefinition>;
   playerOptions: Record<string, PlayerOptionDefinition>;
   presets: GamePreset[];
@@ -319,7 +318,6 @@ const playerCountOptions = computed(() => {
             <PlayerConfigList
               :player-count="playerCount"
               v-model="playerConfigs"
-              :has-a-i="definition.hasAI"
               :player-options="hasPlayerOptions ? definition.playerOptions : undefined"
             />
           </template>
