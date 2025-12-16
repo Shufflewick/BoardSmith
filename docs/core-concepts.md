@@ -322,6 +322,164 @@ Each player receives a filtered view of the game state:
    - getWinners() called
 ```
 
+## Game Definition Metadata
+
+Games export a `gameDefinition` object that describes the game to the framework. This metadata enables:
+- Dynamic lobby UI generation
+- Game options configuration
+- Per-player settings (colors, roles)
+- Quick-start presets
+
+### Basic Structure
+
+```typescript
+// index.ts
+export const gameDefinition = {
+  gameClass: MyGame,
+  gameType: 'my-game',
+  displayName: 'My Game',
+  minPlayers: 2,
+  maxPlayers: 4,
+  ai: {
+    objectives: getMyGameObjectives,  // Optional AI support
+  },
+  gameOptions: { /* ... */ },         // Optional game-level options
+  playerOptions: { /* ... */ },       // Optional per-player options
+  presets: [ /* ... */ ],             // Optional quick-start presets
+};
+```
+
+### Game Options
+
+Game-level configuration options that appear in the lobby.
+
+```typescript
+gameOptions: {
+  boardSize: {
+    type: 'number',
+    label: 'Board Size',
+    description: 'Number of hexes per side',
+    min: 5,
+    max: 19,
+    step: 1,
+    default: 11,
+  },
+  targetScore: {
+    type: 'number',
+    label: 'Target Score',
+    description: 'Points needed to win',
+    min: 31,
+    max: 121,
+    default: 121,
+  },
+  variant: {
+    type: 'select',
+    label: 'Game Variant',
+    choices: [
+      { value: 'standard', label: 'Standard' },
+      { value: 'speed', label: 'Speed Mode' },
+    ],
+    default: 'standard',
+  },
+  allowUndo: {
+    type: 'boolean',
+    label: 'Allow Undo',
+    default: true,
+  },
+}
+```
+
+### Player Options
+
+Per-player settings that appear for each player slot in the lobby.
+
+```typescript
+import { createColorOption } from '@boardsmith/session';
+
+playerOptions: {
+  // Standard color picker (8 colors)
+  color: createColorOption(),
+
+  // Custom color picker
+  color: createColorOption([
+    { value: '#ff0000', label: 'Red Team' },
+    { value: '#0000ff', label: 'Blue Team' },
+  ], 'Team'),
+
+  // Role selector (for asymmetric games)
+  role: {
+    type: 'select',
+    label: 'Role',
+    choices: [
+      { value: 'attacker', label: 'Attacker' },
+      { value: 'defender', label: 'Defender' },
+    ],
+    default: 'attacker',
+  },
+}
+```
+
+### Presets
+
+Quick-start configurations for common game setups.
+
+```typescript
+presets: [
+  {
+    name: 'Quick Game',
+    description: '7x7 board',
+    options: { boardSize: 7 },
+    players: [
+      { color: '#e74c3c' },
+      { color: '#3498db' },
+    ],
+  },
+  {
+    name: 'vs AI',
+    description: 'Play against AI',
+    options: { boardSize: 9 },
+    players: [
+      { isAI: false, color: '#e74c3c' },
+      { isAI: true, aiLevel: 'medium', color: '#3498db' },
+    ],
+  },
+]
+```
+
+### Receiving Options in Game Constructor
+
+Options are passed to your game constructor via `CreateGameRequest`:
+
+```typescript
+export interface CreateGameRequest {
+  gameType: string;
+  playerCount: number;
+  playerNames?: string[];
+  gameOptions?: Record<string, unknown>;    // From gameOptions
+  playerConfigs?: PlayerConfig[];           // From playerOptions
+  aiPlayers?: number[];
+  aiLevel?: string;
+}
+
+// In your game
+class MyGame extends Game<MyGame, MyPlayer> {
+  constructor(options: MyGameOptions) {
+    super(options);
+
+    // Access game options
+    const boardSize = options.boardSize ?? 11;
+
+    // Access player configs
+    for (let i = 0; i < this.players.length; i++) {
+      const config = options.playerConfigs?.[i];
+      if (config?.color) {
+        this.players[i].color = config.color;
+      }
+    }
+  }
+}
+```
+
 ## Example: Hex Game
 
 A minimal but complete example from `packages/games/hex/`:

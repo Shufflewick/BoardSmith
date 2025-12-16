@@ -174,6 +174,145 @@ Development tool for inspecting game state, history, and debugging.
 </template>
 ```
 
+## Lobby Components
+
+BoardSmith provides a complete lobby system for configuring games before they start. The lobby dynamically renders controls based on game definition metadata.
+
+### GameLobby
+
+The main lobby component that fetches game definition metadata and renders configuration UI.
+
+```vue
+<template>
+  <GameLobby
+    :game-type="gameType"
+    :player-count="playerCount"
+    @create="handleCreate"
+  />
+</template>
+
+<script setup lang="ts">
+import { GameLobby } from '@boardsmith/ui';
+
+const gameType = 'hex';
+const playerCount = 2;
+
+function handleCreate(config: { gameOptions: Record<string, unknown>; playerConfigs: PlayerConfig[] }) {
+  // Create game with the configured options
+}
+</script>
+```
+
+The lobby automatically:
+- Fetches game definition from `/games/definitions` endpoint
+- Renders game options (number inputs, selects, toggles)
+- Renders per-player configuration (name, AI toggle, color picker)
+- Shows preset cards for quick setup
+- Validates player count against game limits
+
+### GameOptionsForm
+
+Dynamic form that renders game-level options from metadata.
+
+```vue
+<template>
+  <GameOptionsForm
+    :options="gameDefinition.gameOptions"
+    v-model="gameOptions"
+  />
+</template>
+```
+
+Supports three option types:
+
+| Type | Control | Properties |
+|------|---------|------------|
+| `number` | Number input | `min`, `max`, `step`, `default` |
+| `select` | Dropdown | `choices` (array of `{ value, label }`) |
+| `boolean` | Toggle switch | `default` |
+
+### PlayerConfigList
+
+Per-player configuration with AI toggle and custom options.
+
+```vue
+<template>
+  <PlayerConfigList
+    :player-count="2"
+    :has-ai="true"
+    :player-options="gameDefinition.playerOptions"
+    v-model="playerConfigs"
+  />
+</template>
+```
+
+Features:
+- Player name input
+- AI toggle with level selector (when game has AI)
+- Dynamic rendering of per-player options (color picker, role select, etc.)
+- Shows taken options as disabled with visual indicator
+
+### PresetsPanel
+
+Quick-start preset cards for common game configurations.
+
+```vue
+<template>
+  <PresetsPanel
+    :presets="gameDefinition.presets"
+    @select="applyPreset"
+  />
+</template>
+
+<script setup lang="ts">
+function applyPreset(preset: GamePreset) {
+  // Apply preset.options to gameOptions
+  // Apply preset.players to playerConfigs
+}
+</script>
+```
+
+### Standard Color Picker
+
+BoardSmith provides a standard color palette and utilities for player color selection.
+
+```typescript
+import {
+  STANDARD_PLAYER_COLORS,
+  DEFAULT_PLAYER_COLORS,
+  createColorOption
+} from '@boardsmith/session';
+
+// Standard 8-color palette
+STANDARD_PLAYER_COLORS
+// [{ value: '#e74c3c', label: 'Red' }, { value: '#3498db', label: 'Blue' }, ...]
+
+// Default 2-player colors (Red, Blue)
+DEFAULT_PLAYER_COLORS
+// ['#e74c3c', '#3498db']
+
+// Create a color option for game definition
+export const gameDefinition = {
+  // ...
+  playerOptions: {
+    color: createColorOption(), // Uses standard colors
+  },
+};
+
+// Or with custom colors
+playerOptions: {
+  color: createColorOption([
+    { value: '#ff0000', label: 'Fire' },
+    { value: '#0000ff', label: 'Ice' },
+  ], 'Team Color'),
+}
+```
+
+The color picker in PlayerConfigList:
+- Shows color swatches with labels
+- Disables already-selected colors with X overlay
+- Automatically applies first available color as default
+
 ## Helper Components
 
 ### DeckPile
@@ -361,6 +500,92 @@ flyToPlayerStat({
   statName: 'score',
   onComplete: () => updateScore(),
 });
+```
+
+### useAutoFlyAnimation
+
+Automatic flying animations when elements leave a zone. This composable provides a unified, foolproof way to animate elements flying from a game zone to a player stat display.
+
+```typescript
+import { useAutoFlyAnimation } from '@boardsmith/ui';
+
+const { flyingCards, watchZone } = useAutoFlyAnimation();
+
+// Watch a zone for removals and fly to a stat
+watchZone({
+  containerRef: myHandRef,
+  gameView: () => props.gameView,
+  getElementIds: (gv) => getHandCardIds(gv),
+  targetStat: 'books',
+  getTargetPlayer: (elementData) => props.playerPosition,
+});
+```
+
+**Setup Requirements:**
+
+1. Add data attributes to game elements:
+```html
+<div
+  data-element-id="123"
+  data-face-image="/cards/ah.png"
+  data-back-image="/cards/back.png"
+  data-rank="A"
+  data-suit="H"
+  data-player-position="0"
+  data-face-up="true"
+>...</div>
+```
+
+2. Add data attributes to player stat targets:
+```html
+<span data-player-stat="books" data-player-position="0">{{ count }}</span>
+```
+
+3. Include the FlyingCardsOverlay in your template:
+```vue
+<template>
+  <div class="game-board">
+    <!-- Your game content -->
+  </div>
+  <FlyingCardsOverlay :flying-cards="flyingCards" />
+</template>
+```
+
+**Data Attributes:**
+
+| Attribute | Purpose | Example |
+|-----------|---------|---------|
+| `data-element-id` | Unique ID for tracking | "123" |
+| `data-face-image` | URL of card/piece face | "/cards/ah.png" |
+| `data-back-image` | URL of card/piece back | "/cards/back.png" |
+| `data-rank` | Card rank | "A", "K", "10" |
+| `data-suit` | Card suit | "H", "D", "C", "S" |
+| `data-player-position` | Owner position | "0" |
+| `data-face-up` | Whether element shows face | "true" |
+
+**Why This Works:**
+
+Previous implementations had problems where imagery was extracted from game state, which changes before animation. This solution:
+- Uses DOM data attributes as the source of truth for imagery
+- Captures data BEFORE state changes (using `flush: 'sync'` watcher)
+- Provides standard attribute names all games can use
+- Requires zero game-specific animation code
+
+**Helper Function:**
+
+```typescript
+import { getElementDataAttrs } from '@boardsmith/ui';
+
+// In template - automatically generate data attributes
+<div v-bind="getElementDataAttrs({
+  id: card.id,
+  faceImage: card.image,
+  backImage: '/cards/back.png',
+  rank: card.rank,
+  suit: card.suit,
+  playerPosition: card.owner,
+  faceUp: card.faceUp,
+})">
 ```
 
 ### useGameViewHelpers
