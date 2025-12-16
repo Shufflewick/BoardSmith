@@ -21,4 +21,36 @@ export const gameDefinition = {
   ai: {
     objectives: getCheckersObjectives,
   },
-} as const;
+  playerOptions: {
+    color: {
+      type: 'select' as const,
+      label: 'Checker Color',
+      choices: [
+        { value: 'red', label: 'Red' },
+        { value: 'black', label: 'Black' },
+        { value: 'white', label: 'White' },
+      ],
+      default: 'red',
+    },
+  },
+  presets: [
+    {
+      name: 'Classic',
+      description: 'Red vs Black',
+      options: {},
+      players: [
+        { color: 'red' },
+        { color: 'black' },
+      ],
+    },
+    {
+      name: 'vs AI',
+      description: 'Play against AI',
+      options: {},
+      players: [
+        { isAI: false, color: 'red' },
+        { isAI: true, aiLevel: 'medium', color: 'black' },
+      ],
+    },
+  ],
+};

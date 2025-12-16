@@ -38,8 +38,8 @@ const pieceTracker = useElementChangeTracker<number>({
   selector: '[data-piece-id]',
   getElementId: (el) => parseInt(el.getAttribute('data-piece-id') || '0', 10),
   getElementData: (el) => ({
-    // Track which player owns this piece (dark = player 0, light = player 1)
-    playerPosition: el.classList.contains('dark') ? 0 : 1,
+    // Track which player owns this piece based on player-X class
+    playerPosition: el.classList.contains('player-0') ? 0 : 1,
   }),
 });
 
@@ -465,16 +465,76 @@ function isSelectablePiece(row: number, col: number): boolean {
   return piece !== undefined && movablePieceIds.value.has(piece.id);
 }
 
-// Get piece color class
+// Color mapping for checker colors
+const colorMap: Record<string, { bg: string; border: string; gradient: string }> = {
+  red: {
+    bg: '#c0392b',
+    border: '#922b21',
+    gradient: 'linear-gradient(145deg, #e74c3c, #c0392b)',
+  },
+  black: {
+    bg: '#2c3e50',
+    border: '#1a252f',
+    gradient: 'linear-gradient(145deg, #4a4a4a, #2a2a2a)',
+  },
+  white: {
+    bg: '#ecf0f1',
+    border: '#bdc3c7',
+    gradient: 'linear-gradient(145deg, #f5f5f5, #d0d0d0)',
+  },
+};
+
+// Get player color from gameView
+function getPlayerColorName(playerPosition: number): string {
+  const players = props.gameView?.players;
+  if (players && players[playerPosition]?.color) {
+    return players[playerPosition].color;
+  }
+  // Fallback to default colors
+  return playerPosition === 0 ? 'black' : 'white';
+}
+
+// Get piece color class (for fallback/compatibility)
 function getPieceColorClass(piece: CheckerPiece): string {
   const playerPos = piece.attributes?.player?.position;
   if (playerPos === undefined || playerPos === null) {
     // Fallback: check piece name to determine color
-    if (piece.name?.startsWith('p0-')) return 'dark';
-    if (piece.name?.startsWith('p1-')) return 'light';
-    return 'dark'; // Default fallback
+    if (piece.name?.startsWith('p0-')) return 'player-0';
+    if (piece.name?.startsWith('p1-')) return 'player-1';
+    return 'player-0'; // Default fallback
   }
-  return playerPos === 0 ? 'dark' : 'light';
+  return `player-${playerPos}`;
+}
+
+// Get piece style for dynamic coloring
+function getPieceStyle(piece: CheckerPiece): Record<string, string> {
+  const playerPos = piece.attributes?.player?.position ??
+    (piece.name?.startsWith('p0-') ? 0 : piece.name?.startsWith('p1-') ? 1 : 0);
+  const colorName = getPlayerColorName(playerPos);
+  const colors = colorMap[colorName] || colorMap.black;
+
+  return {
+    background: colors.gradient,
+    borderColor: colors.border,
+  };
+}
+
+// Check if piece color is light (for crown color)
+function isPieceLight(piece: CheckerPiece): boolean {
+  const playerPos = piece.attributes?.player?.position ?? 0;
+  const colorName = getPlayerColorName(playerPos);
+  return colorName === 'white';
+}
+
+// Get style for flying piece animation (uses same color as board pieces)
+function getFlyingPieceStyle(playerPosition: number): Record<string, string> {
+  const colorName = getPlayerColorName(playerPosition ?? 0);
+  const colors = colorMap[colorName] || colorMap.black;
+
+  return {
+    background: colors.gradient,
+    borderColor: colors.border,
+  };
 }
 
 // Count pieces for each player
@@ -566,9 +626,9 @@ watch(
           // The capturing player is the opponent of the piece owner
           const capturingPlayer = pieceData.playerPosition === 0 ? 1 : 0;
 
-          // Use faceUp to encode piece color (true = dark, false = light)
+          // Pass the captured piece's player position for color lookup
           flyToPlayerStat(flyCards, {
-            cards: [{ rect: pieceData.rect, faceUp: pieceData.playerPosition === 0 }],
+            cards: [{ rect: pieceData.rect, faceUp: true, playerPosition: pieceData.playerPosition }],
             playerPosition: capturingPlayer,
             statName: 'captured',
             duration: 400,
@@ -633,9 +693,11 @@ watch(
                   getPieceColorClass(getPieceAt(row - 1, col - 1)!),
                   {
                     king: getPieceAt(row - 1, col - 1)?.attributes?.isKing,
-                    movable: movablePieceIds.has(getPieceAt(row - 1, col - 1)!.id)
+                    movable: movablePieceIds.has(getPieceAt(row - 1, col - 1)!.id),
+                    'light-piece': isPieceLight(getPieceAt(row - 1, col - 1)!)
                   }
                 ]"
+                :style="getPieceStyle(getPieceAt(row - 1, col - 1)!)"
                 :data-piece-id="getPieceAt(row - 1, col - 1)!.id"
               >
                 <span v-if="getPieceAt(row - 1, col - 1)?.attributes?.isKing" class="crown">&#9813;</span>
@@ -656,7 +718,7 @@ watch(
       <template #card="{ card }">
         <div
           class="flying-piece"
-          :class="card.cardData.faceUp ? 'dark' : 'light'"
+          :style="getFlyingPieceStyle(card.cardData.playerPosition)"
         ></div>
       </template>
     </FlyingCardsOverlay>
@@ -815,16 +877,7 @@ watch(
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s, box-shadow 0.2s;
   position: relative;
-}
-
-.piece.dark {
-  background: linear-gradient(145deg, #4a4a4a, #2a2a2a);
-  border: 3px solid #1a1a1a;
-}
-
-.piece.light {
-  background: linear-gradient(145deg, #f5f5f5, #d0d0d0);
-  border: 3px solid #aaa;
+  border: 3px solid; /* border-color set by inline style */
 }
 
 .piece.movable {
@@ -839,14 +892,11 @@ watch(
 .piece.king .crown {
   font-size: 1.5rem;
   text-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  color: #ffd700; /* Gold crown for dark pieces */
 }
 
-.piece.dark.king .crown {
-  color: #ffd700;
-}
-
-.piece.light.king .crown {
-  color: #b8860b;
+.piece.light-piece.king .crown {
+  color: #b8860b; /* Darker gold for light pieces */
 }
 
 .capture-notice {
@@ -882,15 +932,6 @@ watch(
   height: 100%;
   border-radius: 50%;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-}
-
-.flying-piece.dark {
-  background: linear-gradient(145deg, #4a4a4a, #2a2a2a);
-  border: 2px solid #1a1a1a;
-}
-
-.flying-piece.light {
-  background: linear-gradient(145deg, #f5f5f5, #d0d0d0);
-  border: 2px solid #aaa;
+  border: 3px solid; /* border-color set by inline style */
 }
 </style>

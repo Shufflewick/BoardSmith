@@ -119,6 +119,8 @@ export class Board extends Grid<CheckersGame, CheckersPlayer> {
 export class CheckersPlayer extends Player {
   /** Number of pieces captured by this player */
   capturedCount: number = 0;
+  /** The color of this player's checkers */
+  color: string = 'red';
 }
 
 /**

@@ -2,9 +2,34 @@
 import { GameShell, AutoUI } from '@boardsmith/ui';
 import CheckersBoard from './components/CheckersBoard.vue';
 
-// Get player color name
-function getPlayerColor(playerPosition: number): string {
-  return playerPosition === 0 ? 'Dark' : 'Light';
+// Color name mapping for display
+const colorNames: Record<string, string> = {
+  red: 'Red',
+  black: 'Black',
+  white: 'White',
+};
+
+// Get player color from player data (falls back to position-based default)
+function getPlayerColor(player: { position: number; color?: string }): string {
+  if (player.color && colorNames[player.color]) {
+    return colorNames[player.color];
+  }
+  // Fallback for backward compatibility
+  return player.position === 0 ? 'Dark' : 'Light';
+}
+
+// Get CSS color value for a player's checker color
+function getColorValue(player: { position: number; color?: string }): string {
+  const colorMap: Record<string, string> = {
+    red: '#c0392b',
+    black: '#2c3e50',
+    white: '#ecf0f1',
+  };
+  if (player.color && colorMap[player.color]) {
+    return colorMap[player.color];
+  }
+  // Fallback
+  return player.position === 0 ? '#2c3e50' : '#ecf0f1';
 }
 
 // Count pieces for a player from gameView
@@ -88,8 +113,8 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
 
     <template #player-stats="{ player, gameView }">
       <div class="player-color">
-        <span class="color-indicator" :class="getPlayerColor(player.position).toLowerCase()"></span>
-        <span class="color-name">{{ getPlayerColor(player.position) }} pieces</span>
+        <span class="color-indicator" :style="{ backgroundColor: getColorValue(player) }"></span>
+        <span class="color-name">{{ getPlayerColor(player) }} pieces</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Pieces:</span>
@@ -157,16 +182,7 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
   height: 20px;
   border-radius: 50%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.color-indicator.dark {
-  background: linear-gradient(145deg, #4a4a4a, #2a2a2a);
-  border: 2px solid #1a1a1a;
-}
-
-.color-indicator.light {
-  background: linear-gradient(145deg, #f5f5f5, #d0d0d0);
-  border: 2px solid #aaa;
+  border: 2px solid rgba(0, 0, 0, 0.3);
 }
 
 .color-name {

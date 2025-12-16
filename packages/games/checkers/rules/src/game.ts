@@ -4,11 +4,23 @@ import { createMoveAction, createEndTurnAction } from './actions.js';
 import { createCheckersFlow } from './flow.js';
 
 /**
+ * Player configuration from lobby
+ */
+interface PlayerConfig {
+  name?: string;
+  isAI?: boolean;
+  aiLevel?: string;
+  color?: string;
+}
+
+/**
  * Checkers game options
  */
 export interface CheckersOptions extends GameOptions {
   /** Random seed for deterministic gameplay */
   seed?: string;
+  /** Per-player configurations from lobby */
+  playerConfigs?: PlayerConfig[];
 }
 
 /**
@@ -39,6 +51,9 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
   constructor(options: CheckersOptions) {
     super(options);
 
+    // Apply player colors from config
+    this.applyPlayerColors(options.playerConfigs);
+
     // Register element classes
     this.registerElements([Board, Square, CheckerPiece]);
 
@@ -58,6 +73,25 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
 
     // Set up game flow
     this.setFlow(createCheckersFlow(this));
+
+    // Announce player colors
+    this.message(`${this.players[0].name} plays ${this.players[0].color}`);
+    this.message(`${this.players[1].name} plays ${this.players[1].color}`);
+  }
+
+  /**
+   * Apply colors from player configs
+   */
+  private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
+    for (let i = 0; i < this.players.length; i++) {
+      const config = playerConfigs?.[i];
+      if (config?.color) {
+        this.players[i].color = config.color;
+      } else {
+        // Default colors: Player 0 = red, Player 1 = black
+        this.players[i].color = i === 0 ? 'red' : 'black';
+      }
+    }
   }
 
   /**
