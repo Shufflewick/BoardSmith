@@ -624,11 +624,12 @@ watch(
         const pieceData = pieceTracker.positions.value.get(id);
         if (pieceData) {
           // The capturing player is the opponent of the piece owner
-          const capturingPlayer = pieceData.playerPosition === 0 ? 1 : 0;
+          const pieceOwner = (pieceData.playerPosition as number) ?? 0;
+          const capturingPlayer = pieceOwner === 0 ? 1 : 0;
 
           // Pass the captured piece's player position for color lookup
           flyToPlayerStat(flyCards, {
-            cards: [{ rect: pieceData.rect, faceUp: true, playerPosition: pieceData.playerPosition }],
+            cards: [{ rect: pieceData.rect, faceUp: true, playerPosition: pieceOwner }],
             playerPosition: capturingPlayer,
             statName: 'captured',
             duration: 400,
@@ -718,7 +719,7 @@ watch(
       <template #card="{ card }">
         <div
           class="flying-piece"
-          :style="getFlyingPieceStyle(card.cardData.playerPosition)"
+          :style="getFlyingPieceStyle((card.cardData.playerPosition as number) ?? 0)"
         ></div>
       </template>
     </FlyingCardsOverlay>

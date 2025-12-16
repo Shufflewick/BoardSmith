@@ -5,12 +5,31 @@
  * Place this component at the root of your game board to render
  * cards that are animating between positions.
  *
- * Usage:
+ * Supports three rendering modes:
+ * 1. **Card images**: When `faceImage`/`backImage` are provided
+ * 2. **Text cards**: When `rank`/`suit` are provided (default card face)
+ * 3. **Player pieces**: When `playerPosition` is set (circular pieces with player colors)
+ *
+ * ## Usage
+ *
  * ```vue
  * <template>
  *   <div class="game-board">
- *     <!-- Your game content -->
- *     <FlyingCardsOverlay :flying-cards="flyingCards" :render-card="renderCard" />
+ *     <!-- Basic: uses default rendering -->
+ *     <FlyingCardsOverlay :flying-cards="flyingCards" />
+ *
+ *     <!-- With player colors for piece games -->
+ *     <FlyingCardsOverlay
+ *       :flying-cards="flyingCards"
+ *       :player-colors="['#e74c3c', '#2c3e50']"
+ *     />
+ *
+ *     <!-- Custom rendering via slot -->
+ *     <FlyingCardsOverlay :flying-cards="flyingCards">
+ *       <template #card="{ card }">
+ *         <MyCustomCard :data="card.cardData" />
+ *       </template>
+ *     </FlyingCardsOverlay>
  *   </div>
  * </template>
  * ```
@@ -18,14 +37,55 @@
 import type { FlyingCard } from '../../composables/useFlyingCards.js';
 import type { CSSProperties } from 'vue';
 
-defineProps<{
+const props = defineProps<{
   /** Array of flying cards from useFlyingCards composable */
   flyingCards: readonly FlyingCard[];
   /** Optional custom card renderer slot data */
   getSuitSymbol?: (suit: string) => string;
   /** Optional custom suit color */
   getSuitColor?: (suit: string) => string;
+  /**
+   * Player colors for piece rendering (indexed by playerPosition).
+   * When set, elements with playerPosition but no images render as colored pieces.
+   * Default: ['#e74c3c', '#2c3e50'] (red, dark gray)
+   */
+  playerColors?: string[];
 }>();
+
+// Default player colors (can be overridden via prop)
+const defaultPlayerColors = ['#e74c3c', '#2c3e50', '#27ae60', '#f39c12', '#9b59b6', '#3498db'];
+
+/**
+ * Determine rendering mode for a flying card:
+ * - 'image': Has face/back images
+ * - 'card': Has rank/suit (text-based card)
+ * - 'piece': Has playerPosition (colored piece)
+ * - 'default': None of the above
+ */
+function getRenderMode(cardData: Record<string, unknown>): 'image' | 'card' | 'piece' | 'default' {
+  if (cardData.faceImage || cardData.backImage) return 'image';
+  if (cardData.rank || cardData.suit) return 'card';
+  if (typeof cardData.playerPosition === 'number') return 'piece';
+  return 'default';
+}
+
+/**
+ * Get player color for piece rendering
+ */
+function getPlayerColor(playerPosition: number): string {
+  const colors = props.playerColors || defaultPlayerColors;
+  return colors[playerPosition % colors.length] || defaultPlayerColors[0];
+}
+
+/**
+ * Get piece style based on player position
+ */
+function getPieceStyle(cardData: Record<string, unknown>): CSSProperties {
+  const playerPosition = cardData.playerPosition as number;
+  return {
+    backgroundColor: getPlayerColor(playerPosition),
+  };
+}
 
 // Type for parsed image info (either URL string or sprite with coordinates)
 type ImageInfo =
@@ -138,9 +198,17 @@ function getDefaultSuitColor(suit: string): string {
         :class="{ flipping: card.isFlipped }"
         :style="card.style"
       >
-        <!-- Default card rendering with front and back faces -->
+        <!-- Custom card rendering via slot -->
         <slot name="card" :card="card">
-          <div class="card-inner" :class="{ flipped: card.isFlipped }">
+          <!-- PIECE MODE: Render as colored game piece -->
+          <div
+            v-if="getRenderMode(card.cardData) === 'piece'"
+            class="piece-inner"
+            :style="getPieceStyle(card.cardData)"
+          ></div>
+
+          <!-- CARD MODE: Render with front/back faces -->
+          <div v-else class="card-inner" :class="{ flipped: card.isFlipped }">
             <!-- Front face -->
             <div
               class="card-face card-front"
@@ -204,6 +272,18 @@ function getDefaultSuitColor(suit: string): string {
 .flying-card {
   /* Preserve 3D for child transforms */
   transform-style: preserve-3d;
+}
+
+/* Piece rendering (for games like checkers, chess) */
+.piece-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.3),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(0, 0, 0, 0.3);
 }
 
 .card-inner {

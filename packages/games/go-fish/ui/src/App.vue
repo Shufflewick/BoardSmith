@@ -21,13 +21,14 @@ function getBookCount(playerPosition: number, gameView: any): number {
 </script>
 
 <template>
-  <GameShell game-type="go-fish" display-name="Go Fish" :player-count="2">
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
+  <GameShell game-type="go-fish" display-name="Go Fish">
+    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <GoFishBoard
             :game-view="gameView"
+            :players="players"
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"

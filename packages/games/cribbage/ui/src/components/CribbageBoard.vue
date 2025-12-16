@@ -98,6 +98,16 @@ function getFaceSrc(card: Card | null | undefined): string {
   return '';
 }
 
+// Helper to get image data for data attribute (works with animation system)
+// Returns URL string for URL images, or JSON string for sprites
+function getImageDataAttr(card: Card | null | undefined, side: 'face' | 'back'): string | undefined {
+  const info = getCardImageInfo(card, side);
+  if (!info) return undefined;
+  if (info.type === 'url') return info.src;
+  // For sprites, return the sprite URL (animation system will use default card appearance)
+  return info.sprite;
+}
+
 // Sprite sheet layout constants
 // Standard card dimensions in the sprite sheet (face cards)
 const NATIVE_CARD_WIDTH = 238;
@@ -629,6 +639,12 @@ defineExpose({
             class="card"
             :class="{ 'has-image': getCardImageInfo(card as Card, 'face') }"
             :data-card-id="card.name"
+            :data-element-id="card.name"
+            :data-rank="card.attributes?.rank"
+            :data-suit="card.attributes?.suit"
+            :data-face-image="getImageDataAttr(card as Card, 'face')"
+            :data-back-image="getImageDataAttr(card as Card, 'back')"
+            data-face-up="true"
             :data-card-preview="getCardPreviewJson(card as Card)"
             :style="{ color: getSuitColor((card.attributes?.suit as string) || '') }"
           >
@@ -684,6 +700,12 @@ defineExpose({
               class="card"
               :class="{ 'has-image': getCardImageInfo(starterCard as any, 'face') }"
               :data-card-id="starterCard.name"
+              :data-element-id="starterCard.name"
+              :data-rank="starterCard.attributes?.rank"
+              :data-suit="starterCard.attributes?.suit"
+              :data-face-image="getImageDataAttr(starterCard as any, 'face')"
+              :data-back-image="getImageDataAttr(starterCard as any, 'back')"
+              data-face-up="true"
               :data-card-preview="getCardPreviewJson(starterCard as any)"
               :style="{ color: getSuitColor((starterCard.attributes?.suit as string) || '') }"
             >
@@ -764,6 +786,12 @@ defineExpose({
               class="card stacked"
               :class="{ 'has-image': getCardImageInfo(card as Card, 'face') }"
               :data-card-id="card.name"
+              :data-element-id="card.name"
+              :data-rank="card.attributes?.rank"
+              :data-suit="card.attributes?.suit"
+              :data-face-image="getImageDataAttr(card as Card, 'face')"
+              :data-back-image="getImageDataAttr(card as Card, 'back')"
+              data-face-up="true"
               :data-card-preview="getCardPreviewJson(card as Card)"
               :style="{
                 color: getSuitColor((card.attributes?.suit as string) || ''),
@@ -801,6 +829,12 @@ defineExpose({
               unplayable: cribbagePhase === 'play' && !isCardPlayable(card.attributes?.rank || '')
             }"
             :data-card-id="card.name"
+            :data-element-id="card.name"
+            :data-rank="card.attributes?.rank"
+            :data-suit="card.attributes?.suit"
+            :data-face-image="getImageDataAttr(card, 'face')"
+            :data-back-image="getImageDataAttr(card, 'back')"
+            data-face-up="true"
             :data-card-preview="getCardPreviewJson(card)"
             :style="{ color: getSuitColor(card.attributes?.suit || '') }"
             @click="toggleCardSelection(card.name)"

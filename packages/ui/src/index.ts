@@ -167,6 +167,15 @@ export {
   type FLIPAnimationReturn,
 } from './composables/useFLIPAnimation.js';
 
+// Auto-fly animation utilities (unified element removal animations)
+export {
+  useAutoFlyAnimation,
+  getElementDataAttrs,
+  type CapturedElementData,
+  type WatchZoneOptions,
+  type AutoFlyAnimationReturn,
+} from './composables/useAutoFlyAnimation.js';
+
 // Theming
 export {
   applyTheme,

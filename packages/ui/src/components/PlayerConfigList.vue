@@ -46,7 +46,7 @@ const configs = computed(() => {
   for (let i = 0; i < props.playerCount; i++) {
     result.push(
       props.modelValue[i] ?? {
-        name: '',
+        name: `Player ${i + 1}`,
         isAI: false,
         aiLevel: 'medium',
       }

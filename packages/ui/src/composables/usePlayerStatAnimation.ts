@@ -49,6 +49,10 @@ export interface CardForAnimation {
   faceImage?: string;
   /** Back image URL (optional) */
   backImage?: string;
+  /** Player position who owns this card/piece (for piece rendering) */
+  playerPosition?: number;
+  /** Allow additional custom properties */
+  [key: string]: unknown;
 }
 
 export interface FlyToStatOptions {
