@@ -11,6 +11,7 @@ import type {
   ActionRequest,
   AIConfig,
   GameDefinition,
+  ClaimPositionRequest,
 } from '../types.js';
 
 // ============================================
@@ -70,7 +71,7 @@ function buildEffectiveGameOptions(
 export async function handleCreateGame(
   store: GameStore,
   registry: GameRegistry,
-  request: CreateGameRequest,
+  request: CreateGameRequest & { useLobby?: boolean; creatorId?: string },
   aiConfig?: AIConfig
 ): Promise<ServerResponse> {
   const {
@@ -83,6 +84,8 @@ export async function handleCreateGame(
     aiLevel,
     gameOptions,
     playerConfigs,
+    useLobby,
+    creatorId,
   } = request;
 
   const definition = registry.get(gameType);
@@ -140,9 +143,16 @@ export async function handleCreateGame(
     seed,
     aiConfig: effectiveAiConfig,
     gameOptions: effectiveGameOptions,
+    displayName: definition.displayName,
+    playerConfigs,
+    creatorId,
+    useLobby,
   });
 
   const state = session.getState(0);
+
+  // Include lobby info if using lobby flow
+  const lobby = useLobby ? session.getLobbyInfo() : undefined;
 
   return success(
     {
@@ -150,6 +160,7 @@ export async function handleCreateGame(
       gameId,
       flowState: state.flowState,
       state: state.state,
+      lobby,
     },
     201
   );
@@ -326,4 +337,91 @@ export async function handleRestart(
  */
 export function handleHealth(environment?: string): ServerResponse {
   return success({ status: 'ok', environment: environment ?? 'unknown' });
+}
+
+// ============================================
+// Lobby Handlers
+// ============================================
+
+/**
+ * GET /games/:gameId/lobby - Get lobby state
+ */
+export async function handleGetLobby(
+  store: GameStore,
+  gameId: string
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const lobby = session.getLobbyInfo();
+  if (!lobby) {
+    return error('Game does not have a lobby', 400);
+  }
+
+  return success({ success: true, lobby });
+}
+
+/**
+ * POST /games/:gameId/claim-position - Claim a position in the lobby
+ */
+export async function handleClaimPosition(
+  store: GameStore,
+  gameId: string,
+  request: ClaimPositionRequest
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const { position, playerId, name } = request;
+
+  if (position === undefined || position === null) {
+    return error('Position is required');
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (!name) {
+    return error('Player name is required');
+  }
+
+  const result = await session.claimPosition(position, playerId, name);
+
+  if (result.success) {
+    return success({
+      success: true,
+      lobby: result.lobby,
+      position,
+    });
+  } else {
+    return error(result.error ?? 'Failed to claim position');
+  }
+}
+
+/**
+ * POST /games/:gameId/update-name - Update player name in lobby
+ */
+export async function handleUpdateName(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  name: string
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = await session.updateSlotName(playerId, name);
+
+  if (result.success) {
+    return success({ success: true });
+  } else {
+    return error(result.error ?? 'Failed to update name');
+  }
 }

@@ -13,6 +13,11 @@ import type {
   StorageAdapter,
   BroadcastAdapter,
   AIConfig,
+  LobbyState,
+  LobbySlot,
+  LobbyInfo,
+  LobbyUpdate,
+  PlayerConfig,
 } from './types.js';
 import { buildPlayerState, computeUndoInfo } from './utils.js';
 import { AIController } from './ai-controller.js';
@@ -35,6 +40,14 @@ export interface GameSessionOptions<G extends Game = Game> {
   aiConfig?: AIConfig;
   /** Game-specific options (boardSize, targetScore, etc.) */
   gameOptions?: Record<string, unknown>;
+  /** Display name for lobby UI */
+  displayName?: string;
+  /** Per-player configurations (for lobby) */
+  playerConfigs?: PlayerConfig[];
+  /** Creator's player ID */
+  creatorId?: string;
+  /** Whether to use lobby flow (game waits for players to join) */
+  useLobby?: boolean;
 }
 
 /**
@@ -116,19 +129,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   readonly #storage?: StorageAdapter;
   readonly #aiController?: AIController<G>;
   #broadcaster?: BroadcastAdapter<TSession>;
+  #displayName?: string;
 
   private constructor(
     runner: GameRunner<G>,
     storedState: StoredGameState,
     GameClass: GameClass<G>,
     storage?: StorageAdapter,
-    aiController?: AIController<G>
+    aiController?: AIController<G>,
+    displayName?: string
   ) {
     this.#runner = runner;
     this.#storedState = storedState;
     this.#GameClass = GameClass;
     this.#storage = storage;
     this.#aiController = aiController;
+    this.#displayName = displayName;
   }
 
   // ============================================
@@ -149,6 +165,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       storage,
       aiConfig,
       gameOptions: customGameOptions,
+      displayName,
+      playerConfigs,
+      creatorId,
+      useLobby,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -158,6 +178,38 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       gameType,
       gameOptions: { playerCount, playerNames, seed: gameSeed, ...customGameOptions },
     });
+
+    // Build lobby slots from player configs
+    let lobbySlots: LobbySlot[] | undefined;
+    let lobbyState: LobbyState | undefined;
+
+    if (useLobby && playerConfigs) {
+      lobbySlots = playerConfigs.map((config, i) => {
+        const isAI = config.isAI ?? false;
+        const isCreator = i === 0; // Position 0 is always the creator
+
+        // Extract player options (everything except name, isAI, aiLevel)
+        const playerOptions: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(config)) {
+          if (!['name', 'isAI', 'aiLevel'].includes(key)) {
+            playerOptions[key] = value;
+          }
+        }
+
+        return {
+          position: i,
+          status: isAI ? 'ai' : (isCreator ? 'claimed' : 'open'),
+          name: config.name ?? (isAI ? 'Bot' : `Player ${i + 1}`),
+          playerId: isCreator ? creatorId : undefined,
+          aiLevel: isAI ? (config.aiLevel ?? 'medium') : undefined,
+          playerOptions: Object.keys(playerOptions).length > 0 ? playerOptions : undefined,
+        } as LobbySlot;
+      });
+
+      // Determine if all human slots are filled
+      const openSlots = lobbySlots.filter(s => s.status === 'open').length;
+      lobbyState = openSlots > 0 ? 'waiting' : 'playing';
+    }
 
     const storedState: StoredGameState = {
       gameType,
@@ -169,6 +221,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       createdAt: Date.now(),
       aiConfig,
       gameOptions: customGameOptions,
+      lobbyState,
+      lobbySlots,
+      creatorId,
     };
 
     runner.start();
@@ -177,10 +232,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       ? new AIController(GameClass, gameType, playerCount, aiConfig)
       : undefined;
 
-    const session = new GameSession(runner, storedState, GameClass, storage, aiController);
+    const session = new GameSession(runner, storedState, GameClass, storage, aiController, displayName);
 
-    // Trigger AI if it should move first
-    if (aiController?.hasAIPlayers()) {
+    // Only trigger AI if game is playing (not waiting for players)
+    if (lobbyState !== 'waiting' && aiController?.hasAIPlayers()) {
       session.#scheduleAICheck();
     }
 
@@ -688,6 +743,192 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       const flowState = this.#runner.getFlowState();
       if (flowState?.awaitingInput && !flowState.complete) {
         this.#scheduleAICheck();
+      }
+    }
+  }
+
+  // ============================================
+  // Lobby Methods
+  // ============================================
+
+  /**
+   * Check if the game is waiting for players to join
+   */
+  isWaitingForPlayers(): boolean {
+    return this.#storedState.lobbyState === 'waiting';
+  }
+
+  /**
+   * Get the current lobby state
+   */
+  getLobbyState(): LobbyState | undefined {
+    return this.#storedState.lobbyState;
+  }
+
+  /**
+   * Get full lobby information for clients
+   */
+  getLobbyInfo(): LobbyInfo | null {
+    if (!this.#storedState.lobbySlots) {
+      return null;
+    }
+
+    const slots = this.#storedState.lobbySlots;
+    const openSlots = slots.filter(s => s.status === 'open').length;
+
+    return {
+      state: this.#storedState.lobbyState ?? 'playing',
+      gameType: this.#storedState.gameType,
+      displayName: this.#displayName,
+      slots,
+      gameOptions: this.#storedState.gameOptions,
+      creatorId: this.#storedState.creatorId,
+      openSlots,
+      isReady: openSlots === 0,
+    };
+  }
+
+  /**
+   * Claim a position in the lobby
+   *
+   * @param position Position to claim (0-indexed)
+   * @param playerId Player's unique ID
+   * @param name Player's display name
+   * @returns Result with updated lobby info
+   */
+  async claimPosition(
+    position: number,
+    playerId: string,
+    name: string
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    if (position < 0 || position >= this.#storedState.lobbySlots.length) {
+      return { success: false, error: 'Invalid position' };
+    }
+
+    const slot = this.#storedState.lobbySlots[position];
+
+    if (slot.status === 'ai') {
+      return { success: false, error: 'This position is reserved for AI' };
+    }
+
+    if (slot.status === 'claimed' && slot.playerId !== playerId) {
+      return { success: false, error: 'This position is already taken' };
+    }
+
+    // Check if player already claimed another position
+    const existingSlot = this.#storedState.lobbySlots.find(
+      s => s.playerId === playerId && s.position !== position
+    );
+    if (existingSlot) {
+      // Release the old position
+      existingSlot.status = 'open';
+      existingSlot.playerId = undefined;
+      existingSlot.name = `Player ${existingSlot.position + 1}`;
+    }
+
+    // Claim the position
+    slot.status = 'claimed';
+    slot.playerId = playerId;
+    slot.name = name;
+
+    // Update player names in stored state
+    this.#storedState.playerNames[position] = name;
+
+    // Check if all positions are now filled
+    const openSlots = this.#storedState.lobbySlots.filter(s => s.status === 'open').length;
+    if (openSlots === 0) {
+      // All positions filled - start the game
+      this.#storedState.lobbyState = 'playing';
+
+      // Trigger AI if needed
+      if (this.#aiController?.hasAIPlayers()) {
+        this.#scheduleAICheck();
+      }
+    }
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    // If game started, also broadcast initial game state
+    if (this.#storedState.lobbyState === 'playing') {
+      this.broadcast();
+    }
+
+    return { success: true, lobby: this.getLobbyInfo()! };
+  }
+
+  /**
+   * Update a player's name in their slot
+   *
+   * @param playerId Player's unique ID
+   * @param name New display name
+   */
+  async updateSlotName(
+    playerId: string,
+    name: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
+    if (!slot) {
+      return { success: false, error: 'Player not found in lobby' };
+    }
+
+    slot.name = name;
+    this.#storedState.playerNames[slot.position] = name;
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true };
+  }
+
+  /**
+   * Get position for a player ID
+   */
+  getPositionForPlayer(playerId: string): number | undefined {
+    if (!this.#storedState.lobbySlots) return undefined;
+    const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
+    return slot?.position;
+  }
+
+  /**
+   * Broadcast lobby state to all connected sessions
+   */
+  broadcastLobby(): void {
+    if (!this.#broadcaster) return;
+
+    const lobby = this.getLobbyInfo();
+    if (!lobby) return;
+
+    const sessions = this.#broadcaster.getSessions();
+    const update: LobbyUpdate = { type: 'lobby', lobby };
+
+    for (const session of sessions) {
+      try {
+        this.#broadcaster.send(session, update);
+      } catch (error) {
+        console.error('Lobby broadcast error:', error);
       }
     }
   }

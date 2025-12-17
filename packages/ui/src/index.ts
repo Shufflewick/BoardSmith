@@ -7,6 +7,7 @@ export { default as GameLobby } from './components/GameLobby.vue';
 export { default as HamburgerMenu } from './components/HamburgerMenu.vue';
 export { default as PlayersPanel } from './components/PlayersPanel.vue';
 export { default as WaitingRoom } from './components/WaitingRoom.vue';
+export { default as Toast } from './components/Toast.vue';
 
 // Helper components
 export {
@@ -39,6 +40,11 @@ export {
 } from './components/auto-ui/index.js';
 
 // Composables
+export {
+  useToast,
+  type Toast as ToastMessage,
+} from './composables/useToast.js';
+
 export {
   useBoardInteraction,
   createBoardInteraction,

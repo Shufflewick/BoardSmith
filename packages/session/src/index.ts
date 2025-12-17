@@ -55,6 +55,15 @@ export type {
   ExclusivePlayerOption,
   PlayerConfig,
   GamePreset,
+  // Lobby types
+  LobbyState,
+  SlotStatus,
+  LobbySlot,
+  LobbyInfo,
+  LobbyUpdate,
+  ClaimPositionRequest,
+  ClaimPositionResponse,
+  UpdateNameRequest,
 } from './types.js';
 
 // ============================================

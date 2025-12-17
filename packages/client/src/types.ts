@@ -227,6 +227,10 @@ export interface CreateGameRequest {
     aiLevel?: string;
     [key: string]: unknown;
   }>;
+  /** Whether to use lobby flow (game waits for players to join) */
+  useLobby?: boolean;
+  /** Creator's player ID (for lobby) */
+  creatorId?: string;
 }
 
 export interface CreateGameResponse {
@@ -235,4 +239,67 @@ export interface CreateGameResponse {
   flowState?: FlowState;
   state?: PlayerState;
   error?: string;
+  /** Lobby info (if useLobby was true) */
+  lobby?: LobbyInfo;
+}
+
+// ============================================
+// Lobby Types
+// ============================================
+
+/** Lobby lifecycle state */
+export type LobbyState = 'waiting' | 'playing' | 'finished';
+
+/** Status of a player slot in the lobby */
+export type SlotStatus = 'open' | 'ai' | 'claimed';
+
+/** Information about a player slot in the lobby */
+export interface LobbySlot {
+  /** Position index (0-based) */
+  position: number;
+  /** Current status of this slot */
+  status: SlotStatus;
+  /** Player name */
+  name: string;
+  /** Player ID who claimed this slot (for humans) */
+  playerId?: string;
+  /** AI level if this is an AI slot */
+  aiLevel?: string;
+  /** Custom player options (color, role, etc.) */
+  playerOptions?: Record<string, unknown>;
+}
+
+/** Full lobby information */
+export interface LobbyInfo {
+  /** Current lobby state */
+  state: LobbyState;
+  /** Game type */
+  gameType: string;
+  /** Display name of the game */
+  displayName?: string;
+  /** All player slots */
+  slots: LobbySlot[];
+  /** Game options that were configured */
+  gameOptions?: Record<string, unknown>;
+  /** Creator's player ID */
+  creatorId?: string;
+  /** Number of human slots still open */
+  openSlots: number;
+  /** Whether all slots are filled (ready to start) */
+  isReady: boolean;
+}
+
+/** Request to claim a position in the lobby */
+export interface ClaimPositionRequest {
+  position: number;
+  name: string;
+  playerId: string;
+}
+
+/** Response to claim position */
+export interface ClaimPositionResponse {
+  success: boolean;
+  error?: string;
+  lobby?: LobbyInfo;
+  position?: number;
 }

@@ -69,4 +69,12 @@ export type {
   CreateGameRequest,
   CreateGameResponse,
   ApiResponse,
+
+  // Lobby
+  LobbyState,
+  SlotStatus,
+  LobbySlot,
+  LobbyInfo,
+  ClaimPositionRequest,
+  ClaimPositionResponse,
 } from './types.js';

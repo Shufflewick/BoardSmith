@@ -90,6 +90,11 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
       seed: options.seed,
       aiConfig: options.aiConfig,
       gameOptions: options.gameOptions,
+      // Lobby options
+      displayName: options.displayName ?? definition.displayName,
+      playerConfigs: options.playerConfigs,
+      creatorId: options.creatorId,
+      useLobby: options.useLobby,
     });
 
     // Create and attach broadcaster

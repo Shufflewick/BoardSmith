@@ -26,7 +26,11 @@ import {
   handleUndo,
   handleRestart,
   handleHealth,
+  handleGetLobby,
+  handleClaimPosition,
+  handleUpdateName,
 } from './handlers/games.js';
+import type { ClaimPositionRequest } from './types.js';
 
 import {
   handleMatchmakingJoin,
@@ -163,6 +167,28 @@ export class GameServerCore {
         return await handleRestart(this.#store, this.#registry, gameId, this.#aiConfig);
       }
 
+      // GET /games/:gameId/lobby - Get lobby state
+      const lobbyMatch = path.match(/^\/games\/([^/]+)\/lobby$/);
+      if (lobbyMatch && method === 'GET') {
+        const gameId = lobbyMatch[1];
+        return await handleGetLobby(this.#store, gameId);
+      }
+
+      // POST /games/:gameId/claim-position - Claim a position in the lobby
+      const claimMatch = path.match(/^\/games\/([^/]+)\/claim-position$/);
+      if (claimMatch && method === 'POST') {
+        const gameId = claimMatch[1];
+        return await handleClaimPosition(this.#store, gameId, body as ClaimPositionRequest);
+      }
+
+      // POST /games/:gameId/update-name - Update player name in lobby
+      const updateNameLobbyMatch = path.match(/^\/games\/([^/]+)\/update-name$/);
+      if (updateNameLobbyMatch && method === 'POST') {
+        const gameId = updateNameLobbyMatch[1];
+        const { playerId, name } = body as { playerId: string; name: string };
+        return await handleUpdateName(this.#store, gameId, playerId, name);
+      }
+
       // PUT /games/:gameId/players/:position/name - Update player name
       const updateNameMatch = path.match(/^\/games\/([^/]+)\/players\/(\d+)\/name$/);
       if (updateNameMatch && method === 'PUT') {
@@ -284,6 +310,61 @@ export class GameServerCore {
 
       case 'ping':
         session.ws.send({ type: 'pong', timestamp: Date.now() });
+        break;
+
+      case 'getLobby':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        const lobbyInfo = gameSession.getLobbyInfo();
+        if (lobbyInfo) {
+          session.ws.send({ type: 'lobby', lobby: lobbyInfo });
+        } else {
+          session.ws.send({ type: 'error', error: 'Game does not have a lobby' });
+        }
+        break;
+
+      case 'claimPosition':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (message.position === undefined || message.name === undefined || !session.playerId) {
+          session.ws.send({ type: 'error', error: 'Position, name, and playerId are required' });
+          return;
+        }
+
+        const claimResult = await gameSession.claimPosition(
+          message.position,
+          session.playerId,
+          message.name
+        );
+
+        if (!claimResult.success) {
+          session.ws.send({ type: 'error', error: claimResult.error });
+        }
+        // Success: broadcast happens automatically in GameSession.claimPosition
+        break;
+
+      case 'updateName':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || !message.name) {
+          session.ws.send({ type: 'error', error: 'PlayerId and name are required' });
+          return;
+        }
+
+        const nameResult = await gameSession.updateSlotName(session.playerId, message.name);
+        if (!nameResult.success) {
+          session.ws.send({ type: 'error', error: nameResult.error });
+        }
+        // Success: broadcast happens automatically
         break;
     }
   }

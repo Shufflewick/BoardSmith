@@ -176,6 +176,12 @@ export interface StoredGameState {
   aiConfig?: AIConfig;
   /** Game-specific options (for restart) */
   gameOptions?: Record<string, unknown>;
+  /** Lobby state - 'waiting' until all players join, then 'playing' */
+  lobbyState?: LobbyState;
+  /** Per-slot information for lobby (who claimed what, AI status, etc.) */
+  lobbySlots?: LobbySlot[];
+  /** Creator's player ID */
+  creatorId?: string;
 }
 
 /**
@@ -282,6 +288,60 @@ export interface PlayerGameState {
 }
 
 // ============================================
+// Lobby Types
+// ============================================
+
+/**
+ * Lobby lifecycle state
+ */
+export type LobbyState = 'waiting' | 'playing' | 'finished';
+
+/**
+ * Status of a player slot in the lobby
+ */
+export type SlotStatus = 'open' | 'ai' | 'claimed';
+
+/**
+ * Information about a player slot in the lobby
+ */
+export interface LobbySlot {
+  /** Position index (0-based) */
+  position: number;
+  /** Current status of this slot */
+  status: SlotStatus;
+  /** Player name (set by creator for AI, by joiner for humans) */
+  name: string;
+  /** Player ID who claimed this slot (for humans) */
+  playerId?: string;
+  /** AI level if this is an AI slot */
+  aiLevel?: string;
+  /** Custom player options (color, role, etc.) */
+  playerOptions?: Record<string, unknown>;
+}
+
+/**
+ * Full lobby information for clients
+ */
+export interface LobbyInfo {
+  /** Current lobby state */
+  state: LobbyState;
+  /** Game type */
+  gameType: string;
+  /** Display name of the game */
+  displayName?: string;
+  /** All player slots */
+  slots: LobbySlot[];
+  /** Game options that were configured */
+  gameOptions?: Record<string, unknown>;
+  /** Creator's player ID */
+  creatorId?: string;
+  /** Number of human slots still open */
+  openSlots: number;
+  /** Whether all slots are filled (ready to start) */
+  isReady: boolean;
+}
+
+// ============================================
 // Session Types
 // ============================================
 
@@ -371,7 +431,55 @@ export interface ActionRequest {
  * WebSocket message from client
  */
 export interface WebSocketMessage {
-  type: 'action' | 'ping' | 'getState';
+  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimPosition' | 'updateName';
   action?: string;
   args?: Record<string, unknown>;
+  /** For claimPosition: which position to claim */
+  position?: number;
+  /** For updateName/claimPosition: player's name */
+  name?: string;
+}
+
+// ============================================
+// Lobby Request/Response Types
+// ============================================
+
+/**
+ * Request to claim a position in the lobby
+ */
+export interface ClaimPositionRequest {
+  /** Position to claim (0-indexed) */
+  position: number;
+  /** Player's name */
+  name: string;
+  /** Player's unique ID */
+  playerId: string;
+}
+
+/**
+ * Response to claim position request
+ */
+export interface ClaimPositionResponse {
+  success: boolean;
+  error?: string;
+  /** Updated lobby info */
+  lobby?: LobbyInfo;
+}
+
+/**
+ * Request to update player name
+ */
+export interface UpdateNameRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** New name */
+  name: string;
+}
+
+/**
+ * Lobby state update message sent to clients
+ */
+export interface LobbyUpdate {
+  type: 'lobby';
+  lobby: LobbyInfo;
 }

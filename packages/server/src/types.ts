@@ -21,6 +21,15 @@ export type {
   CreateGameRequest,
   ActionRequest,
   WebSocketMessage,
+  // Lobby types
+  LobbyState,
+  SlotStatus,
+  LobbySlot,
+  LobbyInfo,
+  LobbyUpdate,
+  ClaimPositionRequest,
+  ClaimPositionResponse,
+  PlayerConfig,
 } from '@boardsmith/session';
 
 // ============================================
@@ -62,6 +71,19 @@ export interface CreateGameOptions {
   aiConfig?: AIConfig;
   /** Game-specific options (boardSize, targetScore, etc.) */
   gameOptions?: Record<string, unknown>;
+  /** Display name for lobby UI */
+  displayName?: string;
+  /** Per-player configurations (for lobby) */
+  playerConfigs?: Array<{
+    name?: string;
+    isAI?: boolean;
+    aiLevel?: string;
+    [key: string]: unknown;
+  }>;
+  /** Creator's player ID */
+  creatorId?: string;
+  /** Whether to use lobby flow (game waits for players to join) */
+  useLobby?: boolean;
 }
 
 /**

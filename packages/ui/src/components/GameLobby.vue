@@ -94,11 +94,10 @@ const props = defineProps<{
 }>();
 
 const joinGameId = defineModel<string>('joinGameId', { required: true });
-const joinPlayerName = ref('');
 
 const emit = defineEmits<{
   (e: 'create', config: LobbyConfig): void;
-  (e: 'join', playerName?: string): void;
+  (e: 'join'): void;
 }>();
 
 // Game definition metadata (fetched from server)
@@ -340,13 +339,7 @@ const playerCountOptions = computed(() => {
             placeholder="Enter game code"
             class="game-code-input"
           />
-          <input
-            v-model="joinPlayerName"
-            type="text"
-            placeholder="Your name (optional)"
-            class="player-name-join-input"
-          />
-          <button @click="emit('join', joinPlayerName.trim() || undefined)" class="btn secondary">Join Game</button>
+          <button @click="emit('join')" class="btn secondary">Join Game</button>
         </div>
       </div>
     </div>
@@ -481,26 +474,6 @@ const playerCountOptions = computed(() => {
 .game-code-input:focus {
   outline: none;
   border-color: #00d9ff;
-}
-
-.player-name-join-input {
-  width: 100%;
-  padding: 12px;
-  margin-bottom: 15px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
-  font-size: 1rem;
-}
-
-.player-name-join-input:focus {
-  outline: none;
-  border-color: #00d9ff;
-}
-
-.player-name-join-input::placeholder {
-  color: #666;
 }
 
 .game-code-input::placeholder {

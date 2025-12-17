@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, watchEffect, onMounted, provide } from 'vue';
-import { MeepleClient, audioService } from '@boardsmith/client';
+import { MeepleClient, audioService, type LobbyInfo } from '@boardsmith/client';
 import { useGame } from '@boardsmith/client/vue';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import DebugPanel from './DebugPanel.vue';
@@ -9,10 +9,34 @@ import GameHistory from './GameHistory.vue';
 import GameLobby from './GameLobby.vue';
 import PlayersPanel from './PlayersPanel.vue';
 import WaitingRoom from './WaitingRoom.vue';
+import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { useZoomPreview } from '../composables/useZoomPreview';
+import { useToast } from '../composables/useToast';
 import turnNotificationSound from '../assets/turn-notification.mp3';
+
+// Generate or retrieve persistent player ID
+function getPlayerId(): string {
+  const KEY = 'boardsmith_player_id';
+  let id = localStorage.getItem(KEY);
+  if (!id) {
+    id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    localStorage.setItem(KEY, id);
+  }
+  return id;
+}
+
+// Get or set persistent player name
+function getPlayerName(): string | null {
+  const KEY = 'boardsmith_player_name';
+  return localStorage.getItem(KEY);
+}
+
+function setPlayerName(name: string): void {
+  const KEY = 'boardsmith_player_name';
+  localStorage.setItem(KEY, name);
+}
 
 interface GameShellProps {
   /** Game type identifier (e.g., 'go-fish', 'cribbage') */
@@ -40,9 +64,15 @@ const props = withDefaults(defineProps<GameShellProps>(), {
 type Screen = 'lobby' | 'waiting' | 'game';
 const currentScreen = ref<Screen>('lobby');
 
+// Player identity (persistent across sessions, but can change for joiners in same-browser scenarios)
+const playerId = ref(getPlayerId());
+
 // Lobby state
 const joinGameId = ref('');
 const createdGameId = ref<string | null>(null);
+const lobbyInfo = ref<LobbyInfo | null>(null);
+const isCreator = ref(false);
+const lobbyPollInterval = ref<number | null>(null);
 
 // Game state
 const gameId = ref<string | null>(null);
@@ -65,6 +95,10 @@ const isViewingHistory = computed(() => timeTravelState.value !== null);
 const client = new MeepleClient({
   baseUrl: props.apiUrl,
 });
+
+// Sync the client's playerId with our localStorage-based one
+// This ensures all API calls (claim position, etc.) use the same ID
+client.setPlayerId(playerId.value);
 
 // Initialize audio service with the turn notification sound
 audioService.init({
@@ -215,6 +249,9 @@ provideBoardInteraction(boardInteraction);
 // Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards
 const { previewState } = useZoomPreview();
 
+// Toast notifications
+const toast = useToast();
+
 // Provide context to child components
 provide('gameState', state);
 provide('gameView', gameView);
@@ -295,6 +332,10 @@ async function createGame(config?: LobbyConfig) {
       playerNames = Array.from({ length: effectivePlayerCount }, (_, i) => `Player ${i + 1}`);
     }
 
+    // Count human players to determine if we need lobby flow
+    const humanCount = config?.playerConfigs?.filter((p) => !p.isAI).length ?? effectivePlayerCount;
+    const needsLobby = humanCount > 1;
+
     const result = await client.createGame({
       gameType: props.gameType,
       playerCount: effectivePlayerCount,
@@ -303,21 +344,25 @@ async function createGame(config?: LobbyConfig) {
       aiLevel: aiPlayers.length > 0 ? aiLevel : undefined,
       gameOptions: config?.gameOptions,
       playerConfigs: config?.playerConfigs,
+      useLobby: needsLobby,
+      creatorId: playerId.value,
     });
 
     if (result.success && result.gameId) {
       createdGameId.value = result.gameId;
       playerPosition.value = 0;
+      isCreator.value = true;
 
-      // If all other players are AI, skip waiting room
-      const humanCount = config?.playerConfigs?.filter((p) => !p.isAI).length ?? 1;
-      if (humanCount <= 1) {
+      if (needsLobby && result.lobby) {
+        // Multi-human game - go to waiting room
+        lobbyInfo.value = result.lobby;
+        currentScreen.value = 'waiting';
+        startLobbyPolling(result.gameId);
+      } else {
+        // Solo or all-AI game - go directly to game
         gameId.value = result.gameId;
         currentScreen.value = 'game';
         updateUrl(result.gameId, 0);
-      } else {
-        currentScreen.value = 'waiting';
-        pollForOtherPlayers(result.gameId);
       }
     }
   } catch (err) {
@@ -326,13 +371,42 @@ async function createGame(config?: LobbyConfig) {
   }
 }
 
-async function pollForOtherPlayers(gid: string) {
-  gameId.value = gid;
-  currentScreen.value = 'game';
-  updateUrl(gid, 0);
+// Lobby polling functions
+function startLobbyPolling(gid: string) {
+  // Poll lobby state every 2 seconds
+  lobbyPollInterval.value = window.setInterval(async () => {
+    try {
+      const lobby = await client.getLobby(gid);
+      lobbyInfo.value = lobby;
+
+      // If game has started (all positions filled), transition to game
+      if (lobby.state === 'playing') {
+        stopLobbyPolling();
+
+        // Find my position from the lobby slots
+        const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
+        if (mySlot) {
+          playerPosition.value = mySlot.position;
+        }
+
+        gameId.value = gid;
+        currentScreen.value = 'game';
+        updateUrl(gid, playerPosition.value);
+      }
+    } catch (err) {
+      console.error('Failed to poll lobby:', err);
+    }
+  }, 2000);
 }
 
-async function joinGame(playerName?: string) {
+function stopLobbyPolling() {
+  if (lobbyPollInterval.value !== null) {
+    clearInterval(lobbyPollInterval.value);
+    lobbyPollInterval.value = null;
+  }
+}
+
+async function joinGame() {
   if (!joinGameId.value.trim()) {
     alert('Please enter a game code');
     return;
@@ -341,15 +415,63 @@ async function joinGame(playerName?: string) {
   try {
     const gid = joinGameId.value.trim();
 
-    // If player provided a name, update it on the server
-    if (playerName) {
-      await fetch(`${props.apiUrl || window.location.origin.replace(/:\d+$/, ':8787')}/games/${gid}/players/1/name`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: playerName }),
-      });
+    // Try to get lobby info first
+    try {
+      const lobby = await client.getLobby(gid);
+      createdGameId.value = gid;
+      isCreator.value = false;
+
+      if (lobby.state === 'waiting') {
+        // Check if our playerId is already claimed in this lobby (same browser scenario)
+        // If so, generate a new playerId for this joiner session
+        const existingSlot = lobby.slots.find(s => s.playerId === playerId.value);
+        if (existingSlot) {
+          // Generate a new unique playerId for this joiner
+          const newPlayerId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+          playerId.value = newPlayerId;
+          client.setPlayerId(newPlayerId);
+          // Note: we don't update localStorage - this ID is for this session only
+        }
+
+        // Find the first open slot
+        const firstOpenSlot = lobby.slots.find(s => s.status === 'open');
+
+        if (firstOpenSlot) {
+          // Auto-claim the first open slot
+          // Use saved name if available, otherwise keep the slot's default name
+          const playerName = getPlayerName() || firstOpenSlot.name;
+          const claimResult = await client.claimPosition(gid, firstOpenSlot.position, playerName);
+
+          if (claimResult.success && claimResult.lobby) {
+            lobbyInfo.value = claimResult.lobby;
+
+            // Check if game started (all slots filled)
+            if (claimResult.lobby.state === 'playing') {
+              playerPosition.value = firstOpenSlot.position;
+              gameId.value = gid;
+              currentScreen.value = 'game';
+              updateUrl(gid, firstOpenSlot.position);
+              return;
+            }
+          } else {
+            // Claim failed, show lobby anyway so they can try manually
+            lobbyInfo.value = lobby;
+          }
+
+          currentScreen.value = 'waiting';
+          startLobbyPolling(gid);
+        } else {
+          // No open slots - game is full
+          toast.error('This game is full. No open positions available.');
+        }
+        return;
+      }
+      // Game already started - fall through to direct join
+    } catch {
+      // No lobby info - game might be old-style without lobby
     }
 
+    // Direct join (legacy flow or game already playing)
     const stateResult = await client.getGameState(gid, 1);
 
     if (stateResult) {
@@ -365,17 +487,70 @@ async function joinGame(playerName?: string) {
   }
 }
 
+// Lobby event handlers
+async function handleClaimPosition(position: number, name: string) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.claimPosition(createdGameId.value, position, name);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+      // Save name for future games
+      setPlayerName(name);
+
+      // If game started, transition
+      if (result.lobby.state === 'playing') {
+        stopLobbyPolling();
+        playerPosition.value = position;
+        gameId.value = createdGameId.value;
+        currentScreen.value = 'game';
+        updateUrl(createdGameId.value, position);
+      }
+    } else {
+      alert(result.error || 'Failed to claim position');
+    }
+  } catch (err) {
+    console.error('Failed to claim position:', err);
+    alert('Failed to claim position');
+  }
+}
+
+async function handleUpdateLobbyName(name: string) {
+  if (!createdGameId.value) return;
+
+  try {
+    await client.updateLobbyName(createdGameId.value, name);
+    // Save name for future games
+    setPlayerName(name);
+    // Lobby update will come via polling
+  } catch (err) {
+    console.error('Failed to update name:', err);
+  }
+}
+
+function handleLobbyCancel() {
+  stopLobbyPolling();
+  lobbyInfo.value = null;
+  createdGameId.value = null;
+  isCreator.value = false;
+  currentScreen.value = 'lobby';
+}
+
 function copyGameCode() {
   if (createdGameId.value) {
     navigator.clipboard.writeText(createdGameId.value);
-    alert('Game code copied!');
+    toast.success('Copied!');
   }
 }
 
 function leaveGame() {
+  stopLobbyPolling();
   gameId.value = null;
   createdGameId.value = null;
   joinGameId.value = '';
+  lobbyInfo.value = null;
+  isCreator.value = false;
   currentScreen.value = 'lobby';
   clearUrl();
 }
@@ -453,10 +628,14 @@ defineExpose({
 
     <!-- WAITING SCREEN -->
     <WaitingRoom
-      v-if="currentScreen === 'waiting'"
+      v-if="currentScreen === 'waiting' && lobbyInfo"
       :game-id="createdGameId || ''"
-      @start="() => { gameId = createdGameId; currentScreen = 'game'; if (createdGameId) updateUrl(createdGameId, 0); }"
-      @cancel="leaveGame"
+      :lobby="lobbyInfo"
+      :player-id="playerId"
+      :is-creator="isCreator"
+      @claim-position="handleClaimPosition"
+      @update-name="handleUpdateLobbyName"
+      @cancel="handleLobbyCancel"
     />
 
     <!-- GAME SCREEN -->
@@ -573,6 +752,9 @@ defineExpose({
 
     <!-- Zoom preview overlay (Alt+hover to enlarge cards) -->
     <ZoomPreviewOverlay :preview-state="previewState" />
+
+    <!-- Toast notifications -->
+    <Toast />
   </div>
 </template>
 

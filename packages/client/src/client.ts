@@ -14,6 +14,8 @@ import type {
   CreateGameRequest,
   CreateGameResponse,
   GameConnectionConfig,
+  LobbyInfo,
+  ClaimPositionResponse,
 } from './types.js';
 
 export class MeepleClient {
@@ -306,6 +308,59 @@ export class MeepleClient {
       flowState: data.flowState,
       state: data.state,
     };
+  }
+
+  // ============================================
+  // Lobby API
+  // ============================================
+
+  /**
+   * Get lobby state for a game.
+   */
+  async getLobby(gameId: string): Promise<LobbyInfo> {
+    const response = await this.fetch(`/games/${gameId}/lobby`);
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get lobby');
+    }
+
+    return data.lobby;
+  }
+
+  /**
+   * Claim a position in the game lobby.
+   */
+  async claimPosition(gameId: string, position: number, name: string): Promise<ClaimPositionResponse> {
+    const response = await this.fetch(`/games/${gameId}/claim-position`, {
+      method: 'POST',
+      body: JSON.stringify({
+        position,
+        name,
+        playerId: this.playerId,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Update player name in lobby.
+   */
+  async updateLobbyName(gameId: string, name: string): Promise<void> {
+    const response = await this.fetch(`/games/${gameId}/update-name`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        name,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to update name');
+    }
   }
 
   /**
