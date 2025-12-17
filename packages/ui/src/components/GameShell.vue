@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, watchEffect, onMounted, provide } from 'vue';
-import { MeepleClient, audioService, type LobbyInfo } from '@boardsmith/client';
+import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, provide } from 'vue';
+import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '@boardsmith/client';
 import { useGame } from '@boardsmith/client/vue';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import DebugPanel from './DebugPanel.vue';
@@ -17,14 +17,37 @@ import { useToast } from '../composables/useToast';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 
 // Generate or retrieve persistent player ID
+// Session-specific IDs (for same-browser scenarios) are stored in sessionStorage
+// and take precedence over localStorage
 function getPlayerId(): string {
-  const KEY = 'boardsmith_player_id';
-  let id = localStorage.getItem(KEY);
+  const SESSION_KEY = 'boardsmith_session_player_id';
+  const LOCAL_KEY = 'boardsmith_player_id';
+
+  // Check sessionStorage first (for same-browser joiner scenarios)
+  const sessionId = sessionStorage.getItem(SESSION_KEY);
+  if (sessionId) {
+    return sessionId;
+  }
+
+  // Fall back to localStorage
+  let id = localStorage.getItem(LOCAL_KEY);
   if (!id) {
     id = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    localStorage.setItem(KEY, id);
+    localStorage.setItem(LOCAL_KEY, id);
   }
   return id;
+}
+
+// Save a session-specific player ID (survives refresh but not browser close)
+function setSessionPlayerId(id: string): void {
+  const SESSION_KEY = 'boardsmith_session_player_id';
+  sessionStorage.setItem(SESSION_KEY, id);
+}
+
+// Clear session-specific player ID (when leaving lobby)
+function clearSessionPlayerId(): void {
+  const SESSION_KEY = 'boardsmith_session_player_id';
+  sessionStorage.removeItem(SESSION_KEY);
 }
 
 // Get or set persistent player name
@@ -72,7 +95,10 @@ const joinGameId = ref('');
 const createdGameId = ref<string | null>(null);
 const lobbyInfo = ref<LobbyInfo | null>(null);
 const isCreator = ref(false);
-const lobbyPollInterval = ref<number | null>(null);
+const lobbyConnection = ref<GameConnection | null>(null);
+
+// Game definition (for playerOptions)
+const gamePlayerOptions = ref<Record<string, unknown> | undefined>(undefined);
 
 // Game state
 const gameId = ref<string | null>(null);
@@ -252,6 +278,21 @@ const { previewState } = useZoomPreview();
 // Toast notifications
 const toast = useToast();
 
+// Helper to fetch playerOptions from game definitions
+async function fetchPlayerOptions(gameType: string): Promise<Record<string, unknown> | undefined> {
+  try {
+    const response = await fetch(`${props.apiUrl}/games/definitions`);
+    const data = await response.json();
+    if (data.success && data.definitions) {
+      const definition = data.definitions.find((d: { gameType: string }) => d.gameType === gameType);
+      return definition?.playerOptions;
+    }
+  } catch (err) {
+    console.error('Failed to fetch game definitions:', err);
+  }
+  return undefined;
+}
+
 // Provide context to child components
 provide('gameState', state);
 provide('gameView', gameView);
@@ -265,25 +306,85 @@ provide('actionArgs', actionArgs);
 provide('boardInteraction', boardInteraction);
 provide('timeTravelDiff', timeTravelDiff);
 
-// URL routing - check for game ID in URL on mount
-onMounted(() => {
+// URL routing - check for game ID or lobby ID in URL on mount
+onMounted(async () => {
   const path = window.location.pathname;
-  const match = path.match(/^\/game\/([a-z0-9]+)(?:\/(\d))?$/);
-  if (match) {
-    const urlGameId = match[1];
-    const urlPosition = match[2] ? parseInt(match[2], 10) : 0;
+
+  // Check for game URL: /game/:gameId/:position?
+  const gameMatch = path.match(/^\/game\/([a-z0-9]+)(?:\/(\d))?$/);
+  if (gameMatch) {
+    const urlGameId = gameMatch[1];
+    const urlPosition = gameMatch[2] ? parseInt(gameMatch[2], 10) : 0;
 
     playerPosition.value = urlPosition;
     setTimeout(() => {
       gameId.value = urlGameId;
       currentScreen.value = 'game';
     }, 50);
+    return;
   }
+
+  // Check for lobby URL: /lobby/:gameId
+  const lobbyMatch = path.match(/^\/lobby\/([a-z0-9]+)$/);
+  if (lobbyMatch) {
+    const urlGameId = lobbyMatch[1];
+    createdGameId.value = urlGameId;
+
+    try {
+      // Fetch lobby info to determine our role
+      const lobby = await client.getLobby(urlGameId);
+
+      if (lobby.state === 'playing') {
+        // Game already started - find our position and go to game
+        const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
+        if (mySlot) {
+          playerPosition.value = mySlot.position;
+          gameId.value = urlGameId;
+          currentScreen.value = 'game';
+          updateUrl(urlGameId, mySlot.position);
+        } else {
+          // Not in this game - go to lobby screen
+          currentScreen.value = 'lobby';
+          clearUrl();
+        }
+        return;
+      }
+
+      // Check if we're the creator
+      isCreator.value = lobby.creatorId === playerId.value;
+
+      // Check if we have a claimed slot
+      const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
+      if (mySlot) {
+        playerPosition.value = mySlot.position;
+      }
+
+      lobbyInfo.value = lobby;
+      // Fetch playerOptions for the lobby
+      gamePlayerOptions.value = await fetchPlayerOptions(lobby.gameType);
+      currentScreen.value = 'waiting';
+      connectToLobby(urlGameId);
+    } catch (err) {
+      console.error('Failed to load lobby:', err);
+      currentScreen.value = 'lobby';
+      clearUrl();
+    }
+  }
+});
+
+// Cleanup on unmount
+onUnmounted(() => {
+  disconnectFromLobby();
 });
 
 // Update URL when entering a game
 function updateUrl(gid: string, position: number) {
   window.history.pushState({ gameId: gid, position }, '', `/game/${gid}/${position}`);
+}
+
+// Update URL when entering a lobby
+function updateLobbyUrl(gid: string) {
+  window.history.pushState({ gameId: gid, lobby: true }, '', `/lobby/${gid}`);
 }
 
 // Clear URL when leaving game
@@ -356,8 +457,11 @@ async function createGame(config?: LobbyConfig) {
       if (needsLobby && result.lobby) {
         // Multi-human game - go to waiting room
         lobbyInfo.value = result.lobby;
+        // Fetch playerOptions for the lobby
+        gamePlayerOptions.value = await fetchPlayerOptions(props.gameType);
         currentScreen.value = 'waiting';
-        startLobbyPolling(result.gameId);
+        updateLobbyUrl(result.gameId);
+        connectToLobby(result.gameId);
       } else {
         // Solo or all-AI game - go directly to game
         gameId.value = result.gameId;
@@ -371,38 +475,53 @@ async function createGame(config?: LobbyConfig) {
   }
 }
 
-// Lobby polling functions
-function startLobbyPolling(gid: string) {
-  // Poll lobby state every 2 seconds
-  lobbyPollInterval.value = window.setInterval(async () => {
-    try {
-      const lobby = await client.getLobby(gid);
-      lobbyInfo.value = lobby;
+// Lobby WebSocket connection functions
+function connectToLobby(gid: string) {
+  // Disconnect any existing connection
+  disconnectFromLobby();
 
-      // If game has started (all positions filled), transition to game
-      if (lobby.state === 'playing') {
-        stopLobbyPolling();
+  // Create a new connection for the lobby
+  const connection = new GameConnection(props.apiUrl, {
+    gameId: gid,
+    playerId: playerId.value,
+    playerPosition: playerPosition.value,
+    autoReconnect: true,
+  });
 
-        // Find my position from the lobby slots
-        const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
-        if (mySlot) {
-          playerPosition.value = mySlot.position;
-        }
+  // Listen for lobby updates
+  connection.onLobbyChange((lobby) => {
+    lobbyInfo.value = lobby;
 
-        gameId.value = gid;
-        currentScreen.value = 'game';
-        updateUrl(gid, playerPosition.value);
+    // If game has started, transition to game
+    if (lobby.state === 'playing') {
+      disconnectFromLobby();
+
+      // Find my position from the lobby slots
+      const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
+      if (mySlot) {
+        playerPosition.value = mySlot.position;
       }
-    } catch (err) {
-      console.error('Failed to poll lobby:', err);
+
+      gameId.value = gid;
+      currentScreen.value = 'game';
+      updateUrl(gid, playerPosition.value);
     }
-  }, 2000);
+  });
+
+  // Handle connection errors
+  connection.onError((err) => {
+    console.error('Lobby connection error:', err);
+  });
+
+  // Connect
+  connection.connect();
+  lobbyConnection.value = connection;
 }
 
-function stopLobbyPolling() {
-  if (lobbyPollInterval.value !== null) {
-    clearInterval(lobbyPollInterval.value);
-    lobbyPollInterval.value = null;
+function disconnectFromLobby() {
+  if (lobbyConnection.value) {
+    lobbyConnection.value.disconnect();
+    lobbyConnection.value = null;
   }
 }
 
@@ -426,11 +545,12 @@ async function joinGame() {
         // If so, generate a new playerId for this joiner session
         const existingSlot = lobby.slots.find(s => s.playerId === playerId.value);
         if (existingSlot) {
-          // Generate a new unique playerId for this joiner
+          // Generate a new unique playerId for this joiner (same-browser scenario)
           const newPlayerId = Math.random().toString(36).substring(2) + Date.now().toString(36);
           playerId.value = newPlayerId;
           client.setPlayerId(newPlayerId);
-          // Note: we don't update localStorage - this ID is for this session only
+          // Save to sessionStorage so it survives refresh but not browser close
+          setSessionPlayerId(newPlayerId);
         }
 
         // Find the first open slot
@@ -458,8 +578,11 @@ async function joinGame() {
             lobbyInfo.value = lobby;
           }
 
+          // Fetch playerOptions for the lobby
+          gamePlayerOptions.value = await fetchPlayerOptions(lobby.gameType);
           currentScreen.value = 'waiting';
-          startLobbyPolling(gid);
+          updateLobbyUrl(gid);
+          connectToLobby(gid);
         } else {
           // No open slots - game is full
           toast.error('This game is full. No open positions available.');
@@ -501,7 +624,7 @@ async function handleClaimPosition(position: number, name: string) {
 
       // If game started, transition
       if (result.lobby.state === 'playing') {
-        stopLobbyPolling();
+        disconnectFromLobby();
         playerPosition.value = position;
         gameId.value = createdGameId.value;
         currentScreen.value = 'game';
@@ -529,12 +652,161 @@ async function handleUpdateLobbyName(name: string) {
   }
 }
 
-function handleLobbyCancel() {
-  stopLobbyPolling();
+async function handleSetReady(ready: boolean) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.setReady(createdGameId.value, ready);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+
+      // If game started (all ready), transition to game
+      if (result.lobby.state === 'playing') {
+        disconnectFromLobby();
+
+        // Find my position from the lobby slots
+        const mySlot = result.lobby.slots.find(s => s.playerId === playerId.value);
+        if (mySlot) {
+          playerPosition.value = mySlot.position;
+        }
+
+        gameId.value = createdGameId.value;
+        currentScreen.value = 'game';
+        updateUrl(createdGameId.value, playerPosition.value);
+      }
+    } else {
+      console.error('Failed to set ready:', result.error);
+    }
+  } catch (err) {
+    console.error('Failed to set ready:', err);
+  }
+}
+
+async function handleAddSlot() {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.addSlot(createdGameId.value);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+    } else {
+      toast.error(result.error || 'Failed to add slot');
+    }
+  } catch (err) {
+    console.error('Failed to add slot:', err);
+    toast.error('Failed to add slot');
+  }
+}
+
+async function handleRemoveSlot(position: number) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.removeSlot(createdGameId.value, position);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+    } else {
+      toast.error(result.error || 'Failed to remove slot');
+    }
+  } catch (err) {
+    console.error('Failed to remove slot:', err);
+    toast.error('Failed to remove slot');
+  }
+}
+
+async function handleSetSlotAI(position: number, isAI: boolean, aiLevel?: string) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.setSlotAI(createdGameId.value, position, isAI, aiLevel);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+    } else {
+      toast.error(result.error || 'Failed to update slot');
+    }
+  } catch (err) {
+    console.error('Failed to set slot AI:', err);
+    toast.error('Failed to update slot');
+  }
+}
+
+async function handleKickPlayer(position: number) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.kickPlayer(createdGameId.value, position);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+    } else {
+      toast.error(result.error || 'Failed to kick player');
+    }
+  } catch (err) {
+    console.error('Failed to kick player:', err);
+    toast.error('Failed to kick player');
+  }
+}
+
+async function handleUpdatePlayerOptions(options: Record<string, unknown>) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.updatePlayerOptions(createdGameId.value, options);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+    } else {
+      toast.error(result.error || 'Failed to update options');
+    }
+  } catch (err) {
+    console.error('Failed to update player options:', err);
+    toast.error('Failed to update options');
+  }
+}
+
+async function handleUpdateGameOptions(options: Record<string, unknown>) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.updateGameOptions(createdGameId.value, options);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+    } else {
+      toast.error(result.error || 'Failed to update game options');
+    }
+  } catch (err) {
+    console.error('Failed to update game options:', err);
+    toast.error('Failed to update game options');
+  }
+}
+
+async function handleLobbyCancel() {
+  // For non-hosts, release our slot before leaving
+  if (!isCreator.value && createdGameId.value) {
+    console.log('[Leave] Calling leavePosition for game:', createdGameId.value, 'playerId:', playerId.value);
+    try {
+      const result = await client.leavePosition(createdGameId.value);
+      console.log('[Leave] leavePosition result:', result);
+    } catch (err) {
+      console.error('[Leave] Failed to leave position:', err);
+      // Continue with cleanup even if leave fails
+    }
+  } else {
+    console.log('[Leave] Skipping leavePosition - isCreator:', isCreator.value, 'createdGameId:', createdGameId.value);
+  }
+
+  disconnectFromLobby();
+  clearSessionPlayerId();
   lobbyInfo.value = null;
   createdGameId.value = null;
   isCreator.value = false;
   currentScreen.value = 'lobby';
+  clearUrl();
 }
 
 function copyGameCode() {
@@ -545,7 +817,8 @@ function copyGameCode() {
 }
 
 function leaveGame() {
-  stopLobbyPolling();
+  disconnectFromLobby();
+  clearSessionPlayerId();
   gameId.value = null;
   createdGameId.value = null;
   joinGameId.value = '';
@@ -633,8 +906,16 @@ defineExpose({
       :lobby="lobbyInfo"
       :player-id="playerId"
       :is-creator="isCreator"
+      :player-options="gamePlayerOptions"
       @claim-position="handleClaimPosition"
       @update-name="handleUpdateLobbyName"
+      @set-ready="handleSetReady"
+      @add-slot="handleAddSlot"
+      @remove-slot="handleRemoveSlot"
+      @set-slot-ai="handleSetSlotAI"
+      @kick-player="handleKickPlayer"
+      @update-player-options="handleUpdatePlayerOptions"
+      @update-game-options="handleUpdateGameOptions"
       @cancel="handleLobbyCancel"
     />
 

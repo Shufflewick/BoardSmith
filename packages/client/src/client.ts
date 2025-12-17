@@ -16,6 +16,7 @@ import type {
   GameConnectionConfig,
   LobbyInfo,
   ClaimPositionResponse,
+  LobbyResponse,
 } from './types.js';
 
 export class MeepleClient {
@@ -361,6 +362,126 @@ export class MeepleClient {
     if (!data.success) {
       throw new Error(data.error || 'Failed to update name');
     }
+  }
+
+  /**
+   * Set ready state in lobby.
+   */
+  async setReady(gameId: string, ready: boolean): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/set-ready`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        ready,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Add a player slot (host only).
+   */
+  async addSlot(gameId: string): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/add-slot`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Remove a player slot (host only).
+   */
+  async removeSlot(gameId: string, position: number): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/remove-slot`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        position,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Toggle slot between open and AI (host only).
+   */
+  async setSlotAI(gameId: string, position: number, isAI: boolean, aiLevel?: string): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/set-slot-ai`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        position,
+        isAI,
+        aiLevel,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Leave/unclaim position in lobby (for non-hosts).
+   */
+  async leavePosition(gameId: string): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/leave-position`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Kick a player from the lobby (host only).
+   */
+  async kickPlayer(gameId: string, position: number): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/kick-player`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        position,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Update player options (color, role, etc.) in lobby.
+   */
+  async updatePlayerOptions(gameId: string, options: Record<string, unknown>): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/player-options`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        options,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Update game options (host only).
+   */
+  async updateGameOptions(gameId: string, options: Record<string, unknown>): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/game-options`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        options,
+      }),
+    });
+
+    return await response.json();
   }
 
   /**

@@ -7,11 +7,13 @@ import type {
   GameState,
   ConnectionStatus,
   StateChangeCallback,
+  LobbyChangeCallback,
   ErrorCallback,
   ConnectionCallback,
   WebSocketOutgoingMessage,
   WebSocketIncomingMessage,
   ActionResult,
+  LobbyInfo,
 } from './types.js';
 
 export class GameConnection {
@@ -28,8 +30,12 @@ export class GameConnection {
 
   // Callbacks
   private stateCallbacks: Set<StateChangeCallback> = new Set();
+  private lobbyCallbacks: Set<LobbyChangeCallback> = new Set();
   private errorCallbacks: Set<ErrorCallback> = new Set();
   private connectionCallbacks: Set<ConnectionCallback> = new Set();
+
+  // Last lobby state
+  private lastLobby: LobbyInfo | null = null;
 
   // Pending action promises
   private pendingActions: Map<
@@ -149,6 +155,21 @@ export class GameConnection {
     return () => this.stateCallbacks.delete(callback);
   }
 
+  onLobbyChange(callback: LobbyChangeCallback): () => void {
+    this.lobbyCallbacks.add(callback);
+
+    // Immediately call with current lobby if available
+    if (this.lastLobby) {
+      callback(this.lastLobby);
+    }
+
+    return () => this.lobbyCallbacks.delete(callback);
+  }
+
+  getLobby(): LobbyInfo | null {
+    return this.lastLobby;
+  }
+
   onError(callback: ErrorCallback): () => void {
     this.errorCallbacks.add(callback);
     return () => this.errorCallbacks.delete(callback);
@@ -230,6 +251,13 @@ export class GameConnection {
               isSpectator: message.isSpectator ?? this.config.spectator,
             };
             this.notifyStateChange();
+          }
+          break;
+
+        case 'lobby':
+          if (message.lobby) {
+            this.lastLobby = message.lobby;
+            this.notifyLobbyChange();
           }
           break;
 
@@ -367,6 +395,18 @@ export class GameConnection {
           callback(this.lastState);
         } catch (error) {
           console.error('State callback error:', error);
+        }
+      }
+    }
+  }
+
+  private notifyLobbyChange(): void {
+    if (this.lastLobby) {
+      for (const callback of this.lobbyCallbacks) {
+        try {
+          callback(this.lastLobby);
+        } catch (error) {
+          console.error('Lobby callback error:', error);
         }
       }
     }

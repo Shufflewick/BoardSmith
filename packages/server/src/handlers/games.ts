@@ -425,3 +425,239 @@ export async function handleUpdateName(
     return error(result.error ?? 'Failed to update name');
   }
 }
+
+/**
+ * POST /games/:gameId/set-ready - Set player ready state
+ */
+export async function handleSetReady(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  ready: boolean
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  const result = await session.setReady(playerId, ready);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to set ready state');
+  }
+}
+
+/**
+ * POST /games/:gameId/add-slot - Add a player slot (host only)
+ */
+export async function handleAddSlot(
+  store: GameStore,
+  gameId: string,
+  playerId: string
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  const result = await session.addSlot(playerId);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to add slot');
+  }
+}
+
+/**
+ * POST /games/:gameId/remove-slot - Remove a player slot (host only)
+ */
+export async function handleRemoveSlot(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  position: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (position === undefined || position === null) {
+    return error('Position is required');
+  }
+
+  const result = await session.removeSlot(playerId, position);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to remove slot');
+  }
+}
+
+/**
+ * POST /games/:gameId/set-slot-ai - Toggle slot between open and AI (host only)
+ */
+export async function handleSetSlotAI(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  position: number,
+  isAI: boolean,
+  aiLevel?: string
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (position === undefined || position === null) {
+    return error('Position is required');
+  }
+
+  const result = await session.setSlotAI(playerId, position, isAI, aiLevel);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to set slot AI');
+  }
+}
+
+/**
+ * POST /games/:gameId/leave-position - Leave/unclaim position in lobby (non-hosts)
+ */
+export async function handleLeavePosition(
+  store: GameStore,
+  gameId: string,
+  playerId: string
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  const result = await session.leavePosition(playerId);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to leave position');
+  }
+}
+
+/**
+ * POST /games/:gameId/kick-player - Kick a player from lobby (host only)
+ */
+export async function handleKickPlayer(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  position: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (position === undefined || position === null) {
+    return error('Position is required');
+  }
+
+  const result = await session.kickPlayer(playerId, position);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to kick player');
+  }
+}
+
+/**
+ * POST /games/:gameId/player-options - Update player's options (color, etc.)
+ */
+export async function handleUpdatePlayerOptions(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  options: Record<string, unknown>
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (!options || typeof options !== 'object') {
+    return error('Options are required');
+  }
+
+  const result = await session.updatePlayerOptions(playerId, options);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to update player options');
+  }
+}
+
+/**
+ * POST /games/:gameId/game-options - Update game options (host only)
+ */
+export async function handleUpdateGameOptions(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  options: Record<string, unknown>
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (!options || typeof options !== 'object') {
+    return error('Options are required');
+  }
+
+  const result = await session.updateGameOptions(playerId, options);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to update game options');
+  }
+}

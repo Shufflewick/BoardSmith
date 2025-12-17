@@ -55,6 +55,11 @@ export type {
   ExclusivePlayerOption,
   PlayerConfig,
   GamePreset,
+  // Game option types
+  GameOptionDefinition,
+  NumberOption,
+  SelectOption,
+  BooleanOption,
   // Lobby types
   LobbyState,
   SlotStatus,

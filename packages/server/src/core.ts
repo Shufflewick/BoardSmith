@@ -29,6 +29,14 @@ import {
   handleGetLobby,
   handleClaimPosition,
   handleUpdateName,
+  handleSetReady,
+  handleAddSlot,
+  handleRemoveSlot,
+  handleSetSlotAI,
+  handleLeavePosition,
+  handleKickPlayer,
+  handleUpdatePlayerOptions,
+  handleUpdateGameOptions,
 } from './handlers/games.js';
 import type { ClaimPositionRequest } from './types.js';
 
@@ -187,6 +195,70 @@ export class GameServerCore {
         const gameId = updateNameLobbyMatch[1];
         const { playerId, name } = body as { playerId: string; name: string };
         return await handleUpdateName(this.#store, gameId, playerId, name);
+      }
+
+      // POST /games/:gameId/set-ready - Set player ready state
+      const setReadyMatch = path.match(/^\/games\/([^/]+)\/set-ready$/);
+      if (setReadyMatch && method === 'POST') {
+        const gameId = setReadyMatch[1];
+        const { playerId, ready } = body as { playerId: string; ready: boolean };
+        return await handleSetReady(this.#store, gameId, playerId, ready);
+      }
+
+      // POST /games/:gameId/add-slot - Add a player slot (host only)
+      const addSlotMatch = path.match(/^\/games\/([^/]+)\/add-slot$/);
+      if (addSlotMatch && method === 'POST') {
+        const gameId = addSlotMatch[1];
+        const { playerId } = body as { playerId: string };
+        return await handleAddSlot(this.#store, gameId, playerId);
+      }
+
+      // POST /games/:gameId/remove-slot - Remove a player slot (host only)
+      const removeSlotMatch = path.match(/^\/games\/([^/]+)\/remove-slot$/);
+      if (removeSlotMatch && method === 'POST') {
+        const gameId = removeSlotMatch[1];
+        const { playerId, position } = body as { playerId: string; position: number };
+        return await handleRemoveSlot(this.#store, gameId, playerId, position);
+      }
+
+      // POST /games/:gameId/set-slot-ai - Toggle slot between open and AI (host only)
+      const setSlotAIMatch = path.match(/^\/games\/([^/]+)\/set-slot-ai$/);
+      if (setSlotAIMatch && method === 'POST') {
+        const gameId = setSlotAIMatch[1];
+        const { playerId, position, isAI, aiLevel } = body as { playerId: string; position: number; isAI: boolean; aiLevel?: string };
+        return await handleSetSlotAI(this.#store, gameId, playerId, position, isAI, aiLevel);
+      }
+
+      // POST /games/:gameId/leave-position - Leave/unclaim position in lobby (non-hosts)
+      const leavePositionMatch = path.match(/^\/games\/([^/]+)\/leave-position$/);
+      if (leavePositionMatch && method === 'POST') {
+        const gameId = leavePositionMatch[1];
+        const { playerId } = body as { playerId: string };
+        return await handleLeavePosition(this.#store, gameId, playerId);
+      }
+
+      // POST /games/:gameId/kick-player - Kick a player from lobby (host only)
+      const kickPlayerMatch = path.match(/^\/games\/([^/]+)\/kick-player$/);
+      if (kickPlayerMatch && method === 'POST') {
+        const gameId = kickPlayerMatch[1];
+        const { playerId, position } = body as { playerId: string; position: number };
+        return await handleKickPlayer(this.#store, gameId, playerId, position);
+      }
+
+      // POST /games/:gameId/player-options - Update player's options (color, etc.)
+      const playerOptionsMatch = path.match(/^\/games\/([^/]+)\/player-options$/);
+      if (playerOptionsMatch && method === 'POST') {
+        const gameId = playerOptionsMatch[1];
+        const { playerId, options } = body as { playerId: string; options: Record<string, unknown> };
+        return await handleUpdatePlayerOptions(this.#store, gameId, playerId, options);
+      }
+
+      // POST /games/:gameId/game-options - Update game options (host only)
+      const gameOptionsMatch = path.match(/^\/games\/([^/]+)\/game-options$/);
+      if (gameOptionsMatch && method === 'POST') {
+        const gameId = gameOptionsMatch[1];
+        const { playerId, options } = body as { playerId: string; options: Record<string, unknown> };
+        return await handleUpdateGameOptions(this.#store, gameId, playerId, options);
       }
 
       // PUT /games/:gameId/players/:position/name - Update player name
@@ -363,6 +435,161 @@ export class GameServerCore {
         const nameResult = await gameSession.updateSlotName(session.playerId, message.name);
         if (!nameResult.success) {
           session.ws.send({ type: 'error', error: nameResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'setReady':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || message.ready === undefined) {
+          session.ws.send({ type: 'error', error: 'PlayerId and ready state are required' });
+          return;
+        }
+
+        const readyResult = await gameSession.setReady(session.playerId, message.ready);
+        if (!readyResult.success) {
+          session.ws.send({ type: 'error', error: readyResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'addSlot':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId) {
+          session.ws.send({ type: 'error', error: 'PlayerId is required' });
+          return;
+        }
+
+        const addSlotResult = await gameSession.addSlot(session.playerId);
+        if (!addSlotResult.success) {
+          session.ws.send({ type: 'error', error: addSlotResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'removeSlot':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || message.position === undefined) {
+          session.ws.send({ type: 'error', error: 'PlayerId and position are required' });
+          return;
+        }
+
+        const removeSlotResult = await gameSession.removeSlot(session.playerId, message.position);
+        if (!removeSlotResult.success) {
+          session.ws.send({ type: 'error', error: removeSlotResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'setSlotAI':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || message.position === undefined || message.isAI === undefined) {
+          session.ws.send({ type: 'error', error: 'PlayerId, position, and isAI are required' });
+          return;
+        }
+
+        const setSlotAIResult = await gameSession.setSlotAI(
+          session.playerId,
+          message.position,
+          message.isAI,
+          message.aiLevel
+        );
+        if (!setSlotAIResult.success) {
+          session.ws.send({ type: 'error', error: setSlotAIResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'leavePosition':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId) {
+          session.ws.send({ type: 'error', error: 'PlayerId is required' });
+          return;
+        }
+
+        const leavePositionResult = await gameSession.leavePosition(session.playerId);
+        if (!leavePositionResult.success) {
+          session.ws.send({ type: 'error', error: leavePositionResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'kickPlayer':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || message.position === undefined) {
+          session.ws.send({ type: 'error', error: 'PlayerId and position are required' });
+          return;
+        }
+
+        const kickPlayerResult = await gameSession.kickPlayer(session.playerId, message.position);
+        if (!kickPlayerResult.success) {
+          session.ws.send({ type: 'error', error: kickPlayerResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'updatePlayerOptions':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || !message.playerOptions) {
+          session.ws.send({ type: 'error', error: 'PlayerId and playerOptions are required' });
+          return;
+        }
+
+        const updateOptionsResult = await gameSession.updatePlayerOptions(
+          session.playerId,
+          message.playerOptions
+        );
+        if (!updateOptionsResult.success) {
+          session.ws.send({ type: 'error', error: updateOptionsResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'updateGameOptions':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || !message.gameOptions) {
+          session.ws.send({ type: 'error', error: 'PlayerId and gameOptions are required' });
+          return;
+        }
+
+        const updateGameOptionsResult = await gameSession.updateGameOptions(
+          session.playerId,
+          message.gameOptions
+        );
+        if (!updateGameOptionsResult.success) {
+          session.ws.send({ type: 'error', error: updateGameOptionsResult.error });
         }
         // Success: broadcast happens automatically
         break;

@@ -182,6 +182,13 @@ export interface StoredGameState {
   lobbySlots?: LobbySlot[];
   /** Creator's player ID */
   creatorId?: string;
+  /** Min/max players for this game type (for lobby slot management) */
+  minPlayers?: number;
+  maxPlayers?: number;
+  /** Player options definitions (for initializing defaults when claiming) */
+  playerOptionsDefinitions?: Record<string, PlayerOptionDefinition>;
+  /** Game options definitions (for host to modify in lobby) */
+  gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
 }
 
 /**
@@ -317,6 +324,10 @@ export interface LobbySlot {
   aiLevel?: string;
   /** Custom player options (color, role, etc.) */
   playerOptions?: Record<string, unknown>;
+  /** Whether this player is ready to start (AI slots are always ready) */
+  ready: boolean;
+  /** Whether this player is currently connected via WebSocket (for humans) */
+  connected?: boolean;
 }
 
 /**
@@ -333,12 +344,18 @@ export interface LobbyInfo {
   slots: LobbySlot[];
   /** Game options that were configured */
   gameOptions?: Record<string, unknown>;
+  /** Game options definitions (for host to modify) */
+  gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
   /** Creator's player ID */
   creatorId?: string;
   /** Number of human slots still open */
   openSlots: number;
-  /** Whether all slots are filled (ready to start) */
+  /** Whether all slots are filled AND all humans are ready */
   isReady: boolean;
+  /** Min players for this game type */
+  minPlayers?: number;
+  /** Max players for this game type */
+  maxPlayers?: number;
 }
 
 // ============================================
@@ -431,13 +448,23 @@ export interface ActionRequest {
  * WebSocket message from client
  */
 export interface WebSocketMessage {
-  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimPosition' | 'updateName';
+  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimPosition' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leavePosition' | 'kickPlayer' | 'updatePlayerOptions' | 'updateGameOptions';
   action?: string;
   args?: Record<string, unknown>;
-  /** For claimPosition: which position to claim */
+  /** For claimPosition/kickPlayer: which position to target */
   position?: number;
   /** For updateName/claimPosition: player's name */
   name?: string;
+  /** For setReady: ready state */
+  ready?: boolean;
+  /** For setSlotAI: whether slot should be AI */
+  isAI?: boolean;
+  /** For setSlotAI: AI difficulty level */
+  aiLevel?: string;
+  /** For updatePlayerOptions: the options to set */
+  playerOptions?: Record<string, unknown>;
+  /** For updateGameOptions: the game options to set (host only) */
+  gameOptions?: Record<string, unknown>;
 }
 
 // ============================================

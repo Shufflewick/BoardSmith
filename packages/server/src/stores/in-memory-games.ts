@@ -95,6 +95,10 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
       playerConfigs: options.playerConfigs,
       creatorId: options.creatorId,
       useLobby: options.useLobby,
+      // Pass player options definitions for initializing defaults on claim
+      playerOptionsDefinitions: definition.playerOptions,
+      // Pass game options definitions for host to modify in lobby
+      gameOptionsDefinitions: definition.gameOptions,
     });
 
     // Create and attach broadcaster

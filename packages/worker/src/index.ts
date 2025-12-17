@@ -510,6 +510,25 @@ export function createGameWorker(config: WorkerConfig) {
     return Response.json(result, { status: response.status, headers });
   }
 
+  async function handleLobbyRoute(
+    gameId: string,
+    action: string,
+    body: unknown,
+    env: Env,
+    headers: Record<string, string>
+  ): Promise<Response> {
+    const id = env.GAME_STATE.idFromName(gameId);
+    const stub = env.GAME_STATE.get(id);
+
+    const response = await stub.fetch(new Request(`http://internal/lobby/${action}`, {
+      method: action === 'GET' ? 'GET' : 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    }));
+
+    const result = await response.json();
+    return Response.json(result, { status: response.status, headers });
+  }
+
   /**
    * Game creation callback for matchmaking - creates game in Durable Object
    */
@@ -612,6 +631,62 @@ export function createGameWorker(config: WorkerConfig) {
         if (restartMatch && request.method === 'POST') {
           const gameId = restartMatch[1];
           return await handleRestart(gameId, env, corsHeaders);
+        }
+
+        // Lobby routes
+        const lobbyMatch = path.match(/^\/games\/([^/]+)\/lobby$/);
+        if (lobbyMatch && request.method === 'GET') {
+          const gameId = lobbyMatch[1];
+          return await handleLobbyRoute(gameId, 'GET', null, env, corsHeaders);
+        }
+
+        const claimPositionMatch = path.match(/^\/games\/([^/]+)\/claim-position$/);
+        if (claimPositionMatch && request.method === 'POST') {
+          const gameId = claimPositionMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'claim-position', body, env, corsHeaders);
+        }
+
+        const updateNameMatch = path.match(/^\/games\/([^/]+)\/update-name$/);
+        if (updateNameMatch && request.method === 'POST') {
+          const gameId = updateNameMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'update-name', body, env, corsHeaders);
+        }
+
+        const setReadyMatch = path.match(/^\/games\/([^/]+)\/set-ready$/);
+        if (setReadyMatch && request.method === 'POST') {
+          const gameId = setReadyMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'set-ready', body, env, corsHeaders);
+        }
+
+        const addSlotMatch = path.match(/^\/games\/([^/]+)\/add-slot$/);
+        if (addSlotMatch && request.method === 'POST') {
+          const gameId = addSlotMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'add-slot', body, env, corsHeaders);
+        }
+
+        const removeSlotMatch = path.match(/^\/games\/([^/]+)\/remove-slot$/);
+        if (removeSlotMatch && request.method === 'POST') {
+          const gameId = removeSlotMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'remove-slot', body, env, corsHeaders);
+        }
+
+        const setSlotAIMatch = path.match(/^\/games\/([^/]+)\/set-slot-ai$/);
+        if (setSlotAIMatch && request.method === 'POST') {
+          const gameId = setSlotAIMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'set-slot-ai', body, env, corsHeaders);
+        }
+
+        const leavePositionMatch = path.match(/^\/games\/([^/]+)\/leave-position$/);
+        if (leavePositionMatch && request.method === 'POST') {
+          const gameId = leavePositionMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'leave-position', body, env, corsHeaders);
         }
 
         // Matchmaking routes - use shared handlers from @boardsmith/server
@@ -752,6 +827,13 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
           return await this.#handleRestart();
         }
 
+        // Lobby routes
+        const lobbyMatch = path.match(/^\/lobby\/(.+)$/);
+        if (lobbyMatch) {
+          const action = lobbyMatch[1];
+          return await this.#handleLobbyAction(action, request);
+        }
+
         return Response.json({ success: false, error: 'Not found' }, { status: 404 });
       } catch (error) {
         console.error('Durable Object error:', error);
@@ -774,10 +856,16 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
       await this.#ensureLoaded();
 
-      // Check if playerId maps to a player position
+      // Check if playerId maps to a player position (from lobby slots or playerIds)
       if (playerId && this.#gameSession) {
         const storedState = this.#gameSession.storedState;
-        if (storedState.playerIds) {
+
+        // First check lobby slots
+        const lobbyPosition = this.#gameSession.getPositionForPlayer(playerId);
+        if (lobbyPosition !== undefined) {
+          playerPosition = lobbyPosition;
+        } else if (storedState.playerIds) {
+          // Fallback to playerIds array
           const foundPosition = storedState.playerIds.indexOf(playerId);
           if (foundPosition >= 0) {
             playerPosition = foundPosition;
@@ -795,18 +883,34 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
       (server as any).serializeAttachment?.(sessionData);
       this.#sessions.set(server, sessionData);
 
-      // Send initial state
-      if (this.#gameSession) {
-        const state = this.#gameSession.getState(isSpectator ? 0 : playerPosition);
-        const flowState = this.#gameSession.getFlowState();
+      // Mark player as connected in lobby
+      if (playerId && this.#gameSession) {
+        await this.#gameSession.setPlayerConnected(playerId, true);
+      }
 
-        server.send(JSON.stringify({
-          type: 'state',
-          flowState,
-          state: state.state,
-          playerPosition,
-          isSpectator,
-        }));
+      // Send initial state or lobby info
+      if (this.#gameSession) {
+        const lobbyInfo = this.#gameSession.getLobbyInfo();
+
+        // If in lobby waiting state, send lobby info
+        if (lobbyInfo && lobbyInfo.state === 'waiting') {
+          server.send(JSON.stringify({
+            type: 'lobby',
+            lobby: lobbyInfo,
+          }));
+        } else {
+          // Send game state
+          const state = this.#gameSession.getState(isSpectator ? 0 : playerPosition);
+          const flowState = this.#gameSession.getFlowState();
+
+          server.send(JSON.stringify({
+            type: 'state',
+            flowState,
+            state: state.state,
+            playerPosition,
+            isSpectator,
+          }));
+        }
       }
 
       return new Response(null, { status: 101, webSocket: client });
@@ -881,12 +985,24 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
     }
 
     async webSocketClose(ws: WebSocket): Promise<void> {
+      const session = this.#sessions.get(ws);
       this.#sessions.delete(ws);
+
+      // Mark player as disconnected in lobby
+      if (session?.playerId && this.#gameSession) {
+        await this.#gameSession.setPlayerConnected(session.playerId, false);
+      }
     }
 
     async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
       console.error('WebSocket error:', error);
+      const session = this.#sessions.get(ws);
       this.#sessions.delete(ws);
+
+      // Mark player as disconnected in lobby
+      if (session?.playerId && this.#gameSession) {
+        await this.#gameSession.setPlayerConnected(session.playerId, false);
+      }
     }
 
     async #handleCreate(request: Request): Promise<Response> {
@@ -1135,6 +1251,84 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         flowState: state.flowState,
         state: state.state,
       });
+    }
+
+    async #handleLobbyAction(action: string, request: Request): Promise<Response> {
+      await this.#ensureLoaded();
+
+      if (!this.#gameSession) {
+        return Response.json(
+          { success: false, error: 'Game not found' },
+          { status: 404 }
+        );
+      }
+
+      // GET lobby info
+      if (action === 'GET') {
+        const lobbyInfo = this.#gameSession.getLobbyInfo();
+        if (!lobbyInfo) {
+          return Response.json(
+            { success: false, error: 'Game does not have a lobby' },
+            { status: 400 }
+          );
+        }
+        return Response.json(lobbyInfo);
+      }
+
+      // All other actions need a body
+      const body = await request.json() as Record<string, unknown>;
+
+      switch (action) {
+        case 'claim-position': {
+          const { position, name, playerId } = body as { position: number; name: string; playerId: string };
+          const result = await this.#gameSession.claimPosition(position, playerId, name);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        case 'update-name': {
+          const { playerId, name } = body as { playerId: string; name: string };
+          const result = await this.#gameSession.updateSlotName(playerId, name);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        case 'set-ready': {
+          const { playerId, ready } = body as { playerId: string; ready: boolean };
+          const result = await this.#gameSession.setReady(playerId, ready);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        case 'add-slot': {
+          const { playerId } = body as { playerId: string };
+          const result = await this.#gameSession.addSlot(playerId);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        case 'remove-slot': {
+          const { playerId, position } = body as { playerId: string; position: number };
+          const result = await this.#gameSession.removeSlot(playerId, position);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        case 'set-slot-ai': {
+          const { playerId, position, isAI, aiLevel } = body as { playerId: string; position: number; isAI: boolean; aiLevel?: string };
+          const result = await this.#gameSession.setSlotAI(playerId, position, isAI, aiLevel);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        case 'leave-position': {
+          const { playerId } = body as { playerId: string };
+          console.log('[DO] leave-position called with playerId:', playerId);
+          const result = await this.#gameSession.leavePosition(playerId);
+          console.log('[DO] leave-position result:', result);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        default:
+          return Response.json(
+            { success: false, error: `Unknown lobby action: ${action}` },
+            { status: 400 }
+          );
+      }
     }
 
     async #ensureLoaded(): Promise<void> {

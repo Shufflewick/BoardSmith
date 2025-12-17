@@ -25,6 +25,7 @@ import {
 
 interface WsSession extends SessionInfo {
   ws: WebSocket;
+  playerId?: string;
 }
 
 class WsBroadcastAdapter implements BroadcastAdapter<WsSession> {
@@ -238,6 +239,7 @@ export class LocalServer {
     const playerParam = url.searchParams.get('player');
     const playerPosition = playerParam ? parseInt(playerParam, 10) : 0;
     const isSpectator = url.searchParams.get('spectator') === 'true';
+    const playerId = url.searchParams.get('playerId') ?? undefined;
 
     // Get the game's broadcaster
     const broadcaster = this.#store.getBroadcaster(gameId);
@@ -252,7 +254,16 @@ export class LocalServer {
     (broadcaster as WsBroadcastAdapter).addSession(ws, {
       playerPosition,
       isSpectator,
+      playerId,
     });
+
+    // Mark player as connected in lobby
+    if (playerId) {
+      const gameSession = await this.#store.getGame(gameId);
+      if (gameSession) {
+        await gameSession.setPlayerConnected(playerId, true);
+      }
+    }
 
     // Send initial state
     const initialState = await this.#core.getWebSocketInitialState(gameId, playerPosition, isSpectator);
@@ -281,6 +292,7 @@ export class LocalServer {
             ws: wsAdapter,
             playerPosition,
             isSpectator,
+            playerId,
           },
           gameId,
           message
@@ -291,8 +303,16 @@ export class LocalServer {
       }
     });
 
-    ws.on('close', () => {
+    ws.on('close', async () => {
       (broadcaster as WsBroadcastAdapter).removeSession(ws);
+
+      // Mark player as disconnected in lobby (triggers timeout for auto-kick)
+      if (playerId) {
+        const gameSession = await this.#store.getGame(gameId);
+        if (gameSession) {
+          await gameSession.setPlayerConnected(playerId, false);
+        }
+      }
     });
   }
 }

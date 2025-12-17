@@ -176,6 +176,7 @@ export interface ActionResult {
 // ============================================
 
 export type StateChangeCallback = (state: GameState) => void;
+export type LobbyChangeCallback = (lobby: LobbyInfo) => void;
 export type ErrorCallback = (error: Error) => void;
 export type ConnectionCallback = (status: ConnectionStatus) => void;
 
@@ -190,13 +191,14 @@ export interface WebSocketOutgoingMessage {
 }
 
 export interface WebSocketIncomingMessage {
-  type: 'state' | 'restart' | 'error' | 'pong';
+  type: 'state' | 'restart' | 'error' | 'pong' | 'lobby';
   flowState?: FlowState;
   state?: PlayerState;
   playerPosition?: number;
   isSpectator?: boolean;
   error?: string;
   timestamp?: number;
+  lobby?: LobbyInfo;
 }
 
 // ============================================
@@ -267,6 +269,10 @@ export interface LobbySlot {
   aiLevel?: string;
   /** Custom player options (color, role, etc.) */
   playerOptions?: Record<string, unknown>;
+  /** Whether this player is ready to start (AI slots are always ready) */
+  ready: boolean;
+  /** Whether this player is currently connected via WebSocket (for humans) */
+  connected?: boolean;
 }
 
 /** Full lobby information */
@@ -285,8 +291,12 @@ export interface LobbyInfo {
   creatorId?: string;
   /** Number of human slots still open */
   openSlots: number;
-  /** Whether all slots are filled (ready to start) */
+  /** Whether all slots are filled AND all humans are ready */
   isReady: boolean;
+  /** Min players for this game type */
+  minPlayers?: number;
+  /** Max players for this game type */
+  maxPlayers?: number;
 }
 
 /** Request to claim a position in the lobby */
@@ -302,4 +312,48 @@ export interface ClaimPositionResponse {
   error?: string;
   lobby?: LobbyInfo;
   position?: number;
+}
+
+/** Generic lobby response */
+export interface LobbyResponse {
+  success: boolean;
+  error?: string;
+  lobby?: LobbyInfo;
+}
+
+/** Request to set ready state */
+export interface SetReadyRequest {
+  playerId: string;
+  ready: boolean;
+}
+
+/** Request to add a player slot (host only) */
+export interface AddSlotRequest {
+  playerId: string;
+}
+
+/** Request to remove a player slot (host only) */
+export interface RemoveSlotRequest {
+  playerId: string;
+  position: number;
+}
+
+/** Request to set a slot to AI or open (host only) */
+export interface SetSlotAIRequest {
+  playerId: string;
+  position: number;
+  isAI: boolean;
+  aiLevel?: string;
+}
+
+/** Request to update game options (host only) */
+export interface UpdateGameOptionsRequest {
+  playerId: string;
+  gameOptions: Record<string, unknown>;
+}
+
+/** Request to update player options */
+export interface UpdatePlayerOptionsRequest {
+  playerId: string;
+  playerOptions: Record<string, unknown>;
 }

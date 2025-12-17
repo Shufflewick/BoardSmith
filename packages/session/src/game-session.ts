@@ -18,6 +18,8 @@ import type {
   LobbyInfo,
   LobbyUpdate,
   PlayerConfig,
+  PlayerOptionDefinition,
+  GameOptionDefinition,
 } from './types.js';
 import { buildPlayerState, computeUndoInfo } from './utils.js';
 import { AIController } from './ai-controller.js';
@@ -48,6 +50,10 @@ export interface GameSessionOptions<G extends Game = Game> {
   creatorId?: string;
   /** Whether to use lobby flow (game waits for players to join) */
   useLobby?: boolean;
+  /** Player options definitions (for initializing defaults) */
+  playerOptionsDefinitions?: Record<string, PlayerOptionDefinition>;
+  /** Game options definitions (for host to modify in lobby) */
+  gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
 }
 
 /**
@@ -123,13 +129,18 @@ export interface ElementDiff {
  * ```
  */
 export class GameSession<G extends Game = Game, TSession extends SessionInfo = SessionInfo> {
+  /** Timeout duration before auto-kicking disconnected players (30 seconds) */
+  static readonly DISCONNECT_TIMEOUT_MS = 30000;
+
   #runner: GameRunner<G>;
   readonly #storedState: StoredGameState;
   readonly #GameClass: GameClass<G>;
   readonly #storage?: StorageAdapter;
-  readonly #aiController?: AIController<G>;
+  #aiController?: AIController<G>;  // Mutable for dynamic AI slot changes
   #broadcaster?: BroadcastAdapter<TSession>;
   #displayName?: string;
+  /** Map of playerId -> disconnect timeout handle for auto-kick */
+  #disconnectTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   private constructor(
     runner: GameRunner<G>,
@@ -169,6 +180,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       playerConfigs,
       creatorId,
       useLobby,
+      playerOptionsDefinitions,
+      gameOptionsDefinitions,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -203,8 +216,20 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           playerId: isCreator ? creatorId : undefined,
           aiLevel: isAI ? (config.aiLevel ?? 'medium') : undefined,
           playerOptions: Object.keys(playerOptions).length > 0 ? playerOptions : undefined,
+          // AI is always ready, humans start not ready
+          ready: isAI ? true : false,
         } as LobbySlot;
       });
+
+      // Initialize default player options for the host (position 0)
+      if (playerOptionsDefinitions && lobbySlots[0]?.status === 'claimed') {
+        lobbySlots[0].playerOptions = GameSession.computeDefaultPlayerOptions(
+          0,
+          playerOptionsDefinitions,
+          lobbySlots,
+          playerCount
+        );
+      }
 
       // Determine if all human slots are filled
       const openSlots = lobbySlots.filter(s => s.status === 'open').length;
@@ -224,6 +249,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       lobbyState,
       lobbySlots,
       creatorId,
+      playerOptionsDefinitions,
+      gameOptionsDefinitions,
     };
 
     runner.start();
@@ -776,15 +803,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const slots = this.#storedState.lobbySlots;
     const openSlots = slots.filter(s => s.status === 'open').length;
 
+    // All ready = no open slots AND all filled slots are ready (AI always ready)
+    const allReady = openSlots === 0 &&
+      slots.every(s => s.status === 'ai' || s.ready);
+
     return {
       state: this.#storedState.lobbyState ?? 'playing',
       gameType: this.#storedState.gameType,
       displayName: this.#displayName,
       slots,
       gameOptions: this.#storedState.gameOptions,
+      gameOptionsDefinitions: this.#storedState.gameOptionsDefinitions,
       creatorId: this.#storedState.creatorId,
       openSlots,
-      isReady: openSlots === 0,
+      isReady: allReady,
+      minPlayers: this.#storedState.minPlayers,
+      maxPlayers: this.#storedState.maxPlayers,
     };
   }
 
@@ -832,27 +866,25 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       existingSlot.status = 'open';
       existingSlot.playerId = undefined;
       existingSlot.name = `Player ${existingSlot.position + 1}`;
+      existingSlot.ready = false;
     }
 
-    // Claim the position
+    // Claim the position (starts not ready - player must explicitly ready up)
     slot.status = 'claimed';
     slot.playerId = playerId;
     slot.name = name;
+    slot.ready = false;
+
+    // Initialize player options with defaults (if definitions exist)
+    if (this.#storedState.playerOptionsDefinitions) {
+      slot.playerOptions = this.#computeDefaultPlayerOptions(position);
+    }
 
     // Update player names in stored state
     this.#storedState.playerNames[position] = name;
 
-    // Check if all positions are now filled
-    const openSlots = this.#storedState.lobbySlots.filter(s => s.status === 'open').length;
-    if (openSlots === 0) {
-      // All positions filled - start the game
-      this.#storedState.lobbyState = 'playing';
-
-      // Trigger AI if needed
-      if (this.#aiController?.hasAIPlayers()) {
-        this.#scheduleAICheck();
-      }
-    }
+    // Note: Game no longer auto-starts when slots are filled
+    // Players must use setReady() to ready up, and game starts when all are ready
 
     // Persist changes
     if (this.#storage) {
@@ -862,10 +894,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Broadcast lobby update
     this.broadcastLobby();
 
-    // If game started, also broadcast initial game state
-    if (this.#storedState.lobbyState === 'playing') {
-      this.broadcast();
-    }
+    // Note: Game doesn't auto-start from claimPosition anymore
+    // Players must use setReady() after claiming their position
 
     return { success: true, lobby: this.getLobbyInfo()! };
   }
@@ -904,6 +934,394 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
+   * Set a player's ready state
+   *
+   * @param playerId Player's unique ID
+   * @param ready Whether the player is ready
+   * @returns Result with updated lobby info
+   */
+  async setReady(
+    playerId: string,
+    ready: boolean
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
+    if (!slot) {
+      return { success: false, error: 'Player not found in lobby' };
+    }
+
+    if (slot.status === 'ai') {
+      return { success: false, error: 'Cannot change ready state for AI' };
+    }
+
+    slot.ready = ready;
+
+    // Check if all players are ready and start game
+    await this.#checkAndStartGame();
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    // If game started, also broadcast initial game state
+    const lobbyInfo = this.getLobbyInfo()!;
+    if (lobbyInfo.state === 'playing') {
+      this.broadcast();
+    }
+
+    return { success: true, lobby: lobbyInfo };
+  }
+
+  /**
+   * Add a new player slot (host only)
+   *
+   * @param playerId Must be the creator's ID
+   * @returns Result with updated lobby info
+   */
+  async addSlot(
+    playerId: string
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    if (playerId !== this.#storedState.creatorId) {
+      return { success: false, error: 'Only the host can add slots' };
+    }
+
+    const currentCount = this.#storedState.lobbySlots.length;
+    const maxPlayers = this.#storedState.maxPlayers ?? 10;
+
+    if (currentCount >= maxPlayers) {
+      return { success: false, error: `Cannot exceed ${maxPlayers} players` };
+    }
+
+    const newPosition = currentCount;
+    this.#storedState.lobbySlots.push({
+      position: newPosition,
+      status: 'open',
+      name: `Player ${newPosition + 1}`,
+      ready: false,
+    });
+
+    // Update player count and names
+    this.#storedState.playerCount = currentCount + 1;
+    this.#storedState.playerNames.push(`Player ${newPosition + 1}`);
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo()! };
+  }
+
+  /**
+   * Remove a player slot (host only, slot must be open or AI)
+   *
+   * @param playerId Must be the creator's ID
+   * @param position Position of the slot to remove
+   * @returns Result with updated lobby info
+   */
+  async removeSlot(
+    playerId: string,
+    position: number
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    if (playerId !== this.#storedState.creatorId) {
+      return { success: false, error: 'Only the host can remove slots' };
+    }
+
+    const currentCount = this.#storedState.lobbySlots.length;
+    const minPlayers = this.#storedState.minPlayers ?? 1;
+
+    if (currentCount <= minPlayers) {
+      return { success: false, error: `Cannot have fewer than ${minPlayers} players` };
+    }
+
+    if (position === 0) {
+      return { success: false, error: 'Cannot remove the host slot' };
+    }
+
+    if (position < 0 || position >= currentCount) {
+      return { success: false, error: 'Invalid position' };
+    }
+
+    const slot = this.#storedState.lobbySlots[position];
+    if (slot.status === 'claimed') {
+      return { success: false, error: 'Cannot remove a slot with a player - they must leave first' };
+    }
+
+    // Remove the slot
+    this.#storedState.lobbySlots.splice(position, 1);
+    this.#storedState.playerNames.splice(position, 1);
+    this.#storedState.playerCount = this.#storedState.lobbySlots.length;
+
+    // Renumber remaining slots
+    this.#storedState.lobbySlots.forEach((s, i) => {
+      s.position = i;
+      if (s.status === 'open') {
+        s.name = `Player ${i + 1}`;
+      }
+    });
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo()! };
+  }
+
+  /**
+   * Toggle a slot between open and AI (host only)
+   *
+   * @param playerId Must be the creator's ID
+   * @param position Position of the slot to modify
+   * @param isAI Whether to make this an AI slot
+   * @param aiLevel AI difficulty level (if isAI is true)
+   * @returns Result with updated lobby info
+   */
+  async setSlotAI(
+    playerId: string,
+    position: number,
+    isAI: boolean,
+    aiLevel: string = 'medium'
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    if (playerId !== this.#storedState.creatorId) {
+      return { success: false, error: 'Only the host can modify slots' };
+    }
+
+    if (position === 0) {
+      return { success: false, error: 'Cannot change the host slot to AI' };
+    }
+
+    if (position < 0 || position >= this.#storedState.lobbySlots.length) {
+      return { success: false, error: 'Invalid position' };
+    }
+
+    const slot = this.#storedState.lobbySlots[position];
+
+    if (slot.status === 'claimed') {
+      return { success: false, error: 'Cannot change a claimed slot - player must leave first' };
+    }
+
+    if (isAI) {
+      slot.status = 'ai';
+      slot.name = 'Bot';
+      slot.aiLevel = aiLevel;
+      slot.playerId = undefined;
+      slot.ready = true; // AI is always ready
+    } else {
+      slot.status = 'open';
+      slot.name = `Player ${position + 1}`;
+      slot.aiLevel = undefined;
+      slot.playerId = undefined;
+      slot.ready = false;
+    }
+
+    // Update AI config if needed
+    this.#updateAIConfig();
+
+    // Check if all players are ready and start game
+    await this.#checkAndStartGame();
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    // If game started, also broadcast initial game state
+    const lobbyInfo = this.getLobbyInfo()!;
+    if (lobbyInfo.state === 'playing') {
+      this.broadcast();
+    }
+
+    return { success: true, lobby: lobbyInfo };
+  }
+
+  /**
+   * Check if all players are ready and start the game if so
+   */
+  async #checkAndStartGame(): Promise<void> {
+    if (!this.#storedState.lobbySlots) return;
+    if (this.#storedState.lobbyState !== 'waiting') return;
+
+    const slots = this.#storedState.lobbySlots;
+    const openSlots = slots.filter(s => s.status === 'open').length;
+
+    // All ready = no open slots AND all humans are ready (AI is always ready)
+    const allReady = openSlots === 0 &&
+      slots.every(s => s.status === 'ai' || s.ready);
+
+    if (allReady) {
+      this.#storedState.lobbyState = 'playing';
+
+      // Clear any pending disconnect timeouts since game is starting
+      this.clearDisconnectTimeouts();
+
+      // Trigger AI if needed
+      if (this.#aiController?.hasAIPlayers()) {
+        this.#scheduleAICheck();
+      }
+    }
+  }
+
+  /**
+   * Update AI config based on current lobby slots
+   */
+  #updateAIConfig(): void {
+    if (!this.#storedState.lobbySlots) return;
+
+    const aiSlots = this.#storedState.lobbySlots.filter(s => s.status === 'ai');
+
+    if (aiSlots.length === 0) {
+      this.#storedState.aiConfig = undefined;
+      this.#aiController = undefined;
+    } else {
+      const aiPlayers = aiSlots.map(s => s.position);
+      const aiLevel = aiSlots[0].aiLevel || 'medium';
+
+      this.#storedState.aiConfig = {
+        players: aiPlayers,
+        level: aiLevel as 'easy' | 'medium' | 'hard',
+      };
+
+      // Recreate AI controller with new config
+      this.#aiController = new AIController(
+        this.#GameClass,
+        this.#storedState.gameType,
+        this.#storedState.playerCount,
+        this.#storedState.aiConfig
+      );
+    }
+  }
+
+  /**
+   * Compute default player options for a position (static version)
+   * Takes into account options already taken by other players
+   */
+  static computeDefaultPlayerOptions(
+    position: number,
+    definitions: Record<string, PlayerOptionDefinition>,
+    lobbySlots: LobbySlot[],
+    playerCount: number
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+
+    // Collect values already taken by other players
+    const takenValues: Record<string, Set<string>> = {};
+    for (const slot of lobbySlots) {
+      if (slot.position !== position && slot.playerOptions) {
+        for (const [key, value] of Object.entries(slot.playerOptions)) {
+          if (!takenValues[key]) {
+            takenValues[key] = new Set();
+          }
+          takenValues[key].add(String(value));
+        }
+      }
+    }
+
+    for (const [key, opt] of Object.entries(definitions)) {
+      if (opt.type === 'select' || opt.type === 'color') {
+        // For select/color, pick the first available choice
+        const choices = opt.choices ?? [];
+        const taken = takenValues[key] ?? new Set();
+
+        for (const choice of choices) {
+          const value = typeof choice === 'string' ? choice : choice.value;
+          if (!taken.has(value)) {
+            result[key] = value;
+            break;
+          }
+        }
+
+        // If all choices are taken (shouldn't happen), use the default or first choice
+        if (result[key] === undefined) {
+          if (opt.default !== undefined) {
+            result[key] = opt.default;
+          } else if (choices.length > 0) {
+            const firstChoice = choices[0];
+            result[key] = typeof firstChoice === 'string' ? firstChoice : firstChoice.value;
+          }
+        }
+      } else if (opt.type === 'exclusive') {
+        // For exclusive options, check if this position matches the default
+        let defaultIndex: number;
+        if (opt.default === 'first' || opt.default === undefined) {
+          defaultIndex = 0;
+        } else if (opt.default === 'last') {
+          defaultIndex = playerCount - 1;
+        } else {
+          defaultIndex = opt.default;
+        }
+        result[key] = position === defaultIndex;
+      } else if (opt.type === 'text') {
+        // For text, use the default if provided
+        if (opt.default !== undefined) {
+          result[key] = opt.default;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Compute default player options for a position (instance method wrapper)
+   */
+  #computeDefaultPlayerOptions(position: number): Record<string, unknown> {
+    const definitions = this.#storedState.playerOptionsDefinitions;
+    if (!definitions || !this.#storedState.lobbySlots) return {};
+
+    return GameSession.computeDefaultPlayerOptions(
+      position,
+      definitions,
+      this.#storedState.lobbySlots,
+      this.#storedState.playerCount
+    );
+  }
+
+  /**
    * Get position for a player ID
    */
   getPositionForPlayer(playerId: string): number | undefined {
@@ -931,5 +1349,279 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         console.error('Lobby broadcast error:', error);
       }
     }
+  }
+
+  /**
+   * Set the connected status for a player in the lobby
+   * Called when a WebSocket connects/disconnects
+   *
+   * @param playerId Player's unique ID
+   * @param connected Whether the player is connected
+   * @returns true if a slot was updated
+   */
+  /**
+   * Leave/unclaim a position in the lobby
+   * Used when a player leaves the waiting room
+   */
+  async leavePosition(playerId: string): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    console.log('[GameSession] leavePosition called with playerId:', playerId);
+    console.log('[GameSession] lobbySlots:', JSON.stringify(this.#storedState.lobbySlots?.map(s => ({ pos: s.position, playerId: s.playerId, status: s.status }))));
+
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    // Find the slot claimed by this player
+    const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
+    console.log('[GameSession] Found slot:', slot ? `position ${slot.position}` : 'none');
+    if (!slot) {
+      return { success: false, error: 'Player has not claimed a position' };
+    }
+
+    // Cannot leave if you're the creator/host (position 0)
+    if (slot.position === 0) {
+      return { success: false, error: 'Host cannot leave. Cancel the game instead.' };
+    }
+
+    // Release the position
+    slot.status = 'open';
+    slot.playerId = undefined;
+    slot.name = `Player ${slot.position + 1}`;
+    slot.ready = false;
+    slot.connected = undefined;
+
+    // Update player names in stored state
+    this.#storedState.playerNames[slot.position] = slot.name;
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+  }
+
+  async setPlayerConnected(playerId: string, connected: boolean): Promise<boolean> {
+    if (!this.#storedState.lobbySlots) return false;
+
+    const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
+    if (!slot) return false;
+
+    // Handle disconnect timeout logic
+    if (connected) {
+      // Player reconnected - cancel any pending timeout
+      const existingTimeout = this.#disconnectTimeouts.get(playerId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        this.#disconnectTimeouts.delete(playerId);
+      }
+    } else {
+      // Player disconnected - unready them so game doesn't start without them
+      if (slot.ready && this.#storedState.lobbyState === 'waiting') {
+        slot.ready = false;
+      }
+
+      // Start timeout for auto-kick (non-host players only)
+      if (slot.position !== 0 && this.#storedState.lobbyState === 'waiting') {
+        // Clear any existing timeout first
+        const existingTimeout = this.#disconnectTimeouts.get(playerId);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+        }
+
+        const timeout = setTimeout(async () => {
+          this.#disconnectTimeouts.delete(playerId);
+          // Auto-kick if still in waiting state
+          if (this.#storedState.lobbyState === 'waiting') {
+            await this.leavePosition(playerId);
+          }
+        }, GameSession.DISCONNECT_TIMEOUT_MS);
+
+        this.#disconnectTimeouts.set(playerId, timeout);
+      }
+    }
+
+    // Only update if status actually changed
+    if (slot.connected === connected) return false;
+
+    slot.connected = connected;
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return true;
+  }
+
+  /**
+   * Kick a player from the lobby (host only)
+   *
+   * @param hostPlayerId Must be the creator's ID
+   * @param position Position of the player to kick
+   * @returns Result with updated lobby info
+   */
+  async kickPlayer(
+    hostPlayerId: string,
+    position: number
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    // Verify caller is the host
+    if (hostPlayerId !== this.#storedState.creatorId) {
+      return { success: false, error: 'Only the host can kick players' };
+    }
+
+    // Can't kick yourself (host is position 0)
+    if (position === 0) {
+      return { success: false, error: 'Cannot kick the host' };
+    }
+
+    if (position < 0 || position >= this.#storedState.lobbySlots.length) {
+      return { success: false, error: 'Invalid position' };
+    }
+
+    const slot = this.#storedState.lobbySlots[position];
+
+    if (slot.status !== 'claimed') {
+      return { success: false, error: 'Position is not occupied by a player' };
+    }
+
+    // Clear any pending disconnect timeout for this player
+    if (slot.playerId) {
+      const timeout = this.#disconnectTimeouts.get(slot.playerId);
+      if (timeout) {
+        clearTimeout(timeout);
+        this.#disconnectTimeouts.delete(slot.playerId);
+      }
+    }
+
+    // Release the slot
+    slot.status = 'open';
+    slot.playerId = undefined;
+    slot.name = `Player ${slot.position + 1}`;
+    slot.ready = false;
+    slot.connected = undefined;
+
+    // Update player names in stored state
+    this.#storedState.playerNames[position] = slot.name;
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+  }
+
+  /**
+   * Clear all disconnect timeouts (e.g., when game starts or ends)
+   */
+  clearDisconnectTimeouts(): void {
+    for (const timeout of this.#disconnectTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.#disconnectTimeouts.clear();
+  }
+
+  /**
+   * Update a player's options (color, etc.)
+   *
+   * @param playerId Player's unique ID
+   * @param options The player options to set
+   * @returns Result with updated lobby info
+   */
+  async updatePlayerOptions(
+    playerId: string,
+    options: Record<string, unknown>
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
+    if (!slot) {
+      return { success: false, error: 'Player not found in lobby' };
+    }
+
+    // Merge new options with existing
+    slot.playerOptions = {
+      ...slot.playerOptions,
+      ...options,
+    };
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+  }
+
+  /**
+   * Update game options (host only)
+   *
+   * @param hostPlayerId Must be the creator's ID
+   * @param options The game options to set
+   * @returns Result with updated lobby info
+   */
+  async updateGameOptions(
+    hostPlayerId: string,
+    options: Record<string, unknown>
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    // Verify caller is the host
+    if (hostPlayerId !== this.#storedState.creatorId) {
+      return { success: false, error: 'Only the host can modify game options' };
+    }
+
+    // Merge new options with existing
+    this.#storedState.gameOptions = {
+      ...this.#storedState.gameOptions,
+      ...options,
+    };
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
   }
 }
