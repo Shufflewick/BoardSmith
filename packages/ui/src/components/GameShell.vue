@@ -433,10 +433,7 @@ async function createGame(config?: LobbyConfig) {
       playerNames = Array.from({ length: effectivePlayerCount }, (_, i) => `Player ${i + 1}`);
     }
 
-    // Count human players to determine if we need lobby flow
-    const humanCount = config?.playerConfigs?.filter((p) => !p.isAI).length ?? effectivePlayerCount;
-    const needsLobby = humanCount > 1;
-
+    // Always use the lobby so host can configure players, add AI, change settings
     const result = await client.createGame({
       gameType: props.gameType,
       playerCount: effectivePlayerCount,
@@ -445,7 +442,7 @@ async function createGame(config?: LobbyConfig) {
       aiLevel: aiPlayers.length > 0 ? aiLevel : undefined,
       gameOptions: config?.gameOptions,
       playerConfigs: config?.playerConfigs,
-      useLobby: needsLobby,
+      useLobby: true,
       creatorId: playerId.value,
     });
 
@@ -454,8 +451,8 @@ async function createGame(config?: LobbyConfig) {
       playerPosition.value = 0;
       isCreator.value = true;
 
-      if (needsLobby && result.lobby) {
-        // Multi-human game - go to waiting room
+      if (result.lobby) {
+        // Go to waiting room for configuration
         lobbyInfo.value = result.lobby;
         // Fetch playerOptions for the lobby
         gamePlayerOptions.value = await fetchPlayerOptions(props.gameType);
@@ -463,7 +460,7 @@ async function createGame(config?: LobbyConfig) {
         updateLobbyUrl(result.gameId);
         connectToLobby(result.gameId);
       } else {
-        // Solo or all-AI game - go directly to game
+        // Fallback if lobby wasn't created (shouldn't happen)
         gameId.value = result.gameId;
         currentScreen.value = 'game';
         updateUrl(result.gameId, 0);

@@ -231,9 +231,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         );
       }
 
-      // Determine if all human slots are filled
-      const openSlots = lobbySlots.filter(s => s.status === 'open').length;
-      lobbyState = openSlots > 0 ? 'waiting' : 'playing';
+      // Always start in 'waiting' state when using lobby
+      // Game only starts when all players click Ready
+      lobbyState = 'waiting';
     }
 
     const storedState: StoredGameState = {
