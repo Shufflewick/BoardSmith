@@ -210,6 +210,14 @@ function buildSelectionMetadata(
             base.choicesByDependentValue[key] = formattedChoices;
           }
 
+          // Add repeat info if present (must be before break!)
+          if (choiceSel.repeat || choiceSel.repeatUntil !== undefined) {
+            base.repeat = {
+              hasOnEach: !!choiceSel.repeat?.onEach,
+              terminator: choiceSel.repeatUntil,
+            };
+          }
+
           // Don't populate base.choices for dependsOn selections - client uses choicesByDependentValue
           break;
         }
@@ -252,6 +260,14 @@ function buildSelectionMetadata(
       // Add filterBy if present
       if (choiceSel.filterBy) {
         base.filterBy = choiceSel.filterBy;
+      }
+
+      // Add repeat info if present
+      if (choiceSel.repeat || choiceSel.repeatUntil !== undefined) {
+        base.repeat = {
+          hasOnEach: !!choiceSel.repeat?.onEach,
+          terminator: choiceSel.repeatUntil,
+        };
       }
       break;
     }

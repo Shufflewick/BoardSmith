@@ -119,6 +119,10 @@ export type {
   ConditionDetail,
   SelectionTrace,
   ActionTrace,
+  // Repeating selections types
+  RepeatConfig,
+  RepeatingSelectionState,
+  PendingActionState,
 } from './action/index.js';
 
 // Flow system

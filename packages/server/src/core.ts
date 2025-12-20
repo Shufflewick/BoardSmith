@@ -39,6 +39,11 @@ import {
   handleUpdatePlayerOptions,
   handleUpdateSlotPlayerOptions,
   handleUpdateGameOptions,
+  // Repeating selection handlers
+  handleStartPendingAction,
+  handleSelectionStep,
+  handleCancelPendingAction,
+  handleGetPendingAction,
 } from './handlers/games.js';
 import type { ClaimPositionRequest } from './types.js';
 
@@ -169,6 +174,42 @@ export class GameServerCore {
         const gameId = actionTracesMatch[1];
         const playerPosition = parseInt(query.player || '0', 10);
         return await handleGetActionTraces(this.#store, gameId, playerPosition);
+      }
+
+      // ============================================
+      // Repeating Selection Routes
+      // ============================================
+
+      // POST /games/:gameId/start-action - Start a pending action (for repeating selections)
+      const startActionMatch = path.match(/^\/games\/([^/]+)\/start-action$/);
+      if (startActionMatch && method === 'POST') {
+        const gameId = startActionMatch[1];
+        const { action, player } = body as { action: string; player: number };
+        return await handleStartPendingAction(this.#store, gameId, action, player);
+      }
+
+      // POST /games/:gameId/selection-step - Process a selection step
+      const selectionStepMatch = path.match(/^\/games\/([^/]+)\/selection-step$/);
+      if (selectionStepMatch && method === 'POST') {
+        const gameId = selectionStepMatch[1];
+        const { player, selectionName, value, action, initialArgs } = body as { player: number; selectionName: string; value: unknown; action?: string; initialArgs?: Record<string, unknown> };
+        return await handleSelectionStep(this.#store, gameId, player, selectionName, value, action, initialArgs);
+      }
+
+      // POST /games/:gameId/cancel-action - Cancel a pending action
+      const cancelActionMatch = path.match(/^\/games\/([^/]+)\/cancel-action$/);
+      if (cancelActionMatch && method === 'POST') {
+        const gameId = cancelActionMatch[1];
+        const { player } = body as { player: number };
+        return await handleCancelPendingAction(this.#store, gameId, player);
+      }
+
+      // GET /games/:gameId/pending-action - Get pending action state
+      const pendingActionMatch = path.match(/^\/games\/([^/]+)\/pending-action$/);
+      if (pendingActionMatch && method === 'GET') {
+        const gameId = pendingActionMatch[1];
+        const playerPosition = parseInt(query.player || '0', 10);
+        return await handleGetPendingAction(this.#store, gameId, playerPosition);
       }
 
       // POST /games/:gameId/undo - Undo to turn start

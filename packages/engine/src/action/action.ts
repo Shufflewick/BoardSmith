@@ -18,6 +18,8 @@ import type {
   ConditionDetail,
   ActionTrace,
   SelectionTrace,
+  RepeatConfig,
+  PendingActionState,
 } from './types.js';
 import type { ElementClass } from '../element/types.js';
 
@@ -174,6 +176,16 @@ export class Action {
        * dependent selection and sent to the client as a map.
        */
       dependsOn?: string;
+      /**
+       * Repeat this selection until termination condition is met.
+       * When used, the selection value becomes an array of all choices made.
+       */
+      repeat?: RepeatConfig<T>;
+      /**
+       * Shorthand for repeat.until that terminates when this value is selected.
+       * Equivalent to: repeat: { until: (ctx, choice) => choice === repeatUntil }
+       */
+      repeatUntil?: T;
     }
   ): this {
     const selection: ChoiceSelection<T> = {
@@ -188,6 +200,8 @@ export class Action {
       boardRefs: options.boardRefs,
       filterBy: options.filterBy,
       dependsOn: options.dependsOn,
+      repeat: options.repeat,
+      repeatUntil: options.repeatUntil,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -931,5 +945,235 @@ export class ActionExecutor {
 
     // No choice led to a valid path
     return false;
+  }
+
+  // ============================================
+  // Repeating Selections Support
+  // ============================================
+
+  /**
+   * Check if a selection is configured for repeating.
+   */
+  isRepeatingSelection(selection: Selection): boolean {
+    if (selection.type !== 'choice') return false;
+    const cs = selection as ChoiceSelection;
+    return cs.repeat !== undefined || cs.repeatUntil !== undefined;
+  }
+
+  /**
+   * Check if an action has any repeating selections.
+   */
+  hasRepeatingSelections(action: ActionDefinition): boolean {
+    return action.selections.some(s => this.isRepeatingSelection(s));
+  }
+
+  /**
+   * Process one step of a repeating selection.
+   * This handles adding a value to the accumulated selections, running onEach,
+   * and checking the termination condition.
+   *
+   * @returns Object with:
+   *   - done: true if the repeating selection is complete
+   *   - nextChoices: available choices for the next iteration (if not done)
+   *   - error: error message if something went wrong
+   */
+  processRepeatingStep(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    value: unknown
+  ): { done: boolean; nextChoices?: unknown[]; error?: string } {
+    const selection = action.selections[pendingState.currentSelectionIndex];
+    if (!selection || selection.type !== 'choice') {
+      return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found or not a choice` };
+    }
+
+    const choiceSel = selection as ChoiceSelection;
+    if (!choiceSel.repeat && choiceSel.repeatUntil === undefined) {
+      return { done: true, error: `Selection ${selection.name} is not repeating` };
+    }
+
+    // Initialize repeating state if needed
+    if (!pendingState.repeating) {
+      pendingState.repeating = {
+        selectionName: selection.name,
+        accumulated: [],
+        iterationCount: 0,
+      };
+    }
+
+    // Resolve element/player IDs to actual objects before validating choices
+    // This is needed because choices functions (e.g., equipment) may depend on
+    // previously selected elements (e.g., actingMerc)
+    const resolvedArgs = this.resolveArgs(action, pendingState.collectedArgs);
+
+    // Validate the choice is in the available choices
+    const context: ActionContext = {
+      game: this.game,
+      player,
+      args: {
+        ...resolvedArgs,
+        [selection.name]: pendingState.repeating.accumulated,
+      },
+    };
+
+    const currentChoices = this.getChoices(selection, player, context.args);
+    if (!this.choicesContain(currentChoices, value)) {
+      return { done: false, error: `Invalid choice: ${JSON.stringify(value)}`, nextChoices: currentChoices };
+    }
+
+    // Add to accumulated values
+    pendingState.repeating.accumulated.push(value);
+    pendingState.repeating.iterationCount++;
+
+    // Update context with new accumulated value
+    context.args[selection.name] = pendingState.repeating.accumulated;
+
+    // Run onEach callback if present
+    if (choiceSel.repeat?.onEach) {
+      try {
+        choiceSel.repeat.onEach(context, value);
+      } catch (error) {
+        return { done: true, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
+    // Check termination condition
+    let isDone = false;
+    if (choiceSel.repeatUntil !== undefined) {
+      // Simple termination: check if value matches repeatUntil
+      isDone = this.valuesEqual(value, choiceSel.repeatUntil);
+    } else if (choiceSel.repeat?.until) {
+      // Custom termination function
+      try {
+        isDone = choiceSel.repeat.until(context, value);
+      } catch (error) {
+        return { done: true, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
+    if (isDone) {
+      // Move accumulated values to collected args
+      pendingState.collectedArgs[selection.name] = pendingState.repeating.accumulated;
+      pendingState.repeating = undefined;
+      pendingState.currentSelectionIndex++;
+      return { done: true };
+    }
+
+    // Get next choices (choices may have changed after onEach)
+    // Re-resolve args in case they changed, and use resolved args for choices
+    const nextResolvedArgs = this.resolveArgs(action, pendingState.collectedArgs);
+    const nextContext: ActionContext = {
+      game: this.game,
+      player,
+      args: {
+        ...nextResolvedArgs,
+        [selection.name]: pendingState.repeating.accumulated,
+      },
+    };
+    const nextChoices = this.getChoices(selection, player, nextContext.args);
+
+    // If no more choices available, terminate
+    if (nextChoices.length === 0) {
+      pendingState.collectedArgs[selection.name] = pendingState.repeating.accumulated;
+      pendingState.repeating = undefined;
+      pendingState.currentSelectionIndex++;
+      return { done: true };
+    }
+
+    return { done: false, nextChoices };
+  }
+
+  /**
+   * Create initial pending action state for an action.
+   */
+  createPendingActionState(actionName: string, playerPosition: number): PendingActionState {
+    return {
+      actionName,
+      playerPosition,
+      collectedArgs: {},
+      currentSelectionIndex: 0,
+    };
+  }
+
+  /**
+   * Process a non-repeating selection step.
+   * This handles regular selections during a pending action flow.
+   */
+  processSelectionStep(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    selectionName: string,
+    value: unknown
+  ): { success: boolean; error?: string } {
+    const selectionIndex = action.selections.findIndex(s => s.name === selectionName);
+    if (selectionIndex === -1) {
+      return { success: false, error: `Selection ${selectionName} not found` };
+    }
+
+    // Ensure we're at the right selection index
+    if (selectionIndex !== pendingState.currentSelectionIndex) {
+      return { success: false, error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${selectionIndex}` };
+    }
+
+    const selection = action.selections[selectionIndex];
+
+    // If it's a repeating selection, delegate to processRepeatingStep
+    if (this.isRepeatingSelection(selection)) {
+      const result = this.processRepeatingStep(action, player, pendingState, value);
+      return { success: !result.error, error: result.error };
+    }
+
+    // Validate the selection
+    const validationResult = this.validateSelection(selection, value, player, pendingState.collectedArgs);
+    if (!validationResult.valid) {
+      return { success: false, error: validationResult.errors.join('; ') };
+    }
+
+    // Store the value and move to next selection
+    pendingState.collectedArgs[selectionName] = value;
+    pendingState.currentSelectionIndex++;
+
+    return { success: true };
+  }
+
+  /**
+   * Check if a pending action is complete (all selections processed).
+   */
+  isPendingActionComplete(action: ActionDefinition, pendingState: PendingActionState): boolean {
+    return pendingState.currentSelectionIndex >= action.selections.length && !pendingState.repeating;
+  }
+
+  /**
+   * Execute a completed pending action.
+   */
+  executePendingAction(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState
+  ): ActionResult {
+    if (!this.isPendingActionComplete(action, pendingState)) {
+      return { success: false, error: 'Action is not complete' };
+    }
+
+    // Resolve serialized args
+    const resolvedArgs = this.resolveArgs(action, pendingState.collectedArgs);
+
+    const context: ActionContext = {
+      game: this.game,
+      player,
+      args: resolvedArgs,
+    };
+
+    try {
+      const result = action.execute(resolvedArgs, context);
+      return result ?? { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 }

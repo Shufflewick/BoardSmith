@@ -20,4 +20,8 @@ export type {
   ConditionDetail,
   SelectionTrace,
   ActionTrace,
+  // Repeating selections types
+  RepeatConfig,
+  RepeatingSelectionState,
+  PendingActionState,
 } from './types.js';

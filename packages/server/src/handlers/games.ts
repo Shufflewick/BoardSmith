@@ -719,3 +719,117 @@ export async function handleUpdateSlotPlayerOptions(
     return error(result.error ?? 'Failed to update slot player options');
   }
 }
+
+// ============================================
+// Repeating Selection Handlers
+// ============================================
+
+/**
+ * POST /games/:gameId/start-action - Start a pending action (for actions with repeating selections)
+ */
+export async function handleStartPendingAction(
+  store: GameStore,
+  gameId: string,
+  actionName: string,
+  playerPosition: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  // Check if action has repeating selections
+  if (!session.hasRepeatingSelections(actionName)) {
+    // If no repeating selections, just return success - client can use normal flow
+    return success({
+      success: true,
+      hasRepeatingSelections: false,
+      message: 'Action does not have repeating selections, use normal action flow',
+    });
+  }
+
+  const result = session.startPendingAction(actionName, playerPosition);
+
+  if (result.success) {
+    return success({
+      success: true,
+      hasRepeatingSelections: true,
+      pendingState: result.pendingState,
+    });
+  } else {
+    return error(result.error ?? 'Failed to start pending action');
+  }
+}
+
+/**
+ * POST /games/:gameId/selection-step - Process a selection step for a pending action
+ */
+export async function handleSelectionStep(
+  store: GameStore,
+  gameId: string,
+  playerPosition: number,
+  selectionName: string,
+  value: unknown,
+  actionName?: string,
+  initialArgs?: Record<string, unknown>
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = await session.processSelectionStep(playerPosition, selectionName, value, actionName, initialArgs);
+
+  if (result.success) {
+    return success({
+      success: true,
+      done: result.done,
+      nextChoices: result.nextChoices,
+      actionComplete: result.actionComplete,
+      actionResult: result.actionResult,
+      state: result.state,
+    });
+  } else {
+    return error(result.error ?? 'Failed to process selection step');
+  }
+}
+
+/**
+ * POST /games/:gameId/cancel-action - Cancel a pending action
+ */
+export async function handleCancelPendingAction(
+  store: GameStore,
+  gameId: string,
+  playerPosition: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  session.cancelPendingAction(playerPosition);
+
+  return success({ success: true, message: 'Pending action cancelled' });
+}
+
+/**
+ * GET /games/:gameId/pending-action - Get current pending action state for a player
+ */
+export async function handleGetPendingAction(
+  store: GameStore,
+  gameId: string,
+  playerPosition: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const pendingState = session.getPendingAction(playerPosition);
+
+  return success({
+    success: true,
+    hasPendingAction: !!pendingState,
+    pendingState,
+  });
+}

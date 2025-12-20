@@ -2,7 +2,7 @@
  * Core GameSession class for managing game state and lifecycle
  */
 
-import type { FlowState, SerializedAction, Game } from '@boardsmith/engine';
+import type { FlowState, SerializedAction, Game, PendingActionState } from '@boardsmith/engine';
 import { GameRunner } from '@boardsmith/runtime';
 import type {
   GameClass,
@@ -141,6 +141,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #displayName?: string;
   /** Map of playerId -> disconnect timeout handle for auto-kick */
   #disconnectTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  /** Map of player position -> pending action state for repeating selections */
+  #pendingActions: Map<number, PendingActionState> = new Map();
 
   private constructor(
     runner: GameRunner<G>,
@@ -706,6 +708,248 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         error: error instanceof Error ? error.message : 'Failed to undo',
       };
     }
+  }
+
+  // ============================================
+  // Pending Action Methods (for repeating selections)
+  // ============================================
+
+  /**
+   * Start a pending action for a player.
+   * Used when an action has repeating selections and needs step-by-step processing.
+   */
+  startPendingAction(actionName: string, playerPosition: number): {
+    success: boolean;
+    error?: string;
+    pendingState?: PendingActionState;
+  } {
+    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player: ${playerPosition}` };
+    }
+
+    const action = this.#runner.game.getAction(actionName);
+    if (!action) {
+      return { success: false, error: `Action not found: ${actionName}` };
+    }
+
+    const executor = this.#runner.game.getActionExecutor();
+    const pendingState = executor.createPendingActionState(actionName, playerPosition);
+    this.#pendingActions.set(playerPosition, pendingState);
+
+    return { success: true, pendingState };
+  }
+
+  /**
+   * Process a selection step for a pending action.
+   * Handles both regular selections and repeating selections.
+   * Auto-creates the pending action if it doesn't exist.
+   * @param initialArgs - Pre-collected args from earlier selections (e.g., actingMerc before equipment)
+   */
+  async processSelectionStep(
+    playerPosition: number,
+    selectionName: string,
+    value: unknown,
+    actionName?: string,
+    initialArgs?: Record<string, unknown>
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    done?: boolean;
+    nextChoices?: unknown[];
+    actionComplete?: boolean;
+    actionResult?: ActionResult;
+    state?: PlayerGameState;
+  }> {
+    let pendingState = this.#pendingActions.get(playerPosition);
+
+    // Auto-create pending action if it doesn't exist and actionName is provided
+    if (!pendingState && actionName) {
+      const startResult = this.startPendingAction(actionName, playerPosition);
+      if (!startResult.success) {
+        return { success: false, error: startResult.error };
+      }
+      pendingState = startResult.pendingState;
+      this.#pendingActions.set(playerPosition, pendingState!);
+
+      // If initialArgs provided, populate the pending state and advance to correct selection
+      if (initialArgs && Object.keys(initialArgs).length > 0) {
+        const action = this.#runner.game.getAction(actionName);
+        if (action) {
+          // Copy initialArgs to collectedArgs (filter out null/undefined)
+          for (const [key, val] of Object.entries(initialArgs)) {
+            if (val !== undefined && val !== null) {
+              pendingState!.collectedArgs[key] = val;
+            }
+          }
+
+          // Find the index of the selection we're about to process
+          const targetIndex = action.selections.findIndex(s => s.name === selectionName);
+          if (targetIndex > 0) {
+            pendingState!.currentSelectionIndex = targetIndex;
+          }
+        }
+      }
+    }
+
+    if (!pendingState) {
+      return { success: false, error: 'No pending action for this player. Provide actionName to auto-create.' };
+    }
+
+    const action = this.#runner.game.getAction(pendingState.actionName);
+    if (!action) {
+      return { success: false, error: `Action not found: ${pendingState.actionName}` };
+    }
+
+    const executor = this.#runner.game.getActionExecutor();
+    const player = this.#runner.game.players[playerPosition];
+    const selection = action.selections[pendingState.currentSelectionIndex];
+
+    if (!selection) {
+      return { success: false, error: 'No current selection' };
+    }
+
+    // Verify we're processing the expected selection
+    if (selection.name !== selectionName) {
+      return { success: false, error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${action.selections.findIndex(s => s.name === selectionName)}` };
+    }
+
+    // Check if it's a repeating selection
+    if (executor.isRepeatingSelection(selection)) {
+      const result = executor.processRepeatingStep(action, player, pendingState, value);
+
+      if (result.error) {
+        return { success: false, error: result.error, nextChoices: result.nextChoices };
+      }
+
+      // Persist if storage adapter is provided (onEach may have modified game state)
+      if (this.#storage) {
+        await this.#storage.save(this.#storedState);
+      }
+
+      // Broadcast state updates to all clients
+      this.broadcast();
+
+      // Check if the action is now complete
+      if (result.done && executor.isPendingActionComplete(action, pendingState)) {
+        // Execute the final action
+        const actionResult = executor.executePendingAction(action, player, pendingState);
+        this.#pendingActions.delete(playerPosition);
+
+        if (actionResult.success) {
+          // Update stored action history
+          this.#storedState.actionHistory = this.#runner.actionHistory;
+
+          // Persist
+          if (this.#storage) {
+            await this.#storage.save(this.#storedState);
+          }
+
+          // Broadcast
+          this.broadcast();
+
+          // Check if AI should respond
+          this.#scheduleAICheck();
+        }
+
+        return {
+          success: actionResult.success,
+          error: actionResult.error,
+          done: true,
+          actionComplete: true,
+          actionResult: {
+            success: actionResult.success,
+            error: actionResult.error,
+            flowState: this.#runner.getFlowState(),
+            state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+          },
+          state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+        };
+      }
+
+      // More selections needed
+      return {
+        success: true,
+        done: result.done,
+        nextChoices: result.nextChoices,
+        actionComplete: false,
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+      };
+    }
+
+    // Regular (non-repeating) selection
+    const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
+
+    if (!stepResult.success) {
+      return { success: false, error: stepResult.error };
+    }
+
+    // Check if action is now complete
+    if (executor.isPendingActionComplete(action, pendingState)) {
+      const actionResult = executor.executePendingAction(action, player, pendingState);
+      this.#pendingActions.delete(playerPosition);
+
+      if (actionResult.success) {
+        // Update stored action history
+        this.#storedState.actionHistory = this.#runner.actionHistory;
+
+        // Persist
+        if (this.#storage) {
+          await this.#storage.save(this.#storedState);
+        }
+
+        // Broadcast
+        this.broadcast();
+
+        // Check if AI should respond
+        this.#scheduleAICheck();
+      }
+
+      return {
+        success: actionResult.success,
+        error: actionResult.error,
+        done: true,
+        actionComplete: true,
+        actionResult: {
+          success: actionResult.success,
+          error: actionResult.error,
+          flowState: this.#runner.getFlowState(),
+          state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+        },
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+      };
+    }
+
+    // More selections needed
+    return {
+      success: true,
+      done: true,
+      actionComplete: false,
+      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+    };
+  }
+
+  /**
+   * Get the current pending action for a player.
+   */
+  getPendingAction(playerPosition: number): PendingActionState | undefined {
+    return this.#pendingActions.get(playerPosition);
+  }
+
+  /**
+   * Cancel a pending action for a player.
+   */
+  cancelPendingAction(playerPosition: number): void {
+    this.#pendingActions.delete(playerPosition);
+  }
+
+  /**
+   * Check if an action has repeating selections.
+   */
+  hasRepeatingSelections(actionName: string): boolean {
+    const action = this.#runner.game.getAction(actionName);
+    if (!action) return false;
+    const executor = this.#runner.game.getActionExecutor();
+    return executor.hasRepeatingSelections(action);
   }
 
   // ============================================

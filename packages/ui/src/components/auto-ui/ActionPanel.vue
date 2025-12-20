@@ -24,6 +24,12 @@ function clearReactiveObject(obj: Record<string, unknown>): void {
   }
 }
 
+// Clear action state including display cache
+function clearActionState(args: Record<string, unknown>, cache: Record<string, string>): void {
+  clearReactiveObject(args);
+  clearReactiveObject(cache as unknown as Record<string, unknown>);
+}
+
 /**
  * Reference to a board element for highlighting
  */
@@ -81,6 +87,13 @@ export interface Selection {
   dependsOn?: string;
   /** For choice selections with dependsOn: choices indexed by dependent value */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
+  /** For repeating choice selections: configuration for repeat behavior */
+  repeat?: {
+    /** Whether the selection has an onEach callback (requires server round-trip) */
+    hasOnEach: boolean;
+    /** The terminator value (if using repeatUntil shorthand) */
+    terminator?: unknown;
+  };
 }
 
 export interface ActionMetadata {
@@ -118,6 +131,16 @@ const emit = defineEmits<{
   (e: 'cancelSelection'): void;
   (e: 'undo'): void;
   (e: 'action-started'): void;
+  // Repeating selection events
+  (e: 'start-action', actionName: string, player: number): Promise<{ success: boolean; hasRepeatingSelections?: boolean }>;
+  (e: 'selection-step', player: number, selectionName: string, value: unknown): Promise<{
+    success: boolean;
+    error?: string;
+    done?: boolean;
+    nextChoices?: unknown[];
+    actionComplete?: boolean;
+  }>;
+  (e: 'cancel-action', player: number): void;
 }>();
 
 // Board interaction for hover/selection sync
@@ -126,6 +149,40 @@ const boardInteraction = useBoardInteraction();
 // Current action state
 const currentAction = ref<string | null>(null);
 const isExecuting = ref(false);
+
+// Cache for selection display values (preserves display even after game state changes)
+const displayCache = reactive<Record<string, string>>({});
+
+// Repeating selection state
+const repeatingState = ref<{
+  selectionName: string;
+  accumulated: unknown[];
+  awaitingServer: boolean;
+  currentChoices?: ChoiceWithRefs[];
+} | null>(null);
+
+/**
+ * Type for the selection step function that handles repeating selections.
+ * This must be injected by the parent component (e.g., GameShell) to handle
+ * server communication for repeating selections.
+ */
+type SelectionStepFn = (
+  player: number,
+  selectionName: string,
+  value: unknown,
+  actionName: string,
+  initialArgs?: Record<string, unknown>
+) => Promise<{
+  success: boolean;
+  error?: string;
+  done?: boolean;
+  nextChoices?: unknown[];
+  actionComplete?: boolean;
+}>;
+
+// Inject the selection step function for repeating selections
+// This is required for repeating selections to work - parent must provide it
+const selectionStepFn = inject<SelectionStepFn | undefined>('selectionStepFn', undefined);
 
 // Inject shared actionArgs from GameShell (enables bidirectional sync with custom game boards)
 // Falls back to local state for standalone usage (testing, storybook, etc.)
@@ -212,6 +269,10 @@ const currentSelection = computed(() => {
             currentArgs.value[sel.name] = (choice as any).position;
           } else if (sel.type === 'element') {
             currentArgs.value[sel.name] = (choice as any).id;
+            // Cache display for later lookup
+            if ((choice as any).display) {
+              cacheSelectionDisplay(sel.name, (choice as any).id, (choice as any).display);
+            }
           } else {
             currentArgs.value[sel.name] = (choice as any).value ?? choice;
           }
@@ -237,6 +298,10 @@ const currentSelection = computed(() => {
             currentArgs.value[sel.name] = (choice as any).position;
           } else if (sel.type === 'element') {
             currentArgs.value[sel.name] = (choice as any).id;
+            // Cache display for later lookup
+            if ((choice as any).display) {
+              cacheSelectionDisplay(sel.name, (choice as any).id, (choice as any).display);
+            }
           } else {
             currentArgs.value[sel.name] = (choice as any).value ?? choice;
           }
@@ -285,8 +350,12 @@ const filteredChoices = computed(() => {
 
   let choices: ChoiceWithRefs[] = [];
 
+  // For repeating selections, use dynamic choices from server if available
+  if (isRepeatingSelection(currentSelection.value) && repeatingState.value?.currentChoices) {
+    choices = repeatingState.value.currentChoices;
+  }
   // Handle dependsOn: look up choices from choicesByDependentValue
-  if (currentSelection.value.dependsOn && currentSelection.value.choicesByDependentValue) {
+  else if (currentSelection.value.dependsOn && currentSelection.value.choicesByDependentValue) {
     const dependentValue = currentArgs.value[currentSelection.value.dependsOn];
     if (dependentValue !== undefined) {
       const key = String(dependentValue);
@@ -379,16 +448,28 @@ function selectElement(elementId: number, ref?: ElementRef) {
   // (because setSelectionValue will change currentSelection)
   const selectionName = currentSelection.value.name;
 
+  // Look up display from validElements
+  const validElem = currentSelection.value.validElements?.find((e: ValidElement) => e.id === elementId);
+  const display = validElem?.display || String(elementId);
+
   // Use setSelectionValue which handles auto-execute
-  setSelectionValue(selectionName, elementId);
+  setSelectionValue(selectionName, elementId, display);
 
   // Note: We don't call boardInteraction.selectElement here because it triggers the watch
   // which would try to fill the NEXT selection with the same element
 }
 
 // Execute a choice directly (no confirm step for filtered selections)
+// But for repeating selections, delegate to setSelectionValue to handle the repeat flow
 function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
   if (!currentAction.value) return;
+
+  // Check if this is a repeating selection - if so, use setSelectionValue instead
+  const selection = currentSelection.value;
+  if (selection && isRepeatingSelection(selection)) {
+    setSelectionValue(selectionName, choice.value, choice.display);
+    return;
+  }
 
   // Set the hovered choice to show on board briefly
   if (boardInteraction) {
@@ -424,6 +505,12 @@ function handleElementLeave() {
 
 // Get display text for a selection value
 function getSelectionDisplay(selectionName: string, value: unknown): string {
+  // First check cache (preserves display even after game state changes filter out the element)
+  const cacheKey = `${selectionName}:${JSON.stringify(value)}`;
+  if (displayCache[cacheKey]) {
+    return displayCache[cacheKey];
+  }
+
   if (!currentActionMeta.value) return String(value);
 
   // Find the selection definition
@@ -447,6 +534,33 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
   if (selection.type === 'choice' && selection.choices) {
     const choice = selection.choices.find(c => c.value === value);
     return choice?.display || String(value);
+  }
+
+  return String(value);
+}
+
+// Cache a display value for a selection
+function cacheSelectionDisplay(selectionName: string, value: unknown, display: string) {
+  const cacheKey = `${selectionName}:${JSON.stringify(value)}`;
+  displayCache[cacheKey] = display;
+}
+
+/**
+ * Get display text for an accumulated value in a repeating selection
+ */
+function getAccumulatedDisplay(value: unknown): string {
+  if (!currentSelection.value) return String(value);
+
+  // For choice selections, look up display in choices
+  if (currentSelection.value.type === 'choice') {
+    const choices = repeatingState.value?.currentChoices || currentSelection.value.choices || [];
+    const choice = choices.find((c: ChoiceWithRefs) => c.value === value);
+    if (choice) return choice.display;
+
+    // Value might be an object with name property
+    if (value && typeof value === 'object' && 'name' in value) {
+      return (value as { name: string }).name;
+    }
   }
 
   return String(value);
@@ -503,7 +617,7 @@ watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
 watch(() => props.availableActions, (actions) => {
   if (currentAction.value && !actions.includes(currentAction.value)) {
     currentAction.value = null;
-    clearReactiveObject(currentArgs.value);
+    clearActionState(currentArgs.value, displayCache);
     boardInteraction?.clear();
   }
 
@@ -685,7 +799,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
   if (elementAction) {
     currentAction.value = elementAction.name;
-    clearReactiveObject(currentArgs.value);
+    clearActionState(currentArgs.value, displayCache);
 
     // Find and set the element in args
     const firstSel = elementAction.selections[0];
@@ -697,6 +811,10 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
     if (validElem) {
       currentArgs.value[firstSel.name] = validElem.id;
+      // Cache display for later lookup
+      if (validElem.display) {
+        cacheSelectionDisplay(firstSel.name, validElem.id, validElem.display);
+      }
     }
   }
 });
@@ -798,8 +916,12 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
   // Set up the action state
   currentAction.value = dragAction.name;
-  clearReactiveObject(currentArgs.value);
+  clearActionState(currentArgs.value, displayCache);
   currentArgs.value[firstSel.name] = validPiece.id;
+  // Cache display for later lookup
+  if (validPiece.display) {
+    cacheSelectionDisplay(firstSel.name, validPiece.id, validPiece.display);
+  }
 
   // Get filtered choices for this piece (destinations)
   const allChoices = secondSel.choices || [];
@@ -838,6 +960,11 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 watch(() => props.selectedElementId, (newId) => {
   if (newId !== undefined && currentSelection.value?.type === 'element') {
     currentArgs.value[currentSelection.value.name] = newId;
+    // Cache display from validElements
+    const validElem = currentSelection.value.validElements?.find((e: ValidElement) => e.id === newId);
+    if (validElem?.display) {
+      cacheSelectionDisplay(currentSelection.value.name, newId, validElem.display);
+    }
   }
 });
 
@@ -846,6 +973,20 @@ function formatActionName(name: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, str => str.toUpperCase())
     .trim();
+}
+
+/**
+ * Check if a selection is repeating
+ */
+function isRepeatingSelection(sel: Selection): boolean {
+  return sel.repeat !== undefined;
+}
+
+/**
+ * Check if an action has any repeating selections
+ */
+function hasRepeatingSelections(meta: ActionMetadata): boolean {
+  return meta.selections.some(s => isRepeatingSelection(s));
 }
 
 function startAction(actionName: string) {
@@ -857,7 +998,8 @@ function startAction(actionName: string) {
   }
 
   currentAction.value = actionName;
-  clearReactiveObject(currentArgs.value);
+  clearActionState(currentArgs.value, displayCache);
+  repeatingState.value = null;
   boardInteraction?.clear();
 
   const firstSel = meta.selections[0];
@@ -867,18 +1009,123 @@ function startAction(actionName: string) {
 }
 
 function cancelAction() {
+  // If there's a repeating selection in progress, notify server to cancel
+  if (repeatingState.value) {
+    emit('cancel-action', props.playerPosition);
+  }
   currentAction.value = null;
-  clearReactiveObject(currentArgs.value);
+  repeatingState.value = null;
+  clearActionState(currentArgs.value, displayCache);
   boardInteraction?.clear();
   emit('cancelSelection');
 }
 
-function setSelectionValue(name: string, value: unknown, display?: string) {
+async function setSelectionValue(name: string, value: unknown, display?: string) {
+  const selection = currentSelection.value;
+
+  // Handle repeating selections
+  if (selection && isRepeatingSelection(selection) && selection.name === name) {
+    // Check if we have the required function injected
+    if (!selectionStepFn) {
+      console.error('selectionStepFn not injected - repeating selections require parent to provide this');
+      return;
+    }
+
+    if (!currentAction.value) {
+      console.error('No current action for repeating selection');
+      return;
+    }
+
+    // Initialize repeating state if needed
+    if (!repeatingState.value || repeatingState.value.selectionName !== name) {
+      repeatingState.value = {
+        selectionName: name,
+        accumulated: [],
+        awaitingServer: false,
+        currentChoices: selection.choices,
+      };
+    }
+
+    // Add to accumulated values
+    repeatingState.value.accumulated.push(value);
+    repeatingState.value.awaitingServer = true;
+
+    try {
+      // Call server to process this selection step via injected function
+      // Pass currentArgs as initialArgs so server knows about prior selections (e.g., actingMerc)
+      const result = await selectionStepFn(props.playerPosition, name, value, currentAction.value, { ...currentArgs.value });
+
+      if (!result.success) {
+        // Error - remove from accumulated and show error
+        repeatingState.value.accumulated.pop();
+        console.error('Selection step failed:', result.error);
+        return;
+      }
+
+      // Check if action is complete (termination condition met)
+      if (result.actionComplete) {
+        // Action completed - clear everything
+        repeatingState.value = null;
+        currentAction.value = null;
+        clearActionState(currentArgs.value, displayCache);
+        boardInteraction?.clear();
+        emit('cancelSelection');
+        return;
+      }
+
+      // Check if this repeating selection is done but action continues
+      if (result.done) {
+        // Move accumulated to args and clear repeating state
+        currentArgs.value[name] = repeatingState.value.accumulated;
+        repeatingState.value = null;
+
+        // Check if action is ready to execute
+        if (currentAction.value && isActionReady.value) {
+          executeAction(currentAction.value, { ...currentArgs.value });
+        }
+        return;
+      }
+
+      // For selections with onEach, clear accumulated since items are processed immediately
+      // (they're not "pending" - they've already been applied to game state)
+      if (selection.repeat?.hasOnEach) {
+        repeatingState.value.accumulated = [];
+      }
+
+      // More iterations needed - update choices if provided
+      if (result.nextChoices) {
+        // Convert raw choices to ChoiceWithRefs format
+        repeatingState.value.currentChoices = result.nextChoices.map((choice: unknown) => {
+          // If already a ChoiceWithRefs object, use as-is
+          if (typeof choice === 'object' && choice !== null && 'value' in choice && 'display' in choice) {
+            return choice as ChoiceWithRefs;
+          }
+          // Convert primitive to ChoiceWithRefs
+          return {
+            value: choice,
+            display: String(choice),
+          };
+        });
+      }
+    } finally {
+      if (repeatingState.value) {
+        repeatingState.value.awaitingServer = false;
+      }
+    }
+    return;
+  }
+
+  // Normal (non-repeating) selection handling
   currentArgs.value[name] = value;
 
+  // Cache display for later lookup (important for element selections that may be filtered out later)
+  if (display) {
+    cacheSelectionDisplay(name, value, display);
+  }
+
   // For choice selections with board refs, mark the selected element
-  if (currentSelection.value?.type === 'choice' && currentSelection.value.choices) {
-    const choice = currentSelection.value.choices.find((c: any) => c.value === value);
+  if (selection?.type === 'choice' && selection.choices) {
+    const choice = selection.choices.find((c: any) => c.value === value);
     if (choice && (choice.sourceRef || choice.targetRef)) {
       const ref = choice.sourceRef || choice.targetRef;
       if (ref && boardInteraction) {
@@ -896,8 +1143,8 @@ function setSelectionValue(name: string, value: unknown, display?: string) {
     });
   }
 
-  if (currentSelection.value?.type === 'element') {
-    emit('selectingElement', currentSelection.value.name, currentSelection.value.elementClassName);
+  if (selection?.type === 'element') {
+    emit('selectingElement', selection.name, selection.elementClassName);
   }
 
   // Auto-execute if action is now complete (all required selections filled)
@@ -922,7 +1169,7 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   } finally {
     isExecuting.value = false;
     currentAction.value = null;
-    clearReactiveObject(currentArgs.value);
+    clearActionState(currentArgs.value, displayCache);
     boardInteraction?.clear();
     emit('cancelSelection');
   }
@@ -992,6 +1239,19 @@ const otherPlayers = computed(() => {
             <button class="clear-selection-btn" @click="clearSelection(key as string)">✕</button>
           </div>
         </template>
+      </div>
+
+      <!-- Accumulated selections for repeating selection in progress -->
+      <div v-if="repeatingState && repeatingState.accumulated.length > 0" class="accumulated-selections">
+        <span class="accumulated-label">Selected:</span>
+        <span
+          v-for="(val, idx) in repeatingState.accumulated"
+          :key="idx"
+          class="accumulated-chip"
+        >
+          {{ getAccumulatedDisplay(val) }}
+        </span>
+        <span v-if="repeatingState.awaitingServer" class="loading-indicator">...</span>
       </div>
 
       <!-- Current selection input -->
@@ -1214,6 +1474,42 @@ const otherPlayers = computed(() => {
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 0.85rem;
+}
+
+/* Accumulated selections for repeating choices */
+.accumulated-selections {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(0, 217, 255, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(0, 217, 255, 0.3);
+}
+
+.accumulated-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-right: 4px;
+}
+
+.accumulated-chip {
+  background: rgba(0, 217, 255, 0.2);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #00d9ff;
+}
+
+.loading-indicator {
+  color: rgba(255, 255, 255, 0.5);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 .value-display {

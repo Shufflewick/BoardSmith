@@ -7,6 +7,9 @@ import type { FlowState, SerializedAction, Game } from '@boardsmith/engine';
 // Re-export debug tracing types from engine for convenience
 export type { ActionTrace, SelectionTrace, ConditionDetail } from '@boardsmith/engine';
 
+// Re-export repeating selection types from engine
+export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '@boardsmith/engine';
+
 // ============================================
 // Game Class Types
 // ============================================
@@ -276,6 +279,13 @@ export interface SelectionMetadata {
     sourceRef?: ElementRef;
     targetRef?: ElementRef;
   }>;
+  /** For repeating choice selections: configuration for repeat behavior */
+  repeat?: {
+    /** Whether the selection has an onEach callback (requires server round-trip) */
+    hasOnEach: boolean;
+    /** The terminator value (if using repeatUntil shorthand) */
+    terminator?: unknown;
+  };
 }
 
 /**

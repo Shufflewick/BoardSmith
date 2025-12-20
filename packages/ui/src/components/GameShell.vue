@@ -297,6 +297,52 @@ async function fetchPlayerOptions(gameType: string): Promise<Record<string, unkn
   return undefined;
 }
 
+/**
+ * Selection step function for repeating selections.
+ * Makes API call to process each step of a repeating selection.
+ * @param initialArgs - Previously collected args for earlier selections (e.g., actingMerc)
+ */
+async function selectionStepFn(
+  player: number,
+  selectionName: string,
+  value: unknown,
+  actionName: string,
+  initialArgs?: Record<string, unknown>
+): Promise<{
+  success: boolean;
+  error?: string;
+  done?: boolean;
+  nextChoices?: unknown[];
+  actionComplete?: boolean;
+}> {
+  if (!gameId.value) {
+    return { success: false, error: 'No game ID' };
+  }
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${gameId.value}/selection-step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        player,
+        selectionName,
+        value,
+        action: actionName,
+        initialArgs,
+      }),
+    });
+
+    const result = await response.json();
+    return result;
+  } catch (err) {
+    console.error('Selection step error:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Selection step failed',
+    };
+  }
+}
+
 // Provide context to child components
 provide('gameState', state);
 provide('gameView', gameView);
@@ -309,6 +355,7 @@ provide('action', action);
 provide('actionArgs', actionArgs);
 provide('boardInteraction', boardInteraction);
 provide('timeTravelDiff', timeTravelDiff);
+provide('selectionStepFn', selectionStepFn);
 
 // URL routing - check for game ID or lobby ID in URL on mount
 onMounted(async () => {

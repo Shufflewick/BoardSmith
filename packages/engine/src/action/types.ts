@@ -51,6 +51,56 @@ export interface DependentFilter {
   selectionName: string;
 }
 
+// ============================================
+// Repeating Selections Types
+// ============================================
+
+/**
+ * Configuration for repeating selections.
+ * Allows a selection to be shown multiple times until a termination condition is met.
+ */
+export interface RepeatConfig<T = unknown> {
+  /**
+   * Condition to stop repeating. Called after each selection.
+   * Return true to stop repeating and complete this selection.
+   */
+  until: (context: ActionContext, lastChoice: T) => boolean;
+  /**
+   * Callback after each selection, before computing next choices.
+   * Can modify game state (e.g., equip an item, update available choices).
+   */
+  onEach?: (context: ActionContext, choice: T) => void;
+}
+
+/**
+ * State for an in-progress repeating selection
+ */
+export interface RepeatingSelectionState {
+  /** Name of the selection being repeated */
+  selectionName: string;
+  /** Accumulated values so far */
+  accumulated: unknown[];
+  /** Number of iterations completed */
+  iterationCount: number;
+}
+
+/**
+ * State for a pending action with repeating selections.
+ * Tracked by the session to support step-by-step selection flow.
+ */
+export interface PendingActionState {
+  /** Action being executed */
+  actionName: string;
+  /** Player position */
+  playerPosition: number;
+  /** Collected args for completed selections */
+  collectedArgs: Record<string, unknown>;
+  /** Current repeating selection state (if any) */
+  repeating?: RepeatingSelectionState;
+  /** Index of current selection in action.selections */
+  currentSelectionIndex: number;
+}
+
 /**
  * Select from a list of choices
  */
@@ -71,6 +121,17 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
    * Use this when choices are dynamically generated based on previous selections.
    */
   dependsOn?: string;
+  /**
+   * Repeat this selection until termination condition is met.
+   * When used, the selection value becomes an array of all choices made.
+   * Each selection round-trips to the server for state updates.
+   */
+  repeat?: RepeatConfig<T>;
+  /**
+   * Shorthand for repeat.until that terminates when this value is selected.
+   * Equivalent to: repeat: { until: (ctx, choice) => choice === repeatUntil }
+   */
+  repeatUntil?: T;
 }
 
 /**
