@@ -142,9 +142,18 @@ const actionsWithMetadata = computed(() => {
       selections: [] as Selection[],
     }));
   }
-  return props.availableActions
-    .map(name => props.actionMetadata![name])
-    .filter(Boolean);
+  // Map available actions to their metadata, falling back to a basic entry
+  // if the action doesn't have metadata (e.g., actions with no selections)
+  return props.availableActions.map(name => {
+    const meta = props.actionMetadata![name];
+    if (meta) return meta;
+    // Fallback for actions without metadata entry
+    return {
+      name,
+      prompt: formatActionName(name),
+      selections: [] as Selection[],
+    };
+  });
 });
 
 // Actions to display in the UI (filtered based on autoEndTurn setting)

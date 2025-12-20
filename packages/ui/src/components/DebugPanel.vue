@@ -1001,7 +1001,16 @@ const displayedState = computed(() => {
                 :key="key"
                 class="custom-debug-item"
               >
-                <div class="custom-debug-key">{{ key }}</div>
+                <div class="custom-debug-key">
+                  <span>{{ key }}</span>
+                  <button
+                    class="debug-btn small custom-debug-copy"
+                    @click="copyNodeToClipboard(value)"
+                    title="Copy JSON"
+                  >
+                    Copy
+                  </button>
+                </div>
                 <pre class="custom-debug-value">{{ JSON.stringify(value, null, 2) }}</pre>
               </div>
             </div>
@@ -2345,14 +2354,14 @@ const displayedState = computed(() => {
 /* Custom Debug Section */
 .custom-debug-section {
   padding-bottom: 16px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .custom-debug-content {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 300px;
-  overflow-y: auto;
 }
 
 .custom-debug-item {
@@ -2362,11 +2371,24 @@ const displayedState = computed(() => {
 }
 
 .custom-debug-key {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 8px 12px;
   background: rgba(0, 217, 255, 0.1);
   color: #00d9ff;
   font-weight: 500;
   font-size: 11px;
+}
+
+.custom-debug-copy {
+  opacity: 0.6;
+  font-size: 9px !important;
+  padding: 2px 6px !important;
+}
+
+.custom-debug-copy:hover {
+  opacity: 1;
 }
 
 .custom-debug-value {
@@ -2375,7 +2397,8 @@ const displayedState = computed(() => {
   font-family: 'Monaco', 'Menlo', monospace;
   font-size: 10px;
   color: #00ff88;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 200px;
   white-space: pre-wrap;
   word-break: break-all;
 }
