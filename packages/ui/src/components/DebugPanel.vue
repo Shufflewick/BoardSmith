@@ -1,3 +1,176 @@
+<script lang="ts">
+import { defineComponent, h } from 'vue';
+
+// Recursive TreeNode component for unlimited depth state tree
+export const TreeNode = defineComponent({
+  name: 'TreeNode',
+  props: {
+    nodeKey: { type: String, required: true },
+    value: { type: null, required: true },
+    path: { type: String, required: true },
+    depth: { type: Number, default: 0 },
+    expandedPaths: { type: Set, required: true },
+    searchQuery: { type: String, default: '' },
+  },
+  emits: ['toggle', 'copy'],
+  setup(props, { emit }) {
+    const isExpandable = (val: unknown): boolean => val !== null && typeof val === 'object';
+
+    const getTypeColor = (val: unknown): string => {
+      if (val === null) return '#e74c3c';
+      if (val === undefined) return '#95a5a6';
+      if (typeof val === 'string') return '#2ecc71';
+      if (typeof val === 'number') return '#3498db';
+      if (typeof val === 'boolean') return '#e67e22';
+      if (Array.isArray(val)) return '#9b59b6';
+      if (typeof val === 'object') return '#00d9ff';
+      return '#fff';
+    };
+
+    const formatValue = (val: unknown): string => {
+      if (val === null) return 'null';
+      if (val === undefined) return 'undefined';
+      if (typeof val === 'string') return `"${val}"`;
+      if (typeof val === 'boolean') return val ? 'true' : 'false';
+      if (Array.isArray(val)) return `Array(${val.length})`;
+      if (typeof val === 'object') {
+        const keys = Object.keys(val as object);
+        return `{${keys.length} keys}`;
+      }
+      return String(val);
+    };
+
+    const isExpanded = () => props.expandedPaths.has(props.path);
+    const expandable = () => isExpandable(props.value);
+
+    const handleToggle = () => {
+      if (expandable()) {
+        emit('toggle', props.path);
+      }
+    };
+
+    const handleCopy = (e: Event) => {
+      e.stopPropagation();
+      emit('copy', props.value);
+    };
+
+    // Inline styles for render function (scoped CSS doesn't apply)
+    const styles = {
+      row: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '3px 4px',
+        borderRadius: '3px',
+        cursor: 'default',
+      },
+      rowExpandable: {
+        cursor: 'pointer',
+      },
+      arrow: {
+        color: '#666',
+        fontSize: '10px',
+        width: '12px',
+        textAlign: 'center' as const,
+      },
+      arrowPlaceholder: {
+        width: '12px',
+      },
+      key: {
+        color: '#00d9ff',
+        fontWeight: '500' as const,
+      },
+      separator: {
+        color: '#666',
+      },
+      value: {
+        marginLeft: '4px',
+      },
+      copyBtn: {
+        opacity: '0',
+        marginLeft: 'auto',
+        padding: '2px 6px',
+        fontSize: '10px',
+        background: 'rgba(255, 255, 255, 0.1)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        borderRadius: '3px',
+        color: '#888',
+        cursor: 'pointer',
+      },
+      children: {
+        marginLeft: '16px',
+        borderLeft: '1px solid rgba(255, 255, 255, 0.1)',
+        paddingLeft: '8px',
+      },
+    };
+
+    return () => {
+      const children: any[] = [];
+
+      // Row
+      const rowStyle = expandable()
+        ? { ...styles.row, ...styles.rowExpandable }
+        : styles.row;
+
+      const rowChildren = [
+        // Arrow
+        expandable()
+          ? h('span', { style: styles.arrow }, isExpanded() ? '▼' : '▶')
+          : h('span', { style: styles.arrowPlaceholder }),
+        // Key
+        h('span', { style: styles.key }, props.nodeKey),
+        h('span', { style: styles.separator }, ':'),
+        // Value
+        h('span', { style: { ...styles.value, color: getTypeColor(props.value) } }, formatValue(props.value)),
+        // Copy button
+        h('button', {
+          class: 'tree-copy-btn',
+          style: styles.copyBtn,
+          onClick: handleCopy,
+          title: 'Copy JSON',
+        }, '⎘'),
+      ];
+
+      children.push(
+        h('div', {
+          class: 'tree-row',
+          style: rowStyle,
+          onClick: handleToggle,
+          onMouseenter: (e: MouseEvent) => {
+            const btn = (e.currentTarget as HTMLElement).querySelector('.tree-copy-btn') as HTMLElement;
+            if (btn) btn.style.opacity = '1';
+          },
+          onMouseleave: (e: MouseEvent) => {
+            const btn = (e.currentTarget as HTMLElement).querySelector('.tree-copy-btn') as HTMLElement;
+            if (btn) btn.style.opacity = '0';
+          },
+        }, rowChildren)
+      );
+
+      // Children if expanded
+      if (expandable() && isExpanded() && props.value) {
+        const childNodes = Object.entries(props.value as Record<string, unknown>).map(([childKey, childValue]) =>
+          h(TreeNode, {
+            key: childKey,
+            nodeKey: childKey,
+            value: childValue,
+            path: `${props.path}.${childKey}`,
+            depth: props.depth + 1,
+            expandedPaths: props.expandedPaths,
+            searchQuery: props.searchQuery,
+            onToggle: (p: string) => emit('toggle', p),
+            onCopy: (v: unknown) => emit('copy', v),
+          })
+        );
+        children.push(h('div', { style: styles.children }, childNodes));
+      }
+
+      return h('div', {}, children);
+    };
+  },
+});
+</script>
+
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
@@ -14,6 +187,28 @@ interface ElementDiff {
   changed: number[];
   fromIndex: number;
   toIndex: number;
+}
+
+interface ActionTrace {
+  actionName: string;
+  available: boolean;
+  conditionResult?: boolean;
+  conditionError?: string;
+  conditionDetails?: Array<{
+    label: string;
+    value: unknown;
+    passed: boolean;
+    children?: unknown[];
+  }>;
+  selections: Array<{
+    name: string;
+    type: string;
+    choiceCount: number;
+    skipped?: boolean;
+    optional?: boolean;
+    filterApplied?: boolean;
+    dependentOn?: string;
+  }>;
 }
 
 interface DebugPanelProps {
@@ -41,14 +236,30 @@ const emit = defineEmits<{
   'restart-game': [];
   'update:expanded': [value: boolean];
   'time-travel': [state: any | null, actionIndex: number | null, diff: ElementDiff | null];
+  'highlight-element': [elementId: number | null];
 }>();
 
 // Local state
 const panelExpanded = ref(props.expanded);
-const activeTab = ref<'state' | 'history' | 'actions' | 'settings'>('state');
+const activeTab = ref<'state' | 'history' | 'elements' | 'actions' | 'controls'>('state');
 const showRawState = ref(false);
 const stateSearchQuery = ref('');
 const expandedPaths = ref<Set<string>>(new Set(['root']));
+
+// Copy toast state
+const copyToastVisible = ref(false);
+const copyToastTimeout = ref<ReturnType<typeof setTimeout> | null>(null);
+
+// Action traces state
+const actionTraces = ref<ActionTrace[]>([]);
+const tracesLoading = ref(false);
+const tracesError = ref<string | null>(null);
+const tracesLastFetched = ref<number>(0);
+
+// Element inspector state
+const selectedElementId = ref<number | null>(null);
+const elementSearchQuery = ref('');
+const expandedElementGroups = ref<Set<string>>(new Set());
 
 // History state
 const actionHistory = ref<SerializedAction[]>([]);
@@ -118,6 +329,23 @@ function toggleExpand(path: string) {
 
 function isNodeExpanded(path: string): boolean {
   return expandedPaths.value.has(path);
+}
+
+// Copy any node value to clipboard as JSON
+async function copyNodeToClipboard(value: unknown) {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
+    // Show toast
+    if (copyToastTimeout.value) {
+      clearTimeout(copyToastTimeout.value);
+    }
+    copyToastVisible.value = true;
+    copyToastTimeout.value = setTimeout(() => {
+      copyToastVisible.value = false;
+    }, 1500);
+  } catch (e) {
+    console.error('Failed to copy to clipboard:', e);
+  }
 }
 
 function expandAll() {
@@ -206,6 +434,198 @@ function downloadState() {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// Fetch action traces from server
+async function fetchActionTraces() {
+  if (!props.gameId || tracesLoading.value) return;
+
+  tracesLoading.value = true;
+  tracesError.value = null;
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/action-traces?player=${props.playerPosition}`);
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch action traces');
+    }
+
+    actionTraces.value = data.traces || [];
+    tracesLastFetched.value = Date.now();
+  } catch (e) {
+    tracesError.value = e instanceof Error ? e.message : 'Unknown error';
+  } finally {
+    tracesLoading.value = false;
+  }
+}
+
+// Copy available actions to clipboard
+async function copyAvailableActions() {
+  const available = actionTraces.value.filter(t => t.available);
+  await copyNodeToClipboard(available);
+}
+
+// Copy unavailable actions to clipboard
+async function copyUnavailableActions() {
+  const unavailable = actionTraces.value.filter(t => !t.available);
+  await copyNodeToClipboard(unavailable);
+}
+
+// Group elements by class name from the view tree
+interface GroupedElement {
+  id: number;
+  className: string;
+  name?: string;
+  notation?: string;
+  attributes: Record<string, unknown>;
+  fullObject: Record<string, unknown>; // Store full object for detail view
+}
+
+const groupedElements = computed(() => {
+  const groups: Record<string, GroupedElement[]> = {};
+
+  function traverse(node: unknown) {
+    if (!node || typeof node !== 'object') return;
+    const obj = node as Record<string, unknown>;
+
+    if (typeof obj.id === 'number') {
+      const className = (obj.className as string) || 'Unknown';
+      if (!groups[className]) {
+        groups[className] = [];
+      }
+
+      // Create a copy of the object without children for the detail view
+      const { children, ...objectWithoutChildren } = obj;
+
+      groups[className].push({
+        id: obj.id,
+        className,
+        name: obj.name as string | undefined,
+        notation: obj.notation as string | undefined,
+        attributes: (obj.attributes as Record<string, unknown>) || {},
+        fullObject: objectWithoutChildren,
+      });
+    }
+
+    // Traverse children
+    if (Array.isArray(obj.children)) {
+      for (const child of obj.children) {
+        traverse(child);
+      }
+    }
+  }
+
+  if (displayedState.value?.state?.view) {
+    traverse(displayedState.value.state.view);
+  }
+
+  return groups;
+});
+
+// Get the currently selected element
+const selectedElement = computed<GroupedElement | null>(() => {
+  if (selectedElementId.value === null) return null;
+  for (const elements of Object.values(groupedElements.value)) {
+    const found = elements.find(el => el.id === selectedElementId.value);
+    if (found) return found;
+  }
+  return null;
+});
+
+// Copy element JSON to clipboard
+async function copyElementToClipboard(element: GroupedElement) {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(element.fullObject, null, 2));
+  } catch (e) {
+    console.error('Failed to copy element to clipboard:', e);
+  }
+}
+
+// Filter elements by search query
+const filteredElementGroups = computed(() => {
+  if (!elementSearchQuery.value) return groupedElements.value;
+
+  const query = elementSearchQuery.value.toLowerCase();
+  const filtered: Record<string, GroupedElement[]> = {};
+
+  for (const [className, elements] of Object.entries(groupedElements.value)) {
+    const matchingElements = elements.filter(el =>
+      className.toLowerCase().includes(query) ||
+      el.name?.toLowerCase().includes(query) ||
+      el.notation?.toLowerCase().includes(query) ||
+      String(el.id).includes(query)
+    );
+
+    if (matchingElements.length > 0) {
+      filtered[className] = matchingElements;
+    }
+  }
+
+  return filtered;
+});
+
+// Toggle element group expansion
+function toggleElementGroup(className: string) {
+  if (expandedElementGroups.value.has(className)) {
+    expandedElementGroups.value.delete(className);
+  } else {
+    expandedElementGroups.value.add(className);
+  }
+  expandedElementGroups.value = new Set(expandedElementGroups.value);
+}
+
+// Select an element and highlight it on the board
+function selectElement(element: GroupedElement) {
+  if (selectedElementId.value === element.id) {
+    // Deselect
+    selectedElementId.value = null;
+    emit('highlight-element', null);
+  } else {
+    selectedElementId.value = element.id;
+    emit('highlight-element', element.id);
+  }
+}
+
+// Get display name for an element
+function getElementDisplayName(element: GroupedElement): string {
+  if (element.notation) return element.notation;
+  if (element.name) return element.name;
+  return `#${element.id}`;
+}
+
+// Get custom debug data from state
+const customDebugData = computed(() => {
+  return displayedState.value?.state?.customDebug ?? null;
+});
+
+// Format a condition value for display
+function formatConditionValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'boolean') return value.toString();
+  if (typeof value === 'number') return value.toString();
+  if (typeof value === 'string') return `"${value}"`;
+  if (Array.isArray(value)) return `[${value.length} items]`;
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+// Refresh action traces when switching to actions tab or when state changes
+watch(activeTab, (tab) => {
+  if (tab === 'actions' && props.gameId) {
+    // Refresh traces when switching to actions tab
+    if (Date.now() - tracesLastFetched.value > 2000) {
+      fetchActionTraces();
+    }
+  }
+});
+
+// Refresh traces when state changes
+watch(() => props.state, () => {
+  if (activeTab.value === 'actions') {
+    fetchActionTraces();
+  }
+}, { deep: false });
 
 // Fetch action history from server
 async function fetchHistory() {
@@ -391,22 +811,28 @@ const displayedState = computed(() => {
             State
           </button>
           <button
+            :class="{ active: activeTab === 'elements' }"
+            @click="activeTab = 'elements'"
+          >
+            Elements
+          </button>
+          <button
+            :class="{ active: activeTab === 'actions' }"
+            @click="activeTab = 'actions'"
+          >
+            Actions
+          </button>
+          <button
             :class="{ active: activeTab === 'history' }"
             @click="activeTab = 'history'"
           >
             History
           </button>
           <button
-            :class="{ active: activeTab === 'actions' }"
-            @click="activeTab = 'actions'"
+            :class="{ active: activeTab === 'controls' }"
+            @click="activeTab = 'controls'"
           >
             Controls
-          </button>
-          <button
-            :class="{ active: activeTab === 'settings' }"
-            @click="activeTab = 'settings'"
-          >
-            Settings
           </button>
         </div>
 
@@ -464,82 +890,220 @@ const displayedState = computed(() => {
                     </span>
                   </div>
 
-                  <!-- State tree -->
-                  <div class="tree-node" v-for="(value, key) in displayedState" :key="key">
-                    <div
-                      class="tree-row"
-                      :class="{ expandable: isExpandable(value), hidden: !matchesSearch(String(key), value, stateSearchQuery) }"
-                      @click="isExpandable(value) && toggleExpand(`root.${key}`)"
-                    >
-                      <span v-if="isExpandable(value)" class="tree-arrow">
-                        {{ isNodeExpanded(`root.${key}`) ? '▼' : '▶' }}
-                      </span>
-                      <span v-else class="tree-arrow-placeholder"></span>
-                      <span class="tree-key">{{ key }}</span>
-                      <span class="tree-separator">:</span>
-                      <span class="tree-value" :style="{ color: getTypeColor(value) }">
-                        {{ formatValue(value) }}
-                      </span>
-                    </div>
-
-                    <!-- Nested children (1 level deep for performance) -->
-                    <div v-if="isExpandable(value) && isNodeExpanded(`root.${key}`)" class="tree-children">
-                      <div
-                        class="tree-node"
-                        v-for="(childValue, childKey) in value"
-                        :key="childKey"
-                      >
-                        <div
-                          class="tree-row"
-                          :class="{ expandable: isExpandable(childValue), hidden: !matchesSearch(String(childKey), childValue, stateSearchQuery) }"
-                          @click="isExpandable(childValue) && toggleExpand(`root.${key}.${childKey}`)"
-                        >
-                          <span v-if="isExpandable(childValue)" class="tree-arrow">
-                            {{ isNodeExpanded(`root.${key}.${childKey}`) ? '▼' : '▶' }}
-                          </span>
-                          <span v-else class="tree-arrow-placeholder"></span>
-                          <span class="tree-key">{{ childKey }}</span>
-                          <span class="tree-separator">:</span>
-                          <span class="tree-value" :style="{ color: getTypeColor(childValue) }">
-                            {{ formatValue(childValue) }}
-                          </span>
-                        </div>
-
-                        <!-- Level 3 -->
-                        <div v-if="isExpandable(childValue) && isNodeExpanded(`root.${key}.${childKey}`)" class="tree-children">
-                          <div
-                            class="tree-node"
-                            v-for="(grandchildValue, grandchildKey) in childValue"
-                            :key="grandchildKey"
-                          >
-                            <div
-                              class="tree-row"
-                              :class="{ expandable: isExpandable(grandchildValue) }"
-                              @click="isExpandable(grandchildValue) && toggleExpand(`root.${key}.${childKey}.${grandchildKey}`)"
-                            >
-                              <span v-if="isExpandable(grandchildValue)" class="tree-arrow">
-                                {{ isNodeExpanded(`root.${key}.${childKey}.${grandchildKey}`) ? '▼' : '▶' }}
-                              </span>
-                              <span v-else class="tree-arrow-placeholder"></span>
-                              <span class="tree-key">{{ grandchildKey }}</span>
-                              <span class="tree-separator">:</span>
-                              <span class="tree-value" :style="{ color: getTypeColor(grandchildValue) }">
-                                {{ formatValue(grandchildValue) }}
-                              </span>
-                            </div>
-
-                            <!-- Level 4 - show as JSON -->
-                            <div v-if="isExpandable(grandchildValue) && isNodeExpanded(`root.${key}.${childKey}.${grandchildKey}`)" class="tree-children tree-json">
-                              <pre>{{ JSON.stringify(grandchildValue, null, 2) }}</pre>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <!-- State tree (recursive component) -->
+                  <TreeNode
+                    v-for="(value, key) in displayedState"
+                    :key="key"
+                    :node-key="String(key)"
+                    :value="value"
+                    :path="`root.${key}`"
+                    :depth="0"
+                    :expanded-paths="expandedPaths"
+                    :search-query="stateSearchQuery"
+                    @toggle="toggleExpand"
+                    @copy="copyNodeToClipboard"
+                  />
                 </div>
               </template>
               <div v-else class="no-state">No state available</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Elements Tab -->
+        <div v-if="activeTab === 'elements'" class="tab-content elements-tab">
+          <!-- Search -->
+          <div class="element-search">
+            <input
+              type="text"
+              v-model="elementSearchQuery"
+              placeholder="Search elements..."
+              class="search-input"
+            />
+          </div>
+
+          <!-- Split View: List + Details -->
+          <div class="elements-split-view" :class="{ 'has-selection': selectedElement }">
+            <!-- Element List -->
+            <div class="elements-list-panel">
+              <div v-if="Object.keys(filteredElementGroups).length === 0" class="no-elements">
+                No elements found
+              </div>
+
+              <div v-else class="element-groups">
+                <div
+                  v-for="(elements, className) in filteredElementGroups"
+                  :key="className"
+                  class="element-group"
+                >
+                  <div
+                    class="element-group-header"
+                    @click="toggleElementGroup(className)"
+                  >
+                    <span class="group-arrow">
+                      {{ expandedElementGroups.has(className) ? '▼' : '▶' }}
+                    </span>
+                    <span class="group-name">{{ className }}</span>
+                    <span class="group-count">[{{ elements.length }}]</span>
+                  </div>
+
+                  <div v-if="expandedElementGroups.has(className)" class="element-list">
+                    <div
+                      v-for="element in elements"
+                      :key="element.id"
+                      class="element-item"
+                      :class="{ selected: selectedElementId === element.id }"
+                      @click="selectElement(element)"
+                    >
+                      <span class="element-name">{{ getElementDisplayName(element) }}</span>
+                      <span class="element-id">#{{ element.id }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Element Detail Panel -->
+            <div v-if="selectedElement" class="element-detail-panel">
+              <div class="element-detail-header">
+                <span class="element-detail-title">
+                  {{ selectedElement.className }} #{{ selectedElement.id }}
+                </span>
+                <div class="element-detail-actions">
+                  <button
+                    @click="copyElementToClipboard(selectedElement)"
+                    class="debug-btn small"
+                    title="Copy JSON"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    @click="selectedElementId = null; emit('highlight-element', null)"
+                    class="debug-btn small"
+                    title="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div class="element-detail-content">
+                <pre class="element-json">{{ JSON.stringify(selectedElement.fullObject, null, 2) }}</pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Debug Section -->
+          <div v-if="customDebugData" class="custom-debug-section">
+            <h4 class="section-title">Custom Debug</h4>
+            <div class="custom-debug-content">
+              <div
+                v-for="(value, key) in customDebugData"
+                :key="key"
+                class="custom-debug-item"
+              >
+                <div class="custom-debug-key">{{ key }}</div>
+                <pre class="custom-debug-value">{{ JSON.stringify(value, null, 2) }}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions Tab -->
+        <div v-if="activeTab === 'actions'" class="tab-content actions-tab">
+          <div class="actions-header">
+            <span class="actions-count">{{ actionTraces.length }} actions</span>
+            <button @click="fetchActionTraces" class="debug-btn small" :disabled="tracesLoading">
+              {{ tracesLoading ? 'Loading...' : 'Refresh' }}
+            </button>
+          </div>
+
+          <div v-if="tracesError" class="traces-error">
+            {{ tracesError }}
+          </div>
+
+          <div v-else-if="actionTraces.length === 0" class="no-traces">
+            No action traces available
+          </div>
+
+          <div v-else class="traces-list">
+            <!-- Available Actions -->
+            <div class="trace-group">
+              <div class="trace-group-header available">
+                <span class="trace-icon">✓</span>
+                <span class="trace-group-label">Available ({{ actionTraces.filter(t => t.available).length }})</span>
+                <button
+                  class="debug-btn small trace-copy-btn"
+                  @click="copyAvailableActions"
+                  title="Copy available actions"
+                >
+                  Copy
+                </button>
+              </div>
+              <div class="trace-items">
+                <div
+                  v-for="trace in actionTraces.filter(t => t.available)"
+                  :key="trace.actionName"
+                  class="trace-item available"
+                >
+                  <span class="trace-name">{{ trace.actionName }}</span>
+                  <span v-if="trace.selections.length > 0" class="trace-selections">
+                    ({{ trace.selections.map(s => `${s.name}: ${s.choiceCount}`).join(', ') }})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Unavailable Actions -->
+            <div class="trace-group">
+              <div class="trace-group-header unavailable">
+                <span class="trace-icon">✗</span>
+                <span class="trace-group-label">Unavailable ({{ actionTraces.filter(t => !t.available).length }})</span>
+                <button
+                  class="debug-btn small trace-copy-btn"
+                  @click="copyUnavailableActions"
+                  title="Copy unavailable actions"
+                >
+                  Copy
+                </button>
+              </div>
+              <div class="trace-items">
+                <div
+                  v-for="trace in actionTraces.filter(t => !t.available)"
+                  :key="trace.actionName"
+                  class="trace-item-detailed unavailable"
+                >
+                  <div class="trace-item-header">
+                    <span class="trace-name">{{ trace.actionName }}</span>
+                    <span class="trace-reason">
+                      <template v-if="trace.conditionError">
+                        error: {{ trace.conditionError }}
+                      </template>
+                      <template v-else-if="trace.conditionResult === false">
+                        condition failed
+                      </template>
+                      <template v-else-if="trace.selections.some(s => s.choiceCount === 0)">
+                        no choices for: {{ trace.selections.filter(s => s.choiceCount === 0).map(s => s.name).join(', ') }}
+                      </template>
+                      <template v-else>
+                        unknown
+                      </template>
+                    </span>
+                  </div>
+                  <!-- Show condition details if available -->
+                  <div v-if="trace.conditionDetails && trace.conditionDetails.length > 0" class="condition-details">
+                    <div
+                      v-for="(detail, idx) in trace.conditionDetails"
+                      :key="idx"
+                      class="condition-detail"
+                      :class="{ passed: detail.passed, failed: !detail.passed }"
+                    >
+                      <span class="condition-icon">{{ detail.passed ? '✓' : '✗' }}</span>
+                      <span class="condition-label">{{ detail.label }}</span>
+                      <span class="condition-value">= {{ formatConditionValue(detail.value) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -631,7 +1195,7 @@ const displayedState = computed(() => {
         </div>
 
         <!-- Controls Tab -->
-        <div v-if="activeTab === 'actions'" class="tab-content actions-tab">
+        <div v-if="activeTab === 'controls'" class="tab-content controls-tab">
           <!-- Player Perspective -->
           <div class="action-group">
             <h4>Player Perspective</h4>
@@ -657,27 +1221,18 @@ const displayedState = computed(() => {
             </button>
             <p class="hint">Start a new game (current progress will be lost)</p>
           </div>
-        </div>
 
-        <!-- Settings Tab -->
-        <div v-if="activeTab === 'settings'" class="tab-content settings-tab">
-          <div class="setting-group">
-            <h4>Display</h4>
+          <!-- Settings -->
+          <div class="action-group">
+            <h4>Settings</h4>
             <label class="setting-item">
               <input type="checkbox" v-model="showRawState" />
               Show raw JSON by default
             </label>
           </div>
-          <div class="setting-group">
-            <h4>Keyboard Shortcuts</h4>
-            <div class="shortcut-list">
-              <div class="shortcut-item">
-                <kbd>D</kbd>
-                <span>Toggle debug panel</span>
-              </div>
-            </div>
-          </div>
-          <div class="setting-group">
+
+          <!-- Connection Info -->
+          <div class="action-group">
             <h4>Connection</h4>
             <div class="state-item">
               <span class="label">API URL:</span>
@@ -687,10 +1242,20 @@ const displayedState = computed(() => {
               <span class="label">Game ID:</span>
               <span class="value monospace">{{ gameId || 'N/A' }}</span>
             </div>
+            <div class="shortcut-hint">
+              <kbd>D</kbd> Toggle debug panel
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Copy toast notification -->
+    <Transition name="toast">
+      <div v-if="copyToastVisible" class="copy-toast">
+        Copied to clipboard
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -808,6 +1373,7 @@ const displayedState = computed(() => {
 
 .debug-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 8px 16px 0;
   background: rgba(0, 0, 0, 0.3);
@@ -989,6 +1555,28 @@ const displayedState = computed(() => {
   margin-left: 4px;
 }
 
+.tree-copy-btn {
+  opacity: 0;
+  margin-left: auto;
+  padding: 2px 6px;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  color: #888;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.tree-row:hover .tree-copy-btn {
+  opacity: 1;
+}
+
+.tree-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
 .tree-json {
   margin-top: 4px;
 }
@@ -1096,7 +1684,8 @@ const displayedState = computed(() => {
   color: #aaa;
 }
 
-.shortcut-item kbd {
+.shortcut-item kbd,
+.shortcut-hint kbd {
   display: inline-block;
   padding: 4px 8px;
   background: rgba(255, 255, 255, 0.1);
@@ -1105,6 +1694,12 @@ const displayedState = computed(() => {
   font-family: monospace;
   font-size: 12px;
   color: #00d9ff;
+}
+
+.shortcut-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
 }
 
 .state-item {
@@ -1183,6 +1778,18 @@ const displayedState = computed(() => {
 }
 
 .history-count {
+  color: #888;
+  font-size: 12px;
+}
+
+.actions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.actions-count {
   color: #888;
   font-size: 12px;
 }
@@ -1384,5 +1991,418 @@ const displayedState = computed(() => {
 
 .tree-summary.historical {
   background: rgba(245, 158, 11, 0.15);
+}
+
+/* Elements Tab */
+.elements-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.element-search {
+  margin-bottom: 8px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 12px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* Actions Section */
+.actions-section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 16px;
+}
+
+.traces-error {
+  color: #e74c3c;
+  padding: 8px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.no-traces {
+  color: #666;
+  font-style: italic;
+  font-size: 11px;
+}
+
+.traces-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trace-group {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.trace-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.trace-group-header.available {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.trace-group-header.unavailable {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.trace-group-label {
+  flex: 1;
+}
+
+.trace-copy-btn {
+  opacity: 0.6;
+  font-size: 9px !important;
+  padding: 2px 6px !important;
+  text-transform: none;
+}
+
+.trace-copy-btn:hover {
+  opacity: 1;
+}
+
+.trace-icon {
+  font-size: 12px;
+}
+
+.trace-items {
+  padding: 4px 8px;
+}
+
+.trace-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+.trace-item.available .trace-name {
+  color: #4ade80;
+}
+
+.trace-item.unavailable .trace-name {
+  color: #f87171;
+}
+
+.trace-selections {
+  color: #888;
+  font-size: 10px;
+}
+
+.trace-reason {
+  color: #888;
+  font-size: 10px;
+  font-style: italic;
+}
+
+/* Detailed trace item for unavailable actions */
+.trace-item-detailed {
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.trace-item-detailed.unavailable {
+  border-left: 3px solid #f87171;
+}
+
+.trace-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.trace-item-detailed .trace-name {
+  color: #f87171;
+  font-weight: 500;
+}
+
+/* Condition details */
+.condition-details {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.condition-detail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 10px;
+  font-family: monospace;
+}
+
+.condition-detail.passed {
+  color: #4ade80;
+}
+
+.condition-detail.failed {
+  color: #f87171;
+}
+
+.condition-icon {
+  font-size: 9px;
+  width: 12px;
+  text-align: center;
+}
+
+.condition-label {
+  color: #aaa;
+}
+
+.condition-value {
+  color: #888;
+  font-size: 9px;
+}
+
+/* Elements Section */
+.elements-section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 16px;
+}
+
+.no-elements {
+  color: #666;
+  font-style: italic;
+  font-size: 11px;
+}
+
+/* Elements split view layout */
+.elements-split-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+}
+
+.elements-split-view.has-selection {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.elements-list-panel {
+  flex: 1;
+  min-width: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.elements-split-view.has-selection .elements-list-panel {
+  flex: 0 0 40%;
+  max-height: 400px;
+}
+
+.element-detail-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 400px;
+}
+
+.element-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.element-detail-title {
+  font-weight: 600;
+  color: #3498db;
+  font-size: 13px;
+}
+
+.element-detail-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.element-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.element-json {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #ccc;
+}
+
+.element-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: none;
+  overflow-y: visible;
+}
+
+.element-group {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.element-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.element-group-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.group-arrow {
+  color: #666;
+  font-size: 10px;
+  width: 12px;
+}
+
+.group-name {
+  color: #00d9ff;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.group-count {
+  color: #888;
+  font-size: 11px;
+}
+
+.element-list {
+  padding: 4px 8px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.element-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.element-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.element-item.selected {
+  background: rgba(0, 217, 255, 0.2);
+  border: 1px solid rgba(0, 217, 255, 0.4);
+}
+
+.element-name {
+  color: #e0e0e0;
+  font-size: 11px;
+}
+
+.element-id {
+  color: #666;
+  font-size: 10px;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* Custom Debug Section */
+.custom-debug-section {
+  padding-bottom: 16px;
+}
+
+.custom-debug-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.custom-debug-item {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.custom-debug-key {
+  padding: 8px 12px;
+  background: rgba(0, 217, 255, 0.1);
+  color: #00d9ff;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.custom-debug-value {
+  margin: 0;
+  padding: 8px 12px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 10px;
+  color: #00ff88;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Copy toast */
+.copy-toast {
+  position: absolute;
+  bottom: 60px;
+  right: 20px;
+  padding: 8px 16px;
+  background: rgba(0, 217, 255, 0.9);
+  color: #000;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 </style>

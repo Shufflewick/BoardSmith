@@ -117,6 +117,10 @@ const timeTravelActionIndex = ref<number | null>(null);
 const timeTravelDiff = ref<{ added: number[]; removed: number[]; changed: number[] } | null>(null);
 const isViewingHistory = computed(() => timeTravelState.value !== null);
 
+// Debug highlight state (for element inspector)
+const debugHighlightedElementId = ref<number | null>(null);
+provide('debugHighlight', debugHighlightedElementId);
+
 // Create client
 const client = new MeepleClient({
   baseUrl: props.apiUrl,
@@ -782,6 +786,23 @@ async function handleUpdateGameOptions(options: Record<string, unknown>) {
   }
 }
 
+async function handleUpdateSlotPlayerOptions(position: number, options: Record<string, unknown>) {
+  if (!createdGameId.value) return;
+
+  try {
+    const result = await client.updateSlotPlayerOptions(createdGameId.value, position, options);
+
+    if (result.success && result.lobby) {
+      lobbyInfo.value = result.lobby;
+    } else {
+      toast.error(result.error || 'Failed to update slot options');
+    }
+  } catch (err) {
+    console.error('Failed to update slot player options:', err);
+    toast.error('Failed to update slot options');
+  }
+}
+
 async function handleLobbyCancel() {
   // For non-hosts, release our slot before leaving
   if (!isCreator.value && createdGameId.value) {
@@ -857,6 +878,11 @@ function handleTimeTravel(
   timeTravelDiff.value = diff;
 }
 
+// Debug highlight handler - highlights an element on the board
+function handleHighlightElement(elementId: number | null) {
+  debugHighlightedElementId.value = elementId;
+}
+
 // Menu handlers
 function handleMenuItemClick(id: string) {
   if (id === 'leave') {
@@ -912,6 +938,7 @@ defineExpose({
       @set-slot-ai="handleSetSlotAI"
       @kick-player="handleKickPlayer"
       @update-player-options="handleUpdatePlayerOptions"
+      @update-slot-player-options="handleUpdateSlotPlayerOptions"
       @update-game-options="handleUpdateGameOptions"
       @cancel="handleLobbyCancel"
     />
@@ -1020,6 +1047,7 @@ defineExpose({
         @switch-player="handleSwitchPlayer"
         @restart-game="handleRestartGame"
         @time-travel="handleTimeTravel"
+        @highlight-element="handleHighlightElement"
       />
 
       <!-- Error display -->

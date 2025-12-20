@@ -23,6 +23,7 @@ import {
   handleGetHistory,
   handleGetStateAt,
   handleGetStateDiff,
+  handleGetActionTraces,
   handleUndo,
   handleRestart,
   handleHealth,
@@ -36,6 +37,7 @@ import {
   handleLeavePosition,
   handleKickPlayer,
   handleUpdatePlayerOptions,
+  handleUpdateSlotPlayerOptions,
   handleUpdateGameOptions,
 } from './handlers/games.js';
 import type { ClaimPositionRequest } from './types.js';
@@ -160,6 +162,15 @@ export class GameServerCore {
         return await handleGetStateDiff(this.#store, gameId, fromIndex, toIndex, playerPosition);
       }
 
+      // GET /games/:gameId/action-traces - Action availability traces (debug)
+      const actionTracesMatch = path.match(/^\/games\/([^/]+)\/action-traces$/);
+      if (actionTracesMatch && method === 'GET') {
+        // Note: This is a debug endpoint. Consider disabling in production.
+        const gameId = actionTracesMatch[1];
+        const playerPosition = parseInt(query.player || '0', 10);
+        return await handleGetActionTraces(this.#store, gameId, playerPosition);
+      }
+
       // POST /games/:gameId/undo - Undo to turn start
       const undoMatch = path.match(/^\/games\/([^/]+)\/undo$/);
       if (undoMatch && method === 'POST') {
@@ -259,6 +270,14 @@ export class GameServerCore {
         const gameId = gameOptionsMatch[1];
         const { playerId, options } = body as { playerId: string; options: Record<string, unknown> };
         return await handleUpdateGameOptions(this.#store, gameId, playerId, options);
+      }
+
+      // POST /games/:gameId/slot-player-options - Update a slot's player options (host only)
+      const slotPlayerOptionsMatch = path.match(/^\/games\/([^/]+)\/slot-player-options$/);
+      if (slotPlayerOptionsMatch && method === 'POST') {
+        const gameId = slotPlayerOptionsMatch[1];
+        const { playerId, position, options } = body as { playerId: string; position: number; options: Record<string, unknown> };
+        return await handleUpdateSlotPlayerOptions(this.#store, gameId, playerId, position, options);
       }
 
       // PUT /games/:gameId/players/:position/name - Update player name
@@ -569,6 +588,28 @@ export class GameServerCore {
         );
         if (!updateOptionsResult.success) {
           session.ws.send({ type: 'error', error: updateOptionsResult.error });
+        }
+        // Success: broadcast happens automatically
+        break;
+
+      case 'updateSlotPlayerOptions':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || message.position === undefined || !message.playerOptions) {
+          session.ws.send({ type: 'error', error: 'PlayerId, position, and playerOptions are required' });
+          return;
+        }
+
+        const updateSlotOptionsResult = await gameSession.updateSlotPlayerOptions(
+          session.playerId,
+          message.position,
+          message.playerOptions
+        );
+        if (!updateSlotOptionsResult.success) {
+          session.ws.send({ type: 'error', error: updateSlotOptionsResult.error });
         }
         // Success: broadcast happens automatically
         break;

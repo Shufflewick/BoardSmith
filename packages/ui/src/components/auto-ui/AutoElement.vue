@@ -49,6 +49,9 @@ const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(n
 // Time travel diff for highlighting changed elements
 const timeTravelDiff = inject<Ref<{ added: number[]; removed: number[]; changed: number[] } | null>>('timeTravelDiff', ref(null));
 
+// Debug highlight (from element inspector)
+const debugHighlight = inject<Ref<number | null>>('debugHighlight', ref(null));
+
 // Diff highlighting computed properties
 const isDiffAdded = computed(() => timeTravelDiff?.value?.added?.includes(props.element.id) ?? false);
 const isDiffChanged = computed(() => timeTravelDiff?.value?.changed?.includes(props.element.id) ?? false);
@@ -57,6 +60,9 @@ const diffHighlightClass = computed(() => {
   if (isDiffChanged.value) return 'diff-changed';
   return '';
 });
+
+// Debug highlight computed property
+const isDebugHighlighted = computed(() => debugHighlight?.value === props.element.id);
 
 // Board interaction for hover highlighting and click selection
 const boardInteraction = useBoardInteraction();
@@ -897,6 +903,7 @@ const cardBackPreviewData = computed(() => {
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
         'is-valid-target': isValidTarget,
+        'is-debug-highlighted': isDebugHighlighted,
       }
     ]"
     @click="handleClick"
@@ -2035,6 +2042,22 @@ const cardBackPreviewData = computed(() => {
 .is-board-selected .cell-notation {
   opacity: 1;
   color: #fff;
+}
+
+/* Debug inspector highlight (from DebugPanel element inspector) */
+.is-debug-highlighted {
+  box-shadow: 0 0 0 4px rgba(255, 0, 255, 0.8), 0 0 20px rgba(255, 0, 255, 0.5);
+  z-index: 100;
+  animation: debug-pulse 1s ease-in-out infinite;
+}
+
+@keyframes debug-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(255, 0, 255, 0.8), 0 0 20px rgba(255, 0, 255, 0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 0, 255, 1), 0 0 30px rgba(255, 0, 255, 0.8); }
+}
+
+.is-debug-highlighted.grid-cell {
+  background: rgba(255, 0, 255, 0.3);
 }
 
 /* DRAG AND DROP STYLES */

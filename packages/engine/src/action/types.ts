@@ -64,6 +64,13 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
   boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;
   /** Filter choices based on a previous selection value */
   filterBy?: DependentFilter;
+  /**
+   * Name of a previous selection this choice depends on.
+   * When specified, choices are computed for each possible value of the
+   * dependent selection and sent to the client as a map.
+   * Use this when choices are dynamically generated based on previous selections.
+   */
+  dependsOn?: string;
 }
 
 /**
@@ -142,6 +149,9 @@ export interface ActionContext {
   args: Record<string, unknown>;
 }
 
+// Forward declaration for ConditionTracer (class defined in action.ts)
+import type { ConditionTracer } from './action.js';
+
 /**
  * Definition of an action
  */
@@ -152,8 +162,12 @@ export interface ActionDefinition {
   prompt?: string;
   /** Selections required for this action */
   selections: Selection[];
-  /** Condition for when this action is available */
-  condition?: (context: ActionContext) => boolean;
+  /**
+   * Condition for when this action is available.
+   * Optionally accepts a ConditionTracer for detailed debug tracing.
+   * The tracer is only provided when explicitly requested (debug mode).
+   */
+  condition?: (context: ActionContext, tracer?: ConditionTracer) => boolean;
   /** The effect to execute */
   execute: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void;
   /**
@@ -201,4 +215,62 @@ export interface SerializedAction {
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
+}
+
+// ============================================
+// Action Tracing Types (for debug interface)
+// ============================================
+
+/**
+ * Detail of a condition check for deep tracing.
+ * Used when game developers opt-in to detailed condition tracing.
+ */
+export interface ConditionDetail {
+  /** Human-readable label (e.g., "hasStash(primarySquad)") */
+  label: string;
+  /** The actual value that was checked */
+  value: unknown;
+  /** Whether this check passed (truthy) */
+  passed: boolean;
+  /** Nested condition details for complex checks */
+  children?: ConditionDetail[];
+}
+
+/**
+ * Trace information for a selection within an action
+ */
+export interface SelectionTrace {
+  /** Selection name */
+  name: string;
+  /** Selection type (choice, player, element, etc.) */
+  type: string;
+  /** Number of available choices */
+  choiceCount: number;
+  /** Whether skipIfOnlyOne triggered */
+  skipped?: boolean;
+  /** Whether this selection is optional */
+  optional?: boolean;
+  /** Whether filterBy was applied */
+  filterApplied?: boolean;
+  /** Name of selection this depends on (if using dependsOn) */
+  dependentOn?: string;
+}
+
+/**
+ * Complete trace of action availability check.
+ * Used by debug interface to show why actions are available/unavailable.
+ */
+export interface ActionTrace {
+  /** Action name */
+  actionName: string;
+  /** Whether the action is available */
+  available: boolean;
+  /** Result of condition check (true/false/undefined if no condition) */
+  conditionResult?: boolean;
+  /** Error message if condition threw */
+  conditionError?: string;
+  /** Detailed condition trace (only if developer used ConditionTracer) */
+  conditionDetails?: ConditionDetail[];
+  /** Trace of each selection */
+  selections: SelectionTrace[];
 }

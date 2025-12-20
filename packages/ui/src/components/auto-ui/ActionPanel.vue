@@ -77,6 +77,10 @@ export interface Selection {
   validElements?: ValidElement[];
   /** For choice selections: filter choices based on a previous selection */
   filterBy?: SelectionFilter;
+  /** For choice selections: name of a previous selection this depends on */
+  dependsOn?: string;
+  /** For choice selections with dependsOn: choices indexed by dependent value */
+  choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
 }
 
 export interface ActionMetadata {
@@ -265,12 +269,30 @@ const selectedElementRef = computed(() => {
   return null;
 });
 
-// Filter choices based on filterBy and previous selections
+// Filter choices based on filterBy, dependsOn, and previous selections
 // Also excludes choices that were already selected in previous choice selections
 const filteredChoices = computed(() => {
-  if (!currentSelection.value?.choices) return [];
+  if (!currentSelection.value) return [];
 
-  let choices = currentSelection.value.choices;
+  let choices: ChoiceWithRefs[] = [];
+
+  // Handle dependsOn: look up choices from choicesByDependentValue
+  if (currentSelection.value.dependsOn && currentSelection.value.choicesByDependentValue) {
+    const dependentValue = currentArgs.value[currentSelection.value.dependsOn];
+    if (dependentValue !== undefined) {
+      const key = String(dependentValue);
+      choices = currentSelection.value.choicesByDependentValue[key] || [];
+    } else {
+      // Dependent selection not yet made - no choices available
+      return [];
+    }
+  } else if (currentSelection.value.choices) {
+    // Regular choices
+    choices = currentSelection.value.choices;
+  } else {
+    return [];
+  }
+
   const filterBy = currentSelection.value.filterBy;
 
   // If filterBy is specified, filter to only matching choices
@@ -953,12 +975,10 @@ const otherPlayers = computed(() => {
         <button class="cancel-btn" @click="cancelAction">✕</button>
       </div>
 
-      <!-- Selected values (show previous selections) -->
+      <!-- Selected values (show previous selections as chips) -->
       <div v-if="Object.keys(currentArgs).length > 0" class="selected-values">
-        <!-- Show selected element with display from validElements -->
         <template v-for="(value, key) in currentArgs" :key="key">
           <div class="selected-value from-board">
-            <span class="value-label">{{ key }}:</span>
             <span class="value-display">{{ getSelectionDisplay(key as string, value) }}</span>
             <button class="clear-selection-btn" @click="clearSelection(key as string)">✕</button>
           </div>
@@ -994,8 +1014,8 @@ const otherPlayers = computed(() => {
           </div>
         </template>
 
-        <!-- Choice selection with filterBy (shows filtered choices, executes immediately) -->
-        <template v-else-if="currentSelection.type === 'choice' && currentSelection.filterBy">
+        <!-- Choice selection with filterBy or dependsOn (shows filtered choices, executes immediately) -->
+        <template v-else-if="currentSelection.type === 'choice' && (currentSelection.filterBy || currentSelection.dependsOn)">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
           </div>
@@ -1185,11 +1205,6 @@ const otherPlayers = computed(() => {
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 0.85rem;
-}
-
-.value-label {
-  color: #888;
-  margin-right: 4px;
 }
 
 .value-display {

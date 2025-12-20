@@ -104,6 +104,7 @@ const emit = defineEmits<{
   (e: 'set-slot-ai', position: number, isAI: boolean, aiLevel?: string): void;
   (e: 'kick-player', position: number): void;
   (e: 'update-player-options', options: Record<string, unknown>): void;
+  (e: 'update-slot-player-options', position: number, options: Record<string, unknown>): void;
   (e: 'update-game-options', options: Record<string, unknown>): void;
   (e: 'cancel'): void;
 }>();
@@ -144,6 +145,30 @@ watch(() => props.lobby, (lobby) => {
 const typedPlayerOptions = computed(() => {
   if (!props.playerOptions) return null;
   return props.playerOptions as Record<string, PlayerOptionDefinition>;
+});
+
+// Non-exclusive player options (for "Your Settings" panel)
+const standardPlayerOptions = computed(() => {
+  if (!typedPlayerOptions.value) return null;
+  const filtered: Record<string, PlayerOptionDefinition> = {};
+  for (const [key, opt] of Object.entries(typedPlayerOptions.value)) {
+    if (opt.type !== 'exclusive') {
+      filtered[key] = opt;
+    }
+  }
+  return Object.keys(filtered).length > 0 ? filtered : null;
+});
+
+// Exclusive player options (for display in player rows, host-controlled)
+const exclusivePlayerOptions = computed(() => {
+  if (!typedPlayerOptions.value) return null;
+  const filtered: Record<string, ExclusivePlayerOption> = {};
+  for (const [key, opt] of Object.entries(typedPlayerOptions.value)) {
+    if (opt.type === 'exclusive') {
+      filtered[key] = opt as ExclusivePlayerOption;
+    }
+  }
+  return Object.keys(filtered).length > 0 ? filtered : null;
 });
 
 // Filter out internal options like playerConfigs from display
@@ -311,22 +336,20 @@ function handleUpdateOption(key: string, value: unknown) {
 }
 
 /**
- * Check if this player has the exclusive option
+ * Check if a specific slot has the exclusive option
  */
-function hasExclusiveOption(key: string, opt: ExclusivePlayerOption): boolean {
-  if (!mySlot.value) return false;
-
+function slotHasExclusiveOption(slotPosition: number, key: string, opt: ExclusivePlayerOption): boolean {
   // Check if any player has it explicitly set
   for (const slot of props.lobby.slots) {
     const value = slot.playerOptions?.[key];
     if (value === true) {
-      return slot.position === mySlot.value.position;
+      return slot.position === slotPosition;
     }
   }
 
   // No one has it set - use default
   const defaultIndex = getExclusiveDefaultIndex(opt);
-  return mySlot.value.position === defaultIndex;
+  return slotPosition === defaultIndex;
 }
 
 /**
@@ -339,10 +362,25 @@ function getExclusiveDefaultIndex(opt: ExclusivePlayerOption): number {
 }
 
 /**
- * Set the exclusive option for this player
+ * Set exclusive option on a specific slot (host only)
+ * This clears the option from all other slots and sets it on the target slot
  */
-function handleSetExclusiveOption(key: string) {
-  handleUpdateOption(key, true);
+function handleSetSlotExclusiveOption(slotPosition: number, key: string) {
+  if (!props.isCreator) return;
+
+  // Clear the exclusive option from all other slots
+  for (const slot of props.lobby.slots) {
+    if (slot.position !== slotPosition && slot.playerOptions?.[key] === true) {
+      const clearedOptions = { ...slot.playerOptions, [key]: false };
+      emit('update-slot-player-options', slot.position, clearedOptions);
+    }
+  }
+
+  // Set the exclusive option on the target slot
+  const targetSlot = props.lobby.slots.find(s => s.position === slotPosition);
+  const currentOptions = targetSlot?.playerOptions ?? {};
+  const updatedOptions = { ...currentOptions, [key]: true };
+  emit('update-slot-player-options', slotPosition, updatedOptions);
 }
 
 // ============================================
@@ -582,6 +620,30 @@ function handleUpdateGameOption(key: string, value: unknown) {
               </button>
             </div>
           </template>
+
+          <!-- Exclusive options (shown as radio buttons, host-controlled) -->
+          <div v-if="exclusivePlayerOptions && slot.status !== 'open'" class="slot-exclusive-options">
+            <label
+              v-for="(opt, key) in exclusivePlayerOptions"
+              :key="key"
+              class="slot-exclusive-radio"
+              :class="{
+                selected: slotHasExclusiveOption(slot.position, String(key), opt),
+                disabled: !isCreator
+              }"
+              :title="isCreator ? `Assign ${opt.label} to this player` : opt.label"
+            >
+              <input
+                type="radio"
+                :name="`exclusive-${key}`"
+                :checked="slotHasExclusiveOption(slot.position, String(key), opt)"
+                :disabled="!isCreator"
+                @change="handleSetSlotExclusiveOption(slot.position, String(key))"
+              />
+              <span class="radio-indicator"></span>
+              <span class="radio-label">{{ opt.label }}</span>
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -601,9 +663,9 @@ function handleUpdateGameOption(key: string, value: unknown) {
         <button @click="handleUpdateName" class="btn small">Update</button>
       </div>
 
-      <!-- Player Options (color, etc.) -->
-      <div v-if="typedPlayerOptions && Object.keys(typedPlayerOptions).length > 0" class="player-options-section">
-        <div v-for="(opt, key) in typedPlayerOptions" :key="key" class="player-option">
+      <!-- Player Options (color, etc.) - excludes exclusive options which are shown in player list -->
+      <div v-if="standardPlayerOptions && Object.keys(standardPlayerOptions).length > 0" class="player-options-section">
+        <div v-for="(opt, key) in standardPlayerOptions" :key="key" class="player-option">
           <label class="player-option-label">{{ opt.label }}</label>
 
           <!-- Select type -->
@@ -649,21 +711,6 @@ function handleUpdateGameOption(key: string, value: unknown) {
             :placeholder="(opt as StandardPlayerOption).default"
             @input="handleUpdateOption(String(key), ($event.target as HTMLInputElement).value)"
           />
-
-          <!-- Exclusive type (radio button style) -->
-          <label
-            v-else-if="opt.type === 'exclusive'"
-            class="exclusive-option"
-            :class="{ selected: hasExclusiveOption(String(key), opt as ExclusivePlayerOption) }"
-          >
-            <input
-              type="checkbox"
-              :checked="hasExclusiveOption(String(key), opt as ExclusivePlayerOption)"
-              @change="handleSetExclusiveOption(String(key))"
-            />
-            <span class="exclusive-indicator"></span>
-            <span class="exclusive-label">{{ opt.label }}</span>
-          </label>
         </div>
       </div>
     </div>
@@ -1035,6 +1082,85 @@ function handleUpdateGameOption(key: string, value: unknown) {
   display: flex;
   gap: 6px;
   margin-left: auto;
+}
+
+/* Exclusive options in slot rows */
+.slot-exclusive-options {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.slot-exclusive-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.slot-exclusive-radio:hover:not(.disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.slot-exclusive-radio.selected {
+  background: rgba(0, 217, 255, 0.1);
+  border-color: #00d9ff;
+}
+
+.slot-exclusive-radio.disabled {
+  cursor: default;
+}
+
+.slot-exclusive-radio input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.radio-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  position: relative;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.slot-exclusive-radio.selected .radio-indicator {
+  border-color: #00d9ff;
+}
+
+.slot-exclusive-radio.selected .radio-indicator::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00d9ff, #00ff88);
+}
+
+.radio-label {
+  font-size: 0.8rem;
+  color: #888;
+  transition: color 0.2s;
+}
+
+.slot-exclusive-radio.selected .radio-label {
+  color: #00d9ff;
+  font-weight: 500;
 }
 
 .control-btn {

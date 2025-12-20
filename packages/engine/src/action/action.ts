@@ -15,8 +15,72 @@ import type {
   ChoiceBoardRefs,
   DependentFilter,
   BoardElementRef,
+  ConditionDetail,
+  ActionTrace,
+  SelectionTrace,
 } from './types.js';
 import type { ElementClass } from '../element/types.js';
+
+// ============================================
+// Condition Tracing (for debug interface)
+// ============================================
+
+/**
+ * Helper class for detailed condition tracing.
+ * Game developers can optionally use this in their condition functions
+ * to provide detailed debug information about why a condition passed or failed.
+ *
+ * @example
+ * ```typescript
+ * .condition((ctx, tracer) => {
+ *   // Basic usage (tracer may be undefined in normal execution)
+ *   if (!tracer) return ctx.player.hand.count() > 0;
+ *
+ *   // Detailed tracing for debug mode
+ *   return tracer.check('has cards in hand', ctx.player.hand.count() > 0);
+ * })
+ * ```
+ */
+export class ConditionTracer {
+  private details: ConditionDetail[] = [];
+
+  /**
+   * Check a condition and record the result.
+   * @param label Human-readable description of what's being checked
+   * @param value The value to check (truthy = passed)
+   * @returns The boolean result of the check
+   */
+  check(label: string, value: unknown): boolean {
+    const passed = Boolean(value);
+    this.details.push({ label, value, passed });
+    return passed;
+  }
+
+  /**
+   * Create a nested group of checks.
+   * @param label Human-readable description of this group
+   * @param fn Function that performs nested checks using a child tracer
+   * @returns The boolean result of the nested checks
+   */
+  nested(label: string, fn: (tracer: ConditionTracer) => boolean): boolean {
+    const childTracer = new ConditionTracer();
+    const result = fn(childTracer);
+    this.details.push({
+      label,
+      value: result,
+      passed: result,
+      children: childTracer.getDetails(),
+    });
+    return result;
+  }
+
+  /**
+   * Get all recorded condition details.
+   */
+  getDetails(): ConditionDetail[] {
+    return this.details;
+  }
+}
 
 /**
  * Builder class for creating game actions with a fluent API.
@@ -104,6 +168,12 @@ export class Action {
       boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;
       /** Filter choices based on a previous selection value */
       filterBy?: DependentFilter;
+      /**
+       * Name of a previous selection this choice depends on.
+       * When specified, choices are computed for each possible value of the
+       * dependent selection and sent to the client as a map.
+       */
+      dependsOn?: string;
     }
   ): this {
     const selection: ChoiceSelection<T> = {
@@ -117,6 +187,7 @@ export class Action {
       validate: options.validate,
       boardRefs: options.boardRefs,
       filterBy: options.filterBy,
+      dependsOn: options.dependsOn,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -623,6 +694,127 @@ export class ActionExecutor {
 
     // Check if there's at least one valid path through all selections
     return this.hasValidSelectionPath(action.selections, player, {}, 0);
+  }
+
+  /**
+   * Trace why an action is or isn't available for debug purposes.
+   * Returns detailed information about condition checks and selection availability.
+   */
+  traceActionAvailability(action: ActionDefinition, player: Player): ActionTrace {
+    const trace: ActionTrace = {
+      actionName: action.name,
+      available: false,
+      selections: [],
+    };
+
+    const context: ActionContext = {
+      game: this.game,
+      player,
+      args: {},
+    };
+
+    // Check condition with optional tracer for detailed info
+    if (action.condition) {
+      try {
+        const tracer = new ConditionTracer();
+        // Pass tracer as second arg - condition can use it for detailed tracing
+        trace.conditionResult = action.condition(context, tracer);
+        const details = tracer.getDetails();
+        if (details.length > 0) {
+          trace.conditionDetails = details;
+        }
+
+        if (!trace.conditionResult) {
+          // Condition failed - action not available
+          return trace;
+        }
+      } catch (error) {
+        trace.conditionError = error instanceof Error ? error.message : String(error);
+        return trace;
+      }
+    } else {
+      // No condition - always passes
+      trace.conditionResult = true;
+    }
+
+    // Trace each selection
+    trace.available = this.traceSelectionPath(action.selections, player, {}, 0, trace.selections);
+    return trace;
+  }
+
+  /**
+   * Recursively trace selection availability for debug purposes.
+   * Populates the selectionTraces array with info about each selection.
+   */
+  private traceSelectionPath(
+    selections: Selection[],
+    player: Player,
+    args: Record<string, unknown>,
+    index: number,
+    selectionTraces: SelectionTrace[]
+  ): boolean {
+    // Base case: all selections processed
+    if (index >= selections.length) {
+      return true;
+    }
+
+    const selection = selections[index];
+    const selTrace: SelectionTrace = {
+      name: selection.name,
+      type: selection.type,
+      choiceCount: 0,
+      optional: selection.optional,
+    };
+
+    // Handle skipIfOnlyOne
+    if (selection.skipIfOnlyOne) {
+      const choices = this.getChoices(selection, player, args);
+      if (choices.length === 1) {
+        selTrace.choiceCount = 1;
+        selTrace.skipped = true;
+        selectionTraces.push(selTrace);
+        // Auto-select the only choice and continue
+        const newArgs = { ...args, [selection.name]: choices[0] };
+        return this.traceSelectionPath(selections, player, newArgs, index + 1, selectionTraces);
+      }
+    }
+
+    // Skip optional selections - they don't block availability
+    if (selection.optional) {
+      selectionTraces.push(selTrace);
+      return this.traceSelectionPath(selections, player, args, index + 1, selectionTraces);
+    }
+
+    // Text/number inputs are always available
+    if (selection.type === 'text' || selection.type === 'number') {
+      selTrace.choiceCount = -1; // -1 indicates free input, not choices
+      selectionTraces.push(selTrace);
+      return this.traceSelectionPath(selections, player, args, index + 1, selectionTraces);
+    }
+
+    // Check for filterBy
+    if (selection.type === 'choice') {
+      const choiceSel = selection as ChoiceSelection;
+      if (choiceSel.filterBy) {
+        selTrace.filterApplied = true;
+      }
+      if (choiceSel.dependsOn) {
+        selTrace.dependentOn = choiceSel.dependsOn;
+      }
+    }
+
+    // Get choices for this selection
+    const choices = this.getChoices(selection, player, args);
+    selTrace.choiceCount = choices.length;
+    selectionTraces.push(selTrace);
+
+    if (choices.length === 0) {
+      return false;
+    }
+
+    // For simple path checking, just continue with no value
+    // (full path validation would be too expensive for traces)
+    return this.traceSelectionPath(selections, player, args, index + 1, selectionTraces);
   }
 
   /**

@@ -4,6 +4,9 @@
 
 import type { FlowState, SerializedAction, Game } from '@boardsmith/engine';
 
+// Re-export debug tracing types from engine for convenience
+export type { ActionTrace, SelectionTrace, ConditionDetail } from '@boardsmith/engine';
+
 // ============================================
 // Game Class Types
 // ============================================
@@ -255,6 +258,17 @@ export interface SelectionMetadata {
   validElements?: ValidElement[];
   /** For choice selections: filter choices based on a previous selection */
   filterBy?: SelectionFilter;
+  /**
+   * For choice selections with dependsOn: name of the selection this depends on.
+   * When present, use choicesByDependentValue to look up choices based on
+   * the current value of the dependent selection.
+   */
+  dependsOn?: string;
+  /**
+   * For choice selections with dependsOn: choices indexed by the dependent selection's value.
+   * Key is the string representation of the dependent value (element ID, player position, etc.)
+   */
+  choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
   /** For player selections with boardRefs: list of players with their board element references */
   playerChoices?: Array<{
     position: number;
@@ -292,6 +306,8 @@ export interface PlayerGameState {
   actionsThisTurn?: number;
   /** Action index where this player's current turn started */
   turnStartActionIndex?: number;
+  /** Custom debug data from game's registerDebug() calls (optional, debug mode only) */
+  customDebug?: Record<string, unknown>;
 }
 
 // ============================================
@@ -448,7 +464,7 @@ export interface ActionRequest {
  * WebSocket message from client
  */
 export interface WebSocketMessage {
-  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimPosition' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leavePosition' | 'kickPlayer' | 'updatePlayerOptions' | 'updateGameOptions';
+  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimPosition' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leavePosition' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
   action?: string;
   args?: Record<string, unknown>;
   /** For claimPosition/kickPlayer: which position to target */

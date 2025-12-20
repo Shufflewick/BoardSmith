@@ -96,7 +96,7 @@ export type {
 } from './command/index.js';
 
 // Action system
-export { Action, ActionExecutor } from './action/index.js';
+export { Action, ActionExecutor, ConditionTracer } from './action/index.js';
 
 export type {
   SelectionType,
@@ -115,6 +115,10 @@ export type {
   BoardElementRef,
   ChoiceBoardRefs,
   DependentFilter,
+  // Debug tracing types
+  ConditionDetail,
+  SelectionTrace,
+  ActionTrace,
 } from './action/index.js';
 
 // Flow system

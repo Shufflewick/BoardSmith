@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import type { FlowState, Game, Player, Selection, ActionDefinition } from '@boardsmith/engine';
+import type { FlowState, Game, Player, Selection, ActionDefinition, ActionTrace } from '@boardsmith/engine';
 import type { GameRunner } from '@boardsmith/runtime';
 import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
 
@@ -86,11 +86,39 @@ export function buildActionMetadata(
     }
 
     const selectionMetas: SelectionMetadata[] = [];
-    const collectedArgs: Record<string, unknown> = {};
+    // Track available values for each selection (for dependsOn lookups)
+    const selectionValues: Map<string, { type: string; values: unknown[] }> = new Map();
 
     for (const selection of actionDef.selections) {
-      const selMeta = buildSelectionMetadata(game, player, selection, collectedArgs);
+      const selMeta = buildSelectionMetadata(game, player, selection, selectionValues);
       selectionMetas.push(selMeta);
+
+      // Track available values for this selection (for subsequent dependsOn lookups)
+      if (selection.type === 'element' && selMeta.validElements) {
+        selectionValues.set(selection.name, {
+          type: 'element',
+          values: selMeta.validElements.map(ve => ve.id),
+        });
+      } else if (selection.type === 'player') {
+        // Get filtered players
+        const ctx = { game, player, args: {} };
+        const playerSel = selection as any;
+        const players = game.players.filter((p: Player) => {
+          if (playerSel.filter) {
+            return playerSel.filter(p, ctx);
+          }
+          return true;
+        });
+        selectionValues.set(selection.name, {
+          type: 'player',
+          values: players.map((p: Player) => p.position),
+        });
+      } else if (selection.type === 'choice' && selMeta.choices) {
+        selectionValues.set(selection.name, {
+          type: 'choice',
+          values: selMeta.choices.map(c => c.value),
+        });
+      }
     }
 
     metadata[actionName] = {
@@ -110,7 +138,7 @@ function buildSelectionMetadata(
   game: Game,
   player: Player,
   selection: Selection,
-  args: Record<string, unknown>
+  selectionValues: Map<string, { type: string; values: unknown[] }>
 ): SelectionMetadata {
   const base: SelectionMetadata = {
     name: selection.name,
@@ -120,14 +148,74 @@ function buildSelectionMetadata(
     skipIfOnlyOne: selection.skipIfOnlyOne,
   };
 
-  const ctx = { game, player, args };
+  const ctx = { game, player, args: {} as Record<string, unknown> };
 
   // Type-specific properties
   switch (selection.type) {
     case 'choice': {
       const choiceSel = selection as any;
 
-      // Get choices (static array or function result)
+      // Check if this selection depends on a previous selection
+      if (choiceSel.dependsOn && typeof choiceSel.choices === 'function') {
+        const dependentInfo = selectionValues.get(choiceSel.dependsOn);
+
+        if (dependentInfo) {
+          base.dependsOn = choiceSel.dependsOn;
+          base.choicesByDependentValue = {};
+
+          // For each possible value of the dependent selection, compute choices
+          for (const depValue of dependentInfo.values) {
+            // Build args with the dependent value
+            // For element selections, we need to resolve to the actual element
+            let argValue: unknown = depValue;
+            if (dependentInfo.type === 'element' && typeof depValue === 'number') {
+              argValue = game.getElementById(depValue);
+            } else if (dependentInfo.type === 'player' && typeof depValue === 'number') {
+              argValue = game.players[depValue];
+            }
+
+            const argsWithDep = { [choiceSel.dependsOn]: argValue };
+            const ctxWithDep = { game, player, args: argsWithDep };
+
+            let choices: unknown[];
+            try {
+              choices = choiceSel.choices(ctxWithDep);
+            } catch (error) {
+              console.error(`[buildSelectionMetadata] Error getting choices for "${selection.name}" with ${choiceSel.dependsOn}=${depValue}:`, error);
+              choices = [];
+            }
+
+            // Convert to display format with board refs
+            const formattedChoices = choices.map(value => {
+              const choice: any = {
+                value,
+                display: choiceSel.display ? choiceSel.display(value) : defaultChoiceDisplay(value),
+              };
+
+              if (choiceSel.boardRefs) {
+                try {
+                  const refs = choiceSel.boardRefs(value, ctxWithDep);
+                  if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
+                  if (refs.targetRef) choice.targetRef = refs.targetRef;
+                } catch {
+                  // Ignore errors
+                }
+              }
+
+              return choice;
+            });
+
+            // Key by the serialized value (element ID, player position, etc.)
+            const key = String(depValue);
+            base.choicesByDependentValue[key] = formattedChoices;
+          }
+
+          // Don't populate base.choices for dependsOn selections - client uses choicesByDependentValue
+          break;
+        }
+      }
+
+      // Regular choice handling (no dependsOn or static choices)
       let choices: unknown[];
       if (typeof choiceSel.choices === 'function') {
         try {
@@ -365,7 +453,7 @@ export function buildPlayerState(
   runner: GameRunner,
   playerNames: string[],
   playerPosition: number,
-  options?: { includeActionMetadata?: boolean }
+  options?: { includeActionMetadata?: boolean; includeDebugData?: boolean }
 ): PlayerGameState {
   const flowState = runner.getFlowState();
   const view = runner.getPlayerView(playerPosition);
@@ -425,5 +513,28 @@ export function buildPlayerState(
     }
   }
 
+  // Optionally include custom debug data
+  if (options?.includeDebugData) {
+    const customDebug = runner.game.getCustomDebugData();
+    if (Object.keys(customDebug).length > 0) {
+      state.customDebug = customDebug;
+    }
+  }
+
   return state;
+}
+
+/**
+ * Build action traces for debugging.
+ * Returns detailed information about why each action is or isn't available.
+ */
+export function buildActionTraces(
+  runner: GameRunner,
+  playerPosition: number
+): ActionTrace[] {
+  const player = runner.game.players[playerPosition];
+  if (!player) {
+    return [];
+  }
+  return runner.game.getActionTraces(player);
 }

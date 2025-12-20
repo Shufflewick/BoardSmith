@@ -4,7 +4,7 @@ import type { ElementContext, ElementClass, ElementJSON } from './types.js';
 import { Player, PlayerCollection } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand } from '../command/executor.js';
-import type { ActionDefinition, ActionResult, SerializedAction } from '../action/types.js';
+import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 import { FlowEngine } from '../flow/engine.js';
@@ -108,6 +108,9 @@ export class Game<
   /** Flow engine instance */
   private _flowEngine?: FlowEngine;
 
+  /** Debug registry for custom debug data (dev mode only) */
+  private _debugRegistry: Map<string, () => unknown> = new Map();
+
   static override unserializableAttributes = [
     ...Space.unserializableAttributes,
     'pile',
@@ -118,6 +121,7 @@ export class Game<
     '_actionExecutor',
     '_flowDefinition',
     '_flowEngine',
+    '_debugRegistry',
   ];
 
   constructor(options: GameOptions) {
@@ -362,6 +366,60 @@ export class Game<
     }
 
     return this.performAction(serialized.name, player as P, serialized.args);
+  }
+
+  // ============================================
+  // Debug API
+  // ============================================
+
+  /**
+   * Register a custom debug entry.
+   * The provided function will be called when debug data is requested.
+   * Use this to expose game-specific debug information in the debug panel.
+   *
+   * @example
+   * ```typescript
+   * // In game setup
+   * this.registerDebug('Sector Stashes', () =>
+   *   this.all(Sector).map(s => ({
+   *     name: s.sectorName,
+   *     explored: s.explored,
+   *     stash: s.stash.map(e => e.name)
+   *   }))
+   * );
+   * ```
+   */
+  registerDebug(name: string, fn: () => unknown): void {
+    this._debugRegistry.set(name, fn);
+  }
+
+  /**
+   * Get all custom debug data.
+   * Calls each registered debug function and collects the results.
+   */
+  getCustomDebugData(): Record<string, unknown> {
+    const data: Record<string, unknown> = {};
+    for (const [name, fn] of this._debugRegistry) {
+      try {
+        data[name] = fn();
+      } catch (error) {
+        data[name] = { error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    return data;
+  }
+
+  /**
+   * Get action availability traces for a player.
+   * Returns detailed information about why each action is or isn't available.
+   * Used by the debug interface to show action condition status.
+   */
+  getActionTraces(player: P): ActionTrace[] {
+    const traces: ActionTrace[] = [];
+    for (const action of this._actions.values()) {
+      traces.push(this._actionExecutor.traceActionAvailability(action, player));
+    }
+    return traces;
   }
 
   // ============================================

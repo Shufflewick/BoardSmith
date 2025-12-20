@@ -21,7 +21,7 @@ import type {
   PlayerOptionDefinition,
   GameOptionDefinition,
 } from './types.js';
-import { buildPlayerState, computeUndoInfo } from './utils.js';
+import { buildPlayerState, computeUndoInfo, buildActionTraces } from './utils.js';
 import { AIController } from './ai-controller.js';
 
 // ============================================
@@ -359,17 +359,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Get the game state for a specific player
    * @param playerPosition Player's position
    * @param options.includeActionMetadata Include action metadata for auto-UI (default: true)
+   * @param options.includeDebugData Include debug data from game.registerDebug() (default: true)
    */
   getState(
     playerPosition: number,
-    options?: { includeActionMetadata?: boolean }
+    options?: { includeActionMetadata?: boolean; includeDebugData?: boolean }
   ): { success: boolean; flowState?: FlowState; state?: PlayerGameState } {
     const flowState = this.#runner.getFlowState();
     const state = buildPlayerState(
       this.#runner,
       this.#storedState.playerNames,
       playerPosition,
-      { includeActionMetadata: options?.includeActionMetadata ?? true }
+      { includeActionMetadata: options?.includeActionMetadata ?? true, includeDebugData: options?.includeDebugData ?? true }
     );
     return { success: true, flowState, state };
   }
@@ -377,12 +378,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /**
    * Build player state for a specific position
    */
-  buildPlayerState(playerPosition: number, options?: { includeActionMetadata?: boolean }): PlayerGameState {
+  buildPlayerState(playerPosition: number, options?: { includeActionMetadata?: boolean; includeDebugData?: boolean }): PlayerGameState {
     return buildPlayerState(
       this.#runner,
       this.#storedState.playerNames,
       playerPosition,
-      { includeActionMetadata: options?.includeActionMetadata ?? true }
+      { includeActionMetadata: options?.includeActionMetadata ?? true, includeDebugData: options?.includeDebugData ?? true }
     );
   }
 
@@ -567,6 +568,26 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     }
   }
 
+  /**
+   * Get action traces for debugging (shows why actions are available/unavailable)
+   * @param playerPosition Player's position
+   */
+  getActionTraces(playerPosition: number): { success: boolean; traces?: import('./types.js').ActionTrace[]; error?: string } {
+    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player position: ${playerPosition}` };
+    }
+
+    try {
+      const traces = buildActionTraces(this.#runner, playerPosition);
+      return { success: true, traces };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get action traces',
+      };
+    }
+  }
+
   // ============================================
   // Action Methods
   // ============================================
@@ -606,7 +627,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     return {
       success: true,
       flowState: result.flowState,
-      state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true }),
+      state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: true }),
       serializedAction: result.serializedAction,
     };
   }
@@ -676,7 +697,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return {
         success: true,
         flowState: newFlowState,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true }),
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
         actionsUndone: actionsThisTurn,
       };
     } catch (error) {
@@ -702,7 +723,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     for (const session of sessions) {
       const effectivePosition = session.isSpectator ? 0 : session.playerPosition;
-      const state = buildPlayerState(this.#runner, this.#storedState.playerNames, effectivePosition, { includeActionMetadata: true });
+      const state = buildPlayerState(this.#runner, this.#storedState.playerNames, effectivePosition, { includeActionMetadata: true, includeDebugData: true });
 
       const update: StateUpdate = {
         type: 'state',
@@ -1565,6 +1586,59 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
     if (!slot) {
       return { success: false, error: 'Player not found in lobby' };
+    }
+
+    // Merge new options with existing
+    slot.playerOptions = {
+      ...slot.playerOptions,
+      ...options,
+    };
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+  }
+
+  /**
+   * Update a specific slot's player options (host only)
+   * Used for exclusive options that the host assigns to players
+   *
+   * @param hostPlayerId Must be the creator's ID
+   * @param position The slot position to update
+   * @param options The player options to set
+   * @returns Result with updated lobby info
+   */
+  async updateSlotPlayerOptions(
+    hostPlayerId: string,
+    position: number,
+    options: Record<string, unknown>
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    // Verify caller is the host
+    if (hostPlayerId !== this.#storedState.creatorId) {
+      return { success: false, error: 'Only the host can modify other players\' options' };
+    }
+
+    const slot = this.#storedState.lobbySlots.find(s => s.position === position);
+    if (!slot) {
+      return { success: false, error: 'Slot not found' };
+    }
+
+    if (slot.status === 'open') {
+      return { success: false, error: 'Cannot set options for an open slot' };
     }
 
     // Merge new options with existing

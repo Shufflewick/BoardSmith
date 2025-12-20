@@ -269,6 +269,28 @@ export async function handleGetStateDiff(
 }
 
 /**
+ * GET /games/:gameId/action-traces - Get action availability traces (debug)
+ * Returns detailed information about why each action is or isn't available.
+ */
+export async function handleGetActionTraces(
+  store: GameStore,
+  gameId: string,
+  playerPosition: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = session.getActionTraces(playerPosition);
+  if (result.success) {
+    return success({ success: true, traces: result.traces });
+  } else {
+    return error(result.error ?? 'Failed to get action traces');
+  }
+}
+
+/**
  * POST /games/:gameId/undo - Undo to turn start
  */
 export async function handleUndo(
@@ -659,5 +681,41 @@ export async function handleUpdateGameOptions(
     return success({ success: true, lobby: result.lobby });
   } else {
     return error(result.error ?? 'Failed to update game options');
+  }
+}
+
+/**
+ * POST /games/:gameId/slot-player-options - Update a specific slot's player options (host only)
+ */
+export async function handleUpdateSlotPlayerOptions(
+  store: GameStore,
+  gameId: string,
+  playerId: string,
+  position: number,
+  options: Record<string, unknown>
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (position === undefined || position === null) {
+    return error('Position is required');
+  }
+
+  if (!options || typeof options !== 'object') {
+    return error('Options are required');
+  }
+
+  const result = await session.updateSlotPlayerOptions(playerId, position, options);
+
+  if (result.success) {
+    return success({ success: true, lobby: result.lobby });
+  } else {
+    return error(result.error ?? 'Failed to update slot player options');
   }
 }

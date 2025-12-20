@@ -470,6 +470,23 @@ export class MeepleClient {
   }
 
   /**
+   * Update a specific slot's player options (host only).
+   * Used for exclusive options that the host assigns to players.
+   */
+  async updateSlotPlayerOptions(gameId: string, position: number, options: Record<string, unknown>): Promise<LobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/slot-player-options`, {
+      method: 'POST',
+      body: JSON.stringify({
+        playerId: this.playerId,
+        position,
+        options,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
    * Update game options (host only).
    */
   async updateGameOptions(gameId: string, options: Record<string, unknown>): Promise<LobbyResponse> {

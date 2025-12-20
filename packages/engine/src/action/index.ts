@@ -1,4 +1,4 @@
-export { Action, ActionExecutor } from './action.js';
+export { Action, ActionExecutor, ConditionTracer } from './action.js';
 export type {
   SelectionType,
   Selection,
@@ -16,4 +16,8 @@ export type {
   BoardElementRef,
   ChoiceBoardRefs,
   DependentFilter,
+  // Debug tracing types
+  ConditionDetail,
+  SelectionTrace,
+  ActionTrace,
 } from './types.js';
