@@ -175,6 +175,62 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
+   * Resume flow after an action was executed externally (e.g., via pending action).
+   * This is like resume() but skips the action execution since it already happened.
+   * @param result The result of the externally-executed action
+   */
+  resumeAfterExternalAction(result: ActionResult): FlowState {
+    if (!this.awaitingInput) {
+      throw new Error('Flow is not awaiting input');
+    }
+
+    this.lastActionResult = result;
+
+    if (!result.success) {
+      // Action failed, stay in same state
+      return this.getState();
+    }
+
+    // Clear awaiting state
+    this.awaitingInput = false;
+
+    // Handle action step completion logic
+    const currentFrame = this.stack[this.stack.length - 1];
+    if (currentFrame?.node.type === 'action-step') {
+      const config = currentFrame.node.config as ActionStepConfig;
+
+      // Increment move count
+      const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
+      const newMoveCount = currentMoveCount + 1;
+      currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };
+
+      // Check if maxMoves reached - auto-complete
+      if (config.maxMoves && newMoveCount >= config.maxMoves) {
+        currentFrame.completed = true;
+        this.currentActionConfig = undefined;
+        this.moveCount = 0;
+      }
+      // Check repeatUntil - only complete if minMoves is met
+      else if (config.repeatUntil) {
+        const minMovesMet = !config.minMoves || newMoveCount >= config.minMoves;
+        if (config.repeatUntil(this.createContext()) && minMovesMet) {
+          currentFrame.completed = true;
+          this.currentActionConfig = undefined;
+          this.moveCount = 0;
+        }
+      }
+      // No repeatUntil and no maxMoves - complete after single action (unless minMoves/maxMoves configured)
+      else if (!config.minMoves && !config.maxMoves) {
+        currentFrame.completed = true;
+        this.currentActionConfig = undefined;
+        this.moveCount = 0;
+      }
+    }
+
+    return this.run();
+  }
+
+  /**
    * Resume a simultaneous action step after a player's action
    */
   private resumeSimultaneousAction(
@@ -634,10 +690,11 @@ export class FlowEngine<G extends Game = Game> {
       : config.actions;
 
     // Filter to only available actions
+    const allAvailable = this.game.getAvailableActions(player as any);
     const available = actions.filter((actionName) => {
       const action = this.game.getAction(actionName);
       if (!action) return false;
-      return this.game.getAvailableActions(player as any).some((a) => a.name === actionName);
+      return allAvailable.some((a) => a.name === actionName);
     });
 
     // If no available actions and minMoves met, complete

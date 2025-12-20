@@ -1203,7 +1203,8 @@ const otherPlayers = computed(() => {
 <template>
   <div class="action-panel" v-if="isMyTurn">
     <!-- No action being configured -->
-    <div v-if="!currentAction" class="action-buttons">
+    <!-- Key forces re-render when available actions change -->
+    <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
       <button
         v-for="action in visibleActions"
         :key="action.name"

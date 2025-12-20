@@ -836,6 +836,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         this.#pendingActions.delete(playerPosition);
 
         if (actionResult.success) {
+          // Continue the flow to update available actions
+          this.#runner.game.continueFlowAfterPendingAction(actionResult);
+
           // Update stored action history
           this.#storedState.actionHistory = this.#runner.actionHistory;
 
@@ -889,6 +892,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       this.#pendingActions.delete(playerPosition);
 
       if (actionResult.success) {
+        // Continue the flow to update available actions
+        this.#runner.game.continueFlowAfterPendingAction(actionResult);
+
         // Update stored action history
         this.#storedState.actionHistory = this.#runner.actionHistory;
 
