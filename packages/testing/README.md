@@ -162,8 +162,8 @@ Check action availability:
 ```typescript
 import { assertActionAvailable, assertActionNotAvailable } from '@boardsmith/testing';
 
-assertActionAvailable(testGame, 'draw', 0);  // Player 0 can draw
-assertActionNotAvailable(testGame, 'draw', 1);  // Player 1 cannot
+assertActionAvailable(testGame, 0, 'draw');  // Player 0 can draw
+assertActionNotAvailable(testGame, 1, 'draw');  // Player 1 cannot
 ```
 
 ## Fixtures and Scenarios
@@ -387,8 +387,8 @@ function assertFlowState(testGame, expected): void;
 function assertPlayerHas(testGame, playerIndex, zone, criteria): void;
 function assertElementCount(testGame, elementClass, count): void;
 function assertGameFinished(testGame, options?): void;
-function assertActionAvailable(testGame, actionName, playerIndex?): void;
-function assertActionNotAvailable(testGame, actionName, playerIndex?): void;
+function assertActionAvailable(testGame, playerIndex, actionName, options?): void;
+function assertActionNotAvailable(testGame, playerIndex, actionName, options?): void;
 ```
 
 ### Debug Utilities
