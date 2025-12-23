@@ -169,6 +169,28 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/games/checkers/tests:
+    dependencies:
+      '@boardsmith/checkers-rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@boardsmith/engine':
+        specifier: workspace:*
+        version: link:../../../engine
+      '@boardsmith/runtime':
+        specifier: workspace:*
+        version: link:../../../runtime
+      '@boardsmith/testing':
+        specifier: workspace:*
+        version: link:../../../testing
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@22.19.2)
+
   packages/games/checkers/ui:
     dependencies:
       '@boardsmith/client':
@@ -330,6 +352,28 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/games/hex/tests:
+    dependencies:
+      '@boardsmith/engine':
+        specifier: workspace:*
+        version: link:../../../engine
+      '@boardsmith/hex-rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@boardsmith/runtime':
+        specifier: workspace:*
+        version: link:../../../runtime
+      '@boardsmith/testing':
+        specifier: workspace:*
+        version: link:../../../testing
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@22.19.2)
+
   packages/games/hex/ui:
     dependencies:
       '@boardsmith/client':
@@ -364,6 +408,28 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+
+  packages/games/polyhedral-potions/tests:
+    dependencies:
+      '@boardsmith/engine':
+        specifier: workspace:*
+        version: link:../../../engine
+      '@boardsmith/polyhedral-potions-rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@boardsmith/runtime':
+        specifier: workspace:*
+        version: link:../../../runtime
+      '@boardsmith/testing':
+        specifier: workspace:*
+        version: link:../../../testing
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@22.19.2)
 
   packages/games/polyhedral-potions/ui:
     dependencies:

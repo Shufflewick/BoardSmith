@@ -704,6 +704,105 @@ describe('Dependent Selection Filtering (filterBy)', () => {
   });
 });
 
+describe('Better Filter Error Messages', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+
+    // Create some cards to select from
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(5, Card, 'card', (i) => ({
+      suit: 'H',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+  });
+
+  it('should provide helpful error when filter accesses undefined args property', () => {
+    // This is the bug-prone pattern: filter tries to access ctx.args.piece.value
+    // without checking if piece is defined first
+    const action = Action.create('move')
+      .chooseElement('piece', {
+        elementClass: Card,
+      })
+      .chooseElement('destination', {
+        elementClass: Card,
+        // Bug: accessing piece.value without null check - crashes during availability check
+        filter: (element, ctx) => {
+          const piece = ctx.args.piece as Card;
+          return (element as Card).value > piece.value; // crashes when piece is undefined
+        },
+      })
+      .execute(() => {});
+
+    // When checking availability, the filter runs with ctx.args.piece = undefined
+    // This should throw a helpful error instead of generic "Cannot read properties of undefined"
+    expect(() => {
+      executor.getChoices(action.selections[1], game.players[0], {});
+    }).toThrowError(/Filter for selection 'destination' crashed/);
+  });
+
+  it('should include fix suggestions in error message', () => {
+    const action = Action.create('move')
+      .chooseElement('piece', { elementClass: Card })
+      .chooseElement('destination', {
+        elementClass: Card,
+        filter: (element, ctx) => {
+          const piece = ctx.args.piece as Card;
+          return (element as Card).value > piece.value;
+        },
+      })
+      .execute(() => {});
+
+    try {
+      executor.getChoices(action.selections[1], game.players[0], {});
+      expect.fail('Should have thrown');
+    } catch (e) {
+      const message = (e as Error).message;
+      expect(message).toContain('dependentFilter');
+      expect(message).toContain('null check');
+      expect(message).toContain('availability check');
+    }
+  });
+
+  it('should preserve original error if not undefined access pattern', () => {
+    const action = Action.create('test')
+      .chooseElement('card', {
+        elementClass: Card,
+        filter: () => {
+          throw new Error('Custom error');
+        },
+      })
+      .execute(() => {});
+
+    expect(() => {
+      executor.getChoices(action.selections[0], game.players[0], {});
+    }).toThrowError('Custom error');
+  });
+
+  it('should work correctly when filter handles undefined properly', () => {
+    const action = Action.create('move')
+      .chooseElement('piece', { elementClass: Card })
+      .chooseElement('destination', {
+        elementClass: Card,
+        // Correct pattern: check for undefined first
+        filter: (element, ctx) => {
+          const piece = ctx.args?.piece as Card | undefined;
+          if (!piece) return true; // Allow all during availability check
+          return (element as Card).value > piece.value;
+        },
+      })
+      .execute(() => {});
+
+    // Should not throw
+    const choices = executor.getChoices(action.selections[1], game.players[0], {});
+    expect(choices.length).toBe(5); // All cards available during availability check
+  });
+});
+
 describe('Game Action Integration', () => {
   let game: TestGame;
 

@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createTestGame } from '@boardsmith/testing';
+import {
+  createTestGame,
+  toDebugString,
+  traceAction,
+  logAvailableActions,
+  diffSnapshots,
+} from '@boardsmith/testing';
 import { CribbageGame, Card, CribbagePlayer, scoreHand, scoreHandDetailed } from '@boardsmith/cribbage-rules';
 
 describe('CribbageGame', () => {
@@ -358,6 +364,88 @@ describe('CribbageGame', () => {
       expect(runItems.length).toBe(1);
       expect(runItems[0].description).toContain('Run');
       expect(runItems[0].description).toContain('4');
+    });
+  });
+
+  describe('Debug Utilities (examples)', () => {
+    it('demonstrates toDebugString for game state inspection', () => {
+      const testGame = createTestGame(CribbageGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'debug-demo',
+      });
+
+      // Useful when debugging test failures
+      const stateString = toDebugString(testGame.game);
+      expect(stateString).toContain('CribbageGame');
+      expect(stateString).toContain('Alice');
+      expect(stateString).toContain('Bob');
+
+      // Uncomment to see the full debug output:
+      // console.log(stateString);
+    });
+
+    it('demonstrates traceAction for understanding action availability', () => {
+      const testGame = createTestGame(CribbageGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'trace-demo',
+      });
+
+      const alice = testGame.game.players[0] as CribbagePlayer;
+      const trace = traceAction(testGame.game, 'discardToCrib', alice);
+
+      // traceAction returns structured info about action availability
+      expect(trace.actionName).toBe('discardToCrib');
+      expect(typeof trace.available).toBe('boolean');
+      expect(trace.reason).toBeDefined();
+      expect(Array.isArray(trace.details)).toBe(true);
+
+      // When debugging, uncomment to see full trace:
+      // console.log('Action available:', trace.available);
+      // console.log('Reason:', trace.reason);
+      // trace.details.forEach(d => console.log(`${d.step}: ${d.passed ? '✓' : '✗'} ${d.info}`));
+    });
+
+    it('demonstrates logAvailableActions for quick action overview', () => {
+      const testGame = createTestGame(CribbageGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'log-demo',
+      });
+
+      const alice = testGame.game.players[0] as CribbagePlayer;
+      const actionLog = logAvailableActions(testGame.game, alice);
+
+      // Returns a string summarizing available actions
+      expect(actionLog).toContain('Alice');
+      expect(typeof actionLog).toBe('string');
+
+      // Uncomment to see the full action log:
+      // console.log(actionLog);
+    });
+
+    it('demonstrates diffSnapshots for tracking state changes', () => {
+      const testGame = createTestGame(CribbageGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'diff-demo',
+      });
+
+      const before = JSON.stringify(testGame.runner.getSnapshot());
+
+      // Simulate a game state change
+      const alice = testGame.game.players[0] as CribbagePlayer;
+      alice.score = 10;
+
+      const after = JSON.stringify(testGame.runner.getSnapshot());
+      const diff = diffSnapshots(before, after);
+
+      // Diff shows what changed
+      expect(typeof diff).toBe('string');
+
+      // Uncomment to see the diff:
+      // console.log(diff);
     });
   });
 });

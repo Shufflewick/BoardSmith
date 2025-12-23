@@ -49,9 +49,12 @@ export {
   toDebugString,
   traceAction,
   visualizeFlow,
+  visualizeFlowWithPosition,
+  debugFlowState,
   logAvailableActions,
   diffSnapshots,
   type DebugStringOptions,
   type ActionTraceResult,
   type ActionTraceDetail,
+  type FlowStateDebug,
 } from './debug.js';

@@ -401,6 +401,207 @@ export function logAvailableActions(game: Game, player?: Player): string {
 }
 
 /**
+ * Result from debugging flow state
+ */
+export interface FlowStateDebug {
+  /** Current phase/step name */
+  currentPhase: string;
+  /** Stack of flow nodes (path to current position) */
+  nodeStack: string[];
+  /** Current player position (if applicable) */
+  currentPlayer?: number;
+  /** Available actions at this point */
+  availableActions: string[];
+  /** Whether the flow is waiting for input */
+  awaitingInput: boolean;
+  /** Human-readable description of current state */
+  description: string;
+}
+
+/**
+ * Get a debug view of the current flow state.
+ * Shows where in the flow the game currently is and what's happening.
+ *
+ * @example
+ * ```typescript
+ * const flowState = debugFlowState(testGame);
+ * console.log(flowState.description);
+ * // "In phase 'playing', waiting for Player 1 to choose: [ask]"
+ * console.log(flowState.nodeStack);
+ * // ["sequence 'main'", "loop 'rounds'", "eachPlayer", "actionStep"]
+ * ```
+ */
+export function debugFlowState(testGame: any): FlowStateDebug {
+  const runner = testGame.runner;
+  const game = testGame.game;
+
+  // Get the flow state from the runner
+  const flowState = runner?.getFlowState?.() || {};
+
+  const result: FlowStateDebug = {
+    currentPhase: flowState.phase || 'unknown',
+    nodeStack: [],
+    availableActions: flowState.availableActions || [],
+    awaitingInput: flowState.awaitingInput || false,
+    description: '',
+  };
+
+  if (typeof flowState.currentPlayer === 'number') {
+    result.currentPlayer = flowState.currentPlayer;
+  }
+
+  // Try to extract the node stack from flow engine internal state
+  const flowEngine = runner?.flowEngine || (runner as any)?._flow;
+  if (flowEngine) {
+    const stack = extractNodeStack(flowEngine);
+    result.nodeStack = stack;
+  }
+
+  // Build human-readable description
+  const parts: string[] = [];
+
+  if (result.currentPhase && result.currentPhase !== 'unknown') {
+    parts.push(`In phase '${result.currentPhase}'`);
+  }
+
+  if (result.awaitingInput) {
+    const playerName = result.currentPlayer !== undefined
+      ? `Player ${result.currentPlayer}`
+      : 'a player';
+
+    if (result.availableActions.length > 0) {
+      parts.push(`waiting for ${playerName} to choose: [${result.availableActions.join(', ')}]`);
+    } else {
+      parts.push(`waiting for ${playerName}`);
+    }
+  } else {
+    parts.push('processing');
+  }
+
+  result.description = parts.join(', ');
+
+  return result;
+}
+
+/**
+ * Extract the stack of flow nodes from the flow engine
+ */
+function extractNodeStack(flowEngine: any): string[] {
+  const stack: string[] = [];
+
+  // Try to access internal state
+  const frames = flowEngine?.frames || flowEngine?._frames || [];
+  for (const frame of frames) {
+    const nodeType = frame.node?.type || frame.type || 'node';
+    const nodeName = frame.node?.config?.name || frame.name || '';
+    stack.push(nodeName ? `${nodeType} '${nodeName}'` : nodeType);
+  }
+
+  // If no frames, try to get current node info
+  if (stack.length === 0 && flowEngine?.currentNode) {
+    const node = flowEngine.currentNode;
+    const nodeType = node.type || 'node';
+    const nodeName = node.config?.name || '';
+    stack.push(nodeName ? `${nodeType} '${nodeName}'` : nodeType);
+  }
+
+  return stack;
+}
+
+/**
+ * Visualize the flow with the current position highlighted.
+ * Similar to visualizeFlow but marks where execution currently is.
+ *
+ * @example
+ * ```typescript
+ * console.log(visualizeFlowWithPosition(gameDefinition.flow, testGame));
+ * // sequence "main"
+ * //   ├─ phase "setup" ✓
+ * //   ├─ loop "rounds"
+ * //   │  ├─ eachPlayer
+ * //   │  │  └─ actionStep [play, draw, pass] ← CURRENT
+ * //   │  └─ execute (cleanup)
+ * //   └─ execute (endGame)
+ * ```
+ */
+export function visualizeFlowWithPosition(flow: FlowNode, testGame?: any): string {
+  const currentInfo = testGame ? debugFlowState(testGame) : null;
+  const currentNodeNames = new Set(
+    currentInfo?.nodeStack.map(s => {
+      const match = s.match(/'([^']+)'/);
+      return match ? match[1] : '';
+    }).filter(Boolean) || []
+  );
+
+  return visualizeFlowWithHighlight(flow, '', currentNodeNames, currentInfo?.currentPhase || '');
+}
+
+function visualizeFlowWithHighlight(
+  flow: FlowNode,
+  indent: string,
+  currentNames: Set<string>,
+  currentPhase: string
+): string {
+  const lines: string[] = [];
+  const nodeType = flow.type || 'unknown';
+  const config = (flow as any).config || {};
+  const nodeName = config.name || '';
+
+  // Build node description
+  let desc = nodeType;
+  if (nodeName) desc += ` "${nodeName}"`;
+  if (nodeType === 'action-step' && config.actions) {
+    desc += ` [${Array.isArray(config.actions) ? config.actions.join(', ') : 'dynamic'}]`;
+  }
+  if (nodeType === 'loop' && config.while) {
+    desc += ' (while: ...)';
+  }
+
+  // Add marker if this is the current node
+  const isCurrent = (nodeName && currentNames.has(nodeName)) || (nodeType === 'phase' && nodeName === currentPhase);
+  if (isCurrent) {
+    desc += ' ← CURRENT';
+  }
+
+  lines.push(`${indent}${desc}`);
+
+  // Handle children
+  const children: FlowNode[] = [];
+  if (config.do) {
+    if (Array.isArray(config.do)) {
+      children.push(...config.do);
+    } else {
+      children.push(config.do);
+    }
+  }
+  if (config.steps) {
+    children.push(...config.steps);
+  }
+  if (config.cases) {
+    for (const [key, caseNode] of Object.entries(config.cases)) {
+      lines.push(`${indent}  case "${key}":`);
+      lines.push(visualizeFlowWithHighlight(caseNode as FlowNode, indent + '    ', currentNames, currentPhase));
+    }
+  }
+
+  const childIndent = indent + '  ';
+  for (let i = 0; i < children.length; i++) {
+    const isLast = i === children.length - 1;
+    const prefix = isLast ? '└─ ' : '├─ ';
+    const childLines = visualizeFlowWithHighlight(
+      children[i],
+      childIndent + (isLast ? '   ' : '│  '),
+      currentNames,
+      currentPhase
+    ).split('\n');
+    lines.push(`${childIndent.slice(0, -2)}${prefix}${childLines[0].trim()}`);
+    lines.push(...childLines.slice(1));
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Print game state diff between two snapshots.
  * Useful for debugging what changed after an action.
  *

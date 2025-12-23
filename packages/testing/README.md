@@ -333,6 +333,43 @@ console.log(diffSnapshots(before, after));
 //   board.cells[5].occupant: null → {id: 42}
 ```
 
+### debugFlowState
+
+Get detailed info about current flow position:
+
+```typescript
+import { debugFlowState } from '@boardsmith/testing';
+
+const flowState = debugFlowState(testGame);
+console.log(flowState.description);
+// "In phase 'playing', waiting for Player 0 to choose: [play, draw, pass]"
+
+console.log(flowState.nodeStack);
+// ["sequence 'main'", "loop 'rounds'", "eachPlayer", "actionStep"]
+
+console.log(flowState.currentPhase);      // "playing"
+console.log(flowState.currentPlayer);      // 0
+console.log(flowState.availableActions);   // ["play", "draw", "pass"]
+console.log(flowState.awaitingInput);      // true
+```
+
+### visualizeFlowWithPosition
+
+Show flow structure with current position highlighted:
+
+```typescript
+import { visualizeFlowWithPosition } from '@boardsmith/testing';
+
+console.log(visualizeFlowWithPosition(gameDefinition.flow, testGame));
+// sequence "main"
+//   ├─ phase "setup"
+//   ├─ loop "rounds"
+//   │  ├─ eachPlayer
+//   │  │  └─ actionStep [play, draw, pass] ← CURRENT
+//   │  └─ execute
+//   └─ phase "endgame"
+```
+
 ## Random Simulation
 
 ### simulateRandomGames
@@ -397,6 +434,8 @@ function assertActionNotAvailable(testGame, playerIndex, actionName, options?): 
 function toDebugString(game, options?): string;
 function traceAction(game, actionName, player?): ActionTraceResult;
 function visualizeFlow(flow): string;
+function visualizeFlowWithPosition(flow, testGame?): string;
+function debugFlowState(testGame): FlowStateDebug;
 function logAvailableActions(game, player?): string;
 function diffSnapshots(before, after): string;
 ```

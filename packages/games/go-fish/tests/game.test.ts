@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createTestGame, assertActionSucceeds, assertActionFails, simulateAction } from '@boardsmith/testing';
+import {
+  createTestGame,
+  assertActionSucceeds,
+  assertActionFails,
+  simulateAction,
+  toDebugString,
+  traceAction,
+  diffSnapshots,
+  logAvailableActions,
+} from '@boardsmith/testing';
 import { GoFishGame, Card, Hand, Pond, Books, GoFishPlayer } from '@boardsmith/gofish-rules';
 
 describe('GoFishGame', () => {
@@ -331,6 +340,92 @@ describe('GoFishGame', () => {
         });
 
         expect(result.success).toBe(true);
+      }
+    });
+  });
+
+  describe('Debug Utilities (examples)', () => {
+    it('demonstrates toDebugString for game state inspection', () => {
+      const testGame = createTestGame(GoFishGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'debug-demo',
+      });
+
+      // Useful when debugging test failures
+      const stateString = toDebugString(testGame.game);
+      expect(stateString).toContain('GoFishGame');
+      expect(stateString).toContain('Alice');
+      expect(stateString).toContain('Bob');
+
+      // Uncomment to see the full debug output:
+      // console.log(stateString);
+    });
+
+    it('demonstrates traceAction for understanding action availability', () => {
+      const testGame = createTestGame(GoFishGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'trace-demo',
+      });
+
+      const alice = testGame.game.players[0] as GoFishPlayer;
+      const trace = traceAction(testGame.game, 'ask', alice);
+
+      // traceAction returns structured info about action availability
+      expect(trace.actionName).toBe('ask');
+      expect(typeof trace.available).toBe('boolean');
+      expect(trace.reason).toBeDefined();
+      expect(Array.isArray(trace.details)).toBe(true);
+
+      // When debugging, uncomment to see full trace:
+      // console.log('Action available:', trace.available);
+      // console.log('Reason:', trace.reason);
+      // trace.details.forEach(d => console.log(`${d.step}: ${d.passed ? '✓' : '✗'} ${d.info}`));
+    });
+
+    it('demonstrates logAvailableActions for quick action overview', () => {
+      const testGame = createTestGame(GoFishGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'log-demo',
+      });
+
+      const alice = testGame.game.players[0] as GoFishPlayer;
+      const actionLog = logAvailableActions(testGame.game, alice);
+
+      // Returns a string summarizing available actions
+      expect(actionLog).toContain('Alice');
+      expect(typeof actionLog).toBe('string');
+
+      // Uncomment to see the full action log:
+      // console.log(actionLog);
+    });
+
+    it('demonstrates diffSnapshots for tracking state changes', () => {
+      const testGame = createTestGame(GoFishGame, {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'diff-demo',
+      });
+
+      const before = JSON.stringify(testGame.runner.getSnapshot());
+
+      const alice = testGame.game.players[0] as GoFishPlayer;
+      const bob = testGame.game.players[1] as GoFishPlayer;
+      const ranks = testGame.game.getPlayerRanks(alice);
+
+      if (ranks.length > 0) {
+        testGame.doAction(0, 'ask', { target: bob, rank: ranks[0] });
+
+        const after = JSON.stringify(testGame.runner.getSnapshot());
+        const diff = diffSnapshots(before, after);
+
+        // Diff shows what changed after the action
+        expect(typeof diff).toBe('string');
+
+        // Uncomment to see the diff:
+        // console.log(diff);
       }
     });
   });
