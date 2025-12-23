@@ -29,6 +29,9 @@ coverage/
 .wrangler/
 .dev.vars
 
+# BoardSmith dev server temp files
+.boardsmith/
+
 # OS files
 Thumbs.db
 
