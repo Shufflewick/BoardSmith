@@ -453,7 +453,25 @@ export class FlowEngine<G extends Game = Game> {
     while (this.stack.length > 0 && !this.awaitingInput && !this.complete) {
       iterations++;
       if (iterations > DEFAULT_MAX_ITERATIONS) {
-        throw new Error('Flow exceeded maximum iterations - possible infinite loop');
+        // Build helpful error message with context
+        const frame = this.stack[this.stack.length - 1];
+        const nodeName = frame?.node?.config?.name ?? frame?.node?.type ?? 'unknown';
+        const nodeType = frame?.node?.type ?? 'unknown';
+        const stackTrace = this.stack.map((f, i) =>
+          `  ${i}: ${f.node.type}${f.node.config?.name ? ` "${f.node.config.name}"` : ''} (index: ${f.index})`
+        ).join('\n');
+
+        throw new Error(
+          `Flow exceeded ${DEFAULT_MAX_ITERATIONS} iterations - possible infinite loop.\n\n` +
+          `Current node: ${nodeType}${nodeName !== nodeType ? ` "${nodeName}"` : ''}\n` +
+          `Flow stack:\n${stackTrace}\n\n` +
+          `Common causes:\n` +
+          `- A while() condition that never becomes false\n` +
+          `- Missing state update that should break the loop\n` +
+          `- Condition references stale game state\n` +
+          `- isFinished() never returns true\n\n` +
+          `Fix: Check the while/repeatUntil conditions in the nodes above.`
+        );
       }
 
       const frame = this.stack[this.stack.length - 1];

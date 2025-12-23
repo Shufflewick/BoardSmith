@@ -21,3 +21,37 @@ export {
   type SingleGameResult,
   type SimulationResults,
 } from './random-simulation.js';
+
+// Assertion helpers
+export {
+  assertFlowState,
+  assertPlayerHas,
+  assertElementCount,
+  assertGameFinished,
+  assertActionAvailable,
+  assertActionNotAvailable,
+  type ExpectedFlowState,
+  type FlowStateAssertionResult,
+} from './assertions.js';
+
+// Fixture and scenario helpers
+export {
+  ScenarioBuilder,
+  scenario,
+  quickGame,
+  playSequence,
+  playUntil,
+  createMultiple,
+} from './fixtures.js';
+
+// Debug utilities
+export {
+  toDebugString,
+  traceAction,
+  visualizeFlow,
+  logAvailableActions,
+  diffSnapshots,
+  type DebugStringOptions,
+  type ActionTraceResult,
+  type ActionTraceDetail,
+} from './debug.js';

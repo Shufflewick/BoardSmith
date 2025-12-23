@@ -16,6 +16,7 @@ interface DevOptions {
   aiLevel?: string;
   lobby?: boolean;
   persist?: string | boolean;
+  debug?: boolean;
 }
 
 interface BoardSmithConfig {
@@ -173,6 +174,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
   console.log(chalk.dim(`  Starting game server on port ${workerPort}...`));
 
   try {
+    if (options.debug) {
+      console.log(chalk.cyan('  Debug mode enabled - verbose logging active'));
+    }
+
     server = createLocalServer({
       port: workerPort,
       definitions: [gameDefinition],
@@ -181,6 +186,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       },
       aiConfig: aiPlayers.length > 0 ? { players: aiPlayers, level: aiLevel } : undefined,
       persist: options.persist,
+      debug: options.debug,
     });
 
     // Wait for server to be ready before continuing

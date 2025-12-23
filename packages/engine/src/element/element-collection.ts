@@ -226,6 +226,54 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
     return Array.from(seen);
   }
 
+  // ============================================
+  // Element Comparison Helpers
+  // ============================================
+
+  /**
+   * Check if this collection contains an element by ID comparison.
+   * Use this instead of .includes() which fails due to object reference issues.
+   *
+   * @example
+   * // WRONG: cards.includes(selectedCard) (fails - different object instances)
+   * // CORRECT: cards.contains(selectedCard)
+   */
+  contains(element: GameElement | null | undefined): boolean {
+    if (!element) return false;
+    return this.some(e => e.id === element.id);
+  }
+
+  /**
+   * Find an element in this collection by ID.
+   * Returns undefined if not found.
+   *
+   * @example
+   * const card = cards.findById(selectedCard.id);
+   */
+  findById(id: number): T | undefined {
+    return this.find(e => e.id === id);
+  }
+
+  /**
+   * Check if this collection contains an element with the given ID.
+   */
+  hasId(id: number): boolean {
+    return this.some(e => e.id === id);
+  }
+
+  /**
+   * Get the index of an element by ID comparison.
+   * Returns -1 if not found.
+   *
+   * @example
+   * // WRONG: cards.indexOf(selectedCard) (fails - different object instances)
+   * // CORRECT: cards.indexOfElement(selectedCard)
+   */
+  indexOfElement(element: GameElement | null | undefined): number {
+    if (!element) return -1;
+    return this.findIndex(e => e.id === element.id);
+  }
+
   /**
    * Internal finder implementation
    */

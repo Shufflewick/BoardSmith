@@ -452,3 +452,81 @@ export function setVar(
     ctx.set(name, resolvedValue);
   });
 }
+
+/**
+ * A simplified loop for turn-based action sequences.
+ *
+ * This is syntactic sugar for the common pattern of looping while a condition
+ * is true, with automatic game.isFinished() checking. It reduces boilerplate
+ * for turn loops that need custom continuation conditions.
+ *
+ * @example
+ * ```typescript
+ * // Simple turn loop - continue while player has actions remaining
+ * turnLoop({
+ *   actions: ['move', 'attack', 'endTurn'],
+ *   while: (ctx) => ctx.player.actionsRemaining > 0,
+ * })
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // With all options
+ * turnLoop({
+ *   name: 'rebel-action-loop',
+ *   actions: ['move', 'explore', 'train', 'endTurn'],
+ *   while: (ctx) => {
+ *     const player = ctx.player as RebelPlayer;
+ *     return player.team.some(m => m.actionsRemaining > 0);
+ *   },
+ *   maxIterations: 30,
+ * })
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Minimal - just loop until endTurn or game ends
+ * turnLoop({
+ *   actions: ['playCard', 'drawCard', 'endTurn'],
+ * })
+ * ```
+ *
+ * This is equivalent to:
+ * ```typescript
+ * loop({
+ *   while: (ctx) => !ctx.game.isFinished() && customCondition(ctx),
+ *   do: actionStep({ actions: [...] }),
+ * })
+ * ```
+ */
+export function turnLoop(config: {
+  /** Optional name for debugging */
+  name?: string;
+  /** Actions available during the loop */
+  actions: string[] | ((context: FlowContext) => string[]);
+  /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
+  while?: (context: FlowContext) => boolean;
+  /** Safety limit to prevent infinite loops (default: 100) */
+  maxIterations?: number;
+  /** Optional prompt to display */
+  prompt?: string | ((context: FlowContext) => string);
+}): FlowNode {
+  return loop({
+    name: config.name,
+    while: (ctx) => {
+      // Always stop if game is finished
+      if (ctx.game.isFinished()) return false;
+      // Check custom condition if provided
+      if (config.while) {
+        return config.while(ctx);
+      }
+      // Default: continue forever (until endTurn action or game ends)
+      return true;
+    },
+    maxIterations: config.maxIterations ?? 100,
+    do: actionStep({
+      actions: config.actions,
+      prompt: config.prompt,
+    }),
+  });
+}

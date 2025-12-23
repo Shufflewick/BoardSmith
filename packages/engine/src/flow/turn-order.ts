@@ -106,4 +106,87 @@ export const TurnOrder = {
     direction: 'forward' as const,
     filter: (player: Player) => positions.includes(player.position),
   }),
+
+  /**
+   * Start from the player after a "dealer" position.
+   * Common pattern for card games where play starts left of dealer.
+   *
+   * @example
+   * ```typescript
+   * // In game class: dealerPosition: number = 0;
+   *
+   * eachPlayer({
+   *   ...TurnOrder.LEFT_OF_DEALER(ctx => ctx.game.dealerPosition),
+   *   do: actionStep({ actions: ['bet', 'fold'] })
+   * })
+   *
+   * // At end of hand:
+   * execute(ctx => {
+   *   ctx.game.dealerPosition = (ctx.game.dealerPosition + 1) % ctx.game.players.length;
+   * })
+   * ```
+   */
+  LEFT_OF_DEALER: (getDealerPosition: (ctx: FlowContext) => number): TurnOrderConfig => ({
+    direction: 'forward' as const,
+    startingPlayer: (ctx: FlowContext) => {
+      const dealerPos = getDealerPosition(ctx);
+      const nextPos = (dealerPos + 1) % ctx.game.players.length;
+      return ctx.game.players[nextPos];
+    },
+  }),
+
+  /**
+   * Skip certain players based on a condition.
+   * Players who don't match the filter are skipped.
+   *
+   * @example
+   * ```typescript
+   * // Skip players who have folded
+   * eachPlayer({
+   *   ...TurnOrder.SKIP_IF(player => player.hasFolded),
+   *   do: actionStep({ actions: ['bet', 'raise', 'call'] })
+   * })
+   * ```
+   */
+  SKIP_IF: (shouldSkip: (player: Player, ctx: FlowContext) => boolean): TurnOrderConfig => ({
+    direction: 'forward' as const,
+    filter: (player: Player, ctx: FlowContext) => !shouldSkip(player, ctx),
+  }),
+
+  /**
+   * Combine multiple turn order configs.
+   * Useful for combining filters with starting positions.
+   *
+   * @example
+   * ```typescript
+   * eachPlayer({
+   *   ...TurnOrder.combine(
+   *     TurnOrder.LEFT_OF_DEALER(ctx => ctx.game.dealerPosition),
+   *     TurnOrder.SKIP_IF(p => p.hasFolded)
+   *   ),
+   *   do: actionStep({ actions: ['bet'] })
+   * })
+   * ```
+   */
+  combine: (...configs: TurnOrderConfig[]): TurnOrderConfig => {
+    const combined: TurnOrderConfig = { direction: 'forward' };
+
+    for (const config of configs) {
+      if (config.direction) combined.direction = config.direction;
+      if (config.startingPlayer) combined.startingPlayer = config.startingPlayer;
+
+      if (config.filter) {
+        const existingFilter = combined.filter;
+        if (existingFilter) {
+          // Combine filters with AND
+          const newFilter = config.filter;
+          combined.filter = (player, ctx) => existingFilter(player, ctx) && newFilter(player, ctx);
+        } else {
+          combined.filter = config.filter;
+        }
+      }
+    }
+
+    return combined;
+  },
 };

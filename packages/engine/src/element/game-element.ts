@@ -200,13 +200,59 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     name: string,
     attributes?: Record<string, unknown>
   ): T {
-    const element = new elementClass(this._ctx);
+    // Validate element class
+    if (!elementClass) {
+      throw new Error(
+        `Cannot create element: elementClass is ${elementClass}.\n` +
+        `Parent: ${this.constructor.name} "${this.name}"\n` +
+        `Hint: Make sure you imported the element class correctly.`
+      );
+    }
+
+    if (typeof elementClass !== 'function') {
+      throw new Error(
+        `Cannot create element: expected a class constructor, got ${typeof elementClass}.\n` +
+        `Parent: ${this.constructor.name} "${this.name}"\n` +
+        `Value: ${JSON.stringify(elementClass)}`
+      );
+    }
+
+    let element: T;
+    try {
+      element = new elementClass(this._ctx);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to instantiate ${elementClass.name}:\n` +
+        `  Error: ${errMsg}\n` +
+        `  Parent: ${this.constructor.name} "${this.name}"\n` +
+        `  Hint: Check that ${elementClass.name} constructor accepts a context parameter.`
+      );
+    }
+
     element.name = name;
     element.game = this.game;
 
-    // Apply attributes
+    // Apply attributes with validation
     if (attributes) {
-      Object.assign(element, attributes);
+      try {
+        for (const [key, value] of Object.entries(attributes)) {
+          if (key === 'id' || key === '_t' || key === '_ctx') {
+            console.warn(
+              `Warning: Setting reserved property "${key}" on ${elementClass.name} "${name}" - ` +
+              `this may cause unexpected behavior.`
+            );
+          }
+          (element as any)[key] = value;
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to set attributes on ${elementClass.name} "${name}":\n` +
+          `  Error: ${errMsg}\n` +
+          `  Attributes: ${JSON.stringify(attributes)}`
+        );
+      }
     }
 
     // Add to tree
@@ -618,7 +664,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   ): T {
     const ElementClass = classRegistry.get(json.className);
     if (!ElementClass) {
-      throw new Error(`Unknown element class: ${json.className}`);
+      const registeredClasses = Array.from(classRegistry.keys()).join(', ');
+      throw new Error(
+        `Unknown element class: "${json.className}"\n\n` +
+        `This error occurs when deserializing game state (e.g., after restart, undo, or AI move).\n\n` +
+        `Registered classes: ${registeredClasses || '(none)'}\n\n` +
+        `To fix this, register the class in your Game constructor:\n` +
+        `  this.registerElements([${json.className}, ...]);\n\n` +
+        `Or check that "${json.className}" is spelled correctly and imported.`
+      );
     }
 
     const element = new ElementClass(ctx);
@@ -651,7 +705,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   // ============================================
-  // ID Access
+  // ID Access and Comparison
   // ============================================
 
   /**
@@ -659,5 +713,25 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   get id(): number {
     return this._t.id;
+  }
+
+  /**
+   * Compare this element to another by ID.
+   * Use this instead of === or .includes() which fail due to object reference issues.
+   *
+   * @example
+   * // WRONG: card1 === card2 (fails - different object instances)
+   * // CORRECT: card1.equals(card2)
+   */
+  equals(other: GameElement | null | undefined): boolean {
+    if (!other) return false;
+    return this._t.id === other._t.id;
+  }
+
+  /**
+   * Check if this element's ID matches a given ID
+   */
+  hasId(id: number): boolean {
+    return this._t.id === id;
   }
 }

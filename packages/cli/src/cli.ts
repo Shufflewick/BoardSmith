@@ -6,6 +6,8 @@ import { buildCommand } from './commands/build.js';
 import { testCommand } from './commands/test.js';
 import { validateCommand } from './commands/validate.js';
 import { publishCommand } from './commands/publish.js';
+import { lintCommand } from './commands/lint.js';
+import { analyzeCommand } from './commands/analyze.js';
 
 const program = new Command();
 
@@ -32,6 +34,7 @@ program
   .option('--ai-level <level>', 'AI difficulty: easy, medium, hard, expert, or iteration count', 'medium')
   .option('--lobby', 'Open game lobby instead of auto-creating a game')
   .option('--persist [path]', 'Persist games to SQLite (default: .boardsmith/games.db)')
+  .option('--debug', 'Enable debug mode for verbose logging of actions, flow, and commands')
   .action(devCommand);
 
 // Testing
@@ -56,6 +59,21 @@ program
   .option('--fix', 'Attempt to auto-fix issues')
   .option('--skip-simulation', 'Skip random game simulation')
   .action(validateCommand);
+
+// Linting
+program
+  .command('lint')
+  .description('Check for common BoardSmith pitfalls and issues')
+  .option('--fix', 'Attempt to auto-fix issues (coming soon)')
+  .action(lintCommand);
+
+// Analysis
+program
+  .command('analyze')
+  .description('Analyze game complexity and structure')
+  .option('--json', 'Output results as JSON')
+  .option('-v, --verbose', 'Show detailed information')
+  .action(analyzeCommand);
 
 // Publishing
 program

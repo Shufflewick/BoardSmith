@@ -267,8 +267,21 @@ The UI uses Vue 3 and the `@boardsmith/ui` package:
 </template>
 ```
 
+## Important: Read Before You Start
+
+Before diving into implementation, read [Common Pitfalls](./common-pitfalls.md) to avoid these critical issues:
+
+1. **Object Reference Comparison** - Never use `.includes(element)` or `===` to compare elements. Always use `.some(e => e.id === element.id)` or `element.equals(other)`.
+
+2. **Multi-Step Selection Filters** - When action B depends on selection A, handle `undefined` in your filter for availability checks.
+
+3. **Dead Elements in Collections** - Element queries return all elements including "dead" ones. Filter explicitly with `.filter(e => !e.isDead)`.
+
+These issues cause silent failures that are hard to debug. Five minutes reading the pitfalls guide will save hours of debugging.
+
 ## Next Steps
 
+- **Start here**: [Common Pitfalls](./common-pitfalls.md) - Critical issues to avoid
 - Read [Core Concepts](./core-concepts.md) to understand elements, actions, and commands
 - Learn about [Actions & Flow](./actions-and-flow.md) for complex game logic
 - Explore [UI Components](./ui-components.md) for building custom UIs

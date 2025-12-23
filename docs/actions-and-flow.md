@@ -101,6 +101,36 @@ Action.create('move')
   })
 ```
 
+> **IMPORTANT: Handling Undefined in Multi-Step Selections**
+>
+> BoardSmith evaluates ALL filters during availability checks, even for selections the player hasn't made yet. This means `ctx.args.piece` will be `undefined` when checking if the action should be available.
+>
+> **This will crash:**
+> ```typescript
+> filter: (cell, ctx) => {
+>   const piece = ctx.args.piece as Piece;
+>   return piece.canMoveTo(cell);  // ERROR: Cannot read 'canMoveTo' of undefined
+> }
+> ```
+>
+> **Correct pattern:**
+> ```typescript
+> filter: (cell, ctx) => {
+>   const piece = ctx.args?.piece as Piece | undefined;
+>
+>   if (!piece) {
+>     // Availability check - no piece selected yet
+>     // Return true if this cell would be valid for ANY movable piece
+>     return getMovablePieces(ctx.player).some(p => p.canMoveTo(cell));
+>   }
+>
+>   // Actual selection - piece is selected
+>   return piece.canMoveTo(cell);
+> }
+> ```
+>
+> See [Common Pitfalls](./common-pitfalls.md#2-multi-step-selection-filters) for more details.
+
 ### Conditions
 
 Control when actions are available:

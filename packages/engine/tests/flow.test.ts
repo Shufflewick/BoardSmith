@@ -21,6 +21,7 @@ import {
   noop,
   phase,
   TurnOrder,
+  turnLoop,
 } from '../src/index.js';
 import type { FlowContext, FlowDefinition } from '../src/index.js';
 
@@ -107,6 +108,25 @@ describe('Flow Builders', () => {
     });
     expect(flow.root).toBeDefined();
     expect(flow.isComplete).toBeDefined();
+  });
+
+  it('should create turnLoop node', () => {
+    const node = turnLoop({
+      actions: ['move', 'attack', 'endTurn'],
+    });
+    expect(node.type).toBe('loop');
+  });
+
+  it('should create turnLoop with while condition', () => {
+    const node = turnLoop({
+      name: 'action-loop',
+      actions: ['move', 'attack'],
+      while: () => true,
+      maxIterations: 50,
+    });
+    expect(node.type).toBe('loop');
+    expect(node.config.name).toBe('action-loop');
+    expect(node.config.maxIterations).toBe(50);
   });
 });
 
@@ -1026,6 +1046,189 @@ describe('Move Limits', () => {
     expect(state.complete).toBe(true); // Now complete
 
     expect(actionCount).toBe(3);
+  });
+});
+
+describe('turnLoop Helper', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+  });
+
+  it('should loop until game is finished', () => {
+    let actionCount = 0;
+
+    game.registerAction(
+      Action.create<TestGame>('act').execute((args, ctx) => {
+        actionCount++;
+        if (actionCount >= 3) {
+          ctx.game.finish();
+        }
+      })
+    );
+
+    const flow = defineFlow({
+      root: turnLoop({
+        actions: ['act'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    // Action 1
+    expect(state.awaitingInput).toBe(true);
+    state = engine.resume('act', {});
+
+    // Action 2
+    expect(state.awaitingInput).toBe(true);
+    state = engine.resume('act', {});
+
+    // Action 3 - game finishes
+    expect(state.awaitingInput).toBe(true);
+    state = engine.resume('act', {});
+
+    expect(state.complete).toBe(true);
+    expect(actionCount).toBe(3);
+  });
+
+  it('should loop until while condition is false', () => {
+    let actionsRemaining = 3;
+
+    game.registerAction(
+      Action.create<TestGame>('act').execute(() => {
+        actionsRemaining--;
+      })
+    );
+
+    const flow = defineFlow({
+      root: turnLoop({
+        actions: ['act'],
+        while: () => actionsRemaining > 0,
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    // 3 actions until condition is false
+    state = engine.resume('act', {});
+    expect(state.awaitingInput).toBe(true);
+
+    state = engine.resume('act', {});
+    expect(state.awaitingInput).toBe(true);
+
+    state = engine.resume('act', {});
+    expect(state.complete).toBe(true);
+
+    expect(actionsRemaining).toBe(0);
+  });
+
+  it('should respect maxIterations', () => {
+    let actionCount = 0;
+
+    game.registerAction(
+      Action.create<TestGame>('act').execute(() => {
+        actionCount++;
+      })
+    );
+
+    const flow = defineFlow({
+      root: turnLoop({
+        actions: ['act'],
+        maxIterations: 2,
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    state = engine.resume('act', {});
+    state = engine.resume('act', {});
+
+    expect(state.complete).toBe(true);
+    expect(actionCount).toBe(2);
+  });
+
+  it('should default maxIterations to 100', () => {
+    const node = turnLoop({
+      actions: ['act'],
+    });
+    expect(node.config.maxIterations).toBe(100);
+  });
+
+  it('should support dynamic actions list', () => {
+    const actionsAvailable: string[] = ['draw', 'play'];
+
+    game.registerAction(
+      Action.create<TestGame>('draw').execute(() => {})
+    );
+    game.registerAction(
+      Action.create<TestGame>('play').execute(() => {})
+    );
+    game.registerAction(
+      Action.create<TestGame>('endTurn').execute((args, ctx) => {
+        ctx.game.finish();
+      })
+    );
+
+    const flow = defineFlow({
+      root: turnLoop({
+        actions: () => [...actionsAvailable, 'endTurn'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    const state = engine.start();
+
+    expect(state.availableActions).toContain('draw');
+    expect(state.availableActions).toContain('play');
+    expect(state.availableActions).toContain('endTurn');
+  });
+
+  it('should work with eachPlayer for turn-based games', () => {
+    let turnsTaken = 0;
+    let endedTurn = false;
+
+    game.registerAction(
+      Action.create<TestGame>('act').execute(() => {})
+    );
+    game.registerAction(
+      Action.create<TestGame>('endTurn').execute(() => {
+        turnsTaken++;
+        endedTurn = true;
+      })
+    );
+
+    const flow = defineFlow({
+      root: loop({
+        while: () => turnsTaken < 4,
+        do: eachPlayer({
+          do: sequence(
+            execute(() => {
+              endedTurn = false;
+            }),
+            turnLoop({
+              actions: ['act', 'endTurn'],
+              while: () => !endedTurn,
+            })
+          ),
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    // 4 turns (2 rounds × 2 players)
+    for (let i = 0; i < 4; i++) {
+      expect(state.awaitingInput).toBe(true);
+      state = engine.resume('endTurn', {});
+    }
+
+    expect(state.complete).toBe(true);
+    expect(turnsTaken).toBe(4);
   });
 });
 

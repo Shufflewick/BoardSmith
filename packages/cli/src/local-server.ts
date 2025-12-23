@@ -77,6 +77,10 @@ export interface LocalServerOptions {
    * If false or undefined, uses in-memory storage (games lost on restart).
    */
   persist?: string | boolean;
+  /**
+   * Enable debug mode for verbose logging of actions, flow, and commands.
+   */
+  debug?: boolean;
 }
 
 export class LocalServer {
@@ -88,6 +92,7 @@ export class LocalServer {
   readonly #registry: SimpleGameRegistry;
   readonly #readyPromise: Promise<void>;
   readonly #isPersistent: boolean;
+  readonly #debug: boolean;
 
   /** Promise that resolves when the server is ready to accept connections */
   get ready(): Promise<void> {
@@ -109,6 +114,7 @@ export class LocalServer {
 
   constructor(options: LocalServerOptions) {
     this.#port = options.port;
+    this.#debug = options.debug ?? false;
 
     // Build registry from definitions
     this.#registry = new SimpleGameRegistry(options.definitions);
@@ -174,6 +180,13 @@ export class LocalServer {
     this.#store.updateRegistry?.(definition);
   }
 
+  /** Log a debug message if debug mode is enabled */
+  #log(...args: unknown[]): void {
+    if (this.#debug) {
+      console.log('[DEBUG]', ...args);
+    }
+  }
+
   close(): Promise<void> {
     return new Promise((resolve, reject) => {
       // Close all WebSocket connections
@@ -212,8 +225,12 @@ export class LocalServer {
       // Convert Node request to platform-agnostic request
       const serverRequest = await this.#nodeToServerRequest(req);
 
+      this.#log(`${serverRequest.method} ${serverRequest.path}`, serverRequest.body);
+
       // Handle request through core
       const response = await this.#core.handleRequest(serverRequest);
+
+      this.#log(`Response: ${response.status}`, response.body);
 
       // Send response
       this.#sendResponse(res, response);
@@ -283,6 +300,8 @@ export class LocalServer {
     const playerPosition = playerParam ? parseInt(playerParam, 10) : 0;
     const isSpectator = url.searchParams.get('spectator') === 'true';
     const playerId = url.searchParams.get('playerId') ?? undefined;
+
+    this.#log(`WebSocket connection: game=${gameId}, player=${playerPosition}, spectator=${isSpectator}`);
 
     // First, ensure the game is loaded (this will restore from SQLite if persisted)
     const game = await this.#store.getGame(gameId);

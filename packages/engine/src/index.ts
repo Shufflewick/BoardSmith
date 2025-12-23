@@ -98,6 +98,16 @@ export type {
 // Action system
 export { Action, ActionExecutor, ConditionTracer } from './action/index.js';
 
+// Filter helpers for multi-step selections
+export {
+  dependentFilter,
+  adjacentToSelection,
+  excludeAlreadySelected,
+  allOf,
+  anyOf,
+  not,
+} from './action/index.js';
+
 export type {
   SelectionType,
   Selection,
@@ -115,6 +125,7 @@ export type {
   BoardElementRef,
   ChoiceBoardRefs,
   DependentFilter,
+  DependentFilterOptions,
   // Debug tracing types
   ConditionDetail,
   SelectionTrace,
@@ -144,6 +155,7 @@ export {
   noop,
   execute,
   setVar,
+  turnLoop,
   TurnOrder,
 } from './flow/index.js';
 
