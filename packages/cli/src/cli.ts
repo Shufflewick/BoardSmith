@@ -31,6 +31,7 @@ program
   .option('--ai <players...>', 'Player positions to be AI (e.g., --ai 1 or --ai 0 2)')
   .option('--ai-level <level>', 'AI difficulty: easy, medium, hard, expert, or iteration count', 'medium')
   .option('--lobby', 'Open game lobby instead of auto-creating a game')
+  .option('--persist [path]', 'Persist games to SQLite (default: .boardsmith/games.db)')
   .action(devCommand);
 
 // Testing

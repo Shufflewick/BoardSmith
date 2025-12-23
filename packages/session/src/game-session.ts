@@ -6,6 +6,7 @@ import type { FlowState, SerializedAction, Game, PendingActionState } from '@boa
 import { GameRunner } from '@boardsmith/runtime';
 import type {
   GameClass,
+  GameDefinition,
   StoredGameState,
   PlayerGameState,
   SessionInfo,
@@ -134,7 +135,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
   #runner: GameRunner<G>;
   readonly #storedState: StoredGameState;
-  readonly #GameClass: GameClass<G>;
+  #GameClass: GameClass<G>;
   readonly #storage?: StorageAdapter;
   #aiController?: AIController<G>;  // Mutable for dynamic AI slot changes
   #broadcaster?: BroadcastAdapter<TSession>;
@@ -262,6 +263,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       : undefined;
 
     const session = new GameSession(runner, storedState, GameClass, storage, aiController, displayName);
+
+    // Persist initial state (fire-and-forget to keep create synchronous)
+    if (storage) {
+      storage.save(storedState).catch(err => {
+        console.error('Failed to save initial game state:', err);
+      });
+    }
 
     // Only trigger AI if game is playing (not waiting for players)
     if (lobbyState !== 'waiting' && aiController?.hasAIPlayers()) {
@@ -634,6 +642,50 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     };
   }
 
+  // ============================================
+  // Hot Reload Methods
+  // ============================================
+
+  /**
+   * Reload the game with a new game definition (for hot reloading rules).
+   * Replays the entire action history with the new game class.
+   */
+  reloadWithCurrentRules(definition: GameDefinition): void {
+    // Validate game type matches
+    if (definition.gameType !== this.#storedState.gameType) {
+      throw new Error(`Cannot reload: game type mismatch (expected ${this.#storedState.gameType}, got ${definition.gameType})`);
+    }
+
+    // Replay all actions with the new game class
+    const newRunner = GameRunner.replay<G>(
+      {
+        GameClass: definition.gameClass as GameClass<G>,
+        gameType: this.#storedState.gameType,
+        gameOptions: {
+          playerCount: this.#storedState.playerCount,
+          playerNames: this.#storedState.playerNames,
+          seed: this.#storedState.seed,
+          ...this.#storedState.gameOptions,
+        },
+      },
+      this.#storedState.actionHistory
+    );
+
+    // Replace the current runner and game class
+    this.#runner = newRunner;
+    this.#GameClass = definition.gameClass as GameClass<G>;
+
+    // Clear any pending actions (they may reference old game state)
+    this.#pendingActions.clear();
+
+    // Broadcast updated state to all clients
+    this.broadcast();
+  }
+
+  // ============================================
+  // Undo Methods
+  // ============================================
+
   /**
    * Undo actions back to the start of the current player's turn.
    * Only works if it's the player's turn and they've made at least one action.
@@ -706,6 +758,77 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to undo',
+      };
+    }
+  }
+
+  /**
+   * Rewind the game to a specific action index and continue from there.
+   * All actions after the target index will be discarded.
+   * This is intended for debug/development use.
+   */
+  async rewindToAction(targetActionIndex: number): Promise<{
+    success: boolean;
+    error?: string;
+    actionsDiscarded?: number;
+    state?: PlayerGameState;
+  }> {
+    const currentLength = this.#storedState.actionHistory.length;
+
+    // Validate target index
+    if (targetActionIndex < 0) {
+      return { success: false, error: `Invalid action index: ${targetActionIndex}` };
+    }
+
+    if (targetActionIndex >= currentLength) {
+      return { success: false, error: `Cannot rewind forward: target ${targetActionIndex} >= current ${currentLength}` };
+    }
+
+    // Slice history to target point
+    const actionsToReplay = this.#storedState.actionHistory.slice(0, targetActionIndex);
+    const actionsDiscarded = currentLength - targetActionIndex;
+
+    try {
+      // Replay game to that point
+      const newRunner = GameRunner.replay<G>(
+        {
+          GameClass: this.#GameClass,
+          gameType: this.#storedState.gameType,
+          gameOptions: {
+            playerCount: this.#storedState.playerCount,
+            playerNames: this.#storedState.playerNames,
+            seed: this.#storedState.seed,
+            ...this.#storedState.gameOptions,
+          },
+        },
+        actionsToReplay
+      );
+
+      // Replace current state
+      this.#runner = newRunner;
+      this.#storedState.actionHistory = actionsToReplay;
+
+      // Clear any pending actions (they reference old game state)
+      this.#pendingActions.clear();
+
+      // Persist
+      if (this.#storage) {
+        await this.#storage.save(this.#storedState);
+      }
+
+      // Broadcast new state to all clients
+      this.broadcast();
+
+      // Return state for the first player (caller should handle their own player position)
+      return {
+        success: true,
+        actionsDiscarded,
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, 0, { includeActionMetadata: true, includeDebugData: true }),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to rewind',
       };
     }
   }

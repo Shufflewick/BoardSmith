@@ -5,6 +5,7 @@
  * Features:
  * - Create game button (configuration happens in WaitingRoom)
  * - Join existing game by code
+ * - Resume persisted games (when using --persist flag)
  */
 import { ref, onMounted } from 'vue';
 
@@ -33,6 +34,8 @@ const props = defineProps<{
   displayName: string;
   /** API base URL (optional, defaults to same origin with port 8787) */
   apiUrl?: string;
+  /** Player positions that should be AI by default (0-indexed). E.g., [1] makes player 2 AI */
+  defaultAIPlayers?: number[];
 }>();
 
 const joinGameId = defineModel<string>('joinGameId', { required: true });
@@ -40,16 +43,22 @@ const joinGameId = defineModel<string>('joinGameId', { required: true });
 const emit = defineEmits<{
   (e: 'create', config: LobbyConfig): void;
   (e: 'join'): void;
+  (e: 'resume', gameId: string): void;
 }>();
 
 // Game definition metadata (fetched from server)
 const definition = ref<GameDefinitionMeta | null>(null);
 
-// Fetch game definition on mount (to get min players)
+// Persisted games that can be resumed
+const persistedGames = ref<string[]>([]);
+
+// Fetch game definition and persisted games on mount
 onMounted(async () => {
+  const baseUrl =
+    props.apiUrl || window.location.origin.replace(/:\d+$/, ':8787');
+
+  // Fetch definitions
   try {
-    const baseUrl =
-      props.apiUrl || window.location.origin.replace(/:\d+$/, ':8787');
     const res = await fetch(`${baseUrl}/games/definitions`);
     const data = await res.json();
 
@@ -59,16 +68,29 @@ onMounted(async () => {
   } catch (e) {
     console.warn('Could not fetch game definitions:', e);
   }
+
+  // Fetch persisted games
+  try {
+    const res = await fetch(`${baseUrl}/games/list`);
+    const data = await res.json();
+
+    if (data.success && data.games?.length > 0) {
+      persistedGames.value = data.games;
+    }
+  } catch (e) {
+    console.warn('Could not fetch persisted games:', e);
+  }
 });
 
 // Handle create game - just use defaults, host will configure in waiting room
 function handleCreate() {
   const minPlayers = definition.value?.minPlayers ?? 2;
+  const defaultAI = props.defaultAIPlayers || [];
 
-  // Create with minimum players, all human, default names
+  // Create with minimum players, applying default AI settings
   const playerConfigs: PlayerConfig[] = Array.from({ length: minPlayers }, (_, i) => ({
-    name: `Player ${i + 1}`,
-    isAI: false,
+    name: defaultAI.includes(i) ? 'Bot' : `Player ${i + 1}`,
+    isAI: defaultAI.includes(i),
     aiLevel: 'medium',
   }));
 
@@ -78,6 +100,11 @@ function handleCreate() {
     playerConfigs,
   });
 }
+
+// Handle resume game
+function handleResume(gameId: string) {
+  emit('resume', gameId);
+}
 </script>
 
 <template>
@@ -86,6 +113,24 @@ function handleCreate() {
 
     <div class="lobby-form">
       <div class="lobby-actions">
+        <!-- Resume Persisted Games Section (only shown if there are persisted games) -->
+        <div v-if="persistedGames.length > 0" class="action-box resume-box">
+          <h3>Resume Saved Game</h3>
+          <p>Continue where you left off</p>
+          <div class="saved-games-list">
+            <button
+              v-for="gameId in persistedGames"
+              :key="gameId"
+              @click="handleResume(gameId)"
+              class="btn resume"
+            >
+              {{ gameId }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="persistedGames.length > 0" class="divider">OR</div>
+
         <!-- Create Game Section -->
         <div class="action-box">
           <h3>Create New Game</h3>
@@ -216,5 +261,29 @@ function handleCreate() {
 
 .btn.secondary:hover {
   border-color: #00d9ff;
+}
+
+.btn.resume {
+  background: rgba(0, 217, 255, 0.15);
+  color: #00d9ff;
+  border: 2px solid rgba(0, 217, 255, 0.3);
+  font-family: monospace;
+}
+
+.btn.resume:hover {
+  background: rgba(0, 217, 255, 0.25);
+  border-color: #00d9ff;
+}
+
+.resume-box {
+  border: 2px solid rgba(0, 217, 255, 0.3);
+}
+
+.saved-games-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
 }
 </style>

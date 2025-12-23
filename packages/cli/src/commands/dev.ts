@@ -15,6 +15,7 @@ interface DevOptions {
   ai?: string[];
   aiLevel?: string;
   lobby?: boolean;
+  persist?: string | boolean;
 }
 
 interface BoardSmithConfig {
@@ -179,6 +180,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
         console.log(chalk.green(`  Game server ready on http://localhost:${p}`));
       },
       aiConfig: aiPlayers.length > 0 ? { players: aiPlayers, level: aiLevel } : undefined,
+      persist: options.persist,
     });
 
     // Wait for server to be ready before continuing
@@ -217,11 +219,68 @@ export async function devCommand(options: DevOptions): Promise<void> {
     console.log(chalk.green(`  UI server running on http://localhost:${port}`));
 
     if (options.lobby) {
+      // Show any persisted games that can be resumed
+      if (options.persist && server) {
+        const persistedGames = server.listPersistedGames();
+        if (persistedGames.length > 0) {
+          console.log(chalk.cyan(`\n  Found ${persistedGames.length} persisted game(s):`));
+          for (const gameId of persistedGames) {
+            console.log(chalk.dim(`    Resume: http://localhost:${port}/game/${gameId}/0`));
+          }
+        }
+      }
+
       // Open the lobby for manual game configuration
       console.log(chalk.cyan('\n  Opening game lobby...'));
       const lobbyUrl = `http://localhost:${port}`;
       await open(lobbyUrl);
       console.log(chalk.dim(`  Lobby: ${lobbyUrl}`));
+    } else if (options.persist && server) {
+      // Non-lobby mode with persistence: try to resume the most recent game or create new
+      const persistedGames = server.listPersistedGames();
+      if (persistedGames.length > 0) {
+        const gameId = persistedGames[0]; // Most recently updated game
+        console.log(chalk.cyan(`\n  Resuming persisted game: ${gameId}`));
+
+        // Open browser tabs for players
+        console.log(chalk.cyan(`  Opening ${playerCount} player tab(s)...`));
+        for (let i = 0; i < playerCount; i++) {
+          const url = `http://localhost:${port}/game/${gameId}/${i}`;
+          await open(url);
+          console.log(chalk.dim(`  Player ${i + 1}: ${url}`));
+        }
+      } else {
+        // No persisted games - create a new one
+        const playerNames = Array.from({ length: playerCount }, (_, i) =>
+          aiPlayers.includes(i) ? 'Bot' : `Player ${i + 1}`
+        );
+        const gameId = await createGame(workerPort, gameDefinition.gameType, playerCount, playerNames);
+
+        if (gameId) {
+          console.log(chalk.cyan(`\n  Game created: ${gameId}`));
+
+          const humanPlayers = Array.from({ length: playerCount }, (_, i) => i)
+            .filter(i => !aiPlayers.includes(i));
+
+          if (humanPlayers.length > 0) {
+            console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
+            for (const i of humanPlayers) {
+              const url = `http://localhost:${port}/game/${gameId}/${i}`;
+              await open(url);
+              console.log(chalk.dim(`  Player ${i + 1}: ${url}`));
+            }
+          }
+
+          for (const i of aiPlayers) {
+            if (i < playerCount) {
+              console.log(chalk.dim(`  Player ${i + 1}: AI (${aiLevel})`));
+            }
+          }
+        } else {
+          console.log(chalk.yellow('\n  Could not auto-create game. Open the UI manually.'));
+          await open(`http://localhost:${port}`);
+        }
+      }
     } else {
       // Create a game with appropriate names for AI and human players
       const playerNames = Array.from({ length: playerCount }, (_, i) =>
@@ -302,9 +361,17 @@ export async function devCommand(options: DevOptions): Promise<void> {
       if (server) {
         await server.close();
       }
-      // Clean up temp files
+      // Clean up temp files (but preserve database if persisting)
       try {
-        rmSync(tempDir, { recursive: true, force: true });
+        // Only delete the rules bundle, not the entire directory (which contains the database)
+        const bundlePath = join(tempDir, 'rules-bundle.mjs');
+        if (existsSync(bundlePath)) {
+          rmSync(bundlePath);
+        }
+        // Only delete the directory if it's empty (no database)
+        if (!options.persist) {
+          rmSync(tempDir, { recursive: true, force: true });
+        }
       } catch {
         // Ignore cleanup errors
       }

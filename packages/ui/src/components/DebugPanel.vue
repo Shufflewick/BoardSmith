@@ -534,11 +534,7 @@ const selectedElement = computed<GroupedElement | null>(() => {
 
 // Copy element JSON to clipboard
 async function copyElementToClipboard(element: GroupedElement) {
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(element.fullObject, null, 2));
-  } catch (e) {
-    console.error('Failed to copy element to clipboard:', e);
-  }
+  await copyNodeToClipboard(element.fullObject);
 }
 
 // Filter elements by search query
@@ -767,6 +763,46 @@ function clearHistoricalState() {
   stateDiff.value = null;
   // Emit to parent to return to live state
   emit('time-travel', null, null, null);
+}
+
+// Rewind game to a specific action index (debug only)
+// This permanently rewinds the game - all subsequent actions are discarded
+const rewindLoading = ref(false);
+const rewindError = ref<string | null>(null);
+
+async function rewindToAction(actionIndex: number) {
+  const actionsToDiscard = actionHistory.value.length - actionIndex;
+  const confirmed = window.confirm(
+    `Rewind to action ${actionIndex}?\n\nThis will permanently discard ${actionsToDiscard} action(s) and cannot be undone.`
+  );
+
+  if (!confirmed) return;
+
+  rewindLoading.value = true;
+  rewindError.value = null;
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/rewind`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actionIndex }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      // Clear time travel state - we're now at the live (rewound) state
+      clearHistoricalState();
+      // Refresh history to show the updated action list
+      await fetchHistory();
+    } else {
+      rewindError.value = result.error || 'Rewind failed';
+    }
+  } catch (err) {
+    rewindError.value = err instanceof Error ? err.message : 'Rewind failed';
+  } finally {
+    rewindLoading.value = false;
+  }
 }
 
 // Computed: is viewing historical state?
@@ -1172,6 +1208,18 @@ const displayedState = computed(() => {
             >
               Live
             </button>
+            <button
+              v-if="isViewingHistory && selectedActionIndex !== null && selectedActionIndex < actionHistory.length"
+              class="debug-btn small rewind-btn"
+              :disabled="rewindLoading"
+              @click="rewindToAction(selectedActionIndex)"
+              title="Permanently rewind game to this action"
+            >
+              {{ rewindLoading ? 'Rewinding...' : 'Rewind Here' }}
+            </button>
+          </div>
+          <div v-if="rewindError" class="rewind-error">
+            {{ rewindError }}
           </div>
 
           <!-- Action list -->
@@ -1968,6 +2016,31 @@ const displayedState = computed(() => {
   background: rgba(34, 197, 94, 0.2) !important;
   border-color: #22c55e !important;
   color: #22c55e !important;
+}
+
+.rewind-btn {
+  background: rgba(245, 158, 11, 0.2) !important;
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+}
+
+.rewind-btn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.4) !important;
+}
+
+.rewind-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rewind-error {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 12px;
 }
 
 /* Historical State Banner */

@@ -44,6 +44,8 @@ import {
   handleSelectionStep,
   handleCancelPendingAction,
   handleGetPendingAction,
+  // Debug handlers
+  handleRewind,
 } from './handlers/games.js';
 import type { ClaimPositionRequest } from './types.js';
 
@@ -114,6 +116,11 @@ export class GameServerCore {
       // GET /games/definitions - Get game definitions for lobby UI
       if (path === '/games/definitions' && method === 'GET') {
         return this.#handleGetDefinitions();
+      }
+
+      // GET /games/list - List all persisted games (for resume feature)
+      if (path === '/games/list' && method === 'GET') {
+        return this.#handleListGames();
       }
 
       // POST /games - Create a new game
@@ -210,6 +217,14 @@ export class GameServerCore {
         const gameId = pendingActionMatch[1];
         const playerPosition = parseInt(query.player || '0', 10);
         return await handleGetPendingAction(this.#store, gameId, playerPosition);
+      }
+
+      // POST /games/:gameId/rewind - Rewind to a specific action (debug only)
+      const rewindMatch = path.match(/^\/games\/([^/]+)\/rewind$/);
+      if (rewindMatch && method === 'POST') {
+        const gameId = rewindMatch[1];
+        const { actionIndex } = body as { actionIndex: number };
+        return await handleRewind(this.#store, gameId, actionIndex);
       }
 
       // POST /games/:gameId/undo - Undo to turn start
@@ -753,6 +768,23 @@ export class GameServerCore {
     return {
       status: 200,
       body: { success: true, definitions },
+    };
+  }
+
+  #handleListGames(): ServerResponse {
+    // Check if store has listGames method (only SqliteGameStore has it)
+    if ('listGames' in this.#store && typeof this.#store.listGames === 'function') {
+      const gameIds = (this.#store as { listGames: () => string[] }).listGames();
+      return {
+        status: 200,
+        body: { success: true, games: gameIds },
+      };
+    }
+
+    // In-memory store doesn't support listing (games don't survive restart anyway)
+    return {
+      status: 200,
+      body: { success: true, games: [] },
     };
   }
 }

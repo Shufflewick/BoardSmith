@@ -1,43 +1,14 @@
 /**
- * In-memory game store for local development
+ * SQLite-backed game store for persistent game storage
  */
 
+import Database from 'better-sqlite3';
 import { GameSession, type BroadcastAdapter, type GameDefinition, type SessionInfo } from '@boardsmith/session';
 import type { GameStore, GameRegistry, CreateGameOptions } from '../types.js';
+import { SqliteStorageAdapter, initSqliteSchema } from './sqlite-storage.js';
 
 // ============================================
-// Simple Game Registry Implementation
-// ============================================
-
-/**
- * Simple in-memory game registry
- */
-export class SimpleGameRegistry implements GameRegistry {
-  readonly #definitions: Map<string, GameDefinition> = new Map();
-
-  constructor(definitions?: GameDefinition[]) {
-    if (definitions) {
-      for (const def of definitions) {
-        this.set(def);
-      }
-    }
-  }
-
-  get(gameType: string): GameDefinition | undefined {
-    return this.#definitions.get(gameType);
-  }
-
-  getAll(): GameDefinition[] {
-    return [...this.#definitions.values()];
-  }
-
-  set(definition: GameDefinition): void {
-    this.#definitions.set(definition.gameType, definition);
-  }
-}
-
-// ============================================
-// In-Memory Game Store
+// SQLite Game Store
 // ============================================
 
 /**
@@ -54,25 +25,78 @@ export interface GameSessionWithBroadcaster<TSession extends SessionInfo = Sessi
 export type BroadcasterFactory<TSession extends SessionInfo = SessionInfo> = () => BroadcastAdapter<TSession>;
 
 /**
- * In-memory game store for local development.
- * Stores games in a Map, with optional broadcaster factory.
+ * SQLite-backed game store for persistent game storage.
+ * Games survive server restarts and are reloaded with current rules.
  */
-export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> implements GameStore {
-  readonly #games: Map<string, GameSessionWithBroadcaster<TSession>> = new Map();
+export class SqliteGameStore<TSession extends SessionInfo = SessionInfo> implements GameStore {
+  readonly #db: Database.Database;
   readonly #registry: GameRegistry;
   readonly #broadcasterFactory: BroadcasterFactory<TSession>;
+  /** In-memory cache of active sessions (restored on demand) */
+  readonly #games: Map<string, GameSessionWithBroadcaster<TSession>> = new Map();
 
   constructor(
+    dbPath: string,
     registry: GameRegistry,
     broadcasterFactory: BroadcasterFactory<TSession>
   ) {
+    this.#db = new Database(dbPath);
     this.#registry = registry;
     this.#broadcasterFactory = broadcasterFactory;
+
+    // Initialize database schema
+    initSqliteSchema(this.#db);
   }
 
   async getGame(gameId: string): Promise<GameSession | null> {
-    const data = this.#games.get(gameId);
-    return data?.session ?? null;
+    // Check in-memory cache first
+    const cached = this.#games.get(gameId);
+    if (cached) {
+      return cached.session;
+    }
+
+    // Try to load from SQLite
+    const storage = new SqliteStorageAdapter(this.#db, gameId);
+    const storedState = await storage.load();
+    if (!storedState) {
+      return null;
+    }
+
+    // Get current game definition (uses latest rules!)
+    const definition = this.#registry.get(storedState.gameType);
+    if (!definition) {
+      console.error(`Cannot restore game ${gameId}: unknown game type ${storedState.gameType}`);
+      return null;
+    }
+
+    // Restore the game with current rules
+    let session: GameSession;
+    try {
+      session = GameSession.restore(
+        storedState,
+        definition.gameClass,
+        storage
+      );
+    } catch (err) {
+      // Game can't be restored (likely due to rule changes)
+      console.error(`  Failed to restore game ${gameId}: ${err instanceof Error ? err.message : err}`);
+      console.error(`  This game may be incompatible with current rules. Removing from database.`);
+      // Delete the invalid game from database
+      const deleteStmt = this.#db.prepare('DELETE FROM games WHERE game_id = ?');
+      deleteStmt.run(gameId);
+      return null;
+    }
+
+    // Create and attach broadcaster
+    const broadcaster = this.#broadcasterFactory();
+    session.setBroadcaster(broadcaster);
+
+    // Cache in memory
+    this.#games.set(gameId, { session, broadcaster });
+
+    console.log(`  Restored game ${gameId} from SQLite (using current rules)`);
+
+    return session;
   }
 
   async createGame(gameId: string, options: CreateGameOptions): Promise<GameSession> {
@@ -80,6 +104,9 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
     if (!definition) {
       throw new Error(`Unknown game type: ${options.gameType}`);
     }
+
+    // Create storage adapter for this game
+    const storage = new SqliteStorageAdapter(this.#db, gameId);
 
     const session = GameSession.create({
       gameType: options.gameType,
@@ -99,19 +126,27 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
       playerOptionsDefinitions: definition.playerOptions,
       // Pass game options definitions for host to modify in lobby
       gameOptionsDefinitions: definition.gameOptions,
+      // SQLite storage for persistence
+      storage,
     });
 
     // Create and attach broadcaster
     const broadcaster = this.#broadcasterFactory();
     session.setBroadcaster(broadcaster);
 
+    // Cache in memory
     this.#games.set(gameId, { session, broadcaster });
 
     return session;
   }
 
   async deleteGame(gameId: string): Promise<void> {
+    // Remove from memory cache
     this.#games.delete(gameId);
+
+    // Remove from SQLite
+    const stmt = this.#db.prepare('DELETE FROM games WHERE game_id = ?');
+    stmt.run(gameId);
   }
 
   /**
@@ -123,7 +158,6 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
 
   /**
    * Update the game registry (for hot reloading)
-   * Auto-reloads active games with the new definition
    */
   updateRegistry(definition: GameDefinition): void {
     this.#registry.set(definition);
@@ -139,5 +173,21 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
         }
       }
     }
+  }
+
+  /**
+   * List all game IDs in the database, ordered by most recently updated
+   */
+  listGames(): string[] {
+    const stmt = this.#db.prepare('SELECT game_id FROM games ORDER BY updated_at DESC');
+    const rows = stmt.all() as Array<{ game_id: string }>;
+    return rows.map(row => row.game_id);
+  }
+
+  /**
+   * Close the database connection
+   */
+  close(): void {
+    this.#db.close();
   }
 }

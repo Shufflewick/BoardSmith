@@ -833,3 +833,30 @@ export async function handleGetPendingAction(
     pendingState,
   });
 }
+
+/**
+ * POST /games/:gameId/rewind - Rewind game to a specific action (debug only)
+ * Discards all actions after the target index.
+ */
+export async function handleRewind(
+  store: GameStore,
+  gameId: string,
+  actionIndex: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = await session.rewindToAction(actionIndex);
+
+  if (result.success) {
+    return success({
+      success: true,
+      actionsDiscarded: result.actionsDiscarded,
+      message: `Rewound to action ${actionIndex}`,
+    });
+  } else {
+    return error(result.error ?? 'Rewind failed');
+  }
+}

@@ -58,6 +58,10 @@ export {
 
 export { InMemoryMatchmakingStore } from './stores/in-memory-matchmaking.js';
 
+// SQLite storage (for persistent dev mode)
+export { SqliteGameStore } from './stores/sqlite-games.js';
+export { SqliteStorageAdapter, initSqliteSchema } from './stores/sqlite-storage.js';
+
 // Handlers (for advanced use cases)
 export {
   handleCreateGame,
@@ -69,6 +73,7 @@ export {
   handleUndo,
   handleRestart,
   handleHealth,
+  handleRewind,
 } from './handlers/games.js';
 
 export {

@@ -213,13 +213,10 @@ const actionsWithMetadata = computed(() => {
   });
 });
 
-// Actions to display in the UI (filtered based on autoEndTurn setting)
-// When autoEndTurn is enabled, hide the endTurn button since it will auto-execute
-// when it's the only available action
+// Actions to display in the UI
+// endTurn is always shown so users can manually end their turn
+// Auto-execute only happens when endTurn is the only available action
 const visibleActions = computed(() => {
-  if (props.autoEndTurn !== false) {
-    return actionsWithMetadata.value.filter(a => a.name !== 'endTurn');
-  }
   return actionsWithMetadata.value;
 });
 

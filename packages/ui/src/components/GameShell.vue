@@ -74,6 +74,8 @@ interface GameShellProps {
   debugMode?: boolean;
   /** Show game history sidebar (default: true) */
   showHistory?: boolean;
+  /** Player positions that should be AI by default (0-indexed). E.g., [1] makes player 2 AI */
+  defaultAIPlayers?: number[];
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -658,6 +660,12 @@ async function joinGame() {
   }
 }
 
+// Resume a persisted game by ID
+async function resumeGame(gid: string) {
+  joinGameId.value = gid;
+  await joinGame();
+}
+
 // Lobby event handlers
 async function handleClaimPosition(position: number, name: string) {
   if (!createdGameId.value) return;
@@ -962,9 +970,11 @@ defineExpose({
       v-if="currentScreen === 'lobby'"
       :display-name="displayName || gameType"
       :api-url="apiUrl"
+      :default-a-i-players="defaultAIPlayers"
       v-model:join-game-id="joinGameId"
       @create="createGame"
       @join="joinGame"
+      @resume="resumeGame"
     >
       <slot name="lobby-extra"></slot>
     </GameLobby>

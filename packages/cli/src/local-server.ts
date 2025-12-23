@@ -11,12 +11,14 @@ import {
   InMemoryGameStore,
   InMemoryMatchmakingStore,
   SimpleGameRegistry,
+  SqliteGameStore,
   type ServerRequest,
   type ServerResponse as CoreResponse,
   type GameDefinition,
   type AIConfig,
   type SessionInfo,
   type BroadcastAdapter,
+  type GameStore,
 } from '@boardsmith/server';
 
 // ============================================
@@ -69,6 +71,12 @@ export interface LocalServerOptions {
   definitions: GameDefinition[];
   onReady?: (port: number) => void;
   aiConfig?: AIConfig;
+  /**
+   * Path to SQLite database for persistent game storage.
+   * If true, uses default path '.boardsmith/games.db'.
+   * If false or undefined, uses in-memory storage (games lost on restart).
+   */
+  persist?: string | boolean;
 }
 
 export class LocalServer {
@@ -76,13 +84,27 @@ export class LocalServer {
   readonly #wss: WebSocketServer;
   readonly #port: number;
   readonly #core: GameServerCore;
-  readonly #store: InMemoryGameStore<WsSession>;
+  readonly #store: InMemoryGameStore<WsSession> | SqliteGameStore<WsSession>;
   readonly #registry: SimpleGameRegistry;
   readonly #readyPromise: Promise<void>;
+  readonly #isPersistent: boolean;
 
   /** Promise that resolves when the server is ready to accept connections */
   get ready(): Promise<void> {
     return this.#readyPromise;
+  }
+
+  /** Whether this server uses SQLite persistence */
+  get isPersistent(): boolean {
+    return this.#isPersistent;
+  }
+
+  /** List all persisted game IDs (only works with SQLite persistence) */
+  listPersistedGames(): string[] {
+    if (this.#isPersistent && 'listGames' in this.#store) {
+      return (this.#store as SqliteGameStore<WsSession>).listGames();
+    }
+    return [];
   }
 
   constructor(options: LocalServerOptions) {
@@ -91,11 +113,25 @@ export class LocalServer {
     // Build registry from definitions
     this.#registry = new SimpleGameRegistry(options.definitions);
 
-    // Create in-memory game store with broadcaster factory
-    this.#store = new InMemoryGameStore<WsSession>(
-      this.#registry,
-      () => new WsBroadcastAdapter()
-    );
+    // Create game store - SQLite for persistence, in-memory otherwise
+    if (options.persist) {
+      const dbPath = typeof options.persist === 'string'
+        ? options.persist
+        : '.boardsmith/games.db';
+      this.#store = new SqliteGameStore<WsSession>(
+        dbPath,
+        this.#registry,
+        () => new WsBroadcastAdapter()
+      );
+      this.#isPersistent = true;
+      console.log(`  Using SQLite persistence: ${dbPath}`);
+    } else {
+      this.#store = new InMemoryGameStore<WsSession>(
+        this.#registry,
+        () => new WsBroadcastAdapter()
+      );
+      this.#isPersistent = false;
+    }
 
     // Create in-memory matchmaking store
     const matchmaking = new InMemoryMatchmakingStore();
@@ -147,8 +183,15 @@ export class LocalServer {
 
       this.#wss.close(() => {
         this.#server.close((err) => {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            reject(err);
+          } else {
+            // Close SQLite database if using persistence
+            if (this.#isPersistent && 'close' in this.#store) {
+              (this.#store as SqliteGameStore<WsSession>).close();
+            }
+            resolve();
+          }
         });
       });
     });
@@ -241,10 +284,17 @@ export class LocalServer {
     const isSpectator = url.searchParams.get('spectator') === 'true';
     const playerId = url.searchParams.get('playerId') ?? undefined;
 
-    // Get the game's broadcaster
+    // First, ensure the game is loaded (this will restore from SQLite if persisted)
+    const game = await this.#store.getGame(gameId);
+    if (!game) {
+      ws.close(4004, 'Game not found');
+      return;
+    }
+
+    // Get the game's broadcaster (now guaranteed to exist after getGame)
     const broadcaster = this.#store.getBroadcaster(gameId);
     if (!broadcaster) {
-      ws.close(4004, 'Game not found');
+      ws.close(4004, 'Game broadcaster not found');
       return;
     }
 
