@@ -1,25 +1,16 @@
-import { mkdir, writeFile, readdir, copyFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Detect if running from local dev (npm link) by checking if we're in the monorepo
-function getMonorepoRoot(): string | null {
-  // __dirname is like /path/to/BoardSmith/packages/cli/dist/commands
-  // Go up: commands -> dist -> cli -> packages -> BoardSmith
-  const potentialRoot = join(__dirname, '..', '..', '..', '..');
-  const enginePath = join(potentialRoot, 'packages', 'engine', 'package.json');
-  const uiPath = join(potentialRoot, 'packages', 'ui', 'package.json');
-
-  if (existsSync(enginePath) && existsSync(uiPath)) {
-    return potentialRoot;
-  }
-  return null;
-}
+import {
+  generateScaffoldFiles,
+  getRequiredDirectories,
+  getDependencyPaths,
+  toPascalCase,
+  toDisplayName,
+  type ProjectConfig,
+} from '../lib/project-scaffold.js';
 
 interface InitOptions {
   template: string;
@@ -36,107 +27,40 @@ export async function initCommand(name: string, options: InitOptions): Promise<v
   const spinner = ora(`Creating ${name}...`).start();
 
   try {
+    // Create directory structure
     await mkdir(projectPath);
-    await mkdir(join(projectPath, 'src'));
-    await mkdir(join(projectPath, 'src', 'rules'));
-    await mkdir(join(projectPath, 'src', 'ui'));
-    await mkdir(join(projectPath, 'src', 'ui', 'components'));
-    await mkdir(join(projectPath, 'src', 'ui', 'assets'));
-    await mkdir(join(projectPath, 'tests'));
-    await mkdir(join(projectPath, 'public'));
+    for (const dir of getRequiredDirectories()) {
+      await mkdir(join(projectPath, dir), { recursive: true });
+    }
 
-    const config = {
-      '$schema': 'https://boardsmith.io/schemas/game.json',
-      name: name,
+    // Create project config
+    const config: ProjectConfig = {
+      name,
       displayName: toDisplayName(name),
       description: 'A fun game for 2-4 players',
       playerCount: { min: 2, max: 4 },
-      estimatedDuration: '15-30 minutes',
-      complexity: 2,
       categories: ['card-game'],
-      thumbnail: './public/thumbnail.png',
-      scoreboard: { stats: ['score'] },
     };
-    await writeFile(join(projectPath, 'boardsmith.json'), JSON.stringify(config, null, 2));
 
-    // Check if we're running from local dev environment
-    const monorepoRoot = getMonorepoRoot();
-    const isLocalDev = monorepoRoot !== null;
-
-    const engineDep = isLocalDev
-      ? `file:${join(monorepoRoot!, 'packages', 'engine')}`
-      : '^0.0.1';
-    const uiDep = isLocalDev
-      ? `file:${join(monorepoRoot!, 'packages', 'ui')}`
-      : '^0.0.1';
-    const cliDep = isLocalDev
-      ? `file:${join(monorepoRoot!, 'packages', 'cli')}`
-      : '^0.0.1';
-
-    if (isLocalDev) {
-      console.log(chalk.dim(`  Using local packages from ${monorepoRoot}`));
+    // Generate scaffold files
+    const scaffoldFiles = generateScaffoldFiles(config);
+    for (const file of scaffoldFiles) {
+      await writeFile(join(projectPath, file.path), file.content);
     }
 
-    const packageJson = {
-      name: `@mygames/${name}`,
-      version: '0.0.1',
-      type: 'module',
-      scripts: {
-        dev: 'boardsmith dev',
-        build: 'boardsmith build',
-        test: 'vitest',
-        validate: 'boardsmith validate',
-      },
-      dependencies: {
-        '@boardsmith/engine': engineDep,
-        '@boardsmith/ui': uiDep,
-        vue: '^3.4.0',
-      },
-      devDependencies: {
-        '@boardsmith/cli': cliDep,
-        typescript: '^5.7.0',
-        vitest: '^2.0.0',
-        '@vitejs/plugin-vue': '^5.0.0',
-      },
-    };
-    await writeFile(join(projectPath, 'package.json'), JSON.stringify(packageJson, null, 2));
-
-    const tsconfig = {
-      compilerOptions: {
-        target: 'ES2022',
-        module: 'ESNext',
-        moduleResolution: 'bundler',
-        lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-        strict: true,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        forceConsistentCasingInFileNames: true,
-        resolveJsonModule: true,
-        jsx: 'preserve',
-        declaration: true,
-        declarationMap: true,
-        sourceMap: true,
-        outDir: './dist',
-        rootDir: './src',
-      },
-      include: ['src/**/*'],
-      exclude: ['node_modules', 'dist'],
-    };
-    await writeFile(join(projectPath, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
-
-    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateGameTs(name));
+    // Generate game-specific files
+    const pascal = toPascalCase(name);
+    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateGameTs(pascal));
     await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateElementsTs());
-    await writeFile(join(projectPath, 'src', 'rules', 'actions.ts'), generateActionsTs(name));
-    await writeFile(join(projectPath, 'src', 'rules', 'flow.ts'), generateFlowTs(name));
-    await writeFile(join(projectPath, 'src', 'rules', 'index.ts'), generateRulesIndexTs(name));
-    await writeFile(join(projectPath, 'src', 'ui', 'App.vue'), generateAppVue(name));
-    await writeFile(join(projectPath, 'src', 'ui', 'components', 'GameBoard.vue'), generateGameBoardVue());
-    await writeFile(join(projectPath, 'src', 'ui', 'index.ts'), generateUiIndexTs());
-    await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(name));
-    await writeFile(join(projectPath, '.gitignore'), 'node_modules/\ndist/\n.DS_Store\n*.log\n');
-    await writeFile(join(projectPath, 'vite.config.ts'), generateViteConfig());
-    await writeFile(join(projectPath, 'index.html'), generateIndexHtml(name));
-    await writeFile(join(projectPath, 'src', 'main.ts'), generateMainTs());
+    await writeFile(join(projectPath, 'src', 'rules', 'actions.ts'), generateActionsTs(pascal));
+    await writeFile(join(projectPath, 'src', 'rules', 'flow.ts'), generateFlowTs(pascal));
+    await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(pascal));
+
+    // Log if using local dev
+    const deps = getDependencyPaths();
+    if (deps.isLocalDev) {
+      console.log(chalk.dim(`  Using local packages from monorepo`));
+    }
 
     spinner.succeed(chalk.green(`Created ${name} successfully!`));
     console.log(`
@@ -155,16 +79,7 @@ ${chalk.dim('This will start the development server and open player tabs in your
   }
 }
 
-function toPascalCase(str: string): string {
-  return str.split(/[-_]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
-}
-
-function toDisplayName(str: string): string {
-  return str.split(/[-_]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-}
-
-function generateGameTs(name: string): string {
-  const pascal = toPascalCase(name);
+function generateGameTs(pascal: string): string {
   return `import { Game, Player, type GameOptions } from '@boardsmith/engine';
 import { Card, Hand, Deck } from './elements.js';
 import { createGameFlow } from './flow.js';
@@ -278,8 +193,7 @@ export class PlayArea extends Space {
 `;
 }
 
-function generateActionsTs(name: string): string {
-  const pascal = toPascalCase(name);
+function generateActionsTs(pascal: string): string {
   return `import { Action, type ActionDefinition } from '@boardsmith/engine';
 import type { ${pascal}Game, ${pascal}Player } from './game.js';
 import { Card } from './elements.js';
@@ -319,8 +233,7 @@ export function createPlayAction(game: ${pascal}Game): ActionDefinition {
 `;
 }
 
-function generateFlowTs(name: string): string {
-  const pascal = toPascalCase(name);
+function generateFlowTs(pascal: string): string {
   return `import {
   loop,
   eachPlayer,
@@ -368,372 +281,7 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
 `;
 }
 
-function generateRulesIndexTs(name: string): string {
-  const pascal = toPascalCase(name);
-  const display = toDisplayName(name);
-  return `export { ${pascal}Game, ${pascal}Player } from './game.js';
-export { Card, Hand, Deck, PlayArea } from './elements.js';
-export { createDrawAction, createPlayAction } from './actions.js';
-export { createGameFlow } from './flow.js';
-
-import { ${pascal}Game } from './game.js';
-
-export const gameDefinition = {
-  gameClass: ${pascal}Game,
-  gameType: '${name}',
-  displayName: '${display}',
-  minPlayers: 2,
-  maxPlayers: 4,
-} as const;
-`;
-}
-
-function generateAppVue(name: string): string {
-  const display = toDisplayName(name);
-  return `<script setup lang="ts">
-import { GameShell, AutoUI } from '@boardsmith/ui';
-import GameBoard from './components/GameBoard.vue';
-<\/script>
-
-<template>
-  <GameShell
-    game-type="${name}"
-    display-name="${display}"
-    :player-count="2"
-  >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt, startAction }">
-      <div class="board-comparison">
-        <div class="board-section">
-          <h2 class="board-title">Custom UI</h2>
-          <GameBoard
-            :game-view="gameView"
-            :player-position="playerPosition"
-            :is-my-turn="isMyTurn"
-            :available-actions="availableActions"
-            :action="action"
-            :action-args="actionArgs"
-            :execute-action="executeAction"
-            :set-board-prompt="setBoardPrompt"
-            :start-action="startAction"
-          />
-        </div>
-        <div class="board-section">
-          <h2 class="board-title">Auto-Generated UI</h2>
-          <AutoUI
-            :game-view="gameView || null"
-            :player-position="playerPosition"
-            :flow-state="state?.flowState as any"
-          />
-        </div>
-      </div>
-    </template>
-
-    <template #player-stats="{ player, gameView }">
-      <div class="player-stat">
-        <span class="stat-label">Cards:</span>
-        <span class="stat-value">
-          {{
-            gameView?.children?.find((c: any) =>
-              c.attributes?.$type === 'hand' && c.attributes?.player?.position === player.position
-            )?.children?.length || 0
-          }}
-        </span>
-      </div>
-      <div class="player-stat">
-        <span class="stat-label">Score:</span>
-        <span class="stat-value">{{ (player as any).score || 0 }}</span>
-      </div>
-    </template>
-  </GameShell>
-</template>
-
-<style scoped>
-.board-comparison {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  width: 100%;
-  height: 100%;
-}
-
-.board-section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.board-title {
-  font-size: 1.2rem;
-  margin: 0 0 12px 0;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  text-align: center;
-}
-
-.player-stat {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  margin-top: 8px;
-}
-
-.stat-label {
-  color: #888;
-}
-
-.stat-value {
-  font-weight: bold;
-  color: #00d9ff;
-}
-</style>
-`;
-}
-
-function generateGameBoardVue(): string {
-  return `<script setup lang="ts">
-import { computed } from 'vue';
-
-interface Card {
-  id: string;
-  name: string;
-  attributes?: {
-    rank?: string;
-    suit?: string;
-  };
-}
-
-// Props from GameShell
-// - actionArgs: Shared reactive object with ActionPanel for bidirectional sync
-// - startAction: Trigger ActionPanel to start an action, with optional initial selections
-//   Example: startAction('move', { piece: pieceId }) - pre-fills the piece selection
-const props = defineProps<{
-  gameView: any;
-  playerPosition: number;
-  isMyTurn: boolean;
-  availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
-  actionArgs: Record<string, unknown>;  // Bidirectional sync with ActionPanel
-  executeAction: (name: string) => Promise<void>;
-  setBoardPrompt: (prompt: string | null) => void;
-  startAction: (name: string, initialArgs?: Record<string, unknown>) => void;
-}>();
-
-// Computed properties to extract data from gameView
-const myHand = computed<Card[]>(() => {
-  if (!props.gameView) return [];
-  const handElement = props.gameView.children?.find(
-    (c: any) => c.attributes?.$type === 'hand' && c.attributes?.player?.position === props.playerPosition
-  );
-  return handElement?.children?.filter((c: any) => c.attributes?.rank) || [];
-});
-
-const deckCount = computed(() => {
-  if (!props.gameView) return 0;
-  const deck = props.gameView.children?.find((c: any) => c.attributes?.$type === 'deck');
-  return deck?.children?.length || deck?.childCount || 0;
-});
-
-// Helpers
-function getSuitSymbol(suit: string): string {
-  const symbols: Record<string, string> = {
-    'H': '\\u2665', 'D': '\\u2666', 'C': '\\u2663', 'S': '\\u2660',
-    'hearts': '\\u2665', 'diamonds': '\\u2666', 'clubs': '\\u2663', 'spades': '\\u2660',
-  };
-  return symbols[suit] || suit;
-}
-
-function getSuitColor(suit: string): string {
-  return suit === 'H' || suit === 'D' || suit === 'hearts' || suit === 'diamonds' ? '#e74c3c' : '#2c3e50';
-}
-
-// Actions
-async function drawCard() {
-  if (!props.isMyTurn || !props.availableActions.includes('draw')) return;
-  await props.action('draw', {});
-}
-
-async function playCard(card: Card) {
-  if (!props.isMyTurn || !props.availableActions.includes('play')) return;
-  await props.action('play', { card: card.id });
-}
-<\/script>
-
-<template>
-  <div class="game-board">
-    <!-- Deck Area -->
-    <div class="deck-area">
-      <div
-        class="deck"
-        :class="{ clickable: isMyTurn && availableActions.includes('draw') }"
-        @click="drawCard"
-      >
-        <span v-if="deckCount > 0">{{ deckCount }} cards</span>
-        <span v-else>Empty</span>
-      </div>
-      <div class="deck-label">Deck</div>
-    </div>
-
-    <!-- My Hand -->
-    <div class="hand-area">
-      <div class="area-header">
-        <span class="area-title">Your Hand</span>
-        <span class="card-count">{{ myHand.length }} cards</span>
-      </div>
-      <div class="cards">
-        <div
-          v-for="card in myHand"
-          :key="card.id"
-          class="card"
-          :class="{ clickable: isMyTurn && availableActions.includes('play') }"
-          :style="{ color: getSuitColor(card.attributes?.suit || '') }"
-          @click="playCard(card)"
-        >
-          <span class="rank">{{ card.attributes?.rank }}</span>
-          <span class="suit">{{ getSuitSymbol(card.attributes?.suit || '') }}</span>
-        </div>
-        <div v-if="myHand.length === 0" class="no-cards">No cards in hand</div>
-      </div>
-    </div>
-
-    <!-- Turn indicator -->
-    <div v-if="isMyTurn" class="turn-indicator">
-      Your Turn
-    </div>
-  </div>
-</template>
-
-<style scoped>
-.game-board {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 30px;
-  padding: 20px;
-}
-
-.deck-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.deck {
-  width: 100px;
-  height: 140px;
-  background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-  transition: transform 0.2s;
-}
-
-.deck.clickable {
-  cursor: pointer;
-}
-
-.deck.clickable:hover {
-  transform: translateY(-4px);
-}
-
-.deck-label {
-  color: #888;
-  font-size: 0.9rem;
-}
-
-.hand-area {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 20px;
-  border-radius: 12px;
-  width: 100%;
-  max-width: 600px;
-}
-
-.area-header {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 15px;
-  align-items: center;
-}
-
-.area-title {
-  font-weight: bold;
-  font-size: 1.1rem;
-}
-
-.card-count {
-  font-size: 0.9rem;
-  color: #aaa;
-}
-
-.cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-}
-
-.no-cards {
-  color: #666;
-  font-style: italic;
-}
-
-.card {
-  width: 60px;
-  height: 84px;
-  background: #fff;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.card.clickable {
-  cursor: pointer;
-}
-
-.card.clickable:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 8px 20px rgba(0, 217, 255, 0.4);
-}
-
-.card .rank {
-  font-size: 1.5rem;
-}
-
-.card .suit {
-  font-size: 1.8rem;
-}
-
-.turn-indicator {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
-  padding: 8px 24px;
-  border-radius: 20px;
-  font-weight: bold;
-}
-</style>
-`;
-}
-
-function generateUiIndexTs(): string {
-  return `import App from './App.vue';
-export { App };
-export { default as GameBoard } from './components/GameBoard.vue';
-`;
-}
-
-function generateTestTs(name: string): string {
-  const pascal = toPascalCase(name);
+function generateTestTs(pascal: string): string {
   return `import { describe, it, expect } from 'vitest';
 import { ${pascal}Game } from '../src/rules/game.js';
 
@@ -753,45 +301,5 @@ describe('${pascal}Game', () => {
     }
   });
 });
-`;
-}
-
-function generateViteConfig(): string {
-  return `import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
-
-export default defineConfig({
-  plugins: [vue()],
-});
-`;
-}
-
-function generateIndexHtml(name: string): string {
-  const display = toDisplayName(name);
-  return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${display}</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { height: 100%; }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"><\/script>
-  </body>
-</html>
-`;
-}
-
-function generateMainTs(): string {
-  return `import { createApp } from 'vue';
-import { App } from './ui/index.js';
-
-const app = createApp(App);
-app.mount('#app');
 `;
 }

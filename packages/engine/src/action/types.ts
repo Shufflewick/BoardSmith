@@ -14,8 +14,11 @@ export type SelectionType = 'element' | 'player' | 'choice' | 'text' | 'number';
 export interface BaseSelection<T = unknown> {
   /** Selection name (becomes key in args) */
   name: string;
-  /** User-facing prompt */
-  prompt?: string;
+  /**
+   * User-facing prompt. Can be a static string or a function that returns a string.
+   * Functions are evaluated at render time with the current game state.
+   */
+  prompt?: string | ((context: ActionContext) => string);
   /** Skip if only one valid choice */
   skipIfOnlyOne?: boolean;
   /** Make this selection optional */
@@ -70,6 +73,17 @@ export interface RepeatConfig<T = unknown> {
    * Can modify game state (e.g., equip an item, update available choices).
    */
   onEach?: (context: ActionContext, choice: T) => void;
+}
+
+/**
+ * Configuration for multi-select choices.
+ * Renders checkboxes instead of radio buttons, allowing multiple selections at once.
+ */
+export interface MultiSelectConfig {
+  /** Minimum selections required (default: 1) */
+  min?: number;
+  /** Maximum selections allowed (default: unlimited) */
+  max?: number;
 }
 
 /**
@@ -132,6 +146,36 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
    * Equivalent to: repeat: { until: (ctx, choice) => choice === repeatUntil }
    */
   repeatUntil?: T;
+  /**
+   * Enable multi-select mode with checkboxes instead of radio buttons.
+   * Result will be an array of selected values.
+   *
+   * Can be:
+   * - A number: shorthand for { min: 1, max: N }
+   * - A config object: { min?: number, max?: number }
+   * - A function: evaluated at render time, returns number | config | undefined
+   *
+   * @example
+   * // Select up to 2 targets
+   * multiSelect: 2
+   *
+   * @example
+   * // Select exactly 3 items
+   * multiSelect: { min: 3, max: 3 }
+   *
+   * @example
+   * // Select 1 or more (no upper limit)
+   * multiSelect: { min: 1 }
+   *
+   * @example
+   * // Dynamic based on game state
+   * multiSelect: (ctx) => {
+   *   const max = ctx.game.activeCombat?.maxTargets;
+   *   if (!max || max <= 1) return undefined; // Single-select
+   *   return { min: 1, max };
+   * }
+   */
+  multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
 }
 
 /**

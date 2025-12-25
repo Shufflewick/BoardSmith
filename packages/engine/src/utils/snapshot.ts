@@ -53,7 +53,6 @@ export interface PlayerStateView {
     awaitingInput: boolean;
     isMyTurn: boolean;
     availableActions?: string[];
-    prompt?: string;
   };
 
   /** Messages visible to this player */
@@ -110,9 +109,6 @@ export function createPlayerView(
       isMyTurn: currentPlayer === playerPosition,
       availableActions: flowState.awaitingInput && currentPlayer === playerPosition
         ? flowState.availableActions
-        : undefined,
-      prompt: flowState.awaitingInput && currentPlayer === playerPosition
-        ? flowState.prompt
         : undefined,
     } : undefined,
     messages: game.getFormattedMessages().map(text => ({ text })),

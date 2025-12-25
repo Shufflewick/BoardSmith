@@ -69,7 +69,6 @@ export class FlowEngine<G extends Game = Game> {
   private currentPlayer?: Player;
   private awaitingInput = false;
   private availableActions: string[] = [];
-  private prompt?: string;
   private complete = false;
   private lastActionResult?: ActionResult;
   /** For simultaneous action steps - tracks which players can act */
@@ -326,7 +325,6 @@ export class FlowEngine<G extends Game = Game> {
       awaitingInput: this.awaitingInput,
       currentPlayer: this.currentPlayer?.position,
       availableActions: this.awaitingInput ? this.availableActions : undefined,
-      prompt: this.prompt,
       awaitingPlayers: this.awaitingPlayers.length > 0 ? this.awaitingPlayers : undefined,
       currentPhase: this.currentPhase,
     };
@@ -735,7 +733,6 @@ export class FlowEngine<G extends Game = Game> {
     // Prompt for input
     this.currentPlayer = player;
     this.availableActions = available;
-    this.prompt = typeof config.prompt === 'function' ? config.prompt(context) : config.prompt;
 
     // Don't mark completed yet - we'll continue after input
     return {
@@ -803,9 +800,6 @@ export class FlowEngine<G extends Game = Game> {
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
-
-    // Set prompt
-    this.prompt = typeof config.prompt === 'function' ? config.prompt(context) : config.prompt;
 
     // Don't mark completed - waiting for all players
     return {

@@ -286,6 +286,19 @@ export interface SelectionMetadata {
     /** The terminator value (if using repeatUntil shorthand) */
     terminator?: unknown;
   };
+  /**
+   * For choice selections with dependsOn + multiSelect: multiSelect config indexed by dependent value.
+   * Key is the string representation of the dependent value (element ID, player position, etc.)
+   * Value is the multiSelect config for that dependent value, or undefined if single-select.
+   */
+  multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
+  /** For multi-select choice selections: min/max selection configuration */
+  multiSelect?: {
+    /** Minimum selections required (default: 1) */
+    min: number;
+    /** Maximum selections allowed (undefined = unlimited) */
+    max?: number;
+  };
 }
 
 /**

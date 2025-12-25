@@ -65,7 +65,6 @@ export function createGoFishFlow(): FlowDefinition {
         actionStep({
           name: 'ask-step',
           actions: ['ask'],
-          prompt: 'Ask another player for a rank you hold',
           skipIf: (ctx) => {
             // Skip if game is over
             const game = ctx.game as GoFishGame;

@@ -94,6 +94,18 @@ export interface Selection {
     /** The terminator value (if using repeatUntil shorthand) */
     terminator?: unknown;
   };
+  /** For multi-select choice selections: min/max selection configuration */
+  multiSelect?: {
+    /** Minimum selections required (default: 1) */
+    min: number;
+    /** Maximum selections allowed (undefined = unlimited) */
+    max?: number;
+  };
+  /**
+   * For choice selections with dependsOn + multiSelect: multiSelect config indexed by dependent value.
+   * Key is the string representation of the dependent value (element ID, player position, etc.)
+   */
+  multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
 }
 
 export interface ActionMetadata {
@@ -115,7 +127,12 @@ const props = defineProps<{
   isMyTurn: boolean;
   selectedElementId?: number;
   canUndo?: boolean;
-  /** Auto-execute endTurn action when available (default: true) */
+  /**
+   * Auto mode: streamlines UX by reducing unnecessary clicks (default: true)
+   * - Auto-executes endTurn when it's the only available action
+   * - Auto-starts any single available action (shows its first selection prompt)
+   * - Auto-executes actions with no selections when they're the only option
+   */
   autoEndTurn?: boolean;
   /** Show undo button when undo is available (default: true) */
   showUndo?: boolean;
@@ -160,6 +177,16 @@ const repeatingState = ref<{
   awaitingServer: boolean;
   currentChoices?: ChoiceWithRefs[];
 } | null>(null);
+
+// Multi-select state: tracks selected values for current multiSelect selection
+const multiSelectState = ref<{
+  selectionName: string;
+  selectedValues: unknown[];
+} | null>(null);
+
+// Track the last executed action to prevent auto-starting it immediately after execution
+// This handles the race condition where availableActions hasn't updated yet from the server
+const lastExecutedAction = ref<string | null>(null);
 
 /**
  * Type for the selection step function that handles repeating selections.
@@ -310,6 +337,29 @@ const currentSelection = computed(() => {
   }
 
   return null;
+});
+
+/**
+ * Get the current multiSelect config, resolving dependsOn-based configs.
+ * For selections with dependsOn + multiSelectByDependentValue, looks up the config
+ * based on the current value of the dependent selection.
+ */
+const currentMultiSelect = computed(() => {
+  const sel = currentSelection.value;
+  if (!sel) return undefined;
+
+  // If selection has dependsOn and multiSelectByDependentValue, resolve it
+  if (sel.dependsOn && sel.multiSelectByDependentValue) {
+    const depValue = currentArgs.value[sel.dependsOn];
+    if (depValue !== undefined) {
+      const key = String(depValue);
+      return sel.multiSelectByDependentValue[key];
+    }
+    return undefined;
+  }
+
+  // Otherwise use static multiSelect
+  return sel.multiSelect;
 });
 
 // Get the selected element ID (from currentArgs when element selection completed)
@@ -589,13 +639,18 @@ const isActionReady = computed(() => {
   return currentSelection.value === null;
 });
 
-// Auto-start board-interactive actions when they become available
+// Auto-start board-interactive actions on initial render
+// (For subsequent actions after flow steps, auto-start is handled in the availableActions watch below)
 watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
   if (!myTurn || currentAction.value || actions.length === 0) return;
 
   // If there's exactly one action and it has board-interactive selections, auto-start it
   if (actions.length === 1) {
     const action = actions[0];
+
+    // Don't auto-start an action we just executed - wait for availableActions to update
+    if (action.name === lastExecutedAction.value) return;
+
     const firstSel = action.selections[0];
 
     // Auto-start if first selection is element, choice with board refs, or player with board refs
@@ -611,23 +666,71 @@ watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
 }, { immediate: true });
 
 // Reset current action if it's no longer available (e.g., executed from custom UI)
-watch(() => props.availableActions, (actions) => {
+// Also handles auto-start/auto-execute for single available actions when auto mode is enabled
+watch(() => props.availableActions, (actions, oldActions) => {
+  // Determine if we need to clear action state
+  let shouldClear = false;
+
+  // Clear if current action is no longer available
   if (currentAction.value && !actions.includes(currentAction.value)) {
+    shouldClear = true;
+  }
+
+  // Clear if action set changed completely (flow transition)
+  // This handles cases like: regular actions → combat → regular actions
+  // where stale partial action state might otherwise persist
+  if (oldActions && oldActions.length > 0 && actions.length > 0) {
+    const hasOverlap = actions.some(a => oldActions.includes(a));
+    if (!hasOverlap) {
+      shouldClear = true;
+    }
+  }
+
+  if (shouldClear) {
     currentAction.value = null;
     clearActionState(currentArgs.value, displayCache);
+    repeatingState.value = null;
+    multiSelectState.value = null;
     boardInteraction?.clear();
   }
 
-  // Auto-execute endTurn when enabled and it's the only available action
-  // This skips the confirmation step for convenience
+  // Clear lastExecutedAction when the action is no longer available OR when it
+  // re-appears after being unavailable (indicating a new invocation cycle)
+  if (lastExecutedAction.value) {
+    if (!actions.includes(lastExecutedAction.value)) {
+      // Action no longer available - clear tracking
+      lastExecutedAction.value = null;
+    } else if (oldActions && !oldActions.includes(lastExecutedAction.value)) {
+      // Action was unavailable but is now available again - new invocation cycle
+      lastExecutedAction.value = null;
+    }
+  }
+
+  // Auto mode: when only one action is available, streamline the UX
   if (
-    props.autoEndTurn !== false && // Default to true
+    props.autoEndTurn !== false && // Auto mode enabled (default: true)
     props.isMyTurn &&
     actions.length === 1 &&
-    actions[0] === 'endTurn' &&
+    !currentAction.value &&
     !isExecuting.value
   ) {
-    executeAction('endTurn', {});
+    const actionName = actions[0];
+
+    // Don't auto-start an action we just executed - wait for availableActions to update
+    if (actionName === lastExecutedAction.value) return;
+
+    const actionMeta = actionsWithMetadata.value.find(a => a.name === actionName);
+
+    if (actionMeta) {
+      // If action has selections, auto-start it (show first selection prompt)
+      if (actionMeta.selections.length > 0) {
+        startAction(actionName);
+      }
+      // If action has no selections, auto-execute it
+      else {
+        executeAction(actionName, {});
+      }
+    }
   }
 });
 
@@ -986,6 +1089,99 @@ function hasRepeatingSelections(meta: ActionMetadata): boolean {
   return meta.selections.some(s => isRepeatingSelection(s));
 }
 
+/**
+ * Check if a selection is multi-select
+ */
+function isMultiSelectSelection(sel: Selection): boolean {
+  return sel.multiSelect !== undefined;
+}
+
+/**
+ * Check if a value is currently selected in multi-select mode
+ */
+function isMultiSelectValueSelected(value: unknown): boolean {
+  if (!multiSelectState.value) return false;
+  return multiSelectState.value.selectedValues.some(v => v === value);
+}
+
+/**
+ * Toggle a value in multi-select mode
+ */
+function toggleMultiSelectValue(selectionName: string, value: unknown, display?: string) {
+  const multiSelect = currentMultiSelect.value;
+  if (!currentSelection.value || !multiSelect) return;
+
+  // Initialize state if needed
+  if (!multiSelectState.value || multiSelectState.value.selectionName !== selectionName) {
+    multiSelectState.value = {
+      selectionName,
+      selectedValues: [],
+    };
+  }
+
+  const state = multiSelectState.value;
+  const index = state.selectedValues.findIndex(v => v === value);
+
+  if (index >= 0) {
+    // Already selected - remove it
+    state.selectedValues.splice(index, 1);
+  } else {
+    // Not selected - add it if we haven't hit max
+    const max = multiSelect.max;
+    if (max === undefined || state.selectedValues.length < max) {
+      state.selectedValues.push(value);
+      // Cache display
+      if (display) {
+        cacheSelectionDisplay(selectionName, value, display);
+      }
+    }
+  }
+}
+
+/**
+ * Confirm multi-select and move to next selection or execute action
+ */
+function confirmMultiSelect() {
+  if (!currentSelection.value) return;
+
+  const selectionName = currentSelection.value.name;
+  const values = multiSelectState.value?.selectedValues ? [...multiSelectState.value.selectedValues] : [];
+
+  // Set the selection value as an array
+  currentArgs.value[selectionName] = values;
+
+  // Clear multi-select state
+  multiSelectState.value = null;
+
+  // Auto-execute if action is now complete
+  if (currentAction.value && isActionReady.value) {
+    executeAction(currentAction.value, { ...currentArgs.value });
+  }
+}
+
+/**
+ * Check if multi-select "Done" button should be enabled
+ */
+const isMultiSelectReady = computed(() => {
+  if (!currentMultiSelect.value) return false;
+  const min = currentMultiSelect.value.min;
+  const selectedCount = multiSelectState.value?.selectedValues?.length ?? 0;
+  return selectedCount >= min;
+});
+
+/**
+ * Get display text for multi-select count (e.g., "Selected: 1/2")
+ */
+const multiSelectCountDisplay = computed(() => {
+  if (!multiSelectState.value || !currentMultiSelect.value) return '';
+  const count = multiSelectState.value.selectedValues.length;
+  const max = currentMultiSelect.value.max;
+  if (max !== undefined) {
+    return `Selected: ${count}/${max}`;
+  }
+  return `Selected: ${count}`;
+});
+
 function startAction(actionName: string) {
   const meta = actionsWithMetadata.value.find(a => a.name === actionName);
 
@@ -997,6 +1193,7 @@ function startAction(actionName: string) {
   currentAction.value = actionName;
   clearActionState(currentArgs.value, displayCache);
   repeatingState.value = null;
+  multiSelectState.value = null;
   boardInteraction?.clear();
 
   const firstSel = meta.selections[0];
@@ -1012,6 +1209,7 @@ function cancelAction() {
   }
   currentAction.value = null;
   repeatingState.value = null;
+  multiSelectState.value = null;
   clearActionState(currentArgs.value, displayCache);
   boardInteraction?.clear();
   emit('cancelSelection');
@@ -1166,6 +1364,8 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   } finally {
     isExecuting.value = false;
     currentAction.value = null;
+    // Track last executed action to prevent auto-starting it before availableActions updates
+    lastExecutedAction.value = actionName;
     clearActionState(currentArgs.value, displayCache);
     boardInteraction?.clear();
     emit('cancelSelection');
@@ -1281,7 +1481,44 @@ const otherPlayers = computed(() => {
           </div>
         </template>
 
+        <!-- Multi-select choice selection (checkboxes with Done button) - MUST come before dependsOn template -->
+        <template v-else-if="currentSelection.type === 'choice' && currentMultiSelect && (currentSelection.choices || currentSelection.choicesByDependentValue)">
+          <div class="selection-prompt">
+            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
+          </div>
+          <div class="choice-buttons multi-select-choices">
+            <label
+              v-for="choice in filteredChoices"
+              :key="String(choice.value)"
+              class="multi-select-choice"
+              :class="{ selected: isMultiSelectValueSelected(choice.value) }"
+              @mouseenter="handleChoiceHover(choice)"
+              @mouseleave="handleChoiceLeave"
+            >
+              <input
+                type="checkbox"
+                :checked="isMultiSelectValueSelected(choice.value)"
+                @change="toggleMultiSelectValue(currentSelection.name, choice.value, choice.display)"
+                :disabled="!isMultiSelectValueSelected(choice.value) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max"
+              />
+              <span class="checkbox-label">{{ choice.display }}</span>
+            </label>
+            <span v-if="filteredChoices.length === 0" class="no-choices">
+              No options available
+            </span>
+            <button
+              class="multi-select-done-btn"
+              :disabled="!isMultiSelectReady"
+              @click="confirmMultiSelect"
+            >
+              Done
+            </button>
+          </div>
+        </template>
+
         <!-- Choice selection with filterBy or dependsOn (shows filtered choices, executes immediately) -->
+        <!-- This comes AFTER multi-select so multiSelect+dependsOn uses multi-select template above -->
         <template v-else-if="currentSelection.type === 'choice' && (currentSelection.filterBy || currentSelection.dependsOn)">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
@@ -1661,5 +1898,105 @@ const otherPlayers = computed(() => {
   text-align: center;
   color: #888;
   font-size: 0.9rem;
+}
+
+/* Multi-select styles */
+.multi-select-count {
+  color: #00d9ff;
+  font-weight: bold;
+  margin-left: 8px;
+}
+
+.multi-select-choices {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.multi-select-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.multi-select-choice:hover {
+  border-color: #00d9ff;
+  background: rgba(0, 217, 255, 0.2);
+}
+
+.multi-select-choice.selected {
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.2);
+}
+
+.multi-select-choice input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.multi-select-choice input[type="checkbox"]:checked {
+  border-color: #00ff88;
+  background: #00ff88;
+}
+
+.multi-select-choice input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #1a1a2e;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.multi-select-choice input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.checkbox-label {
+  flex: 1;
+}
+
+.multi-select-done-btn {
+  padding: 10px 24px;
+  background: linear-gradient(90deg, #00d9ff, #00ff88);
+  color: #1a1a2e;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: center;
+}
+
+.multi-select-done-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.4);
+}
+
+.multi-select-done-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(128, 128, 128, 0.3);
 }
 </style>

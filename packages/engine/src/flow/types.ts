@@ -131,8 +131,6 @@ export interface ActionStepConfig extends BaseFlowConfig {
   player?: (context: FlowContext) => Player;
   /** Actions available to the player */
   actions: string[] | ((context: FlowContext) => string[]);
-  /** Prompt to display */
-  prompt?: string | ((context: FlowContext) => string);
   /** Continue until this returns true */
   repeatUntil?: (context: FlowContext) => boolean;
   /** Skip if this returns true */
@@ -153,8 +151,6 @@ export interface SimultaneousActionStepConfig extends BaseFlowConfig {
   players?: (context: FlowContext) => Player[];
   /** Actions available to each player */
   actions: string[] | ((context: FlowContext, player: Player) => string[]);
-  /** Prompt to display */
-  prompt?: string | ((context: FlowContext) => string);
   /** Condition to check if a player is done (per-player) */
   playerDone?: (context: FlowContext, player: Player) => boolean;
   /** Condition to check if the entire step is complete */
@@ -248,8 +244,6 @@ export interface FlowState {
   currentPlayer?: number;
   /** Available actions if awaiting input (for single-player action steps) */
   availableActions?: string[];
-  /** Prompt to display */
-  prompt?: string;
   /** Multiple players awaiting input (for simultaneous action steps) */
   awaitingPlayers?: PlayerAwaitingState[];
   /** Current named phase (for UI display) */

@@ -53,7 +53,6 @@ export function createPolyPotionsFlow(): FlowDefinition {
     actionStep({
       name: 'draft-1',
       actions: (ctx) => ['draft', ...getAvailableAbilityActions(ctx)],
-      prompt: 'Draft your first die (or use an ability)',
     }),
 
     // Check if only one die left - auto-draft and reroll for next pick
@@ -95,7 +94,6 @@ export function createPolyPotionsFlow(): FlowDefinition {
     actionStep({
       name: 'draft-2',
       actions: (ctx) => ['draft', ...getAvailableAbilityActions(ctx)],
-      prompt: 'Draft your second die (or use an ability)',
       skipIf: (ctx) => {
         const game = ctx.game as PolyPotionsGame;
         // Skip if already have 2 dice
@@ -123,7 +121,6 @@ export function createPolyPotionsFlow(): FlowDefinition {
     actionStep({
       name: 'craft',
       actions: ['craft'],
-      prompt: 'Combine your dice to craft a potion',
       skipIf: (ctx) => {
         const game = ctx.game as PolyPotionsGame;
         return game.draftedValues.length < 2;
@@ -134,7 +131,6 @@ export function createPolyPotionsFlow(): FlowDefinition {
     actionStep({
       name: 'record',
       actions: ['record'],
-      prompt: 'Record your potion value',
       skipIf: (ctx) => {
         const game = ctx.game as PolyPotionsGame;
         return game.craftedValue === 0;

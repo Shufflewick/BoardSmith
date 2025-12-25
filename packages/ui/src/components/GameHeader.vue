@@ -15,7 +15,7 @@ const props = defineProps<{
   connectionStatus: string;
   /** Current zoom level (0.5 to 2.0, default 1.0) */
   zoom?: number;
-  /** Auto-end turn after making a move (default: true) */
+  /** Auto mode: skip unnecessary clicks when there's only one option (default: true) */
   autoEndTurn?: boolean;
   /** Show undo button when undo is available (default: true) */
   showUndo?: boolean;
@@ -69,7 +69,7 @@ import { computed } from 'vue';
           title="Zoom level"
         />
       </div>
-      <label class="auto-end-turn-toggle" title="Automatically end turn after making a move">
+      <label class="auto-end-turn-toggle" title="Auto mode: Skip unnecessary clicks when there's only one option">
         <input
           type="checkbox"
           :checked="autoEndTurn ?? true"

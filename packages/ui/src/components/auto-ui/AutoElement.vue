@@ -1278,7 +1278,7 @@ const cardBackPreviewData = computed(() => {
         <div class="space-header">
           <span class="space-label">
             <template v-if="props.element.attributes?.player">
-              {{ isOwned ? `Your ${props.element.className}` : `${playerName}'s ${props.element.className}` }}
+              {{ isOwned ? `Your ${displayLabel}` : `${playerName}'s ${displayLabel}` }}
             </template>
             <template v-else>
               {{ displayLabel }}

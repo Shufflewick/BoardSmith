@@ -20,6 +20,7 @@ import type {
   SelectionTrace,
   RepeatConfig,
   PendingActionState,
+  MultiSelectConfig,
 } from './types.js';
 import type { ElementClass } from '../element/types.js';
 
@@ -240,6 +241,11 @@ export class Action {
        * Equivalent to: repeat: { until: (ctx, choice) => choice === repeatUntil }
        */
       repeatUntil?: T;
+      /**
+       * Enable multi-select mode with checkboxes instead of radio buttons.
+       * Can be a static config or dynamic function evaluated per context.
+       */
+      multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
     }
   ): this {
     const selection: ChoiceSelection<T> = {
@@ -256,6 +262,7 @@ export class Action {
       dependsOn: options.dependsOn,
       repeat: options.repeat,
       repeatUntil: options.repeatUntil,
+      multiSelect: options.multiSelect,
     };
     this.definition.selections.push(selection as Selection);
     return this;

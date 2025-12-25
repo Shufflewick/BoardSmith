@@ -30,7 +30,6 @@ export function createCribbageFlow(): FlowDefinition {
     do: simultaneousActionStep({
       name: 'simultaneous-discard',
       actions: ['discard'],
-      prompt: 'Discard 2 cards to the crib',
       // Player is done when they have 4 cards left (discarded 2)
       playerDone: (ctx, player) => {
         const game = ctx.game as CribbageGame;
@@ -110,7 +109,6 @@ export function createCribbageFlow(): FlowDefinition {
             return game.getCurrentPlayPlayer();
           },
           actions: ['playCard', 'sayGo'],
-          prompt: 'Play a card',
           skipIf: (ctx) => {
             const game = ctx.game as CribbageGame;
             if (game.isFinished()) return true;
@@ -208,7 +206,6 @@ export function createCribbageFlow(): FlowDefinition {
         simultaneousActionStep({
           name: 'acknowledge-round-summary',
           actions: ['acknowledgeScore'],
-          prompt: 'View round scores and continue',
           allDone: (ctx) => {
             const game = ctx.game as CribbageGame;
             return game.isFinished() || !game.roundSummary.active;

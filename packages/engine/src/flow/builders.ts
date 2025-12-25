@@ -187,7 +187,6 @@ export function forEach<T>(config: {
  * ```typescript
  * actionStep({
  *   actions: ['ask'],
- *   prompt: 'Ask another player for cards'
  * })
  * ```
  *
@@ -205,7 +204,6 @@ export function actionStep(config: {
   name?: string;
   player?: (context: FlowContext) => Player;
   actions: string[] | ((context: FlowContext) => string[]);
-  prompt?: string | ((context: FlowContext) => string);
   repeatUntil?: (context: FlowContext) => boolean;
   skipIf?: (context: FlowContext) => boolean;
   timeout?: number;
@@ -218,7 +216,6 @@ export function actionStep(config: {
       name: config.name,
       player: config.player,
       actions: config.actions,
-      prompt: config.prompt,
       repeatUntil: config.repeatUntil,
       skipIf: config.skipIf,
       timeout: config.timeout,
@@ -242,14 +239,12 @@ export function actionStep(config: {
 export function playerActions(config: {
   name?: string;
   actions: string[] | ((context: FlowContext) => string[]);
-  prompt?: string | ((context: FlowContext) => string);
   repeatUntil?: (context: FlowContext) => boolean;
   skipIf?: (context: FlowContext) => boolean;
 }): FlowNode {
   return actionStep({
     name: config.name,
     actions: config.actions,
-    prompt: config.prompt,
     repeatUntil: config.repeatUntil,
     skipIf: config.skipIf,
   });
@@ -266,7 +261,6 @@ export function playerActions(config: {
  * simultaneousActionStep({
  *   actions: ['discard'],
  *   playerDone: (ctx, player) => player.hand.count() <= 4,
- *   prompt: 'Discard 2 cards to the crib'
  * })
  * ```
  */
@@ -274,7 +268,6 @@ export function simultaneousActionStep(config: {
   name?: string;
   players?: (context: FlowContext) => Player[];
   actions: string[] | ((context: FlowContext, player: Player) => string[]);
-  prompt?: string | ((context: FlowContext) => string);
   playerDone?: (context: FlowContext, player: Player) => boolean;
   allDone?: (context: FlowContext) => boolean;
   skipPlayer?: (context: FlowContext, player: Player) => boolean;
@@ -286,7 +279,6 @@ export function simultaneousActionStep(config: {
       name: config.name,
       players: config.players,
       actions: config.actions,
-      prompt: config.prompt,
       playerDone: config.playerDone,
       allDone: config.allDone,
       skipPlayer: config.skipPlayer,
@@ -508,8 +500,6 @@ export function turnLoop(config: {
   while?: (context: FlowContext) => boolean;
   /** Safety limit to prevent infinite loops (default: 100) */
   maxIterations?: number;
-  /** Optional prompt to display */
-  prompt?: string | ((context: FlowContext) => string);
 }): FlowNode {
   return loop({
     name: config.name,
@@ -526,7 +516,6 @@ export function turnLoop(config: {
     maxIterations: config.maxIterations ?? 100,
     do: actionStep({
       actions: config.actions,
-      prompt: config.prompt,
     }),
   });
 }

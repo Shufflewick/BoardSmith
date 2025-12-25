@@ -85,6 +85,20 @@ export function buildActionMetadata(
       continue;
     }
 
+    // Re-check condition in case state changed during action execution (mid-action broadcast)
+    // This prevents showing stale action metadata when the condition has become false
+    if (actionDef.condition) {
+      const ctx = { game, player, args: {} };
+      try {
+        if (!actionDef.condition(ctx)) {
+          continue; // Skip actions whose condition is now false
+        }
+      } catch (error) {
+        console.error(`[buildActionMetadata] Error checking condition for "${actionName}":`, error);
+        continue; // Skip on error
+      }
+    }
+
     const selectionMetas: SelectionMetadata[] = [];
     // Track available values for each selection (for dependsOn lookups)
     const selectionValues: Map<string, { type: string; values: unknown[] }> = new Map();
@@ -140,15 +154,21 @@ function buildSelectionMetadata(
   selection: Selection,
   selectionValues: Map<string, { type: string; values: unknown[] }>
 ): SelectionMetadata {
+  // Create context first so we can evaluate dynamic prompts
+  const ctx = { game, player, args: {} as Record<string, unknown> };
+
+  // Evaluate prompt - can be static string or function returning string
+  const evaluatedPrompt = typeof selection.prompt === 'function'
+    ? selection.prompt(ctx)
+    : selection.prompt;
+
   const base: SelectionMetadata = {
     name: selection.name,
     type: selection.type,
-    prompt: selection.prompt,
+    prompt: evaluatedPrompt,
     optional: selection.optional,
     skipIfOnlyOne: selection.skipIfOnlyOne,
   };
-
-  const ctx = { game, player, args: {} as Record<string, unknown> };
 
   // Type-specific properties
   switch (selection.type) {
@@ -218,6 +238,44 @@ function buildSelectionMetadata(
             };
           }
 
+          // Add multiSelect config per dependent value if present
+          // This must be evaluated PER dependent value since multiSelect can vary
+          if (choiceSel.multiSelect !== undefined) {
+            base.multiSelectByDependentValue = {};
+
+            for (const depValue of dependentInfo.values) {
+              // Build args with the dependent value (same as above for choices)
+              let argValue: unknown = depValue;
+              if (dependentInfo.type === 'element' && typeof depValue === 'number') {
+                argValue = game.getElementById(depValue);
+              } else if (dependentInfo.type === 'player' && typeof depValue === 'number') {
+                argValue = game.players[depValue];
+              }
+
+              const argsWithDep = { [choiceSel.dependsOn]: argValue };
+              const ctxWithDep = { game, player, args: argsWithDep };
+
+              const multiSelectConfig = typeof choiceSel.multiSelect === 'function'
+                ? choiceSel.multiSelect(ctxWithDep)
+                : choiceSel.multiSelect;
+
+              const key = String(depValue);
+              if (multiSelectConfig !== undefined) {
+                if (typeof multiSelectConfig === 'number') {
+                  base.multiSelectByDependentValue[key] = { min: 1, max: multiSelectConfig };
+                } else {
+                  base.multiSelectByDependentValue[key] = {
+                    min: multiSelectConfig.min ?? 1,
+                    max: multiSelectConfig.max,
+                  };
+                }
+              } else {
+                // Explicitly store undefined for single-select
+                base.multiSelectByDependentValue[key] = undefined;
+              }
+            }
+          }
+
           // Don't populate base.choices for dependsOn selections - client uses choicesByDependentValue
           break;
         }
@@ -268,6 +326,26 @@ function buildSelectionMetadata(
           hasOnEach: !!choiceSel.repeat?.onEach,
           terminator: choiceSel.repeatUntil,
         };
+      }
+
+      // Add multiSelect config if present (evaluate function if needed)
+      if (choiceSel.multiSelect !== undefined) {
+        const multiSelectConfig = typeof choiceSel.multiSelect === 'function'
+          ? choiceSel.multiSelect(ctx)
+          : choiceSel.multiSelect;
+
+        if (multiSelectConfig !== undefined) {
+          if (typeof multiSelectConfig === 'number') {
+            // Shorthand: number means { min: 1, max: N }
+            base.multiSelect = { min: 1, max: multiSelectConfig };
+          } else {
+            // Full config object
+            base.multiSelect = {
+              min: multiSelectConfig.min ?? 1,
+              max: multiSelectConfig.max,
+            };
+          }
+        }
       }
       break;
     }

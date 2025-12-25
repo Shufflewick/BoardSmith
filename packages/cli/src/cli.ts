@@ -8,6 +8,7 @@ import { validateCommand } from './commands/validate.js';
 import { publishCommand } from './commands/publish.js';
 import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
+import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
 
 const program = new Command();
 
@@ -81,5 +82,23 @@ program
   .description('Publish game to boardsmith.io')
   .option('--dry-run', 'Show what would be published without uploading')
   .action(publishCommand);
+
+// Claude Code integration
+const claudeCmd = program
+  .command('claude')
+  .description('Claude Code integration for game design');
+
+claudeCmd
+  .command('install')
+  .description('Install the /design-game slash command for Claude Code')
+  .option('--force', 'Overwrite existing slash command')
+  .option('--local', 'Install to current project instead of globally')
+  .action(installClaudeCommand);
+
+claudeCmd
+  .command('uninstall')
+  .description('Uninstall the /design-game slash command')
+  .option('--local', 'Uninstall from current project instead of globally')
+  .action(uninstallClaudeCommand);
 
 program.parse();

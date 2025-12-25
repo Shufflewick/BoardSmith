@@ -168,7 +168,6 @@ const currentPlayerName = computed(() => {
   const player = players.value.find(p => p.position === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
-const prompt = computed(() => (state.value?.flowState as any)?.prompt);
 const availableActions = computed(() => {
   const flowState = state.value?.flowState as any;
   if (!flowState) return [];
