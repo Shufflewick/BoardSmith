@@ -5,12 +5,13 @@ import { Card, CribbagePlayer } from './elements.js';
 /**
  * Create the "discard" action for Cribbage
  * Players discard 2 cards to the crib
+ * Uses multiSelect with min=2, max=2 so it auto-confirms when 2 cards are selected
  */
 export function createDiscardAction(game: CribbageGame): ActionDefinition {
   return Action.create('discard')
     .prompt('Discard 2 cards to the crib')
-    .chooseFrom<string>('card1', {
-      prompt: 'Choose first card to discard',
+    .chooseFrom<string>('cards', {
+      prompt: 'Select 2 cards to discard',
       choices: (ctx) => {
         const game = ctx.game as CribbageGame;
         const player = ctx.player as CribbagePlayer;
@@ -25,26 +26,8 @@ export function createDiscardAction(game: CribbageGame): ActionDefinition {
         const card = game.first(Card, cardName);
         return card ? { sourceRef: { id: card.id, name: card.name } } : {};
       },
-    })
-    .chooseFrom<string>('card2', {
-      prompt: 'Choose second card to discard',
-      choices: (ctx) => {
-        const game = ctx.game as CribbageGame;
-        const player = ctx.player as CribbagePlayer;
-        const hand = game.getPlayerHand(player);
-        const firstCard = ctx.args.card1 as string;
-        return [...hand.all(Card)]
-          .map(c => c.name)
-          .filter((n): n is string => n !== undefined && n !== firstCard);
-      },
-      display: (cardName) => {
-        const card = game.first(Card, cardName);
-        return card ? `${card.rank}${card.suit}` : cardName;
-      },
-      boardRefs: (cardName, ctx) => {
-        const card = game.first(Card, cardName);
-        return card ? { sourceRef: { id: card.id, name: card.name } } : {};
-      },
+      // Exactly 2 cards required - auto-confirms when 2 are selected (no Done button)
+      multiSelect: { min: 2, max: 2 },
     })
     .condition((ctx) => {
       const game = ctx.game as CribbageGame;
@@ -55,20 +38,17 @@ export function createDiscardAction(game: CribbageGame): ActionDefinition {
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;
       const player = ctx.player as CribbagePlayer;
-      const card1Name = args.card1 as string;
-      const card2Name = args.card2 as string;
+      const cardNames = args.cards as string[];
 
-      const card1 = game.first(Card, card1Name);
-      const card2 = game.first(Card, card2Name);
+      const cards = cardNames.map(name => game.first(Card, name)).filter((c): c is Card => c !== undefined);
 
-      if (!card1 || !card2) {
-        return { success: false, error: 'Card not found' };
+      if (cards.length !== 2) {
+        return { success: false, error: 'Must discard exactly 2 cards' };
       }
 
-      card1.putInto(game.crib);
-      card2.putInto(game.crib);
+      cards.forEach(card => card.putInto(game.crib));
 
-      game.message(`${player.name} discards ${card1.rank}${card1.suit} and ${card2.rank}${card2.suit} to the crib`);
+      game.message(`${player.name} discards ${cards.map(c => `${c.rank}${c.suit}`).join(' and ')} to the crib`);
 
       return {
         success: true,

@@ -1962,18 +1962,21 @@ const cardBackPreviewData = computed(() => {
 }
 
 /* BOARD INTERACTION STATES */
-/* Highlighted when hovering a choice in ActionPanel */
+/* Highlighted when hovering a choice in ActionPanel or selected in multiSelect */
 .is-board-highlighted {
-  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(255, 200, 50, 0.9), 0 0 20px rgba(255, 200, 50, 0.5);
   z-index: 10;
+  transform: translateY(-8px) scale(1.02);
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
 .is-board-highlighted.grid-cell {
-  background: rgba(0, 217, 255, 0.3);
+  background: rgba(255, 200, 50, 0.3);
+  transform: none; /* Don't translate grid cells */
 }
 
 .is-board-highlighted .piece {
-  box-shadow: 0 0 12px rgba(0, 217, 255, 0.8);
+  box-shadow: 0 0 15px rgba(255, 200, 50, 0.9);
   transform: scale(1.1);
 }
 

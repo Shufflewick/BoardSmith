@@ -610,7 +610,15 @@ export class ActionExecutor {
     // Check if value is in valid choices (for choice/player/element)
     if (selection.type === 'choice' || selection.type === 'player' || selection.type === 'element') {
       const choices = this.getChoices(selection, player, args);
-      if (!this.choicesContain(choices, value)) {
+
+      // Handle multiSelect arrays - validate each value in the array
+      if (Array.isArray(value)) {
+        for (const v of value) {
+          if (!this.choicesContain(choices, v)) {
+            errors.push(`Invalid selection for ${selection.name}: ${JSON.stringify(v)}`);
+          }
+        }
+      } else if (!this.choicesContain(choices, value)) {
         errors.push(`Invalid selection for ${selection.name}`);
       }
     }

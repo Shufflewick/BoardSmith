@@ -1134,9 +1134,91 @@ function toggleMultiSelectValue(selectionName: string, value: unknown, display?:
       if (display) {
         cacheSelectionDisplay(selectionName, value, display);
       }
+
+      // Auto-confirm when min === max and we've reached exact count (no Done button needed)
+      if (multiSelect.min === multiSelect.max && state.selectedValues.length === multiSelect.min) {
+        confirmMultiSelect();
+        return;
+      }
     }
   }
+
+  // Sync preview to board using special key (doesn't affect selection completion)
+  currentArgs.value[`_preview_${selectionName}`] = [...state.selectedValues];
+
+  // Update AutoUI board highlighting for selected items
+  updateMultiSelectBoardHighlights();
 }
+
+/**
+ * Update board highlighting to show all selected multiSelect items
+ * This makes the AutoUI highlight the selected elements
+ */
+function updateMultiSelectBoardHighlights() {
+  if (!boardInteraction || !multiSelectState.value || multiSelectState.value.selectedValues.length === 0) {
+    boardInteraction?.setHoveredChoice(null);
+    return;
+  }
+
+  const selectedValues = multiSelectState.value.selectedValues;
+
+  // Collect all boardRefs for selected values from filteredChoices
+  const sourceRefs: ElementRef[] = [];
+  const targetRefs: ElementRef[] = [];
+
+  for (const val of selectedValues) {
+    const choice = filteredChoices.value.find(c => c.value === val);
+    if (choice) {
+      if (choice.sourceRef) sourceRefs.push(choice.sourceRef);
+      if (choice.targetRef) targetRefs.push(choice.targetRef);
+    }
+  }
+
+  if (sourceRefs.length > 0 || targetRefs.length > 0) {
+    boardInteraction.setHoveredChoice({
+      value: selectedValues,
+      display: `${selectedValues.length} selected`,
+      sourceRefs,
+      targetRefs,
+    });
+  }
+}
+
+// Watch for external changes from board (via preview key) when in multiSelect mode
+watch(
+  () => {
+    const sel = currentSelection.value;
+    const multiSelect = currentMultiSelect.value;
+    if (!sel || !multiSelect) return undefined;
+    return currentArgs.value[`_preview_${sel.name}`];
+  },
+  (previewValue) => {
+    const sel = currentSelection.value;
+    const multiSelect = currentMultiSelect.value;
+    if (!sel || !multiSelect || !Array.isArray(previewValue)) return;
+
+    // Sync preview to multiSelectState
+    const currentValues = multiSelectState.value?.selectedValues ?? [];
+    const isDifferent = previewValue.length !== currentValues.length ||
+      previewValue.some((v, i) => v !== currentValues[i]);
+
+    if (isDifferent) {
+      multiSelectState.value = {
+        selectionName: sel.name,
+        selectedValues: [...previewValue],
+      };
+
+      // Update AutoUI board highlighting for the new selection
+      updateMultiSelectBoardHighlights();
+
+      // Check for auto-confirm when min === max
+      if (multiSelect.min === multiSelect.max && previewValue.length === multiSelect.min) {
+        confirmMultiSelect();
+      }
+    }
+  },
+  { deep: true }
+);
 
 /**
  * Confirm multi-select and move to next selection or execute action
@@ -1150,8 +1232,9 @@ function confirmMultiSelect() {
   // Set the selection value as an array
   currentArgs.value[selectionName] = values;
 
-  // Clear multi-select state
+  // Clear multi-select state and board highlights
   multiSelectState.value = null;
+  boardInteraction?.setHoveredChoice(null);
 
   // Auto-execute if action is now complete
   if (currentAction.value && isActionReady.value) {
@@ -1167,6 +1250,16 @@ const isMultiSelectReady = computed(() => {
   const min = currentMultiSelect.value.min;
   const selectedCount = multiSelectState.value?.selectedValues?.length ?? 0;
   return selectedCount >= min;
+});
+
+/**
+ * Check if Done button should be shown (hidden when min === max, since auto-confirms)
+ */
+const showMultiSelectDoneButton = computed(() => {
+  if (!currentMultiSelect.value) return false;
+  const { min, max } = currentMultiSelect.value;
+  // Hide Done button when exact count required - auto-confirms on reaching count
+  return min !== max;
 });
 
 /**
@@ -1384,6 +1477,12 @@ function handleChoiceHover(choice: ChoiceWithRefs) {
 }
 
 function handleChoiceLeave() {
+  // Don't clear hover if we have multiSelect items selected - keep them highlighted
+  if (multiSelectState.value && multiSelectState.value.selectedValues.length > 0) {
+    // Re-apply the multiSelect highlights instead of clearing
+    updateMultiSelectBoardHighlights();
+    return;
+  }
   boardInteraction?.setHoveredChoice(null);
 }
 
@@ -1508,6 +1607,7 @@ const otherPlayers = computed(() => {
               No options available
             </span>
             <button
+              v-if="showMultiSelectDoneButton"
               class="multi-select-done-btn"
               :disabled="!isMultiSelectReady"
               @click="confirmMultiSelect"

@@ -201,11 +201,12 @@ const props = defineProps<{
   executeAction: (name: string) => Promise<void>;
 }>();
 
-// Selected cards - uses shared actionArgs.cards so RightNow button can access it
+// Selected cards - uses shared actionArgs with preview key for ActionPanel sync
+// The _preview_ prefix prevents ActionPanel from thinking the selection is complete
 const selectedCards = computed({
-  get: () => (props.actionArgs.cards as string[]) || [],
+  get: () => (props.actionArgs._preview_cards as string[]) || [],
   set: (value: string[]) => {
-    props.actionArgs.cards = value;
+    props.actionArgs._preview_cards = value;
   }
 });
 const isPerformingAction = ref(false);
@@ -543,10 +544,9 @@ async function performDiscard() {
   }
 
   try {
-    // Discard action expects card1 and card2 parameters
+    // Discard action expects cards array (multiSelect)
     const result = await props.action('discard', {
-      card1: selectedCards.value[0],
-      card2: selectedCards.value[1],
+      cards: selectedCards.value,
     });
 
     if (result.success) {
