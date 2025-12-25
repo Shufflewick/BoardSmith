@@ -29,10 +29,6 @@ export interface FlowStepResult {
   availableActions?: string[];
   /** Current player if awaiting input */
   currentPlayer?: Player;
-  /** Message to display */
-  message?: string;
-  /** Additional data */
-  data?: Record<string, unknown>;
 }
 
 /**
@@ -45,8 +41,6 @@ export interface FlowPosition {
   iterations: Record<string, number>;
   /** Current player index for eachPlayer */
   playerIndex?: number;
-  /** Current item index for forEach */
-  itemIndex?: number;
   /** Variables stored in flow context */
   variables: Record<string, unknown>;
 }
@@ -135,8 +129,6 @@ export interface ActionStepConfig extends BaseFlowConfig {
   repeatUntil?: (context: FlowContext) => boolean;
   /** Skip if this returns true */
   skipIf?: (context: FlowContext) => boolean;
-  /** Optional timeout in milliseconds */
-  timeout?: number;
   /** Minimum number of moves required before step can complete */
   minMoves?: number;
   /** Maximum number of moves allowed (auto-completes after this many) */
@@ -157,8 +149,6 @@ export interface SimultaneousActionStepConfig extends BaseFlowConfig {
   allDone?: (context: FlowContext) => boolean;
   /** Skip this player if returns true */
   skipPlayer?: (context: FlowContext, player: Player) => boolean;
-  /** Optional timeout in milliseconds */
-  timeout?: number;
 }
 
 /**

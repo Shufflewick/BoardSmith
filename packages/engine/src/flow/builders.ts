@@ -206,7 +206,6 @@ export function actionStep(config: {
   actions: string[] | ((context: FlowContext) => string[]);
   repeatUntil?: (context: FlowContext) => boolean;
   skipIf?: (context: FlowContext) => boolean;
-  timeout?: number;
   minMoves?: number;
   maxMoves?: number;
 }): FlowNode {
@@ -218,7 +217,6 @@ export function actionStep(config: {
       actions: config.actions,
       repeatUntil: config.repeatUntil,
       skipIf: config.skipIf,
-      timeout: config.timeout,
       minMoves: config.minMoves,
       maxMoves: config.maxMoves,
     },
@@ -271,7 +269,6 @@ export function simultaneousActionStep(config: {
   playerDone?: (context: FlowContext, player: Player) => boolean;
   allDone?: (context: FlowContext) => boolean;
   skipPlayer?: (context: FlowContext, player: Player) => boolean;
-  timeout?: number;
 }): FlowNode {
   return {
     type: 'simultaneous-action-step',
@@ -282,7 +279,6 @@ export function simultaneousActionStep(config: {
       playerDone: config.playerDone,
       allDone: config.allDone,
       skipPlayer: config.skipPlayer,
-      timeout: config.timeout,
     },
   };
 }
