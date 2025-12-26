@@ -1145,7 +1145,7 @@ defineExpose({
 
 .game-shell__content {
   flex: 1;
-  padding: 15px;
+  padding: 0;
   padding-bottom: 80px; /* Space for sticky action bar */
   overflow: auto;
   min-height: 300px;
@@ -1179,7 +1179,7 @@ defineExpose({
   }
 
   .game-shell__content {
-    padding: 20px;
+    padding: 0;
     min-height: 400px;
     order: 2; /* Content on right on desktop */
   }
