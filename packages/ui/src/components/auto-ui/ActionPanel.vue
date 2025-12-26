@@ -390,6 +390,28 @@ const selectedElementRef = computed(() => {
   return null;
 });
 
+// Filter args for display - exclude internal keys and current multiSelect selection
+// (multiSelect shows its state via checkboxes, not chips)
+const displayableArgs = computed(() => {
+  const result: Record<string, unknown> = {};
+  const currentSelName = currentSelection.value?.name;
+  const isMultiSelectActive = currentMultiSelect.value !== undefined;
+
+  for (const [key, value] of Object.entries(currentArgs.value)) {
+    // Skip internal preview keys
+    if (key.startsWith('_preview_')) continue;
+
+    // Skip the current multiSelect selection (checkboxes show it)
+    if (isMultiSelectActive && key === currentSelName) continue;
+
+    // Skip empty arrays (deselected multiSelect)
+    if (Array.isArray(value) && value.length === 0) continue;
+
+    result[key] = value;
+  }
+  return result;
+});
+
 // Filter choices based on filterBy, dependsOn, and previous selections
 // Also excludes choices that were already selected in previous choice selections
 const filteredChoices = computed(() => {
@@ -1538,8 +1560,9 @@ const otherPlayers = computed(() => {
       </div>
 
       <!-- Selected values (show previous selections as chips) -->
-      <div v-if="Object.keys(currentArgs).length > 0" class="selected-values">
-        <template v-for="(value, key) in currentArgs" :key="key">
+      <!-- Note: displayableArgs filters out internal keys and current multiSelect selection -->
+      <div v-if="Object.keys(displayableArgs).length > 0" class="selected-values">
+        <template v-for="(value, key) in displayableArgs" :key="key">
           <div class="selected-value from-board">
             <span class="value-display">{{ getSelectionDisplay(key as string, value) }}</span>
             <button class="clear-selection-btn" @click="clearSelection(key as string)">✕</button>
