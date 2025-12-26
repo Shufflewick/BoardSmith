@@ -344,6 +344,47 @@ async function selectionStepFn(
   }
 }
 
+/**
+ * Fetch deferred choices for a selection from the server.
+ * Used by ActionPanel when a selection has defer: true.
+ */
+async function fetchDeferredChoicesFn(
+  actionName: string,
+  selectionName: string,
+  player: number,
+  currentArgs: Record<string, unknown>
+): Promise<{
+  success: boolean;
+  choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown }>;
+  error?: string;
+}> {
+  if (!gameId.value) {
+    return { success: false, error: 'No game ID' };
+  }
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${gameId.value}/deferred-choices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: actionName,
+        selection: selectionName,
+        player,
+        currentArgs,
+      }),
+    });
+
+    const result = await response.json();
+    return result;
+  } catch (err) {
+    console.error('Fetch deferred choices error:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to fetch deferred choices',
+    };
+  }
+}
+
 // Provide context to child components
 provide('gameState', state);
 provide('gameView', gameView);
@@ -357,6 +398,7 @@ provide('actionArgs', actionArgs);
 provide('boardInteraction', boardInteraction);
 provide('timeTravelDiff', timeTravelDiff);
 provide('selectionStepFn', selectionStepFn);
+provide('fetchDeferredChoicesFn', fetchDeferredChoicesFn);
 
 // URL routing - check for game ID or lobby ID in URL on mount
 onMounted(async () => {

@@ -2,7 +2,8 @@
  * Core GameSession class for managing game state and lifecycle
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState } from '@boardsmith/engine';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand } from '@boardsmith/engine';
+import { executeCommand } from '@boardsmith/engine';
 import { GameRunner } from '@boardsmith/runtime';
 import type {
   GameClass,
@@ -831,6 +832,201 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         error: error instanceof Error ? error.message : 'Failed to rewind',
       };
     }
+  }
+
+  // ============================================
+  // Debug Deck Manipulation Methods
+  // ============================================
+
+  /**
+   * Execute a debug command against the game state.
+   * Used for deck manipulation and other debug operations.
+   * NOTE: These changes are NOT persisted to action history.
+   *
+   * @param command The command to execute
+   * @returns Result with success status and error message if failed
+   */
+  executeDebugCommand(command: GameCommand): { success: boolean; error?: string } {
+    const result = executeCommand(this.#runner.game, command);
+    if (result.success) {
+      // Broadcast the updated state to all clients
+      this.broadcast();
+    }
+    return result;
+  }
+
+  /**
+   * Move a card to the top of its current deck (debug only).
+   * The card remains in the same parent but is moved to position 0.
+   *
+   * @param cardId ID of the card to move
+   * @returns Result with success status
+   */
+  moveCardToTop(cardId: number): { success: boolean; error?: string } {
+    return this.executeDebugCommand({
+      type: 'REORDER_CHILD',
+      elementId: cardId,
+      targetIndex: 0,
+    });
+  }
+
+  /**
+   * Move a card to a specific position within its current deck (debug only).
+   *
+   * @param cardId ID of the card to move
+   * @param targetIndex Target position (0-based)
+   * @returns Result with success status
+   */
+  reorderCard(cardId: number, targetIndex: number): { success: boolean; error?: string } {
+    return this.executeDebugCommand({
+      type: 'REORDER_CHILD',
+      elementId: cardId,
+      targetIndex,
+    });
+  }
+
+  /**
+   * Transfer a card to a different deck (debug only).
+   *
+   * @param cardId ID of the card to transfer
+   * @param targetDeckId ID of the destination deck
+   * @param position Where to place the card in the destination ('first' or 'last')
+   * @returns Result with success status
+   */
+  transferCard(cardId: number, targetDeckId: number, position: 'first' | 'last' = 'first'): { success: boolean; error?: string } {
+    return this.executeDebugCommand({
+      type: 'MOVE',
+      elementId: cardId,
+      destinationId: targetDeckId,
+      position,
+    });
+  }
+
+  /**
+   * Shuffle a deck (debug only).
+   *
+   * @param deckId ID of the deck to shuffle
+   * @returns Result with success status
+   */
+  shuffleDeck(deckId: number): { success: boolean; error?: string } {
+    return this.executeDebugCommand({
+      type: 'SHUFFLE',
+      spaceId: deckId,
+    });
+  }
+
+  // ============================================
+  // Deferred Choices Methods
+  // ============================================
+
+  /**
+   * Get choices for a deferred selection.
+   * Called when player clicks an action with defer: true selections.
+   *
+   * @param actionName Name of the action
+   * @param selectionName Name of the selection to get choices for
+   * @param playerPosition Player requesting choices
+   * @param currentArgs Arguments collected so far (for dependent selections)
+   * @returns Choices with display strings and board refs
+   */
+  getDeferredChoices(
+    actionName: string,
+    selectionName: string,
+    playerPosition: number,
+    currentArgs: Record<string, unknown> = {}
+  ): { success: boolean; choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown }>; error?: string } {
+    // Validate player position
+    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player: ${playerPosition}` };
+    }
+
+    // Get action definition
+    const action = this.#runner.game.getAction(actionName);
+    if (!action) {
+      return { success: false, error: `Action not found: ${actionName}` };
+    }
+
+    // Find the selection
+    const selection = action.selections.find(s => s.name === selectionName);
+    if (!selection) {
+      return { success: false, error: `Selection not found: ${selectionName}` };
+    }
+
+    if (selection.type !== 'choice') {
+      return { success: false, error: `Selection "${selectionName}" is not a choice selection` };
+    }
+
+    const choiceSel = selection as any;
+    if (!choiceSel.defer) {
+      return { success: false, error: `Selection "${selectionName}" is not deferred` };
+    }
+
+    // Build context with current args
+    const player = this.#runner.game.players[playerPosition];
+    if (!player) {
+      return { success: false, error: `Player not found: ${playerPosition}` };
+    }
+
+    // Resolve any element IDs in currentArgs to actual elements
+    const resolvedArgs: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(currentArgs)) {
+      if (typeof value === 'number') {
+        // Try to resolve as element ID
+        const element = this.#runner.game.getElementById(value);
+        resolvedArgs[key] = element || value;
+      } else {
+        resolvedArgs[key] = value;
+      }
+    }
+
+    const ctx = { game: this.#runner.game, player, args: resolvedArgs };
+
+    // Evaluate choices NOW
+    let choices: unknown[];
+    if (typeof choiceSel.choices === 'function') {
+      try {
+        choices = choiceSel.choices(ctx);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, error: `Error evaluating choices: ${errorMsg}` };
+      }
+    } else {
+      choices = choiceSel.choices || [];
+    }
+
+    // Helper function to generate default display
+    const defaultDisplay = (value: unknown): string => {
+      if (value === null || value === undefined) return String(value);
+      if (typeof value !== 'object') return String(value);
+      const obj = value as Record<string, unknown>;
+      if (typeof obj.display === 'string') return obj.display;
+      if (typeof obj.name === 'string') return obj.name;
+      if (typeof obj.label === 'string') return obj.label;
+      try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
+    };
+
+    // Convert to display format with board refs
+    const formattedChoices = choices.map(value => {
+      const choice: any = {
+        value,
+        display: choiceSel.display ? choiceSel.display(value) : defaultDisplay(value),
+      };
+
+      // Add board refs if provided
+      if (choiceSel.boardRefs) {
+        try {
+          const refs = choiceSel.boardRefs(value, ctx);
+          if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
+          if (refs.targetRef) choice.targetRef = refs.targetRef;
+        } catch {
+          // Ignore errors in boardRefs
+        }
+      }
+
+      return choice;
+    });
+
+    return { success: true, choices: formattedChoices };
   }
 
   // ============================================

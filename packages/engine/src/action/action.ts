@@ -244,6 +244,11 @@ export class Action {
        * Can be a static config or dynamic function evaluated per context.
        */
       multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+      /**
+       * Defer choice evaluation until player clicks the action.
+       * When true, choices are not computed during action availability checking.
+       */
+      defer?: boolean;
     }
   ): this {
     const selection: ChoiceSelection<T> = {
@@ -260,6 +265,7 @@ export class Action {
       repeat: options.repeat,
       repeatUntil: options.repeatUntil,
       multiSelect: options.multiSelect,
+      defer: options.defer,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -907,6 +913,10 @@ export class ActionExecutor {
     // (computing dynamic choices repeatedly is too expensive)
     if (selection.type === 'choice') {
       const choiceSel = selection as ChoiceSelection;
+      // If defer: true, skip availability check - choices evaluated when player clicks
+      if (choiceSel.defer) {
+        return this.hasValidSelectionPath(selections, player, args, index + 1);
+      }
       if (typeof choiceSel.choices === 'function') {
         const choices = this.getChoices(selection, player, args);
         if (choices.length === 0) {

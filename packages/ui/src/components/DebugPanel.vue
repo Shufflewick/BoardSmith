@@ -241,7 +241,7 @@ const emit = defineEmits<{
 
 // Local state
 const panelExpanded = ref(props.expanded);
-const activeTab = ref<'state' | 'history' | 'elements' | 'actions' | 'controls'>('state');
+const activeTab = ref<'state' | 'history' | 'elements' | 'decks' | 'actions' | 'controls'>('state');
 const showRawState = ref(false);
 const stateSearchQuery = ref('');
 const expandedPaths = ref<Set<string>>(new Set(['root']));
@@ -260,6 +260,13 @@ const tracesLastFetched = ref<number>(0);
 const selectedElementId = ref<number | null>(null);
 const elementSearchQuery = ref('');
 const expandedElementGroups = ref<Set<string>>(new Set());
+
+// Deck inspector state
+const deckSearchQuery = ref('');
+const expandedDecks = ref<Set<number>>(new Set());
+const selectedDeckCard = ref<{ deckId: number; cardId: number } | null>(null);
+const deckManipulationLoading = ref(false);
+const deckManipulationError = ref<string | null>(null);
 
 // History state
 const actionHistory = ref<SerializedAction[]>([]);
@@ -594,6 +601,390 @@ const customDebugData = computed(() => {
   return displayedState.value?.state?.customDebug ?? null;
 });
 
+// Discover deck elements from view tree
+interface DeckInfo {
+  id: number;
+  name: string;
+  className: string;
+  cards: Array<{
+    id: number;
+    name?: string;
+    notation?: string;
+    className: string;
+    fullObject: Record<string, unknown>;
+  }>;
+  fullObject: Record<string, unknown>;
+}
+
+const discoveredDecks = computed<DeckInfo[]>(() => {
+  const decks: DeckInfo[] = [];
+
+  function traverse(node: unknown) {
+    if (!node || typeof node !== 'object') return;
+    const obj = node as Record<string, unknown>;
+
+    // Check if this is a deck element (has $type: 'deck' or className contains 'Deck')
+    const isDeck = obj.$type === 'deck' ||
+                   (typeof obj.className === 'string' && obj.className.toLowerCase().includes('deck'));
+
+    if (isDeck && typeof obj.id === 'number') {
+      const cards: DeckInfo['cards'] = [];
+
+      // Traverse children to find cards
+      if (Array.isArray(obj.children)) {
+        for (const child of obj.children) {
+          if (child && typeof child === 'object') {
+            const cardObj = child as Record<string, unknown>;
+            if (typeof cardObj.id === 'number') {
+              const { children: cardChildren, ...cardWithoutChildren } = cardObj;
+              cards.push({
+                id: cardObj.id,
+                name: cardObj.name as string | undefined,
+                notation: cardObj.notation as string | undefined,
+                className: (cardObj.className as string) || 'Unknown',
+                fullObject: cardWithoutChildren,
+              });
+            }
+          }
+        }
+      }
+
+      const { children, ...deckWithoutChildren } = obj;
+      decks.push({
+        id: obj.id,
+        name: (obj.name as string) || `Deck #${obj.id}`,
+        className: (obj.className as string) || 'Deck',
+        cards,
+        fullObject: deckWithoutChildren,
+      });
+    }
+
+    // Continue traversing children
+    if (Array.isArray(obj.children)) {
+      for (const child of obj.children) {
+        traverse(child);
+      }
+    }
+  }
+
+  if (displayedState.value?.state?.view) {
+    traverse(displayedState.value.state.view);
+  }
+
+  return decks;
+});
+
+/**
+ * Card container info - any element that can hold cards (decks, hands, discard piles, etc.)
+ */
+interface CardContainerInfo {
+  id: number;
+  name: string;
+  className: string;
+  cardCount: number;
+}
+
+/**
+ * Discover all card containers in the game state.
+ * This includes decks, hands, discard piles, and any other element with children.
+ */
+const discoveredCardContainers = computed<CardContainerInfo[]>(() => {
+  const containers: CardContainerInfo[] = [];
+  const seenIds = new Set<number>();
+
+  function traverse(node: unknown) {
+    if (!node || typeof node !== 'object') return;
+    const obj = node as Record<string, unknown>;
+
+    // Check if this element has children (making it a potential card container)
+    if (typeof obj.id === 'number' && Array.isArray(obj.children) && obj.children.length > 0) {
+      // Check if children look like cards (have id property)
+      const hasCardLikeChildren = obj.children.some(
+        (child: unknown) => child && typeof child === 'object' && typeof (child as Record<string, unknown>).id === 'number'
+      );
+
+      if (hasCardLikeChildren && !seenIds.has(obj.id)) {
+        seenIds.add(obj.id);
+        containers.push({
+          id: obj.id,
+          name: (obj.name as string) || (obj.className as string) || `Container #${obj.id}`,
+          className: (obj.className as string) || 'Unknown',
+          cardCount: obj.children.filter(
+            (child: unknown) => child && typeof child === 'object' && typeof (child as Record<string, unknown>).id === 'number'
+          ).length,
+        });
+      }
+    }
+
+    // Continue traversing children
+    if (Array.isArray(obj.children)) {
+      for (const child of obj.children) {
+        traverse(child);
+      }
+    }
+  }
+
+  if (displayedState.value?.state?.view) {
+    traverse(displayedState.value.state.view);
+  }
+
+  return containers;
+});
+
+// Check if a card matches the search query
+function cardMatchesSearch(card: DeckInfo['cards'][0], query: string): boolean {
+  if (!query) return false;
+  const lowerQuery = query.toLowerCase();
+  return !!(
+    (card.name && card.name.toLowerCase().includes(lowerQuery)) ||
+    (card.notation && card.notation.toLowerCase().includes(lowerQuery)) ||
+    card.className.toLowerCase().includes(lowerQuery) ||
+    String(card.id).includes(lowerQuery)
+  );
+}
+
+// Filter decks by search query (shows decks that match OR have cards that match)
+const filteredDecks = computed(() => {
+  if (!deckSearchQuery.value) return discoveredDecks.value;
+
+  const query = deckSearchQuery.value.toLowerCase();
+  return discoveredDecks.value.filter(deck => {
+    // Check if deck itself matches
+    const deckMatches =
+      deck.name.toLowerCase().includes(query) ||
+      deck.className.toLowerCase().includes(query) ||
+      String(deck.id).includes(query);
+
+    if (deckMatches) return true;
+
+    // Check if any card in the deck matches
+    return deck.cards.some(card => cardMatchesSearch(card, query));
+  });
+});
+
+// Get decks that should be auto-expanded due to card-level search matches
+const searchExpandedDecks = computed(() => {
+  const expanded = new Set<number>();
+  if (!deckSearchQuery.value) return expanded;
+
+  const query = deckSearchQuery.value.toLowerCase();
+  for (const deck of filteredDecks.value) {
+    // Auto-expand if any card matches the search
+    if (deck.cards.some(card => cardMatchesSearch(card, query))) {
+      expanded.add(deck.id);
+    }
+  }
+  return expanded;
+});
+
+// Check if a deck should be shown as expanded (user expanded OR search auto-expanded)
+function isDeckExpanded(deckId: number): boolean {
+  return expandedDecks.value.has(deckId) || searchExpandedDecks.value.has(deckId);
+}
+
+// Toggle deck expansion
+function toggleDeck(deckId: number) {
+  if (expandedDecks.value.has(deckId)) {
+    expandedDecks.value.delete(deckId);
+  } else {
+    expandedDecks.value.add(deckId);
+  }
+  expandedDecks.value = new Set(expandedDecks.value);
+}
+
+// Get display name for a card
+function getCardDisplayName(card: DeckInfo['cards'][0]): string {
+  if (card.notation) return card.notation;
+  if (card.name) return card.name;
+  return `#${card.id}`;
+}
+
+// Select a card in a deck for detail view
+function selectDeckCard(deckId: number, cardId: number) {
+  if (selectedDeckCard.value?.deckId === deckId && selectedDeckCard.value?.cardId === cardId) {
+    selectedDeckCard.value = null;
+  } else {
+    selectedDeckCard.value = { deckId, cardId };
+  }
+}
+
+// Get the currently selected card object
+const selectedCard = computed(() => {
+  if (!selectedDeckCard.value) return null;
+  const deck = discoveredDecks.value.find(d => d.id === selectedDeckCard.value!.deckId);
+  if (!deck) return null;
+  return deck.cards.find(c => c.id === selectedDeckCard.value!.cardId) || null;
+});
+
+// Copy deck contents to clipboard
+async function copyDeckToClipboard(deck: DeckInfo) {
+  await copyNodeToClipboard({
+    ...deck.fullObject,
+    cards: deck.cards.map(c => c.fullObject),
+  });
+}
+
+// Deck manipulation API calls
+async function moveCardToTop(cardId: number) {
+  if (!props.gameId) {
+    deckManipulationError.value = 'No game ID available';
+    return;
+  }
+
+  deckManipulationLoading.value = true;
+  deckManipulationError.value = null;
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/move-to-top`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardId }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      deckManipulationError.value = data.error || 'Failed to move card';
+    }
+    // State will be updated via WebSocket broadcast
+  } catch (err) {
+    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
+  } finally {
+    deckManipulationLoading.value = false;
+  }
+}
+
+async function reorderCard(cardId: number, targetIndex: number) {
+  if (!props.gameId) {
+    deckManipulationError.value = 'No game ID available';
+    return;
+  }
+
+  deckManipulationLoading.value = true;
+  deckManipulationError.value = null;
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/reorder-card`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardId, targetIndex }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      deckManipulationError.value = data.error || 'Failed to reorder card';
+    }
+  } catch (err) {
+    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
+  } finally {
+    deckManipulationLoading.value = false;
+  }
+}
+
+async function transferCard(cardId: number, targetDeckId: number, position: 'first' | 'last' = 'first') {
+  if (!props.gameId) {
+    deckManipulationError.value = 'No game ID available';
+    return;
+  }
+
+  deckManipulationLoading.value = true;
+  deckManipulationError.value = null;
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/transfer-card`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardId, targetDeckId, position }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      deckManipulationError.value = data.error || 'Failed to transfer card';
+    }
+  } catch (err) {
+    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
+  } finally {
+    deckManipulationLoading.value = false;
+  }
+}
+
+async function shuffleDeck(deckId: number) {
+  if (!props.gameId) {
+    deckManipulationError.value = 'No game ID available';
+    return;
+  }
+
+  deckManipulationLoading.value = true;
+  deckManipulationError.value = null;
+
+  try {
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/shuffle-deck`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deckId }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      deckManipulationError.value = data.error || 'Failed to shuffle deck';
+    }
+  } catch (err) {
+    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
+  } finally {
+    deckManipulationLoading.value = false;
+  }
+}
+
+// Move card up one position in the deck
+function moveCardUp(deck: DeckInfo, cardId: number) {
+  const currentIndex = deck.cards.findIndex(c => c.id === cardId);
+  if (currentIndex > 0) {
+    reorderCard(cardId, currentIndex - 1);
+  }
+}
+
+// Move card down one position in the deck
+function moveCardDown(deck: DeckInfo, cardId: number) {
+  const currentIndex = deck.cards.findIndex(c => c.id === cardId);
+  if (currentIndex < deck.cards.length - 1) {
+    reorderCard(cardId, currentIndex + 1);
+  }
+}
+
+// Transfer dialog state
+const transferDialogOpen = ref(false);
+const transferDialogCardId = ref<number | null>(null);
+const transferDialogSourceDeckId = ref<number | null>(null);
+const transferDialogTargetDeckId = ref<number | null>(null);
+const transferDialogPosition = ref<'first' | 'last'>('first');
+
+function openTransferDialog(cardId: number, sourceDeckId: number) {
+  transferDialogCardId.value = cardId;
+  transferDialogSourceDeckId.value = sourceDeckId;
+  transferDialogTargetDeckId.value = null;
+  transferDialogPosition.value = 'first';
+  transferDialogOpen.value = true;
+}
+
+function closeTransferDialog() {
+  transferDialogOpen.value = false;
+  transferDialogCardId.value = null;
+  transferDialogSourceDeckId.value = null;
+}
+
+async function confirmTransfer() {
+  if (transferDialogCardId.value !== null && transferDialogTargetDeckId.value !== null) {
+    await transferCard(transferDialogCardId.value, transferDialogTargetDeckId.value, transferDialogPosition.value);
+    closeTransferDialog();
+  }
+}
+
+// Get available target containers (excluding the source container)
+// Uses discoveredCardContainers to include hands, discard piles, etc.
+const availableTargetContainers = computed(() => {
+  if (transferDialogSourceDeckId.value === null) return [];
+  return discoveredCardContainers.value.filter(c => c.id !== transferDialogSourceDeckId.value);
+});
+
 // Format a condition value for display
 function formatConditionValue(value: unknown): string {
   if (value === null) return 'null';
@@ -853,6 +1244,13 @@ const displayedState = computed(() => {
             Elements
           </button>
           <button
+            :class="{ active: activeTab === 'decks' }"
+            @click="activeTab = 'decks'"
+          >
+            Decks
+            <span v-if="discoveredDecks.length > 0" class="tab-badge">{{ discoveredDecks.length }}</span>
+          </button>
+          <button
             :class="{ active: activeTab === 'actions' }"
             @click="activeTab = 'actions'"
           >
@@ -1050,6 +1448,211 @@ const displayedState = computed(() => {
                 <pre class="custom-debug-value">{{ JSON.stringify(value, null, 2) }}</pre>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Decks Tab -->
+        <div v-if="activeTab === 'decks'" class="tab-content decks-tab">
+          <!-- Search -->
+          <div class="deck-search">
+            <input
+              type="text"
+              v-model="deckSearchQuery"
+              placeholder="Search decks or cards..."
+              class="search-input"
+            />
+          </div>
+
+          <!-- Error message -->
+          <div v-if="deckManipulationError" class="deck-error">
+            {{ deckManipulationError }}
+            <button class="debug-btn small" @click="deckManipulationError = null">Dismiss</button>
+          </div>
+
+          <!-- No decks found -->
+          <div v-if="filteredDecks.length === 0" class="no-decks">
+            <template v-if="discoveredDecks.length === 0">
+              No deck elements found in game state.
+              <div class="deck-hint">
+                Decks are elements with <code>$type: 'deck'</code> or className containing "Deck".
+              </div>
+            </template>
+            <template v-else>
+              No decks match your search.
+            </template>
+          </div>
+
+          <!-- Decks list with split view -->
+          <div v-else class="decks-split-view" :class="{ 'has-selection': selectedCard }">
+            <!-- Deck List Panel -->
+            <div class="decks-list-panel">
+              <div
+                v-for="deck in filteredDecks"
+                :key="deck.id"
+                class="deck-item"
+              >
+                <div
+                  class="deck-header"
+                  @click="toggleDeck(deck.id)"
+                >
+                  <span class="deck-arrow">
+                    {{ isDeckExpanded(deck.id) ? '▼' : '▶' }}
+                  </span>
+                  <span class="deck-name">{{ deck.name }}</span>
+                  <span class="deck-count">[{{ deck.cards.length }} cards]</span>
+                  <div class="deck-actions" @click.stop>
+                    <button
+                      class="debug-btn small deck-action-btn"
+                      @click="shuffleDeck(deck.id)"
+                      :disabled="deckManipulationLoading"
+                      title="Shuffle deck"
+                    >
+                      🔀
+                    </button>
+                    <button
+                      class="debug-btn small deck-action-btn"
+                      @click="copyDeckToClipboard(deck)"
+                      title="Copy deck JSON"
+                    >
+                      📋
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Expanded card list -->
+                <div v-if="isDeckExpanded(deck.id)" class="deck-cards">
+                  <div v-if="deck.cards.length === 0" class="deck-empty">
+                    Deck is empty
+                  </div>
+                  <div
+                    v-for="(card, index) in deck.cards"
+                    :key="card.id"
+                    class="card-item"
+                    :class="{
+                      selected: selectedDeckCard?.deckId === deck.id && selectedDeckCard?.cardId === card.id,
+                      'search-match': deckSearchQuery && cardMatchesSearch(card, deckSearchQuery)
+                    }"
+                    @click="selectDeckCard(deck.id, card.id)"
+                  >
+                    <span class="card-position">{{ index }}</span>
+                    <span class="card-name">{{ getCardDisplayName(card) }}</span>
+                    <span class="card-class">{{ card.className }}</span>
+                    <span class="card-id">#{{ card.id }}</span>
+                    <div class="card-actions" @click.stop>
+                      <button
+                        class="card-action-btn"
+                        @click="moveCardToTop(card.id)"
+                        :disabled="index === 0 || deckManipulationLoading"
+                        title="Move to top"
+                      >
+                        ⬆️
+                      </button>
+                      <button
+                        class="card-action-btn"
+                        @click="moveCardUp(deck, card.id)"
+                        :disabled="index === 0 || deckManipulationLoading"
+                        title="Move up"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        class="card-action-btn"
+                        @click="moveCardDown(deck, card.id)"
+                        :disabled="index === deck.cards.length - 1 || deckManipulationLoading"
+                        title="Move down"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        class="card-action-btn"
+                        @click="openTransferDialog(card.id, deck.id)"
+                        :disabled="discoveredCardContainers.length < 2 || deckManipulationLoading"
+                        title="Transfer to another container"
+                      >
+                        ➡️
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card Detail Panel -->
+            <div v-if="selectedCard" class="card-detail-panel">
+              <div class="card-detail-header">
+                <span class="card-detail-title">
+                  {{ selectedCard.className }} #{{ selectedCard.id }}
+                </span>
+                <div class="card-detail-actions">
+                  <button
+                    @click="copyNodeToClipboard(selectedCard.fullObject)"
+                    class="debug-btn small"
+                    title="Copy JSON"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    @click="selectedDeckCard = null"
+                    class="debug-btn small"
+                    title="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div class="card-detail-content">
+                <pre class="card-json">{{ JSON.stringify(selectedCard.fullObject, null, 2) }}</pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- Transfer Dialog -->
+          <div v-if="transferDialogOpen" class="transfer-dialog-overlay" @click.self="closeTransferDialog">
+            <div class="transfer-dialog">
+              <div class="transfer-dialog-header">
+                <span>Transfer Card</span>
+                <button class="close-btn" @click="closeTransferDialog">×</button>
+              </div>
+              <div class="transfer-dialog-body">
+                <div class="form-group">
+                  <label>Target Container:</label>
+                  <select v-model="transferDialogTargetDeckId">
+                    <option :value="null" disabled>Select a container...</option>
+                    <option v-for="container in availableTargetContainers" :key="container.id" :value="container.id">
+                      {{ container.name }} ({{ container.className }}, {{ container.cardCount }} cards)
+                    </option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Position:</label>
+                  <div class="radio-group">
+                    <label>
+                      <input type="radio" v-model="transferDialogPosition" value="first" />
+                      Top (first)
+                    </label>
+                    <label>
+                      <input type="radio" v-model="transferDialogPosition" value="last" />
+                      Bottom (last)
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="transfer-dialog-footer">
+                <button class="debug-btn" @click="closeTransferDialog">Cancel</button>
+                <button
+                  class="debug-btn primary"
+                  @click="confirmTransfer"
+                  :disabled="transferDialogTargetDeckId === null || deckManipulationLoading"
+                >
+                  {{ deckManipulationLoading ? 'Transferring...' : 'Transfer' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading indicator -->
+          <div v-if="deckManipulationLoading" class="deck-loading">
+            Processing...
           </div>
         </div>
 
@@ -2500,5 +3103,457 @@ const displayedState = computed(() => {
 .toast-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+/* Tab badge */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(0, 217, 255, 0.3);
+  color: #00d9ff;
+  border-radius: 8px;
+}
+
+/* Decks Tab */
+.decks-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.deck-search {
+  margin-bottom: 4px;
+}
+
+.deck-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #f87171;
+  font-size: 12px;
+}
+
+.no-decks {
+  color: #888;
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.deck-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.deck-hint code {
+  background: rgba(0, 217, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #00d9ff;
+  font-size: 10px;
+}
+
+/* Decks split view */
+.decks-split-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+}
+
+.decks-split-view.has-selection {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.decks-list-panel {
+  flex: 1;
+  min-width: 0;
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.decks-split-view.has-selection .decks-list-panel {
+  flex: 0 0 50%;
+  max-height: 400px;
+}
+
+/* Deck item */
+.deck-item {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.deck-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.deck-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.deck-arrow {
+  color: #666;
+  font-size: 10px;
+  width: 12px;
+}
+
+.deck-name {
+  color: #9b59b6;
+  font-weight: 500;
+  font-size: 12px;
+  flex: 1;
+}
+
+.deck-count {
+  color: #888;
+  font-size: 11px;
+}
+
+.deck-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.deck-action-btn {
+  opacity: 0.6;
+  font-size: 12px !important;
+  padding: 2px 6px !important;
+  line-height: 1;
+}
+
+.deck-action-btn:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.deck-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Deck cards list */
+.deck-cards {
+  padding: 4px 8px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.deck-empty {
+  color: #666;
+  font-style: italic;
+  padding: 8px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.card-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 11px;
+}
+
+.card-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.card-item.selected {
+  background: rgba(155, 89, 182, 0.2);
+  border: 1px solid rgba(155, 89, 182, 0.4);
+}
+
+.card-item.search-match {
+  background: rgba(241, 196, 15, 0.2);
+  border: 1px solid rgba(241, 196, 15, 0.5);
+}
+
+.card-item.search-match .card-name {
+  color: #f1c40f;
+  font-weight: bold;
+}
+
+.card-position {
+  min-width: 20px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  font-size: 9px;
+  color: #888;
+}
+
+.card-name {
+  color: #e0e0e0;
+  flex: 1;
+}
+
+.card-class {
+  color: #666;
+  font-size: 10px;
+}
+
+.card-id {
+  color: #555;
+  font-size: 10px;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* Card action buttons */
+.card-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.card-item:hover .card-actions {
+  opacity: 1;
+}
+
+.card-action-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #aaa;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.card-action-btn:hover:not(:disabled) {
+  background: rgba(0, 217, 255, 0.2);
+  border-color: rgba(0, 217, 255, 0.3);
+  color: #00d9ff;
+}
+
+.card-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Transfer dialog */
+.transfer-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.transfer-dialog {
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  width: 300px;
+  max-width: 90vw;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.transfer-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+  color: #fff;
+}
+
+.transfer-dialog-header .close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transfer-dialog-header .close-btn:hover {
+  color: #fff;
+}
+
+.transfer-dialog-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.transfer-dialog-body .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transfer-dialog-body label {
+  color: #aaa;
+  font-size: 12px;
+}
+
+.transfer-dialog-body select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.transfer-dialog-body select:focus {
+  outline: none;
+  border-color: #00d9ff;
+}
+
+.transfer-dialog-body .radio-group {
+  display: flex;
+  gap: 16px;
+}
+
+.transfer-dialog-body .radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #ccc;
+}
+
+.transfer-dialog-body .radio-group input[type="radio"] {
+  accent-color: #00d9ff;
+}
+
+.transfer-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.debug-btn.primary {
+  background: rgba(0, 217, 255, 0.2);
+  border-color: rgba(0, 217, 255, 0.4);
+  color: #00d9ff;
+}
+
+.debug-btn.primary:hover:not(:disabled) {
+  background: rgba(0, 217, 255, 0.3);
+}
+
+.debug-btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Deck loading indicator */
+.deck-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  padding: 12px 20px;
+  border-radius: 6px;
+  color: #00d9ff;
+  font-size: 12px;
+  z-index: 100;
+}
+
+/* Card detail panel */
+.card-detail-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 400px;
+}
+
+.card-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card-detail-title {
+  font-weight: 600;
+  color: #9b59b6;
+  font-size: 13px;
+}
+
+.card-detail-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.card-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.card-json {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #ccc;
+}
+
+/* Deck tab positioning */
+.decks-tab {
+  position: relative;
 }
 </style>

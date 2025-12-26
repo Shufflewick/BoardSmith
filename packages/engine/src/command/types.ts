@@ -169,6 +169,18 @@ export interface SetOrderCommand extends BaseCommand {
 }
 
 /**
+ * Reorder a child element within its parent (debug/testing only)
+ * Moves an element to a specific index position within its current parent
+ */
+export interface ReorderChildCommand extends BaseCommand {
+  type: 'REORDER_CHILD';
+  /** ID of element to reorder */
+  elementId: number;
+  /** Target index position (0-based) */
+  targetIndex: number;
+}
+
+/**
  * Visibility configuration for complex cases
  */
 export interface VisibilityConfig {
@@ -196,7 +208,8 @@ export type GameCommand =
   | MessageCommand
   | StartGameCommand
   | EndGameCommand
-  | SetOrderCommand;
+  | SetOrderCommand
+  | ReorderChildCommand;
 
 /**
  * Result of executing a command

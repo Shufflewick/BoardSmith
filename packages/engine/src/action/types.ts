@@ -174,6 +174,26 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
    * }
    */
   multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+  /**
+   * Defer choice evaluation until the player clicks this action.
+   * By default, choices are computed when building action metadata (before player acts).
+   * With defer: true, choices are not evaluated until the player clicks the action button.
+   *
+   * Use this when:
+   * - Choice computation has side effects (e.g., drawing cards from a deck)
+   * - You want to test deck manipulation before the draw occurs
+   * - Choices depend on game state at the moment of clicking
+   *
+   * @example
+   * .chooseFrom('card', {
+   *   defer: true,
+   *   choices: (ctx) => {
+   *     // This runs when player clicks, not at game start
+   *     return ctx.game.deck.drawCards(3);
+   *   }
+   * })
+   */
+  defer?: boolean;
 }
 
 /**

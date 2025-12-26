@@ -107,6 +107,11 @@ export interface Selection {
    * Key is the string representation of the dependent value (element ID, player position, etc.)
    */
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
+  /**
+   * For choice selections with defer: true.
+   * Choices are not evaluated until the action is clicked - must fetch via /deferred-choices endpoint.
+   */
+  deferred?: boolean;
 }
 
 export interface ActionMetadata {
@@ -215,6 +220,29 @@ type SelectionStepFn = (
 // Inject the selection step function for repeating selections
 // This is required for repeating selections to work - parent must provide it
 const selectionStepFn = inject<SelectionStepFn | undefined>('selectionStepFn', undefined);
+
+/**
+ * Type for the deferred choices fetch function.
+ * This must be injected by the parent component (e.g., GameShell) to handle
+ * server communication for deferred selections.
+ */
+type FetchDeferredChoicesFn = (
+  actionName: string,
+  selectionName: string,
+  player: number,
+  currentArgs: Record<string, unknown>
+) => Promise<{
+  success: boolean;
+  choices?: ChoiceWithRefs[];
+  error?: string;
+}>;
+
+// Inject the deferred choices fetch function
+// This is required for deferred selections to work - parent must provide it
+const fetchDeferredChoicesFn = inject<FetchDeferredChoicesFn | undefined>('fetchDeferredChoicesFn', undefined);
+
+// State for tracking when we're loading deferred choices
+const deferredChoicesLoading = ref(false);
 
 // Inject shared actionArgs from GameShell (enables bidirectional sync with custom game boards)
 // Falls back to local state for standalone usage (testing, storybook, etc.)
@@ -426,6 +454,11 @@ const filteredChoices = computed(() => {
   // For repeating selections, use dynamic choices from server if available
   if (isRepeatingSelection(currentSelection.value) && repeatingState.value?.currentChoices) {
     choices = repeatingState.value.currentChoices;
+  }
+  // For deferred selections, use fetched choices from server
+  else if (currentSelection.value.deferred && currentAction.value) {
+    const key = `${currentAction.value}:${currentSelection.value.name}`;
+    choices = fetchedDeferredChoices[key] || [];
   }
   // Handle dependsOn: look up choices from choicesByDependentValue
   else if (currentSelection.value.dependsOn && currentSelection.value.choicesByDependentValue) {
@@ -1351,7 +1384,12 @@ const multiSelectCountDisplay = computed(() => {
   return `Selected: ${count}`;
 });
 
-function startAction(actionName: string) {
+/**
+ * State for storing fetched deferred choices, keyed by "actionName:selectionName"
+ */
+const fetchedDeferredChoices = reactive<Record<string, ChoiceWithRefs[]>>({});
+
+async function startAction(actionName: string) {
   const meta = actionsWithMetadata.value.find(a => a.name === actionName);
 
   if (!meta || meta.selections.length === 0) {
@@ -1365,9 +1403,49 @@ function startAction(actionName: string) {
   multiSelectState.value = null;
   boardInteraction?.clear();
 
+  // Check if first selection is deferred - if so, fetch choices before showing UI
   const firstSel = meta.selections[0];
+  if (firstSel.deferred) {
+    await fetchDeferredChoicesForSelection(actionName, firstSel.name);
+  }
+
   if (firstSel.type === 'element') {
     emit('selectingElement', firstSel.name, firstSel.elementClassName);
+  }
+}
+
+/**
+ * Fetch deferred choices for a selection from the server.
+ * Stores results in fetchedDeferredChoices for use by the UI.
+ */
+async function fetchDeferredChoicesForSelection(actionName: string, selectionName: string) {
+  if (!fetchDeferredChoicesFn) {
+    console.error('fetchDeferredChoicesFn not injected - deferred selections require parent to provide this');
+    return;
+  }
+
+  const key = `${actionName}:${selectionName}`;
+  deferredChoicesLoading.value = true;
+
+  try {
+    const result = await fetchDeferredChoicesFn(
+      actionName,
+      selectionName,
+      props.playerPosition,
+      { ...currentArgs.value }
+    );
+
+    if (result.success && result.choices) {
+      fetchedDeferredChoices[key] = result.choices;
+    } else {
+      console.error('Failed to fetch deferred choices:', result.error);
+      fetchedDeferredChoices[key] = [];
+    }
+  } catch (err) {
+    console.error('Error fetching deferred choices:', err);
+    fetchedDeferredChoices[key] = [];
+  } finally {
+    deferredChoicesLoading.value = false;
   }
 }
 
@@ -1379,6 +1457,8 @@ function cancelAction() {
   currentAction.value = null;
   repeatingState.value = null;
   multiSelectState.value = null;
+  // Clear deferred choices cache
+  clearReactiveObject(fetchedDeferredChoices);
   clearActionState(currentArgs.value, displayCache);
   boardInteraction?.clear();
   emit('cancelSelection');
@@ -1546,6 +1626,8 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
     currentAction.value = null;
     // Track last executed action to prevent auto-starting it before availableActions updates
     lastExecutedAction.value = actionName;
+    // Clear deferred choices cache
+    clearReactiveObject(fetchedDeferredChoices);
     clearActionState(currentArgs.value, displayCache);
     boardInteraction?.clear();
     emit('cancelSelection');
@@ -1719,6 +1801,43 @@ function clearBoardSelection() {
             <span v-if="filteredChoices.length === 0" class="no-choices">
               No options available
             </span>
+          </div>
+        </template>
+
+        <!-- Deferred choice selection (choices fetched from server on demand) -->
+        <template v-else-if="currentSelection.type === 'choice' && currentSelection.deferred">
+          <div class="selection-prompt">
+            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
+          </div>
+          <div class="choice-buttons">
+            <!-- Loading indicator while fetching deferred choices -->
+            <span v-if="deferredChoicesLoading" class="deferred-loading">
+              Loading choices...
+            </span>
+            <!-- Show choices once loaded -->
+            <template v-else>
+              <button
+                v-for="choice in filteredChoices"
+                :key="String(choice.value)"
+                class="choice-btn"
+                @click="setSelectionValue(currentSelection.name, choice.value, choice.display)"
+                @mouseenter="handleChoiceHover(choice)"
+                @mouseleave="handleChoiceLeave"
+              >
+                {{ choice.display }}
+              </button>
+              <button
+                v-if="currentSelection.optional"
+                class="choice-btn skip-btn"
+                @click="skipOptionalSelection"
+              >
+                Skip
+              </button>
+              <span v-if="filteredChoices.length === 0 && !currentSelection.optional" class="no-choices">
+                No options available
+              </span>
+            </template>
           </div>
         </template>
 
@@ -2175,5 +2294,18 @@ function clearBoardSelection() {
 
 .checkbox-label {
   flex: 1;
+}
+
+/* Deferred choice loading styles */
+.deferred-loading {
+  color: #00d9ff;
+  font-style: italic;
+  font-size: 0.9rem;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 </style>

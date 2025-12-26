@@ -860,3 +860,143 @@ export async function handleRewind(
     return error(result.error ?? 'Rewind failed');
   }
 }
+
+// ============================================
+// Debug Deck Manipulation Handlers
+// ============================================
+
+/**
+ * POST /games/:gameId/debug/move-to-top - Move a card to the top of its deck (debug only)
+ */
+export async function handleMoveCardToTop(
+  store: GameStore,
+  gameId: string,
+  cardId: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = session.moveCardToTop(cardId);
+
+  if (result.success) {
+    return success({
+      success: true,
+      message: `Card ${cardId} moved to top`,
+    });
+  } else {
+    return error(result.error ?? 'Move failed');
+  }
+}
+
+/**
+ * POST /games/:gameId/debug/reorder-card - Reorder a card within its deck (debug only)
+ */
+export async function handleReorderCard(
+  store: GameStore,
+  gameId: string,
+  cardId: number,
+  targetIndex: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = session.reorderCard(cardId, targetIndex);
+
+  if (result.success) {
+    return success({
+      success: true,
+      message: `Card ${cardId} moved to position ${targetIndex}`,
+    });
+  } else {
+    return error(result.error ?? 'Reorder failed');
+  }
+}
+
+/**
+ * POST /games/:gameId/debug/transfer-card - Transfer a card to another deck (debug only)
+ */
+export async function handleTransferCard(
+  store: GameStore,
+  gameId: string,
+  cardId: number,
+  targetDeckId: number,
+  position: 'first' | 'last' = 'first'
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = session.transferCard(cardId, targetDeckId, position);
+
+  if (result.success) {
+    return success({
+      success: true,
+      message: `Card ${cardId} transferred to deck ${targetDeckId}`,
+    });
+  } else {
+    return error(result.error ?? 'Transfer failed');
+  }
+}
+
+/**
+ * POST /games/:gameId/debug/shuffle-deck - Shuffle a deck (debug only)
+ */
+export async function handleShuffleDeck(
+  store: GameStore,
+  gameId: string,
+  deckId: number
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = session.shuffleDeck(deckId);
+
+  if (result.success) {
+    return success({
+      success: true,
+      message: `Deck ${deckId} shuffled`,
+    });
+  } else {
+    return error(result.error ?? 'Shuffle failed');
+  }
+}
+
+// ============================================
+// Deferred Choices Handler
+// ============================================
+
+/**
+ * POST /games/:gameId/deferred-choices - Get choices for a deferred selection
+ * Used when an action has defer: true selections that aren't evaluated until clicked.
+ */
+export async function handleGetDeferredChoices(
+  store: GameStore,
+  gameId: string,
+  actionName: string,
+  selectionName: string,
+  playerPosition: number,
+  currentArgs: Record<string, unknown> = {}
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const result = session.getDeferredChoices(actionName, selectionName, playerPosition, currentArgs);
+
+  if (result.success) {
+    return success({
+      success: true,
+      choices: result.choices,
+    });
+  } else {
+    return error(result.error ?? 'Failed to get deferred choices');
+  }
+}

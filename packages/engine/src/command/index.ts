@@ -15,6 +15,7 @@ export type {
   StartGameCommand,
   EndGameCommand,
   SetOrderCommand,
+  ReorderChildCommand,
   VisibilityConfig,
 } from './types.js';
 

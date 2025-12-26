@@ -14,6 +14,7 @@ import type {
   StartGameCommand,
   EndGameCommand,
   SetOrderCommand,
+  ReorderChildCommand,
   VisibilityConfig,
 } from './types.js';
 import type { Game } from '../element/game.js';
@@ -55,6 +56,8 @@ export function executeCommand(game: Game, command: GameCommand): CommandResult 
         return executeEndGame(game, command);
       case 'SET_ORDER':
         return executeSetOrder(game, command);
+      case 'REORDER_CHILD':
+        return executeReorderChild(game, command);
       default:
         return { success: false, error: `Unknown command type: ${(command as any).type}` };
     }
@@ -211,5 +214,35 @@ function executeSetOrder(game: Game, command: SetOrderCommand): CommandResult {
   }
 
   space._t.order = command.order;
+  return { success: true };
+}
+
+function executeReorderChild(game: Game, command: ReorderChildCommand): CommandResult {
+  const element = game.getElementById(command.elementId);
+  if (!element) {
+    return { success: false, error: `Element not found: ${command.elementId}` };
+  }
+
+  const parent = element.parent;
+  if (!parent) {
+    return { success: false, error: `Element has no parent` };
+  }
+
+  const children = parent._t.children;
+  const currentIndex = children.indexOf(element);
+  if (currentIndex === -1) {
+    return { success: false, error: `Element not found in parent's children` };
+  }
+
+  // Validate target index
+  if (command.targetIndex < 0 || command.targetIndex >= children.length) {
+    return { success: false, error: `Invalid target index: ${command.targetIndex}` };
+  }
+
+  // Remove from current position
+  children.splice(currentIndex, 1);
+  // Insert at target position
+  children.splice(command.targetIndex, 0, element);
+
   return { success: true };
 }

@@ -170,6 +170,35 @@ function buildSelectionMetadata(
     case 'choice': {
       const choiceSel = selection as any;
 
+      // Handle deferred choices - don't evaluate until action is clicked
+      if (choiceSel.defer) {
+        base.deferred = true;
+        // Still include filterBy if present (for UI to know about dependency)
+        if (choiceSel.filterBy) {
+          base.filterBy = choiceSel.filterBy;
+        }
+        // Still include repeat info if present
+        if (choiceSel.repeat || choiceSel.repeatUntil !== undefined) {
+          base.repeat = {
+            hasOnEach: !!choiceSel.repeat?.onEach,
+            terminator: choiceSel.repeatUntil,
+          };
+        }
+        // Still include multiSelect config if it's static (not function-based)
+        if (choiceSel.multiSelect !== undefined && typeof choiceSel.multiSelect !== 'function') {
+          if (typeof choiceSel.multiSelect === 'number') {
+            base.multiSelect = { min: 1, max: choiceSel.multiSelect };
+          } else {
+            base.multiSelect = {
+              min: choiceSel.multiSelect.min ?? 1,
+              max: choiceSel.multiSelect.max,
+            };
+          }
+        }
+        // Don't evaluate choices - that will happen when /deferred-choices is called
+        break;
+      }
+
       // Check if this selection depends on a previous selection
       if (choiceSel.dependsOn && typeof choiceSel.choices === 'function') {
         const dependentInfo = selectionValues.get(choiceSel.dependsOn);

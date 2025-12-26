@@ -46,6 +46,12 @@ import {
   handleGetPendingAction,
   // Debug handlers
   handleRewind,
+  handleMoveCardToTop,
+  handleReorderCard,
+  handleTransferCard,
+  handleShuffleDeck,
+  // Deferred choices handler
+  handleGetDeferredChoices,
 } from './handlers/games.js';
 import type { ClaimPositionRequest } from './types.js';
 
@@ -225,6 +231,59 @@ export class GameServerCore {
         const gameId = rewindMatch[1];
         const { actionIndex } = body as { actionIndex: number };
         return await handleRewind(this.#store, gameId, actionIndex);
+      }
+
+      // ============================================
+      // Debug Deck Manipulation Routes
+      // ============================================
+
+      // POST /games/:gameId/debug/move-to-top - Move card to top of deck (debug only)
+      const moveToTopMatch = path.match(/^\/games\/([^/]+)\/debug\/move-to-top$/);
+      if (moveToTopMatch && method === 'POST') {
+        const gameId = moveToTopMatch[1];
+        const { cardId } = body as { cardId: number };
+        return await handleMoveCardToTop(this.#store, gameId, cardId);
+      }
+
+      // POST /games/:gameId/debug/reorder-card - Reorder card within deck (debug only)
+      const reorderCardMatch = path.match(/^\/games\/([^/]+)\/debug\/reorder-card$/);
+      if (reorderCardMatch && method === 'POST') {
+        const gameId = reorderCardMatch[1];
+        const { cardId, targetIndex } = body as { cardId: number; targetIndex: number };
+        return await handleReorderCard(this.#store, gameId, cardId, targetIndex);
+      }
+
+      // POST /games/:gameId/debug/transfer-card - Transfer card to another deck (debug only)
+      const transferCardMatch = path.match(/^\/games\/([^/]+)\/debug\/transfer-card$/);
+      if (transferCardMatch && method === 'POST') {
+        const gameId = transferCardMatch[1];
+        const { cardId, targetDeckId, position } = body as { cardId: number; targetDeckId: number; position?: 'first' | 'last' };
+        return await handleTransferCard(this.#store, gameId, cardId, targetDeckId, position);
+      }
+
+      // POST /games/:gameId/debug/shuffle-deck - Shuffle a deck (debug only)
+      const shuffleDeckMatch = path.match(/^\/games\/([^/]+)\/debug\/shuffle-deck$/);
+      if (shuffleDeckMatch && method === 'POST') {
+        const gameId = shuffleDeckMatch[1];
+        const { deckId } = body as { deckId: number };
+        return await handleShuffleDeck(this.#store, gameId, deckId);
+      }
+
+      // ============================================
+      // Deferred Choices Route
+      // ============================================
+
+      // POST /games/:gameId/deferred-choices - Get choices for deferred selections
+      const deferredChoicesMatch = path.match(/^\/games\/([^/]+)\/deferred-choices$/);
+      if (deferredChoicesMatch && method === 'POST') {
+        const gameId = deferredChoicesMatch[1];
+        const { action, selection, player, currentArgs } = body as {
+          action: string;
+          selection: string;
+          player: number;
+          currentArgs?: Record<string, unknown>;
+        };
+        return await handleGetDeferredChoices(this.#store, gameId, action, selection, player, currentArgs || {});
       }
 
       // POST /games/:gameId/undo - Undo to turn start

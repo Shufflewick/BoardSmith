@@ -247,6 +247,12 @@ export interface SelectionMetadata {
   type: 'choice' | 'element' | 'number' | 'text';
   prompt?: string;
   optional?: boolean;
+  /**
+   * For choice selections with defer: true.
+   * When deferred, choices are not evaluated until the player clicks the action.
+   * The UI should call /deferred-choices endpoint to get choices when needed.
+   */
+  deferred?: boolean;
   // Type-specific properties
   choices?: ChoiceWithRefs[];
   min?: number;
