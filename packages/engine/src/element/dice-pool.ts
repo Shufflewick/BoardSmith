@@ -1,6 +1,5 @@
 import { Space } from './space.js';
-import { Die } from './die.js';
-import type { DieSides } from './die.js';
+import { Die, type DieSides } from './die.js';
 import type { ElementContext } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
@@ -126,53 +125,5 @@ export class DicePool<G extends Game = any, P extends Player = any> extends Spac
    */
   countValue(value: number): number {
     return this.getDice().filter(d => d.value === value).length;
-  }
-
-  /**
-   * Create a standard set of polyhedral dice (d4, d6, d8, d10, d12, d20)
-   * @param colors - Optional colors for each die type
-   */
-  createPolySet(colors?: Partial<Record<DieSides, string>>): void {
-    const defaultColors: Record<DieSides, string> = {
-      4: '#4CAF50',   // Green
-      6: '#9C27B0',   // Purple
-      8: '#2196F3',   // Blue
-      10: '#FF9800',  // Orange
-      12: '#E91E63',  // Pink
-      20: '#F44336',  // Red
-    };
-
-    const dieTypes: DieSides[] = [4, 6, 8, 10, 12, 20];
-    for (const sides of dieTypes) {
-      this.create(Die, `d${sides}`, {
-        sides,
-        color: colors?.[sides] ?? defaultColors[sides],
-      });
-    }
-  }
-
-  /**
-   * Create a standard RPG dice set (d4, d6, d8, 2xd10, d12, d20)
-   * Used in Polyhedral Potions and similar games
-   * @param colors - Optional colors for each die
-   */
-  createRPGSet(colors?: Partial<Record<DieSides, string>>): void {
-    const defaultColors: Record<DieSides, string> = {
-      4: '#4CAF50',   // Green
-      6: '#9C27B0',   // Purple
-      8: '#2196F3',   // Blue
-      10: '#FF9800',  // Orange
-      12: '#E91E63',  // Pink
-      20: '#F44336',  // Red
-    };
-
-    // Standard RPG set has two d10s (one for percentile)
-    this.create(Die, 'd4', { sides: 4, color: colors?.[4] ?? defaultColors[4] });
-    this.create(Die, 'd6', { sides: 6, color: colors?.[6] ?? defaultColors[6] });
-    this.create(Die, 'd8', { sides: 8, color: colors?.[8] ?? defaultColors[8] });
-    this.create(Die, 'd10', { sides: 10, color: colors?.[10] ?? defaultColors[10] });
-    this.create(Die, 'd10-percent', { sides: 10, color: colors?.[10] ?? defaultColors[10] });
-    this.create(Die, 'd12', { sides: 12, color: colors?.[12] ?? defaultColors[12] });
-    this.create(Die, 'd20', { sides: 20, color: colors?.[20] ?? defaultColors[20] });
   }
 }

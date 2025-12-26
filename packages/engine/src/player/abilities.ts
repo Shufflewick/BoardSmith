@@ -37,20 +37,6 @@ export interface Ability<T extends string = string> {
 }
 
 /**
- * Configuration for ability display in UI
- */
-export interface AbilityDisplayInfo {
-  /** Icon (emoji or icon name) */
-  icon: string;
-  /** Human-readable label */
-  label: string;
-  /** Color for styling */
-  color?: string;
-  /** Description of what the ability does */
-  description?: string;
-}
-
-/**
  * Manages a collection of abilities for a player
  *
  * @typeParam T - The ability type string literal union for type safety
@@ -218,21 +204,4 @@ export class AbilityManager<T extends string = string> {
     manager.fromJSON(data);
     return manager;
   }
-}
-
-/**
- * Helper to create ability display info map
- *
- * @example
- * ```typescript
- * const ABILITY_INFO = createAbilityDisplayMap({
- *   'reroll-2': { icon: '🎲', label: 'Reroll 2', color: '#2196F3' },
- *   'flip': { icon: '↻', label: 'Flip', color: '#9C27B0' },
- * });
- * ```
- */
-export function createAbilityDisplayMap<T extends string>(
-  info: Record<T, AbilityDisplayInfo>
-): Map<T, AbilityDisplayInfo> {
-  return new Map(Object.entries(info) as [T, AbilityDisplayInfo][]);
 }

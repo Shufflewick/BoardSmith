@@ -36,16 +36,6 @@ export interface ReplayFile {
 
   /** ISO timestamp when game was played */
   timestamp: string;
-
-  /** Optional metadata */
-  metadata?: {
-    /** Duration in milliseconds */
-    duration?: number;
-    /** Platform version */
-    platform?: string;
-    /** Custom game-specific data */
-    custom?: Record<string, unknown>;
-  };
 }
 
 /**
@@ -60,7 +50,6 @@ export function createReplayFile(options: {
   actions: SerializedAction[];
   outcome: 'complete' | 'aborted';
   winners?: number[];
-  metadata?: ReplayFile['metadata'];
 }): ReplayFile {
   return {
     version: 1,
@@ -73,7 +62,6 @@ export function createReplayFile(options: {
     outcome: options.outcome,
     winners: options.winners,
     timestamp: new Date().toISOString(),
-    metadata: options.metadata,
   };
 }
 

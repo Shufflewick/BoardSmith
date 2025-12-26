@@ -14,11 +14,8 @@ export interface GameStateSnapshot {
   /** Game class name for reconstruction */
   gameType: string;
 
-  /** Timestamp when snapshot was created */
-  timestamp: number;
-
   /** Full element tree state */
-  state: ElementJSON & {
+  state: {
     players: Record<string, unknown>[];
     phase: string;
     messages: Array<{ text: string; data?: Record<string, unknown> }>;
@@ -82,7 +79,6 @@ export function createSnapshot(
   return {
     version: 1,
     gameType,
-    timestamp: Date.now(),
     state: game.toJSON() as GameStateSnapshot['state'],
     flowState: flowState ?? undefined,
     commandHistory: [...game.commandHistory],
@@ -123,78 +119,4 @@ export function createPlayerView(
  */
 export function createAllPlayerViews(game: Game): PlayerStateView[] {
   return game.players.map((_, i) => createPlayerView(game, i));
-}
-
-/**
- * Compute the difference between two snapshots (for efficient sync)
- */
-export interface StateDiff {
-  /** Changed elements (by ID) */
-  changed: Map<number, Partial<ElementJSON>>;
-  /** Added element IDs */
-  added: number[];
-  /** Removed element IDs */
-  removed: number[];
-  /** New commands since last sync */
-  newCommands: GameCommand[];
-  /** New actions since last sync */
-  newActions: SerializedAction[];
-  /** Updated flow state */
-  flowState?: FlowState;
-}
-
-/**
- * Compute diff between two snapshots
- */
-export function computeDiff(
-  oldSnapshot: GameStateSnapshot,
-  newSnapshot: GameStateSnapshot
-): StateDiff {
-  const diff: StateDiff = {
-    changed: new Map(),
-    added: [],
-    removed: [],
-    newCommands: newSnapshot.commandHistory.slice(oldSnapshot.commandHistory.length),
-    newActions: newSnapshot.actionHistory.slice(oldSnapshot.actionHistory.length),
-    flowState: newSnapshot.flowState,
-  };
-
-  // Build maps of elements by ID
-  const oldElements = new Map<number, ElementJSON>();
-  const newElements = new Map<number, ElementJSON>();
-
-  function collectElements(json: ElementJSON, map: Map<number, ElementJSON>) {
-    map.set(json.id, json);
-    if (json.children) {
-      for (const child of json.children) {
-        collectElements(child, map);
-      }
-    }
-  }
-
-  collectElements(oldSnapshot.state, oldElements);
-  collectElements(newSnapshot.state, newElements);
-
-  // Find added and removed
-  for (const id of newElements.keys()) {
-    if (!oldElements.has(id)) {
-      diff.added.push(id);
-    }
-  }
-
-  for (const id of oldElements.keys()) {
-    if (!newElements.has(id)) {
-      diff.removed.push(id);
-    }
-  }
-
-  // Find changed (simple comparison for now)
-  for (const [id, newEl] of newElements) {
-    const oldEl = oldElements.get(id);
-    if (oldEl && JSON.stringify(oldEl) !== JSON.stringify(newEl)) {
-      diff.changed.set(id, newEl);
-    }
-  }
-
-  return diff;
 }

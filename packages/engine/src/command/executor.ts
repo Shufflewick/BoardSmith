@@ -77,8 +77,8 @@ function executeCreate(game: Game, command: CreateElementCommand): CommandResult
     return { success: false, error: `Unknown element class: ${command.className}` };
   }
 
-  const element = parent.createInternal(ElementClass, command.name, command.attributes);
-  return { success: true, createdIds: [element.id] };
+  parent.createInternal(ElementClass, command.name, command.attributes);
+  return { success: true };
 }
 
 function executeCreateMany(game: Game, command: CreateManyCommand): CommandResult {
@@ -92,14 +92,12 @@ function executeCreateMany(game: Game, command: CreateManyCommand): CommandResul
     return { success: false, error: `Unknown element class: ${command.className}` };
   }
 
-  const createdIds: number[] = [];
   for (let i = 0; i < command.count; i++) {
     const attrs = command.attributesList?.[i] ?? {};
-    const element = parent.createInternal(ElementClass, command.name, attrs);
-    createdIds.push(element.id);
+    parent.createInternal(ElementClass, command.name, attrs);
   }
 
-  return { success: true, createdIds };
+  return { success: true };
 }
 
 function executeMove(game: Game, command: MoveCommand): CommandResult {

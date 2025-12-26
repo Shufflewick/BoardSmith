@@ -88,14 +88,6 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
   }
 
   /**
-   * Clear the rolling state after animation completes.
-   * @deprecated Use rollCount instead of rolling flag
-   */
-  stopRolling(): void {
-    this.rolling = false;
-  }
-
-  /**
    * Set the die to a specific value.
    * Useful for abilities like "flip to opposite" or manual setting.
    * @param n - The value to set (1 to sides)

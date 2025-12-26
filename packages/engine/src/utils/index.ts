@@ -17,13 +17,11 @@ export {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
-  computeDiff,
 } from './snapshot.js';
 
 export type {
   GameStateSnapshot,
   PlayerStateView,
-  StateDiff,
 } from './snapshot.js';
 
 // Replay system

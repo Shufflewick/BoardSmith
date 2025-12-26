@@ -40,13 +40,9 @@ export {
   Player,
   PlayerCollection,
   AbilityManager,
-  createAbilityDisplayMap,
 } from './player/index.js';
 
-export type {
-  Ability,
-  AbilityDisplayInfo,
-} from './player/index.js';
+export type { Ability } from './player/index.js';
 
 // Scoring system (tracks for dice/roll-and-write games)
 export {
@@ -192,7 +188,6 @@ export {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
-  computeDiff,
   createReplayFile,
   validateReplayFile,
   parseReplayFile,
@@ -203,7 +198,6 @@ export type {
   SerializeOptions,
   GameStateSnapshot,
   PlayerStateView,
-  StateDiff,
   ReplayFile,
 } from './utils/index.js';
 

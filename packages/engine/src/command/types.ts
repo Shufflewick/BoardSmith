@@ -21,8 +21,6 @@ import type { VisibilityMode } from './visibility.js';
  */
 export interface BaseCommand {
   type: string;
-  /** Timestamp when command was created */
-  timestamp?: number;
 }
 
 /**
@@ -208,6 +206,4 @@ export interface CommandResult {
   success: boolean;
   /** Error message if failed */
   error?: string;
-  /** IDs of created elements (for CREATE commands) */
-  createdIds?: number[];
 }
