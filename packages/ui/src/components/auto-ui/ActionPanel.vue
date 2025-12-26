@@ -803,7 +803,16 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
       onSelect = (elementId: number) => {
         const entry = refToChoice.get(elementId);
         if (entry !== undefined) {
-          setSelectionValue(selection.name, entry.value);
+          // For multiSelect, toggle the value instead of setting it
+          const multiSelect = currentMultiSelect.value;
+          if (multiSelect) {
+            // Find the display for this choice
+            const choice = choices.find((c: any) => c.value === entry.value);
+            const display = choice?.display || String(entry.value);
+            toggleMultiSelectValue(selection.name, entry.value, display);
+          } else {
+            setSelectionValue(selection.name, entry.value);
+          }
         }
       };
     }
