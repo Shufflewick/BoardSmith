@@ -621,25 +621,25 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
     return displayCache[cacheKey];
   }
 
-  if (!currentActionMeta.value) return String(value);
+  if (!currentActionMeta.value) return getDisplayLabel(value);
 
   // Find the selection definition
   const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
-  if (!selection) return String(value);
+  if (!selection) return getDisplayLabel(value);
 
   // For element selections, look up display in validElements
   if (selection.type === 'element' && selection.validElements) {
     const elem = selection.validElements.find(e => e.id === value);
-    return elem?.display || String(value);
+    return elem?.display || getDisplayLabel(value);
   }
 
   // For choice selections, look up display in choices
   if (selection.type === 'choice' && selection.choices) {
     const choice = selection.choices.find(c => c.value === value);
-    return choice?.display || String(value);
+    return choice?.display || getDisplayLabel(value);
   }
 
-  return String(value);
+  return getDisplayLabel(value);
 }
 
 // Cache a display value for a selection
@@ -652,21 +652,16 @@ function cacheSelectionDisplay(selectionName: string, value: unknown, display: s
  * Get display text for an accumulated value in a repeating selection
  */
 function getAccumulatedDisplay(value: unknown): string {
-  if (!currentSelection.value) return String(value);
+  if (!currentSelection.value) return getDisplayLabel(value);
 
   // For choice selections, look up display in choices
   if (currentSelection.value.type === 'choice') {
     const choices = repeatingState.value?.currentChoices || currentSelection.value.choices || [];
     const choice = choices.find((c: ChoiceWithRefs) => c.value === value);
     if (choice) return choice.display;
-
-    // Value might be an object with name property
-    if (value && typeof value === 'object' && 'name' in value) {
-      return (value as { name: string }).name;
-    }
   }
 
-  return String(value);
+  return getDisplayLabel(value);
 }
 
 // Clear a specific selection (and all subsequent selections)
@@ -1115,6 +1110,47 @@ function formatActionName(name: string): string {
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, str => str.toUpperCase())
     .trim();
+}
+
+/**
+ * Get a human-readable display label for any value.
+ * Priority: display property > name property > stringified primitive
+ * Never returns [object Object]
+ */
+function getDisplayLabel(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  // Handle primitives directly
+  if (typeof value !== 'object') {
+    return String(value);
+  }
+
+  // For objects, look for common display properties
+  const obj = value as Record<string, unknown>;
+
+  // Priority 1: display property (most explicit)
+  if (typeof obj.display === 'string') {
+    return obj.display;
+  }
+
+  // Priority 2: name property (common for elements/entities)
+  if (typeof obj.name === 'string') {
+    return obj.name;
+  }
+
+  // Priority 3: value property that's a primitive (like playerChoices returns)
+  if (obj.value !== undefined && typeof obj.value !== 'object') {
+    return String(obj.value);
+  }
+
+  // Fallback: JSON for debugging (better than [object Object])
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[Complex Object]';
+  }
 }
 
 /**

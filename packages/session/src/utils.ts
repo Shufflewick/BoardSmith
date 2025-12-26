@@ -8,7 +8,8 @@ import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types
 
 /**
  * Generate a default display string for a choice value.
- * Handles objects with name property, primitives, etc.
+ * Priority: display > name > label > JSON > String
+ * Never returns [object Object]
  */
 function defaultChoiceDisplay(value: unknown): string {
   if (value === null || value === undefined) {
@@ -20,20 +21,29 @@ function defaultChoiceDisplay(value: unknown): string {
     return String(value);
   }
 
-  // Objects: prefer 'name' or 'label' property if present
+  // Objects: prefer 'display', 'name', or 'label' property if present
   const obj = value as Record<string, unknown>;
+
+  // Priority 1: display property (most explicit, used by playerChoices)
+  if (typeof obj.display === 'string') {
+    return obj.display;
+  }
+
+  // Priority 2: name property (common for elements/entities)
   if (typeof obj.name === 'string') {
     return obj.name;
   }
+
+  // Priority 3: label property
   if (typeof obj.label === 'string') {
     return obj.label;
   }
 
-  // Fallback to JSON for objects without name/label
+  // Fallback to JSON for objects without display/name/label
   try {
     return JSON.stringify(value);
   } catch {
-    return String(value);
+    return '[Complex Object]';
   }
 }
 
