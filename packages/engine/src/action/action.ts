@@ -7,7 +7,6 @@ import type {
   ActionResult,
   Selection,
   ChoiceSelection,
-  PlayerSelection,
   ElementSelection,
   TextSelection,
   NumberSelection,
@@ -151,9 +150,9 @@ function wrapFilterWithHelpfulErrors<T>(
  * ```typescript
  * const askAction = Action.create('ask')
  *   .prompt('Ask another player for a card')
- *   .choosePlayer('target', {
+ *   .chooseFrom('target', {
  *     prompt: 'Choose a player to ask',
- *     filter: (p, ctx) => p !== ctx.player
+ *     choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
  *   })
  *   .chooseFrom('rank', {
  *     prompt: 'Choose a rank',
@@ -218,7 +217,6 @@ export class Action {
       prompt?: string;
       choices: T[] | ((context: ActionContext) => T[]);
       display?: (choice: T) => string;
-      skipIfOnlyOne?: boolean;
       optional?: boolean;
       validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
       /** Get board element references for highlighting (source/target) */
@@ -254,7 +252,6 @@ export class Action {
       prompt: options.prompt,
       choices: options.choices,
       display: options.display,
-      skipIfOnlyOne: options.skipIfOnlyOne,
       optional: options.optional,
       validate: options.validate,
       boardRefs: options.boardRefs,
@@ -269,34 +266,6 @@ export class Action {
   }
 
   /**
-   * Add a player selection
-   */
-  choosePlayer(
-    name: string,
-    options: {
-      prompt?: string;
-      filter?: (player: Player, context: ActionContext) => boolean;
-      skipIfOnlyOne?: boolean;
-      optional?: boolean;
-      validate?: (value: Player, args: Record<string, unknown>, context: ActionContext) => boolean | string;
-      boardRefs?: (player: Player, context: ActionContext) => ChoiceBoardRefs;
-    } = {}
-  ): this {
-    const selection: PlayerSelection = {
-      type: 'player',
-      name,
-      prompt: options.prompt,
-      filter: options.filter,
-      skipIfOnlyOne: options.skipIfOnlyOne,
-      optional: options.optional,
-      validate: options.validate,
-      boardRefs: options.boardRefs,
-    };
-    this.definition.selections.push(selection);
-    return this;
-  }
-
-  /**
    * Add an element selection (choose from board)
    */
   chooseElement<T extends GameElement>(
@@ -306,7 +275,6 @@ export class Action {
       elementClass?: ElementClass<T>;
       from?: GameElement | ((context: ActionContext) => GameElement);
       filter?: (element: GameElement, context: ActionContext) => boolean;
-      skipIfOnlyOne?: boolean;
       optional?: boolean;
       validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
       /** Display function for elements (for UI buttons) */
@@ -322,7 +290,6 @@ export class Action {
       elementClass: options.elementClass,
       from: options.from,
       filter: options.filter,
-      skipIfOnlyOne: options.skipIfOnlyOne,
       optional: options.optional,
       validate: options.validate,
       display: options.display as ElementSelection<T>['display'],
@@ -431,17 +398,6 @@ export class ActionExecutor {
       if (value === undefined) continue;
 
       switch (selection.type) {
-        case 'player': {
-          // If value is a number, resolve to actual Player object
-          if (typeof value === 'number') {
-            const player = this.game.players[value];
-            if (player) {
-              resolved[selection.name] = player;
-            }
-          }
-          break;
-        }
-
         case 'element': {
           // If value is a number, resolve to actual GameElement by ID
           if (typeof value === 'number') {
@@ -509,16 +465,6 @@ export class ActionExecutor {
         return choices;
       }
 
-      case 'player': {
-        const playerSel = selection as PlayerSelection;
-        let players = [...this.game.players];
-        if (playerSel.filter) {
-          const wrappedFilter = wrapFilterWithHelpfulErrors(playerSel.filter, selection.name);
-          players = players.filter((p) => wrappedFilter(p, context));
-        }
-        return players;
-      }
-
       case 'element': {
         const elementSel = selection as ElementSelection;
         const from =
@@ -552,22 +498,17 @@ export class ActionExecutor {
   }
 
   /**
-   * Check if a selection should be skipped (only one valid choice)
+   * Check if a selection should be auto-skipped.
+   * Note: Auto-skip is now handled by the UI's Auto mode toggle,
+   * so this always returns skip: false.
+   * @deprecated Auto-skip is handled by UI Auto mode
    */
   shouldSkip(
-    selection: Selection,
-    player: Player,
-    args: Record<string, unknown>
+    _selection: Selection,
+    _player: Player,
+    _args: Record<string, unknown>
   ): { skip: boolean; value?: unknown } {
-    if (!selection.skipIfOnlyOne) {
-      return { skip: false };
-    }
-
-    const choices = this.getChoices(selection, player, args);
-    if (choices.length === 1) {
-      return { skip: true, value: choices[0] };
-    }
-
+    // Auto-skip is now handled by the UI's Auto mode toggle
     return { skip: false };
   }
 
@@ -607,8 +548,8 @@ export class ActionExecutor {
       args,
     };
 
-    // Check if value is in valid choices (for choice/player/element)
-    if (selection.type === 'choice' || selection.type === 'player' || selection.type === 'element') {
+    // Check if value is in valid choices (for choice/element)
+    if (selection.type === 'choice' || selection.type === 'element') {
       const choices = this.getChoices(selection, player, args);
 
       // Handle multiSelect arrays - validate each value in the array
@@ -851,19 +792,6 @@ export class ActionExecutor {
       optional: selection.optional,
     };
 
-    // Handle skipIfOnlyOne
-    if (selection.skipIfOnlyOne) {
-      const choices = this.getChoices(selection, player, args);
-      if (choices.length === 1) {
-        selTrace.choiceCount = 1;
-        selTrace.skipped = true;
-        selectionTraces.push(selTrace);
-        // Auto-select the only choice and continue
-        const newArgs = { ...args, [selection.name]: choices[0] };
-        return this.traceSelectionPath(selections, player, newArgs, index + 1, selectionTraces);
-      }
-    }
-
     // Skip optional selections - they don't block availability
     if (selection.optional) {
       selectionTraces.push(selTrace);
@@ -965,9 +893,9 @@ export class ActionExecutor {
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
-    // For element and player selections, just check they have choices
+    // For element selections, just check they have choices
     // (don't do expensive path validation - trust their filter functions)
-    if (selection.type === 'element' || selection.type === 'player') {
+    if (selection.type === 'element') {
       const choices = this.getChoices(selection, player, args);
       if (choices.length === 0) {
         return false;

@@ -32,12 +32,11 @@ function formatCards(cards: Card[]): string {
 export function createAskAction(game: GoFishGame): ActionDefinition {
   return Action.create('ask')
     .prompt('Ask another player for cards')
-    .choosePlayer('target', {
+    .chooseFrom('target', {
       prompt: 'Choose a player to ask',
-      filter: (player, ctx) => player !== ctx.player,
-      skipIfOnlyOne: true, // Auto-select in 2-player games
-      boardRefs: (player, ctx) => {
-        const targetPlayer = player as GoFishPlayer;
+      choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
+      boardRefs: (choice: { value: number; display: string }, ctx) => {
+        const targetPlayer = game.players[choice.value] as GoFishPlayer;
         const hand = game.getPlayerHand(targetPlayer);
         return {
           targetRef: {
@@ -76,7 +75,8 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
     .condition((ctx) => game.canPlayerTakeAction(ctx.player as GoFishPlayer))
     .execute((args, ctx) => {
       const player = ctx.player as GoFishPlayer;
-      const target = args.target as GoFishPlayer;
+      const targetChoice = args.target as { value: number; display: string };
+      const target = game.players[targetChoice.value] as GoFishPlayer;
       const rank = args.rank as string;
 
       // Get hands for logging

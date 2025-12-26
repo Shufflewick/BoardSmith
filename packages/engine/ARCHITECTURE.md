@@ -131,7 +131,7 @@ Commands represent **low-level state mutations** that modify the game tree. They
 ```typescript
 // Define what players can do
 const askAction = Action.create('ask')
-  .choosePlayer('target')
+  .chooseFrom('target', { choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }) })
   .chooseFrom('rank', { choices: ['A', '2', '3', ...] })
   .execute((args, ctx) => {
     // Game logic here

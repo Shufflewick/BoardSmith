@@ -6,7 +6,7 @@ import type { ElementClass } from '../element/types.js';
 /**
  * Selection types for action arguments
  */
-export type SelectionType = 'element' | 'player' | 'choice' | 'text' | 'number';
+export type SelectionType = 'element' | 'choice' | 'text' | 'number';
 
 /**
  * Base selection configuration
@@ -19,8 +19,6 @@ export interface BaseSelection<T = unknown> {
    * Functions are evaluated at render time with the current game state.
    */
   prompt?: string | ((context: ActionContext) => string);
-  /** Skip if only one valid choice */
-  skipIfOnlyOne?: boolean;
   /** Make this selection optional */
   optional?: boolean;
   /** Validation function */
@@ -179,17 +177,6 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
 }
 
 /**
- * Select a player
- */
-export interface PlayerSelection extends BaseSelection<Player> {
-  type: 'player';
-  /** Filter which players can be selected */
-  filter?: (player: Player, context: ActionContext) => boolean;
-  /** Get board element references for highlighting (e.g., player's hand or avatar) */
-  boardRefs?: (player: Player, context: ActionContext) => ChoiceBoardRefs;
-}
-
-/**
  * Select an element from the board
  */
 export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T> {
@@ -237,7 +224,6 @@ export interface NumberSelection extends BaseSelection<number> {
  */
 export type Selection =
   | ChoiceSelection
-  | PlayerSelection
   | ElementSelection
   | TextSelection
   | NumberSelection;
@@ -351,7 +337,7 @@ export interface SelectionTrace {
   type: string;
   /** Number of available choices */
   choiceCount: number;
-  /** Whether skipIfOnlyOne triggered */
+  /** Whether auto-selected (single choice with Auto mode) */
   skipped?: boolean;
   /** Whether this selection is optional */
   optional?: boolean;

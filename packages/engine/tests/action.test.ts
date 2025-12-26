@@ -45,15 +45,17 @@ describe('Action Builder', () => {
     expect(action.selections[0].name).toBe('color');
   });
 
-  it('should add player selection', () => {
+  it('should add player selection using chooseFrom with playerChoices', () => {
+    // Players are now selected using chooseFrom with the playerChoices() helper
     const action = Action.create('test')
-      .choosePlayer('target', {
+      .chooseFrom('target', {
         prompt: 'Choose a player',
+        choices: [{ value: 0, display: 'Player 1' }, { value: 1, display: 'Player 2' }],
       })
       .execute(() => {});
 
     expect(action.selections).toHaveLength(1);
-    expect(action.selections[0].type).toBe('player');
+    expect(action.selections[0].type).toBe('choice');
   });
 
   it('should add element selection', () => {
@@ -98,7 +100,10 @@ describe('Action Builder', () => {
   it('should chain multiple selections', () => {
     const action = Action.create('ask')
       .prompt('Ask for cards')
-      .choosePlayer('target', { prompt: 'Who?' })
+      .chooseFrom('target', {
+        prompt: 'Who?',
+        choices: [{ value: 0, display: 'Player 1' }, { value: 1, display: 'Player 2' }],
+      })
       .chooseFrom('rank', {
         choices: ['A', 'K', 'Q', 'J'],
         prompt: 'What rank?',
@@ -157,21 +162,14 @@ describe('Action Executor', () => {
       expect(choices).toEqual([2]);
     });
 
-    it('should filter players', () => {
-      const action = Action.create('test')
-        .choosePlayer('target', {
-          filter: (p, ctx) => p !== ctx.player,
-        })
-        .execute(() => {});
+    it('should get player choices from playerChoices helper', () => {
+      // With playerChoices helper, players are just choice objects
+      const playerChoices = game.playerChoices({ excludeSelf: true, currentPlayer: game.players[0] });
 
-      const choices = executor.getChoices(
-        action.selections[0],
-        game.players[0],
-        {}
-      );
-
-      expect(choices).toHaveLength(2);
-      expect(choices).not.toContain(game.players[0]);
+      expect(playerChoices).toHaveLength(2);
+      expect(playerChoices.map(p => p.value)).not.toContain(0);
+      expect(playerChoices.map(p => p.value)).toContain(1);
+      expect(playerChoices.map(p => p.value)).toContain(2);
     });
 
     it('should filter elements by class', () => {
@@ -223,29 +221,12 @@ describe('Action Executor', () => {
   });
 
   describe('shouldSkip', () => {
-    it('should skip when only one choice and skipIfOnlyOne is true', () => {
+    it('should never skip selections (auto-select is handled by UI)', () => {
+      // skipIfOnlyOne was removed from the engine - auto-selection is now
+      // controlled by the UI's Auto toggle for a consistent experience
       const action = Action.create('test')
         .chooseFrom('choice', {
           choices: ['only'],
-          skipIfOnlyOne: true,
-        })
-        .execute(() => {});
-
-      const result = executor.shouldSkip(
-        action.selections[0],
-        game.players[0],
-        {}
-      );
-
-      expect(result.skip).toBe(true);
-      expect(result.value).toBe('only');
-    });
-
-    it('should not skip when multiple choices', () => {
-      const action = Action.create('test')
-        .chooseFrom('choice', {
-          choices: ['a', 'b'],
-          skipIfOnlyOne: true,
         })
         .execute(() => {});
 
@@ -397,15 +378,17 @@ describe('Action Executor', () => {
 
   describe('validateAction', () => {
     it('should validate complete action args', () => {
+      // Using playerChoices helper pattern
+      const playerChoices = game.playerChoices({ excludeSelf: true, currentPlayer: game.players[0] });
       const action = Action.create('ask')
-        .choosePlayer('target', {
-          filter: (p, ctx) => p !== ctx.player,
+        .chooseFrom('target', {
+          choices: playerChoices,
         })
         .chooseFrom('rank', { choices: ['A', 'K', 'Q'] })
         .execute(() => {});
 
       const result = executor.validateAction(action, game.players[0], {
-        target: game.players[1],
+        target: playerChoices[0], // First player choice (position 1)
         rank: 'A',
       });
 

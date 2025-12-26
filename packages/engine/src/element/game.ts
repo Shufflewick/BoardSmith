@@ -580,6 +580,47 @@ export class Game<
   }
 
   // ============================================
+  // Player Helpers
+  // ============================================
+
+  /**
+   * Get player choices for use with chooseFrom selection.
+   * Returns an array of choices with player position as value and name as display.
+   *
+   * @param options.excludeSelf - If true, excludes the current player from choices
+   * @param options.filter - Optional filter function to narrow down players
+   * @param options.currentPlayer - The current player (required if excludeSelf is true)
+   *
+   * @example
+   * ```typescript
+   * .chooseFrom('target', {
+   *   prompt: 'Choose a player',
+   *   choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
+   * })
+   * ```
+   */
+  playerChoices(options: {
+    excludeSelf?: boolean;
+    filter?: (player: P) => boolean;
+    currentPlayer?: Player;
+  } = {}): { value: number; display: string }[] {
+    let players = [...this.players] as P[];
+
+    if (options.excludeSelf && options.currentPlayer) {
+      players = players.filter(p => p.position !== options.currentPlayer!.position);
+    }
+
+    if (options.filter) {
+      players = players.filter(options.filter);
+    }
+
+    return players.map(p => ({
+      value: p.position,
+      display: p.name,
+    }));
+  }
+
+  // ============================================
   // Game Lifecycle
   // ============================================
 

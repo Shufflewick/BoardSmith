@@ -244,10 +244,9 @@ export interface SelectionFilter {
  */
 export interface SelectionMetadata {
   name: string;
-  type: 'choice' | 'player' | 'element' | 'number' | 'text';
+  type: 'choice' | 'element' | 'number' | 'text';
   prompt?: string;
   optional?: boolean;
-  skipIfOnlyOne?: boolean;
   // Type-specific properties
   choices?: ChoiceWithRefs[];
   min?: number;
@@ -272,13 +271,6 @@ export interface SelectionMetadata {
    * Key is the string representation of the dependent value (element ID, player position, etc.)
    */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
-  /** For player selections with boardRefs: list of players with their board element references */
-  playerChoices?: Array<{
-    position: number;
-    name: string;
-    sourceRef?: ElementRef;
-    targetRef?: ElementRef;
-  }>;
   /** For repeating choice selections: configuration for repeat behavior */
   repeat?: {
     /** Whether the selection has an onEach callback (requires server round-trip) */

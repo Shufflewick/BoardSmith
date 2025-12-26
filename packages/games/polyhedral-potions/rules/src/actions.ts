@@ -127,7 +127,6 @@ export function createCraftAction(game: PolyPotionsGame): ActionDefinition {
         if (adj === 'none') return 'No adjustment';
         return `${adj} to final value (uses ability)`;
       },
-      skipIfOnlyOne: true, // Auto-select if only 'none' is available
     })
     .execute((args, ctx) => {
       const player = ctx.player as PolyPotionsPlayer;
@@ -445,7 +444,6 @@ export function createUseRefreshAction(game: PolyPotionsGame): ActionDefinition 
         if (choice === 'keep') return 'Keep drafted die, refresh shelf';
         return 'Include drafted die in refresh';
       },
-      skipIfOnlyOne: true,
     })
     .execute((args, ctx) => {
       // IMPORTANT: Use ctx.game, not the closure 'game', to avoid stale references after hot-reload

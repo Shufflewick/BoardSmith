@@ -3,7 +3,7 @@
  * ActionPanel - Automatically generates action UI from action metadata
  *
  * Features:
- * - Generates UI for each selection type (choice, player, element, etc.)
+ * - Generates UI for each selection type (choice, element, number, text)
  * - Hover over choices to highlight elements on the board
  * - Click elements on board to filter choices
  * - Bidirectional interaction with the game board
@@ -12,6 +12,7 @@
  */
 import { ref, computed, watch, inject, reactive } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
+import DoneButton from './DoneButton.vue';
 
 /**
  * Helper to clear all keys from a reactive object while preserving reactivity.
@@ -68,7 +69,7 @@ export interface SelectionFilter {
 
 export interface Selection {
   name: string;
-  type: 'choice' | 'player' | 'element' | 'number' | 'text';
+  type: 'choice' | 'element' | 'number' | 'text';
   prompt?: string;
   optional?: boolean;
   choices?: ChoiceWithRefs[];
@@ -188,6 +189,10 @@ const multiSelectState = ref<{
 // This handles the race condition where availableActions hasn't updated yet from the server
 const lastExecutedAction = ref<string | null>(null);
 
+// Track current input values for number/text inputs (so Done button can submit them)
+const numberInputValue = ref<number | null>(null);
+const textInputValue = ref<string>('');
+
 /**
  * Type for the selection step function that handles repeating selections.
  * This must be injected by the parent component (e.g., GameShell) to handle
@@ -257,9 +262,6 @@ const currentActionMeta = computed(() => {
 function getAvailableChoices(selection: any): unknown[] {
   if (selection.type === 'choice') {
     return selection.choices || [];
-  } else if (selection.type === 'player') {
-    // Count other players (exclude current player)
-    return otherPlayers.value;
   } else if (selection.type === 'element') {
     return selection.validElements || [];
   }
@@ -275,23 +277,24 @@ function selectionNeedsInput(sel: { name: string }): boolean {
 
 // Current selection - returns next selection that needs user input
 // First returns required selections, then optional ones (so user can fill or skip them)
+// When Auto mode is enabled, single-choice selections are auto-filled
 const currentSelection = computed(() => {
   if (!currentActionMeta.value) return null;
+
+  const autoMode = props.autoEndTurn !== false;
 
   // First pass: find first required selection without value
   for (const sel of currentActionMeta.value.selections) {
     if (selectionNeedsInput(sel) && !sel.optional) {
-      // Check if we should skip this selection (skipIfOnlyOne)
-      if ((sel as any).skipIfOnlyOne) {
+      // Auto mode: auto-select if only one choice available
+      if (autoMode) {
         const choices = getAvailableChoices(sel);
 
         if (choices.length === 1) {
           // Auto-fill this selection and move to next
           const choice = choices[0];
 
-          if (sel.type === 'player') {
-            currentArgs.value[sel.name] = (choice as any).position;
-          } else if (sel.type === 'element') {
+          if (sel.type === 'element') {
             currentArgs.value[sel.name] = (choice as any).id;
             // Cache display for later lookup
             if ((choice as any).display) {
@@ -312,15 +315,13 @@ const currentSelection = computed(() => {
   // This gives the user a chance to fill optional selections before auto-executing
   for (const sel of currentActionMeta.value.selections) {
     if (selectionNeedsInput(sel) && sel.optional) {
-      // Check if we should skip this selection (skipIfOnlyOne)
-      if ((sel as any).skipIfOnlyOne) {
+      // Auto mode: auto-select if only one choice available
+      if (autoMode) {
         const choices = getAvailableChoices(sel);
         if (choices.length === 1) {
           // Auto-fill and continue
           const choice = choices[0];
-          if (sel.type === 'player') {
-            currentArgs.value[sel.name] = (choice as any).position;
-          } else if (sel.type === 'element') {
+          if (sel.type === 'element') {
             currentArgs.value[sel.name] = (choice as any).id;
             // Cache display for later lookup
             if ((choice as any).display) {
@@ -406,6 +407,9 @@ const displayableArgs = computed(() => {
 
     // Skip empty arrays (deselected multiSelect)
     if (Array.isArray(value) && value.length === 0) continue;
+
+    // Skip null values (skipped optional selections)
+    if (value === null) continue;
 
     result[key] = value;
   }
@@ -507,6 +511,43 @@ function skipOptionalSelection() {
   if (!currentSelection.value || !currentSelection.value.optional) return;
   // Mark as explicitly skipped by setting to null (not undefined)
   currentArgs.value[currentSelection.value.name] = null;
+
+  // Auto-execute if action is now complete (all required selections filled)
+  if (currentAction.value && isActionReady.value) {
+    executeAction(currentAction.value, { ...currentArgs.value });
+  }
+}
+
+// Submit number input value
+function submitNumberInput() {
+  if (!currentSelection.value || currentSelection.value.type !== 'number') return;
+  if (numberInputValue.value === null) return;
+
+  // Validate against min/max
+  const val = numberInputValue.value;
+  const min = currentSelection.value.min;
+  const max = currentSelection.value.max;
+  if (min !== undefined && val < min) return;
+  if (max !== undefined && val > max) return;
+
+  setSelectionValue(currentSelection.value.name, val);
+  numberInputValue.value = null;
+}
+
+// Submit text input value
+function submitTextInput() {
+  if (!currentSelection.value || currentSelection.value.type !== 'text') return;
+  if (!textInputValue.value) return;
+
+  // Validate against min/max length
+  const val = textInputValue.value;
+  const minLen = currentSelection.value.minLength;
+  const maxLen = currentSelection.value.maxLength;
+  if (minLen !== undefined && val.length < minLen) return;
+  if (maxLen !== undefined && val.length > maxLen) return;
+
+  setSelectionValue(currentSelection.value.name, val);
+  textInputValue.value = '';
 }
 
 // Select an element (from element selection buttons)
@@ -586,13 +627,6 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
   const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
   if (!selection) return String(value);
 
-  // For player selections, look up player name by position
-  if (selection.type === 'player') {
-    const playerPosition = value as number;
-    const player = props.players.find(p => p.position === playerPosition);
-    return player?.name || String(value);
-  }
-
   // For element selections, look up display in validElements
   if (selection.type === 'element' && selection.validElements) {
     const elem = selection.validElements.find(e => e.id === value);
@@ -661,6 +695,13 @@ const isActionReady = computed(() => {
   return currentSelection.value === null;
 });
 
+// Auto-execute when action becomes ready (handles auto-fill from currentSelection computed)
+watch(isActionReady, (ready) => {
+  if (ready && currentAction.value && !isExecuting.value) {
+    executeAction(currentAction.value, { ...currentArgs.value });
+  }
+});
+
 // Auto-start board-interactive actions on initial render
 // (For subsequent actions after flow steps, auto-start is handled in the availableActions watch below)
 watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
@@ -675,11 +716,10 @@ watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
 
     const firstSel = action.selections[0];
 
-    // Auto-start if first selection is element, choice with board refs, or player with board refs
+    // Auto-start if first selection is element or choice with board refs
     const isBoardInteractive =
       firstSel?.type === 'element' ||
-      (firstSel?.type === 'choice' && (firstSel as any).choices?.some((c: any) => c.sourceRef || c.targetRef)) ||
-      (firstSel?.type === 'player' && (firstSel as any).playerChoices?.length > 0);
+      (firstSel?.type === 'choice' && (firstSel as any).choices?.some((c: any) => c.sourceRef || c.targetRef));
 
     if (isBoardInteractive) {
       startAction(action.name);
@@ -851,35 +891,6 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
       }
     }
   }
-  // Handle player selections with board refs - support board-direct clicking
-  else if (selection.type === 'player') {
-    const playerSel = selection as any;
-
-    // Use pre-computed playerChoices from server (includes boardRefs already evaluated)
-    if (playerSel.playerChoices && playerSel.playerChoices.length > 0) {
-      const refToPlayer = new Map<number, any>();
-
-      playerSel.playerChoices.forEach((choice: any) => {
-        // Use targetRef for clickable elements (e.g., opponent's hand)
-        const ref = choice.targetRef || choice.sourceRef;
-        if (ref?.id !== undefined) {
-          refToPlayer.set(ref.id, choice);
-        }
-      });
-
-      validElems = Array.from(refToPlayer.entries()).map(([id, choice]) => ({
-        id,
-        ref: { id }
-      }));
-
-      onSelect = (elementId: number) => {
-        const playerChoice = refToPlayer.get(elementId);
-        if (playerChoice !== undefined) {
-          setSelectionValue(selection.name, playerChoice.position);
-        }
-      };
-    }
-  }
 
   if (validElems.length > 0 && onSelect) {
     boardInteraction.setValidElements(validElems, onSelect);
@@ -958,7 +969,7 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
   const dragged = boardInteraction.draggedElement;
 
-  // Case 1: Action already in progress with piece selected (e.g., skipIfOnlyOne triggered)
+  // Case 1: Action already in progress with piece selected (e.g., auto-select triggered)
   // Check if the dragged element matches the already-selected piece
   if (currentAction.value && currentActionMeta.value) {
     const firstSel = currentActionMeta.value.selections[0];
@@ -1522,9 +1533,6 @@ function clearBoardSelection() {
   boardInteraction?.selectElement(null);
 }
 
-const otherPlayers = computed(() => {
-  return props.players.filter(p => p.position !== props.playerPosition);
-});
 </script>
 
 <template>
@@ -1638,14 +1646,11 @@ const otherPlayers = computed(() => {
             <span v-if="filteredChoices.length === 0" class="no-choices">
               No options available
             </span>
-            <button
+            <DoneButton
               v-if="showMultiSelectDoneButton"
-              class="multi-select-done-btn"
               :disabled="!isMultiSelectReady"
               @click="confirmMultiSelect"
-            >
-              Done
-            </button>
+            />
           </div>
         </template>
 
@@ -1676,6 +1681,7 @@ const otherPlayers = computed(() => {
         <template v-else-if="currentSelection.type === 'choice' && currentSelection.choices">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons">
             <button
@@ -1688,23 +1694,18 @@ const otherPlayers = computed(() => {
             >
               {{ choice.display }}
             </button>
-            <span v-if="filteredChoices.length === 0" class="no-choices">
+            <button
+              v-if="currentSelection.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              Skip
+            </button>
+            <span v-if="filteredChoices.length === 0 && !currentSelection.optional" class="no-choices">
               No options available
             </span>
           </div>
         </template>
-
-        <!-- Player selection -->
-        <div v-else-if="currentSelection.type === 'player'" class="player-buttons">
-          <button
-            v-for="player in otherPlayers"
-            :key="player.position"
-            class="player-btn"
-            @click="setSelectionValue(currentSelection.name, player.position)"
-          >
-            {{ player.name }}
-          </button>
-        </div>
 
         <!-- Element selection -->
         <div v-else-if="currentSelection.type === 'element'" class="element-instruction">
@@ -1715,24 +1716,38 @@ const otherPlayers = computed(() => {
 
         <!-- Number input -->
         <div v-else-if="currentSelection.type === 'number'" class="number-input">
-          <input
-            type="number"
-            :min="currentSelection.min"
-            :max="currentSelection.max"
-            :step="currentSelection.integer ? 1 : 'any'"
-            @change="(e) => setSelectionValue(currentSelection!.name, Number((e.target as HTMLInputElement).value))"
-          />
+          <span v-if="currentSelection.min !== undefined || currentSelection.max !== undefined" class="input-hint">
+            ({{ currentSelection.min ?? '?' }}-{{ currentSelection.max ?? '?' }}{{ currentSelection.integer ? ', integer' : '' }})
+          </span>
+          <div class="input-row">
+            <input
+              type="number"
+              v-model.number="numberInputValue"
+              :min="currentSelection.min"
+              :max="currentSelection.max"
+              :step="currentSelection.integer ? 1 : 'any'"
+              @keyup.enter="submitNumberInput"
+            />
+            <DoneButton @click="submitNumberInput" />
+          </div>
         </div>
 
         <!-- Text input -->
         <div v-else-if="currentSelection.type === 'text'" class="text-input">
-          <input
-            type="text"
-            :minlength="currentSelection.minLength"
-            :maxlength="currentSelection.maxLength"
-            :pattern="currentSelection.pattern"
-            @change="(e) => setSelectionValue(currentSelection!.name, (e.target as HTMLInputElement).value)"
-          />
+          <span v-if="currentSelection.minLength !== undefined || currentSelection.maxLength !== undefined" class="input-hint">
+            ({{ currentSelection.minLength ?? '?' }}-{{ currentSelection.maxLength ?? '?' }} chars)
+          </span>
+          <div class="input-row">
+            <input
+              type="text"
+              v-model="textInputValue"
+              :minlength="currentSelection.minLength"
+              :maxlength="currentSelection.maxLength"
+              :pattern="currentSelection.pattern"
+              @keyup.enter="submitTextInput"
+            />
+            <DoneButton @click="submitTextInput" />
+          </div>
         </div>
       </div>
     </div>
@@ -1925,16 +1940,14 @@ const otherPlayers = computed(() => {
   white-space: nowrap;
 }
 
-.choice-buttons,
-.player-buttons {
+.choice-buttons {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
 }
 
-.choice-btn,
-.player-btn {
+.choice-btn {
   padding: 8px 14px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -1945,8 +1958,7 @@ const otherPlayers = computed(() => {
   transition: all 0.2s;
 }
 
-.choice-btn:hover,
-.player-btn:hover {
+.choice-btn:hover {
   border-color: #00d9ff;
   background: rgba(0, 217, 255, 0.2);
 }
@@ -2021,6 +2033,18 @@ const otherPlayers = computed(() => {
 .text-input input:focus {
   outline: none;
   border-color: #00d9ff;
+}
+
+.input-hint {
+  color: #888;
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .waiting-message {
@@ -2106,29 +2130,5 @@ const otherPlayers = computed(() => {
 
 .checkbox-label {
   flex: 1;
-}
-
-.multi-select-done-btn {
-  padding: 10px 24px;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.2s;
-  align-self: center;
-}
-
-.multi-select-done-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.4);
-}
-
-.multi-select-done-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background: rgba(128, 128, 128, 0.3);
 }
 </style>

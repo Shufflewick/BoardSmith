@@ -224,7 +224,7 @@ const isActionSelectable = computed(() => {
     return true;
   }
 
-  // Also check if this is the draggable selected element (for skipIfOnlyOne scenarios)
+  // Also check if this is the draggable selected element (for auto-select scenarios)
   if (boardInteraction.isDraggableSelectedElement(elementRef)) {
     return true;
   }

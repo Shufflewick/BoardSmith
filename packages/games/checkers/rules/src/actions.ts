@@ -115,7 +115,6 @@ export function createMoveAction(game: CheckersGame): ActionDefinition {
           notation: square?.notation,
         };
       },
-      skipIfOnlyOne: true,
     })
     // Step 2: Select a destination
     .chooseFrom<DestinationChoice>('destination', {

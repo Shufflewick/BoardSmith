@@ -66,7 +66,7 @@ export interface BoardInteractionState {
   /** Whether drag mode is active */
   isDragging: boolean;
 
-  /** Element that is selected and can be dragged (for skipIfOnlyOne scenarios) */
+  /** Element that is selected and can be dragged (for auto-select scenarios) */
   draggableSelectedElement: ElementRef | null;
 }
 
@@ -119,7 +119,7 @@ export interface BoardInteractionActions {
   /** Trigger drop on target (called by board when element is dropped) */
   triggerDrop: (target: { id?: number; name?: string; notation?: string }) => void;
 
-  /** Set the element that is selected and can be dragged (for skipIfOnlyOne) */
+  /** Set the element that is selected and can be dragged (for auto-select) */
   setDraggableSelectedElement: (element: ElementRef | null) => void;
 
   /** Check if an element is the draggable selected element */

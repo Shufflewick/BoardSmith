@@ -4,7 +4,6 @@ export type {
   Selection,
   BaseSelection,
   ChoiceSelection,
-  PlayerSelection,
   ElementSelection,
   TextSelection,
   NumberSelection,

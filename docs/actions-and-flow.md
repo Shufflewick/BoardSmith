@@ -48,15 +48,28 @@ Action.create('placeStone')
   })
 ```
 
-#### `choosePlayer` - Choose another player
+#### `playerChoices` - Choose a player with chooseFrom
+
+Use the `playerChoices()` helper on your Game class to generate player choices for use with `chooseFrom`:
 
 ```typescript
 Action.create('askPlayer')
-  .choosePlayer('target', {
+  .chooseFrom('target', {
     prompt: 'Who do you want to ask?',
-    filter: (player, ctx) => player !== ctx.player,  // Not self
+    choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
   })
+  .execute((args, ctx) => {
+    // playerChoices returns { value: number; display: string } objects
+    const choice = args.target as { value: number; display: string };
+    const targetPlayer = game.players[choice.value];
+    // ...
+  });
 ```
+
+The `playerChoices()` helper supports:
+- `excludeSelf: true` - Filter out the current player
+- `currentPlayer` - Required when using excludeSelf
+- `filter: (player) => boolean` - Custom filter function
 
 #### `chooseNumber` - Enter a number
 
@@ -210,37 +223,43 @@ From `packages/games/go-fish/rules/src/actions.ts`:
 export function createAskAction(game: GoFishGame): ActionDefinition {
   return Action.create('ask')
     .prompt('Ask another player for a card')
-    .choosePlayer('target', {
+    .chooseFrom('target', {
       prompt: 'Who do you want to ask?',
-      filter: (p, ctx) => p !== ctx.player && p.hand.count(Card) > 0,
+      choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
+      boardRefs: (choice: { value: number; display: string }, ctx) => {
+        const targetPlayer = game.players[choice.value] as GoFishPlayer;
+        return { targetRef: { id: game.getPlayerHand(targetPlayer).id } };
+      },
     })
     .chooseFrom<string>('rank', {
       prompt: 'What rank do you want?',
-      choices: (ctx) => {
-        const player = ctx.player as GoFishPlayer;
-        const ranks = new Set<string>();
-        for (const card of player.hand.all(Card)) {
-          ranks.add(card.rank);
-        }
-        return [...ranks];
+      choices: (ctx) => game.getPlayerRanks(ctx.player as GoFishPlayer),
+      display: (rank) => {
+        const names: Record<string, string> = {
+          'A': 'Aces', '2': 'Twos', '3': 'Threes', '4': 'Fours',
+          '5': 'Fives', '6': 'Sixes', '7': 'Sevens', '8': 'Eights',
+          '9': 'Nines', '10': 'Tens', 'J': 'Jacks', 'Q': 'Queens', 'K': 'Kings'
+        };
+        return names[rank] ?? rank;
       },
     })
     .execute((args, ctx) => {
       const player = ctx.player as GoFishPlayer;
-      const target = args.target as GoFishPlayer;
+      const targetChoice = args.target as { value: number; display: string };
+      const target = game.players[targetChoice.value] as GoFishPlayer;
       const rank = args.rank as string;
 
-      const matchingCards = target.hand.all(Card).filter(c => c.rank === rank);
+      const matchingCards = game.getCardsOfRank(target, rank);
 
       if (matchingCards.length > 0) {
         for (const card of matchingCards) {
-          card.putInto(player.hand);
+          card.putInto(game.getPlayerHand(player));
         }
         game.message(`${player.name} got ${matchingCards.length} ${rank}(s) from ${target.name}!`);
-        game.setPlayerGoesAgain(true);
+        // Player gets another turn when they receive cards
       } else {
         game.message(`${target.name} says "Go Fish!"`);
-        game.setPlayerGoesAgain(false);
+        // Player draws from pond
       }
 
       return { success: true };

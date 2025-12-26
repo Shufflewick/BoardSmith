@@ -113,20 +113,6 @@ export function buildActionMetadata(
           type: 'element',
           values: selMeta.validElements.map(ve => ve.id),
         });
-      } else if (selection.type === 'player') {
-        // Get filtered players
-        const ctx = { game, player, args: {} };
-        const playerSel = selection as any;
-        const players = game.players.filter((p: Player) => {
-          if (playerSel.filter) {
-            return playerSel.filter(p, ctx);
-          }
-          return true;
-        });
-        selectionValues.set(selection.name, {
-          type: 'player',
-          values: players.map((p: Player) => p.position),
-        });
       } else if (selection.type === 'choice' && selMeta.choices) {
         selectionValues.set(selection.name, {
           type: 'choice',
@@ -167,7 +153,6 @@ function buildSelectionMetadata(
     type: selection.type,
     prompt: evaluatedPrompt,
     optional: selection.optional,
-    skipIfOnlyOne: selection.skipIfOnlyOne,
   };
 
   // Type-specific properties
@@ -190,8 +175,6 @@ function buildSelectionMetadata(
             let argValue: unknown = depValue;
             if (dependentInfo.type === 'element' && typeof depValue === 'number') {
               argValue = game.getElementById(depValue);
-            } else if (dependentInfo.type === 'player' && typeof depValue === 'number') {
-              argValue = game.players[depValue];
             }
 
             const argsWithDep = { [choiceSel.dependsOn]: argValue };
@@ -248,8 +231,6 @@ function buildSelectionMetadata(
               let argValue: unknown = depValue;
               if (dependentInfo.type === 'element' && typeof depValue === 'number') {
                 argValue = game.getElementById(depValue);
-              } else if (dependentInfo.type === 'player' && typeof depValue === 'number') {
-                argValue = game.players[depValue];
               }
 
               const argsWithDep = { [choiceSel.dependsOn]: argValue };
@@ -346,51 +327,6 @@ function buildSelectionMetadata(
             };
           }
         }
-      }
-      break;
-    }
-
-    case 'player': {
-      const playerSel = selection as any;
-
-      // If boardRefs provided, evaluate them for each player
-      if (playerSel.boardRefs) {
-        const players = game.players.filter((p: Player) => {
-          // Apply filter if provided
-          if (playerSel.filter) {
-            return playerSel.filter(p, ctx);
-          }
-          return true;
-        });
-
-        // Build player choices with their board refs
-        // IMPORTANT: Convert to plain array first, then map to plain objects for proper JSON serialization
-        const playerArray = Array.from(players);
-        const choices = [];
-
-        for (const p of playerArray) {
-          try {
-            const refs = playerSel.boardRefs(p, ctx);
-
-            // Create a plain object with all properties
-            const choice: any = {
-              position: p.position,
-              name: p.name,
-            };
-
-            if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
-            if (refs.targetRef) choice.targetRef = refs.targetRef;
-
-            choices.push(choice);
-          } catch (err) {
-            choices.push({
-              position: p.position,
-              name: p.name,
-            });
-          }
-        }
-
-        base.playerChoices = choices;
       }
       break;
     }
