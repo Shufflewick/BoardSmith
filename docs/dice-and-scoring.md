@@ -228,41 +228,6 @@ abilities.fromJSON(data);
 AbilityManager.fromJSON(data);              // Static factory
 ```
 
-### Display Info
-
-Create UI-friendly ability descriptions:
-
-```typescript
-import { createAbilityDisplayMap, type AbilityDisplayInfo } from '@boardsmith/engine';
-
-const ABILITY_INFO = createAbilityDisplayMap<MyAbility>({
-  'reroll': {
-    icon: '🎲',
-    label: 'Reroll',
-    color: '#2196F3',
-    description: 'Reroll up to 2 dice'
-  },
-  'flip': {
-    icon: '↻',
-    label: 'Flip',
-    color: '#9C27B0',
-    description: 'Flip a die to its opposite face'
-  },
-  'bonus': {
-    icon: '+',
-    label: 'Bonus',
-    color: '#4CAF50',
-    description: 'Add +1 or +2 to your total'
-  },
-  'skip': {
-    icon: '⏭',
-    label: 'Skip',
-    color: '#FF9800',
-    description: 'Skip this round'
-  },
-});
-```
-
 ## Scoring Tracks
 
 BoardSmith provides abstract track classes for dice/roll-and-write games where players record values on scoring sheets.
