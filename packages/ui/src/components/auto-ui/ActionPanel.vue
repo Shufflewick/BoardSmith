@@ -697,27 +697,25 @@ watch(isActionReady, (ready) => {
   }
 });
 
-// Auto-start board-interactive actions on initial render
+// Auto-start single actions on initial render when auto mode is enabled
 // (For subsequent actions after flow steps, auto-start is handled in the availableActions watch below)
 watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
-  if (!myTurn || currentAction.value || actions.length === 0) return;
+  if (!myTurn || currentAction.value || actions.length === 0 || isExecuting.value) return;
 
-  // If there's exactly one action and it has board-interactive selections, auto-start it
-  if (actions.length === 1) {
+  // Auto mode: when only one action is available, streamline the UX
+  if (props.autoEndTurn !== false && actions.length === 1) {
     const action = actions[0];
 
     // Don't auto-start an action we just executed - wait for availableActions to update
     if (action.name === lastExecutedAction.value) return;
 
-    const firstSel = action.selections[0];
-
-    // Auto-start if first selection is element or choice with board refs
-    const isBoardInteractive =
-      firstSel?.type === 'element' ||
-      (firstSel?.type === 'choice' && (firstSel as any).choices?.some((c: any) => c.sourceRef || c.targetRef));
-
-    if (isBoardInteractive) {
+    // If action has selections, auto-start it (show first selection prompt)
+    if (action.selections.length > 0) {
       startAction(action.name);
+    }
+    // If action has no selections, auto-execute it
+    else {
+      executeAction(action.name, {});
     }
   }
 }, { immediate: true });
@@ -725,6 +723,12 @@ watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
 // Reset current action if it's no longer available (e.g., executed from custom UI)
 // Also handles auto-start/auto-execute for single available actions when auto mode is enabled
 watch(() => props.availableActions, (actions, oldActions) => {
+  // Clear lastExecutedAction on any availableActions update from server
+  // This is safe because: if we just executed and server hasn't responded yet,
+  // currentAction is still set (preventing re-execution). Once server responds
+  // with new availableActions, it's a new turn/state and we should allow auto-start.
+  lastExecutedAction.value = null;
+
   // Determine if we need to clear action state
   let shouldClear = false;
 
@@ -751,18 +755,6 @@ watch(() => props.availableActions, (actions, oldActions) => {
     boardInteraction?.clear();
   }
 
-  // Clear lastExecutedAction when the action is no longer available OR when it
-  // re-appears after being unavailable (indicating a new invocation cycle)
-  if (lastExecutedAction.value) {
-    if (!actions.includes(lastExecutedAction.value)) {
-      // Action no longer available - clear tracking
-      lastExecutedAction.value = null;
-    } else if (oldActions && !oldActions.includes(lastExecutedAction.value)) {
-      // Action was unavailable but is now available again - new invocation cycle
-      lastExecutedAction.value = null;
-    }
-  }
-
   // Auto mode: when only one action is available, streamline the UX
   if (
     props.autoEndTurn !== false && // Auto mode enabled (default: true)
@@ -771,21 +763,16 @@ watch(() => props.availableActions, (actions, oldActions) => {
     !currentAction.value &&
     !isExecuting.value
   ) {
-    const actionName = actions[0];
-
-    // Don't auto-start an action we just executed - wait for availableActions to update
-    if (actionName === lastExecutedAction.value) return;
-
-    const actionMeta = actionsWithMetadata.value.find(a => a.name === actionName);
+    const actionMeta = actionsWithMetadata.value.find(a => a.name === actions[0]);
 
     if (actionMeta) {
       // If action has selections, auto-start it (show first selection prompt)
       if (actionMeta.selections.length > 0) {
-        startAction(actionName);
+        startAction(actionMeta.name);
       }
       // If action has no selections, auto-execute it
       else {
-        executeAction(actionName, {});
+        executeAction(actionMeta.name, {});
       }
     }
   }
