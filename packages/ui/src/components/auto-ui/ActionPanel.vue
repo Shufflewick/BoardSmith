@@ -700,14 +700,12 @@ watch(isActionReady, (ready) => {
 // Auto-start single actions on initial render when auto mode is enabled
 // (For subsequent actions after flow steps, auto-start is handled in the availableActions watch below)
 watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
+  // Skip if not my turn, already have an action, no actions available, or currently executing
   if (!myTurn || currentAction.value || actions.length === 0 || isExecuting.value) return;
 
   // Auto mode: when only one action is available, streamline the UX
   if (props.autoEndTurn !== false && actions.length === 1) {
     const action = actions[0];
-
-    // Don't auto-start an action we just executed - wait for availableActions to update
-    if (action.name === lastExecutedAction.value) return;
 
     // If action has selections, auto-start it (show first selection prompt)
     if (action.selections.length > 0) {
@@ -755,7 +753,9 @@ watch(() => props.availableActions, (actions, oldActions) => {
     boardInteraction?.clear();
   }
 
-  // Auto mode: when only one action is available, streamline the UX
+  // Auto mode: when only one action is available with selections, auto-start it
+  // NOTE: Auto-execute for no-selection actions is handled by the [isMyTurn, actionsWithMetadata] watch
+  // to avoid double-execution when both watches fire for the same state update
   if (
     props.autoEndTurn !== false && // Auto mode enabled (default: true)
     props.isMyTurn &&
@@ -765,15 +765,10 @@ watch(() => props.availableActions, (actions, oldActions) => {
   ) {
     const actionMeta = actionsWithMetadata.value.find(a => a.name === actions[0]);
 
-    if (actionMeta) {
-      // If action has selections, auto-start it (show first selection prompt)
-      if (actionMeta.selections.length > 0) {
-        startAction(actionMeta.name);
-      }
-      // If action has no selections, auto-execute it
-      else {
-        executeAction(actionMeta.name, {});
-      }
+    // Only auto-start actions WITH selections here
+    // No-selection actions are auto-executed by the other watch
+    if (actionMeta && actionMeta.selections.length > 0) {
+      startAction(actionMeta.name);
     }
   }
 });
@@ -1508,7 +1503,18 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
 }
 
 async function executeAction(actionName: string, args: Record<string, unknown>) {
+  // CRITICAL: Atomic check-and-set MUST happen first, before any other code
+  // This prevents race conditions when multiple reactive paths trigger in the same tick
+  if (isExecuting.value) {
+    return;
+  }
   isExecuting.value = true;
+
+  // Extra safeguard: don't execute if it's not our turn
+  if (!props.isMyTurn) {
+    isExecuting.value = false;  // Reset since we're not actually executing
+    return;
+  }
   try {
     // Filter out null values (explicitly skipped optional selections)
     // Server expects undefined for missing optional args, not null
