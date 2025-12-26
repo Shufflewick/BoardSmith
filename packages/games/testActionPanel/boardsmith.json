@@ -1,0 +1,12 @@
+{
+  "name": "test-action-panel",
+  "displayName": "Test Action Panel",
+  "version": "0.1.0",
+  "minPlayers": 1,
+  "maxPlayers": 2,
+  "rulesPackage": "@boardsmith/test-action-panel-rules",
+  "paths": {
+    "rules": "./rules/src",
+    "ui": "./ui"
+  }
+}
