@@ -790,12 +790,32 @@ export class Game<
       // If zone has hidden or count-only visibility, handle children specially
       if (zoneVisibility) {
         if (zoneVisibility.mode === 'hidden' || zoneVisibility.mode === 'count-only') {
-          // Hidden and count-only modes: show count but omit children entirely
-          // For truly hidden zones (like decks), children should not be serialized
-          // Show count but not actual children
+          // Hidden and count-only modes: create anonymized placeholders for children
+          // This allows the UI to render the correct number and type of elements
+          // without revealing their identity (no real IDs or names that could be used to cheat)
+          const hiddenChildren: ElementJSON[] = [];
+          if (json.children) {
+            for (let i = 0; i < json.children.length; i++) {
+              const childJson = json.children[i];
+              // Only include $-prefixed system attributes (for rendering info like $images, $type)
+              const systemAttrs: Record<string, unknown> = { __hidden: true };
+              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
+                if (key.startsWith('$')) {
+                  systemAttrs[key] = value;
+                }
+              }
+              hiddenChildren.push({
+                className: childJson.className,
+                // Use negative index-based IDs to prevent correlation with real element IDs
+                id: -(element._t.id * 1000 + i),
+                attributes: systemAttrs,
+                // Don't include name - could reveal card identity
+              });
+            }
+          }
           return {
             ...json,
-            children: undefined,
+            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
         } else if (zoneVisibility.mode === 'owner' && element.player?.position !== visibilityPosition) {

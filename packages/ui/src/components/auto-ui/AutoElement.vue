@@ -1296,6 +1296,27 @@ const cardBackPreviewData = computed(() => {
             @element-click="handleChildClick"
           />
         </div>
+        <!-- Show card backs when we have childCount but no visible children (hidden contents) -->
+        <div v-else-if="element.childCount && element.childCount > 0" class="space-children has-overlap">
+          <div
+            v-for="i in element.childCount"
+            :key="i"
+            class="card-back-small"
+            :class="{ 'has-image': childBackImage }"
+            :style="{ '--card-index': i - 1, '--card-count': element.childCount }"
+          >
+            <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
+            <div
+              v-else-if="childBackImage?.type === 'sprite'"
+              class="card-image card-sprite"
+              :style="getSpriteStyle(childBackImage)"
+            ></div>
+            <div v-else class="card-back-pattern"></div>
+          </div>
+        </div>
+        <div v-else class="space-empty">
+          <span class="empty-text">Empty</span>
+        </div>
       </div>
     </template>
   </div>
@@ -1938,6 +1959,15 @@ const cardBackPreviewData = computed(() => {
 
 .space-children.has-overlap > *:last-child {
   margin-right: 0;
+}
+
+/* Empty space state */
+.space-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  min-height: 60px;
 }
 
 /* Space fan layout */
