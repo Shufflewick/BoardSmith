@@ -89,9 +89,9 @@ async function loadGameDefinition(rulesPath: string, tempDir: string): Promise<G
     logLevel: 'silent',
   });
 
-  // Import the bundled module
+  // Import the bundled module with cache-busting to ensure fresh load
   const moduleUrl = pathToFileURL(bundlePath).href;
-  const module = await import(moduleUrl);
+  const module = await import(`${moduleUrl}?t=${Date.now()}`);
 
   if (!module.gameDefinition) {
     throw new Error('Rules module must export a gameDefinition');
