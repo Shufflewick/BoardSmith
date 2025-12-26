@@ -767,14 +767,11 @@ watch(() => props.availableActions, (actions, oldActions) => {
   ) {
     const actionMeta = actionsWithMetadata.value.find(a => a.name === actions[0]);
 
-    if (actionMeta) {
-      if (actionMeta.selections.length > 0) {
-        startAction(actionMeta.name);
-      } else {
-        // Auto-execute no-selection actions (like endTurn)
-        // The isExecuting guard in executeAction prevents double-execution
-        executeAction(actionMeta.name, {});
-      }
+    // Only auto-start actions WITH selections here
+    // No-selection actions are handled by the isMyTurn/actionsWithMetadata watch
+    // to avoid double-execution when both watches fire for the same state update
+    if (actionMeta && actionMeta.selections.length > 0) {
+      startAction(actionMeta.name);
     }
   }
 });
@@ -883,11 +880,19 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
 }, { immediate: true });
 
 // Watch for board element selection - handle element selection from board clicks
+// This watch handles auto-starting actions when clicking elements before starting an action.
+// When an action is already in progress, triggerElementSelect handles selection via onElementSelect callback.
 watch(() => boardInteraction?.selectedElement, (selected) => {
   if (!selected) return;
 
-  // If we're configuring an action with an element selection, update the arg
+  // If we're configuring an action with an element selection, check if triggerElementSelect will handle it
   if (currentSelection.value && currentSelection.value.type === 'element') {
+    // If onElementSelect callback is set, triggerElementSelect will handle this selection
+    // Don't duplicate by also calling setSelectionValue here
+    if (boardInteraction?.onElementSelect) {
+      return;
+    }
+
     // Check if this element was already selected in a previous selection
     // (prevents double-selection bug when clicking elements)
     const alreadySelected = Object.values(currentArgs.value).includes(selected.id);
@@ -911,6 +916,11 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
   // If not configuring, auto-start the first action that has an element selection
   // This handles clicking a piece on the board before clicking the action button
+  // Guard: don't auto-start if it's not my turn or if currently executing
+  if (!props.isMyTurn || isExecuting.value) {
+    return;
+  }
+
   const elementAction = actionsWithMetadata.value.find(action => {
     const firstSel = action.selections[0];
     if (firstSel?.type !== 'element') return false;
