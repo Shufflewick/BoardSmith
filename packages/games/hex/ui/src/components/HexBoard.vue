@@ -96,6 +96,17 @@ function isValidTarget(cell: Cell): boolean {
   return !cell.children?.length;
 }
 
+// Check if a cell is being hovered via ActionPanel
+function isHoveredFromPanel(cell: Cell): boolean {
+  if (!boardInteraction) return false;
+  // Create element ref for this cell
+  const elementRef = {
+    id: cell.id,
+    notation: `${cell.attributes?.q},${cell.attributes?.r}`,
+  };
+  return boardInteraction.isHighlighted(elementRef);
+}
+
 // Handle cell click - pass the cell element to the action
 async function handleCellClick(cell: Cell) {
   if (!isValidTarget(cell) || !props.action) return;
@@ -240,7 +251,8 @@ watch(
         class="hex-cell-group"
         :class="{
           'valid-target': isValidTarget(cell),
-          'has-stone': (cell.children?.length ?? 0) > 0
+          'has-stone': (cell.children?.length ?? 0) > 0,
+          'panel-hovered': isHoveredFromPanel(cell)
         }"
         :transform="`translate(${getHexPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).x}, ${getHexPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).y})`"
         @click="handleCellClick(cell)"
@@ -394,6 +406,21 @@ watch(
 
 .hex-cell-group.has-stone .hex-inner {
   fill: rgba(5, 10, 15, 0.9);
+}
+
+/* Panel hover highlight - when hovering over a space in ActionPanel */
+.hex-cell-group.panel-hovered .hex-border {
+  stroke: #ffcc00;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 8px rgba(255, 204, 0, 0.6));
+}
+
+.hex-cell-group.panel-hovered .hex-inner {
+  fill: rgba(255, 204, 0, 0.25);
+}
+
+.hex-cell-group.panel-hovered .hex-coord {
+  fill: rgba(255, 204, 0, 0.9);
 }
 
 /* Stone styles */
