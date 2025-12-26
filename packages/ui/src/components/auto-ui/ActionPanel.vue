@@ -697,8 +697,10 @@ watch(isActionReady, (ready) => {
   }
 });
 
-// Auto-start single actions on initial render when auto mode is enabled
-// (For subsequent actions after flow steps, auto-start is handled in the availableActions watch below)
+// Auto-start/execute single actions when auto mode is enabled
+// This watch handles initial render and when isMyTurn changes
+// The availableActions watch below handles subsequent state updates
+// Both watches use isExecuting guard to prevent double-execution
 watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
   // Skip if not my turn, already have an action, no actions available, or currently executing
   if (!myTurn || currentAction.value || actions.length === 0 || isExecuting.value) return;
@@ -753,9 +755,9 @@ watch(() => props.availableActions, (actions, oldActions) => {
     boardInteraction?.clear();
   }
 
-  // Auto mode: when only one action is available with selections, auto-start it
-  // NOTE: Auto-execute for no-selection actions is handled by the [isMyTurn, actionsWithMetadata] watch
-  // to avoid double-execution when both watches fire for the same state update
+  // Auto mode: when only one action is available, streamline the UX
+  // - Actions with selections: auto-start (show first selection prompt)
+  // - Actions without selections: auto-execute immediately
   if (
     props.autoEndTurn !== false && // Auto mode enabled (default: true)
     props.isMyTurn &&
@@ -765,10 +767,14 @@ watch(() => props.availableActions, (actions, oldActions) => {
   ) {
     const actionMeta = actionsWithMetadata.value.find(a => a.name === actions[0]);
 
-    // Only auto-start actions WITH selections here
-    // No-selection actions are auto-executed by the other watch
-    if (actionMeta && actionMeta.selections.length > 0) {
-      startAction(actionMeta.name);
+    if (actionMeta) {
+      if (actionMeta.selections.length > 0) {
+        startAction(actionMeta.name);
+      } else {
+        // Auto-execute no-selection actions (like endTurn)
+        // The isExecuting guard in executeAction prevents double-execution
+        executeAction(actionMeta.name, {});
+      }
     }
   }
 });
