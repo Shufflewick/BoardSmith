@@ -39,11 +39,21 @@ export function createDiscardAction(game: CribbageGame): ActionDefinition {
       const game = ctx.game as CribbageGame;
       const player = ctx.player as CribbagePlayer;
       const cardNames = args.cards as string[];
+      const hand = game.getPlayerHand(player);
 
-      const cards = cardNames.map(name => game.first(Card, name)).filter((c): c is Card => c !== undefined);
+      // Find cards by name from the player's hand (not globally)
+      // This prevents a bug where cards already in the crib could be "found" and moved again
+      const handCards = [...hand.all(Card)];
+      const cards: Card[] = [];
+      for (const name of cardNames) {
+        const card = handCards.find(c => c.name === name);
+        if (card) {
+          cards.push(card);
+        }
+      }
 
       if (cards.length !== 2) {
-        return { success: false, error: 'Must discard exactly 2 cards' };
+        return { success: false, error: 'Must discard exactly 2 cards from your hand' };
       }
 
       cards.forEach(card => card.putInto(game.crib));

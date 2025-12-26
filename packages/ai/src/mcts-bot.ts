@@ -455,6 +455,28 @@ export class MCTSBot<G extends Game = Game> {
 
     const results: Record<string, unknown>[] = [];
 
+    // Check for multiSelect - need to generate combinations
+    const multiSelect = (selection as any).multiSelect;
+    if (multiSelect) {
+      const { min, max } = this.parseMultiSelect(multiSelect);
+      const combinations = this.generateCombinations(choices, min, max, selection);
+
+      // Limit combinations to avoid explosion
+      const maxCombos = 50;
+      const sampledCombos = combinations.length > maxCombos
+        ? this.sampleChoices(combinations, maxCombos)
+        : combinations;
+
+      for (const combo of sampledCombos) {
+        const newArgs = { ...currentArgs, [selection.name]: combo };
+        const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs);
+        results.push(...subResults);
+      }
+
+      return results;
+    }
+
+    // Single-select handling
     // Limit branching factor to avoid combinatorial explosion
     const maxChoices = 20;
     const sampledChoices = choices.length > maxChoices
@@ -470,6 +492,71 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     return results;
+  }
+
+  /**
+   * Parse multiSelect config into min/max values
+   */
+  private parseMultiSelect(multiSelect: unknown): { min: number; max: number } {
+    if (typeof multiSelect === 'number') {
+      return { min: 1, max: multiSelect };
+    }
+    if (typeof multiSelect === 'object' && multiSelect !== null) {
+      const config = multiSelect as { min?: number; max?: number };
+      return {
+        min: config.min ?? 1,
+        max: config.max ?? Infinity,
+      };
+    }
+    return { min: 1, max: Infinity };
+  }
+
+  /**
+   * Generate all combinations of choices for multiSelect
+   */
+  private generateCombinations(
+    choices: unknown[],
+    min: number,
+    max: number,
+    selection: Selection
+  ): unknown[][] {
+    const results: unknown[][] = [];
+
+    // For exact count (min === max), just generate combinations of that size
+    if (min === max) {
+      this.combinationsOfSize(choices, min, [], 0, results, selection);
+    } else {
+      // Generate combinations of all valid sizes
+      for (let size = min; size <= Math.min(max, choices.length); size++) {
+        this.combinationsOfSize(choices, size, [], 0, results, selection);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Generate combinations of a specific size (recursive helper)
+   */
+  private combinationsOfSize(
+    choices: unknown[],
+    size: number,
+    current: unknown[],
+    startIndex: number,
+    results: unknown[][],
+    selection: Selection
+  ): void {
+    if (current.length === size) {
+      // Serialize each choice in the combination
+      results.push(current.map(c => this.serializeChoice(c, selection)));
+      return;
+    }
+
+    for (let i = startIndex; i < choices.length; i++) {
+      current.push(choices[i]);
+      this.combinationsOfSize(choices, size, current, i + 1, results, selection);
+      current.pop();
+    }
   }
 
   /**
@@ -489,9 +576,6 @@ export class MCTSBot<G extends Game = Game> {
    * Serialize a choice value for action args
    */
   private serializeChoice(choice: unknown, selection: Selection): unknown {
-    if (selection.type === 'player') {
-      return (choice as Player).position;
-    }
     if (selection.type === 'element') {
       return (choice as { _t: { id: number } })._t.id;
     }
