@@ -11,10 +11,6 @@ export { default as Toast } from './components/Toast.vue';
 
 // Helper components
 export {
-  Draggable,
-  DiceRoller,
-  CardFan,
-  DeckPile,
   FlyingCardsOverlay,
   ZoomPreviewOverlay,
 } from './components/helpers/index.js';
@@ -62,13 +58,6 @@ export {
   prefersReducedMotion,
   type AnimationOptions,
 } from './composables/useElementAnimation.js';
-
-export {
-  useCardFlip,
-  useCardReveal,
-  type CardFlipOptions,
-  type CardFlipReturn,
-} from './composables/useCardFlip.js';
 
 export {
   useFlyingCards,
@@ -172,15 +161,6 @@ export {
   type FLIPAnimationOptions,
   type FLIPAnimationReturn,
 } from './composables/useFLIPAnimation.js';
-
-// Auto-fly animation utilities (unified element removal animations)
-export {
-  useAutoFlyAnimation,
-  getElementDataAttrs,
-  type CapturedElementData,
-  type WatchZoneOptions,
-  type AutoFlyAnimationReturn,
-} from './composables/useAutoFlyAnimation.js';
 
 // Theming
 export {

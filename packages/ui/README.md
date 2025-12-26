@@ -144,66 +144,6 @@ Features:
 
 ## Helper Components
 
-### CardFan
-
-Display cards in a fan layout:
-
-```vue
-<CardFan
-  :cards="player.hand"
-  :selectable="isMyTurn"
-  :selected="selectedCardIds"
-  @select="handleCardSelect"
->
-  <template #card="{ card }">
-    <MyCard :card="card" />
-  </template>
-</CardFan>
-```
-
-**Props:**
-- `cards` - Array of card elements
-- `selectable` - Allow selection (default: false)
-- `selected` - Array of selected card IDs
-- `spread` - Fan spread angle (default: 15)
-- `overlap` - Card overlap ratio (default: 0.5)
-
-### DeckPile
-
-Display a deck with count:
-
-```vue
-<DeckPile
-  :count="deck.count()"
-  :top-card="deck.first()"
-  :clickable="canDraw"
-  @click="handleDraw"
-/>
-```
-
-**Props:**
-- `count` - Number of cards
-- `topCard` - Top card (for face-up decks)
-- `clickable` - Allow clicking
-- `faceUp` - Show top card face-up
-
-### DiceRoller
-
-3D animated dice rolling:
-
-```vue
-<DiceRoller
-  :dice="game.dicePool"
-  :rolling="isRolling"
-  @roll-complete="handleRollComplete"
-/>
-```
-
-**Props:**
-- `dice` - Array of Die elements
-- `rolling` - Animation state
-- `rollDuration` - Animation duration (default: 1000ms)
-
 ### Die3D
 
 Single 3D die component:
@@ -222,26 +162,6 @@ Single 3D die component:
 - `value` - Current face value
 - `color` - Die color
 - `size` - Die size in pixels
-
-### Draggable
-
-Make elements draggable with drop zones:
-
-```vue
-<Draggable
-  :element="piece"
-  :disabled="!canMove"
-  @drag-start="handleDragStart"
-  @drop="handleDrop"
->
-  <MyPiece :piece="piece" />
-</Draggable>
-```
-
-**Props:**
-- `element` - The element being dragged
-- `disabled` - Disable dragging
-- `dropZones` - Valid drop zone selectors
 
 ### FlyingCardsOverlay
 
@@ -349,18 +269,6 @@ Pre-game waiting area:
   :is-host="isHost"
   @start="handleStart"
   @leave="handleLeave"
-/>
-```
-
-### PlayerConfigList
-
-Configure player settings:
-
-```vue
-<PlayerConfigList
-  :players="players"
-  :editable="isHost"
-  @update="handlePlayerUpdate"
 />
 ```
 
