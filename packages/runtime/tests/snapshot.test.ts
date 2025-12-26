@@ -14,8 +14,7 @@ import {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
-  computeDiff,
-} from '../src/snapshot.js';
+} from '../src/index.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}
@@ -68,7 +67,6 @@ describe('GameStateSnapshot', () => {
       expect(snapshot.version).toBe(1);
       expect(snapshot.gameType).toBe('test-game');
       expect(snapshot.seed).toBe('test');
-      expect(snapshot.timestamp).toBeGreaterThan(0);
       expect(snapshot.state).toBeDefined();
       expect(snapshot.state.players).toHaveLength(2);
       expect(snapshot.commandHistory).toBeDefined();
@@ -151,122 +149,6 @@ describe('GameStateSnapshot', () => {
       expect(views).toHaveLength(2);
       expect(views[0].player).toBe(0);
       expect(views[1].player).toBe(1);
-    });
-  });
-
-  describe('computeDiff', () => {
-    it('should detect new actions in diff', () => {
-      // Create mock snapshots directly
-      const snapshot1: any = {
-        state: { id: 1, className: 'Game', attributes: {}, children: [] },
-        commandHistory: [],
-        actionHistory: [],
-      };
-      const snapshot2: any = {
-        state: { id: 1, className: 'Game', attributes: {}, children: [] },
-        commandHistory: [],
-        actionHistory: [{ name: 'test', player: 0, args: {}, timestamp: Date.now() }],
-      };
-
-      const diff = computeDiff(snapshot1, snapshot2);
-
-      expect(diff.newActions).toHaveLength(1);
-    });
-
-    it('should detect new commands in diff', () => {
-      const snapshot1: any = {
-        state: { id: 1, className: 'Game', attributes: {}, children: [] },
-        commandHistory: [{ type: 'MESSAGE', text: 'first' }],
-        actionHistory: [],
-      };
-      const snapshot2: any = {
-        state: { id: 1, className: 'Game', attributes: {}, children: [] },
-        commandHistory: [
-          { type: 'MESSAGE', text: 'first' },
-          { type: 'MESSAGE', text: 'second' },
-        ],
-        actionHistory: [],
-      };
-
-      const diff = computeDiff(snapshot1, snapshot2);
-
-      expect(diff.newCommands).toHaveLength(1);
-      expect((diff.newCommands[0] as any).text).toBe('second');
-    });
-
-    it('should detect added elements', () => {
-      const snapshot1: any = {
-        state: {
-          id: 1, className: 'Game', attributes: {},
-          children: [{ id: 2, className: 'Card', attributes: {} }],
-        },
-        commandHistory: [],
-        actionHistory: [],
-      };
-      const snapshot2: any = {
-        state: {
-          id: 1, className: 'Game', attributes: {},
-          children: [
-            { id: 2, className: 'Card', attributes: {} },
-            { id: 3, className: 'Card', attributes: {} },
-          ],
-        },
-        commandHistory: [],
-        actionHistory: [],
-      };
-
-      const diff = computeDiff(snapshot1, snapshot2);
-
-      expect(diff.added).toContain(3);
-    });
-
-    it('should detect removed elements', () => {
-      const snapshot1: any = {
-        state: {
-          id: 1, className: 'Game', attributes: {},
-          children: [
-            { id: 2, className: 'Card', attributes: {} },
-            { id: 3, className: 'Card', attributes: {} },
-          ],
-        },
-        commandHistory: [],
-        actionHistory: [],
-      };
-      const snapshot2: any = {
-        state: {
-          id: 1, className: 'Game', attributes: {},
-          children: [{ id: 2, className: 'Card', attributes: {} }],
-        },
-        commandHistory: [],
-        actionHistory: [],
-      };
-
-      const diff = computeDiff(snapshot1, snapshot2);
-
-      expect(diff.removed).toContain(3);
-    });
-
-    it('should detect changed elements', () => {
-      const snapshot1: any = {
-        state: {
-          id: 1, className: 'Game', attributes: {},
-          children: [{ id: 2, className: 'Card', attributes: { value: 1 } }],
-        },
-        commandHistory: [],
-        actionHistory: [],
-      };
-      const snapshot2: any = {
-        state: {
-          id: 1, className: 'Game', attributes: {},
-          children: [{ id: 2, className: 'Card', attributes: { value: 2 } }],
-        },
-        commandHistory: [],
-        actionHistory: [],
-      };
-
-      const diff = computeDiff(snapshot1, snapshot2);
-
-      expect(diff.changed.has(2)).toBe(true);
     });
   });
 });

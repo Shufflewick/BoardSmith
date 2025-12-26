@@ -12,7 +12,7 @@ import {
   serializeAction,
   deserializeAction,
   isSerializedReference,
-} from '../src/serializer.js';
+} from '../src/index.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}

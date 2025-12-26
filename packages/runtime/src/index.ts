@@ -14,10 +14,8 @@ export {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
-  computeDiff,
   type GameStateSnapshot,
   type PlayerStateView,
-  type StateDiff,
 } from '@boardsmith/engine';
 
 // Re-export replay types from engine
