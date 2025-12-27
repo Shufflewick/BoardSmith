@@ -35,6 +35,61 @@ Action.create('selectRank')
   })
 ```
 
+#### Deferred Choices (`defer: true`)
+
+By default, choices are evaluated when building action metadata (before the player acts). Use `defer: true` to delay evaluation until the player clicks the action button.
+
+**Use this when:**
+- Choice computation has side effects (e.g., drawing cards from a deck)
+- Choices depend on game state at the moment of clicking
+- You want to manipulate state (like decks) before the draw occurs
+
+```typescript
+Action.create('hireFirstMerc')
+  .prompt('Choose a MERC to hire')
+  .condition((ctx) => ctx.player.team.length === 0)
+  .chooseFrom('merc', {
+    defer: true,  // Choices evaluated when player clicks, not at game load
+    choices: (ctx) => {
+      // This runs AFTER player clicks "Hire First MERC"
+      const drawn = ctx.game.mercDeck.drawCards(3);
+
+      // Store drawn cards for custom GameBoard to display
+      ctx.game.settings._drawnMercsForHiring = drawn.map(m => m.id);
+
+      return drawn;
+    },
+    display: (merc) => merc.displayName,
+  })
+  .execute((args, ctx) => {
+    const merc = args.merc;
+    ctx.player.team.push(merc);
+
+    // Return unused mercs to deck
+    const drawnIds = ctx.game.settings._drawnMercsForHiring as number[];
+    for (const id of drawnIds) {
+      if (id !== merc.id) {
+        const card = ctx.game.getElementById(id);
+        if (card) ctx.game.mercDeck.addToBottom(card);
+      }
+    }
+
+    // Clean up temporary storage
+    delete ctx.game.settings._drawnMercsForHiring;
+
+    return { success: true };
+  });
+```
+
+**How it works:**
+1. Player sees "Hire First MERC" button
+2. Player clicks button
+3. Server evaluates choices callback NOW (draws 3 cards)
+4. UI receives choices and shows selection dropdown
+5. Player picks one, `execute()` runs
+
+> **Note:** Use `game.settings` for temporary state storage since it survives hot-reload. Always clean up in `execute()`.
+
 #### `chooseElement<T>` - Choose a game element
 
 ```typescript

@@ -317,6 +317,50 @@ class MyGame extends Game {
 
 ---
 
+## 8. Side Effects in Choice Callbacks
+
+### The Problem
+
+Choice callbacks in `chooseFrom` are evaluated when building action metadata, **before the player acts**. This causes issues when your choices have side effects:
+
+```typescript
+// WRONG - Draws cards every time action metadata is built!
+Action.create('hireFirstMerc')
+  .chooseFrom('merc', {
+    choices: (ctx) => {
+      // This runs on EVERY state update, not when player clicks
+      const drawn = ctx.game.mercDeck.drawCards(3);  // Side effect!
+      return drawn;
+    },
+  })
+```
+
+This causes:
+- Cards drawn before player intends to act
+- Cards drawn multiple times during the same turn
+- Deck state corruption
+
+### The Solution
+
+Use `defer: true` to delay choice evaluation until the player clicks the action:
+
+```typescript
+// CORRECT - Choices evaluated when player clicks
+Action.create('hireFirstMerc')
+  .chooseFrom('merc', {
+    defer: true,  // Key addition
+    choices: (ctx) => {
+      // This runs AFTER player clicks "Hire First MERC"
+      const drawn = ctx.game.mercDeck.drawCards(3);
+      return drawn;
+    },
+  })
+```
+
+See [Deferred Choices](./actions-and-flow.md#deferred-choices-defer-true) in the Actions & Flow documentation for full details.
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -329,6 +373,7 @@ class MyGame extends Game {
 | Element refs on Player | `selectedCard: Card` | `selectedCardId: number` |
 | Loop safety | No `maxIterations` | Always set `maxIterations` |
 | Class registration | Forget to register | `registerElements([...])` |
+| Side effects in choices | `choices: () => deck.draw()` | `defer: true` with choices |
 
 ---
 

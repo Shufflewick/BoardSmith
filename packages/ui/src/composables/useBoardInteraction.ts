@@ -68,6 +68,17 @@ export interface BoardInteractionState {
 
   /** Element that is selected and can be dragged (for auto-select scenarios) */
   draggableSelectedElement: ElementRef | null;
+
+  // ---- Action State ----
+
+  /** Currently active action name (null if no action is in progress) */
+  currentAction: string | null;
+
+  /** Index of the current selection step (0-based) */
+  currentSelectionIndex: number;
+
+  /** Name of the current selection being filled */
+  currentSelectionName: string | null;
 }
 
 /**
@@ -124,6 +135,14 @@ export interface BoardInteractionActions {
 
   /** Check if an element is the draggable selected element */
   isDraggableSelectedElement: (element: { id?: number; name?: string; notation?: string }) => boolean;
+
+  // ---- Action State Methods ----
+
+  /** Set the current action (called by ActionPanel when action starts) */
+  setCurrentAction: (actionName: string | null, selectionIndex?: number, selectionName?: string | null) => void;
+
+  /** Update the current selection step */
+  setCurrentSelection: (selectionIndex: number, selectionName: string | null) => void;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -143,6 +162,10 @@ export function createBoardInteraction(): BoardInteraction {
     dropTargets: [],
     isDragging: false,
     draggableSelectedElement: null,
+    // Action state
+    currentAction: null,
+    currentSelectionIndex: 0,
+    currentSelectionName: null,
   });
 
   // Callback for when element is dropped on valid target
@@ -184,6 +207,9 @@ export function createBoardInteraction(): BoardInteraction {
       state.dropTargets = [];
       state.isDragging = false;
       state.draggableSelectedElement = null;
+      state.currentAction = null;
+      state.currentSelectionIndex = 0;
+      state.currentSelectionName = null;
       onDropCallback = null;
     },
 
@@ -263,6 +289,17 @@ export function createBoardInteraction(): BoardInteraction {
     isDraggableSelectedElement(element) {
       if (!state.draggableSelectedElement) return false;
       return matchesRef(element, state.draggableSelectedElement);
+    },
+
+    setCurrentAction(actionName, selectionIndex = 0, selectionName = null) {
+      state.currentAction = actionName;
+      state.currentSelectionIndex = selectionIndex;
+      state.currentSelectionName = selectionName;
+    },
+
+    setCurrentSelection(selectionIndex, selectionName) {
+      state.currentSelectionIndex = selectionIndex;
+      state.currentSelectionName = selectionName;
     },
   };
 

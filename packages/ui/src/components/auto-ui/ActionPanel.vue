@@ -833,6 +833,12 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
     return;
   }
 
+  // Update action state for custom GameBoard components
+  if (currentAction.value && currentActionMeta.value) {
+    const selectionIndex = currentActionMeta.value.selections.findIndex(s => s.name === selection.name);
+    boardInteraction.setCurrentSelection(selectionIndex, selection.name);
+  }
+
   let validElems: { id: number; ref: any }[] = [];
   let onSelect: ((id: number) => void) | null = null;
 
@@ -1408,6 +1414,9 @@ async function startAction(actionName: string) {
   if (firstSel.deferred) {
     await fetchDeferredChoicesForSelection(actionName, firstSel.name);
   }
+
+  // Notify board interaction of action start (for custom GameBoard components)
+  boardInteraction?.setCurrentAction(actionName, 0, firstSel.name);
 
   if (firstSel.type === 'element') {
     emit('selectingElement', firstSel.name, firstSel.elementClassName);

@@ -418,6 +418,84 @@ boardInteraction.isDropTarget(element)
 boardInteraction.isDraggedElement(element)
 ```
 
+#### Action State Detection
+
+Custom game boards can detect which action is currently being filled in. This is useful when:
+- Showing visual feedback based on the active action
+- Displaying deferred choices (cards drawn when action clicked)
+- Customizing the board based on current selection step
+
+```typescript
+import { useBoardInteraction } from '@boardsmith/ui';
+import { computed, watch } from 'vue';
+
+const boardInteraction = useBoardInteraction();
+
+// Current action being filled in (null if none)
+boardInteraction.currentAction         // string | null
+
+// Which selection step the player is on (0-based)
+boardInteraction.currentSelectionIndex // number
+
+// Name of the current selection
+boardInteraction.currentSelectionName  // string | null
+```
+
+**Example: Detecting when "Hire First MERC" is clicked**
+
+```vue
+<script setup lang="ts">
+import { computed, watch } from 'vue';
+import { useBoardInteraction } from '@boardsmith/ui';
+
+const props = defineProps<{
+  gameView: any;
+}>();
+
+const boardInteraction = useBoardInteraction();
+
+// Detect when hiring action is active
+const isHiringMerc = computed(() =>
+  boardInteraction?.currentAction === 'hireFirstMerc'
+);
+
+// Get drawn mercs from game settings (stored by deferred choices callback)
+const drawnMercs = computed(() => {
+  if (!isHiringMerc.value) return [];
+
+  const ids = props.gameView.settings?._drawnMercsForHiring as number[] | undefined;
+  if (!ids?.length) return [];
+
+  // Find the elements by ID in the game view
+  return ids.map(id => findElementById(props.gameView, id)).filter(Boolean);
+});
+
+// React to action changes
+watch(() => boardInteraction?.currentAction, (action, prevAction) => {
+  if (action === 'hireFirstMerc') {
+    console.log('Player started hiring a MERC');
+  }
+  if (prevAction === 'hireFirstMerc' && !action) {
+    console.log('Hiring action completed or cancelled');
+  }
+});
+</script>
+
+<template>
+  <div class="game-board">
+    <!-- Show drawn MERC cards when hiring -->
+    <div v-if="isHiringMerc && drawnMercs.length" class="hiring-overlay">
+      <h3>Choose a MERC to hire:</h3>
+      <div class="drawn-mercs">
+        <MercCard v-for="merc in drawnMercs" :key="merc.id" :merc="merc" />
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+> **Note:** Action state is automatically cleared when the action completes, is cancelled, or the turn ends.
+
 ### useElementAnimation
 
 FLIP animations for smooth element movement.
