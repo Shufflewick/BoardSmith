@@ -496,6 +496,13 @@ watch(() => boardInteraction?.currentAction, (action, prevAction) => {
 
 > **Note:** Action state is automatically cleared when the action completes, is cancelled, or the turn ends.
 
+**Real Example: Go Fish**
+
+See `packages/games/go-fish/ui/src/components/GoFishBoard.vue` for a complete implementation. It uses `boardInteraction.currentAction` to:
+- Show an "Asking:" indicator banner when the player clicks the Ask button
+- Display which selection step they're on (choosing player vs choosing rank)
+- Only highlight selectable elements after the action button is clicked (not just when available)
+
 ### useElementAnimation
 
 FLIP animations for smooth element movement.

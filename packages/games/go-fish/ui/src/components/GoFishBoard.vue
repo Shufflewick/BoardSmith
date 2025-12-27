@@ -66,6 +66,17 @@ const props = defineProps<{
 // Inject board interaction from GameShell
 const boardInteraction = inject<BoardInteraction>('boardInteraction');
 
+// Detect when player has clicked "Ask" button and is actively filling in the action
+// This is different from availableActions.includes('ask') which just means the action CAN be taken
+const isAskingInProgress = computed(() =>
+  boardInteraction?.currentAction === 'ask'
+);
+
+// Which selection step are we on? (0 = target, 1 = rank)
+const currentSelectionStep = computed(() =>
+  isAskingInProgress.value ? boardInteraction?.currentSelectionName : null
+);
+
 // Refs for animation sources/targets
 const pondRef = ref<HTMLElement | null>(null);
 const myHandRef = ref<HTMLElement | null>(null);
@@ -209,8 +220,12 @@ function isOpponentHandSelectable(position: number): boolean {
 }
 
 // Check if we're selecting a target player
+// Now uses currentAction to know if player has actually clicked "Ask"
 const isSelectingPlayer = computed(() => {
-  if (!props.isMyTurn || !props.availableActions.includes('ask')) return false;
+  // Must be my turn and actively in the "ask" action (not just available)
+  if (!props.isMyTurn || !isAskingInProgress.value) return false;
+  // Must be on the "target" selection step
+  if (currentSelectionStep.value !== 'target') return false;
   // Check if any opponent hand is selectable
   for (const pos of opponentHands.value.keys()) {
     if (isOpponentHandSelectable(pos)) return true;
@@ -219,8 +234,12 @@ const isSelectingPlayer = computed(() => {
 });
 
 // Check if my cards are selectable for rank selection
+// Now uses currentAction to know if player has actually clicked "Ask"
 const isSelectingRank = computed(() => {
-  if (!props.isMyTurn || !props.availableActions.includes('ask')) return false;
+  // Must be my turn and actively in the "ask" action
+  if (!props.isMyTurn || !isAskingInProgress.value) return false;
+  // Must be on the "rank" selection step
+  if (currentSelectionStep.value !== 'rank') return false;
 
   // Check if any of my cards are selectable
   if (!boardInteraction || !myHand.value?.children) return false;
@@ -449,6 +468,14 @@ watch(
 
 <template>
   <div class="go-fish-board">
+    <!-- Action state indicator - shows when player is actively filling in the "Ask" action -->
+    <div v-if="isAskingInProgress" class="action-indicator">
+      <span class="action-indicator-label">Asking:</span>
+      <span class="action-indicator-step">
+        {{ currentSelectionStep === 'target' ? 'Choose a player to ask' : 'Choose a rank from your hand' }}
+      </span>
+    </div>
+
     <!-- Player Section (at top) -->
     <div class="player-section">
       <div class="player-label">Your Hand</div>
@@ -577,6 +604,42 @@ watch(
   border-radius: 12px;
   min-height: 600px;
   box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.3);
+}
+
+/* Action state indicator - shows current action step */
+.action-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(0, 200, 255, 0.2), rgba(0, 150, 255, 0.3));
+  border: 2px solid rgba(0, 200, 255, 0.6);
+  border-radius: 8px;
+  animation: action-pulse 2s ease-in-out infinite;
+}
+
+.action-indicator-label {
+  font-weight: bold;
+  color: #00d4ff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.85rem;
+}
+
+.action-indicator-step {
+  color: #fff;
+  font-size: 1rem;
+}
+
+@keyframes action-pulse {
+  0%, 100% {
+    border-color: rgba(0, 200, 255, 0.6);
+    box-shadow: 0 0 10px rgba(0, 200, 255, 0.2);
+  }
+  50% {
+    border-color: rgba(0, 200, 255, 1);
+    box-shadow: 0 0 20px rgba(0, 200, 255, 0.4);
+  }
 }
 
 .opponents-container {
