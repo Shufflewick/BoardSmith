@@ -324,16 +324,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
-    // Watch for rules changes and hot reload
+    // Watch for rules and data changes with hot reload
     let reloadDebounce: NodeJS.Timeout | null = null;
-    const watcher = watch(rulesPath, { recursive: true }, async (eventType, filename) => {
-      if (!filename || !filename.endsWith('.ts')) return;
+    const watchers: ReturnType<typeof watch>[] = [];
 
+    const triggerReload = (source: string, filename: string) => {
       // Debounce to avoid multiple reloads for rapid changes
       if (reloadDebounce) clearTimeout(reloadDebounce);
 
       reloadDebounce = setTimeout(async () => {
-        console.log(chalk.yellow(`\n  Rules changed: ${filename}`));
+        console.log(chalk.yellow(`\n  ${source} changed: ${filename}`));
         console.log(chalk.dim('  Reloading game rules...'));
 
         try {
@@ -357,12 +357,39 @@ export async function devCommand(options: DevOptions): Promise<void> {
           console.error(chalk.red('  Failed to reload rules:'), error);
         }
       }, 100);
+    };
+
+    // Watch rules directory for .ts files
+    const rulesWatcher = watch(rulesPath, { recursive: true }, async (eventType, filename) => {
+      if (!filename || !filename.endsWith('.ts')) return;
+      triggerReload('Rules', filename);
     });
+    watchers.push(rulesWatcher);
+
+    // Watch for JSON data files (check common locations)
+    const dataDirectories = [
+      join(cwd, 'data'),           // <game>/data/
+      join(cwd, 'rules', 'data'),  // <game>/rules/data/
+      join(rulesPath, 'data'),     // <rulesPath>/data/
+    ];
+
+    for (const dataDir of dataDirectories) {
+      if (existsSync(dataDir)) {
+        console.log(chalk.dim(`  Watching data directory: ${dataDir}`));
+        const dataWatcher = watch(dataDir, { recursive: true }, async (eventType, filename) => {
+          if (!filename || !filename.endsWith('.json')) return;
+          triggerReload('Data', filename);
+        });
+        watchers.push(dataWatcher);
+      }
+    }
 
     // Cleanup on exit
     const cleanup = async () => {
       console.log(chalk.dim('\n  Shutting down...'));
-      watcher.close();
+      for (const w of watchers) {
+        w.close();
+      }
       await vite.close();
       if (server) {
         await server.close();
