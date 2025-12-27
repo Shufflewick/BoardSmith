@@ -62,11 +62,24 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
   /** Current round number */
   round: number = 1;
 
-  /** Dice drafted this turn (for tracking) */
-  draftedDice: IngredientDie[] = [];
+  // ---- HMR-safe state (stored in settings) ----
+
+  /** Dice drafted this turn (for tracking) - stores IDs, resolves to elements */
+  get draftedDice(): IngredientDie[] {
+    const ids = (this.settings._draftedDiceIds as number[]) ?? [];
+    return ids.map(id => this.getElementById(id) as IngredientDie).filter(Boolean);
+  }
+  set draftedDice(value: IngredientDie[]) {
+    this.settings._draftedDiceIds = value.map(die => die._t.id);
+  }
 
   /** The effective values of drafted dice (may differ due to D10 0/10 choice or flip) */
-  draftedValues: number[] = [];
+  get draftedValues(): number[] {
+    return (this.settings._draftedValues as number[]) ?? [];
+  }
+  set draftedValues(value: number[]) {
+    this.settings._draftedValues = value;
+  }
 
   /** The crafted potion/poison value this turn */
   craftedValue: number = 0;
@@ -161,7 +174,7 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
    */
   draftDie(player: PolyPotionsPlayer, die: IngredientDie, effectiveValue?: number): AbilityType | null {
     die.drafted = true;
-    this.draftedDice.push(die);
+    this.draftedDice = [...this.draftedDice, die];
 
     // Move the die to the player's draft area
     const draftArea = this.getPlayerDraftArea(player);
@@ -171,7 +184,7 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
 
     // Use effective value if provided (for D10 0/10 choice), otherwise use die value
     const value = effectiveValue ?? die.value;
-    this.draftedValues.push(value);
+    this.draftedValues = [...this.draftedValues, value];
 
     // Track ingredient usage and check for ability unlock
     const dieType = this.getDieType(die);

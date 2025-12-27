@@ -14,6 +14,7 @@ export {
   HexCell,
   Game,
   ElementCollection,
+  PersistentMap,
 } from './element/index.js';
 
 export type {

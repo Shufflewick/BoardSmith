@@ -49,9 +49,6 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
   /** Current running total during play phase */
   runningTotal: number = 0;
 
-  /** Cards played in current count sequence */
-  currentPlayCards: string[] = []; // Card IDs for tracking
-
   /** Current cribbage phase */
   cribbagePhase: CribbagePhase = 'dealing';
 
@@ -61,8 +58,23 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
   /** Current dealer position (alternates each round) */
   dealerPosition: number = 0;
 
+  // ---- HMR-safe state (stored in settings) ----
+
+  /** Cards played in current count sequence */
+  get currentPlayCards(): string[] {
+    return (this.settings._currentPlayCards as string[]) ?? [];
+  }
+  set currentPlayCards(value: string[]) {
+    this.settings._currentPlayCards = value;
+  }
+
   /** Track who said "Go" */
-  playerSaidGo: boolean[] = [false, false];
+  get playerSaidGo(): boolean[] {
+    return (this.settings._playerSaidGo as boolean[]) ?? [false, false];
+  }
+  set playerSaidGo(value: boolean[]) {
+    this.settings._playerSaidGo = value;
+  }
 
   /** Last player to play a card (for "Go" and "Last card" points) */
   lastPlayerToPlay: number = -1;

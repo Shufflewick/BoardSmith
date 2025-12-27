@@ -7,6 +7,104 @@ import { executeCommand } from '../command/executor.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
+
+/**
+ * A Map-like structure that persists through HMR by syncing to game.settings.
+ * Use game.persistentMap() to create instances.
+ *
+ * Limitations:
+ * - Keys must be serializable to JSON (strings, numbers)
+ * - Values must be serializable to JSON (no element references, functions, etc.)
+ * - For element references, use element children instead
+ */
+export class PersistentMap<K, V> implements Map<K, V> {
+  #game: Game;
+  #key: string;
+
+  constructor(game: Game, key: string) {
+    this.#game = game;
+    this.#key = key;
+    // Initialize settings entry if not exists
+    if (!(key in game.settings)) {
+      game.settings[key] = {};
+    }
+  }
+
+  #getData(): Record<string, V> {
+    return (this.#game.settings[this.#key] as Record<string, V>) ?? {};
+  }
+
+  #setData(data: Record<string, V>): void {
+    this.#game.settings[this.#key] = data;
+  }
+
+  get size(): number {
+    return Object.keys(this.#getData()).length;
+  }
+
+  get(key: K): V | undefined {
+    return this.#getData()[String(key)];
+  }
+
+  set(key: K, value: V): this {
+    const data = this.#getData();
+    data[String(key)] = value;
+    this.#setData(data);
+    return this;
+  }
+
+  has(key: K): boolean {
+    return String(key) in this.#getData();
+  }
+
+  delete(key: K): boolean {
+    const data = this.#getData();
+    const existed = String(key) in data;
+    delete data[String(key)];
+    this.#setData(data);
+    return existed;
+  }
+
+  clear(): void {
+    this.#setData({});
+  }
+
+  forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: unknown): void {
+    const data = this.#getData();
+    for (const [k, v] of Object.entries(data)) {
+      callbackfn.call(thisArg, v as V, k as unknown as K, this);
+    }
+  }
+
+  *entries(): IterableIterator<[K, V]> {
+    const data = this.#getData();
+    for (const [k, v] of Object.entries(data)) {
+      yield [k as unknown as K, v as V];
+    }
+  }
+
+  *keys(): IterableIterator<K> {
+    const data = this.#getData();
+    for (const k of Object.keys(data)) {
+      yield k as unknown as K;
+    }
+  }
+
+  *values(): IterableIterator<V> {
+    const data = this.#getData();
+    for (const v of Object.values(data)) {
+      yield v as V;
+    }
+  }
+
+  [Symbol.iterator](): IterableIterator<[K, V]> {
+    return this.entries();
+  }
+
+  get [Symbol.toStringTag](): string {
+    return 'PersistentMap';
+  }
+}
 import { FlowEngine } from '../flow/engine.js';
 
 /**
@@ -111,6 +209,19 @@ export class Game<
   /** Debug registry for custom debug data (dev mode only) */
   private _debugRegistry: Map<string, () => unknown> = new Map();
 
+  /** Persistent maps that survive HMR (synced to settings) */
+  private _persistentMaps: Map<string, PersistentMap<unknown, unknown>> = new Map();
+
+  /** Properties that are safe and shouldn't trigger HMR warnings */
+  private static readonly _safeProperties = new Set([
+    // Base GameElement properties
+    '_t', '_ctx', 'game', 'name', 'player',
+    // Game internal properties
+    'pile', 'players', 'phase', 'random', 'messages', 'settings',
+    'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
+    '_flowEngine', '_debugRegistry', '_persistentMaps',
+  ]);
+
   static override unserializableAttributes = [
     ...Space.unserializableAttributes,
     'pile',
@@ -165,6 +276,89 @@ export class Game<
 
     // Initialize action executor
     this._actionExecutor = new ActionExecutor(this);
+
+    // Schedule HMR warning check after subclass constructor completes
+    // Uses queueMicrotask so it runs after the full constructor chain
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+      queueMicrotask(() => this._checkForVolatileState());
+    }
+  }
+
+  /**
+   * Check for Map/Array properties that won't survive HMR.
+   * Runs after construction in development mode.
+   */
+  private _checkForVolatileState(): void {
+    const warnings: string[] = [];
+    const safeProps = (this.constructor as typeof Game)._safeProperties;
+
+    for (const key of Object.keys(this)) {
+      // Skip safe/internal properties
+      if (safeProps.has(key)) continue;
+      if (key.startsWith('_')) continue; // Private by convention
+
+      const value = (this as Record<string, unknown>)[key];
+
+      // Check for native Map (not PersistentMap)
+      if (value instanceof Map && !(value instanceof PersistentMap)) {
+        warnings.push(
+          `  ⚠️  game.${key} is a Map - will be reset on HMR.\n` +
+          `      Use: ${key} = this.persistentMap('${key}') for persistent state,\n` +
+          `      or store data as element children.`
+        );
+      }
+
+      // Check for native Set
+      if (value instanceof Set) {
+        warnings.push(
+          `  ⚠️  game.${key} is a Set - will be reset on HMR.\n` +
+          `      Consider using a PersistentMap or element children instead.`
+        );
+      }
+
+      // Check for arrays that look like they hold state
+      if (Array.isArray(value) && key !== 'messages') {
+        warnings.push(
+          `  ⚠️  game.${key} is an Array - will be reset on HMR.\n` +
+          `      Consider storing items as element children instead,\n` +
+          `      or use game.settings.${key} for simple data.`
+        );
+      }
+    }
+
+    // Also check Player instances
+    for (const player of this.players) {
+      for (const key of Object.keys(player)) {
+        if (key.startsWith('_')) continue;
+        if (['position', 'name', 'game', 'score'].includes(key)) continue;
+
+        const value = (player as Record<string, unknown>)[key];
+
+        if (value instanceof Map) {
+          warnings.push(
+            `  ⚠️  player.${key} is a Map - will be reset on HMR.\n` +
+            `      Consider using game.persistentMap() or element children.`
+          );
+        }
+
+        if (Array.isArray(value) && value.length === 0) {
+          // Only warn about arrays with initializers (empty on construction)
+          // This catches patterns like: myItems: Item[] = []
+          warnings.push(
+            `  ⚠️  player.${key} is an Array - will be reset on HMR.\n` +
+            `      Consider storing items as element children instead.`
+          );
+        }
+      }
+    }
+
+    if (warnings.length > 0) {
+      console.warn(
+        '\n🔥 BoardSmith HMR Warning: Detected volatile state that won\'t survive hot reload:\n\n' +
+        warnings.join('\n\n') +
+        '\n\n  Learn more: https://boardsmith.dev/docs/hmr-state\n'
+      );
+    }
   }
 
   /**
@@ -172,6 +366,45 @@ export class Game<
    */
   protected createPlayer(position: number, name: string): P {
     return new Player(position, name) as P;
+  }
+
+  // ============================================
+  // Persistent State (HMR-safe)
+  // ============================================
+
+  /**
+   * Create a persistent Map that survives HMR (Hot Module Replacement).
+   *
+   * Unlike regular Maps, PersistentMaps store their data in game.settings,
+   * so they're preserved when game rules are hot-reloaded during development.
+   *
+   * @param name - Unique name for this map (used as key in game.settings)
+   * @returns A Map-like object that persists through HMR
+   *
+   * @example
+   * ```typescript
+   * // In your game class
+   * pendingLoot = this.persistentMap<string, LootOption[]>('pendingLoot');
+   *
+   * // Use like a normal Map
+   * this.pendingLoot.set(sectorId, options);
+   * const options = this.pendingLoot.get(sectorId);
+   * ```
+   *
+   * Limitations:
+   * - Keys must be serializable (strings, numbers)
+   * - Values must be JSON-serializable (no element references)
+   * - For element references, use element children instead
+   */
+  protected persistentMap<K extends string | number, V>(name: string): PersistentMap<K, V> {
+    // Return existing map if already created (for idempotency)
+    if (this._persistentMaps.has(name)) {
+      return this._persistentMaps.get(name) as PersistentMap<K, V>;
+    }
+
+    const map = new PersistentMap<K, V>(this, name);
+    this._persistentMaps.set(name, map as PersistentMap<unknown, unknown>);
+    return map;
   }
 
   /**

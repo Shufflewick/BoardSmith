@@ -83,7 +83,16 @@ export class CribbagePlayer extends Player {
   cardsPlayedThisRound: number = 0;
 
   /** Original hand card IDs (stored after discard, before play phase for scoring) */
-  originalHandCardIds: string[] = [];
+  get originalHandCardIds(): string[] {
+    const key = `_originalHandCardIds_${this.position}`;
+    return (this.game?.settings[key] as string[]) ?? [];
+  }
+  set originalHandCardIds(value: string[]) {
+    if (this.game) {
+      const key = `_originalHandCardIds_${this.position}`;
+      this.game.settings[key] = value;
+    }
+  }
 }
 
 // Forward declare for circular reference

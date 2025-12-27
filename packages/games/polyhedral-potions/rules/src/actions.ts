@@ -321,12 +321,14 @@ export function createUseRerollAction(game: PolyPotionsGame): ActionDefinition {
       const newValues = diceToReroll.map(d => d.value);
 
       // Update drafted values if any drafted dice were rerolled
+      const updatedValues = [...currentGame.draftedValues];
       for (let i = 0; i < currentGame.draftedDice.length; i++) {
         const draftedDie = currentGame.draftedDice[i];
         if (diceToReroll.includes(draftedDie)) {
-          currentGame.draftedValues[i] = draftedDie.value;
+          updatedValues[i] = draftedDie.value;
         }
       }
+      currentGame.draftedValues = updatedValues;
 
       return {
         success: true,
@@ -410,7 +412,9 @@ export function createUseFlipAction(game: PolyPotionsGame): ActionDefinition {
       // Update drafted values if this was a drafted die
       const draftedIndex = currentGame.draftedDice.indexOf(die);
       if (draftedIndex >= 0) {
-        currentGame.draftedValues[draftedIndex] = die.value;
+        const updatedValues = [...currentGame.draftedValues];
+        updatedValues[draftedIndex] = die.value;
+        currentGame.draftedValues = updatedValues;
       }
 
       return {

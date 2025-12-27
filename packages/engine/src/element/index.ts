@@ -8,7 +8,7 @@ export { Die } from './die.js';
 export { DicePool } from './dice-pool.js';
 export { Grid, GridCell } from './grid.js';
 export { HexGrid, HexCell } from './hex-grid.js';
-export { Game } from './game.js';
+export { Game, PersistentMap } from './game.js';
 export { ElementCollection } from './element-collection.js';
 
 export type {

@@ -727,3 +727,98 @@ describe('Game Restoration', () => {
     expect(restoredContainer.items?.[1]).toBe(restoredItem2);
   });
 });
+
+describe('PersistentMap', () => {
+  // Test game that uses persistentMap
+  class GameWithPersistentMap extends Game<GameWithPersistentMap, Player> {
+    // Using persistentMap for HMR-safe state
+    pendingLoot = this.persistentMap<string, string[]>('pendingLoot');
+
+    constructor(options: { playerCount: number }) {
+      super(options);
+    }
+  }
+
+  it('should store and retrieve values', () => {
+    const game = new GameWithPersistentMap({ playerCount: 2 });
+
+    game.pendingLoot.set('sector1', ['gold', 'silver']);
+    game.pendingLoot.set('sector2', ['bronze']);
+
+    expect(game.pendingLoot.get('sector1')).toEqual(['gold', 'silver']);
+    expect(game.pendingLoot.get('sector2')).toEqual(['bronze']);
+    expect(game.pendingLoot.size).toBe(2);
+  });
+
+  it('should persist data in game.settings', () => {
+    const game = new GameWithPersistentMap({ playerCount: 2 });
+
+    game.pendingLoot.set('sector1', ['gold']);
+
+    // Data should be stored in settings
+    expect(game.settings.pendingLoot).toEqual({ sector1: ['gold'] });
+  });
+
+  it('should support Map operations', () => {
+    const game = new GameWithPersistentMap({ playerCount: 2 });
+
+    game.pendingLoot.set('a', ['x']);
+    game.pendingLoot.set('b', ['y']);
+
+    expect(game.pendingLoot.has('a')).toBe(true);
+    expect(game.pendingLoot.has('c')).toBe(false);
+
+    game.pendingLoot.delete('a');
+    expect(game.pendingLoot.has('a')).toBe(false);
+    expect(game.pendingLoot.size).toBe(1);
+
+    game.pendingLoot.clear();
+    expect(game.pendingLoot.size).toBe(0);
+  });
+
+  it('should support iteration', () => {
+    const game = new GameWithPersistentMap({ playerCount: 2 });
+
+    game.pendingLoot.set('a', ['1']);
+    game.pendingLoot.set('b', ['2']);
+
+    const entries: [string, string[]][] = [];
+    for (const [key, value] of game.pendingLoot) {
+      entries.push([key, value]);
+    }
+
+    expect(entries).toHaveLength(2);
+    expect(entries.some(([k]) => k === 'a')).toBe(true);
+    expect(entries.some(([k]) => k === 'b')).toBe(true);
+  });
+
+  it('should survive serialization/deserialization via settings', () => {
+    const game = new GameWithPersistentMap({ playerCount: 2 });
+
+    game.pendingLoot.set('sector1', ['gold', 'silver']);
+
+    // Serialize
+    const json = game.toJSON();
+
+    // Verify settings contains the data
+    expect(json.settings.pendingLoot).toEqual({ sector1: ['gold', 'silver'] });
+
+    // In HMR scenario, a new game is created and settings are restored
+    // We simulate this by creating a new game and copying settings
+    const newGame = new GameWithPersistentMap({ playerCount: 2 });
+    newGame.settings = { ...json.settings };
+
+    // PersistentMap should read from settings
+    expect(newGame.pendingLoot.get('sector1')).toEqual(['gold', 'silver']);
+  });
+
+  it('should return same instance for same name', () => {
+    const game = new GameWithPersistentMap({ playerCount: 2 });
+
+    // Multiple calls with same name should return same instance
+    const map1 = game['persistentMap']<string, string>('test');
+    const map2 = game['persistentMap']<string, string>('test');
+
+    expect(map1).toBe(map2);
+  });
+});
