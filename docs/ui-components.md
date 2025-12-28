@@ -569,95 +569,59 @@ flyCard({
 });
 ```
 
-### useAutoFlyingCards
+### useAutoAnimations
 
-**Recommended for most games.** Automatically animates cards when they move between registered containers. No manual tracking needed.
+**Recommended for all games.** The unified animation system that combines flying between containers, FLIP animations within containers, and flying to player stats. One composable to rule them all.
 
 ```typescript
-import { useAutoFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
+import { useAutoAnimations, FlyingCardsOverlay } from '@boardsmith/ui';
 
 // 1. Create refs for DOM elements
-const deckRef = ref<HTMLElement | null>(null);
+const boardRef = ref<HTMLElement | null>(null);
 const handRef = ref<HTMLElement | null>(null);
 const discardRef = ref<HTMLElement | null>(null);
 
 // 2. Create computed refs for game elements
-const deck = computed(() => findElement(gameView, { type: 'deck' }));
+const board = computed(() => findElement(gameView, { className: 'Board' }));
 const myHand = computed(() => findPlayerHand(gameView, playerPosition));
 const discardPile = computed(() => findElement(gameView, { className: 'DiscardPile' }));
 
-// 3. Set up auto-flying cards
-const { flyingCards } = useAutoFlyingCards({
+// 3. Set up auto-animations
+const { flyingElements, isAnimating } = useAutoAnimations({
   gameView: () => props.gameView,
   containers: [
-    { element: deck, ref: deckRef },
-    { element: myHand, ref: handRef },
+    // Elements reorder within board with FLIP animation
+    { element: board, ref: boardRef, flipWithin: '[data-piece-id]' },
+    // Cards fly between hand and discard
+    { element: myHand, ref: handRef, flipWithin: '[data-card-id]' },
     { element: discardPile, ref: discardRef },
   ],
-  getCardData: (element) => ({
+  // Optional: fly elements to player stats when removed
+  flyToStats: [
+    {
+      stat: 'captured',
+      containerRef: boardRef,
+      selector: '[data-piece-id]',
+      player: (piece) => piece.playerPosition === 0 ? 1 : 0,
+    },
+  ],
+  getElementData: (element) => ({
     rank: element.attributes?.rank,
     suit: element.attributes?.suit,
-    backColor: 'linear-gradient(135deg, #c41e3a 0%, #8b0000 100%)',
+    playerPosition: element.attributes?.player?.position,
   }),
   duration: 400,
 });
 
 // 4. Use in template
-// <FlyingCardsOverlay :flying-cards="flyingCards" />
+// <FlyingCardsOverlay :flying-cards="flyingElements" />
 ```
 
-**Dynamic Containers (for opponent hands):**
+**What useAutoAnimations provides:**
 
-When cards can fly to opponent hands, use a function for containers:
-
-```typescript
-// Pre-create refs for opponent positions
-const opponentHandRefs = [
-  ref<HTMLElement | null>(null),
-  ref<HTMLElement | null>(null),
-];
-
-const opponentHands = [
-  computed(() => findPlayerHand(props.gameView, 0)),
-  computed(() => findPlayerHand(props.gameView, 1)),
-];
-
-const { flyingCards } = useAutoFlyingCards({
-  gameView: () => props.gameView,
-  // Function returns containers dynamically
-  containers: () => {
-    const list = [
-      { element: deck, ref: deckRef },
-      { element: myHand, ref: handRef },
-      { element: discardPile, ref: discardRef },
-    ];
-
-    // Add opponent containers with valid refs
-    for (const opponent of otherPlayers.value) {
-      const pos = opponent.position;
-      if (opponentHands[pos] && opponentHandRefs[pos]?.value) {
-        list.push({
-          element: opponentHands[pos],
-          ref: opponentHandRefs[pos],
-        });
-      }
-    }
-    return list;
-  },
-  getCardData: (element) => ({
-    rank: element.attributes?.rank,
-    suit: element.attributes?.suit,
-    backColor: 'your-card-back-color',
-  }),
-});
-```
-
-**Why use useAutoFlyingCards:**
-
-- **No timing issues** - Uses data-driven detection (checks where cards actually went)
-- **No manual tracking** - No `prevCards` refs or watchers needed
-- **Works with any game structure** - Just register your containers
-- **Handles edge cases** - Trade, gift, draw, discard all work automatically
+1. **Flying between containers** - Elements moving between registered containers animate automatically
+2. **FLIP within containers** - Elements reordering within a container animate smoothly (use `flipWithin` option)
+3. **Flying to stats** - Elements removed from a container fly to player stat displays
 
 **Options:**
 
@@ -665,9 +629,82 @@ const { flyingCards } = useAutoFlyingCards({
 |--------|------|-------------|
 | `gameView` | `() => any` | Function returning current game view |
 | `containers` | `ContainerConfig[] \| () => ContainerConfig[]` | Containers to track |
-| `getCardData` | `(element) => FlyingCardData` | Extract display data from elements |
-| `duration` | `number` | Animation duration (default: 400ms) |
-| `cardSize` | `{ width, height }` | Card dimensions (default: 60x84) |
+| `flyToStats` | `FlyToStatConfig[]` | Stats to fly elements to when removed |
+| `getElementData` | `(element) => FlyingCardData` | Extract display data from game elements |
+| `getDOMElementData` | `(el: Element) => Partial<FlyingCardData>` | Extract data from DOM elements (for flyToStats) |
+| `duration` | `number` | Animation duration for flying (default: 400ms) |
+| `flipDuration` | `number` | Animation duration for FLIP (default: 300ms) |
+| `elementSize` | `{ width, height }` | Element dimensions (default: 60x84) |
+
+**Container Config:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `element` | `ComputedRef<any> \| Ref<any>` | Game element for this container |
+| `ref` | `Ref<HTMLElement \| null>` | DOM element ref |
+| `flipWithin` | `string` | CSS selector for FLIP animations within this container |
+| `elementSize` | `{ width, height }` | Optional custom element size |
+
+**FlyToStat Config:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `stat` | `string` | Name of the stat (e.g., 'books', 'captured') |
+| `containerRef` | `Ref<HTMLElement \| null>` | Container to track removals from |
+| `selector` | `string` | CSS selector to find elements |
+| `player` | `number \| ((elementData) => number)` | Target player position |
+| `trackCount` | `() => number` | Only fly when this count increases |
+| `filter` | `(elementData) => boolean` | Filter which elements fly |
+
+**Example: Checkers with piece captures**
+
+```typescript
+const { flyingElements } = useAutoAnimations({
+  gameView: () => props.gameView,
+  containers: [
+    { element: board, ref: boardRef, flipWithin: '[data-piece-id]' },
+  ],
+  flyToStats: [
+    {
+      stat: 'captured',
+      containerRef: boardRef,
+      selector: '[data-piece-id]',
+      // Captured pieces fly to the opponent's captured stat
+      player: (piece) => piece.playerPosition === 0 ? 1 : 0,
+    },
+  ],
+  getDOMElementData: (el) => ({
+    playerPosition: el.classList.contains('player-0') ? 0 : 1,
+  }),
+  elementSize: { width: 40, height: 40 },
+});
+```
+
+**Example: Cribbage with card animations**
+
+```typescript
+const { flyingElements } = useAutoAnimations({
+  gameView: () => props.gameView,
+  containers: [
+    { element: myHand, ref: handRef, flipWithin: '[data-card-id]' },
+    { element: playArea, ref: playAreaRef, flipWithin: '[data-card-id]' },
+    { element: crib, ref: cribRef },
+    { element: deck, ref: deckRef },
+  ],
+  getElementData: (el) => ({
+    rank: el.attributes?.rank,
+    suit: el.attributes?.suit,
+    faceImage: el.attributes?.$images?.face,
+    backImage: el.attributes?.$images?.back,
+  }),
+});
+```
+
+### useAutoFlyingCards (Deprecated)
+
+> **Note:** Use `useAutoAnimations` instead. This composable is kept for backward compatibility.
+
+Automatically animates cards when they move between registered containers. Still works but doesn't include FLIP or fly-to-stat features.
 
 ### useFlyOnAppear
 

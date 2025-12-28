@@ -67,12 +67,43 @@ export {
   type FlyingCardsReturn,
 } from './composables/useFlyingCards.js';
 
+// Auto-flying elements (cards, pieces, tokens) between containers
 export {
-  useAutoFlyingCards,
+  useAutoFlyingElements,
+  useAutoFlyingCards, // deprecated alias
+  type ElementContainerConfig,
+  type AutoFlyingElementsOptions,
+  type AutoFlyingElementsReturn,
+  // Backward-compatible aliases
   type ContainerConfig,
   type AutoFlyingCardsOptions,
   type AutoFlyingCardsReturn,
-} from './composables/useAutoFlyingCards.js';
+} from './composables/useAutoFlyingElements.js';
+
+// Automatic FLIP animations within containers
+export {
+  useAutoFLIP,
+  type AutoFLIPContainer,
+  type AutoFLIPOptions,
+  type AutoFLIPReturn,
+} from './composables/useAutoFLIP.js';
+
+// Automatic flying to player stats (book formation, captures, scoring)
+export {
+  useAutoFlyToStat,
+  type StatConfig,
+  type AutoFlyToStatOptions,
+  type AutoFlyToStatReturn,
+} from './composables/useAutoFlyToStat.js';
+
+// Unified automatic animation system (combines all auto-animation features)
+export {
+  useAutoAnimations,
+  type ContainerConfig as AnimationContainerConfig,
+  type FlyToStatConfig,
+  type AutoAnimationsOptions,
+  type AutoAnimationsReturn,
+} from './composables/useAutoAnimations.js';
 
 export {
   useFlyOnAppear,

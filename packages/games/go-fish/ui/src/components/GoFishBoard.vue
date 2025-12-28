@@ -7,7 +7,7 @@ import {
   findPlayerHand,
   findAllHands,
   getElementCount,
-  useAutoFlyingCards,
+  useAutoAnimations,
   useFlyingCards,
   FlyingCardsOverlay,
   prefersReducedMotion,
@@ -102,8 +102,8 @@ const opponentHandElements = [
   computed(() => findPlayerHand(props.gameView, 5)),
 ];
 
-// Auto-flying cards - handles deck↔hand and hand↔hand animations automatically
-const { flyingCards: autoFlyingCards } = useAutoFlyingCards({
+// Auto-animations - handles deck↔hand and hand↔hand animations automatically
+const { flyingElements: autoFlyingCards } = useAutoAnimations({
   gameView: () => props.gameView,
   containers: () => {
     const list = [
@@ -124,7 +124,7 @@ const { flyingCards: autoFlyingCards } = useAutoFlyingCards({
 
     return list;
   },
-  getCardData: (element) => {
+  getElementData: (element) => {
     const attrs = element.attributes;
     const images = attrs?.$images;
     return {
@@ -135,7 +135,7 @@ const { flyingCards: autoFlyingCards } = useAutoFlyingCards({
     };
   },
   duration: 400,
-  cardSize: { width: 70, height: 100 },
+  elementSize: { width: 70, height: 100 },
 });
 
 // Manual flying cards for book formation (needs flyToPlayerStat)

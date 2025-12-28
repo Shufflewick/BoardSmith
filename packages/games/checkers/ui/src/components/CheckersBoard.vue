@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch, watchEffect, nextTick } from 'vue';
+import { ref, computed, watch, watchEffect } from 'vue';
 import {
   useBoardInteraction,
-  prefersReducedMotion,
-  useFLIPAnimation,
-  useFlyingCards,
+  useAutoAnimations,
   FlyingCardsOverlay,
-  flyToPlayerStat,
   useGameGrid,
-  useElementChangeTracker,
   isMyElement,
   isOpponentElement,
   toAlgebraicNotation,
@@ -20,28 +16,6 @@ const boardInteraction = useBoardInteraction();
 
 // Animation state - tracks piece positions for FLIP animations
 const boardRef = ref<HTMLElement | null>(null);
-
-// FLIP animation for piece movements
-const { capturePositions, animateToNewPositions } = useFLIPAnimation({
-  containerRef: boardRef,
-  selector: '[data-piece-id]',
-  duration: 300,
-  easing: 'ease-out',
-});
-
-// Flying animation for captured pieces
-const { flyingCards, flyCards } = useFlyingCards();
-
-// Track piece positions and ownership for capture animations using shared utility
-const pieceTracker = useElementChangeTracker<number>({
-  containerRef: boardRef,
-  selector: '[data-piece-id]',
-  getElementId: (el) => parseInt(el.getAttribute('data-piece-id') || '0', 10),
-  getElementData: (el) => ({
-    // Track which player owns this piece based on player-X class
-    playerPosition: el.classList.contains('player-0') ? 0 : 1,
-  }),
-});
 
 interface CheckerPiece {
   id: number;
@@ -106,6 +80,35 @@ const {
   colAttr: 'col',
   rows: 8,
   cols: 8,
+});
+
+// Auto-animations: FLIP within board + flying to stats for captures
+const { flyingElements: flyingCards } = useAutoAnimations({
+  gameView: () => props.gameView,
+  containers: [
+    // Board with FLIP animation for piece movements
+    { element: board, ref: boardRef, flipWithin: '[data-piece-id]' },
+  ],
+  flyToStats: [
+    {
+      // Captured pieces fly to opponent's captured stat
+      stat: 'captured',
+      containerRef: boardRef,
+      selector: '[data-piece-id]',
+      // The capturing player is the opponent of the piece owner
+      player: (pieceData) => {
+        const pieceOwner = (pieceData.playerPosition as number) ?? 0;
+        return pieceOwner === 0 ? 1 : 0;
+      },
+    },
+  ],
+  getDOMElementData: (el) => ({
+    // Track which player owns this piece for color rendering
+    playerPosition: el.classList.contains('player-0') ? 0 : 1,
+  }),
+  duration: 400,
+  flipDuration: 300,
+  elementSize: { width: 40, height: 40 },
 });
 
 // Get piece on a square
@@ -580,81 +583,6 @@ const currentPlayerColor = computed(() => {
   return currentPos === 0 ? 'Dark' : 'Light';
 });
 
-// Initialize piece tracking on first load
-watch(
-  () => props.gameView,
-  () => {
-    if (!pieceTracker.isInitialized.value && props.gameView) {
-      // Collect all piece IDs on first load
-      const ids = new Set<number>();
-      for (const [, square] of squaresMap.value) {
-        const piece = getPiece(square);
-        if (piece) {
-          ids.add(piece.id);
-        }
-      }
-      pieceTracker.initialize(ids);
-    }
-  },
-  { immediate: true }
-);
-
-// Watch for gameView changes and animate piece movements + captures
-watch(
-  () => props.gameView,
-  async (newView, oldView) => {
-    if (!oldView || !pieceTracker.isInitialized.value) return;
-
-    // Snapshot previous state using shared tracker
-    const snapshotPrevIds = new Set(pieceTracker.prevIds.value);
-
-    // Capture positions before Vue updates DOM
-    capturePositions();
-    pieceTracker.capturePositions();
-
-    // Wait for DOM to update
-    await nextTick();
-
-    // Get current piece IDs
-    const currentIds = new Set<number>();
-    for (const [, square] of squaresMap.value) {
-      const piece = getPiece(square);
-      if (piece) {
-        currentIds.add(piece.id);
-      }
-    }
-
-    // Animate pieces to new positions
-    animateToNewPositions();
-
-    // Detect captured pieces using shared tracker utility
-    if (!prefersReducedMotion.value) {
-      const removedIds = pieceTracker.getRemovedIds(snapshotPrevIds, currentIds);
-      for (const id of removedIds) {
-        // This piece was captured - fly it to the capturing player's stats
-        const pieceData = pieceTracker.positions.value.get(id);
-        if (pieceData) {
-          // The capturing player is the opponent of the piece owner
-          const pieceOwner = (pieceData.playerPosition as number) ?? 0;
-          const capturingPlayer = pieceOwner === 0 ? 1 : 0;
-
-          // Pass the captured piece's player position for color lookup
-          flyToPlayerStat(flyCards, {
-            cards: [{ rect: pieceData.rect, faceUp: true, playerPosition: pieceOwner }],
-            playerPosition: capturingPlayer,
-            statName: 'captured',
-            duration: 400,
-            cardSize: { width: 40, height: 40 },
-          });
-        }
-      }
-    }
-
-    // Update tracking using shared tracker
-    pieceTracker.updateIds(currentIds);
-  },
-  { flush: 'sync' }
-);
 </script>
 
 <template>

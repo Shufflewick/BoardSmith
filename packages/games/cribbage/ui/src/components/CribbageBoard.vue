@@ -6,6 +6,7 @@ import {
   prefersReducedMotion,
   useFlyingCards,
   useFlyOnAppear,
+  useAutoAnimations,
   FlyingCardsOverlay,
   findElement,
   findPlayerHand,
@@ -16,25 +17,19 @@ import {
   getSuitSymbol,
   getSuitColor,
   getCardPointValue,
-  useFLIPAnimation,
 } from '@boardsmith/ui';
 
 // Animation state - tracks card positions for FLIP animations
 const boardRef = ref<HTMLElement | null>(null);
 
-// Flying cards animation for discard
-const { flyingCards: discardFlyingCards, flyCard, flyCards } = useFlyingCards();
+// Manual flying cards for discard (need to capture before action)
+const { flyingCards: discardFlyingCards, flyCards } = useFlyingCards();
 const cribStackRef = ref<HTMLElement | null>(null);
 const deckStackRef = ref<HTMLElement | null>(null);
 const starterAreaRef = ref<HTMLElement | null>(null);
-
-// FLIP animation for card movements
-const { capturePositions, animateToNewPositions } = useFLIPAnimation({
-  containerRef: boardRef,
-  selector: '[data-card-id]',
-  duration: 300,
-  easing: 'ease-out',
-});
+const myHandRef = ref<HTMLElement | null>(null);
+const playAreaRef = ref<HTMLElement | null>(null);
+const playedCardsRef = ref<HTMLElement | null>(null);
 
 // Type for parsed image info (either URL string or sprite with coordinates)
 type ImageInfo =
@@ -248,6 +243,33 @@ const starterCard = computed(() => getFirstCard(starterElement.value) || null);
 const deckElement = computed(() => findElement(props.gameView, { type: 'deck', name: 'deck' }));
 const deckCardCount = computed(() => getElementCount(deckElement.value));
 
+// Auto-animations: FLIP within containers + flying between containers
+const { flyingElements: autoFlyingCards } = useAutoAnimations({
+  gameView: () => props.gameView,
+  containers: [
+    // Hand cards reorder with FLIP animation
+    { element: myHandElement, ref: myHandRef, flipWithin: '[data-card-id]' },
+    // Play area cards reorder with FLIP animation
+    { element: playAreaElement, ref: playAreaRef, flipWithin: '[data-card-id]' },
+    // Played cards stack with FLIP animation
+    { element: playedCardsElement, ref: playedCardsRef, flipWithin: '[data-card-id]' },
+    // Crib for flying cards
+    { element: cribElement, ref: cribStackRef },
+    // Deck for flying cards
+    { element: deckElement, ref: deckStackRef },
+    // Starter area for flying cards
+    { element: starterElement, ref: starterAreaRef },
+  ],
+  getElementData: (element) => ({
+    rank: element.attributes?.rank,
+    suit: element.attributes?.suit,
+    faceImage: getCardImageInfo(element, 'face') ?? undefined,
+    backImage: getCardImageInfo(element, 'back') ?? undefined,
+  }),
+  duration: 400,
+  flipDuration: 300,
+});
+
 // Fly starter card from deck when it appears using the reusable composable
 const { isFlying: starterIsFlying, flyingCards: starterFlyingCards } = useFlyOnAppear({
   sourceRef: deckStackRef,
@@ -267,6 +289,7 @@ const { isFlying: starterIsFlying, flyingCards: starterFlyingCards } = useFlyOnA
 
 // Combine all flying cards for the overlay
 const allFlyingCards = computed(() => [
+  ...autoFlyingCards.value,
   ...discardFlyingCards.value,
   ...starterFlyingCards.value,
 ]);
@@ -615,24 +638,6 @@ async function sayGo() {
   }
 }
 
-// Watch for gameView changes and animate card movements
-watch(
-  () => props.gameView,
-  async (newView, oldView) => {
-    if (!oldView) return;
-
-    // Capture positions before Vue updates DOM
-    capturePositions();
-
-    // Wait for DOM to update
-    await nextTick();
-
-    // Animate to new positions
-    animateToNewPositions();
-  },
-  { deep: false }
-);
-
 // Expose for parent
 defineExpose({
   selectedCards,
@@ -660,7 +665,7 @@ defineExpose({
           <span>Current Count</span>
           <span class="running-total-inline">{{ runningTotal }}/31</span>
         </div>
-        <div class="current-count-cards">
+        <div ref="playAreaRef" class="current-count-cards">
           <div
             v-for="(card, index) in playArea"
             :key="card.id"
@@ -807,7 +812,7 @@ defineExpose({
         <!-- Played Stack (cards from completed counts, visible during play phase) -->
         <div v-if="cribbagePhase === 'play'" class="played-stack-area">
           <div class="area-label">Played ({{ playedCards.length }})</div>
-          <div class="played-stack">
+          <div ref="playedCardsRef" class="played-stack">
             <div
               v-for="(card, index) in playedCards"
               :key="card.name || card.id"
@@ -845,7 +850,7 @@ defineExpose({
       <!-- My Hand -->
       <div class="my-hand-area">
         <div class="hand-label">Your Hand ({{ myHand.length }} cards)</div>
-        <div class="my-cards">
+        <div ref="myHandRef" class="my-cards">
           <div
             v-for="card in myHand"
             :key="card.name"
