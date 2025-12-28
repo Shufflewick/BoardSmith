@@ -6,7 +6,7 @@ import type { ElementClass } from '../element/types.js';
 /**
  * Selection types for action arguments
  */
-export type SelectionType = 'element' | 'choice' | 'text' | 'number';
+export type SelectionType = 'element' | 'choice' | 'elements' | 'text' | 'number';
 
 /**
  * Base selection configuration
@@ -214,6 +214,50 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
 }
 
 /**
+ * Select from a pre-computed array of elements.
+ *
+ * This is the "pit of success" selection for element-based choices.
+ * Unlike chooseFrom, this selection:
+ * - Uses element IDs as values (numbers), not strings
+ * - Auto-generates display names with disambiguation
+ * - Accepts element IDs from custom UIs naturally
+ * - Resolves IDs to actual Element objects in execute()
+ *
+ * @example
+ * ```typescript
+ * action('attack')
+ *   .fromElements('target', {
+ *     elements: (ctx) => ctx.game.combat.validTargets,
+ *     prompt: 'Choose a target',
+ *   })
+ *   .execute(({ target }) => {
+ *     // target is the resolved Element object
+ *     target.takeDamage(10);
+ *   });
+ * ```
+ */
+export interface ElementsSelection<T extends GameElement = GameElement> extends BaseSelection<T> {
+  type: 'elements';
+  /**
+   * Elements to choose from - can be static array or function.
+   * The value sent to the server will be the element's ID (number).
+   */
+  elements: T[] | ((context: ActionContext) => T[]);
+  /**
+   * Custom display function. If not provided, uses element.name with
+   * automatic disambiguation (e.g., "Militia #1", "Militia #2").
+   */
+  display?: (element: T, context: ActionContext, allElements: T[]) => string;
+  /** Get board element reference for highlighting */
+  boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+  /**
+   * Enable multi-select mode with checkboxes.
+   * Result will be an array of elements.
+   */
+  multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+}
+
+/**
  * Enter text
  */
 export interface TextSelection extends BaseSelection<string> {
@@ -245,6 +289,7 @@ export interface NumberSelection extends BaseSelection<number> {
 export type Selection =
   | ChoiceSelection
   | ElementSelection
+  | ElementsSelection
   | TextSelection
   | NumberSelection;
 

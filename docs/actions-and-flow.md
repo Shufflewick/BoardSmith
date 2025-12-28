@@ -103,6 +103,64 @@ Action.create('placeStone')
   })
 ```
 
+#### `fromElements<T>` - Select from a list of elements (Recommended for Custom UIs)
+
+**This is the preferred method when building custom game UIs.** It uses element IDs as values, making it seamless for custom components to send selections.
+
+```typescript
+Action.create('attack')
+  .fromElements<Unit>('target', {
+    prompt: 'Choose a target',
+    elements: (ctx) => ctx.game.combat.validTargets,
+    display: (unit, ctx, allUnits) => unit.name,  // Optional: custom display
+    boardRef: (unit) => ({ id: unit.id }),
+  })
+  .execute((args, ctx) => {
+    // args.target is the resolved Element object (not an ID!)
+    const target = args.target as Unit;
+    target.takeDamage(10);
+    return { success: true };
+  });
+```
+
+**Why use `fromElements` instead of `chooseFrom`?**
+
+| Feature | `chooseFrom` | `fromElements` |
+|---------|-------------|----------------|
+| Value type | String (manual) | Element ID (automatic) |
+| Custom UI sends | `"Militia #1"` (must match exactly) | `42` (element ID) |
+| Display names | Manual | Auto-disambiguated |
+| Execute receives | Raw value | Resolved Element |
+
+**Custom UI integration:**
+
+```typescript
+// In your custom Vue component:
+function attackTarget(targetId: number) {
+  // Just send the element ID - it works!
+  props.action('attack', { target: targetId });
+}
+```
+
+**Auto-disambiguation:**
+When multiple elements share the same name, display names are automatically suffixed:
+- "Militia" (if unique)
+- "Militia #1", "Militia #2" (if duplicates exist)
+
+**Multi-select:**
+
+```typescript
+.fromElements<Unit>('targets', {
+  elements: (ctx) => ctx.game.combat.validTargets,
+  multiSelect: { min: 1, max: 3 },  // Select 1-3 targets
+})
+.execute((args) => {
+  // args.targets is an array of Element objects
+  const targets = args.targets as Unit[];
+  targets.forEach(t => t.takeDamage(5));
+});
+```
+
 #### `playerChoices` - Choose a player with chooseFrom
 
 Use the `playerChoices()` helper on your Game class to generate player choices for use with `chooseFrom`:
@@ -601,6 +659,78 @@ constructor(options) {
   this.registerAction(createPlayAction(this));
 
   this.setFlow(createGameFlow(this));
+}
+```
+
+## Custom UI Integration
+
+### Sending Actions from Custom Components
+
+When building a custom game board in Vue, you can send actions using the `action` prop:
+
+```vue
+<script setup lang="ts">
+const props = defineProps<{
+  gameView: GameView;
+  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean }>;
+}>();
+
+function attackTarget(targetId: number) {
+  props.action('attack', { target: targetId });
+}
+</script>
+```
+
+### Smart Value Resolution
+
+BoardSmith automatically resolves values in `chooseFrom` selections. When you send an action, these formats are accepted:
+
+1. **Exact choice value** (original behavior)
+2. **Element ID** (if choice references an element with that ID)
+3. **Display string** (case-insensitive match to choice display)
+
+This means custom UIs can send element IDs even for `chooseFrom` selections:
+
+```typescript
+// Action definition using chooseFrom
+.chooseFrom('target', {
+  choices: (ctx) => game.validTargets,  // Returns element objects
+  display: (target) => target.name,
+})
+
+// Custom UI can send the element ID directly
+props.action('attack', { target: target.id });  // Works!
+```
+
+### Detailed Validation Errors
+
+When validation fails, you get helpful error messages:
+
+```typescript
+// Error response includes valid choices:
+{
+  success: false,
+  error: 'Invalid selection for "target": "invalid-value". Valid choices: [Militia #1, Militia #2, genesis]'
+}
+```
+
+### Best Practices
+
+1. **Prefer `fromElements` for new code** - It's designed for custom UIs
+2. **Use element IDs, not string values** - IDs are stable; display strings can change
+3. **Check `actionMetadata` for valid choices** - It includes element IDs for reference
+
+```typescript
+// actionMetadata structure for fromElements:
+{
+  selections: [{
+    name: 'target',
+    type: 'elements',
+    validElements: [
+      { id: 42, display: 'Militia #1', ref: { id: 42 } },
+      { id: 43, display: 'Militia #2', ref: { id: 43 } },
+    ]
+  }]
 }
 ```
 

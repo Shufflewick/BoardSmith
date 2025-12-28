@@ -123,6 +123,12 @@ export function buildActionMetadata(
           type: 'element',
           values: selMeta.validElements.map(ve => ve.id),
         });
+      } else if (selection.type === 'elements' && selMeta.validElements) {
+        // fromElements() type - values are element IDs
+        selectionValues.set(selection.name, {
+          type: 'elements',
+          values: selMeta.validElements.map(ve => ve.id),
+        });
       } else if (selection.type === 'choice' && selMeta.choices) {
         selectionValues.set(selection.name, {
           type: 'choice',
@@ -210,9 +216,9 @@ function buildSelectionMetadata(
           // For each possible value of the dependent selection, compute choices
           for (const depValue of dependentInfo.values) {
             // Build args with the dependent value
-            // For element selections, we need to resolve to the actual element
+            // For element/elements selections, we need to resolve to the actual element
             let argValue: unknown = depValue;
-            if (dependentInfo.type === 'element' && typeof depValue === 'number') {
+            if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
               argValue = game.getElementById(depValue);
             }
 
@@ -268,7 +274,7 @@ function buildSelectionMetadata(
             for (const depValue of dependentInfo.values) {
               // Build args with the dependent value (same as above for choices)
               let argValue: unknown = depValue;
-              if (dependentInfo.type === 'element' && typeof depValue === 'number') {
+              if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
                 argValue = game.getElementById(depValue);
               }
 
@@ -425,6 +431,97 @@ function buildSelectionMetadata(
 
         return validElem;
       });
+      break;
+    }
+
+    case 'elements': {
+      // New "pit of success" selection type - fromElements()
+      // Value is element ID (number), client sends ID directly
+      const elementsSel = selection as any;
+
+      // Get elements from the selection
+      let elements: any[];
+      if (typeof elementsSel.elements === 'function') {
+        try {
+          elements = elementsSel.elements(ctx);
+        } catch (error) {
+          console.error(`[buildSelectionMetadata] Error getting elements for selection "${selection.name}":`, error);
+          elements = [];
+        }
+      } else {
+        elements = elementsSel.elements || [];
+      }
+
+      // Auto-disambiguate display names
+      const nameCounts = new Map<string, number>();
+      for (const el of elements) {
+        const name = el.name || 'Element';
+        nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+      }
+
+      const nameIndices = new Map<string, number>();
+
+      // Build validElements list with auto-disambiguation
+      // The VALUE is the element ID (number), which custom UIs can send directly
+      base.validElements = elements.map((element: any) => {
+        const validElem: any = {
+          id: element.id,  // This is what the client should send
+        };
+
+        // Generate display name with auto-disambiguation
+        const baseName = element.name || 'Element';
+        const count = nameCounts.get(baseName) || 1;
+
+        if (elementsSel.display) {
+          try {
+            validElem.display = elementsSel.display(element, ctx, elements);
+          } catch {
+            validElem.display = baseName;
+          }
+        } else if (count > 1) {
+          // Multiple elements with same name - add index suffix
+          const idx = (nameIndices.get(baseName) || 0) + 1;
+          nameIndices.set(baseName, idx);
+          validElem.display = `${baseName} #${idx}`;
+        } else {
+          validElem.display = baseName;
+        }
+
+        // Add board ref if provided
+        if (elementsSel.boardRef) {
+          try {
+            validElem.ref = elementsSel.boardRef(element, ctx);
+          } catch {
+            // Ignore errors
+          }
+        } else {
+          // Default ref: use element ID and notation if available
+          validElem.ref = { id: element.id };
+          if (element.notation) {
+            validElem.ref.notation = element.notation;
+          }
+        }
+
+        return validElem;
+      });
+
+      // Add multiSelect config if present
+      if (elementsSel.multiSelect !== undefined) {
+        const multiSelectConfig = typeof elementsSel.multiSelect === 'function'
+          ? elementsSel.multiSelect(ctx)
+          : elementsSel.multiSelect;
+
+        if (multiSelectConfig !== undefined) {
+          if (typeof multiSelectConfig === 'number') {
+            base.multiSelect = { min: 1, max: multiSelectConfig };
+          } else {
+            base.multiSelect = {
+              min: multiSelectConfig.min ?? 1,
+              max: multiSelectConfig.max,
+            };
+          }
+        }
+      }
       break;
     }
 

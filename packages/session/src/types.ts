@@ -244,7 +244,7 @@ export interface SelectionFilter {
  */
 export interface SelectionMetadata {
   name: string;
-  type: 'choice' | 'element' | 'number' | 'text';
+  type: 'choice' | 'element' | 'elements' | 'number' | 'text';
   prompt?: string;
   optional?: boolean;
   /**

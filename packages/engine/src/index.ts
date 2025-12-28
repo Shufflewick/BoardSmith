@@ -111,6 +111,7 @@ export type {
   BaseSelection,
   ChoiceSelection,
   ElementSelection,
+  ElementsSelection,
   TextSelection,
   NumberSelection,
   ActionContext,

@@ -8,6 +8,7 @@ import type {
   Selection,
   ChoiceSelection,
   ElementSelection,
+  ElementsSelection,
   TextSelection,
   NumberSelection,
   ValidationResult,
@@ -306,6 +307,67 @@ export class Action {
   }
 
   /**
+   * Select from a pre-computed array of elements.
+   *
+   * This is the "pit of success" method for element-based choices.
+   * - Values are element IDs (numbers), not strings
+   * - Custom UIs send IDs directly: `props.action('attack', { target: 42 })`
+   * - Execute handler receives resolved Element objects
+   * - Display names auto-disambiguate (e.g., "Militia #1", "Militia #2")
+   *
+   * @example
+   * ```typescript
+   * action('attack')
+   *   .fromElements('target', {
+   *     elements: (ctx) => ctx.game.combat.validTargets,
+   *     prompt: 'Choose a target',
+   *   })
+   *   .execute(({ target }) => {
+   *     // target is the resolved Element object, not an ID
+   *     target.takeDamage(10);
+   *   });
+   * ```
+   */
+  fromElements<T extends GameElement>(
+    name: string,
+    options: {
+      prompt?: string;
+      /**
+       * Elements to choose from - can be static array or function.
+       * Custom UIs send the element ID directly.
+       */
+      elements: T[] | ((context: ActionContext) => T[]);
+      /**
+       * Custom display function. If not provided, uses element.name with
+       * automatic disambiguation when multiple elements have the same name.
+       */
+      display?: (element: T, context: ActionContext, allElements: T[]) => string;
+      optional?: boolean;
+      validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      /** Get board element reference for highlighting */
+      boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+      /**
+       * Enable multi-select mode. Result will be an array of elements.
+       */
+      multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+    }
+  ): this {
+    const selection: ElementsSelection<T> = {
+      type: 'elements',
+      name,
+      prompt: options.prompt,
+      elements: options.elements,
+      display: options.display,
+      optional: options.optional,
+      validate: options.validate,
+      boardRef: options.boardRef,
+      multiSelect: options.multiSelect,
+    };
+    this.definition.selections.push(selection as Selection);
+    return this;
+  }
+
+  /**
    * Add a text input selection
    */
   enterText(
@@ -392,10 +454,15 @@ export class ActionExecutor {
   /**
    * Resolve serialized args (player indices, element IDs) to actual objects.
    * This is needed because network-serialized args use indices/IDs instead of objects.
+   *
+   * @param action The action definition
+   * @param args The raw args from the client
+   * @param player Optional player for context-dependent choice resolution
    */
   resolveArgs(
     action: ActionDefinition,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    player?: Player
   ): Record<string, unknown> {
     const resolved = { ...args };
 
@@ -414,6 +481,25 @@ export class ActionExecutor {
           }
           break;
         }
+        case 'elements': {
+          // fromElements() selection - value is element ID(s)
+          // Resolve to actual GameElement object(s)
+          if (typeof value === 'number') {
+            // Single element ID
+            const element = this.game.getElementById(value);
+            if (element) {
+              resolved[selection.name] = element;
+            }
+          } else if (Array.isArray(value)) {
+            // Multi-select: array of element IDs
+            const elements = value
+              .filter((v): v is number => typeof v === 'number')
+              .map(id => this.game.getElementById(id))
+              .filter((el): el is GameElement => el !== null);
+            resolved[selection.name] = elements;
+          }
+          break;
+        }
         case 'choice': {
           // If the choice value is a serialized element (object with id and className),
           // resolve it to the actual GameElement
@@ -421,6 +507,14 @@ export class ActionExecutor {
             const element = this.game.getElementById((value as { id: number }).id);
             if (element) {
               resolved[selection.name] = element;
+            }
+          } else if (player) {
+            // Try smart resolution: element ID or display string → actual choice
+            // This supports custom UIs sending element IDs for chooseFrom selections
+            const choices = this.getChoices(selection, player, resolved);
+            const resolvedValue = this.smartResolveChoiceValue(value, choices);
+            if (resolvedValue !== value) {
+              resolved[selection.name] = resolvedValue;
             }
           }
           break;
@@ -513,6 +607,15 @@ export class ActionExecutor {
         return elements;
       }
 
+      case 'elements': {
+        // New "pit of success" selection type - elements array
+        const elementsSel = selection as ElementsSelection;
+        const elements = typeof elementsSel.elements === 'function'
+          ? elementsSel.elements(context)
+          : [...elementsSel.elements];
+        return elements;
+      }
+
       case 'text':
       case 'number':
         // These don't have predefined choices
@@ -559,6 +662,115 @@ export class ActionExecutor {
   }
 
   /**
+   * Try to resolve a value to a valid choice using smart matching.
+   * This provides backward compatibility for custom UIs sending element IDs
+   * when using chooseFrom with element-based choices.
+   *
+   * Smart matching tries (in order):
+   * 1. Element ID match: if value is a number and a choice is an element with that ID
+   * 2. Display match: if value is a string matching a choice's display property
+   *
+   * @returns true if the value can be resolved to a valid choice
+   */
+  private trySmartResolveChoice(value: unknown, choices: unknown[]): boolean {
+    // Try element ID match
+    if (typeof value === 'number') {
+      for (const choice of choices) {
+        // Check if choice is an element with matching ID
+        if (choice && typeof choice === 'object' && 'id' in choice) {
+          if ((choice as { id: number }).id === value) {
+            return true;
+          }
+        }
+      }
+    }
+
+    // Try display string match (case-insensitive)
+    if (typeof value === 'string') {
+      const lowerValue = value.toLowerCase();
+      for (const choice of choices) {
+        if (choice && typeof choice === 'object') {
+          const obj = choice as Record<string, unknown>;
+          // Check display, name, or label properties
+          const displayProps = ['display', 'name', 'label'];
+          for (const prop of displayProps) {
+            if (typeof obj[prop] === 'string' && obj[prop].toString().toLowerCase() === lowerValue) {
+              return true;
+            }
+          }
+        } else if (typeof choice === 'string' && choice.toLowerCase() === lowerValue) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Resolve a value to the actual choice value using smart matching.
+   * Used by resolveArgs to convert IDs/display strings to actual choice values.
+   *
+   * @returns The resolved choice value, or the original value if no match found
+   */
+  private smartResolveChoiceValue(value: unknown, choices: unknown[]): unknown {
+    // Try element ID match
+    if (typeof value === 'number') {
+      for (const choice of choices) {
+        if (choice && typeof choice === 'object' && 'id' in choice) {
+          if ((choice as { id: number }).id === value) {
+            return choice;
+          }
+        }
+      }
+    }
+
+    // Try display string match (case-insensitive)
+    if (typeof value === 'string') {
+      const lowerValue = value.toLowerCase();
+      for (const choice of choices) {
+        if (choice && typeof choice === 'object') {
+          const obj = choice as Record<string, unknown>;
+          const displayProps = ['display', 'name', 'label'];
+          for (const prop of displayProps) {
+            if (typeof obj[prop] === 'string' && obj[prop].toString().toLowerCase() === lowerValue) {
+              return choice;
+            }
+          }
+        } else if (typeof choice === 'string' && choice.toLowerCase() === lowerValue) {
+          return choice;
+        }
+      }
+    }
+
+    return value;
+  }
+
+  /**
+   * Format valid choices for error messages
+   */
+  private formatValidChoices(choices: unknown[]): string {
+    const maxShow = 5;
+    const formatted = choices.slice(0, maxShow).map(choice => {
+      if (choice && typeof choice === 'object') {
+        const obj = choice as Record<string, unknown>;
+        // Try to get a readable representation
+        if (obj.display) return String(obj.display);
+        if (obj.name) return String(obj.name);
+        if (obj.label) return String(obj.label);
+        if ('id' in obj) return `(id: ${obj.id})`;
+      }
+      return JSON.stringify(choice);
+    });
+
+    if (choices.length > maxShow) {
+      formatted.push(`... and ${choices.length - maxShow} more`);
+    }
+
+    return `[${formatted.join(', ')}]`;
+  }
+
+  /**
    * Validate a single selection value
    */
   validateSelection(
@@ -582,11 +794,50 @@ export class ActionExecutor {
       if (Array.isArray(value)) {
         for (const v of value) {
           if (!this.choicesContain(choices, v)) {
-            errors.push(`Invalid selection for ${selection.name}: ${JSON.stringify(v)}`);
+            // Try smart resolution for choice selections
+            if (selection.type === 'choice' && !this.trySmartResolveChoice(v, choices)) {
+              const validChoicesStr = this.formatValidChoices(choices);
+              errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(v)}. Valid choices: ${validChoicesStr}`);
+            }
           }
         }
       } else if (!this.choicesContain(choices, value)) {
-        errors.push(`Invalid selection for ${selection.name}`);
+        // Try smart resolution for choice selections
+        if (selection.type === 'choice' && !this.trySmartResolveChoice(value, choices)) {
+          const validChoicesStr = this.formatValidChoices(choices);
+          errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${validChoicesStr}`);
+        } else if (selection.type === 'element') {
+          errors.push(`Invalid selection for ${selection.name}`);
+        }
+      }
+    }
+
+    // Validate elements selection (new "pit of success" type)
+    if (selection.type === 'elements') {
+      const validElements = this.getChoices(selection, player, args) as GameElement[];
+      const validIds = validElements.map(e => e.id);
+
+      const validateId = (id: unknown): string | null => {
+        if (typeof id !== 'number') {
+          return `Expected element ID (number) for "${selection.name}", got ${typeof id}: ${JSON.stringify(id)}`;
+        }
+        if (!validIds.includes(id)) {
+          const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
+          return `Element ID ${id} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
+        }
+        return null;
+      };
+
+      if (Array.isArray(value)) {
+        // Multi-select: array of IDs
+        for (const v of value) {
+          const error = validateId(v);
+          if (error) errors.push(error);
+        }
+      } else {
+        // Single selection
+        const error = validateId(value);
+        if (error) errors.push(error);
       }
     }
 
@@ -700,7 +951,7 @@ export class ActionExecutor {
     args: Record<string, unknown>
   ): ActionResult {
     // Resolve serialized args (player indices, element IDs) to actual objects
-    const resolvedArgs = this.resolveArgs(action, args);
+    const resolvedArgs = this.resolveArgs(action, args, player);
 
     // Validate with resolved args
     const validation = this.validateAction(action, player, resolvedArgs);
@@ -929,6 +1180,15 @@ export class ActionExecutor {
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
+    // For elements selections (fromElements), just check they have elements
+    if (selection.type === 'elements') {
+      const elements = this.getChoices(selection, player, args);
+      if (elements.length === 0) {
+        return false;
+      }
+      return this.hasValidSelectionPath(selections, player, args, index + 1);
+    }
+
     // For choice selections with dynamic choices functions, also skip path validation
     // (computing dynamic choices repeatedly is too expensive)
     if (selection.type === 'choice') {
@@ -1034,7 +1294,7 @@ export class ActionExecutor {
     // Resolve element/player IDs to actual objects before validating choices
     // This is needed because choices functions (e.g., equipment) may depend on
     // previously selected elements (e.g., actingMerc)
-    const resolvedArgs = this.resolveArgs(action, pendingState.collectedArgs);
+    const resolvedArgs = this.resolveArgs(action, pendingState.collectedArgs, player);
 
     // Validate the choice is in the available choices
     const context: ActionContext = {
@@ -1091,7 +1351,7 @@ export class ActionExecutor {
 
     // Get next choices (choices may have changed after onEach)
     // Re-resolve args in case they changed, and use resolved args for choices
-    const nextResolvedArgs = this.resolveArgs(action, pendingState.collectedArgs);
+    const nextResolvedArgs = this.resolveArgs(action, pendingState.collectedArgs, player);
     const nextContext: ActionContext = {
       game: this.game,
       player,
@@ -1187,7 +1447,7 @@ export class ActionExecutor {
     }
 
     // Resolve serialized args
-    const resolvedArgs = this.resolveArgs(action, pendingState.collectedArgs);
+    const resolvedArgs = this.resolveArgs(action, pendingState.collectedArgs, player);
 
     const context: ActionContext = {
       game: this.game,
