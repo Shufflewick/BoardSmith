@@ -7,6 +7,7 @@ import {
   findPlayerHand,
   findAllHands,
   getElementCount,
+  useAutoFlyingCards,
   useFlyingCards,
   FlyingCardsOverlay,
   prefersReducedMotion,
@@ -82,16 +83,75 @@ const pondRef = ref<HTMLElement | null>(null);
 const myHandRef = ref<HTMLElement | null>(null);
 const opponentHandRefs = ref<Map<number, HTMLElement>>(new Map());
 
-// Flying cards animation
-const { flyingCards, flyCard, flyCards } = useFlyingCards();
+// Pre-create opponent hand refs and computed elements for auto-flying
+const opponentHandRefArray = [
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+];
 
-// Track previous card IDs to detect new cards
-const prevMyCardIds = ref<Set<number>>(new Set());
-const prevOpponentCardCounts = ref<Map<number, number>>(new Map());
+const opponentHandElements = [
+  computed(() => findPlayerHand(props.gameView, 0)),
+  computed(() => findPlayerHand(props.gameView, 1)),
+  computed(() => findPlayerHand(props.gameView, 2)),
+  computed(() => findPlayerHand(props.gameView, 3)),
+  computed(() => findPlayerHand(props.gameView, 4)),
+  computed(() => findPlayerHand(props.gameView, 5)),
+];
+
+// Auto-flying cards - handles deck↔hand and hand↔hand animations automatically
+const { flyingCards: autoFlyingCards } = useAutoFlyingCards({
+  gameView: () => props.gameView,
+  containers: () => {
+    const list = [
+      { element: pond, ref: pondRef },
+      { element: myHand, ref: myHandRef },
+    ];
+
+    // Add opponent containers dynamically
+    for (const opponent of opponents.value) {
+      const pos = opponent.position;
+      if (opponentHandElements[pos] && opponentHandRefArray[pos]?.value) {
+        list.push({
+          element: opponentHandElements[pos],
+          ref: opponentHandRefArray[pos],
+        });
+      }
+    }
+
+    return list;
+  },
+  getCardData: (element) => {
+    const attrs = element.attributes;
+    const images = attrs?.$images;
+    return {
+      rank: attrs?.rank || '',
+      suit: attrs?.suit || '',
+      faceImage: typeof images?.face === 'string' ? images.face : undefined,
+      backImage: typeof images?.back === 'string' ? images.back : undefined,
+    };
+  },
+  duration: 400,
+  cardSize: { width: 70, height: 100 },
+});
+
+// Manual flying cards for book formation (needs flyToPlayerStat)
+const { flyingCards: bookFlyingCards, flyCards } = useFlyingCards();
+
+// Combine all flying cards for overlay
+const flyingCards = computed(() => [
+  ...autoFlyingCards.value,
+  ...bookFlyingCards.value,
+]);
 
 // Track for book formation animation
 const prevMyBooksCount = ref(0);
 const prevOpponentBooksCounts = ref<Map<number, number>>(new Map());
+// Track previous card IDs for book formation detection
+const prevMyCardIds = ref<Set<number>>(new Set());
 // Store card positions keyed by card ID (captured before state changes)
 const cardPositions = ref<Map<number, { rect: DOMRect; rank: string; suit: string; faceImage?: string; backImage?: string }>>(new Map());
 
@@ -121,12 +181,16 @@ const opponentHands = computed(() => {
   return handMap;
 });
 
-// Helper to set opponent hand ref
+// Helper to set opponent hand ref (updates both Map and array for auto-flying)
 function setOpponentHandRef(position: number, el: HTMLElement | null) {
   if (el) {
     opponentHandRefs.value.set(position, el);
   } else {
     opponentHandRefs.value.delete(position);
+  }
+  // Also update the array-based refs for auto-flying cards
+  if (opponentHandRefArray[position]) {
+    opponentHandRefArray[position].value = el;
   }
 }
 
@@ -278,84 +342,20 @@ async function handleCardClick(rank: string) {
   }
 }
 
-// Watch for new cards appearing in my hand and animate them flying in
-watch(
-  () => myHand.value?.children,
-  (newChildren, oldChildren) => {
-    if (prefersReducedMotion.value) return;
-    if (!newChildren || !myHandRef.value) return;
-
-    // Get current card IDs
-    const currentIds = new Set(newChildren.map(c => c.id));
-
-    // Find new cards (cards that weren't in previous state)
-    const newCards = newChildren.filter(c => !prevMyCardIds.value.has(c.id));
-
-    if (newCards.length > 0 && prevMyCardIds.value.size > 0) {
-      // Determine source: check if any opponent lost cards
-      let sourceRef: HTMLElement | null = pondRef.value;
-      for (const [pos, hand] of opponentHands.value) {
-        const prevCount = prevOpponentCardCounts.value.get(pos) || 0;
-        const currentCount = getElementCount(hand);
-        if (currentCount < prevCount) {
-          sourceRef = opponentHandRefs.value.get(pos) || null;
-          break;
-        }
-      }
-
-      if (sourceRef) {
-        const sourceRect = sourceRef.getBoundingClientRect();
-        const isFromPond = sourceRef === pondRef.value;
-
-        // Fly each new card from source to hand
-        flyCards(
-          newCards.map((card, i) => {
-            const attrs = card.attributes as any;
-            const images = attrs?.$images;
-            return {
-              id: `fly-${card.id}-${Date.now()}`,
-              startRect: sourceRect,
-              endRect: () => myHandRef.value?.getBoundingClientRect() ?? sourceRect,
-              cardData: {
-                rank: attrs?.rank || '',
-                suit: attrs?.suit || '',
-                faceUp: !isFromPond,
-                faceImage: typeof images?.face === 'string' ? images.face : undefined,
-                backImage: typeof images?.back === 'string' ? images.back : undefined,
-              },
-              flip: isFromPond,
-              duration: 400,
-              cardSize: { width: 70, height: 100 },
-            };
-          }),
-          80
-        );
-      }
-    }
-
-    // Update tracking state
-    prevMyCardIds.value = currentIds;
-    for (const [pos, hand] of opponentHands.value) {
-      prevOpponentCardCounts.value.set(pos, getElementCount(hand));
-    }
-  },
-  { deep: true }
-);
-
-// Flag to track if we've initialized
+// Flag to track if we've initialized book tracking
 const isInitialized = ref(false);
 
-// Initialize tracking on first load ONLY
+// Initialize book tracking on first load ONLY
 watch(
   () => props.gameView,
   () => {
     if (!isInitialized.value && props.gameView) {
+      // Initialize my card IDs for book formation detection
       if (myHand.value?.children) {
         prevMyCardIds.value = new Set(myHand.value.children.map(c => c.id));
       }
-      // Initialize opponent tracking
+      // Initialize opponent book counts
       for (const [pos, hand] of opponentHands.value) {
-        prevOpponentCardCounts.value.set(pos, getElementCount(hand));
         prevOpponentBooksCounts.value.set(pos, getBooksCount(pos));
       }
       prevMyBooksCount.value = myBooksCount.value;
@@ -459,7 +459,8 @@ watch(
       prevOpponentBooksCounts.value.set(opponentPos, currentBooks);
     }
 
-    // Update my book tracking
+    // Update my card ID and book tracking
+    prevMyCardIds.value = currentIds;
     prevMyBooksCount.value = currentMyBooks;
   },
   { flush: 'sync' } // Run synchronously before other watchers

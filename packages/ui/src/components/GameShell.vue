@@ -1100,6 +1100,8 @@ defineExpose({
                 :execute-action="executeAction"
                 :set-board-prompt="setBoardPrompt"
                 :start-action="startAction"
+                :can-undo="canUndo && !isViewingHistory"
+                :undo="handleUndo"
               >
                 <div class="empty-game-area">
                   <p>Add your game board in the #game-board slot</p>

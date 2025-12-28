@@ -496,12 +496,22 @@ watch(() => boardInteraction?.currentAction, (action, prevAction) => {
 
 > **Note:** Action state is automatically cleared when the action completes, is cancelled, or the turn ends.
 
-**Real Example: Go Fish**
+**Real Examples:**
 
-See `packages/games/go-fish/ui/src/components/GoFishBoard.vue` for a complete implementation. It uses `boardInteraction.currentAction` to:
-- Show an "Asking:" indicator banner when the player clicks the Ask button
-- Display which selection step they're on (choosing player vs choosing rank)
-- Only highlight selectable elements after the action button is clicked (not just when available)
+1. **Demo: Complex UI Interactions** (`packages/games/demoComplexUiInteractions/`)
+
+   A dedicated demo showing this feature with multiple simultaneous actions. The custom GameBoard:
+   - Shows an action status panel displaying the current action and selection step
+   - Changes board color based on active action (blue for Collect, red for Discard, etc.)
+   - Highlights cards with action-specific colors
+   - Includes a debug panel showing raw `boardInteraction` state
+
+2. **Go Fish** (`packages/games/go-fish/ui/src/components/GoFishBoard.vue`)
+
+   Uses `boardInteraction.currentAction` to:
+   - Show an "Asking:" indicator banner when the player clicks the Ask button
+   - Display which selection step they're on (choosing player vs choosing rank)
+   - Only highlight selectable elements after the action button is clicked (not just when available)
 
 ### useElementAnimation
 
@@ -542,7 +552,7 @@ const { isRevealed, reveal } = useCardReveal({
 
 ### useFlyingCards
 
-Manage cards flying between positions.
+Manage cards flying between positions manually.
 
 ```typescript
 import { useFlyingCards, type FlyingCard } from '@boardsmith/ui';
@@ -558,6 +568,106 @@ flyCard({
   onComplete: () => console.log('Card arrived'),
 });
 ```
+
+### useAutoFlyingCards
+
+**Recommended for most games.** Automatically animates cards when they move between registered containers. No manual tracking needed.
+
+```typescript
+import { useAutoFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
+
+// 1. Create refs for DOM elements
+const deckRef = ref<HTMLElement | null>(null);
+const handRef = ref<HTMLElement | null>(null);
+const discardRef = ref<HTMLElement | null>(null);
+
+// 2. Create computed refs for game elements
+const deck = computed(() => findElement(gameView, { type: 'deck' }));
+const myHand = computed(() => findPlayerHand(gameView, playerPosition));
+const discardPile = computed(() => findElement(gameView, { className: 'DiscardPile' }));
+
+// 3. Set up auto-flying cards
+const { flyingCards } = useAutoFlyingCards({
+  gameView: () => props.gameView,
+  containers: [
+    { element: deck, ref: deckRef },
+    { element: myHand, ref: handRef },
+    { element: discardPile, ref: discardRef },
+  ],
+  getCardData: (element) => ({
+    rank: element.attributes?.rank,
+    suit: element.attributes?.suit,
+    backColor: 'linear-gradient(135deg, #c41e3a 0%, #8b0000 100%)',
+  }),
+  duration: 400,
+});
+
+// 4. Use in template
+// <FlyingCardsOverlay :flying-cards="flyingCards" />
+```
+
+**Dynamic Containers (for opponent hands):**
+
+When cards can fly to opponent hands, use a function for containers:
+
+```typescript
+// Pre-create refs for opponent positions
+const opponentHandRefs = [
+  ref<HTMLElement | null>(null),
+  ref<HTMLElement | null>(null),
+];
+
+const opponentHands = [
+  computed(() => findPlayerHand(props.gameView, 0)),
+  computed(() => findPlayerHand(props.gameView, 1)),
+];
+
+const { flyingCards } = useAutoFlyingCards({
+  gameView: () => props.gameView,
+  // Function returns containers dynamically
+  containers: () => {
+    const list = [
+      { element: deck, ref: deckRef },
+      { element: myHand, ref: handRef },
+      { element: discardPile, ref: discardRef },
+    ];
+
+    // Add opponent containers with valid refs
+    for (const opponent of otherPlayers.value) {
+      const pos = opponent.position;
+      if (opponentHands[pos] && opponentHandRefs[pos]?.value) {
+        list.push({
+          element: opponentHands[pos],
+          ref: opponentHandRefs[pos],
+        });
+      }
+    }
+    return list;
+  },
+  getCardData: (element) => ({
+    rank: element.attributes?.rank,
+    suit: element.attributes?.suit,
+    backColor: 'your-card-back-color',
+  }),
+});
+```
+
+**Why use useAutoFlyingCards:**
+
+- **No timing issues** - Uses data-driven detection (checks where cards actually went)
+- **No manual tracking** - No `prevCards` refs or watchers needed
+- **Works with any game structure** - Just register your containers
+- **Handles edge cases** - Trade, gift, draw, discard all work automatically
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `gameView` | `() => any` | Function returning current game view |
+| `containers` | `ContainerConfig[] \| () => ContainerConfig[]` | Containers to track |
+| `getCardData` | `(element) => FlyingCardData` | Extract display data from elements |
+| `duration` | `number` | Animation duration (default: 400ms) |
+| `cardSize` | `{ width, height }` | Card dimensions (default: 60x84) |
 
 ### useFlyOnAppear
 

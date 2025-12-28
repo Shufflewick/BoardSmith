@@ -59,6 +59,8 @@ export interface FlyingCardData {
   suit?: string;
   /** Whether the card starts face up */
   faceUp?: boolean;
+  /** Custom back color/gradient (e.g., '#1a1a2e' or 'linear-gradient(...)') */
+  backColor?: string;
   /** Any additional data for custom rendering */
   [key: string]: unknown;
 }
@@ -101,7 +103,7 @@ export interface FlyCardOptions {
   duration?: number;
   /** Z-index for the flying card (default: 1000) */
   zIndex?: number;
-  /** Explicit card dimensions (if not provided, uses startRect dimensions) */
+  /** Explicit card dimensions (default: 60x84) */
   cardSize?: { width: number; height: number };
 }
 
@@ -118,6 +120,7 @@ export interface FlyingCardsReturn {
 
 const DEFAULT_DURATION = 400;
 const DEFAULT_Z_INDEX = 1000;
+const DEFAULT_CARD_SIZE = { width: 60, height: 84 };
 
 // Easing function (ease-out cubic)
 function easeOutCubic(t: number): number {
@@ -160,9 +163,9 @@ export function useFlyingCards(): FlyingCardsReturn {
     const startRect = getRect(startTarget);
     if (!startRect) return;
 
-    // Use explicit card size if provided, otherwise use startRect dimensions
-    const cardWidth = cardSize?.width ?? startRect.width;
-    const cardHeight = cardSize?.height ?? startRect.height;
+    // Use explicit card size if provided, otherwise use default card dimensions
+    const cardWidth = cardSize?.width ?? DEFAULT_CARD_SIZE.width;
+    const cardHeight = cardSize?.height ?? DEFAULT_CARD_SIZE.height;
 
     // Calculate start position - center the card on the start rect's center
     const startCenterX = startRect.left + startRect.width / 2;

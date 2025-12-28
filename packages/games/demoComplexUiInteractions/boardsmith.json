@@ -1,0 +1,22 @@
+{
+  "$schema": "https://boardsmith.io/schemas/game.json",
+  "name": "demoComplexUiInteractions",
+  "displayName": "Demo: Complex UI Interactions",
+  "description": "Demonstrates how custom UIs can detect action button clicks using boardInteraction.currentAction",
+  "playerCount": {
+    "min": 2,
+    "max": 4
+  },
+  "estimatedDuration": "5-10 minutes",
+  "complexity": 1,
+  "categories": [
+    "demo",
+    "card-game"
+  ],
+  "thumbnail": "./public/thumbnail.png",
+  "scoreboard": {
+    "stats": [
+      "score"
+    ]
+  }
+}

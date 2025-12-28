@@ -918,6 +918,41 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
   }
 }, { immediate: true });
 
+// Set up choice selection callback for custom UIs to trigger choice selections
+// This allows custom game boards to call boardInteraction.triggerChoiceSelect('suit', 'H')
+// and have it properly advance the ActionPanel's selection state
+watch(currentAction, (action) => {
+  if (!boardInteraction) return;
+
+  if (action) {
+    // Set callback that allows custom UI to trigger choice selection
+    boardInteraction.setChoiceSelectCallback((selectionName: string, value: unknown) => {
+      // Verify we're on the right selection
+      if (currentSelection.value?.name === selectionName) {
+        setSelectionValue(selectionName, value);
+      }
+    });
+  } else {
+    boardInteraction.setChoiceSelectCallback(null);
+  }
+}, { immediate: true });
+
+// Watch for external cancellation via boardInteraction.clear() from custom UI
+// This syncs ActionPanel's internal state when custom UI calls cancelAction
+watch(() => boardInteraction?.currentAction, (boardAction) => {
+  // If boardInteraction action was cleared but we still have an action, sync the cancel
+  if (boardAction === null && currentAction.value !== null) {
+    // This was externally cleared (e.g., by custom UI cancel button)
+    // Reset ActionPanel's internal state to match
+    currentAction.value = null;
+    repeatingState.value = null;
+    multiSelectState.value = null;
+    clearReactiveObject(fetchedDeferredChoices);
+    clearActionState(currentArgs.value, displayCache);
+    emit('cancelSelection');
+  }
+});
+
 // Watch for board element selection - handle element selection from board clicks
 // This watch handles auto-starting actions when clicking elements before starting an action.
 // When an action is already in progress, triggerElementSelect handles selection via onElementSelect callback.

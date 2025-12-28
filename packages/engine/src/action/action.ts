@@ -414,10 +414,30 @@ export class ActionExecutor {
           }
           break;
         }
+        case 'choice': {
+          // If the choice value is a serialized element (object with id and className),
+          // resolve it to the actual GameElement
+          if (this.isSerializedElement(value)) {
+            const element = this.game.getElementById((value as { id: number }).id);
+            if (element) {
+              resolved[selection.name] = element;
+            }
+          }
+          break;
+        }
       }
     }
 
     return resolved;
+  }
+
+  /**
+   * Check if a value is a serialized game element (has id and className properties)
+   */
+  private isSerializedElement(value: unknown): boolean {
+    if (typeof value !== 'object' || value === null) return false;
+    const obj = value as Record<string, unknown>;
+    return typeof obj.id === 'number' && typeof obj.className === 'string';
   }
 
   /**

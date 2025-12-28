@@ -68,6 +68,13 @@ export {
 } from './composables/useFlyingCards.js';
 
 export {
+  useAutoFlyingCards,
+  type ContainerConfig,
+  type AutoFlyingCardsOptions,
+  type AutoFlyingCardsReturn,
+} from './composables/useAutoFlyingCards.js';
+
+export {
   useFlyOnAppear,
   type FlyOnAppearOptions,
   type FlyOnAppearReturn,

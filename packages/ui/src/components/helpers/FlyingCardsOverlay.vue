@@ -234,7 +234,11 @@ function getDefaultSuitColor(suit: string): string {
               </template>
             </div>
             <!-- Back face -->
-            <div class="card-face card-back" :class="{ 'has-image': card.cardData.backImage }">
+            <div
+              class="card-face card-back"
+              :class="{ 'has-image': card.cardData.backImage, 'has-color': card.cardData.backColor }"
+              :style="card.cardData.backColor ? { background: card.cardData.backColor } : undefined"
+            >
               <!-- URL image -->
               <img
                 v-if="isUrlImage(card.cardData.backImage)"
@@ -336,7 +340,12 @@ function getDefaultSuitColor(suit: string): string {
   transform: rotateY(180deg);
 }
 
-.card-back:not(.has-image)::before {
+/* Custom back color overrides default */
+.card-back.has-color {
+  background: none;
+}
+
+.card-back:not(.has-image):not(.has-color)::before {
   content: '';
   width: 60%;
   height: 70%;

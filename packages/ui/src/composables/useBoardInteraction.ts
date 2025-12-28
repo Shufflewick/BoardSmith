@@ -57,6 +57,9 @@ export interface BoardInteractionState {
   /** Callback to invoke when a valid element is clicked */
   onElementSelect: ((elementId: number) => void) | null;
 
+  /** Callback to invoke when a choice value is selected (for non-element choices like suit selection) */
+  onChoiceSelect: ((selectionName: string, value: unknown) => void) | null;
+
   /** Currently dragged element (for drag-and-drop actions) */
   draggedElement: ElementRef | null;
 
@@ -143,6 +146,12 @@ export interface BoardInteractionActions {
 
   /** Update the current selection step */
   setCurrentSelection: (selectionIndex: number, selectionName: string | null) => void;
+
+  /** Set the callback for choice selection (called by ActionPanel) */
+  setChoiceSelectCallback: (callback: ((selectionName: string, value: unknown) => void) | null) => void;
+
+  /** Trigger choice selection (called by custom UI for non-element choices like suit selection) */
+  triggerChoiceSelect: (selectionName: string, value: unknown) => void;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -158,6 +167,7 @@ export function createBoardInteraction(): BoardInteraction {
     selectedElement: null,
     validElements: [],
     onElementSelect: null,
+    onChoiceSelect: null,
     draggedElement: null,
     dropTargets: [],
     isDragging: false,
@@ -203,6 +213,7 @@ export function createBoardInteraction(): BoardInteraction {
       state.selectedElement = null;
       state.validElements = [];
       state.onElementSelect = null;
+      state.onChoiceSelect = null;
       state.draggedElement = null;
       state.dropTargets = [];
       state.isDragging = false;
@@ -300,6 +311,16 @@ export function createBoardInteraction(): BoardInteraction {
     setCurrentSelection(selectionIndex, selectionName) {
       state.currentSelectionIndex = selectionIndex;
       state.currentSelectionName = selectionName;
+    },
+
+    setChoiceSelectCallback(callback) {
+      state.onChoiceSelect = callback;
+    },
+
+    triggerChoiceSelect(selectionName, value) {
+      if (state.onChoiceSelect) {
+        state.onChoiceSelect(selectionName, value);
+      }
     },
   };
 
