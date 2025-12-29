@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from 'vue';
-import type { BoardInteraction } from '@boardsmith/ui';
+import type { BoardInteraction, UseActionControllerReturn } from '@boardsmith/ui';
 import {
   findElement,
   findElements,
@@ -59,21 +59,23 @@ const props = defineProps<{
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, unknown>;
+  actionController: UseActionControllerReturn;
   setBoardPrompt: (prompt: string | null) => void;
 }>();
 
-// Inject board interaction from GameShell
+// Inject board interaction from GameShell (for element highlighting)
 const boardInteraction = inject<BoardInteraction>('boardInteraction');
+
+// Use actionController for action state (pit of success - single source of truth)
+const { currentAction, currentSelection } = props.actionController;
 
 // Detect when player has clicked "Ask" button and is actively filling in the action
 // This is different from availableActions.includes('ask') which just means the action CAN be taken
-const isAskingInProgress = computed(() =>
-  boardInteraction?.currentAction === 'ask'
-);
+const isAskingInProgress = computed(() => currentAction.value === 'ask');
 
-// Which selection step are we on? (0 = target, 1 = rank)
+// Which selection step are we on? (target or rank)
 const currentSelectionStep = computed(() =>
-  isAskingInProgress.value ? boardInteraction?.currentSelectionName : null
+  isAskingInProgress.value ? currentSelection.value?.name : null
 );
 
 // Refs for animation sources/targets
@@ -274,70 +276,63 @@ function getPlayerName(position: number): string {
 }
 
 // Check if a specific opponent's hand is selectable
+// The target selection has player choices, check if this position is a valid choice
 function isOpponentHandSelectable(position: number): boolean {
-  if (!boardInteraction) return false;
-  const hand = opponentHands.value.get(position);
-  if (!hand) return false;
-  return boardInteraction.isSelectableElement({ id: hand.id });
+  if (!currentSelection.value) return false;
+  const choices = props.actionController.getChoices(currentSelection.value);
+  return choices.some((c) => (c.value as any)?.value === position);
 }
 
 // Check if we're selecting a target player
-// Now uses currentAction to know if player has actually clicked "Ask"
+// The target selection is a chooseFrom (player choices), not element selection
 const isSelectingPlayer = computed(() => {
   // Must be my turn and actively in the "ask" action (not just available)
   if (!props.isMyTurn || !isAskingInProgress.value) return false;
   // Must be on the "target" selection step
   if (currentSelectionStep.value !== 'target') return false;
-  // Check if any opponent hand is selectable
-  for (const pos of opponentHands.value.keys()) {
-    if (isOpponentHandSelectable(pos)) return true;
-  }
-  return false;
+  // Check that we have a selection with choices
+  return currentSelection.value?.type === 'choice';
 });
 
-// Check if my cards are selectable for rank selection
-// Now uses currentAction to know if player has actually clicked "Ask"
+// Check if we're selecting a rank
+// The rank selection is a chooseFrom (string choices), not element selection
 const isSelectingRank = computed(() => {
   // Must be my turn and actively in the "ask" action
   if (!props.isMyTurn || !isAskingInProgress.value) return false;
   // Must be on the "rank" selection step
   if (currentSelectionStep.value !== 'rank') return false;
-
-  // Check if any of my cards are selectable
-  if (!boardInteraction || !myHand.value?.children) return false;
-
-  // If any card in my hand is selectable, we're selecting rank
-  return myHand.value.children.some((card) =>
-    boardInteraction.isSelectableElement({ id: card.id })
-  );
+  // Check that we have a selection with choices
+  return currentSelection.value?.type === 'choice';
 });
 
 // Handle clicking an opponent's hand to select them
 async function handleOpponentClick(position: number) {
   if (!isSelectingPlayer.value) return;
 
-  const hand = opponentHands.value.get(position);
-  if (!hand || !isOpponentHandSelectable(position)) return;
+  // The target selection is a chooseFrom with player choices { value: position, display: name }
+  // Find the choice that matches this position
+  const choices = props.actionController.getChoices(currentSelection.value!);
+  const playerChoice = choices.find((c) => (c.value as any)?.value === position);
+  if (!playerChoice) return;
 
-  // Use board interaction to trigger selection (this will notify ActionPanel)
-  if (boardInteraction) {
-    boardInteraction.triggerElementSelect({ id: hand.id });
-  }
+  // Use actionController to fill the selection with the player choice
+  await props.actionController.fill('target', playerChoice.value);
 }
 
 // Handle clicking a card in my hand to select its rank
 async function handleCardClick(rank: string) {
-  if (!isSelectingRank.value || !myHand.value) {
+  if (!isSelectingRank.value) {
     return;
   }
 
-  // Find a card of this rank to get its ID
-  const card = myHand.value.children?.find((c) => (c.attributes as any)?.rank === rank);
+  // The rank selection is a chooseFrom with string choices, not element selection
+  // Check if this rank is in the available choices
+  const choices = props.actionController.getChoices(currentSelection.value!);
+  const isValidRank = choices.some((c) => c.value === rank);
+  if (!isValidRank) return;
 
-  // Use board interaction to trigger selection (this will notify ActionPanel)
-  if (boardInteraction && card) {
-    boardInteraction.triggerElementSelect({ id: card.id });
-  }
+  // Use actionController to fill the selection with the rank string
+  await props.actionController.fill('rank', rank);
 }
 
 // Flag to track if we've initialized book tracking

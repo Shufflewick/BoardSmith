@@ -22,7 +22,7 @@ function getBookCount(playerPosition: number, gameView: any): number {
 
 <template>
   <GameShell game-type="go-fish" display-name="Go Fish">
-    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, actionArgs, setBoardPrompt }">
+    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
@@ -33,6 +33,7 @@ function getBookCount(playerPosition: number, gameView: any): number {
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-args="actionArgs"
+            :action-controller="actionController"
             :set-board-prompt="setBoardPrompt"
           />
         </div>
