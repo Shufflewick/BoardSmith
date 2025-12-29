@@ -91,6 +91,38 @@ function clearHistory() {
   processedMessages.value = [];
   messageCounter = 0;
 }
+
+// Copy history to clipboard as text log
+const copyStatus = ref<'idle' | 'copied'>('idle');
+
+async function copyHistory() {
+  if (processedMessages.value.length === 0) return;
+
+  const lines = processedMessages.value.map(msg => {
+    const timestamp = msg.timestamp.toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    return `[${timestamp}] ${msg.text}`;
+  });
+
+  const text = lines.join('\n');
+
+  try {
+    await navigator.clipboard.writeText(text);
+    copyStatus.value = 'copied';
+    setTimeout(() => {
+      copyStatus.value = 'idle';
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy history:', err);
+  }
+}
 </script>
 
 <template>
@@ -102,9 +134,20 @@ function clearHistory() {
         <span v-if="!isCollapsed" class="header-title">Game History</span>
         <span v-if="!isCollapsed" class="message-count">({{ processedMessages.length }})</span>
       </div>
-      <button v-if="!isCollapsed" @click.stop="clearHistory" class="clear-btn" title="Clear history">
-        Clear
-      </button>
+      <div v-if="!isCollapsed" class="header-buttons">
+        <button
+          @click.stop="copyHistory"
+          class="header-btn copy-btn"
+          :class="{ copied: copyStatus === 'copied' }"
+          :disabled="processedMessages.length === 0"
+          :title="copyStatus === 'copied' ? 'Copied!' : 'Copy history to clipboard'"
+        >
+          {{ copyStatus === 'copied' ? 'Copied!' : 'Copy' }}
+        </button>
+        <button @click.stop="clearHistory" class="header-btn clear-btn" title="Clear history">
+          Clear
+        </button>
+      </div>
     </div>
 
     <!-- Content (when not collapsed) -->
@@ -189,7 +232,12 @@ function clearHistory() {
   font-size: 12px;
 }
 
-.clear-btn {
+.header-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.header-btn {
   padding: 3px 8px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -198,6 +246,21 @@ function clearHistory() {
   font-size: 10px;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.header-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.copy-btn:hover:not(:disabled) {
+  border-color: #00d9ff;
+  color: #00d9ff;
+}
+
+.copy-btn.copied {
+  border-color: #2ecc71;
+  color: #2ecc71;
 }
 
 .clear-btn:hover {
