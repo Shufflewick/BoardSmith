@@ -46,11 +46,39 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@22.19.2)(terser@5.44.1)
 
+  packages/ai-trainer:
+    dependencies:
+      '@boardsmith/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@boardsmith/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@boardsmith/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+    devDependencies:
+      '@boardsmith/checkers-rules':
+        specifier: workspace:*
+        version: link:../games/checkers/rules
+      '@boardsmith/gofish-rules':
+        specifier: workspace:*
+        version: link:../games/go-fish/rules
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.2)(terser@5.44.1)
+
   packages/cli:
     dependencies:
       '@boardsmith/ai':
         specifier: workspace:*
         version: link:../ai
+      '@boardsmith/ai-trainer':
+        specifier: workspace:*
+        version: link:../ai-trainer
       '@boardsmith/engine':
         specifier: workspace:*
         version: link:../engine
@@ -3360,6 +3388,7 @@ snapshots:
   '@boardsmith/cli@file:packages/cli(@types/node@22.19.2)(terser@5.44.1)':
     dependencies:
       '@boardsmith/ai': link:packages/ai
+      '@boardsmith/ai-trainer': link:packages/ai-trainer
       '@boardsmith/engine': link:packages/engine
       '@boardsmith/runtime': link:packages/runtime
       '@boardsmith/server': link:packages/server

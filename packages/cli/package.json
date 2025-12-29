@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@boardsmith/ai": "workspace:*",
+    "@boardsmith/ai-trainer": "workspace:*",
     "@boardsmith/engine": "workspace:*",
     "@boardsmith/runtime": "workspace:*",
     "@boardsmith/server": "workspace:*",
