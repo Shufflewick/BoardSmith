@@ -67,6 +67,10 @@ export interface ActionResult {
   flowState?: FlowState;
   state?: PlayerGameState;
   serializedAction?: SerializedAction;
+  /** Additional data returned by the action's execute() */
+  data?: Record<string, unknown>;
+  /** Message from the action (for logging/display) */
+  message?: string;
 }
 
 /**

@@ -169,6 +169,10 @@ export interface GameConnectionConfig {
 export interface ActionResult {
   success: boolean;
   error?: string;
+  /** Additional data returned by the action's execute() */
+  data?: Record<string, unknown>;
+  /** Message from the action (for logging/display) */
+  message?: string;
 }
 
 // ============================================
@@ -188,10 +192,12 @@ export interface WebSocketOutgoingMessage {
   type: 'action' | 'ping' | 'getState';
   action?: string;
   args?: Record<string, unknown>;
+  /** Request ID for action request/response correlation */
+  requestId?: string;
 }
 
 export interface WebSocketIncomingMessage {
-  type: 'state' | 'restart' | 'error' | 'pong' | 'lobby';
+  type: 'state' | 'restart' | 'error' | 'pong' | 'lobby' | 'actionResult';
   flowState?: FlowState;
   state?: PlayerState;
   playerPosition?: number;
@@ -199,6 +205,11 @@ export interface WebSocketIncomingMessage {
   error?: string;
   timestamp?: number;
   lobby?: LobbyInfo;
+  /** For actionResult messages */
+  requestId?: string;
+  success?: boolean;
+  data?: Record<string, unknown>;
+  message?: string;
 }
 
 // ============================================

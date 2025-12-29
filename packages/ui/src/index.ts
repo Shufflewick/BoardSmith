@@ -200,6 +200,33 @@ export {
   type FLIPAnimationReturn,
 } from './composables/useFLIPAnimation.js';
 
+// Action controller (unified action handling for ActionPanel and custom UIs)
+export {
+  useActionController,
+  injectActionController,
+  ACTION_CONTROLLER_KEY,
+  // Advanced feature injection helpers
+  injectSelectionStepFn,
+  injectFetchDeferredChoicesFn,
+  injectBoardInteraction,
+  // Types
+  type SelectionMetadata,
+  type ActionMetadata as ControllerActionMetadata,
+  type ActionResult as ControllerActionResult,
+  type ValidationResult,
+  type SelectionStepResult,
+  type DeferredChoicesResult,
+  type RepeatingState,
+  type UseActionControllerOptions,
+  type UseActionControllerReturn,
+  type SelectionStepFn,
+  type FetchDeferredChoicesFn,
+  // Selection-related types
+  type ChoiceWithRefs,
+  type ValidElement,
+  type ElementRef as SelectionElementRef,
+} from './composables/useActionController.js';
+
 // Theming
 export {
   applyTheme,

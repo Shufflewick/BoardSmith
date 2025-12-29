@@ -37,11 +37,18 @@ export class GameConnection {
   // Last lobby state
   private lastLobby: LobbyInfo | null = null;
 
-  // Pending action promises
+  // Pending action promises (for request/response pattern)
   private pendingActions: Map<
     string,
-    { resolve: (result: ActionResult) => void; reject: (error: Error) => void }
+    {
+      resolve: (result: ActionResult) => void;
+      reject: (error: Error) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
   > = new Map();
+
+  // Request ID counter
+  private requestIdCounter = 0;
 
   constructor(baseUrl: string, config: GameConnectionConfig) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
@@ -116,21 +123,34 @@ export class GameConnection {
       return { success: false, error: 'Spectators cannot perform actions' };
     }
 
+    // Generate unique request ID
+    const requestId = `req-${++this.requestIdCounter}-${Date.now()}`;
+
     const message: WebSocketOutgoingMessage = {
       type: 'action',
       action: actionName,
       args,
+      requestId,
     };
 
-    try {
-      this.ws.send(JSON.stringify(message));
-    } catch (err) {
-      return { success: false, error: String(err) };
-    }
+    // Create promise that will be resolved when server responds
+    return new Promise<ActionResult>((resolve, reject) => {
+      // Set timeout for action response (10 seconds)
+      const timeout = setTimeout(() => {
+        this.pendingActions.delete(requestId);
+        resolve({ success: false, error: 'Action timed out waiting for server response' });
+      }, 10000);
 
-    // For WebSocket actions, success is indicated by receiving a new state
-    // Errors come back as separate error messages
-    return { success: true };
+      this.pendingActions.set(requestId, { resolve, reject, timeout });
+
+      try {
+        this.ws!.send(JSON.stringify(message));
+      } catch (err) {
+        clearTimeout(timeout);
+        this.pendingActions.delete(requestId);
+        resolve({ success: false, error: String(err) });
+      }
+    });
   }
 
   requestState(): void {
@@ -267,6 +287,23 @@ export class GameConnection {
           }
           break;
 
+        case 'actionResult':
+          // Handle action response with request ID
+          if (message.requestId) {
+            const pending = this.pendingActions.get(message.requestId);
+            if (pending) {
+              clearTimeout(pending.timeout);
+              this.pendingActions.delete(message.requestId);
+              pending.resolve({
+                success: message.success ?? false,
+                error: message.error,
+                data: message.data,
+                message: message.message,
+              });
+            }
+          }
+          break;
+
         case 'pong':
           // Ping acknowledged - connection is alive
           this.awaitingPong = false;
@@ -367,6 +404,13 @@ export class GameConnection {
   private cleanup(): void {
     this.clearReconnectTimer();
     this.stopPingInterval();
+
+    // Reject all pending actions
+    for (const [requestId, pending] of this.pendingActions) {
+      clearTimeout(pending.timeout);
+      pending.resolve({ success: false, error: 'Connection closed' });
+    }
+    this.pendingActions.clear();
 
     if (this.ws) {
       this.ws.onopen = null;

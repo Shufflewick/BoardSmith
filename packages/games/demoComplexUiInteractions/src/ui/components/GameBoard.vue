@@ -12,7 +12,7 @@
 -->
 <script setup lang="ts">
 import { computed, inject, ref } from 'vue';
-import type { BoardInteraction } from '@boardsmith/ui';
+import type { BoardInteraction, UseActionControllerReturn } from '@boardsmith/ui';
 import { findPlayerHand, findElement, getElementCount, useAutoFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
 
 // Props from GameShell
@@ -21,11 +21,9 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   actionArgs: Record<string, unknown>;
-  executeAction: (name: string) => Promise<void>;
+  actionController: UseActionControllerReturn;
   setBoardPrompt: (prompt: string | null) => void;
-  startAction: (name: string, initialArgs?: Record<string, unknown>) => void;
   canUndo?: boolean;
   undo?: () => Promise<void>;
 }>();
@@ -306,8 +304,8 @@ function isOpponentSelectable(position: number): boolean {
 // Handle action button click - starts the action flow
 function handleActionClick(actionName: string) {
   if (!props.isMyTurn) return;
-  // Use startAction for all actions - ActionPanel will auto-execute if no selections needed
-  props.startAction(actionName);
+  // Use actionController.start for all actions - will auto-execute if no selections needed
+  props.actionController.start(actionName);
 }
 
 // Cancel the current action

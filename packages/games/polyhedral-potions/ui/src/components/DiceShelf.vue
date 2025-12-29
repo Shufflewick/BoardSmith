@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch, nextTick, type Ref } from 'vue';
-import { Die3D, useElementAnimation } from '@boardsmith/ui';
-import type { BoardInteraction } from '@boardsmith/ui';
+import { Die3D, useElementAnimation, type UseActionControllerReturn, type BoardInteraction } from '@boardsmith/ui';
 
 // FLIP animation for dice moving from shelf to drafted area
 const { capturePositions, animateToCurrentPositions } = useElementAnimation();
@@ -12,13 +11,10 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
   actionArgs: Record<string, any>;
-  executeAction: (name: string) => Promise<void>;
+  actionController: UseActionControllerReturn;
   /** Players array for ability counts */
   players?: any[];
-  /** Start an action's selection flow in ActionPanel */
-  startAction: (name: string) => void;
 }>();
 
 // Board interaction for syncing with ActionPanel
@@ -75,7 +71,7 @@ const canDraft = computed(() => {
 // Handle die selection for drafting
 function selectDie(dieId: string) {
   if (!canDraft.value) return;
-  props.action('draft', { die: dieId });
+  props.actionController.execute('draft', { die: dieId });
 }
 
 // Check if a die is drafted (no longer on shelf, now in draft area)

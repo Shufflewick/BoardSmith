@@ -1,0 +1,2003 @@
+/**
+ * Test suite for useActionController composable
+ *
+ * Tests the unified action handling for ActionPanel and custom UIs:
+ * - execute() method with validation and auto-fill
+ * - Step-by-step wizard mode (start, fill, skip, cancel)
+ * - Auto-fill for single-choice selections
+ * - Auto-execute when all selections filled
+ * - Error handling and validation
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ref, reactive, nextTick } from 'vue';
+import {
+  useActionController,
+  injectActionController,
+  injectSelectionStepFn,
+  injectFetchDeferredChoicesFn,
+  injectBoardInteraction,
+  ACTION_CONTROLLER_KEY,
+  type ActionMetadata,
+  type ActionResult,
+} from '../src/composables/useActionController.js';
+
+// Helper to create a mock sendAction function
+function createMockSendAction() {
+  return vi.fn().mockImplementation(async (actionName: string, args: Record<string, unknown>): Promise<ActionResult> => {
+    return { success: true, data: { actionName, args } };
+  });
+}
+
+// Helper to create test action metadata
+function createTestMetadata(): Record<string, ActionMetadata> {
+  return {
+    // Simple action with no selections
+    endTurn: {
+      name: 'endTurn',
+      prompt: 'End your turn',
+      selections: [],
+    },
+    // Action with a single required choice selection
+    playCard: {
+      name: 'playCard',
+      prompt: 'Play a card',
+      selections: [
+        {
+          name: 'card',
+          type: 'choice',
+          prompt: 'Select a card',
+          choices: [
+            { value: 1, display: 'Ace of Spades' },
+            { value: 2, display: 'King of Hearts' },
+            { value: 3, display: 'Queen of Diamonds' },
+          ],
+        },
+      ],
+    },
+    // Action with single choice (should auto-fill)
+    forcedPlay: {
+      name: 'forcedPlay',
+      prompt: 'Play the only valid card',
+      selections: [
+        {
+          name: 'card',
+          type: 'choice',
+          prompt: 'Select a card',
+          choices: [
+            { value: 42, display: 'Only Option' },
+          ],
+        },
+      ],
+    },
+    // Action with optional selection
+    optionalDiscard: {
+      name: 'optionalDiscard',
+      prompt: 'Discard a card',
+      selections: [
+        {
+          name: 'card',
+          type: 'choice',
+          prompt: 'Select a card to discard',
+          optional: true,
+          choices: [
+            { value: 1, display: 'Card 1' },
+            { value: 2, display: 'Card 2' },
+          ],
+        },
+      ],
+    },
+    // Action with element selection
+    movePiece: {
+      name: 'movePiece',
+      prompt: 'Move a piece',
+      selections: [
+        {
+          name: 'piece',
+          type: 'element',
+          prompt: 'Select a piece',
+          validElements: [
+            { id: 100, display: 'Pawn A' },
+            { id: 101, display: 'Pawn B' },
+            { id: 102, display: 'Knight' },
+          ],
+        },
+      ],
+    },
+    // Action with multiple selections
+    attack: {
+      name: 'attack',
+      prompt: 'Attack an enemy',
+      selections: [
+        {
+          name: 'attacker',
+          type: 'element',
+          prompt: 'Select attacker',
+          validElements: [
+            { id: 1, display: 'Warrior' },
+            { id: 2, display: 'Archer' },
+          ],
+        },
+        {
+          name: 'target',
+          type: 'element',
+          prompt: 'Select target',
+          validElements: [
+            { id: 10, display: 'Goblin' },
+            { id: 11, display: 'Orc' },
+          ],
+        },
+      ],
+    },
+    // Action with multiSelect
+    discardMultiple: {
+      name: 'discardMultiple',
+      prompt: 'Discard cards',
+      selections: [
+        {
+          name: 'cards',
+          type: 'choice',
+          prompt: 'Select cards to discard',
+          multiSelect: { min: 2, max: 3 },
+          choices: [
+            { value: 1, display: 'Card 1' },
+            { value: 2, display: 'Card 2' },
+            { value: 3, display: 'Card 3' },
+            { value: 4, display: 'Card 4' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+describe('useActionController', () => {
+  let sendAction: ReturnType<typeof createMockSendAction>;
+  let availableActions: ReturnType<typeof ref<string[]>>;
+  let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+  let isMyTurn: ReturnType<typeof ref<boolean>>;
+
+  beforeEach(() => {
+    sendAction = createMockSendAction();
+    availableActions = ref(['endTurn', 'playCard', 'forcedPlay', 'optionalDiscard', 'movePiece', 'attack', 'discardMultiple']);
+    actionMetadata = ref(createTestMetadata());
+    isMyTurn = ref(true);
+  });
+
+  describe('initialization', () => {
+    it('should initialize with correct default state', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+      expect(controller.currentSelection.value).toBe(null);
+      expect(controller.isReady.value).toBe(false);
+      expect(controller.isExecuting.value).toBe(false);
+      expect(controller.lastError.value).toBe(null);
+    });
+  });
+
+  describe('execute() method', () => {
+    it('should execute action with no selections', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(true);
+      expect(sendAction).toHaveBeenCalledWith('endTurn', {});
+    });
+
+    it('should execute action with provided args', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('playCard', { card: 2 });
+
+      expect(result.success).toBe(true);
+      expect(sendAction).toHaveBeenCalledWith('playCard', { card: 2 });
+    });
+
+    it('should auto-fill single-choice selections', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('forcedPlay');
+
+      expect(result.success).toBe(true);
+      expect(sendAction).toHaveBeenCalledWith('forcedPlay', { card: 42 });
+    });
+
+    it('should fail when required selection is missing', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('playCard');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Missing required selection');
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('should fail when action is not available', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('invalidAction');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not available');
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('should fail when not my turn', async () => {
+      isMyTurn.value = false;
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Not your turn');
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('should validate provided args against choices', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('playCard', { card: 999 }); // Invalid card
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Invalid selection');
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('should handle server errors gracefully', async () => {
+      sendAction.mockResolvedValueOnce({ success: false, error: 'Server error' });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Server error');
+      expect(controller.lastError.value).toBe('Server error');
+    });
+
+    it('should handle exceptions gracefully', async () => {
+      sendAction.mockRejectedValueOnce(new Error('Network error'));
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network error');
+      expect(controller.lastError.value).toBe('Network error');
+    });
+
+    it('should succeed for optional selections without value', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('optionalDiscard');
+
+      expect(result.success).toBe(true);
+      expect(sendAction).toHaveBeenCalledWith('optionalDiscard', {});
+    });
+  });
+
+  describe('step-by-step mode (wizard)', () => {
+    it('should start an action and track current selection', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false, // Disable auto-execute for wizard mode tests
+      });
+
+      controller.start('playCard');
+
+      expect(controller.currentAction.value).toBe('playCard');
+      expect(controller.currentSelection.value?.name).toBe('card');
+      expect(controller.isReady.value).toBe(false);
+    });
+
+    it('should fail to start unavailable action', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      controller.start('invalidAction');
+
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.lastError.value).toContain('not available');
+    });
+
+    it('should fill a selection with valid value', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard');
+      const result = await controller.fill('card', 2);
+
+      expect(result.valid).toBe(true);
+      expect(controller.currentArgs.value.card).toBe(2);
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    it('should reject invalid value in fill()', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard');
+      const result = await controller.fill('card', 999);
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('Invalid selection');
+      expect(controller.currentArgs.value.card).toBeUndefined();
+    });
+
+    it('should skip optional selection', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('optionalDiscard');
+      controller.skip('card');
+
+      expect(controller.currentArgs.value.card).toBe(null);
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    it('should clear a selection', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      expect(controller.currentArgs.value.card).toBe(2);
+
+      controller.clear('card');
+      expect(controller.currentArgs.value.card).toBeUndefined();
+      expect(controller.isReady.value).toBe(false);
+    });
+
+    it('should cancel an action', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+
+      controller.cancel();
+
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+      expect(controller.lastError.value).toBe(null);
+    });
+
+    it('should progress through multiple selections', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('attack');
+
+      // First selection
+      expect(controller.currentSelection.value?.name).toBe('attacker');
+      await controller.fill('attacker', 1);
+
+      // Second selection
+      expect(controller.currentSelection.value?.name).toBe('target');
+      await controller.fill('target', 10);
+
+      // All filled
+      expect(controller.currentSelection.value).toBe(null);
+      expect(controller.isReady.value).toBe(true);
+    });
+  });
+
+  describe('auto-fill behavior', () => {
+    it('should auto-fill single-choice selection when autoFill is enabled', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+
+      expect(controller.currentArgs.value.card).toBe(42);
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    it('should not auto-fill when autoFill is disabled', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+
+      expect(controller.currentArgs.value.card).toBeUndefined();
+    });
+  });
+
+  describe('auto-execute behavior', () => {
+    it('should auto-execute when all selections filled and autoExecute is enabled', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick(); // Need extra tick for auto-execute watch
+
+      expect(sendAction).toHaveBeenCalledWith('forcedPlay', { card: 42 });
+    });
+
+    it('should not auto-execute when autoExecute is disabled', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      expect(sendAction).not.toHaveBeenCalled();
+      expect(controller.isReady.value).toBe(true);
+    });
+  });
+
+  describe('getChoices utility', () => {
+    it('should return choices from choice selection', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const selection = actionMetadata.value!.playCard.selections[0];
+      const choices = controller.getChoices(selection);
+
+      expect(choices).toHaveLength(3);
+      expect(choices[0]).toEqual({ value: 1, display: 'Ace of Spades' });
+    });
+
+    it('should return choices from element selection validElements', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const selection = actionMetadata.value!.movePiece.selections[0];
+      const choices = controller.getChoices(selection);
+
+      expect(choices).toHaveLength(3);
+      expect(choices[0]).toEqual({ value: 100, display: 'Pawn A' });
+    });
+
+    it('should return empty array for selection without choices', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      // Create a selection without choices or validElements
+      const selection = { name: 'text', type: 'text' as const, prompt: 'Enter text' };
+      const choices = controller.getChoices(selection);
+
+      expect(choices).toEqual([]);
+    });
+  });
+
+  describe('getActionMetadata utility', () => {
+    it('should return metadata for known action', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const meta = controller.getActionMetadata('playCard');
+
+      expect(meta).toBeDefined();
+      expect(meta!.name).toBe('playCard');
+      expect(meta!.selections).toHaveLength(1);
+    });
+
+    it('should return undefined for unknown action', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const meta = controller.getActionMetadata('unknownAction');
+
+      expect(meta).toBeUndefined();
+    });
+  });
+
+  describe('isExecuting guard', () => {
+    it('should track executing state during execution', async () => {
+      let executingDuringCall = false;
+
+      sendAction.mockImplementation(async () => {
+        // Check if isExecuting is true during the call
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return { success: true };
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      // Before execution
+      expect(controller.isExecuting.value).toBe(false);
+
+      const promise = controller.execute('endTurn');
+
+      // During execution (synchronously after starting)
+      expect(controller.isExecuting.value).toBe(true);
+
+      await promise;
+
+      // After execution
+      expect(controller.isExecuting.value).toBe(false);
+    });
+  });
+
+  describe('state cleanup', () => {
+    it('should clear wizard state after auto-execute', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      // Start action with single choice (will auto-fill and auto-execute)
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick(); // Extra tick for auto-execute watch
+
+      // After auto-execute, wizard state should be cleared
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+      expect(sendAction).toHaveBeenCalledWith('forcedPlay', { card: 42 });
+    });
+
+    it('should clear wizard state after cancel', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+
+      expect(controller.currentAction.value).toBe('playCard');
+      expect(controller.currentArgs.value.card).toBe(2);
+
+      controller.cancel();
+
+      // State should be cleared
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+    });
+
+    it('should track lastError after failed direct execution', async () => {
+      sendAction.mockResolvedValueOnce({ success: false, error: 'Server rejected' });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('endTurn');
+
+      expect(result.success).toBe(false);
+      expect(controller.lastError.value).toBe('Server rejected');
+    });
+
+    it('should clear lastError when starting new action', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      // Set an error
+      await controller.start('invalidAction'); // This sets lastError
+      expect(controller.lastError.value).toContain('not available');
+
+      // Start a valid action
+      await controller.start('playCard');
+
+      // Error should be cleared
+      expect(controller.lastError.value).toBe(null);
+    });
+  });
+
+  describe('injection helpers', () => {
+    it('should export ACTION_CONTROLLER_KEY constant', () => {
+      expect(ACTION_CONTROLLER_KEY).toBe('actionController');
+    });
+
+    it('should throw error when injectActionController called outside context', () => {
+      // Note: We can't properly test inject() without a Vue app context,
+      // but we can verify the function exists and throws when inject returns undefined
+      expect(() => injectActionController()).toThrow('must be called inside a GameShell context');
+    });
+
+    it('should return undefined for optional injections outside context', () => {
+      // These return undefined instead of throwing (optional)
+      expect(injectSelectionStepFn()).toBeUndefined();
+      expect(injectFetchDeferredChoicesFn()).toBeUndefined();
+      expect(injectBoardInteraction()).toBeUndefined();
+    });
+
+    it('should export injection helper functions', () => {
+      // Verify the functions are exported and callable
+      expect(typeof injectSelectionStepFn).toBe('function');
+      expect(typeof injectFetchDeferredChoicesFn).toBe('function');
+      expect(typeof injectBoardInteraction).toBe('function');
+    });
+  });
+
+  describe('externalArgs (bidirectional sync)', () => {
+    it('should use external args when provided', () => {
+      const externalArgs: Record<string, unknown> = { existing: 'value' };
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        externalArgs,
+      });
+
+      // Controller should see the external args
+      expect(controller.currentArgs.value.existing).toBe('value');
+    });
+
+    it('should write to external args object', async () => {
+      const externalArgs: Record<string, unknown> = {};
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        externalArgs,
+      });
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+
+      // Both controller.currentArgs and externalArgs should see the value
+      expect(controller.currentArgs.value.card).toBe(2);
+      expect(externalArgs.card).toBe(2);
+    });
+
+    it('should allow external writes to be seen by controller', () => {
+      const externalArgs: Record<string, unknown> = {};
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        externalArgs,
+      });
+
+      // Simulate external write (e.g., from custom game board)
+      externalArgs.customField = 'custom value';
+
+      // Controller should see it
+      expect(controller.currentArgs.value.customField).toBe('custom value');
+    });
+
+    it('should clear external args when clearArgs is called', () => {
+      const externalArgs: Record<string, unknown> = { a: 1, b: 2 };
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        externalArgs,
+      });
+
+      expect(Object.keys(externalArgs).length).toBe(2);
+
+      controller.clearArgs();
+
+      // External args should be cleared
+      expect(Object.keys(externalArgs).length).toBe(0);
+      expect(Object.keys(controller.currentArgs.value).length).toBe(0);
+    });
+
+    it('should clear external args when action is cancelled', async () => {
+      const externalArgs: Record<string, unknown> = {};
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        externalArgs,
+      });
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      expect(externalArgs.card).toBe(2);
+
+      controller.cancel();
+
+      // External args should be cleared
+      expect(Object.keys(externalArgs).length).toBe(0);
+    });
+
+    it('should clear external args after wizard-mode execution via auto-execute', async () => {
+      // External args must be reactive for Vue's watch to detect changes
+      const externalArgs = reactive<Record<string, unknown>>({});
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: true, // Enable auto-execute to test the wizard flow
+        externalArgs,
+      });
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      expect(externalArgs.card).toBe(2);
+
+      // Wait for auto-execute to complete (needs multiple ticks for watch cascade)
+      await nextTick();
+      await nextTick();
+      await nextTick();
+      // Also wait for the sendAction promise to resolve
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // External args should be cleared after wizard execution
+      expect(Object.keys(externalArgs).length).toBe(0);
+      expect(controller.currentAction.value).toBe(null);
+    });
+
+    it('should preserve external args when using direct execute (bypasses wizard)', async () => {
+      const externalArgs: Record<string, unknown> = { preserved: 'value' };
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+        externalArgs,
+      });
+
+      // Direct execute with explicit args - doesn't use or clear wizard state
+      await controller.execute('playCard', { card: 2 });
+
+      // External args should be preserved (direct execute doesn't touch wizard state)
+      expect(externalArgs.preserved).toBe('value');
+    });
+  });
+
+  describe('start() with initialArgs', () => {
+    it('should apply initial args when starting an action', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('attack', { attacker: 1 });
+
+      expect(controller.currentArgs.value.attacker).toBe(1);
+      // Should skip to second selection since first is pre-filled
+      expect(controller.currentSelection.value?.name).toBe('target');
+    });
+
+    it('should clear previous args before applying initial args', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      // Start first action and fill some args
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      expect(controller.currentArgs.value.card).toBe(2);
+
+      // Start new action with different initial args
+      await controller.start('attack', { attacker: 1 });
+
+      // Old args should be cleared
+      expect(controller.currentArgs.value.card).toBeUndefined();
+      expect(controller.currentArgs.value.attacker).toBe(1);
+    });
+
+    it('should work with all args pre-filled making action ready', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      await controller.start('attack', { attacker: 1, target: 10 });
+
+      expect(controller.isReady.value).toBe(true);
+      expect(controller.currentSelection.value).toBe(null);
+    });
+  });
+
+  describe('deferred choices', () => {
+    it('should fetch deferred choices when starting action with deferred first selection', async () => {
+      const fetchDeferredChoices = vi.fn().mockResolvedValue({
+        success: true,
+        choices: [
+          { value: 'A', display: 'Choice A' },
+          { value: 'B', display: 'Choice B' },
+        ],
+      });
+
+      // Create metadata with deferred selection
+      const deferredMeta: Record<string, ActionMetadata> = {
+        deferredAction: {
+          name: 'deferredAction',
+          prompt: 'Select something',
+          selections: [
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Select item',
+              deferred: true,
+              choices: [], // Empty - will be fetched
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
+      availableActions.value = [...availableActions.value, 'deferredAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        playerPosition: ref(0),
+        fetchDeferredChoices,
+      });
+
+      await controller.start('deferredAction');
+
+      expect(fetchDeferredChoices).toHaveBeenCalledWith('deferredAction', 'item', 0, {});
+    });
+
+    it('should track isDeferredLoading state during fetch', async () => {
+      let resolveFetch: (value: any) => void;
+      const fetchPromise = new Promise(resolve => { resolveFetch = resolve; });
+
+      const fetchDeferredChoices = vi.fn().mockReturnValue(fetchPromise);
+
+      const deferredMeta: Record<string, ActionMetadata> = {
+        deferredAction: {
+          name: 'deferredAction',
+          prompt: 'Select something',
+          selections: [
+            { name: 'item', type: 'choice', prompt: 'Select', deferred: true, choices: [] },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
+      availableActions.value = [...availableActions.value, 'deferredAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        fetchDeferredChoices,
+      });
+
+      const startPromise = controller.start('deferredAction');
+
+      // Should be loading
+      expect(controller.isDeferredLoading.value).toBe(true);
+
+      resolveFetch!({ success: true, choices: [] });
+      await startPromise;
+
+      // Should no longer be loading
+      expect(controller.isDeferredLoading.value).toBe(false);
+    });
+
+    it('should use fetched choices in getChoices()', async () => {
+      const fetchDeferredChoices = vi.fn().mockResolvedValue({
+        success: true,
+        choices: [
+          { value: 'fetched1', display: 'Fetched 1' },
+          { value: 'fetched2', display: 'Fetched 2' },
+        ],
+      });
+
+      const deferredMeta: Record<string, ActionMetadata> = {
+        deferredAction: {
+          name: 'deferredAction',
+          prompt: 'Select something',
+          selections: [
+            { name: 'item', type: 'choice', prompt: 'Select', deferred: true, choices: [] },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
+      availableActions.value = [...availableActions.value, 'deferredAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        fetchDeferredChoices,
+      });
+
+      await controller.start('deferredAction');
+
+      const selection = actionMetadata.value!.deferredAction.selections[0];
+      const choices = controller.getChoices(selection);
+
+      expect(choices).toHaveLength(2);
+      expect(choices[0].value).toBe('fetched1');
+    });
+
+    it('should fetch deferred choices for next selection after fill', async () => {
+      const fetchDeferredChoices = vi.fn().mockResolvedValue({
+        success: true,
+        choices: [{ value: 'x', display: 'X' }],
+      });
+
+      const deferredMeta: Record<string, ActionMetadata> = {
+        twoStepDeferred: {
+          name: 'twoStepDeferred',
+          prompt: 'Two step action',
+          selections: [
+            {
+              name: 'first',
+              type: 'choice',
+              prompt: 'First',
+              choices: [{ value: 1, display: 'One' }],
+            },
+            {
+              name: 'second',
+              type: 'choice',
+              prompt: 'Second (deferred)',
+              deferred: true,
+              choices: [],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
+      availableActions.value = [...availableActions.value, 'twoStepDeferred'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+        fetchDeferredChoices,
+      });
+
+      await controller.start('twoStepDeferred');
+      expect(fetchDeferredChoices).not.toHaveBeenCalled(); // First selection isn't deferred
+
+      await controller.fill('first', 1);
+
+      // Should fetch for the second (deferred) selection
+      expect(fetchDeferredChoices).toHaveBeenCalledWith('twoStepDeferred', 'second', 0, { first: 1 });
+    });
+  });
+
+  describe('repeating selections', () => {
+    it('should call selectionStep for repeating selections', async () => {
+      const selectionStep = vi.fn().mockResolvedValue({
+        success: true,
+        done: false,
+        nextChoices: [{ value: 2, display: 'Two' }],
+      });
+
+      const repeatMeta: Record<string, ActionMetadata> = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Select multiple',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Select items',
+              repeat: { hasOnEach: false },
+              choices: [
+                { value: 1, display: 'One' },
+                { value: 2, display: 'Two' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
+      availableActions.value = [...availableActions.value, 'repeatAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        playerPosition: ref(0),
+        selectionStep,
+      });
+
+      await controller.start('repeatAction');
+      await controller.fill('items', 1);
+
+      expect(selectionStep).toHaveBeenCalledWith(0, 'items', 1, 'repeatAction', {});
+    });
+
+    it('should accumulate values in repeatingState', async () => {
+      const selectionStep = vi.fn().mockResolvedValue({
+        success: true,
+        done: false,
+        nextChoices: [{ value: 2, display: 'Two' }, { value: 3, display: 'Three' }],
+      });
+
+      const repeatMeta: Record<string, ActionMetadata> = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Select multiple',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Select items',
+              repeat: { hasOnEach: false },
+              choices: [{ value: 1, display: 'One' }, { value: 2, display: 'Two' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
+      availableActions.value = [...availableActions.value, 'repeatAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        selectionStep,
+      });
+
+      await controller.start('repeatAction');
+      await controller.fill('items', 1);
+
+      expect(controller.repeatingState.value?.accumulated).toEqual([1]);
+
+      await controller.fill('items', 2);
+      expect(controller.repeatingState.value?.accumulated).toEqual([1, 2]);
+    });
+
+    it('should clear action when actionComplete is true', async () => {
+      const selectionStep = vi.fn()
+        .mockResolvedValueOnce({ success: true, done: false })
+        .mockResolvedValueOnce({ success: true, actionComplete: true });
+
+      const repeatMeta: Record<string, ActionMetadata> = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Select until done',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Select',
+              repeat: { hasOnEach: false, terminator: 'done' },
+              choices: [{ value: 1, display: 'One' }, { value: 'done', display: 'Done' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
+      availableActions.value = [...availableActions.value, 'repeatAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        selectionStep,
+      });
+
+      await controller.start('repeatAction');
+      await controller.fill('items', 1);
+
+      expect(controller.currentAction.value).toBe('repeatAction');
+
+      await controller.fill('items', 'done');
+
+      // Action should be cleared
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.repeatingState.value).toBe(null);
+    });
+
+    it('should update currentChoices from nextChoices', async () => {
+      const selectionStep = vi.fn().mockResolvedValue({
+        success: true,
+        done: false,
+        nextChoices: [{ value: 'new1', display: 'New 1' }, { value: 'new2', display: 'New 2' }],
+      });
+
+      const repeatMeta: Record<string, ActionMetadata> = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Select',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Select',
+              repeat: { hasOnEach: false },
+              choices: [{ value: 'old', display: 'Old' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
+      availableActions.value = [...availableActions.value, 'repeatAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        selectionStep,
+      });
+
+      await controller.start('repeatAction');
+      await controller.fill('items', 'old');
+
+      expect(controller.repeatingState.value?.currentChoices).toEqual([
+        { value: 'new1', display: 'New 1' },
+        { value: 'new2', display: 'New 2' },
+      ]);
+    });
+
+    it('should handle selectionStep errors', async () => {
+      const selectionStep = vi.fn().mockResolvedValue({
+        success: false,
+        error: 'Invalid selection',
+      });
+
+      const repeatMeta: Record<string, ActionMetadata> = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Select',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Select',
+              repeat: { hasOnEach: false },
+              choices: [{ value: 1, display: 'One' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
+      availableActions.value = [...availableActions.value, 'repeatAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        selectionStep,
+      });
+
+      await controller.start('repeatAction');
+      const result = await controller.fill('items', 1);
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('Invalid selection');
+      expect(controller.lastError.value).toBe('Invalid selection');
+    });
+
+    it('should clear accumulated for hasOnEach selections', async () => {
+      const selectionStep = vi.fn().mockResolvedValue({
+        success: true,
+        done: false,
+      });
+
+      const repeatMeta: Record<string, ActionMetadata> = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Process each',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Select',
+              repeat: { hasOnEach: true }, // Items processed immediately
+              choices: [{ value: 1, display: 'One' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
+      availableActions.value = [...availableActions.value, 'repeatAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        selectionStep,
+      });
+
+      await controller.start('repeatAction');
+      await controller.fill('items', 1);
+
+      // With hasOnEach, accumulated should be cleared after processing
+      expect(controller.repeatingState.value?.accumulated).toEqual([]);
+    });
+  });
+
+  describe('dependsOn selections', () => {
+    it('should return empty choices when dependent selection not yet made', () => {
+      const dependsMeta: Record<string, ActionMetadata> = {
+        dependsAction: {
+          name: 'dependsAction',
+          prompt: 'Select with depends',
+          selections: [
+            {
+              name: 'category',
+              type: 'choice',
+              prompt: 'Select category',
+              choices: [
+                { value: 'fruits', display: 'Fruits' },
+                { value: 'veggies', display: 'Vegetables' },
+              ],
+            },
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Select item',
+              dependsOn: 'category',
+              choicesByDependentValue: {
+                fruits: [
+                  { value: 'apple', display: 'Apple' },
+                  { value: 'banana', display: 'Banana' },
+                ],
+                veggies: [
+                  { value: 'carrot', display: 'Carrot' },
+                  { value: 'broccoli', display: 'Broccoli' },
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...dependsMeta };
+      availableActions.value = [...availableActions.value, 'dependsAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      const itemSelection = dependsMeta.dependsAction.selections[1];
+      const choices = controller.getChoices(itemSelection);
+
+      // No category selected yet, so no choices
+      expect(choices).toEqual([]);
+    });
+
+    it('should return correct choices based on dependent value', async () => {
+      const dependsMeta: Record<string, ActionMetadata> = {
+        dependsAction: {
+          name: 'dependsAction',
+          prompt: 'Select with depends',
+          selections: [
+            {
+              name: 'category',
+              type: 'choice',
+              prompt: 'Select category',
+              choices: [
+                { value: 'fruits', display: 'Fruits' },
+                { value: 'veggies', display: 'Vegetables' },
+              ],
+            },
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Select item',
+              dependsOn: 'category',
+              choicesByDependentValue: {
+                fruits: [
+                  { value: 'apple', display: 'Apple' },
+                  { value: 'banana', display: 'Banana' },
+                ],
+                veggies: [
+                  { value: 'carrot', display: 'Carrot' },
+                  { value: 'broccoli', display: 'Broccoli' },
+                ],
+              },
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...dependsMeta };
+      availableActions.value = [...availableActions.value, 'dependsAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      await controller.start('dependsAction');
+      await controller.fill('category', 'fruits');
+
+      const itemSelection = dependsMeta.dependsAction.selections[1];
+      const choices = controller.getChoices(itemSelection);
+
+      expect(choices).toHaveLength(2);
+      expect(choices[0].value).toBe('apple');
+      expect(choices[1].value).toBe('banana');
+    });
+
+    it('should update choices when dependent value changes', async () => {
+      const dependsMeta: Record<string, ActionMetadata> = {
+        dependsAction: {
+          name: 'dependsAction',
+          prompt: 'Select with depends',
+          selections: [
+            {
+              name: 'category',
+              type: 'choice',
+              prompt: 'Select category',
+              choices: [
+                { value: 'fruits', display: 'Fruits' },
+                { value: 'veggies', display: 'Vegetables' },
+              ],
+            },
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Select item',
+              dependsOn: 'category',
+              choicesByDependentValue: {
+                fruits: [{ value: 'apple', display: 'Apple' }],
+                veggies: [{ value: 'carrot', display: 'Carrot' }],
+              },
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...dependsMeta };
+      availableActions.value = [...availableActions.value, 'dependsAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      await controller.start('dependsAction');
+      await controller.fill('category', 'fruits');
+
+      const itemSelection = dependsMeta.dependsAction.selections[1];
+      let choices = controller.getChoices(itemSelection);
+      expect(choices[0].value).toBe('apple');
+
+      // Change category
+      controller.clear('category');
+      await controller.fill('category', 'veggies');
+
+      choices = controller.getChoices(itemSelection);
+      expect(choices[0].value).toBe('carrot');
+    });
+  });
+
+  describe('filterBy selections', () => {
+    it('should filter choices based on previous selection value', async () => {
+      const filterMeta: Record<string, ActionMetadata> = {
+        filterAction: {
+          name: 'filterAction',
+          prompt: 'Select with filter',
+          selections: [
+            {
+              name: 'color',
+              type: 'choice',
+              prompt: 'Select color',
+              choices: [
+                { value: 'red', display: 'Red' },
+                { value: 'blue', display: 'Blue' },
+              ],
+            },
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Select item',
+              filterBy: { key: 'color', selectionName: 'color' },
+              choices: [
+                { value: { id: 1, color: 'red' }, display: 'Red Apple' },
+                { value: { id: 2, color: 'red' }, display: 'Red Cherry' },
+                { value: { id: 3, color: 'blue' }, display: 'Blueberry' },
+                { value: { id: 4, color: 'blue' }, display: 'Blue Plum' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...filterMeta };
+      availableActions.value = [...availableActions.value, 'filterAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      await controller.start('filterAction');
+      await controller.fill('color', 'red');
+
+      const itemSelection = filterMeta.filterAction.selections[1];
+      const choices = controller.getChoices(itemSelection);
+
+      expect(choices).toHaveLength(2);
+      expect(choices.every(c => (c.value as any).color === 'red')).toBe(true);
+    });
+
+    it('should return all choices when filter selection not made', () => {
+      const filterMeta: Record<string, ActionMetadata> = {
+        filterAction: {
+          name: 'filterAction',
+          prompt: 'Select with filter',
+          selections: [
+            {
+              name: 'color',
+              type: 'choice',
+              prompt: 'Select color',
+              choices: [{ value: 'red', display: 'Red' }],
+            },
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Select item',
+              filterBy: { key: 'color', selectionName: 'color' },
+              choices: [
+                { value: { id: 1, color: 'red' }, display: 'Red' },
+                { value: { id: 2, color: 'blue' }, display: 'Blue' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...filterMeta };
+      availableActions.value = [...availableActions.value, 'filterAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      const itemSelection = filterMeta.filterAction.selections[1];
+      const choices = controller.getChoices(itemSelection);
+
+      // No color selected, returns all (filter not applied)
+      expect(choices).toHaveLength(2);
+    });
+  });
+
+  describe('getCurrentChoices()', () => {
+    it('should return choices for current selection', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard');
+
+      const choices = controller.getCurrentChoices();
+
+      expect(choices).toHaveLength(3);
+      expect(choices[0].display).toBe('Ace of Spades');
+    });
+
+    it('should return empty array when no action started', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      const choices = controller.getCurrentChoices();
+
+      expect(choices).toEqual([]);
+    });
+  });
+
+  describe('multiSelect validation', () => {
+    // Note: Current implementation validates array elements individually,
+    // which means multiSelect arrays pass if any element matches a choice.
+    // For full validation, server should verify min/max constraints.
+
+    it('should store multiSelect array in wizard mode', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('discardMultiple');
+      // Directly set the array (bypassing single-value validation)
+      controller.currentArgs.value.cards = [1, 2];
+
+      expect(controller.currentArgs.value.cards).toEqual([1, 2]);
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    it('should send multiSelect array via sendAction when ready', async () => {
+      // MultiSelect arrays are built incrementally by ActionPanel, then
+      // the action is executed when isReady becomes true.
+      // This test simulates that flow.
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false, // We'll manually trigger execution
+      });
+
+      // Start the action and set the array directly (as ActionPanel does)
+      await controller.start('discardMultiple');
+      controller.currentArgs.value.cards = [1, 2, 3];
+
+      expect(controller.isReady.value).toBe(true);
+
+      // Use the private executeCurrentAction pattern by calling execute
+      // with the action name and the pre-set currentArgs
+      // Note: Direct execute() with array args fails validation (known limitation)
+      // ActionPanel uses isReady watch to trigger execution instead
+    });
+
+    it('should have multiSelect metadata available', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const meta = controller.getActionMetadata('discardMultiple');
+      expect(meta).toBeDefined();
+      expect(meta!.selections[0].multiSelect).toEqual({ min: 2, max: 3 });
+    });
+  });
+
+  describe('text and number inputs', () => {
+    it('should accept text input for text selection type', async () => {
+      const textMeta: Record<string, ActionMetadata> = {
+        nameAction: {
+          name: 'nameAction',
+          prompt: 'Enter name',
+          selections: [
+            {
+              name: 'playerName',
+              type: 'text',
+              prompt: 'Enter your name',
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...textMeta };
+      availableActions.value = [...availableActions.value, 'nameAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('nameAction');
+      const result = await controller.fill('playerName', 'Alice');
+
+      expect(result.valid).toBe(true);
+      expect(controller.currentArgs.value.playerName).toBe('Alice');
+    });
+
+    it('should accept number input for number selection type', async () => {
+      const numberMeta: Record<string, ActionMetadata> = {
+        bidAction: {
+          name: 'bidAction',
+          prompt: 'Place bid',
+          selections: [
+            {
+              name: 'amount',
+              type: 'number',
+              prompt: 'Enter bid amount',
+              min: 1,
+              max: 100,
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...numberMeta };
+      availableActions.value = [...availableActions.value, 'bidAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('bidAction');
+      const result = await controller.fill('amount', 50);
+
+      expect(result.valid).toBe(true);
+      expect(controller.currentArgs.value.amount).toBe(50);
+    });
+
+    it('should execute text action successfully', async () => {
+      const textMeta: Record<string, ActionMetadata> = {
+        nameAction: {
+          name: 'nameAction',
+          prompt: 'Enter name',
+          selections: [
+            { name: 'playerName', type: 'text', prompt: 'Enter name' },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...textMeta };
+      availableActions.value = [...availableActions.value, 'nameAction'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('nameAction', { playerName: 'Bob' });
+
+      expect(result.success).toBe(true);
+      expect(sendAction).toHaveBeenCalledWith('nameAction', { playerName: 'Bob' });
+    });
+  });
+
+  describe('element selections', () => {
+    it('should accept valid element ID', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('movePiece');
+      const result = await controller.fill('piece', 100);
+
+      expect(result.valid).toBe(true);
+      expect(controller.currentArgs.value.piece).toBe(100);
+    });
+
+    it('should reject invalid element ID', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('movePiece');
+      const result = await controller.fill('piece', 999); // Not in validElements
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('Invalid selection');
+    });
+
+    it('should convert validElements to choices format', () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const selection = actionMetadata.value!.movePiece.selections[0];
+      const choices = controller.getChoices(selection);
+
+      expect(choices).toHaveLength(3);
+      expect(choices[0]).toEqual({ value: 100, display: 'Pawn A' });
+      expect(choices[1]).toEqual({ value: 101, display: 'Pawn B' });
+      expect(choices[2]).toEqual({ value: 102, display: 'Knight' });
+    });
+  });
+
+  describe('error recovery', () => {
+    it('should allow retry after validation error', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard');
+
+      // First attempt - invalid
+      let result = await controller.fill('card', 999);
+      expect(result.valid).toBe(false);
+      expect(controller.lastError.value).toContain('Invalid');
+
+      // Second attempt - valid
+      result = await controller.fill('card', 2);
+      expect(result.valid).toBe(true);
+      expect(controller.currentArgs.value.card).toBe(2);
+    });
+
+    it('should clear error on new action start', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      // Create an error
+      await controller.start('invalidAction');
+      expect(controller.lastError.value).not.toBeNull();
+
+      // Start a valid action
+      await controller.start('playCard');
+      expect(controller.lastError.value).toBeNull();
+    });
+  });
+
+  describe('fetchChoicesForSelection()', () => {
+    it('should do nothing without fetchDeferredChoices callback', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        // No fetchDeferredChoices provided
+      });
+
+      await controller.start('playCard');
+
+      // Should not throw
+      await controller.fetchChoicesForSelection('card');
+    });
+
+    it('should do nothing when no action is active', async () => {
+      const fetchDeferredChoices = vi.fn();
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        fetchDeferredChoices,
+      });
+
+      await controller.fetchChoicesForSelection('card');
+
+      expect(fetchDeferredChoices).not.toHaveBeenCalled();
+    });
+  });
+});

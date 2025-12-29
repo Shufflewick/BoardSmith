@@ -22,9 +22,8 @@ The main wrapper component that provides the complete game UI structure: header,
       playerPosition,
       isMyTurn,
       availableActions,
-      action,
       actionArgs,
-      executeAction,
+      actionController,
       setBoardPrompt
     }">
       <GameBoard
@@ -32,9 +31,8 @@ The main wrapper component that provides the complete game UI structure: header,
         :player-position="playerPosition"
         :is-my-turn="isMyTurn"
         :available-actions="availableActions"
-        :action="action"
         :action-args="actionArgs"
-        :execute-action="executeAction"
+        :action-controller="actionController"
         :set-board-prompt="setBoardPrompt"
       />
     </template>
@@ -66,11 +64,11 @@ The `#game-board` slot receives:
 | `playerPosition` | `number` | Current player's position |
 | `isMyTurn` | `boolean` | Whether it's this player's turn |
 | `availableActions` | `string[]` | Actions available to the player |
-| `action` | `function` | Execute an action: `(name, args) => Promise` |
 | `actionArgs` | `object` | Shared reactive object for action selections (bidirectional sync with ActionPanel) |
-| `executeAction` | `function` | Execute current action: `(name) => Promise` |
+| `actionController` | `UseActionControllerReturn` | Unified action handling - execute, start, fill, cancel actions |
 | `setBoardPrompt` | `function` | Set a prompt message: `(text) => void` |
-| `startAction` | `function` | Trigger ActionPanel to start an action: `(name) => void` |
+| `canUndo` | `boolean` | Whether undo is available |
+| `undo` | `function` | Undo to turn start: `() => Promise` |
 
 #### Shared Action State (actionArgs)
 
@@ -82,18 +80,20 @@ The `actionArgs` object provides **bidirectional synchronization** between custo
 
 This enables powerful hybrid UIs where users can interact with either the game board or the action panel.
 
-**Example: Board pre-filling selections with startAction**
+**Example: Board pre-filling selections with actionController.start()**
 ```vue
 <script setup lang="ts">
+import type { UseActionControllerReturn } from '@boardsmith/ui';
+
 const props = defineProps<{
   actionArgs: Record<string, unknown>;
-  startAction: (name: string, initialArgs?: Record<string, unknown>) => void;
+  actionController: UseActionControllerReturn;
 }>();
 
 // When user clicks a piece on the board, start the action with that piece pre-selected
 function onPieceClick(pieceId: number) {
-  // Pass initial args to startAction - they're applied after clearing
-  props.startAction('move', { piece: pieceId });
+  // Pass initial args to start() - they're applied after clearing
+  props.actionController.start('move', { piece: pieceId });
 }
 </script>
 ```
@@ -127,12 +127,12 @@ const selectedCards = computed({
 ActionPanel clears `actionArgs` when starting, canceling, or completing actions. To pre-fill selections when starting an action, use the `initialArgs` parameter:
 
 ```typescript
-// Correct: Pass initial values to startAction
-startAction('move', { piece: pieceId });
+// Correct: Pass initial values to start()
+actionController.start('move', { piece: pieceId });
 
 // Incorrect: Writing then starting loses the value (cleared on start)
 actionArgs.piece = pieceId;
-startAction('move');  // piece gets cleared!
+actionController.start('move');  // piece gets cleared!
 ```
 
 For ongoing updates during an action (after it's started), write directly to `actionArgs`.
@@ -988,21 +988,96 @@ const customTheme: ThemeConfig = {
 applyTheme(customTheme);
 ```
 
+## Action Controller API
+
+The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It's provided via the `#game-board` slot and handles all action execution, wizard mode navigation, and auto-fill logic.
+
+### Controller Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `execute` | `(name: string, args?: Record<string, unknown>) => Promise<void>` | Execute an action immediately with provided args |
+| `start` | `(name: string, initialArgs?: Record<string, unknown>) => void` | Start wizard mode for a multi-selection action |
+| `fill` | `(name: string, value: unknown) => void` | Fill a specific selection in wizard mode |
+| `skip` | `() => void` | Skip an optional selection |
+| `cancel` | `() => void` | Cancel wizard mode and clear selections |
+
+### Controller State
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `pendingAction` | `string \| null` | Name of action currently in wizard mode |
+| `isExecuting` | `boolean` | Whether an action is currently executing |
+| `error` | `string \| null` | Error message from last failed execution |
+
+### Usage Patterns
+
+**Direct execution (single-step actions):**
+```typescript
+// Execute an action with all args provided
+await actionController.execute('draw', { count: 3 });
+
+// Execute an action that requires no selections
+await actionController.execute('endTurn');
+```
+
+**Wizard mode (multi-step actions):**
+```typescript
+// Start wizard mode - ActionPanel shows selection UI
+actionController.start('move');
+
+// Pre-fill a selection when starting
+actionController.start('move', { piece: pieceId });
+
+// Custom boards can fill selections programmatically
+actionController.fill('destination', cellId);
+
+// Skip optional selections
+actionController.skip();
+
+// Cancel and clear
+actionController.cancel();
+```
+
+**Reading controller state:**
+```typescript
+// Check if an action is in progress
+if (actionController.pendingAction === 'move') {
+  // Show move-specific UI
+}
+
+// Show loading state during execution
+<button :disabled="actionController.isExecuting">
+  {{ actionController.isExecuting ? 'Working...' : 'Execute' }}
+</button>
+
+// Display errors
+<div v-if="actionController.error" class="error">
+  {{ actionController.error }}
+</div>
+```
+
 ## Building Custom UIs
 
 ### Example: Custom Game Board
 
 ```vue
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useBoardInteraction, useElementAnimation, findPlayerHand, getCards } from '@boardsmith/ui';
+import { computed, ref, watch, nextTick } from 'vue';
+import {
+  useBoardInteraction,
+  useElementAnimation,
+  findPlayerHand,
+  getCards,
+  type UseActionControllerReturn
+} from '@boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<any>;
+  actionController: UseActionControllerReturn;
 }>();
 
 const boardInteraction = useBoardInteraction();
@@ -1020,12 +1095,12 @@ async function onCardClick(card: any) {
   if (!props.isMyTurn) return;
   if (!props.availableActions.includes('play')) return;
 
-  // Check if card is selectable via board interaction
+  // Check if card is selectable via board interaction (wizard mode active)
   if (boardInteraction?.isSelectableElement(card)) {
     boardInteraction.triggerElementSelect(card);
   } else {
-    // Direct action
-    await props.action('play', { card: card.id });
+    // Direct action execution
+    await props.actionController.execute('play', { card: card.id });
   }
 }
 

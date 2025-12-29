@@ -14,6 +14,7 @@ import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useToast } from '../composables/useToast';
+import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 
 // Generate or retrieve persistent player ID
@@ -144,6 +145,94 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGam
   { playerPosition }
 );
 
+// Action metadata for auto-UI (selections, choices)
+const actionMetadata = computed(() => {
+  return (state.value?.state as any)?.actionMetadata;
+});
+
+// Available actions (from flow state)
+const availableActions = computed(() => {
+  const flowState = state.value?.flowState as any;
+  if (!flowState) return [];
+
+  // Check awaitingPlayers for simultaneous actions
+  if (flowState.awaitingPlayers?.length > 0) {
+    const myPlayerState = flowState.awaitingPlayers.find(
+      (p: { playerIndex: number }) => p.playerIndex === playerPosition.value
+    );
+    if (myPlayerState && !myPlayerState.completed) {
+      return myPlayerState.availableActions || [];
+    }
+  }
+
+  return flowState.availableActions || [];
+});
+
+// Shared action args - bidirectional sync between ActionPanel and custom game boards
+const actionArgs = reactive<Record<string, unknown>>({});
+
+// Action controller - unified action handling for ActionPanel and custom UIs
+// This provides 100% parity: same auto-fill, validation, and server communication
+const actionController = useActionController({
+  sendAction: async (actionName, args) => {
+    const result = await action(actionName, args);
+    return result as ControllerActionResult;
+  },
+  availableActions,
+  actionMetadata,
+  isMyTurn,
+  playerPosition,
+  autoFill: true,
+  autoExecute: true,
+  // Share actionArgs with the controller for bidirectional sync with custom UIs
+  externalArgs: actionArgs,
+  // Phase 3: Deferred choices - fetched from server at selection time
+  fetchDeferredChoices: async (actionName, selectionName, player, currentArgs) => {
+    if (!gameId.value) {
+      return { success: false, error: 'No game ID' };
+    }
+    try {
+      const response = await fetch(`${props.apiUrl}/games/${gameId.value}/deferred-choices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: actionName,
+          selection: selectionName,
+          player,
+          currentArgs,
+        }),
+      });
+      return await response.json();
+    } catch (err) {
+      console.error('Fetch deferred choices error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to fetch deferred choices' };
+    }
+  },
+  // Phase 3: Repeating selections - processed step by step on server
+  selectionStep: async (player, selectionName, value, actionName, initialArgs) => {
+    if (!gameId.value) {
+      return { success: false, error: 'No game ID' };
+    }
+    try {
+      const response = await fetch(`${props.apiUrl}/games/${gameId.value}/selection-step`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          player,
+          selectionName,
+          value,
+          action: actionName,
+          initialArgs,
+        }),
+      });
+      return await response.json();
+    } catch (err) {
+      console.error('Selection step error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Selection step failed' };
+    }
+  },
+});
+
 // Extract messages from game state
 const gameMessages = computed(() => {
   if (!state.value?.state?.view) return [];
@@ -168,60 +257,17 @@ const currentPlayerName = computed(() => {
   const player = players.value.find(p => p.position === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
-const availableActions = computed(() => {
-  const flowState = state.value?.flowState as any;
-  if (!flowState) return [];
-
-  // Check awaitingPlayers for simultaneous actions
-  if (flowState.awaitingPlayers?.length > 0) {
-    const myPlayerState = flowState.awaitingPlayers.find(
-      (p: { playerIndex: number }) => p.playerIndex === playerPosition.value
-    );
-    if (myPlayerState && !myPlayerState.completed) {
-      return myPlayerState.availableActions || [];
-    }
-  }
-
-  return flowState.availableActions || [];
-});
-
-// Action metadata for auto-UI (selections, choices)
-const actionMetadata = computed(() => {
-  return (state.value?.state as any)?.actionMetadata;
-});
 
 // Can undo - from PlayerGameState.canUndo
 const canUndo = computed(() => {
   return (state.value?.state as any)?.canUndo ?? false;
 });
 
-// Shared action arguments - bidirectional sync between ActionPanel and custom game boards
-// - ActionPanel writes here when user makes selections in the UI
-// - Custom boards can write here and ActionPanel will reflect those values
-// - Both systems share the same reactive object via provide/inject
-const actionArgs = reactive<Record<string, unknown>>({});
-
-// Pending action to start (set by custom UI, consumed by ActionPanel)
-const pendingActionStart = ref<string | null>(null);
-const pendingActionArgs = ref<Record<string, unknown>>({});
-
-// Start an action's selection flow (called by custom UI)
-// Optional initialArgs are applied to actionArgs after clearing, avoiding timing issues
-function startAction(actionName: string, initialArgs?: Record<string, unknown>): void {
-  pendingActionStart.value = actionName;
-  pendingActionArgs.value = initialArgs ?? {};
-}
-
 // Board-provided prompt (for dynamic prompts based on UI state)
 const boardPrompt = ref<string | null>(null);
 
 function setBoardPrompt(prompt: string | null): void {
   boardPrompt.value = prompt;
-}
-
-// Execute an action with args (called by ActionPanel)
-async function handleActionExecute(actionName: string, args: Record<string, unknown>): Promise<void> {
-  await action(actionName, args);
 }
 
 // Undo actions back to turn start (called by ActionPanel)
@@ -240,36 +286,6 @@ async function handleUndo(): Promise<void> {
     // State update will come via WebSocket
   } catch (error) {
     console.error('Undo error:', error);
-  }
-}
-
-// Execute an action using shared actionArgs
-// This bypasses ActionPanel and executes directly - use for custom UIs that handle their own selection flow
-// For most cases, prefer: write to actionArgs, then call startAction() to let ActionPanel handle it
-async function executeAction(actionName: string): Promise<void> {
-  const cards = actionArgs.cards as string[] | undefined;
-
-  if (cards && cards.length > 0) {
-    // Handle multi-card actions (like discard, playCard) by iterating
-    for (const card of [...cards]) {
-      const result = await action(actionName, { card });
-      if (!result.success) break;
-    }
-    // Clear the selection after action completes
-    actionArgs.cards = [];
-  } else {
-    // Build args from all actionArgs properties (for games like Go Fish with rank/target)
-    const args: Record<string, unknown> = {};
-    for (const key of Object.keys(actionArgs)) {
-      if (actionArgs[key] !== undefined) {
-        args[key] = actionArgs[key];
-      }
-    }
-    await action(actionName, args);
-    // Clear actionArgs after action completes
-    for (const key of Object.keys(actionArgs)) {
-      delete actionArgs[key];
-    }
   }
 }
 
@@ -298,93 +314,6 @@ async function fetchPlayerOptions(gameType: string): Promise<Record<string, unkn
   return undefined;
 }
 
-/**
- * Selection step function for repeating selections.
- * Makes API call to process each step of a repeating selection.
- * @param initialArgs - Previously collected args for earlier selections (e.g., actingMerc)
- */
-async function selectionStepFn(
-  player: number,
-  selectionName: string,
-  value: unknown,
-  actionName: string,
-  initialArgs?: Record<string, unknown>
-): Promise<{
-  success: boolean;
-  error?: string;
-  done?: boolean;
-  nextChoices?: unknown[];
-  actionComplete?: boolean;
-}> {
-  if (!gameId.value) {
-    return { success: false, error: 'No game ID' };
-  }
-
-  try {
-    const response = await fetch(`${props.apiUrl}/games/${gameId.value}/selection-step`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        player,
-        selectionName,
-        value,
-        action: actionName,
-        initialArgs,
-      }),
-    });
-
-    const result = await response.json();
-    return result;
-  } catch (err) {
-    console.error('Selection step error:', err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Selection step failed',
-    };
-  }
-}
-
-/**
- * Fetch deferred choices for a selection from the server.
- * Used by ActionPanel when a selection has defer: true.
- */
-async function fetchDeferredChoicesFn(
-  actionName: string,
-  selectionName: string,
-  player: number,
-  currentArgs: Record<string, unknown>
-): Promise<{
-  success: boolean;
-  choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown }>;
-  error?: string;
-}> {
-  if (!gameId.value) {
-    return { success: false, error: 'No game ID' };
-  }
-
-  try {
-    const response = await fetch(`${props.apiUrl}/games/${gameId.value}/deferred-choices`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: actionName,
-        selection: selectionName,
-        player,
-        currentArgs,
-      }),
-    });
-
-    const result = await response.json();
-    return result;
-  } catch (err) {
-    console.error('Fetch deferred choices error:', err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Failed to fetch deferred choices',
-    };
-  }
-}
-
 // Provide context to child components
 provide('gameState', state);
 provide('gameView', gameView);
@@ -393,12 +322,10 @@ provide('myPlayer', myPlayer);
 provide('playerPosition', playerPosition);
 provide('isMyTurn', isMyTurn);
 provide('availableActions', availableActions);
-provide('action', action);
 provide('actionArgs', actionArgs);
+provide('actionController', actionController);
 provide('boardInteraction', boardInteraction);
 provide('timeTravelDiff', timeTravelDiff);
-provide('selectionStepFn', selectionStepFn);
-provide('fetchDeferredChoicesFn', fetchDeferredChoicesFn);
 
 // URL routing - check for game ID or lobby ID in URL on mount
 onMounted(async () => {
@@ -998,6 +925,7 @@ defineExpose({
   isMyTurn,
   availableActions,
   action,
+  actionController,
   connectionStatus,
   error,
   leaveGame,
@@ -1086,6 +1014,12 @@ defineExpose({
         <!-- Center: Game Board -->
         <main class="game-shell__content">
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
+              <!--
+                Game Board Slot Props:
+                - actionController: USE THIS for all action handling (start, fill, execute, cancel)
+                - actionArgs: Read-only view of current selection args (for UI display)
+                - Other props: game state for rendering
+              -->
               <slot
                 name="game-board"
                 :state="state"
@@ -1095,13 +1029,11 @@ defineExpose({
                 :player-position="playerPosition"
                 :is-my-turn="isMyTurn"
                 :available-actions="availableActions"
-                :action="action"
                 :action-args="actionArgs"
-                :execute-action="executeAction"
                 :set-board-prompt="setBoardPrompt"
-                :start-action="startAction"
                 :can-undo="canUndo && !isViewingHistory"
                 :undo="handleUndo"
+                :action-controller="actionController"
               >
                 <div class="empty-game-area">
                   <p>Add your game board in the #game-board slot</p>
@@ -1122,11 +1054,7 @@ defineExpose({
           :can-undo="canUndo && !isViewingHistory"
           :auto-end-turn="autoEndTurn"
           :show-undo="showUndo"
-          :pending-action-start="pendingActionStart"
-          :pending-action-args="pendingActionArgs"
-          @execute="handleActionExecute"
           @undo="handleUndo"
-          @action-started="pendingActionStart = null; pendingActionArgs = {}"
         />
         <!-- Time travel banner -->
         <div v-if="isViewingHistory" class="time-travel-banner">

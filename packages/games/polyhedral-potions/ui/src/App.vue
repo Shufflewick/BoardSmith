@@ -54,7 +54,7 @@ function getPotionCount(playerPosition: number, players: any[]): number {
 
 <template>
   <GameShell game-type="polyhedral-potions" display-name="Polyhedral Potions" :player-count="2">
-    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt, startAction }">
+    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, actionArgs, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
@@ -64,10 +64,8 @@ function getPotionCount(playerPosition: number, players: any[]): number {
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
-            :action="action"
             :action-args="actionArgs"
-            :execute-action="executeAction"
-            :start-action="startAction"
+            :action-controller="actionController"
           />
         </div>
         <div class="board-section">

@@ -2,7 +2,7 @@
 import { computed, provide } from 'vue';
 import DiceShelf from './DiceShelf.vue';
 import ScoreSheet from './ScoreSheet.vue';
-import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '@boardsmith/ui';
+import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext, type UseActionControllerReturn } from '@boardsmith/ui';
 
 // Create and provide animation context for dice in this custom UI
 // This ensures dice animate independently from dice in AutoUI
@@ -15,10 +15,8 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
   actionArgs: Record<string, any>;
-  executeAction: (name: string) => Promise<void>;
-  startAction: (name: string) => void;
+  actionController: UseActionControllerReturn;
 }>();
 
 // Get current phase from available actions
@@ -50,12 +48,12 @@ const currentRound = computed(() => {
 
 // Handle craft action
 function handleCraft(operation: string, adjustment: string) {
-  props.action('craft', { operation, adjustment });
+  props.actionController.execute('craft', { operation, adjustment });
 }
 
 // Handle record action
 function handleRecord(track: string) {
-  props.action('record', { track });
+  props.actionController.execute('record', { track });
 }
 
 // Get player data for abilities
@@ -98,11 +96,9 @@ const hasAdjustAbility = computed(() => {
           :player-position="playerPosition"
           :is-my-turn="isMyTurn"
           :available-actions="availableActions"
-          :action="action"
           :action-args="actionArgs"
-          :execute-action="executeAction"
+          :action-controller="actionController"
           :players="players"
-          :start-action="startAction"
         />
 
         <!-- Craft Panel -->

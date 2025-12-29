@@ -24,7 +24,7 @@ import GameBoard from './components/GameBoard.vue';
     display-name="Demo: Complex UI Interactions"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt, startAction }">
+    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section custom-board">
           <h2 class="board-title">
@@ -39,11 +39,9 @@ import GameBoard from './components/GameBoard.vue';
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
-            :action="action"
             :action-args="actionArgs"
-            :execute-action="executeAction"
+            :action-controller="actionController"
             :set-board-prompt="setBoardPrompt"
-            :start-action="startAction"
           />
         </div>
         <div class="board-section auto-board">

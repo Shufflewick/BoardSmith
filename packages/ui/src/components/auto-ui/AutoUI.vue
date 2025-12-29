@@ -25,11 +25,6 @@ defineProps<{
   flowState?: FlowState;
   /** Current player's position */
   playerPosition: number;
-  // Keep these for backwards compatibility but they're not used here
-  players?: unknown;
-  isMyTurn?: boolean;
-  action?: unknown;
-  actionMetadata?: unknown;
 }>();
 </script>
 

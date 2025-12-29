@@ -109,6 +109,8 @@ export interface WebSocketMessage {
   type: 'action' | 'ping' | 'getState';
   action?: string;
   args?: Record<string, unknown>;
+  /** Request ID for action request/response correlation */
+  requestId?: string;
 }
 
 export interface WebSocketSession extends SessionInfo {
@@ -936,13 +938,15 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         switch (data.type) {
           case 'action':
             if (session.isSpectator) {
-              ws.send(JSON.stringify({ type: 'error', error: 'Spectators cannot perform actions' }));
+              const errorResult = { type: 'actionResult', requestId: data.requestId, success: false, error: 'Spectators cannot perform actions' };
+              ws.send(JSON.stringify(errorResult));
               return;
             }
 
             await this.#ensureLoaded();
             if (!this.#gameSession) {
-              ws.send(JSON.stringify({ type: 'error', error: 'Game not found' }));
+              const errorResult = { type: 'actionResult', requestId: data.requestId, success: false, error: 'Game not found' };
+              ws.send(JSON.stringify(errorResult));
               return;
             }
 
@@ -952,10 +956,17 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
               data.args || {}
             );
 
-            if (!result.success) {
-              ws.send(JSON.stringify({ type: 'error', error: result.error }));
-            }
-            // Success case: broadcast happens automatically
+            // Always send action result back to the requesting client
+            const actionResult = {
+              type: 'actionResult',
+              requestId: data.requestId,
+              success: result.success,
+              error: result.error,
+              data: result.data,
+              message: result.message,
+            };
+            ws.send(JSON.stringify(actionResult));
+            // Success case: broadcast of state update happens automatically via session
             break;
 
           case 'getState':

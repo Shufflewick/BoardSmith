@@ -9,15 +9,32 @@
  * - Bidirectional interaction with the game board
  * - Element selections show buttons for valid elements
  * - Choice selections can filter based on previous selections (filterBy)
+ *
+ * Requires: ActionPanel must be used inside a GameShell context where the
+ * action controller is provided via inject('actionController').
  */
-import { ref, computed, watch, watchEffect, inject, reactive } from 'vue';
+import { ref, computed, watch, inject, reactive } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
+import type {
+  UseActionControllerReturn,
+  SelectionMetadata,
+  ActionMetadata as ControllerActionMetadata,
+  ChoiceWithRefs,
+  ValidElement,
+  ElementRef,
+} from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
+
+// Inject the action controller from GameShell (REQUIRED)
+// ActionPanel is now a thin UI layer over the controller
+const _actionController = inject<UseActionControllerReturn>('actionController');
+if (!_actionController) {
+  throw new Error('ActionPanel requires actionController to be provided via inject. Use inside GameShell.');
+}
+const actionController = _actionController;
 
 /**
  * Helper to clear all keys from a reactive object while preserving reactivity.
- * This is needed because we share actionArgs with custom game boards,
- * and they may have watchers on it.
  */
 function clearReactiveObject(obj: Record<string, unknown>): void {
   for (const key of Object.keys(obj)) {
@@ -25,110 +42,22 @@ function clearReactiveObject(obj: Record<string, unknown>): void {
   }
 }
 
-// Clear action state including display cache
-function clearActionState(args: Record<string, unknown>, cache: Record<string, string>): void {
+/**
+ * Clear action-related state (args and display cache)
+ */
+function clearActionState(args: Record<string, unknown>, cache: Record<string, unknown>): void {
   clearReactiveObject(args);
-  clearReactiveObject(cache as unknown as Record<string, unknown>);
+  clearReactiveObject(cache);
 }
 
-/**
- * Reference to a board element for highlighting
- */
-export interface ElementRef {
-  id?: number;
-  name?: string;
-  notation?: string;
-}
-
-/**
- * Choice with optional board references
- */
-export interface ChoiceWithRefs {
-  value: unknown;
-  display: string;
-  sourceRef?: ElementRef;
-  targetRef?: ElementRef;
-}
-
-/**
- * Valid element for element selection
- */
-export interface ValidElement {
-  id: number;
-  display?: string;
-  ref?: ElementRef;
-}
-
-/**
- * Filter configuration for dependent selections
- */
-export interface SelectionFilter {
-  key: string;
-  selectionName: string;
-}
-
-export interface Selection {
-  name: string;
-  type: 'choice' | 'element' | 'elements' | 'number' | 'text';
-  prompt?: string;
-  optional?: boolean;
-  choices?: ChoiceWithRefs[];
-  min?: number;
-  max?: number;
-  integer?: boolean;
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  elementClassName?: string;
-  /** For element selections: list of valid element IDs the user can select */
-  validElements?: ValidElement[];
-  /** For choice selections: filter choices based on a previous selection */
-  filterBy?: SelectionFilter;
-  /** For choice selections: name of a previous selection this depends on */
-  dependsOn?: string;
-  /** For choice selections with dependsOn: choices indexed by dependent value */
-  choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
-  /** For repeating choice selections: configuration for repeat behavior */
-  repeat?: {
-    /** Whether the selection has an onEach callback (requires server round-trip) */
-    hasOnEach: boolean;
-    /** The terminator value (if using repeatUntil shorthand) */
-    terminator?: unknown;
-  };
-  /** For multi-select choice selections: min/max selection configuration */
-  multiSelect?: {
-    /** Minimum selections required (default: 1) */
-    min: number;
-    /** Maximum selections allowed (undefined = unlimited) */
-    max?: number;
-  };
-  /**
-   * For choice selections with dependsOn + multiSelect: multiSelect config indexed by dependent value.
-   * Key is the string representation of the dependent value (element ID, player position, etc.)
-   */
-  multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
-  /**
-   * For choice selections with defer: true.
-   * Choices are not evaluated until the action is clicked - must fetch via /deferred-choices endpoint.
-   */
-  deferred?: boolean;
-}
-
-export interface ActionMetadata {
-  name: string;
-  prompt?: string;
-  selections: Selection[];
-}
-
-export interface Player {
-  position: number;
-  name: string;
-}
+// Re-export types for backwards compatibility
+export type { ChoiceWithRefs, ValidElement, ElementRef };
+export type Selection = SelectionMetadata;
+export type ActionMetadata = ControllerActionMetadata;
 
 const props = defineProps<{
   availableActions: string[];
   actionMetadata?: Record<string, ActionMetadata>;
-  players: Player[];
   playerPosition: number;
   isMyTurn: boolean;
   selectedElementId?: number;
@@ -142,47 +71,36 @@ const props = defineProps<{
   autoEndTurn?: boolean;
   /** Show undo button when undo is available (default: true) */
   showUndo?: boolean;
-  /** Action to start (set by external UI, consumed and cleared via action-started event) */
-  pendingActionStart?: string | null;
-  /** Initial args to apply when starting the pending action (applied after clearing) */
-  pendingActionArgs?: Record<string, unknown>;
 }>();
 
 const emit = defineEmits<{
-  (e: 'execute', actionName: string, args: Record<string, unknown>): void;
   (e: 'selectingElement', selectionName: string, elementClassName?: string): void;
   (e: 'cancelSelection'): void;
   (e: 'undo'): void;
-  (e: 'action-started'): void;
-  // Repeating selection events
-  (e: 'start-action', actionName: string, player: number): Promise<{ success: boolean; hasRepeatingSelections?: boolean }>;
-  (e: 'selection-step', player: number, selectionName: string, value: unknown): Promise<{
-    success: boolean;
-    error?: string;
-    done?: boolean;
-    nextChoices?: unknown[];
-    actionComplete?: boolean;
-  }>;
-  (e: 'cancel-action', player: number): void;
 }>();
 
 // Board interaction for hover/selection sync
 const boardInteraction = useBoardInteraction();
 
-// Current action state
-const currentAction = ref<string | null>(null);
-const isExecuting = ref(false);
+// Use controller state directly (controller is required)
+const currentAction = actionController.currentAction;
+const isExecuting = actionController.isExecuting;
+const deferredChoicesLoading = actionController.isDeferredLoading;
+
+// Repeating state from controller
+const repeatingState = computed(() => {
+  const rs = actionController.repeatingState.value;
+  if (!rs) return null;
+  return {
+    selectionName: rs.selectionName,
+    accumulated: rs.accumulated,
+    awaitingServer: rs.awaitingServer,
+    currentChoices: rs.currentChoices as ChoiceWithRefs[] | undefined,
+  };
+});
 
 // Cache for selection display values (preserves display even after game state changes)
 const displayCache = reactive<Record<string, string>>({});
-
-// Repeating selection state
-const repeatingState = ref<{
-  selectionName: string;
-  accumulated: unknown[];
-  awaitingServer: boolean;
-  currentChoices?: ChoiceWithRefs[];
-} | null>(null);
 
 // Multi-select state: tracks selected values for current multiSelect selection
 const multiSelectState = ref<{
@@ -190,65 +108,16 @@ const multiSelectState = ref<{
   selectedValues: unknown[];
 } | null>(null);
 
-// Track the last executed action to prevent auto-starting it immediately after execution
-// This handles the race condition where availableActions hasn't updated yet from the server
-const lastExecutedAction = ref<string | null>(null);
-
 // Track current input values for number/text inputs (so Done button can submit them)
 const numberInputValue = ref<number | null>(null);
 const textInputValue = ref<string>('');
 
-/**
- * Type for the selection step function that handles repeating selections.
- * This must be injected by the parent component (e.g., GameShell) to handle
- * server communication for repeating selections.
- */
-type SelectionStepFn = (
-  player: number,
-  selectionName: string,
-  value: unknown,
-  actionName: string,
-  initialArgs?: Record<string, unknown>
-) => Promise<{
-  success: boolean;
-  error?: string;
-  done?: boolean;
-  nextChoices?: unknown[];
-  actionComplete?: boolean;
-}>;
-
-// Inject the selection step function for repeating selections
-// This is required for repeating selections to work - parent must provide it
-const selectionStepFn = inject<SelectionStepFn | undefined>('selectionStepFn', undefined);
-
-/**
- * Type for the deferred choices fetch function.
- * This must be injected by the parent component (e.g., GameShell) to handle
- * server communication for deferred selections.
- */
-type FetchDeferredChoicesFn = (
-  actionName: string,
-  selectionName: string,
-  player: number,
-  currentArgs: Record<string, unknown>
-) => Promise<{
-  success: boolean;
-  choices?: ChoiceWithRefs[];
-  error?: string;
-}>;
-
-// Inject the deferred choices fetch function
-// This is required for deferred selections to work - parent must provide it
-const fetchDeferredChoicesFn = inject<FetchDeferredChoicesFn | undefined>('fetchDeferredChoicesFn', undefined);
-
-// State for tracking when we're loading deferred choices
-const deferredChoicesLoading = ref(false);
-
-// Inject shared actionArgs from GameShell (enables bidirectional sync with custom game boards)
-// Falls back to local state for standalone usage (testing, storybook, etc.)
-const injectedActionArgs = inject<Record<string, unknown> | undefined>('actionArgs', undefined);
-const fallbackArgs = reactive<Record<string, unknown>>({});
-const currentArgs = computed(() => injectedActionArgs ?? fallbackArgs);
+// Inject shared actionArgs from GameShell (required for bidirectional sync with custom game boards)
+const _currentArgs = inject<Record<string, unknown>>('actionArgs');
+if (!_currentArgs) {
+  throw new Error('ActionPanel requires actionArgs to be provided via inject. Use inside GameShell.');
+}
+const currentArgs = _currentArgs;
 
 // Get metadata for available actions
 const actionsWithMetadata = computed(() => {
@@ -286,94 +155,10 @@ const currentActionMeta = computed(() => {
   return actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
 });
 
-// Helper to get available choices for a selection
-function getAvailableChoices(selection: any): unknown[] {
-  if (selection.type === 'choice') {
-    return selection.choices || [];
-  } else if (selection.type === 'element' || selection.type === 'elements') {
-    return selection.validElements || [];
-  }
-  return [];
-}
+// Current selection - delegates to controller (required)
+const currentSelection = computed(() => actionController.currentSelection.value);
 
-// Check if a selection needs user input (undefined = not filled, null = explicitly skipped)
-function selectionNeedsInput(sel: { name: string }): boolean {
-  const value = currentArgs.value[sel.name];
-  // undefined = not filled yet, null = explicitly skipped (counts as filled)
-  return value === undefined;
-}
-
-// Current selection - returns next selection that needs user input
-// First returns required selections, then optional ones (so user can fill or skip them)
-// This is a PURE computed - no side effects. Auto-fill is handled by autoFillSingleChoice watch.
-const currentSelection = computed(() => {
-  if (!currentActionMeta.value) return null;
-
-  // First pass: find first required selection without value
-  for (const sel of currentActionMeta.value.selections) {
-    if (selectionNeedsInput(sel) && !sel.optional) {
-      return sel;
-    }
-  }
-
-  // Second pass: find first optional selection without value
-  // This gives the user a chance to fill optional selections before auto-executing
-  for (const sel of currentActionMeta.value.selections) {
-    if (selectionNeedsInput(sel) && sel.optional) {
-      return sel;
-    }
-  }
-
-  return null;
-});
-
-// Auto-fill single-choice selections in auto mode
-// Uses watchEffect so it re-runs after each fill until no more auto-fillable selections remain
-// This ensures all consecutive single-choice selections are filled in one reactive flush
-watchEffect(() => {
-  if (!currentActionMeta.value) return;
-  if (props.autoEndTurn === false) return;
-  if (isExecuting.value) return;
-
-  // Loop to fill all consecutive single-choice selections
-  // The loop is bounded by the number of selections, so it can't infinite-loop
-  for (let i = 0; i < currentActionMeta.value.selections.length; i++) {
-    // Find next selection that needs input
-    let selToFill = null;
-    for (const sel of currentActionMeta.value.selections) {
-      if (selectionNeedsInput(sel)) {
-        selToFill = sel;
-        break;
-      }
-    }
-
-    if (!selToFill) {
-      // All selections filled - trigger auto-execute
-      if (currentAction.value && !isExecuting.value) {
-        executeAction(currentAction.value, { ...currentArgs.value });
-      }
-      return;
-    }
-
-    const choices = getAvailableChoices(selToFill);
-    if (choices.length !== 1) {
-      // Can't auto-fill, needs user input
-      return;
-    }
-
-    // Auto-fill this selection
-    const choice = choices[0];
-    if (selToFill.type === 'element' || selToFill.type === 'elements') {
-      currentArgs.value[selToFill.name] = (choice as any).id;
-      if ((choice as any).display) {
-        cacheSelectionDisplay(selToFill.name, (choice as any).id, (choice as any).display);
-      }
-    } else {
-      currentArgs.value[selToFill.name] = (choice as any).value ?? choice;
-    }
-    // Continue loop to check for next selection
-  }
-});
+// Note: Auto-fill is handled by the controller's internal watch
 
 /**
  * Get the current multiSelect config, resolving dependsOn-based configs.
@@ -386,7 +171,7 @@ const currentMultiSelect = computed(() => {
 
   // If selection has dependsOn and multiSelectByDependentValue, resolve it
   if (sel.dependsOn && sel.multiSelectByDependentValue) {
-    const depValue = currentArgs.value[sel.dependsOn];
+    const depValue = currentArgs[sel.dependsOn];
     if (depValue !== undefined) {
       const key = String(depValue);
       return sel.multiSelectByDependentValue[key];
@@ -404,23 +189,8 @@ const selectedElementId = computed(() => {
   if (!currentActionMeta.value) return null;
 
   for (const sel of currentActionMeta.value.selections) {
-    if ((sel.type === 'element' || sel.type === 'elements') && currentArgs.value[sel.name] !== undefined) {
-      return currentArgs.value[sel.name] as number;
-    }
-  }
-  return null;
-});
-
-// Get the selected element ref for highlighting
-const selectedElementRef = computed(() => {
-  if (selectedElementId.value === null) return null;
-
-  // Find the element selection that was completed
-  if (!currentActionMeta.value) return null;
-  for (const sel of currentActionMeta.value.selections) {
-    if ((sel.type === 'element' || sel.type === 'elements') && currentArgs.value[sel.name] !== undefined) {
-      const validElem = sel.validElements?.find(e => e.id === selectedElementId.value);
-      return validElem?.ref || { id: selectedElementId.value };
+    if ((sel.type === 'element' || sel.type === 'elements') && currentArgs[sel.name] !== undefined) {
+      return currentArgs[sel.name] as number;
     }
   }
   return null;
@@ -433,7 +203,7 @@ const displayableArgs = computed(() => {
   const currentSelName = currentSelection.value?.name;
   const isMultiSelectActive = currentMultiSelect.value !== undefined;
 
-  for (const [key, value] of Object.entries(currentArgs.value)) {
+  for (const [key, value] of Object.entries(currentArgs)) {
     // Skip internal preview keys
     if (key.startsWith('_preview_')) continue;
 
@@ -452,58 +222,20 @@ const displayableArgs = computed(() => {
 });
 
 // Filter choices based on filterBy, dependsOn, and previous selections
-// Also excludes choices that were already selected in previous choice selections
+// Delegates to controller for base choices, then applies ActionPanel-specific filtering
 const filteredChoices = computed(() => {
   if (!currentSelection.value) return [];
 
-  let choices: ChoiceWithRefs[] = [];
+  // Get base choices from controller (handles repeating, deferred, dependsOn, filterBy)
+  let choices: ChoiceWithRefs[] = actionController.getCurrentChoices() as ChoiceWithRefs[];
 
-  // For repeating selections, use dynamic choices from server if available
-  if (isRepeatingSelection(currentSelection.value) && repeatingState.value?.currentChoices) {
-    choices = repeatingState.value.currentChoices;
-  }
-  // For deferred selections, use fetched choices from server
-  else if (currentSelection.value.deferred && currentAction.value) {
-    const key = `${currentAction.value}:${currentSelection.value.name}`;
-    choices = fetchedDeferredChoices[key] || [];
-  }
-  // Handle dependsOn: look up choices from choicesByDependentValue
-  else if (currentSelection.value.dependsOn && currentSelection.value.choicesByDependentValue) {
-    const dependentValue = currentArgs.value[currentSelection.value.dependsOn];
-    if (dependentValue !== undefined) {
-      const key = String(dependentValue);
-      choices = currentSelection.value.choicesByDependentValue[key] || [];
-    } else {
-      // Dependent selection not yet made - no choices available
-      return [];
-    }
-  } else if (currentSelection.value.choices) {
-    // Regular choices
-    choices = currentSelection.value.choices;
-  } else {
-    return [];
-  }
-
-  const filterBy = currentSelection.value.filterBy;
-
-  // If filterBy is specified, filter to only matching choices
-  if (filterBy) {
-    const filterValue = currentArgs.value[filterBy.selectionName];
-    if (filterValue !== undefined) {
-      choices = choices.filter(choice => {
-        const choiceValue = choice.value as Record<string, unknown>;
-        return choiceValue[filterBy.key] === filterValue;
-      });
-    }
-  }
-
-  // Exclude choices that were already selected in previous choice selections
+  // ActionPanel-specific: Exclude choices that were already selected in previous choice selections
   // This handles sequential choice selections where user shouldn't pick the same thing twice
   if (currentActionMeta.value) {
     const alreadySelectedValues = new Set<unknown>();
     for (const sel of currentActionMeta.value.selections) {
       if (sel.type === 'choice' && sel.name !== currentSelection.value.name) {
-        const selectedValue = currentArgs.value[sel.name];
+        const selectedValue = currentArgs[sel.name];
         if (selectedValue !== undefined) {
           alreadySelectedValues.add(selectedValue);
         }
@@ -530,7 +262,7 @@ const filteredValidElements = computed(() => {
   if (currentActionMeta.value) {
     for (const sel of currentActionMeta.value.selections) {
       if ((sel.type === 'element' || sel.type === 'elements') && sel.name !== currentSelection.value.name) {
-        const selectedValue = currentArgs.value[sel.name];
+        const selectedValue = currentArgs[sel.name];
         if (typeof selectedValue === 'number') {
           alreadySelectedIds.add(selectedValue);
         } else if (Array.isArray(selectedValue)) {
@@ -555,11 +287,11 @@ const filteredValidElements = computed(() => {
 function skipOptionalSelection() {
   if (!currentSelection.value || !currentSelection.value.optional) return;
   // Mark as explicitly skipped by setting to null (not undefined)
-  currentArgs.value[currentSelection.value.name] = null;
+  currentArgs[currentSelection.value.name] = null;
 
   // Auto-execute if action is now complete (all required selections filled)
   if (currentAction.value && isActionReady.value) {
-    executeAction(currentAction.value, { ...currentArgs.value });
+    executeAction(currentAction.value, { ...currentArgs });
   }
 }
 
@@ -637,7 +369,7 @@ function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
   }
 
   // Execute the action with this choice
-  executeAction(currentAction.value, { ...currentArgs.value, [selectionName]: choice.value });
+  executeAction(currentAction.value, { ...currentArgs, [selectionName]: choice.value });
 }
 
 // Hover handlers for element buttons (highlight on board)
@@ -728,7 +460,7 @@ function clearSelection(selectionName: string) {
   // Clear this selection and all subsequent ones
   for (let i = index; i < currentActionMeta.value.selections.length; i++) {
     const sel = currentActionMeta.value.selections[i];
-    delete currentArgs.value[sel.name];
+    delete currentArgs[sel.name];
   }
 
   // Clear board interaction
@@ -743,12 +475,7 @@ const isActionReady = computed(() => {
   return currentSelection.value === null;
 });
 
-// Auto-execute when action becomes ready (handles auto-fill from currentSelection computed)
-watch(isActionReady, (ready) => {
-  if (ready && currentAction.value && !isExecuting.value) {
-    executeAction(currentAction.value, { ...currentArgs.value });
-  }
-});
+// Note: Auto-execute when action becomes ready is handled by the controller
 
 // Auto-start/execute single actions when auto mode is enabled
 // This watch handles initial render and when isMyTurn changes
@@ -776,12 +503,6 @@ watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
 // Reset current action if it's no longer available (e.g., executed from custom UI)
 // Also handles auto-start/auto-execute for single available actions when auto mode is enabled
 watch(() => props.availableActions, (actions, oldActions) => {
-  // Clear lastExecutedAction on any availableActions update from server
-  // This is safe because: if we just executed and server hasn't responded yet,
-  // currentAction is still set (preventing re-execution). Once server responds
-  // with new availableActions, it's a new turn/state and we should allow auto-start.
-  lastExecutedAction.value = null;
-
   // Determine if we need to clear action state
   let shouldClear = false;
 
@@ -801,9 +522,8 @@ watch(() => props.availableActions, (actions, oldActions) => {
   }
 
   if (shouldClear) {
-    currentAction.value = null;
-    clearActionState(currentArgs.value, displayCache);
-    repeatingState.value = null;
+    actionController.cancel();
+    clearActionState(currentArgs, displayCache);
     multiSelectState.value = null;
     boardInteraction?.clear();
   }
@@ -826,20 +546,6 @@ watch(() => props.availableActions, (actions, oldActions) => {
     if (actionMeta && actionMeta.selections.length > 0) {
       startAction(actionMeta.name);
     }
-  }
-});
-
-// Watch for pending action start from external UI (e.g., custom game board buttons)
-watch(() => props.pendingActionStart, (actionName) => {
-  if (actionName && props.availableActions.includes(actionName)) {
-    startAction(actionName);
-    // Apply initial args after clearing (avoids timing issues with write-then-start pattern)
-    if (props.pendingActionArgs) {
-      for (const [key, value] of Object.entries(props.pendingActionArgs)) {
-        currentArgs.value[key] = value;
-      }
-    }
-    emit('action-started');
   }
 });
 
@@ -930,8 +636,8 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
     // set the selected piece as draggable
     if (selection.filterBy && currentActionMeta.value) {
       const firstSel = currentActionMeta.value.selections[0];
-      if ((firstSel?.type === 'element' || firstSel?.type === 'elements') && currentArgs.value[firstSel.name] !== undefined) {
-        const selectedPieceId = currentArgs.value[firstSel.name] as number;
+      if ((firstSel?.type === 'element' || firstSel?.type === 'elements') && currentArgs[firstSel.name] !== undefined) {
+        const selectedPieceId = currentArgs[firstSel.name] as number;
         // Find the ref for this piece from the first selection's validElements
         const pieceRef = firstSel.validElements?.find(ve => ve.id === selectedPieceId)?.ref;
         boardInteraction.setDraggableSelectedElement(pieceRef || { id: selectedPieceId });
@@ -972,11 +678,9 @@ watch(() => boardInteraction?.currentAction, (boardAction) => {
   if (boardAction === null && currentAction.value !== null) {
     // This was externally cleared (e.g., by custom UI cancel button)
     // Reset ActionPanel's internal state to match
-    currentAction.value = null;
-    repeatingState.value = null;
+    actionController.cancel();
     multiSelectState.value = null;
-    clearReactiveObject(fetchedDeferredChoices);
-    clearActionState(currentArgs.value, displayCache);
+    clearActionState(currentArgs, displayCache);
     emit('cancelSelection');
   }
 });
@@ -997,7 +701,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
     // Check if this element was already selected in a previous selection
     // (prevents double-selection bug when clicking elements)
-    const alreadySelected = Object.values(currentArgs.value).includes(selected.id);
+    const alreadySelected = Object.values(currentArgs).includes(selected.id);
     if (alreadySelected) {
       return;
     }
@@ -1036,7 +740,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
   if (elementAction) {
     currentAction.value = elementAction.name;
-    clearActionState(currentArgs.value, displayCache);
+    clearActionState(currentArgs, displayCache);
 
     // Find and set the element in args
     const firstSel = elementAction.selections[0];
@@ -1047,7 +751,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
     });
 
     if (validElem) {
-      currentArgs.value[firstSel.name] = validElem.id;
+      currentArgs[firstSel.name] = validElem.id;
       // Cache display for later lookup
       if (validElem.display) {
         cacheSelectionDisplay(firstSel.name, validElem.id, validElem.display);
@@ -1072,11 +776,11 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
     // If first selection is element/elements and already filled, and second is choice with filterBy
     if ((firstSel?.type === 'element' || firstSel?.type === 'elements') &&
-        currentArgs.value[firstSel.name] !== undefined &&
+        currentArgs[firstSel.name] !== undefined &&
         secondSel?.type === 'choice' &&
         secondSel.filterBy) {
 
-      const selectedPieceId = currentArgs.value[firstSel.name] as number;
+      const selectedPieceId = currentArgs[firstSel.name] as number;
 
       // Check if dragged element matches the selected piece
       if (dragged.id === selectedPieceId) {
@@ -1103,7 +807,7 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
           const choice = choiceByTargetId.get(targetId);
           if (choice && currentAction.value) {
             executeAction(currentAction.value, {
-              ...currentArgs.value,
+              ...currentArgs,
               [secondSel.name]: choice.value
             });
           }
@@ -1153,8 +857,8 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
   // Set up the action state
   currentAction.value = dragAction.name;
-  clearActionState(currentArgs.value, displayCache);
-  currentArgs.value[firstSel.name] = validPiece.id;
+  clearActionState(currentArgs, displayCache);
+  currentArgs[firstSel.name] = validPiece.id;
   // Cache display for later lookup
   if (validPiece.display) {
     cacheSelectionDisplay(firstSel.name, validPiece.id, validPiece.display);
@@ -1186,7 +890,7 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
     const choice = choiceByTargetId.get(targetId);
     if (choice && currentAction.value) {
       executeAction(currentAction.value, {
-        ...currentArgs.value,
+        ...currentArgs,
         [secondSel.name]: choice.value
       });
     }
@@ -1196,7 +900,7 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 // Watch for external element selection prop
 watch(() => props.selectedElementId, (newId) => {
   if (newId !== undefined && (currentSelection.value?.type === 'element' || currentSelection.value?.type === 'elements')) {
-    currentArgs.value[currentSelection.value.name] = newId;
+    currentArgs[currentSelection.value.name] = newId;
     // Cache display from validElements
     const validElem = currentSelection.value.validElements?.find((e: ValidElement) => e.id === newId);
     if (validElem?.display) {
@@ -1261,20 +965,6 @@ function isRepeatingSelection(sel: Selection): boolean {
 }
 
 /**
- * Check if an action has any repeating selections
- */
-function hasRepeatingSelections(meta: ActionMetadata): boolean {
-  return meta.selections.some(s => isRepeatingSelection(s));
-}
-
-/**
- * Check if a selection is multi-select
- */
-function isMultiSelectSelection(sel: Selection): boolean {
-  return sel.multiSelect !== undefined;
-}
-
-/**
  * Check if a value is currently selected in multi-select mode
  */
 function isMultiSelectValueSelected(value: unknown): boolean {
@@ -1322,7 +1012,7 @@ function toggleMultiSelectValue(selectionName: string, value: unknown, display?:
   }
 
   // Sync preview to board using special key (doesn't affect selection completion)
-  currentArgs.value[`_preview_${selectionName}`] = [...state.selectedValues];
+  currentArgs[`_preview_${selectionName}`] = [...state.selectedValues];
 
   // Update AutoUI board highlighting for selected items
   updateMultiSelectBoardHighlights();
@@ -1368,7 +1058,7 @@ watch(
     const sel = currentSelection.value;
     const multiSelect = currentMultiSelect.value;
     if (!sel || !multiSelect) return undefined;
-    return currentArgs.value[`_preview_${sel.name}`];
+    return currentArgs[`_preview_${sel.name}`];
   },
   (previewValue) => {
     const sel = currentSelection.value;
@@ -1408,7 +1098,7 @@ function confirmMultiSelect() {
   const values = multiSelectState.value?.selectedValues ? [...multiSelectState.value.selectedValues] : [];
 
   // Set the selection value as an array
-  currentArgs.value[selectionName] = values;
+  currentArgs[selectionName] = values;
 
   // Clear multi-select state and board highlights
   multiSelectState.value = null;
@@ -1416,7 +1106,7 @@ function confirmMultiSelect() {
 
   // Auto-execute if action is now complete
   if (currentAction.value && isActionReady.value) {
-    executeAction(currentAction.value, { ...currentArgs.value });
+    executeAction(currentAction.value, { ...currentArgs });
   }
 }
 
@@ -1453,11 +1143,6 @@ const multiSelectCountDisplay = computed(() => {
   return `Selected: ${count}`;
 });
 
-/**
- * State for storing fetched deferred choices, keyed by "actionName:selectionName"
- */
-const fetchedDeferredChoices = reactive<Record<string, ChoiceWithRefs[]>>({});
-
 async function startAction(actionName: string) {
   const meta = actionsWithMetadata.value.find(a => a.name === actionName);
 
@@ -1466,17 +1151,17 @@ async function startAction(actionName: string) {
     return;
   }
 
-  currentAction.value = actionName;
-  clearActionState(currentArgs.value, displayCache);
-  repeatingState.value = null;
+  const firstSel = meta.selections[0];
+
+  // Delegate to controller for core start logic
+  // Controller handles: clearing args, fetching deferred choices for first selection
+  await actionController.start(actionName);
+  // Also clear ActionPanel-specific cache (controller doesn't know about this)
+  clearReactiveObject(displayCache as unknown as Record<string, unknown>);
+
+  // ActionPanel-specific state cleanup (controller doesn't know about these)
   multiSelectState.value = null;
   boardInteraction?.clear();
-
-  // Check if first selection is deferred - if so, fetch choices before showing UI
-  const firstSel = meta.selections[0];
-  if (firstSel.deferred) {
-    await fetchDeferredChoicesForSelection(actionName, firstSel.name);
-  }
 
   // Notify board interaction of action start (for custom GameBoard components)
   boardInteraction?.setCurrentAction(actionName, 0, firstSel.name);
@@ -1486,158 +1171,49 @@ async function startAction(actionName: string) {
   }
 }
 
-/**
- * Fetch deferred choices for a selection from the server.
- * Stores results in fetchedDeferredChoices for use by the UI.
- */
-async function fetchDeferredChoicesForSelection(actionName: string, selectionName: string) {
-  if (!fetchDeferredChoicesFn) {
-    console.error('fetchDeferredChoicesFn not injected - deferred selections require parent to provide this');
-    return;
-  }
-
-  const key = `${actionName}:${selectionName}`;
-  deferredChoicesLoading.value = true;
-
-  try {
-    const result = await fetchDeferredChoicesFn(
-      actionName,
-      selectionName,
-      props.playerPosition,
-      { ...currentArgs.value }
-    );
-
-    if (result.success && result.choices) {
-      fetchedDeferredChoices[key] = result.choices;
-    } else {
-      console.error('Failed to fetch deferred choices:', result.error);
-      fetchedDeferredChoices[key] = [];
-    }
-  } catch (err) {
-    console.error('Error fetching deferred choices:', err);
-    fetchedDeferredChoices[key] = [];
-  } finally {
-    deferredChoicesLoading.value = false;
-  }
-}
-
 function cancelAction() {
-  // If there's a repeating selection in progress, notify server to cancel
-  if (repeatingState.value) {
-    emit('cancel-action', props.playerPosition);
-  }
-  currentAction.value = null;
-  repeatingState.value = null;
+  // Delegate cancel to controller (handles repeating selection cleanup too)
+  actionController.cancel();
+
+  // Clear ActionPanel-specific state
   multiSelectState.value = null;
-  // Clear deferred choices cache
-  clearReactiveObject(fetchedDeferredChoices);
-  clearActionState(currentArgs.value, displayCache);
+  clearActionState(currentArgs, displayCache);
   boardInteraction?.clear();
   emit('cancelSelection');
 }
 
+/**
+ * Handle a selection choice - delegates to controller.fill() for core logic.
+ * This is a thin wrapper that handles UI concerns (display caching, board interaction).
+ *
+ * The controller handles:
+ * - Validation
+ * - Repeating selections (via selectionStep)
+ * - Deferred choices
+ * - Auto-execute when ready
+ *
+ * ActionPanel handles:
+ * - Display caching
+ * - Board interaction (highlighting, selecting)
+ * - Element selection emits
+ */
 async function setSelectionValue(name: string, value: unknown, display?: string) {
   const selection = currentSelection.value;
-
-  // Handle repeating selections
-  if (selection && isRepeatingSelection(selection) && selection.name === name) {
-    // Check if we have the required function injected
-    if (!selectionStepFn) {
-      console.error('selectionStepFn not injected - repeating selections require parent to provide this');
-      return;
-    }
-
-    if (!currentAction.value) {
-      console.error('No current action for repeating selection');
-      return;
-    }
-
-    // Initialize repeating state if needed
-    if (!repeatingState.value || repeatingState.value.selectionName !== name) {
-      repeatingState.value = {
-        selectionName: name,
-        accumulated: [],
-        awaitingServer: false,
-        currentChoices: selection.choices,
-      };
-    }
-
-    // Add to accumulated values
-    repeatingState.value.accumulated.push(value);
-    repeatingState.value.awaitingServer = true;
-
-    try {
-      // Call server to process this selection step via injected function
-      // Pass currentArgs as initialArgs so server knows about prior selections (e.g., actingMerc)
-      const result = await selectionStepFn(props.playerPosition, name, value, currentAction.value, { ...currentArgs.value });
-
-      if (!result.success) {
-        // Error - remove from accumulated and show error
-        repeatingState.value.accumulated.pop();
-        console.error('Selection step failed:', result.error);
-        return;
-      }
-
-      // Check if action is complete (termination condition met)
-      if (result.actionComplete) {
-        // Action completed - clear everything
-        repeatingState.value = null;
-        currentAction.value = null;
-        clearActionState(currentArgs.value, displayCache);
-        boardInteraction?.clear();
-        emit('cancelSelection');
-        return;
-      }
-
-      // Check if this repeating selection is done but action continues
-      if (result.done) {
-        // Move accumulated to args and clear repeating state
-        currentArgs.value[name] = repeatingState.value.accumulated;
-        repeatingState.value = null;
-
-        // Check if action is ready to execute
-        if (currentAction.value && isActionReady.value) {
-          executeAction(currentAction.value, { ...currentArgs.value });
-        }
-        return;
-      }
-
-      // For selections with onEach, clear accumulated since items are processed immediately
-      // (they're not "pending" - they've already been applied to game state)
-      if (selection.repeat?.hasOnEach) {
-        repeatingState.value.accumulated = [];
-      }
-
-      // More iterations needed - update choices if provided
-      if (result.nextChoices) {
-        // Convert raw choices to ChoiceWithRefs format
-        repeatingState.value.currentChoices = result.nextChoices.map((choice: unknown) => {
-          // If already a ChoiceWithRefs object, use as-is
-          if (typeof choice === 'object' && choice !== null && 'value' in choice && 'display' in choice) {
-            return choice as ChoiceWithRefs;
-          }
-          // Convert primitive to ChoiceWithRefs
-          return {
-            value: choice,
-            display: String(choice),
-          };
-        });
-      }
-    } finally {
-      if (repeatingState.value) {
-        repeatingState.value.awaitingServer = false;
-      }
-    }
-    return;
-  }
-
-  // Normal (non-repeating) selection handling
-  currentArgs.value[name] = value;
 
   // Cache display for later lookup (important for element selections that may be filtered out later)
   if (display) {
     cacheSelectionDisplay(name, value, display);
   }
+
+  // Delegate to controller for core fill logic
+  // Controller handles: validation, repeating selections, auto-execute
+  const result = await actionController.fill(name, value);
+  if (!result.valid) {
+    console.error('Selection failed:', result.error);
+    return;
+  }
+
+  // UI-only concerns below (controller doesn't handle these)
 
   // For choice selections with board refs, mark the selected element
   if (selection?.type === 'choice' && selection.choices) {
@@ -1651,7 +1227,6 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
   }
 
   // Keep the selected move highlighted on the board
-  // Don't clear - instead set this as the "hovered" choice so it stays visible
   if (boardInteraction && display) {
     boardInteraction.setHoveredChoice({
       value,
@@ -1662,12 +1237,6 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
   if (selection?.type === 'element' || selection?.type === 'elements') {
     emit('selectingElement', selection.name, selection.elementClassName);
   }
-
-  // Auto-execute if action is now complete (all required selections filled)
-  // This creates a 1:1 relationship between flow actions and UI - no extra "Confirm" step
-  if (currentAction.value && isActionReady.value) {
-    executeAction(currentAction.value, { ...currentArgs.value });
-  }
 }
 
 async function executeAction(actionName: string, args: Record<string, unknown>) {
@@ -1676,31 +1245,31 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   if (isExecuting.value) {
     return;
   }
-  isExecuting.value = true;
 
   // Extra safeguard: don't execute if it's not our turn
   if (!props.isMyTurn) {
-    isExecuting.value = false;  // Reset since we're not actually executing
     return;
   }
-  try {
-    // Filter out null values (explicitly skipped optional selections)
-    // Server expects undefined for missing optional args, not null
-    const filteredArgs: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(args)) {
-      if (value !== null) {
-        filteredArgs[key] = value;
-      }
+
+  // Filter out null values (explicitly skipped optional selections)
+  // Server expects undefined for missing optional args, not null
+  const filteredArgs: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (value !== null) {
+      filteredArgs[key] = value;
     }
-    emit('execute', actionName, filteredArgs);
+  }
+
+  try {
+    // Delegate to controller for execution
+    const result = await actionController.execute(actionName, filteredArgs);
+    if (!result.success && result.error) {
+      console.error('Action failed:', result.error);
+    }
+  } catch (err) {
+    console.error('Execute action error:', err);
   } finally {
-    isExecuting.value = false;
-    currentAction.value = null;
-    // Track last executed action to prevent auto-starting it before availableActions updates
-    lastExecutedAction.value = actionName;
-    // Clear deferred choices cache
-    clearReactiveObject(fetchedDeferredChoices);
-    clearActionState(currentArgs.value, displayCache);
+    clearActionState(currentArgs, displayCache);
     boardInteraction?.clear();
     emit('cancelSelection');
   }
