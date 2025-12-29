@@ -39,21 +39,24 @@ export function createCollectAction(game: DemoGame): ActionDefinition {
 /**
  * DISCARD - Discard a card from your hand (1 selection)
  *
- * Single-step action. UI can show:
+ * Single-step action using fromElements() for easy custom UI integration.
+ * Custom UIs can send: props.action('discard', { card: cardId })
+ *
+ * UI can show:
  * - currentAction === 'discard'
  * - currentSelectionName === 'card'
  */
 export function createDiscardAction(game: DemoGame): ActionDefinition {
   return Action.create('discard')
     .prompt('Discard a card from your hand')
-    .chooseFrom<Card>('card', {
+    .fromElements<Card>('card', {
       prompt: 'Select a card to discard',
-      choices: (ctx) => {
+      elements: (ctx) => {
         const player = ctx.player as DemoPlayer;
         return [...game.getPlayerHand(player).all(Card)];
       },
       display: (card) => `${card.rank}${card.suit}`,
-      boardRefs: (card) => ({ sourceRef: { id: card.id } }),
+      boardRef: (card) => ({ id: card.id }),
     })
     .condition((ctx) => {
       const player = ctx.player as DemoPlayer;
@@ -61,6 +64,7 @@ export function createDiscardAction(game: DemoGame): ActionDefinition {
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
+      // fromElements() resolves the ID to the actual Card element
       const card = args.card as Card;
       card.putInto(game.discardPile);
       game.message(`${player.name} discarded ${card.rank}${card.suit}`);
@@ -71,21 +75,24 @@ export function createDiscardAction(game: DemoGame): ActionDefinition {
 /**
  * TRADE - Give a card to another player in exchange (2 selections)
  *
- * Two-step action. UI can show:
+ * Two-step action using fromElements() for the card selection.
+ * Custom UIs can send: props.action('trade', { myCard: cardId, targetPlayer: playerChoice })
+ *
+ * UI can show:
  * - Step 1: currentAction === 'trade', currentSelectionName === 'myCard'
  * - Step 2: currentAction === 'trade', currentSelectionName === 'targetPlayer'
  */
 export function createTradeAction(game: DemoGame): ActionDefinition {
   return Action.create('trade')
     .prompt('Trade a card with another player')
-    .chooseFrom<Card>('myCard', {
+    .fromElements<Card>('myCard', {
       prompt: 'Select YOUR card to trade away',
-      choices: (ctx) => {
+      elements: (ctx) => {
         const player = ctx.player as DemoPlayer;
         return [...game.getPlayerHand(player).all(Card)];
       },
       display: (card) => `${card.rank}${card.suit}`,
-      boardRefs: (card) => ({ sourceRef: { id: card.id } }),
+      boardRef: (card) => ({ id: card.id }),
     })
     .chooseFrom('targetPlayer', {
       prompt: 'Select a player to trade with',
@@ -102,6 +109,7 @@ export function createTradeAction(game: DemoGame): ActionDefinition {
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
+      // fromElements() resolves the ID to the actual Card element
       const myCard = args.myCard as Card;
       const targetChoice = args.targetPlayer as { value: number; display: string };
       const targetPlayer = game.players[targetChoice.value] as DemoPlayer;
@@ -130,18 +138,20 @@ export function createTradeAction(game: DemoGame): ActionDefinition {
  * Similar to trade but different purpose - demonstrates that
  * the UI can show different visuals for different actions
  * even if they have the same selection structure.
+ *
+ * Custom UIs can send: props.action('gift', { card: cardId, recipient: playerChoice })
  */
 export function createGiftAction(game: DemoGame): ActionDefinition {
   return Action.create('gift')
     .prompt('Gift a card to another player')
-    .chooseFrom<Card>('card', {
+    .fromElements<Card>('card', {
       prompt: 'Select a card to gift',
-      choices: (ctx) => {
+      elements: (ctx) => {
         const player = ctx.player as DemoPlayer;
         return [...game.getPlayerHand(player).all(Card)];
       },
       display: (card) => `${card.rank}${card.suit}`,
-      boardRefs: (card) => ({ sourceRef: { id: card.id } }),
+      boardRef: (card) => ({ id: card.id }),
     })
     .chooseFrom('recipient', {
       prompt: 'Select who to gift the card to',
@@ -158,6 +168,7 @@ export function createGiftAction(game: DemoGame): ActionDefinition {
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
+      // fromElements() resolves the ID to the actual Card element
       const card = args.card as Card;
       const recipientChoice = args.recipient as { value: number; display: string };
       const recipient = game.players[recipientChoice.value] as DemoPlayer;

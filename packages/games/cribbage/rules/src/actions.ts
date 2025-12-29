@@ -5,27 +5,25 @@ import { Card, CribbagePlayer } from './elements.js';
 /**
  * Create the "discard" action for Cribbage
  * Players discard 2 cards to the crib
- * Uses multiSelect with min=2, max=2 so it auto-confirms when 2 cards are selected
+ *
+ * Uses fromElements() with multiSelect for easy custom UI integration.
+ * Custom UIs can send: props.action('discard', { cards: [cardId1, cardId2] })
+ *
+ * The multiSelect config { min: 2, max: 2 } auto-confirms when 2 cards are selected.
  */
 export function createDiscardAction(game: CribbageGame): ActionDefinition {
   return Action.create('discard')
     .prompt('Discard 2 cards to the crib')
-    .chooseFrom<string>('cards', {
+    .fromElements<Card>('cards', {
       prompt: 'Select 2 cards to discard',
-      choices: (ctx) => {
+      elements: (ctx) => {
         const game = ctx.game as CribbageGame;
         const player = ctx.player as CribbagePlayer;
         const hand = game.getPlayerHand(player);
-        return [...hand.all(Card)].map(c => c.name).filter((n): n is string => n !== undefined);
+        return [...hand.all(Card)];
       },
-      display: (cardName) => {
-        const card = game.first(Card, cardName);
-        return card ? `${card.rank}${card.suit}` : cardName;
-      },
-      boardRefs: (cardName, ctx) => {
-        const card = game.first(Card, cardName);
-        return card ? { sourceRef: { id: card.id, name: card.name } } : {};
-      },
+      display: (card) => `${card.rank}${card.suit}`,
+      boardRef: (card) => ({ id: card.id }),
       // Exactly 2 cards required - auto-confirms when 2 are selected (no Done button)
       multiSelect: { min: 2, max: 2 },
     })
@@ -38,21 +36,10 @@ export function createDiscardAction(game: CribbageGame): ActionDefinition {
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;
       const player = ctx.player as CribbagePlayer;
-      const cardNames = args.cards as string[];
-      const hand = game.getPlayerHand(player);
+      // fromElements() with multiSelect resolves IDs to an array of Card elements
+      const cards = args.cards as Card[];
 
-      // Find cards by name from the player's hand (not globally)
-      // This prevents a bug where cards already in the crib could be "found" and moved again
-      const handCards = [...hand.all(Card)];
-      const cards: Card[] = [];
-      for (const name of cardNames) {
-        const card = handCards.find(c => c.name === name);
-        if (card) {
-          cards.push(card);
-        }
-      }
-
-      if (cards.length !== 2) {
+      if (!cards || cards.length !== 2) {
         return { success: false, error: 'Must discard exactly 2 cards from your hand' };
       }
 

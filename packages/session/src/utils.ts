@@ -382,21 +382,44 @@ function buildSelectionMetadata(
         base.elementClassName = elemSel.elementClass.name;
       }
 
-      // Compute valid elements for the UI
-      const from = typeof elemSel.from === 'function'
-        ? elemSel.from(ctx)
-        : elemSel.from ?? game;
-
       let elements: any[];
-      if (elemSel.elementClass) {
-        elements = [...from.all(elemSel.elementClass)];
+
+      // Check if elements array is provided directly (from fromElements without multiSelect)
+      if (elemSel.elements) {
+        if (typeof elemSel.elements === 'function') {
+          try {
+            elements = elemSel.elements(ctx);
+          } catch (error) {
+            console.error(`[buildSelectionMetadata] Error getting elements for selection "${selection.name}":`, error);
+            elements = [];
+          }
+        } else {
+          elements = elemSel.elements || [];
+        }
       } else {
-        elements = [...from.all()];
+        // Original from/filter/elementClass pattern (for chooseElement)
+        const from = typeof elemSel.from === 'function'
+          ? elemSel.from(ctx)
+          : elemSel.from ?? game;
+
+        if (elemSel.elementClass) {
+          elements = [...from.all(elemSel.elementClass)];
+        } else {
+          elements = [...from.all()];
+        }
+
+        if (elemSel.filter) {
+          elements = elements.filter((e: any) => elemSel.filter!(e, ctx));
+        }
       }
 
-      if (elemSel.filter) {
-        elements = elements.filter((e: any) => elemSel.filter!(e, ctx));
+      // Auto-disambiguate display names (from fromElements pattern)
+      const nameCounts = new Map<string, number>();
+      for (const el of elements) {
+        const name = el.name || 'Element';
+        nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
       }
+      const nameIndices = new Map<string, number>();
 
       // Build validElements list with display and refs
       base.validElements = elements.map((element: any) => {
@@ -405,13 +428,23 @@ function buildSelectionMetadata(
         // Add display text if display function provided
         if (elemSel.display) {
           try {
-            validElem.display = elemSel.display(element, ctx);
+            // Support both display signatures: (element, ctx) and (element, ctx, allElements)
+            validElem.display = elemSel.display(element, ctx, elements);
           } catch {
             validElem.display = element.name || String(element.id);
           }
         } else {
-          // Default display: use element's name or notation if available
-          validElem.display = element.notation || element.name || String(element.id);
+          // Auto-disambiguation for elements with same name
+          const baseName = element.name || 'Element';
+          const count = nameCounts.get(baseName) || 1;
+          if (count > 1) {
+            const idx = (nameIndices.get(baseName) || 0) + 1;
+            nameIndices.set(baseName, idx);
+            validElem.display = `${baseName} #${idx}`;
+          } else {
+            // Default display: use element's name or notation if available
+            validElem.display = element.notation || element.name || String(element.id);
+          }
         }
 
         // Add board ref if provided

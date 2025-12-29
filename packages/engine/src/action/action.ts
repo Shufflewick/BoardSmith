@@ -352,18 +352,35 @@ export class Action {
       multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
     }
   ): this {
-    const selection: ElementsSelection<T> = {
-      type: 'elements',
-      name,
-      prompt: options.prompt,
-      elements: options.elements,
-      display: options.display,
-      optional: options.optional,
-      validate: options.validate,
-      boardRef: options.boardRef,
-      multiSelect: options.multiSelect,
-    };
-    this.definition.selections.push(selection as Selection);
+    // For single-select (no multiSelect), use 'element' type to leverage existing code paths
+    // For multi-select, use 'elements' type
+    if (options.multiSelect !== undefined) {
+      const selection: ElementsSelection<T> = {
+        type: 'elements',
+        name,
+        prompt: options.prompt,
+        elements: options.elements,
+        display: options.display,
+        optional: options.optional,
+        validate: options.validate,
+        boardRef: options.boardRef,
+        multiSelect: options.multiSelect,
+      };
+      this.definition.selections.push(selection as Selection);
+    } else {
+      // Single-select: use 'element' type with elements array
+      const selection: ElementSelection<T> = {
+        type: 'element',
+        name,
+        prompt: options.prompt,
+        elements: options.elements,
+        display: options.display as ElementSelection<T>['display'],
+        optional: options.optional,
+        validate: options.validate,
+        boardRef: options.boardRef,
+      };
+      this.definition.selections.push(selection as Selection);
+    }
     return this;
   }
 
@@ -587,21 +604,31 @@ export class ActionExecutor {
 
       case 'element': {
         const elementSel = selection as ElementSelection;
-        const from =
-          typeof elementSel.from === 'function'
-            ? elementSel.from(context)
-            : elementSel.from ?? this.game;
 
         let elements: GameElement[];
-        if (elementSel.elementClass) {
-          elements = [...from.all(elementSel.elementClass)];
-        } else {
-          elements = [...from.all()];
-        }
 
-        if (elementSel.filter) {
-          const wrappedFilter = wrapFilterWithHelpfulErrors(elementSel.filter, selection.name);
-          elements = elements.filter((e) => wrappedFilter(e, context));
+        // Check if elements array is provided directly (from fromElements without multiSelect)
+        if (elementSel.elements) {
+          elements = typeof elementSel.elements === 'function'
+            ? elementSel.elements(context)
+            : [...elementSel.elements];
+        } else {
+          // Original from/filter/elementClass pattern (for chooseElement)
+          const from =
+            typeof elementSel.from === 'function'
+              ? elementSel.from(context)
+              : elementSel.from ?? this.game;
+
+          if (elementSel.elementClass) {
+            elements = [...from.all(elementSel.elementClass)];
+          } else {
+            elements = [...from.all()];
+          }
+
+          if (elementSel.filter) {
+            const wrappedFilter = wrapFilterWithHelpfulErrors(elementSel.filter, selection.name);
+            elements = elements.filter((e) => wrappedFilter(e, context));
+          }
         }
 
         return elements;
@@ -813,30 +840,41 @@ export class ActionExecutor {
     }
 
     // Validate elements selection (new "pit of success" type)
+    // After resolveArgs, values are GameElement objects (not raw IDs)
     if (selection.type === 'elements') {
       const validElements = this.getChoices(selection, player, args) as GameElement[];
       const validIds = validElements.map(e => e.id);
 
-      const validateId = (id: unknown): string | null => {
-        if (typeof id !== 'number') {
-          return `Expected element ID (number) for "${selection.name}", got ${typeof id}: ${JSON.stringify(id)}`;
+      const validateElement = (elem: unknown): string | null => {
+        // Handle resolved GameElement objects
+        if (elem && typeof elem === 'object' && 'id' in elem) {
+          const id = (elem as { id: number }).id;
+          if (!validIds.includes(id)) {
+            const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
+            return `Element ID ${id} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
+          }
+          return null;
         }
-        if (!validIds.includes(id)) {
-          const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
-          return `Element ID ${id} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
+        // Handle unresolved IDs (for backwards compatibility)
+        if (typeof elem === 'number') {
+          if (!validIds.includes(elem)) {
+            const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
+            return `Element ID ${elem} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
+          }
+          return null;
         }
-        return null;
+        return `Expected element or element ID for "${selection.name}", got ${typeof elem}: ${JSON.stringify(elem)}`;
       };
 
       if (Array.isArray(value)) {
-        // Multi-select: array of IDs
+        // Multi-select: array of elements or IDs
         for (const v of value) {
-          const error = validateId(v);
+          const error = validateElement(v);
           if (error) errors.push(error);
         }
       } else {
         // Single selection
-        const error = validateId(value);
+        const error = validateElement(value);
         if (error) errors.push(error);
       }
     }

@@ -20,7 +20,6 @@ export function createGameFlow(game: DemoGame): FlowDefinition {
           name: 'player-action',
           // All actions available simultaneously!
           actions: ['collect', 'discard', 'trade', 'gift', 'score'],
-          prompt: 'Choose an action',
         }),
       }),
     }),

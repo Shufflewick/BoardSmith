@@ -197,10 +197,10 @@ const props = defineProps<{
 }>();
 
 // Selected cards - uses shared actionArgs with preview key for ActionPanel sync
-// The _preview_ prefix prevents ActionPanel from thinking the selection is complete
+// Store element IDs (numbers) so ActionPanel can auto-execute with correct data type
 const selectedCards = computed({
-  get: () => (props.actionArgs._preview_cards as string[]) || [],
-  set: (value: string[]) => {
+  get: () => (props.actionArgs._preview_cards as number[]) || [],
+  set: (value: number[]) => {
     props.actionArgs._preview_cards = value;
   }
 });
@@ -516,20 +516,26 @@ function isCardPlayable(rank: string): boolean {
 function toggleCardSelection(cardName: string) {
   if (!props.isMyTurn || isPerformingAction.value) return;
 
+  // Find the card to get its element ID
+  const card = myHand.value.find((c: Card) => c.name === cardName);
+  if (!card || typeof card.id !== 'number') return;
+  const cardId = card.id;
+
   const current = selectedCards.value;
-  const index = current.indexOf(cardName);
+  const index = current.indexOf(cardId);
   if (index >= 0) {
     // Remove card - create new array without it
     selectedCards.value = current.filter((_, i) => i !== index);
   } else {
     if (cribbagePhase.value === 'discarding' && current.length < 2) {
       // Add card - create new array with it
-      selectedCards.value = [...current, cardName];
+      selectedCards.value = [...current, cardId];
     } else if (cribbagePhase.value === 'play') {
-      const card = myHand.value.find((c: Card) => c.name === cardName);
       const rank = card?.attributes?.rank;
       if (rank && isCardPlayable(rank)) {
-        selectedCards.value = [cardName];
+        // During play phase, immediately execute the action (single card selection)
+        // Don't use selectedCards - call props.action directly with the card ID
+        props.action('playCard', { card: cardId });
       }
     }
   }
@@ -537,7 +543,9 @@ function toggleCardSelection(cardName: string) {
 
 // Actions - call action() directly with proper parameters
 async function performDiscard() {
-  if (selectedCards.value.length !== 2 || isPerformingAction.value) return;
+  if (selectedCards.value.length !== 2 || isPerformingAction.value) {
+    return;
+  }
 
   isPerformingAction.value = true;
 
@@ -548,12 +556,15 @@ async function performDiscard() {
     cardData: { rank: string; suit: string; faceImage?: unknown; backImage?: unknown };
   }> = [];
 
-  for (const cardName of selectedCards.value) {
-    const cardEl = boardRef.value?.querySelector(`[data-card-id="${cardName}"]`);
-    const card = myHand.value.find((c: Card) => c.name === cardName);
+  for (const cardId of selectedCards.value) {
+    // Find card by element ID
+    const card = myHand.value.find((c: Card) => c.id === cardId);
+    if (!card) continue;
+    // Use card.name for DOM selector (data-card-id uses name)
+    const cardEl = boardRef.value?.querySelector(`[data-card-id="${card.name}"]`);
     if (cardEl && card?.attributes?.rank && card?.attributes?.suit) {
       cardsToFly.push({
-        id: cardName,
+        id: card.name,
         startRect: cardEl.getBoundingClientRect(),
         cardData: {
           rank: card.attributes.rank,
@@ -567,7 +578,8 @@ async function performDiscard() {
   }
 
   try {
-    // Discard action expects cards array (multiSelect)
+    // Discard action expects cards array of element IDs (fromElements with multiSelect)
+    // selectedCards already contains element IDs
     const result = await props.action('discard', {
       cards: selectedCards.value,
     });
@@ -607,18 +619,14 @@ async function performPlayCard() {
     return;
   }
 
-  const cardName = selectedCards.value[0];
-  // Find the card object to get its numeric ID (chooseElement needs ID, not name)
-  const card = myHand.value.find((c: Card) => c.name === cardName);
-  if (!card) {
-    return;
-  }
+  // selectedCards already contains element IDs
+  const cardId = selectedCards.value[0];
 
   isPerformingAction.value = true;
   try {
     // Send numeric ID for chooseElement selection
     await props.action('playCard', {
-      card: typeof card.id === 'number' ? card.id : parseInt(card.id, 10),
+      card: cardId,
     });
   } finally {
     // Always clear selection after action (server will send updated state)
@@ -857,7 +865,7 @@ defineExpose({
             class="card"
             :class="{
               'has-image': getCardImageInfo(card, 'face'),
-              selected: selectedCards.includes(card.name),
+              selected: selectedCards.includes(card.id as number),
               clickable: isMyTurn && !isPerformingAction && isCardPlayable(card.attributes?.rank || ''),
               unplayable: cribbagePhase === 'play' && !isCardPlayable(card.attributes?.rank || '')
             }"

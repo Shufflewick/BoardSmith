@@ -73,7 +73,13 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
   }
 
   protected override createPlayer(position: number, name: string): DemoPlayer {
-    return new DemoPlayer(position, name, this);
+    const player = new DemoPlayer(position, name);
+    player.game = this;
+    // Create player's hand
+    player.hand = this.create(Hand, `hand-${position}`);
+    player.hand.player = player;
+    player.hand.contentsVisibleToOwner();
+    return player;
   }
 
   getPlayerHand(player: DemoPlayer): Hand {
@@ -105,16 +111,7 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
   }
 }
 
-export class DemoPlayer extends Player<DemoGame, DemoPlayer> {
+export class DemoPlayer extends Player<DemoGame> {
   hand!: Hand;
   score: number = 0;
-
-  constructor(position: number, name: string, game: DemoGame) {
-    super(position, name);
-    this.game = game;
-    // Create player's hand
-    this.hand = game.create(Hand, `hand-${position}`);
-    this.hand.player = this;
-    this.hand.contentsVisibleToOwner();
-  }
 }

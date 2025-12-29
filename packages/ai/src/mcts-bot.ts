@@ -579,6 +579,10 @@ export class MCTSBot<G extends Game = Game> {
     if (selection.type === 'element') {
       return (choice as { _t: { id: number } })._t.id;
     }
+    // For 'elements' type (fromElements), choices are GameElement objects with id property
+    if (selection.type === 'elements') {
+      return (choice as { id: number }).id;
+    }
     return choice;
   }
 

@@ -262,9 +262,15 @@ function shouldHighlightCard(card: { id: number; suit: string }): boolean {
     return true;
   }
   // Check if this card is selected in actionArgs
+  // fromElements() stores element IDs (numbers), not objects
   const selectedCard = props.actionArgs.card || props.actionArgs.myCard;
-  if (selectedCard && typeof selectedCard === 'object' && 'id' in selectedCard) {
-    return (selectedCard as any).id === card.id;
+  if (typeof selectedCard === 'number') {
+    return selectedCard === card.id;
+  }
+  // Also check preview keys for in-progress selections
+  const previewCard = props.actionArgs._preview_card || props.actionArgs._preview_myCard;
+  if (typeof previewCard === 'number') {
+    return previewCard === card.id;
   }
   return false;
 }

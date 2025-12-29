@@ -201,6 +201,11 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
  */
 export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T> {
   type: 'element';
+  /**
+   * Elements to choose from (alternative to filter/from pattern).
+   * Used by fromElements() for single-select.
+   */
+  elements?: T[] | ((context: ActionContext) => T[]);
   /** Filter which elements can be selected */
   filter?: (element: GameElement, context: ActionContext) => boolean;
   /** Limit selection to elements of this class */

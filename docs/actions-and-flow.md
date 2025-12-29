@@ -721,11 +721,24 @@ When validation fails, you get helpful error messages:
 3. **Check `actionMetadata` for valid choices** - It includes element IDs for reference
 
 ```typescript
-// actionMetadata structure for fromElements:
+// actionMetadata structure for fromElements (single-select):
 {
   selections: [{
     name: 'target',
-    type: 'elements',
+    type: 'element',  // Single-select uses 'element' type
+    validElements: [
+      { id: 42, display: 'Militia #1', ref: { id: 42 } },
+      { id: 43, display: 'Militia #2', ref: { id: 43 } },
+    ]
+  }]
+}
+
+// actionMetadata structure for fromElements (multi-select):
+{
+  selections: [{
+    name: 'targets',
+    type: 'elements',  // Multi-select uses 'elements' type
+    multiSelect: { min: 1, max: 3 },
     validElements: [
       { id: 42, display: 'Militia #1', ref: { id: 42 } },
       { id: 43, display: 'Militia #2', ref: { id: 43 } },

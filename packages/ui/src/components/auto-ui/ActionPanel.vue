@@ -10,7 +10,7 @@
  * - Element selections show buttons for valid elements
  * - Choice selections can filter based on previous selections (filterBy)
  */
-import { ref, computed, watch, inject, reactive } from 'vue';
+import { ref, computed, watch, watchEffect, inject, reactive } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
 import DoneButton from './DoneButton.vue';
 
@@ -69,7 +69,7 @@ export interface SelectionFilter {
 
 export interface Selection {
   name: string;
-  type: 'choice' | 'element' | 'number' | 'text';
+  type: 'choice' | 'element' | 'elements' | 'number' | 'text';
   prompt?: string;
   optional?: boolean;
   choices?: ChoiceWithRefs[];
@@ -290,7 +290,7 @@ const currentActionMeta = computed(() => {
 function getAvailableChoices(selection: any): unknown[] {
   if (selection.type === 'choice') {
     return selection.choices || [];
-  } else if (selection.type === 'element') {
+  } else if (selection.type === 'element' || selection.type === 'elements') {
     return selection.validElements || [];
   }
   return [];
@@ -305,36 +305,13 @@ function selectionNeedsInput(sel: { name: string }): boolean {
 
 // Current selection - returns next selection that needs user input
 // First returns required selections, then optional ones (so user can fill or skip them)
-// When Auto mode is enabled, single-choice selections are auto-filled
+// This is a PURE computed - no side effects. Auto-fill is handled by autoFillSingleChoice watch.
 const currentSelection = computed(() => {
   if (!currentActionMeta.value) return null;
-
-  const autoMode = props.autoEndTurn !== false;
 
   // First pass: find first required selection without value
   for (const sel of currentActionMeta.value.selections) {
     if (selectionNeedsInput(sel) && !sel.optional) {
-      // Auto mode: auto-select if only one choice available
-      if (autoMode) {
-        const choices = getAvailableChoices(sel);
-
-        if (choices.length === 1) {
-          // Auto-fill this selection and move to next
-          const choice = choices[0];
-
-          if (sel.type === 'element') {
-            currentArgs.value[sel.name] = (choice as any).id;
-            // Cache display for later lookup
-            if ((choice as any).display) {
-              cacheSelectionDisplay(sel.name, (choice as any).id, (choice as any).display);
-            }
-          } else {
-            currentArgs.value[sel.name] = (choice as any).value ?? choice;
-          }
-
-          continue; // Skip to next selection
-        }
-      }
       return sel;
     }
   }
@@ -343,29 +320,59 @@ const currentSelection = computed(() => {
   // This gives the user a chance to fill optional selections before auto-executing
   for (const sel of currentActionMeta.value.selections) {
     if (selectionNeedsInput(sel) && sel.optional) {
-      // Auto mode: auto-select if only one choice available
-      if (autoMode) {
-        const choices = getAvailableChoices(sel);
-        if (choices.length === 1) {
-          // Auto-fill and continue
-          const choice = choices[0];
-          if (sel.type === 'element') {
-            currentArgs.value[sel.name] = (choice as any).id;
-            // Cache display for later lookup
-            if ((choice as any).display) {
-              cacheSelectionDisplay(sel.name, (choice as any).id, (choice as any).display);
-            }
-          } else {
-            currentArgs.value[sel.name] = (choice as any).value ?? choice;
-          }
-          continue;
-        }
-      }
       return sel;
     }
   }
 
   return null;
+});
+
+// Auto-fill single-choice selections in auto mode
+// Uses watchEffect so it re-runs after each fill until no more auto-fillable selections remain
+// This ensures all consecutive single-choice selections are filled in one reactive flush
+watchEffect(() => {
+  if (!currentActionMeta.value) return;
+  if (props.autoEndTurn === false) return;
+  if (isExecuting.value) return;
+
+  // Loop to fill all consecutive single-choice selections
+  // The loop is bounded by the number of selections, so it can't infinite-loop
+  for (let i = 0; i < currentActionMeta.value.selections.length; i++) {
+    // Find next selection that needs input
+    let selToFill = null;
+    for (const sel of currentActionMeta.value.selections) {
+      if (selectionNeedsInput(sel)) {
+        selToFill = sel;
+        break;
+      }
+    }
+
+    if (!selToFill) {
+      // All selections filled - trigger auto-execute
+      if (currentAction.value && !isExecuting.value) {
+        executeAction(currentAction.value, { ...currentArgs.value });
+      }
+      return;
+    }
+
+    const choices = getAvailableChoices(selToFill);
+    if (choices.length !== 1) {
+      // Can't auto-fill, needs user input
+      return;
+    }
+
+    // Auto-fill this selection
+    const choice = choices[0];
+    if (selToFill.type === 'element' || selToFill.type === 'elements') {
+      currentArgs.value[selToFill.name] = (choice as any).id;
+      if ((choice as any).display) {
+        cacheSelectionDisplay(selToFill.name, (choice as any).id, (choice as any).display);
+      }
+    } else {
+      currentArgs.value[selToFill.name] = (choice as any).value ?? choice;
+    }
+    // Continue loop to check for next selection
+  }
 });
 
 /**
@@ -397,7 +404,7 @@ const selectedElementId = computed(() => {
   if (!currentActionMeta.value) return null;
 
   for (const sel of currentActionMeta.value.selections) {
-    if (sel.type === 'element' && currentArgs.value[sel.name] !== undefined) {
+    if ((sel.type === 'element' || sel.type === 'elements') && currentArgs.value[sel.name] !== undefined) {
       return currentArgs.value[sel.name] as number;
     }
   }
@@ -411,7 +418,7 @@ const selectedElementRef = computed(() => {
   // Find the element selection that was completed
   if (!currentActionMeta.value) return null;
   for (const sel of currentActionMeta.value.selections) {
-    if (sel.type === 'element' && currentArgs.value[sel.name] !== undefined) {
+    if ((sel.type === 'element' || sel.type === 'elements') && currentArgs.value[sel.name] !== undefined) {
       const validElem = sel.validElements?.find(e => e.id === selectedElementId.value);
       return validElem?.ref || { id: selectedElementId.value };
     }
@@ -515,17 +522,22 @@ const filteredChoices = computed(() => {
 // This handles the case where an action has multiple element selections and the filter
 // depends on previous selections (e.g., "select second die, excluding the first")
 const filteredValidElements = computed(() => {
-  if (!currentSelection.value || currentSelection.value.type !== 'element') return [];
+  if (!currentSelection.value || (currentSelection.value.type !== 'element' && currentSelection.value.type !== 'elements')) return [];
   if (!currentSelection.value.validElements) return [];
 
-  // Get IDs of elements already selected in previous element selections
+  // Get IDs of elements already selected in previous element/elements selections
   const alreadySelectedIds = new Set<number>();
   if (currentActionMeta.value) {
     for (const sel of currentActionMeta.value.selections) {
-      if (sel.type === 'element' && sel.name !== currentSelection.value.name) {
-        const selectedId = currentArgs.value[sel.name];
-        if (typeof selectedId === 'number') {
-          alreadySelectedIds.add(selectedId);
+      if ((sel.type === 'element' || sel.type === 'elements') && sel.name !== currentSelection.value.name) {
+        const selectedValue = currentArgs.value[sel.name];
+        if (typeof selectedValue === 'number') {
+          alreadySelectedIds.add(selectedValue);
+        } else if (Array.isArray(selectedValue)) {
+          // For elements multiSelect - array of IDs
+          for (const id of selectedValue) {
+            if (typeof id === 'number') alreadySelectedIds.add(id);
+          }
         }
       }
     }
@@ -585,7 +597,7 @@ function submitTextInput() {
 
 // Select an element (from element selection buttons)
 function selectElement(elementId: number, ref?: ElementRef) {
-  if (!currentSelection.value || currentSelection.value.type !== 'element') return;
+  if (!currentSelection.value || (currentSelection.value.type !== 'element' && currentSelection.value.type !== 'elements')) return;
 
   // Get the selection name BEFORE calling setSelectionValue
   // (because setSelectionValue will change currentSelection)
@@ -660,8 +672,16 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
   const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
   if (!selection) return getDisplayLabel(value);
 
-  // For element selections, look up display in validElements
-  if (selection.type === 'element' && selection.validElements) {
+  // For element/elements selections, look up display in validElements
+  if ((selection.type === 'element' || selection.type === 'elements') && selection.validElements) {
+    // Handle array of IDs for multiSelect elements
+    if (Array.isArray(value)) {
+      const displays = value.map(id => {
+        const elem = selection.validElements!.find(e => e.id === id);
+        return elem?.display || String(id);
+      });
+      return displays.join(', ');
+    }
     const elem = selection.validElements.find(e => e.id === value);
     return elem?.display || getDisplayLabel(value);
   }
@@ -842,8 +862,8 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
   let validElems: { id: number; ref: any }[] = [];
   let onSelect: ((id: number) => void) | null = null;
 
-  // Handle element selections - always support board-direct clicking
-  if (selection.type === 'element') {
+  // Handle element/elements selections - always support board-direct clicking
+  if (selection.type === 'element' || selection.type === 'elements') {
     // Use filteredValidElements which excludes already-selected elements
     validElems = filteredValidElements.value.map(ve => ({
       id: ve.id,
@@ -851,7 +871,15 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
     }));
 
     onSelect = (elementId: number) => {
-      setSelectionValue(selection.name, elementId);
+      // For elements with multiSelect, toggle instead of set
+      const multiSelect = currentMultiSelect.value;
+      if (selection.type === 'elements' && multiSelect) {
+        const validElem = filteredValidElements.value.find(e => e.id === elementId);
+        const display = validElem?.display || String(elementId);
+        toggleMultiSelectValue(selection.name, elementId, display);
+      } else {
+        setSelectionValue(selection.name, elementId);
+      }
     };
 
     // Clear draggable selected element when we're on element selection
@@ -902,7 +930,7 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
     // set the selected piece as draggable
     if (selection.filterBy && currentActionMeta.value) {
       const firstSel = currentActionMeta.value.selections[0];
-      if (firstSel?.type === 'element' && currentArgs.value[firstSel.name] !== undefined) {
+      if ((firstSel?.type === 'element' || firstSel?.type === 'elements') && currentArgs.value[firstSel.name] !== undefined) {
         const selectedPieceId = currentArgs.value[firstSel.name] as number;
         // Find the ref for this piece from the first selection's validElements
         const pieceRef = firstSel.validElements?.find(ve => ve.id === selectedPieceId)?.ref;
@@ -959,8 +987,8 @@ watch(() => boardInteraction?.currentAction, (boardAction) => {
 watch(() => boardInteraction?.selectedElement, (selected) => {
   if (!selected) return;
 
-  // If we're configuring an action with an element selection, check if triggerElementSelect will handle it
-  if (currentSelection.value && currentSelection.value.type === 'element') {
+  // If we're configuring an action with an element/elements selection, check if triggerElementSelect will handle it
+  if (currentSelection.value && (currentSelection.value.type === 'element' || currentSelection.value.type === 'elements')) {
     // If onElementSelect callback is set, triggerElementSelect will handle this selection
     // Don't duplicate by also calling setSelectionValue here
     if (boardInteraction?.onElementSelect) {
@@ -1042,8 +1070,8 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
     const firstSel = currentActionMeta.value.selections[0];
     const secondSel = currentActionMeta.value.selections[1];
 
-    // If first selection is element and already filled, and second is choice with filterBy
-    if (firstSel?.type === 'element' &&
+    // If first selection is element/elements and already filled, and second is choice with filterBy
+    if ((firstSel?.type === 'element' || firstSel?.type === 'elements') &&
         currentArgs.value[firstSel.name] !== undefined &&
         secondSel?.type === 'choice' &&
         secondSel.filterBy) {
@@ -1167,7 +1195,7 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
 // Watch for external element selection prop
 watch(() => props.selectedElementId, (newId) => {
-  if (newId !== undefined && currentSelection.value?.type === 'element') {
+  if (newId !== undefined && (currentSelection.value?.type === 'element' || currentSelection.value?.type === 'elements')) {
     currentArgs.value[currentSelection.value.name] = newId;
     // Cache display from validElements
     const validElem = currentSelection.value.validElements?.find((e: ValidElement) => e.id === newId);
@@ -1453,7 +1481,7 @@ async function startAction(actionName: string) {
   // Notify board interaction of action start (for custom GameBoard components)
   boardInteraction?.setCurrentAction(actionName, 0, firstSel.name);
 
-  if (firstSel.type === 'element') {
+  if (firstSel.type === 'element' || firstSel.type === 'elements') {
     emit('selectingElement', firstSel.name, firstSel.elementClassName);
   }
 }
@@ -1631,7 +1659,7 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
     });
   }
 
-  if (selection?.type === 'element') {
+  if (selection?.type === 'element' || selection?.type === 'elements') {
     emit('selectingElement', selection.name, selection.elementClassName);
   }
 
@@ -1791,6 +1819,67 @@ function clearBoardSelection() {
           </div>
         </template>
 
+        <!-- Elements selection with multiSelect (checkboxes for multiple element selection) -->
+        <template v-else-if="currentSelection.type === 'elements' && currentMultiSelect && currentSelection.validElements?.length">
+          <div class="selection-prompt">
+            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
+          </div>
+          <div class="choice-buttons multi-select-choices">
+            <label
+              v-for="element in filteredValidElements"
+              :key="element.id"
+              class="multi-select-choice"
+              :class="{ selected: isMultiSelectValueSelected(element.id) }"
+              @mouseenter="handleElementHover(element)"
+              @mouseleave="handleElementLeave"
+            >
+              <input
+                type="checkbox"
+                :checked="isMultiSelectValueSelected(element.id)"
+                @change="toggleMultiSelectValue(currentSelection.name, element.id, element.display)"
+                :disabled="!isMultiSelectValueSelected(element.id) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max"
+              />
+              <span class="checkbox-label">{{ element.display || element.id }}</span>
+            </label>
+            <span v-if="filteredValidElements.length === 0" class="no-choices">
+              No options available
+            </span>
+            <DoneButton
+              v-if="showMultiSelectDoneButton"
+              :disabled="!isMultiSelectReady"
+              @click="confirmMultiSelect"
+            />
+          </div>
+        </template>
+
+        <!-- Elements selection without multiSelect (buttons for single element selection) -->
+        <template v-else-if="currentSelection.type === 'elements' && currentSelection.validElements?.length">
+          <div class="selection-prompt">
+            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
+          </div>
+          <div class="choice-buttons element-selection">
+            <button
+              v-for="element in filteredValidElements"
+              :key="element.id"
+              class="choice-btn element-btn"
+              @click="selectElement(element.id, element.ref)"
+              @mouseenter="handleElementHover(element)"
+              @mouseleave="handleElementLeave"
+            >
+              {{ element.display || element.id }}
+            </button>
+            <button
+              v-if="currentSelection.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              Skip
+            </button>
+          </div>
+        </template>
+
         <!-- Multi-select choice selection (checkboxes with Done button) - MUST come before dependsOn template -->
         <template v-else-if="currentSelection.type === 'choice' && currentMultiSelect && (currentSelection.choices || currentSelection.choicesByDependentValue)">
           <div class="selection-prompt">
@@ -1915,8 +2004,8 @@ function clearBoardSelection() {
           </div>
         </template>
 
-        <!-- Element selection -->
-        <div v-else-if="currentSelection.type === 'element'" class="element-instruction">
+        <!-- Element selection (fallback when no validElements) -->
+        <div v-else-if="currentSelection.type === 'element' || currentSelection.type === 'elements'" class="element-instruction">
           <span class="instruction-text">
             Click on a {{ currentSelection.elementClassName || 'element' }} to select it
           </span>
