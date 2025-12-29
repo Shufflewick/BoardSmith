@@ -1,18 +1,19 @@
 <!--
   Demo: Complex UI Interactions - GameBoard
 
-  This component demonstrates how to use boardInteraction.currentAction to detect
-  when action buttons are clicked in the ActionPanel and show appropriate visual feedback.
+  This component demonstrates how to use actionController to detect action state
+  and handle selections directly from a custom UI.
 
   Key Features Demonstrated:
-  1. Detecting which action is currently being filled in
-  2. Showing which selection step the player is on
-  3. Different visual styles for different actions
-  4. Coordinating between custom UI and ActionPanel
+  1. Using actionController.currentAction to detect which action is being filled
+  2. Using actionController.currentSelection to show which selection step the player is on
+  3. Using actionController.fill() to submit selections from custom UI elements
+  4. Different visual styles for different actions
+  5. Full integration with actionController for "pit of success" pattern
 -->
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue';
-import type { BoardInteraction, UseActionControllerReturn } from '@boardsmith/ui';
+import { computed, ref } from 'vue';
+import type { UseActionControllerReturn } from '@boardsmith/ui';
 import { findPlayerHand, findElement, getElementCount, useAutoFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
 
 // Props from GameShell
@@ -29,17 +30,23 @@ const props = defineProps<{
 }>();
 
 // ============================================
-// BOARD INTERACTION - THE KEY FEATURE!
+// ACTION CONTROLLER - SINGLE SOURCE OF TRUTH
 // ============================================
-// Inject boardInteraction to detect action state from ActionPanel
-const boardInteraction = inject<BoardInteraction>('boardInteraction');
-
-// Which action is the player currently filling in? (null if none)
-const currentAction = computed(() => boardInteraction?.currentAction);
+// Use actionController for action state - this is the "pit of success" pattern
+// Use computed to safely access these since actionController may be undefined initially
+const currentAction = computed(() => props.actionController?.currentAction.value ?? null);
+const currentSelection = computed(() => props.actionController?.currentSelection.value ?? null);
 
 // Which selection step are they on?
-const currentSelectionName = computed(() => boardInteraction?.currentSelectionName);
-const currentSelectionIndex = computed(() => boardInteraction?.currentSelectionIndex ?? 0);
+const currentSelectionName = computed(() => currentSelection.value?.name || null);
+
+// Compute the selection index by counting filled args
+const currentSelectionIndex = computed(() => {
+  if (!currentAction.value) return 0;
+  // Count how many selections have been filled
+  const args = props.actionController?.currentArgs.value ?? {};
+  return Object.keys(args).length;
+});
 
 // ============================================
 // ACTION-SPECIFIC STATES
@@ -152,11 +159,21 @@ const isSuitSelectionActive = computed(() =>
   isScoring.value && currentSelectionName.value === 'suit'
 );
 
-// Handle suit selection - triggers the ActionPanel's selection flow
-function handleSuitClick(suit: string) {
+// Handle suit selection - use actionController to fill the selection
+async function handleSuitClick(suit: string) {
+  if (!props.actionController) return;
   if (!isSuitSelectionActive.value) return;
-  // Use triggerChoiceSelect to properly advance the ActionPanel's selection state
-  boardInteraction?.triggerChoiceSelect('suit', suit);
+  if (!currentSelection.value) return;
+
+  // Get available choices from actionController
+  const choices = props.actionController.getChoices(currentSelection.value);
+
+  // Check if this suit is a valid choice
+  const isValidSuit = choices.some((c) => c.value === suit);
+  if (!isValidSuit) return;
+
+  // Fill with the suit string value
+  await props.actionController.fill('suit', suit);
 }
 
 // ============================================
@@ -207,7 +224,7 @@ function getOpponentHandRef(position: number) {
 }
 
 // Auto-flying cards - automatically animates cards between containers
-const { flyingCards } = useAutoFlyingCards({
+const { flyingElements: flyingCards } = useAutoFlyingCards({
   gameView: () => props.gameView,
   // Use a function for containers to support dynamic opponent hands
   containers: () => {
@@ -231,11 +248,14 @@ const { flyingCards } = useAutoFlyingCards({
 
     return containerList;
   },
-  getCardData: (element) => ({
-    rank: element.attributes?.rank,
-    suit: element.attributes?.suit,
+  getElementData: (element) => ({
+    // Card properties are direct on element, not in attributes
+    rank: element.rank || element.attributes?.rank,
+    suit: element.suit || element.attributes?.suit,
+    faceUp: false, // Start showing back, flip to front
     backColor: 'linear-gradient(135deg, #c41e3a 0%, #8b0000 100%)',
   }),
+  flip: () => true, // Flip cards during animation
   duration: 400,
 });
 
@@ -273,36 +293,64 @@ function shouldHighlightCard(card: { id: number; suit: string }): boolean {
   return false;
 }
 
-// Check if card is selectable (using boardInteraction)
+// Check if we're in an element selection step for cards (fromElements)
 function isCardSelectable(cardId: number): boolean {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelectableElement({ id: cardId });
+  if (!currentAction.value || !currentSelection.value) return false;
+  // Check if this is a fromElements selection type (type is 'element' singular)
+  if (currentSelection.value.type !== 'element') return false;
+
+  // Check if this card is in the valid elements list
+  const validIds = currentSelection.value.validElements?.map((e: any) => e.id) || [];
+  return validIds.includes(cardId);
 }
 
-// Handle card click
-function handleCardClick(card: { id: number }) {
-  if (boardInteraction?.isSelectableElement({ id: card.id })) {
-    boardInteraction.triggerElementSelect({ id: card.id });
-  }
+// Handle card click - fill the selection with the card ID
+async function handleCardClick(card: { id: number }) {
+  if (!props.actionController) return;
+  if (!isCardSelectable(card.id)) return;
+  if (!currentSelection.value) return;
+
+  // Fill with the element ID (fromElements expects the ID)
+  await props.actionController.fill(currentSelection.value.name, card.id);
 }
 
-// Handle opponent click
-function handleOpponentClick(position: number) {
-  const hand = findPlayerHand(props.gameView, position);
-  if (hand && boardInteraction?.isSelectableElement({ id: hand.id })) {
-    boardInteraction.triggerElementSelect({ id: hand.id });
-  }
+// Handle opponent click - for chooseFrom selections (targetPlayer, recipient)
+async function handleOpponentClick(position: number) {
+  if (!props.actionController) return;
+  if (!currentAction.value || !currentSelection.value) return;
+
+  // Check if this is a choice selection type
+  if (currentSelection.value.type !== 'choice') return;
+
+  // Get available choices from actionController
+  const choices = props.actionController.getChoices(currentSelection.value);
+
+  // Find the choice for this player position
+  const playerChoice = choices.find((c: any) => c.value?.value === position);
+  if (!playerChoice) return;
+
+  // Fill with the choice value (player choice object)
+  await props.actionController.fill(currentSelection.value.name, playerChoice.value);
 }
 
-// Is opponent selectable?
+// Is opponent selectable? Check if we're in a player choice selection
 function isOpponentSelectable(position: number): boolean {
-  if (!boardInteraction) return false;
-  const hand = findPlayerHand(props.gameView, position);
-  return hand ? boardInteraction.isSelectableElement({ id: hand.id }) : false;
+  if (!props.actionController) return false;
+  if (!currentAction.value || !currentSelection.value) return false;
+
+  // Check if this is a choice selection type
+  if (currentSelection.value.type !== 'choice') return false;
+
+  // Get available choices from actionController
+  const choices = props.actionController.getChoices(currentSelection.value);
+
+  // Check if this player position is a valid choice
+  return choices.some((c: any) => c.value?.value === position);
 }
 
 // Handle action button click - starts the action flow
 function handleActionClick(actionName: string) {
+  if (!props.actionController) return;
   if (!props.isMyTurn) return;
   // Use actionController.start for all actions - will auto-execute if no selections needed
   props.actionController.start(actionName);
@@ -310,8 +358,9 @@ function handleActionClick(actionName: string) {
 
 // Cancel the current action
 function cancelAction() {
-  // Clear boardInteraction state - this resets currentAction and all selection state
-  boardInteraction?.clear();
+  if (!props.actionController) return;
+  // Use actionController.cancel to reset action state
+  props.actionController.cancel();
 }
 </script>
 
@@ -469,9 +518,9 @@ function cancelAction() {
       </div>
     </div>
 
-    <!-- DEBUG: boardInteraction state -->
+    <!-- DEBUG: actionController state -->
     <details class="debug-panel">
-      <summary>Debug: boardInteraction State</summary>
+      <summary>Debug: actionController State</summary>
       <div class="debug-content">
         <div><strong>currentAction:</strong> {{ currentAction || 'null' }}</div>
         <div><strong>currentSelectionName:</strong> {{ currentSelectionName || 'null' }}</div>
@@ -483,7 +532,7 @@ function cancelAction() {
 
     <!-- Flying cards animation overlay -->
     <FlyingCardsOverlay
-      :flying-cards="flyingCards"
+      :flying-cards="flyingCards || []"
       :get-suit-symbol="getLocalSuitSymbol"
       :get-suit-color="getLocalSuitColor"
     />

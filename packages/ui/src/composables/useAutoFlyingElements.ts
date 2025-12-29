@@ -178,7 +178,19 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
   // Watch the game view for changes
   const gameViewComputed = computed(() => gameView());
 
+  // Initialize element locations on first access
+  let initialized = false;
+
   watch(gameViewComputed, () => {
+    // On first watch trigger, just populate locations without animating
+    if (!initialized) {
+      initialized = true;
+      const initialLocations = buildElementLocations();
+      for (const [elemId, containerIndex] of initialLocations) {
+        elementLocations.set(elemId, containerIndex);
+      }
+      return;
+    }
     const containers = getContainers();
     const newLocations = buildElementLocations();
 

@@ -219,6 +219,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
         port,
         open: false,
       },
+      // Don't pre-bundle @boardsmith packages so changes are picked up immediately during development
+      optimizeDeps: {
+        exclude: ['@boardsmith/ui', '@boardsmith/client', '@boardsmith/session', '@boardsmith/engine'],
+      },
     });
 
     await vite.listen();

@@ -340,9 +340,10 @@ function getDefaultSuitColor(suit: string): string {
   transform: rotateY(180deg);
 }
 
-/* Custom back color overrides default */
+/* Custom back color - the inline style sets the background,
+   we just need to remove the default pattern pseudo-element */
 .card-back.has-color {
-  background: none;
+  /* Don't override - let inline style apply the custom background */
 }
 
 .card-back:not(.has-image):not(.has-color)::before {
