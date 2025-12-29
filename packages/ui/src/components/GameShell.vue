@@ -182,8 +182,10 @@ const actionController = useActionController({
   actionMetadata,
   isMyTurn,
   playerPosition,
-  autoFill: true,
-  autoExecute: true,
+  // Use autoEndTurn ref for both autoFill and autoExecute
+  // When auto mode is OFF, user must manually select each option even if only one choice
+  autoFill: autoEndTurn,
+  autoExecute: true, // Always auto-execute once all selections are manually filled
   // Share actionArgs with the controller for bidirectional sync with custom UIs
   externalArgs: actionArgs,
   // Phase 3: Deferred choices - fetched from server at selection time

@@ -163,13 +163,13 @@ function canUseAbility(abilityType: string): boolean {
 function useAbility(abilityType: string) {
   switch (abilityType) {
     case 'reroll-2':
-      if (canUseReroll.value) props.startAction('useReroll');
+      if (canUseReroll.value) props.actionController.start('useReroll');
       break;
     case 'flip':
-      if (canUseFlip.value) props.startAction('useFlip');
+      if (canUseFlip.value) props.actionController.start('useFlip');
       break;
     case 'refresh':
-      if (canUseRefresh.value) props.startAction('useRefresh');
+      if (canUseRefresh.value) props.actionController.start('useRefresh');
       break;
   }
 }

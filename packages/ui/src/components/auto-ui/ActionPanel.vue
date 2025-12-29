@@ -477,31 +477,43 @@ const isActionReady = computed(() => {
 
 // Note: Auto-execute when action becomes ready is handled by the controller
 
-// Auto-start/execute single actions when auto mode is enabled
-// This watch handles initial render and when isMyTurn changes
-// The availableActions watch below handles subsequent state updates
-// Both watches use isExecuting guard to prevent double-execution
-watch([() => props.isMyTurn, actionsWithMetadata], ([myTurn, actions]) => {
-  // Skip if not my turn, already have an action, no actions available, or currently executing
-  if (!myTurn || currentAction.value || actions.length === 0 || isExecuting.value) return;
+/**
+ * Try to auto-start or auto-execute a single available action.
+ * Called from multiple watches to handle different trigger scenarios.
+ *
+ * @param skipNoSelections - If true, skip actions without selections (to avoid double-execution
+ *                           when multiple watches fire for the same state update)
+ */
+function tryAutoStartSingleAction(skipNoSelections = false): void {
+  // Guard conditions - skip if auto not applicable
+  if (props.autoEndTurn === false) return;
+  if (!props.isMyTurn) return;
+  if (currentAction.value) return;
+  if (isExecuting.value) return;
 
-  // Auto mode: when only one action is available, streamline the UX
-  if (props.autoEndTurn !== false && actions.length === 1) {
-    const action = actions[0];
+  const actions = actionsWithMetadata.value;
+  if (actions.length !== 1) return;
 
-    // If action has selections, auto-start it (show first selection prompt)
-    if (action.selections.length > 0) {
-      startAction(action.name);
-    }
-    // If action has no selections, auto-execute it
-    else {
-      executeAction(action.name, {});
-    }
+  const action = actions[0];
+
+  // If action has selections, auto-start it (show first selection prompt)
+  if (action.selections.length > 0) {
+    startAction(action.name);
   }
+  // If action has no selections, auto-execute it (unless skipped)
+  else if (!skipNoSelections) {
+    executeAction(action.name, {});
+  }
+}
+
+// Auto-start/execute single actions when auto mode is enabled
+// This watch handles initial render and when isMyTurn/actions change
+watch([() => props.isMyTurn, actionsWithMetadata], () => {
+  tryAutoStartSingleAction();
 }, { immediate: true });
 
 // Reset current action if it's no longer available (e.g., executed from custom UI)
-// Also handles auto-start/auto-execute for single available actions when auto mode is enabled
+// Also handles auto-start for single available actions with selections
 watch(() => props.availableActions, (actions, oldActions) => {
   // Determine if we need to clear action state
   let shouldClear = false;
@@ -528,24 +540,17 @@ watch(() => props.availableActions, (actions, oldActions) => {
     boardInteraction?.clear();
   }
 
-  // Auto mode: when only one action is available, streamline the UX
-  // - Actions with selections: auto-start (show first selection prompt)
-  // - Actions without selections: auto-execute immediately
-  if (
-    props.autoEndTurn !== false && // Auto mode enabled (default: true)
-    props.isMyTurn &&
-    actions.length === 1 &&
-    !currentAction.value &&
-    !isExecuting.value
-  ) {
-    const actionMeta = actionsWithMetadata.value.find(a => a.name === actions[0]);
+  // Try auto-start, but skip no-selection actions to avoid double-execution
+  // with the isMyTurn/actionsWithMetadata watch above
+  tryAutoStartSingleAction(/* skipNoSelections */ true);
+});
 
-    // Only auto-start actions WITH selections here
-    // No-selection actions are handled by the isMyTurn/actionsWithMetadata watch
-    // to avoid double-execution when both watches fire for the same state update
-    if (actionMeta && actionMeta.selections.length > 0) {
-      startAction(actionMeta.name);
-    }
+// Retry auto-start when action execution completes
+// This handles the race condition where state updates (with new availableActions)
+// arrive before the actionResult (which clears isExecuting)
+watch(isExecuting, (executing, wasExecuting) => {
+  if (wasExecuting && !executing) {
+    tryAutoStartSingleAction();
   }
 });
 

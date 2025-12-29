@@ -80,7 +80,7 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
     display-name="Checkers"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
+    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
@@ -89,9 +89,8 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
-            :action="action"
             :action-args="actionArgs"
-            :execute-action="executeAction"
+            :action-controller="actionController"
             :set-board-prompt="setBoardPrompt"
           />
         </div>

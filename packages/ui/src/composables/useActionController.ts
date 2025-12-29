@@ -206,10 +206,10 @@ export interface UseActionControllerOptions {
   isMyTurn: Ref<boolean>;
   /** Player position (needed for deferred/repeating features) */
   playerPosition?: Ref<number>;
-  /** Enable auto-fill for single-choice selections (default: true) */
-  autoFill?: boolean;
-  /** Enable auto-execute when all selections filled (default: true) */
-  autoExecute?: boolean;
+  /** Enable auto-fill for single-choice selections (default: true). Can be reactive. */
+  autoFill?: boolean | Ref<boolean>;
+  /** Enable auto-execute when all selections filled (default: true). Can be reactive. */
+  autoExecute?: boolean | Ref<boolean>;
   /**
    * External args object for bidirectional sync with custom UIs.
    * If provided, the controller will use this instead of creating its own.
@@ -312,12 +312,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionMetadata,
     isMyTurn,
     playerPosition,
-    autoFill = true,
-    autoExecute = true,
+    autoFill: autoFillOption = true,
+    autoExecute: autoExecuteOption = true,
     externalArgs,
     fetchDeferredChoices,
     selectionStep,
   } = options;
+
+  // Helper to get current value of potentially reactive options
+  const getAutoFill = (): boolean => {
+    return typeof autoFillOption === 'boolean' ? autoFillOption : autoFillOption.value;
+  };
+  const getAutoExecute = (): boolean => {
+    return typeof autoExecuteOption === 'boolean' ? autoExecuteOption : autoExecuteOption.value;
+  };
 
   // === State ===
   const currentAction = ref<string | null>(null);
@@ -526,7 +534,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // === Auto-fill Watch ===
   // When a selection has only one choice, auto-fill it
   watch(currentSelection, (sel) => {
-    if (!sel || !autoFill || isExecuting.value) return;
+    if (!sel || !getAutoFill() || isExecuting.value) return;
 
     const choices = getChoices(sel);
     if (choices.length === 1) {
@@ -539,7 +547,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // === Auto-execute Watch ===
   // When all selections are filled, auto-execute
   watch(isReady, (ready) => {
-    if (ready && autoExecute && currentAction.value && !isExecuting.value) {
+    if (ready && getAutoExecute() && currentAction.value && !isExecuting.value) {
       executeCurrentAction();
     }
   });
@@ -617,7 +625,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     for (const selection of meta.selections) {
       if (finalArgs[selection.name] === undefined) {
         // Try auto-fill
-        if (autoFill) {
+        if (getAutoFill()) {
           const choices = getChoices(selection);
           if (choices.length === 1) {
             finalArgs[selection.name] = choices[0].value;
@@ -632,6 +640,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           return { success: false, error };
         }
       } else {
+        // Skip client-side validation for filterBy/dependsOn selections when using
+        // direct execute() - the server will validate. This is needed because
+        // getChoices() relies on currentArgs which isn't populated in execute().
+        if (selection.filterBy || selection.dependsOn) {
+          continue;
+        }
+
         // Validate provided value
         const validation = validateSelection(selection, finalArgs[selection.name]);
         if (!validation.valid) {

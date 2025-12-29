@@ -58,9 +58,7 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   actionArgs: Record<string, unknown>;
-  executeAction: (name: string) => Promise<void>;
   setBoardPrompt: (prompt: string | null) => void;
 }>();
 

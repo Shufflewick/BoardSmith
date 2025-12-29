@@ -9,6 +9,7 @@ import {
   isOpponentElement,
   toAlgebraicNotation,
   type GameViewElement,
+  type UseActionControllerReturn,
 } from '@boardsmith/ui';
 
 // Board interaction for syncing with ActionPanel
@@ -55,9 +56,8 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   actionArgs: Record<string, unknown>;
-  executeAction: (name: string) => Promise<void>;
+  actionController: UseActionControllerReturn;
   setBoardPrompt: (prompt: string | null) => void;
 }>();
 
@@ -381,7 +381,7 @@ async function executeMove(move: Move) {
       becomesKing: move.becomesKing,
     };
 
-    const result = await props.action('move', {
+    const result = await props.actionController.execute('move', {
       piece: move.pieceId,
       destination,
     });

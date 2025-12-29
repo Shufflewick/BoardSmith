@@ -15,7 +15,7 @@ import { GameShell, AutoUI } from '@boardsmith/ui';
     <template #player-stats="{ player, gameView }">
       <div class="player-stat">
         <span class="stat-label">Score:</span>
-        <span class="stat-value">{{ player.score || 0 }}</span>
+        <span class="stat-value">{{ (player as any).score || 0 }}</span>
       </div>
     </template>
   </GameShell>

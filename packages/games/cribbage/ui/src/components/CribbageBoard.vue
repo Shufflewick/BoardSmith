@@ -17,6 +17,7 @@ import {
   getSuitSymbol,
   getSuitColor,
   getCardPointValue,
+  type UseActionControllerReturn,
 } from '@boardsmith/ui';
 
 // Animation state - tracks card positions for FLIP animations
@@ -191,9 +192,8 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   actionArgs: Record<string, unknown>;
-  executeAction: (name: string) => Promise<void>;
+  actionController: UseActionControllerReturn;
 }>();
 
 // Selected cards - uses shared actionArgs with preview key for ActionPanel sync
@@ -442,7 +442,7 @@ function getCardDataById(cardId: string): ScoringCardData | null {
 async function handleScoringComplete() {
   // Execute the acknowledgeScore action to advance the game
   if (props.availableActions.includes('acknowledgeScore')) {
-    await props.executeAction('acknowledgeScore');
+    await props.actionController.execute('acknowledgeScore');
   }
   // Also mark as dismissed locally in case action doesn't clear it immediately
   dismissedScoringKey.value = currentScoringKey.value;
@@ -502,7 +502,7 @@ async function handleRoundSummaryComplete() {
   latchedRoundSummaryData.value = null;
   // Then execute the action to advance the game
   if (props.availableActions.includes('acknowledgeScore')) {
-    await props.executeAction('acknowledgeScore');
+    await props.actionController.execute('acknowledgeScore');
   }
 }
 
@@ -534,14 +534,14 @@ function toggleCardSelection(cardName: string) {
       const rank = card?.attributes?.rank;
       if (rank && isCardPlayable(rank)) {
         // During play phase, immediately execute the action (single card selection)
-        // Don't use selectedCards - call props.action directly with the card ID
-        props.action('playCard', { card: cardId });
+        // Don't use selectedCards - call actionController directly with the card ID
+        props.actionController.execute('playCard', { card: cardId });
       }
     }
   }
 }
 
-// Actions - call action() directly with proper parameters
+// Actions - call actionController.execute() with proper parameters
 async function performDiscard() {
   if (selectedCards.value.length !== 2 || isPerformingAction.value) {
     return;
@@ -580,7 +580,7 @@ async function performDiscard() {
   try {
     // Discard action expects cards array of element IDs (fromElements with multiSelect)
     // selectedCards already contains element IDs
-    const result = await props.action('discard', {
+    const result = await props.actionController.execute('discard', {
       cards: selectedCards.value,
     });
 
@@ -625,7 +625,7 @@ async function performPlayCard() {
   isPerformingAction.value = true;
   try {
     // Send numeric ID for chooseElement selection
-    await props.action('playCard', {
+    await props.actionController.execute('playCard', {
       card: cardId,
     });
   } finally {
@@ -640,7 +640,7 @@ async function sayGo() {
 
   isPerformingAction.value = true;
   try {
-    await props.executeAction('sayGo');
+    await props.actionController.execute('sayGo');
   } finally {
     isPerformingAction.value = false;
   }

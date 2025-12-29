@@ -31,7 +31,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
     display-name="Hex"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt }">
+    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
@@ -44,7 +44,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
-            :action="action"
+            :action-controller="actionController"
           />
         </div>
         <div class="board-section">

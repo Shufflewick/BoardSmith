@@ -475,12 +475,22 @@ export class GameServerCore {
     switch (message.type) {
       case 'action':
         if (session.isSpectator) {
-          session.ws.send({ type: 'error', error: 'Spectators cannot perform actions' });
+          session.ws.send({
+            type: 'actionResult',
+            requestId: message.requestId,
+            success: false,
+            error: 'Spectators cannot perform actions',
+          });
           return;
         }
 
         if (!gameSession) {
-          session.ws.send({ type: 'error', error: 'Game not found' });
+          session.ws.send({
+            type: 'actionResult',
+            requestId: message.requestId,
+            success: false,
+            error: 'Game not found',
+          });
           return;
         }
 
@@ -490,10 +500,16 @@ export class GameServerCore {
           message.args || {}
         );
 
-        if (!result.success) {
-          session.ws.send({ type: 'error', error: result.error });
-        }
-        // Success case: broadcast happens automatically in GameSession
+        // Always send action result back to the requesting client
+        session.ws.send({
+          type: 'actionResult',
+          requestId: message.requestId,
+          success: result.success,
+          error: result.error,
+          data: result.data,
+          message: result.message,
+        });
+        // Success case: broadcast of state update happens automatically in GameSession
         break;
 
       case 'getState':

@@ -10,6 +10,7 @@ import {
   isOpponentElement,
   DEFAULT_PLAYER_COLORS,
   type GameViewElement,
+  type UseActionControllerReturn,
 } from '@boardsmith/ui';
 
 // Types for game view
@@ -39,7 +40,7 @@ const props = defineProps<{
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
+  actionController: UseActionControllerReturn;
 }>();
 
 // Board ref for animations
@@ -109,14 +110,14 @@ function isHoveredFromPanel(cell: Cell): boolean {
 
 // Handle cell click - pass the cell element to the action
 async function handleCellClick(cell: Cell) {
-  if (!isValidTarget(cell) || !props.action) return;
+  if (!isValidTarget(cell)) return;
 
   // Capture positions before the move
   capturePositions();
   stoneTracker.capturePositions();
 
   // Execute the action with the cell element (using its ID)
-  await props.action('placeStone', { cell: cell.id });
+  await props.actionController.execute('placeStone', { cell: cell.id });
 }
 
 // Get stone color class

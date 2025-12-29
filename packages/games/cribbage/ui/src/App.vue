@@ -36,7 +36,7 @@ function getCardCount(playerPosition: number, gameView: any): number {
     display-name="Cribbage"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction }">
+    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
@@ -45,9 +45,8 @@ function getCardCount(playerPosition: number, gameView: any): number {
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
-            :action="action"
             :action-args="actionArgs"
-            :execute-action="executeAction"
+            :action-controller="actionController"
           />
         </div>
         <div class="board-section">

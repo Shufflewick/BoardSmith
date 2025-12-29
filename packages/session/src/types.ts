@@ -488,6 +488,8 @@ export interface WebSocketMessage {
   type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimPosition' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leavePosition' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
   action?: string;
   args?: Record<string, unknown>;
+  /** Request ID for action request/response correlation */
+  requestId?: string;
   /** For claimPosition/kickPlayer: which position to target */
   position?: number;
   /** For updateName/claimPosition: player's name */
