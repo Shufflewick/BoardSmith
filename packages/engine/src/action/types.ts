@@ -216,6 +216,23 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
   display?: (element: T, context: ActionContext) => string;
   /** Get board element reference for highlighting */
   boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+  /**
+   * Name of a previous selection this element selection depends on.
+   * When specified, elements are computed for each possible value of the
+   * dependent selection and sent to the client as a map.
+   * Use this when elements are dynamically filtered based on previous selections.
+   */
+  dependsOn?: string;
+  /**
+   * Defer element evaluation until the player clicks this action.
+   * By default, elements are computed when building action metadata.
+   * With defer: true, elements are not evaluated until the player clicks the action button.
+   *
+   * Use this when:
+   * - Element computation has side effects
+   * - Elements depend on game state at the moment of clicking
+   */
+  defer?: boolean;
 }
 
 /**
@@ -260,6 +277,23 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
    * Result will be an array of elements.
    */
   multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+  /**
+   * Name of a previous selection this element selection depends on.
+   * When specified, elements are computed for each possible value of the
+   * dependent selection and sent to the client as a map.
+   * Use this when elements are dynamically filtered based on previous selections.
+   */
+  dependsOn?: string;
+  /**
+   * Defer element evaluation until the player clicks this action.
+   * By default, elements are computed when building action metadata.
+   * With defer: true, elements are not evaluated until the player clicks the action button.
+   *
+   * Use this when:
+   * - Element computation has side effects
+   * - Elements depend on game state at the moment of clicking
+   */
+  defer?: boolean;
 }
 
 /**

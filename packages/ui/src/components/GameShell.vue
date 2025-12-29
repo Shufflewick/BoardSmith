@@ -168,6 +168,15 @@ const availableActions = computed(() => {
   return flowState.availableActions || [];
 });
 
+// Game view - computed here so actionController can use it for element enrichment
+// When viewing historical state (time travel), use that instead of live state
+const gameView = computed(() => {
+  if (timeTravelState.value) {
+    return timeTravelState.value.view as any;
+  }
+  return state.value?.state.view as any;
+});
+
 // Shared action args - bidirectional sync between ActionPanel and custom game boards
 const actionArgs = reactive<Record<string, unknown>>({});
 
@@ -181,6 +190,7 @@ const actionController = useActionController({
   availableActions,
   actionMetadata,
   isMyTurn,
+  gameView,
   playerPosition,
   // Use autoEndTurn ref for both autoFill and autoExecute
   // When auto mode is OFF, user must manually select each option even if only one choice
@@ -242,14 +252,7 @@ const gameMessages = computed(() => {
   return view.messages || [];
 });
 
-// Computed properties for game view
-// When viewing historical state, use that instead of live state
-const gameView = computed(() => {
-  if (timeTravelState.value) {
-    return timeTravelState.value.view as any;
-  }
-  return state.value?.state.view as any;
-});
+// Computed properties derived from game view
 const players = computed(() => state.value?.state.players || []);
 const myPlayer = computed(() => players.value.find(p => p.position === playerPosition.value));
 const opponentPlayers = computed(() => players.value.filter(p => p.position !== playerPosition.value));

@@ -277,6 +277,12 @@ export interface SelectionMetadata {
    * Key is the string representation of the dependent value (element ID, player position, etc.)
    */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
+  /**
+   * For element selections with dependsOn: elements indexed by the dependent selection's value.
+   * Key is the string representation of the dependent value (element ID, player position, etc.)
+   * Used when fromElements() has dependsOn option.
+   */
+  elementsByDependentValue?: Record<string, ValidElement[]>;
   /** For repeating choice selections: configuration for repeat behavior */
   repeat?: {
     /** Whether the selection has an onEach callback (requires server round-trip) */

@@ -350,6 +350,18 @@ export class Action {
        * Enable multi-select mode. Result will be an array of elements.
        */
       multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+      /**
+       * Name of a previous selection this element selection depends on.
+       * When specified, elements are computed for each possible value of the
+       * dependent selection and sent to the client as a map.
+       */
+      dependsOn?: string;
+      /**
+       * Defer element evaluation until the player clicks this action.
+       * By default, elements are computed when building action metadata.
+       * With defer: true, elements are not evaluated until the player clicks the action button.
+       */
+      defer?: boolean;
     }
   ): this {
     // For single-select (no multiSelect), use 'element' type to leverage existing code paths
@@ -365,6 +377,8 @@ export class Action {
         validate: options.validate,
         boardRef: options.boardRef,
         multiSelect: options.multiSelect,
+        dependsOn: options.dependsOn,
+        defer: options.defer,
       };
       this.definition.selections.push(selection as Selection);
     } else {
@@ -378,6 +392,8 @@ export class Action {
         optional: options.optional,
         validate: options.validate,
         boardRef: options.boardRef,
+        dependsOn: options.dependsOn,
+        defer: options.defer,
       };
       this.definition.selections.push(selection as Selection);
     }
@@ -1229,6 +1245,11 @@ export class ActionExecutor {
     // For element selections, just check they have choices
     // (don't do expensive path validation - trust their filter functions)
     if (selection.type === 'element') {
+      const elemSel = selection as ElementSelection;
+      // If defer: true, skip availability check - elements evaluated when player clicks
+      if (elemSel.defer) {
+        return this.hasValidSelectionPath(selections, player, args, index + 1);
+      }
       const choices = this.getChoices(selection, player, args);
       if (choices.length === 0) {
         return false;
@@ -1238,6 +1259,11 @@ export class ActionExecutor {
 
     // For elements selections (fromElements), just check they have elements
     if (selection.type === 'elements') {
+      const elemsSel = selection as ElementsSelection;
+      // If defer: true, skip availability check - elements evaluated when player clicks
+      if (elemsSel.defer) {
+        return this.hasValidSelectionPath(selections, player, args, index + 1);
+      }
       const elements = this.getChoices(selection, player, args);
       if (elements.length === 0) {
         return false;

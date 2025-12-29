@@ -94,6 +94,11 @@
  */
 
 import { ref, computed, watch, inject, type Ref, type ComputedRef } from 'vue';
+import type { GameElement } from '../types.js';
+import { findElementById } from './useGameViewHelpers.js';
+
+// Re-export GameElement as GameViewElement for external use
+export type { GameElement as GameViewElement };
 
 /** Reference to a board element (for highlighting) */
 export interface ElementRef {
@@ -119,6 +124,8 @@ export interface ValidElement {
   display?: string;
   /** Element reference (for board highlighting) */
   ref?: ElementRef;
+  /** Full element data from gameView (auto-enriched by actionController) */
+  element?: GameElement;
 }
 
 // Types for action metadata (from server)
@@ -139,8 +146,10 @@ export interface SelectionMetadata {
   filterBy?: { key: string; selectionName: string };
   /** Look up choices from choicesByDependentValue based on previous selection */
   dependsOn?: string;
-  /** Choices indexed by dependent value (used with dependsOn) */
+  /** Choices indexed by dependent value (used with dependsOn for choice selections) */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
+  /** Elements indexed by dependent value (used with dependsOn for element selections) */
+  elementsByDependentValue?: Record<string, ValidElement[]>;
   /** Selection can repeat until terminator */
   repeat?: { hasOnEach: boolean; terminator?: unknown };
   /** For number inputs: minimum value */
@@ -204,6 +213,8 @@ export interface UseActionControllerOptions {
   actionMetadata: Ref<Record<string, ActionMetadata> | undefined>;
   /** Is it this player's turn */
   isMyTurn: Ref<boolean>;
+  /** Game view (for enriching validElements with full element data) */
+  gameView?: Ref<GameElement | null | undefined>;
   /** Player position (needed for deferred/repeating features) */
   playerPosition?: Ref<number>;
   /** Enable auto-fill for single-choice selections (default: true). Can be reactive. */
@@ -311,6 +322,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     availableActions,
     actionMetadata,
     isMyTurn,
+    gameView,
     playerPosition,
     autoFill: autoFillOption = true,
     autoExecute: autoExecuteOption = true,
@@ -396,12 +408,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       const key = `${currentAction.value}:${selection.name}`;
       choices = deferredChoicesCache.value[key] || [];
     }
-    // Handle dependsOn: look up choices from choicesByDependentValue
-    else if (selection.dependsOn && selection.choicesByDependentValue) {
+    // Handle dependsOn: look up choices from choicesByDependentValue or elementsByDependentValue
+    else if (selection.dependsOn) {
       const dependentValue = currentArgs.value[selection.dependsOn];
       if (dependentValue !== undefined) {
         const key = String(dependentValue);
-        choices = selection.choicesByDependentValue[key] || [];
+        // For choice selections with dependsOn
+        if (selection.choicesByDependentValue) {
+          choices = selection.choicesByDependentValue[key] || [];
+        }
+        // For element selections with dependsOn
+        else if (selection.elementsByDependentValue) {
+          const elements = selection.elementsByDependentValue[key] || [];
+          choices = elements.map(el => ({
+            value: el.id,
+            display: el.display || `Element ${el.id}`,
+          }));
+        }
       }
       // If dependent selection not yet made, return empty
     }
@@ -506,20 +529,81 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return getActionMetadata(currentAction.value);
   });
 
+  // Track which element IDs we've already warned about (to avoid spam)
+  const warnedMissingElements = new Set<number>();
+
+  /**
+   * Enrich a list of valid elements with full element data from gameView.
+   */
+  function enrichElementsList(elements: ValidElement[]): ValidElement[] {
+    if (!gameView?.value) return elements;
+
+    return elements.map(ve => {
+      const element = findElementById(gameView.value, ve.id);
+
+      // Warning: element not found in gameView (only warn once per element)
+      if (!element && !warnedMissingElements.has(ve.id)) {
+        warnedMissingElements.add(ve.id);
+        console.warn(
+          `[actionController] Element ${ve.id} (${ve.display}) not found in gameView. ` +
+          `This can happen if the element was removed after selection metadata was built.`
+        );
+      }
+
+      return { ...ve, element };
+    });
+  }
+
+  /**
+   * Enrich validElements with full element data from gameView.
+   * This is the "pit of success" - designers get full element data automatically.
+   * Handles both static validElements and dependent elementsByDependentValue.
+   */
+  function enrichValidElements(sel: SelectionMetadata): SelectionMetadata {
+    if (!gameView?.value) return sel;
+
+    // Handle elementsByDependentValue (for element selections with dependsOn)
+    if (sel.dependsOn && sel.elementsByDependentValue) {
+      const dependentValue = currentArgs.value[sel.dependsOn];
+      if (dependentValue !== undefined) {
+        const key = String(dependentValue);
+        const elements = sel.elementsByDependentValue[key] || [];
+        const enrichedElements = enrichElementsList(elements);
+
+        return {
+          ...sel,
+          validElements: enrichedElements,
+        };
+      }
+      // Dependent value not set yet - return with empty validElements
+      return { ...sel, validElements: [] };
+    }
+
+    // Handle static validElements
+    if (!sel.validElements) return sel;
+
+    const enrichedElements = enrichElementsList(sel.validElements);
+
+    return {
+      ...sel,
+      validElements: enrichedElements,
+    };
+  }
+
   const currentSelection = computed((): SelectionMetadata | null => {
     if (!currentActionMeta.value) return null;
 
     // Find first selection that needs input
     for (const sel of currentActionMeta.value.selections) {
       if (selectionNeedsInput(sel) && !sel.optional) {
-        return sel;
+        return enrichValidElements(sel);
       }
     }
 
     // Then check optional selections
     for (const sel of currentActionMeta.value.selections) {
       if (selectionNeedsInput(sel) && sel.optional) {
-        return sel;
+        return enrichValidElements(sel);
       }
     }
 
@@ -688,10 +772,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     lastError.value = null;
 
     // Check if first selection is deferred - if so, fetch choices
+    // But skip if it has dependsOn with pre-computed values (elementsByDependentValue/choicesByDependentValue)
     const meta = getActionMetadata(actionName);
     if (meta && meta.selections.length > 0) {
       const firstSel = meta.selections[0];
-      if (firstSel.deferred) {
+      if (firstSel.deferred && !firstSel.elementsByDependentValue && !firstSel.choicesByDependentValue) {
         await fetchChoicesForSelection(firstSel.name);
       }
     }
@@ -718,8 +803,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       currentArgs.value[selectionName] = value;
 
       // Check if next selection is deferred - if so, fetch choices
+      // But skip if it has dependsOn with pre-computed values (elementsByDependentValue/choicesByDependentValue)
       const nextSel = getNextSelection(selectionName);
-      if (nextSel?.deferred) {
+      if (nextSel?.deferred && !nextSel.elementsByDependentValue && !nextSel.choicesByDependentValue) {
         await fetchChoicesForSelection(nextSel.name);
       }
     } else {

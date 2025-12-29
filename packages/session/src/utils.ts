@@ -7,6 +7,67 @@ import type { GameRunner } from '@boardsmith/runtime';
 import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
 
 /**
+ * Build validElements list with auto-disambiguation.
+ * Used for both 'element' and 'elements' selection types.
+ */
+function buildValidElementsList(
+  elements: any[],
+  elemSel: any,
+  ctx: { game: Game; player: Player; args: Record<string, unknown> }
+): Array<{ id: number; display: string; ref?: any }> {
+  // Auto-disambiguate display names
+  const nameCounts = new Map<string, number>();
+  for (const el of elements) {
+    const name = el.name || 'Element';
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  }
+  const nameIndices = new Map<string, number>();
+
+  return elements.map((element: any) => {
+    const validElem: any = { id: element.id };
+
+    // Add display text if display function provided
+    if (elemSel.display) {
+      try {
+        // Support both display signatures: (element, ctx) and (element, ctx, allElements)
+        validElem.display = elemSel.display(element, ctx, elements);
+      } catch {
+        validElem.display = element.name || String(element.id);
+      }
+    } else {
+      // Auto-disambiguation for elements with same name
+      const baseName = element.name || 'Element';
+      const count = nameCounts.get(baseName) || 1;
+      if (count > 1) {
+        const idx = (nameIndices.get(baseName) || 0) + 1;
+        nameIndices.set(baseName, idx);
+        validElem.display = `${baseName} #${idx}`;
+      } else {
+        // Default display: use element's name or notation if available
+        validElem.display = element.notation || element.name || String(element.id);
+      }
+    }
+
+    // Add board ref if provided
+    if (elemSel.boardRef) {
+      try {
+        validElem.ref = elemSel.boardRef(element, ctx);
+      } catch {
+        // Ignore errors
+      }
+    } else {
+      // Default ref: use element ID and notation if available
+      validElem.ref = { id: element.id };
+      if (element.notation) {
+        validElem.ref.notation = element.notation;
+      }
+    }
+
+    return validElem;
+  });
+}
+
+/**
  * Generate a default display string for a choice value.
  * Priority: display > name > label > JSON > String
  * Never returns [object Object]
@@ -382,6 +443,56 @@ function buildSelectionMetadata(
         base.elementClassName = elemSel.elementClass.name;
       }
 
+      // Handle deferred element selections WITHOUT dependsOn - don't evaluate until action is clicked
+      // Note: If dependsOn is present, we compute elementsByDependentValue even with defer: true
+      // because the client can look up elements from the map without a server round-trip
+      if (elemSel.defer && !elemSel.dependsOn) {
+        base.deferred = true;
+        // Don't evaluate elements - that will happen when /deferred-choices is called
+        break;
+      }
+
+      // Check if this selection depends on a previous selection
+      if (elemSel.dependsOn && typeof elemSel.elements === 'function') {
+        const dependentInfo = selectionValues.get(elemSel.dependsOn);
+
+        if (dependentInfo) {
+          base.dependsOn = elemSel.dependsOn;
+          base.elementsByDependentValue = {};
+
+          // For each possible value of the dependent selection, compute elements
+          for (const depValue of dependentInfo.values) {
+            // Build args with the dependent value
+            // For element/elements selections, we need to resolve to the actual element
+            let argValue: unknown = depValue;
+            if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
+              argValue = game.getElementById(depValue);
+            }
+
+            const argsWithDep = { [elemSel.dependsOn]: argValue };
+            const ctxWithDep = { game, player, args: argsWithDep };
+
+            let elements: any[];
+            try {
+              elements = elemSel.elements(ctxWithDep);
+            } catch (error) {
+              console.error(`[buildSelectionMetadata] Error getting elements for "${selection.name}" with ${elemSel.dependsOn}=${depValue}:`, error);
+              elements = [];
+            }
+
+            // Convert elements to validElements format with auto-disambiguation
+            const validElements = buildValidElementsList(elements, elemSel, ctxWithDep);
+
+            // Key by the serialized value (element ID, player position, etc.)
+            const key = String(depValue);
+            base.elementsByDependentValue[key] = validElements;
+          }
+
+          // Don't populate base.validElements for dependsOn selections - client uses elementsByDependentValue
+          break;
+        }
+      }
+
       let elements: any[];
 
       // Check if elements array is provided directly (from fromElements without multiSelect)
@@ -413,57 +524,8 @@ function buildSelectionMetadata(
         }
       }
 
-      // Auto-disambiguate display names (from fromElements pattern)
-      const nameCounts = new Map<string, number>();
-      for (const el of elements) {
-        const name = el.name || 'Element';
-        nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-      }
-      const nameIndices = new Map<string, number>();
-
       // Build validElements list with display and refs
-      base.validElements = elements.map((element: any) => {
-        const validElem: any = { id: element.id };
-
-        // Add display text if display function provided
-        if (elemSel.display) {
-          try {
-            // Support both display signatures: (element, ctx) and (element, ctx, allElements)
-            validElem.display = elemSel.display(element, ctx, elements);
-          } catch {
-            validElem.display = element.name || String(element.id);
-          }
-        } else {
-          // Auto-disambiguation for elements with same name
-          const baseName = element.name || 'Element';
-          const count = nameCounts.get(baseName) || 1;
-          if (count > 1) {
-            const idx = (nameIndices.get(baseName) || 0) + 1;
-            nameIndices.set(baseName, idx);
-            validElem.display = `${baseName} #${idx}`;
-          } else {
-            // Default display: use element's name or notation if available
-            validElem.display = element.notation || element.name || String(element.id);
-          }
-        }
-
-        // Add board ref if provided
-        if (elemSel.boardRef) {
-          try {
-            validElem.ref = elemSel.boardRef(element, ctx);
-          } catch {
-            // Ignore errors
-          }
-        } else {
-          // Default ref: use element ID and notation if available
-          validElem.ref = { id: element.id };
-          if (element.notation) {
-            validElem.ref.notation = element.notation;
-          }
-        }
-
-        return validElem;
-      });
+      base.validElements = buildValidElementsList(elements, elemSel, ctx);
       break;
     }
 
@@ -471,6 +533,85 @@ function buildSelectionMetadata(
       // New "pit of success" selection type - fromElements()
       // Value is element ID (number), client sends ID directly
       const elementsSel = selection as any;
+
+      // Handle deferred element selections WITHOUT dependsOn - don't evaluate until action is clicked
+      // Note: If dependsOn is present, we compute elementsByDependentValue even with defer: true
+      // because the client can look up elements from the map without a server round-trip
+      if (elementsSel.defer && !elementsSel.dependsOn) {
+        base.deferred = true;
+        // Still include multiSelect config if it's static (not function-based)
+        if (elementsSel.multiSelect !== undefined && typeof elementsSel.multiSelect !== 'function') {
+          if (typeof elementsSel.multiSelect === 'number') {
+            base.multiSelect = { min: 1, max: elementsSel.multiSelect };
+          } else {
+            base.multiSelect = {
+              min: elementsSel.multiSelect.min ?? 1,
+              max: elementsSel.multiSelect.max,
+            };
+          }
+        }
+        // Don't evaluate elements - that will happen when /deferred-choices is called
+        break;
+      }
+
+      // Check if this selection depends on a previous selection
+      if (elementsSel.dependsOn && typeof elementsSel.elements === 'function') {
+        const dependentInfo = selectionValues.get(elementsSel.dependsOn);
+
+        if (dependentInfo) {
+          base.dependsOn = elementsSel.dependsOn;
+          base.elementsByDependentValue = {};
+
+          // For each possible value of the dependent selection, compute elements
+          for (const depValue of dependentInfo.values) {
+            // Build args with the dependent value
+            // For element/elements selections, we need to resolve to the actual element
+            let argValue: unknown = depValue;
+            if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
+              argValue = game.getElementById(depValue);
+            }
+
+            const argsWithDep = { [elementsSel.dependsOn]: argValue };
+            const ctxWithDep = { game, player, args: argsWithDep };
+
+            let elements: any[];
+            try {
+              elements = elementsSel.elements(ctxWithDep);
+            } catch (error) {
+              console.error(`[buildSelectionMetadata] Error getting elements for "${selection.name}" with ${elementsSel.dependsOn}=${depValue}:`, error);
+              elements = [];
+            }
+
+            // Convert elements to validElements format with auto-disambiguation
+            const validElements = buildValidElementsList(elements, elementsSel, ctxWithDep);
+
+            // Key by the serialized value (element ID, player position, etc.)
+            const key = String(depValue);
+            base.elementsByDependentValue[key] = validElements;
+          }
+
+          // Add multiSelect config if present (for multi-select element selections)
+          if (elementsSel.multiSelect !== undefined) {
+            const multiSelectConfig = typeof elementsSel.multiSelect === 'function'
+              ? elementsSel.multiSelect(ctx)
+              : elementsSel.multiSelect;
+
+            if (multiSelectConfig !== undefined) {
+              if (typeof multiSelectConfig === 'number') {
+                base.multiSelect = { min: 1, max: multiSelectConfig };
+              } else {
+                base.multiSelect = {
+                  min: multiSelectConfig.min ?? 1,
+                  max: multiSelectConfig.max,
+                };
+              }
+            }
+          }
+
+          // Don't populate base.validElements for dependsOn selections - client uses elementsByDependentValue
+          break;
+        }
+      }
 
       // Get elements from the selection
       let elements: any[];
@@ -485,58 +626,8 @@ function buildSelectionMetadata(
         elements = elementsSel.elements || [];
       }
 
-      // Auto-disambiguate display names
-      const nameCounts = new Map<string, number>();
-      for (const el of elements) {
-        const name = el.name || 'Element';
-        nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-      }
-
-      const nameIndices = new Map<string, number>();
-
-      // Build validElements list with auto-disambiguation
-      // The VALUE is the element ID (number), which custom UIs can send directly
-      base.validElements = elements.map((element: any) => {
-        const validElem: any = {
-          id: element.id,  // This is what the client should send
-        };
-
-        // Generate display name with auto-disambiguation
-        const baseName = element.name || 'Element';
-        const count = nameCounts.get(baseName) || 1;
-
-        if (elementsSel.display) {
-          try {
-            validElem.display = elementsSel.display(element, ctx, elements);
-          } catch {
-            validElem.display = baseName;
-          }
-        } else if (count > 1) {
-          // Multiple elements with same name - add index suffix
-          const idx = (nameIndices.get(baseName) || 0) + 1;
-          nameIndices.set(baseName, idx);
-          validElem.display = `${baseName} #${idx}`;
-        } else {
-          validElem.display = baseName;
-        }
-
-        // Add board ref if provided
-        if (elementsSel.boardRef) {
-          try {
-            validElem.ref = elementsSel.boardRef(element, ctx);
-          } catch {
-            // Ignore errors
-          }
-        } else {
-          // Default ref: use element ID and notation if available
-          validElem.ref = { id: element.id };
-          if (element.notation) {
-            validElem.ref.notation = element.notation;
-          }
-        }
-
-        return validElem;
-      });
+      // Build validElements list with auto-disambiguation using shared helper
+      base.validElements = buildValidElementsList(elements, elementsSel, ctx);
 
       // Add multiSelect config if present
       if (elementsSel.multiSelect !== undefined) {

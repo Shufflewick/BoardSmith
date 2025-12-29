@@ -26,6 +26,30 @@ function getAttrs(element: GameElement): BaseElementAttributes & Record<string, 
 }
 
 /**
+ * Find an element anywhere in the game view tree by its numeric ID.
+ * Performs a recursive depth-first search.
+ */
+export function findElementById(
+  gameView: GameElement | null | undefined,
+  id: number
+): GameElement | undefined {
+  if (!gameView) return undefined;
+
+  // Check if this element matches
+  if (gameView.id === id) return gameView;
+
+  // Recursively search children
+  if (gameView.children) {
+    for (const child of gameView.children) {
+      const found = findElementById(child, id);
+      if (found) return found;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Find an element in the game view by type, name, or className.
  * Prefers $type and name over className since className can be mangled by bundlers.
  */
@@ -184,6 +208,7 @@ export function isOpponentElement(
  */
 export function useGameViewHelpers() {
   return {
+    findElementById,
     findElement,
     findElements,
     findPlayerHand,

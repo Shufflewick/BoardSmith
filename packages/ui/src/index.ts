@@ -131,6 +131,7 @@ export {
 // Game view helpers (for custom UIs)
 export {
   useGameViewHelpers,
+  findElementById,
   findElement,
   findElements,
   findPlayerHand,
