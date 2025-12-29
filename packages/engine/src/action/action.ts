@@ -712,17 +712,26 @@ export class ActionExecutor {
       }
     }
 
-    // Try display string match (case-insensitive)
+    // Try string match against choice properties
     if (typeof value === 'string') {
       const lowerValue = value.toLowerCase();
       for (const choice of choices) {
         if (choice && typeof choice === 'object') {
           const obj = choice as Record<string, unknown>;
-          // Check display, name, or label properties
-          const displayProps = ['display', 'name', 'label'];
-          for (const prop of displayProps) {
-            if (typeof obj[prop] === 'string' && obj[prop].toString().toLowerCase() === lowerValue) {
-              return true;
+          // Check value property first (for {value, display} pattern), then display, name, label
+          // Both exact match and case-insensitive match are tried
+          const propsToCheck = ['value', 'display', 'name', 'label'];
+          for (const prop of propsToCheck) {
+            const propValue = obj[prop];
+            if (propValue !== undefined) {
+              // Exact match (for value property especially)
+              if (propValue === value) {
+                return true;
+              }
+              // Case-insensitive string match
+              if (typeof propValue === 'string' && propValue.toLowerCase() === lowerValue) {
+                return true;
+              }
             }
           }
         } else if (typeof choice === 'string' && choice.toLowerCase() === lowerValue) {
@@ -752,16 +761,25 @@ export class ActionExecutor {
       }
     }
 
-    // Try display string match (case-insensitive)
+    // Try string match against choice properties
     if (typeof value === 'string') {
       const lowerValue = value.toLowerCase();
       for (const choice of choices) {
         if (choice && typeof choice === 'object') {
           const obj = choice as Record<string, unknown>;
-          const displayProps = ['display', 'name', 'label'];
-          for (const prop of displayProps) {
-            if (typeof obj[prop] === 'string' && obj[prop].toString().toLowerCase() === lowerValue) {
-              return choice;
+          // Check value property first (for {value, display} pattern), then display, name, label
+          const propsToCheck = ['value', 'display', 'name', 'label'];
+          for (const prop of propsToCheck) {
+            const propValue = obj[prop];
+            if (propValue !== undefined) {
+              // Exact match (for value property especially)
+              if (propValue === value) {
+                return choice;
+              }
+              // Case-insensitive string match
+              if (typeof propValue === 'string' && propValue.toLowerCase() === lowerValue) {
+                return choice;
+              }
             }
           }
         } else if (typeof choice === 'string' && choice.toLowerCase() === lowerValue) {
