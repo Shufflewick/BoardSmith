@@ -1497,7 +1497,7 @@ export class ActionExecutor {
 
     // Format choices for UI - element selections need {value: id, display: name}
     const formattedChoices = isElementSelection
-      ? this.formatElementChoices(nextChoices as GameElement[])
+      ? this.formatElementChoices(nextChoices as GameElement[], selection, nextContext)
       : nextChoices;
 
     return { done: false, nextChoices: formattedChoices };
@@ -1505,9 +1505,17 @@ export class ActionExecutor {
 
   /**
    * Format element array as choices for UI (with value/display format)
+   * Uses the selection's display function if available, otherwise falls back to element.name
    */
-  private formatElementChoices(elements: GameElement[]): Array<{ value: number; display: string }> {
-    // Auto-disambiguate names
+  private formatElementChoices(
+    elements: GameElement[],
+    selection?: Selection,
+    context?: ActionContext
+  ): Array<{ value: number; display: string }> {
+    // Get custom display function from selection if available
+    const customDisplay = selection && 'display' in selection ? (selection as any).display : undefined;
+
+    // Auto-disambiguate names (for fallback when no custom display)
     const nameCounts = new Map<string, number>();
     for (const el of elements) {
       const name = el.name || 'Element';
@@ -1516,16 +1524,28 @@ export class ActionExecutor {
     const nameIndices = new Map<string, number>();
 
     return elements.map(el => {
-      const baseName = el.name || 'Element';
-      const count = nameCounts.get(baseName) || 1;
       let display: string;
 
-      if (count > 1) {
-        const idx = (nameIndices.get(baseName) || 0) + 1;
-        nameIndices.set(baseName, idx);
-        display = `${baseName} #${idx}`;
+      // Use custom display function if available
+      if (customDisplay && context) {
+        try {
+          display = customDisplay(el, context, elements);
+        } catch {
+          // Fallback to element name if display function fails
+          display = el.name || 'Element';
+        }
       } else {
-        display = baseName;
+        // Default: use element name with disambiguation
+        const baseName = el.name || 'Element';
+        const count = nameCounts.get(baseName) || 1;
+
+        if (count > 1) {
+          const idx = (nameIndices.get(baseName) || 0) + 1;
+          nameIndices.set(baseName, idx);
+          display = `${baseName} #${idx}`;
+        } else {
+          display = baseName;
+        }
       }
 
       return { value: el.id, display };

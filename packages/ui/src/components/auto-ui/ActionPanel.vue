@@ -1391,7 +1391,7 @@ function clearBoardSelection() {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              Skip
+              {{ typeof currentSelection.optional === 'string' ? currentSelection.optional : 'Skip' }}
             </button>
           </div>
         </template>
@@ -1452,7 +1452,7 @@ function clearBoardSelection() {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              Skip
+              {{ typeof currentSelection.optional === 'string' ? currentSelection.optional : 'Skip' }}
             </button>
           </div>
         </template>
@@ -1536,7 +1536,7 @@ function clearBoardSelection() {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              Skip
+              {{ typeof currentSelection.optional === 'string' ? currentSelection.optional : 'Skip' }}
             </button>
             <span v-if="filteredChoices.length === 0 && !currentSelection.optional" class="no-choices">
               No options available
