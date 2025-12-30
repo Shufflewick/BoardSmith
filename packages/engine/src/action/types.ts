@@ -19,8 +19,8 @@ export interface BaseSelection<T = unknown> {
    * Functions are evaluated at render time with the current game state.
    */
   prompt?: string | ((context: ActionContext) => string);
-  /** Make this selection optional */
-  optional?: boolean;
+  /** Make this selection optional. If a string, shows that text instead of "Skip". */
+  optional?: boolean | string;
   /** Validation function */
   validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
 }
@@ -425,8 +425,8 @@ export interface SelectionTrace {
   choiceCount: number;
   /** Whether auto-selected (single choice with Auto mode) */
   skipped?: boolean;
-  /** Whether this selection is optional */
-  optional?: boolean;
+  /** Whether this selection is optional. If a string, shows that text instead of "Skip". */
+  optional?: boolean | string;
   /** Whether filterBy was applied */
   filterApplied?: boolean;
   /** Name of selection this depends on (if using dependsOn) */

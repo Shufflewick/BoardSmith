@@ -246,7 +246,8 @@ export interface SelectionMetadata {
   name: string;
   type: 'choice' | 'element' | 'elements' | 'number' | 'text';
   prompt?: string;
-  optional?: boolean;
+  /** If true, shows "Skip" button. If a string, shows that text instead. */
+  optional?: boolean | string;
   // Type-specific properties
   choices?: ChoiceWithRefs[];
   min?: number;

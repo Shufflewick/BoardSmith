@@ -84,7 +84,8 @@ export interface Selection {
   name: string;
   type: 'choice' | 'player' | 'element' | 'number' | 'text';
   prompt?: string;
-  optional?: boolean;
+  /** If true, shows "Skip" button. If a string, shows that text instead. */
+  optional?: boolean | string;
   choices?: Array<{ value: unknown; display: string }>;
   min?: number;
   max?: number;

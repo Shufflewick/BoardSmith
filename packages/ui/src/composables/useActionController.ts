@@ -133,7 +133,8 @@ export interface SelectionMetadata {
   name: string;
   type: 'choice' | 'element' | 'elements' | 'text' | 'number';
   prompt?: string;
-  optional?: boolean;
+  /** If true, shows "Skip" button. If a string, shows that text instead. */
+  optional?: boolean | string;
   /** For choice selections: available choices */
   choices?: ChoiceWithRefs[];
   /** For element selections: list of valid element IDs the user can select */

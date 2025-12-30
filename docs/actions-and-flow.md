@@ -160,6 +160,22 @@ When multiple elements share the same name, display names are automatically suff
 });
 ```
 
+**Optional selections:**
+
+Allow players to skip a selection. Use `optional: true` for a "Skip" button, or provide a string for custom button text:
+
+```typescript
+.fromElements<Equipment>('item', {
+  elements: (ctx) => ctx.loot.all(Equipment),
+  optional: true,           // Shows "Skip" button
+})
+
+.fromElements<Equipment>('item', {
+  elements: (ctx) => ctx.loot.all(Equipment),
+  optional: 'Done',         // Shows "Done" button instead of "Skip"
+})
+```
+
 #### `playerChoices` - Choose a player with chooseFrom
 
 Use the `playerChoices()` helper on your Game class to generate player choices for use with `chooseFrom`:

@@ -205,7 +205,7 @@ interface ActionTrace {
     type: string;
     choiceCount: number;
     skipped?: boolean;
-    optional?: boolean;
+    optional?: boolean | string;
     filterApplied?: boolean;
     dependentOn?: string;
   }>;
