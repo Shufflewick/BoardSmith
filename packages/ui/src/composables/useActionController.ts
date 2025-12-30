@@ -762,15 +762,33 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   });
 
   // === Auto-fill Watch ===
-  // When a selection has only one choice, auto-fill it
-  watch(currentSelection, (sel) => {
-    if (!sel || !getAutoFill() || isExecuting.value) return;
+  // When a selection changes, fetch choices if needed and auto-fill if only one choice
+  watch(currentSelection, async (sel) => {
+    if (!sel || isExecuting.value) return;
 
-    const choices = getChoices(sel);
-    if (choices.length === 1) {
-      // Auto-fill
-      const choice = choices[0];
-      currentArgs.value[sel.name] = choice.value;
+    // Fetch choices if not in snapshot yet (handles case where board sets args directly)
+    const snapshot = actionSnapshot.value?.selectionSnapshots.get(sel.name);
+    if (!snapshot && (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')) {
+      await fetchChoicesForSelection(sel.name);
+    }
+
+    // Now attempt auto-fill if enabled
+    if (getAutoFill()) {
+      const choices = getChoices(sel);
+      if (choices.length === 1) {
+        // Auto-fill
+        const choice = choices[0];
+        currentArgs.value[sel.name] = choice.value;
+
+        // Also update collectedSelections so UI reflects the selection
+        if (actionSnapshot.value) {
+          actionSnapshot.value.collectedSelections.set(sel.name, {
+            value: choice.value,
+            display: choice.display,
+            skipped: false,
+          });
+        }
+      }
     }
   }, { immediate: true });
 
@@ -963,12 +981,62 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       });
     }
 
-    // Always fetch choices for the first selection (unless it's number/text)
+    // Fetch choices for the first selection that needs input
+    // This handles both normal start (first selection) and followUp with pre-filled args
+    // (where we need to fetch choices for the next unfilled selection)
     if (meta.selections.length > 0) {
-      const firstSel = meta.selections[0];
-      // Fetch choices for choice/element/elements selections
-      if (firstSel.type === 'choice' || firstSel.type === 'element' || firstSel.type === 'elements') {
-        await fetchChoicesForSelection(firstSel.name);
+      // Find first selection that needs input (wasn't pre-filled)
+      let selectionToFetch: SelectionMetadata | undefined;
+      for (const sel of meta.selections) {
+        if (initialArgs[sel.name] === undefined) {
+          selectionToFetch = sel;
+          break;
+        }
+      }
+
+      // Fetch choices for the selection that actually needs input
+      if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
+        await fetchChoicesForSelection(selectionToFetch.name);
+
+        // After fetching, manually trigger auto-fill if there's exactly one choice
+        // The watch may have fired before choices were fetched, so we need to check again
+        if (getAutoFill() && !isExecuting.value) {
+          const choices = getChoices(selectionToFetch);
+          if (choices.length === 1) {
+            const choice = choices[0];
+            currentArgs.value[selectionToFetch.name] = choice.value;
+
+            // Store in snapshot
+            if (actionSnapshot.value) {
+              actionSnapshot.value.collectedSelections.set(selectionToFetch.name, {
+                value: choice.value,
+                display: choice.display,
+                skipped: false,
+              });
+            }
+
+            // Recursively fetch and auto-fill the next selection if needed
+            const nextSel = getNextSelection(selectionToFetch.name);
+            if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
+              await fetchChoicesForSelection(nextSel.name);
+
+              // Check for auto-fill on the next selection too
+              if (getAutoFill() && !isExecuting.value) {
+                const nextChoices = getChoices(nextSel);
+                if (nextChoices.length === 1) {
+                  currentArgs.value[nextSel.name] = nextChoices[0].value;
+                  if (actionSnapshot.value) {
+                    actionSnapshot.value.collectedSelections.set(nextSel.name, {
+                      value: nextChoices[0].value,
+                      display: nextChoices[0].display,
+                      skipped: false,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

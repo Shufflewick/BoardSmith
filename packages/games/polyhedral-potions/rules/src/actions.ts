@@ -334,6 +334,10 @@ export function createUseRerollAction(game: PolyPotionsGame): ActionDefinition {
         success: true,
         data: { oldValues, newValues },
         message: `${player.name} rerolled ${diceToReroll.map(d => d.name).join(', ')}`,
+        // Chain back to draft if player still needs to draft dice
+        followUp: currentGame.draftedDice.length < 2
+          ? { action: 'draft' }
+          : undefined,
       };
     });
 }
@@ -421,6 +425,10 @@ export function createUseFlipAction(game: PolyPotionsGame): ActionDefinition {
         success: true,
         data: { oldValue, newValue: die.value },
         message: `${player.name} flipped ${die.name} from ${oldValue} to ${die.value}`,
+        // Chain back to draft if player still needs to draft dice
+        followUp: currentGame.draftedDice.length < 2
+          ? { action: 'draft' }
+          : undefined,
       };
     });
 }
@@ -481,6 +489,10 @@ export function createUseRefreshAction(game: PolyPotionsGame): ActionDefinition 
       return {
         success: true,
         message: `${player.name} refreshed the ingredient shelf`,
+        // Chain back to draft if player still needs to draft dice
+        followUp: currentGame.draftedDice.length < 2
+          ? { action: 'draft' }
+          : undefined,
       };
     });
 }

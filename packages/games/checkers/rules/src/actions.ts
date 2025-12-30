@@ -226,6 +226,11 @@ export function createMoveAction(game: CheckersGame): ActionDefinition {
               crowned: false,
             },
             message: `Captured! Must continue jumping.`,
+            // Chain to move action with piece pre-selected for smoother multi-jump UX
+            followUp: {
+              action: 'move',
+              args: { piece: move.piece.id },
+            },
           };
         }
       }

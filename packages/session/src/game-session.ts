@@ -72,6 +72,11 @@ export interface ActionResult {
   data?: Record<string, unknown>;
   /** Message from the action (for logging/display) */
   message?: string;
+  /** Optional follow-up action to chain after this action */
+  followUp?: {
+    action: string;
+    args?: Record<string, unknown>;
+  };
 }
 
 /**
@@ -645,6 +650,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       flowState: result.flowState,
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: true }),
       serializedAction: result.serializedAction,
+      // Pass through action chaining info from flowState
+      followUp: result.flowState?.followUp,
     };
   }
 

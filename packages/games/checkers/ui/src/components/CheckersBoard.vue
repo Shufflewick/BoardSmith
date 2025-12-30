@@ -312,10 +312,11 @@ function handleSquareClick(row: number, col: number) {
   const square = getSquare(row, col);
   const piece = getPiece(square);
 
-  // If clicking on one of my movable pieces, select it
+  // If clicking on one of my movable pieces, select it via action controller
   if (piece && isMyPiece(piece) && movablePieceIds.value.has(piece.id)) {
     selectedPieceId.value = piece.id;
-    // Also update board interaction to filter ActionPanel choices
+    // Use action controller's fill() - this enables auto-fill for subsequent selections
+    props.actionController.fill('piece', piece.id);
     updateBoardInteraction(row, col, piece.id);
     return;
   }

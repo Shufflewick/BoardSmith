@@ -521,7 +521,6 @@ export class PolyPotionsPlayer extends Player {
       position: this.position,
       name: this.name,
       color: this.color,
-      avatar: this.avatar,
       // Computed properties
       score: this.score,
       stars: this.stars,
