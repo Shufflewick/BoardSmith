@@ -1,5 +1,5 @@
 {
-  "name": "@boardsmith/test-action-panel-rules",
+  "name": "@boardsmith/demo-action-panel-rules",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
