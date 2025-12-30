@@ -349,6 +349,11 @@ export class FlowEngine<G extends Game = Game> {
       state.actionError = this.actionError;
     }
 
+    // Include followUp if last action returned one
+    if (this.lastActionResult?.followUp) {
+      state.followUp = this.lastActionResult.followUp;
+    }
+
     return state;
   }
 

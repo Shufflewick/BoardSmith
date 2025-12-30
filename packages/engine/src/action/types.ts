@@ -357,6 +357,17 @@ export interface ActionDefinition {
 }
 
 /**
+ * Configuration for a follow-up action that should automatically chain
+ * after this action completes.
+ */
+export interface FollowUpAction {
+  /** Name of the action to chain to */
+  action: string;
+  /** Args to pre-fill in the follow-up action (e.g., element IDs, context) */
+  args?: Record<string, unknown>;
+}
+
+/**
  * Result of action execution
  */
 export interface ActionResult {
@@ -368,6 +379,32 @@ export interface ActionResult {
   data?: Record<string, unknown>;
   /** Message to log */
   message?: string;
+  /**
+   * Optional follow-up action to chain after this action completes.
+   * When specified, the follow-up action automatically starts with
+   * the provided args pre-filled. This enables seamless multi-phase
+   * actions where state changes are visible between phases.
+   *
+   * @example
+   * ```typescript
+   * Action.create('explore')
+   *   .chooseElement('merc', { ... })
+   *   .execute((args, ctx) => {
+   *     const sector = args.merc.getCurrentSector();
+   *     drawEquipmentToStash(sector);
+   *     sector.explored = true;
+   *
+   *     return {
+   *       success: true,
+   *       followUp: sector.stashCount > 0 ? {
+   *         action: 'collectEquipment',
+   *         args: { mercId: args.merc.id, sectorId: sector.id }
+   *       } : undefined
+   *     };
+   *   });
+   * ```
+   */
+  followUp?: FollowUpAction;
 }
 
 /**

@@ -364,6 +364,137 @@ Action.create('move')
   .skipIf((ctx) => /* condition */) // Skip if condition is true
 ```
 
+---
+
+## Action Chaining with `followUp`
+
+Action chaining allows one action to automatically trigger another action with pre-filled context. This is essential for multi-phase game interactions where:
+- The UI needs to show updated state between phases
+- Context (which piece, which location) should flow between phases
+- The user experience should feel seamless
+
+### Basic Usage
+
+Return a `followUp` object from your execute function:
+
+```typescript
+Action.create('explore')
+  .chooseElement('merc', {
+    prompt: 'Select MERC to explore',
+    elementClass: Merc,
+  })
+  .execute((args, ctx) => {
+    const merc = args.merc as Merc;
+    const sector = merc.getCurrentSector();
+
+    // Draw equipment to the sector's stash
+    for (let i = 0; i < sector.lootCount; i++) {
+      const equipment = ctx.game.drawEquipment();
+      if (equipment) equipment.putInto(sector.stashZone);
+    }
+    sector.explored = true;
+    merc.useAction(1);
+
+    ctx.game.message(`${merc.name} explored ${sector.name}`);
+
+    // Chain to collect action - UI will see the drawn equipment
+    return {
+      success: true,
+      followUp: {
+        action: 'collectEquipment',
+        args: {
+          mercId: merc.id,
+          sectorId: sector.id,
+        },
+      },
+    };
+  });
+
+// The follow-up action receives pre-filled args
+Action.create('collectEquipment')
+  .fromElements<Equipment>('equipment', {
+    prompt: 'Select equipment to take',
+    elements: (ctx) => {
+      // UI shows updated state - stash has the drawn equipment
+      const sector = ctx.game.getElementById(ctx.args.sectorId) as Sector;
+      return [...sector.stashZone.all(Equipment)];
+    },
+    optional: 'Done taking equipment',
+  })
+  .execute((args, ctx) => {
+    if (args.equipment) {
+      const merc = ctx.game.getElementById(ctx.args.mercId) as Merc;
+      (args.equipment as Equipment).putInto(merc.inventoryZone);
+      ctx.game.message(`Took ${(args.equipment as Equipment).name}`);
+    }
+    return { success: true };
+  });
+```
+
+### Conditional Chaining
+
+Only chain to follow-up when a condition is met:
+
+```typescript
+.execute((args, ctx) => {
+  const sector = performExploration(args, ctx);
+
+  return {
+    success: true,
+    // Only chain if there's equipment to collect
+    followUp: sector.stashZone.count() > 0
+      ? { action: 'collectEquipment', args: { sectorId: sector.id } }
+      : undefined,
+  };
+})
+```
+
+### How It Works
+
+1. **First action executes** - state changes (drawing equipment, marking explored)
+2. **State syncs to client** - UI receives updated gameView with new state
+3. **Follow-up auto-starts** - client automatically begins the follow-up action
+4. **Args pre-filled** - follow-up action starts with provided args already set
+5. **User continues** - from user's perspective, it's one seamless interaction
+
+### When to Use Action Chaining
+
+Use `followUp` when:
+- An action modifies state that the next action's choices depend on
+- You need the UI to reflect changes before the player makes their next selection
+- Context (which piece, which location, etc.) should flow to the next action
+- The follow-up is optional or conditional
+
+Don't use `followUp` when:
+- Selections don't depend on state changes from previous selections
+- A single action with multiple selections is sufficient
+- The follow-up is mandatory and unconditional (consider putting both in the same action)
+
+### Example: Attack with Damage Resolution
+
+```typescript
+Action.create('attack')
+  .chooseElement('attacker', { elementClass: Unit })
+  .chooseElement('target', { elementClass: Unit })
+  .execute((args, ctx) => {
+    const attacker = args.attacker as Unit;
+    const target = args.target as Unit;
+
+    const damage = calculateDamage(attacker, target);
+    target.takeDamage(damage);
+
+    // If target has a defensive ability, chain to resolution
+    return {
+      success: true,
+      followUp: target.hasDefensiveAbility()
+        ? { action: 'resolveDefense', args: { targetId: target.id, damage } }
+        : undefined,
+    };
+  });
+```
+
+---
+
 ### Example: Go Fish Ask Action
 
 From `packages/games/go-fish/rules/src/actions.ts`:

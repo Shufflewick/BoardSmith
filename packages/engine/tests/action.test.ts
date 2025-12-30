@@ -899,3 +899,128 @@ describe('Game Action Integration', () => {
     expect(executed).toBe(true);
   });
 });
+
+describe('Action Chaining with followUp', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(5, Card, 'card', (i) => ({
+      suit: 'H',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+  });
+
+  it('should return followUp from action result', () => {
+    const action = Action.create('explore')
+      .execute(() => ({
+        success: true,
+        followUp: {
+          action: 'collect',
+          args: { mercId: 42 },
+        },
+      }));
+
+    game.registerAction(action);
+
+    const result = game.performAction('explore', game.players[0], {});
+
+    expect(result.success).toBe(true);
+    expect(result.followUp).toBeDefined();
+    expect(result.followUp?.action).toBe('collect');
+    expect(result.followUp?.args).toEqual({ mercId: 42 });
+  });
+
+  it('should not include followUp when action returns undefined for it', () => {
+    const action = Action.create('simple')
+      .execute(() => ({
+        success: true,
+      }));
+
+    game.registerAction(action);
+
+    const result = game.performAction('simple', game.players[0], {});
+
+    expect(result.success).toBe(true);
+    expect(result.followUp).toBeUndefined();
+  });
+
+  it('should support conditional followUp based on game state', () => {
+    // Setup: Add a stash zone and some cards
+    const stash = game.create(Space, 'stash');
+
+    const explore = Action.create('explore')
+      .execute((args, ctx) => {
+        // Draw cards to stash
+        const deck = ctx.game.first(Deck)!;
+        const card = deck.first(Card);
+        if (card) {
+          card.putInto(stash);
+        }
+
+        // Only return followUp if stash has cards
+        return {
+          success: true,
+          followUp: stash.count(Card) > 0
+            ? { action: 'collect', args: { stashId: stash.id } }
+            : undefined,
+        };
+      });
+
+    game.registerAction(explore);
+
+    // Execute explore - should have followUp since we drew a card
+    const result = game.performAction('explore', game.players[0], {});
+
+    expect(result.success).toBe(true);
+    expect(result.followUp).toBeDefined();
+    expect(result.followUp?.action).toBe('collect');
+    expect(result.followUp?.args).toEqual({ stashId: stash.id });
+  });
+
+  it('should pass through followUp with no args', () => {
+    const action = Action.create('trigger')
+      .execute(() => ({
+        success: true,
+        followUp: {
+          action: 'nextAction',
+          // No args provided
+        },
+      }));
+
+    game.registerAction(action);
+
+    const result = game.performAction('trigger', game.players[0], {});
+
+    expect(result.success).toBe(true);
+    expect(result.followUp?.action).toBe('nextAction');
+    expect(result.followUp?.args).toBeUndefined();
+  });
+
+  it('should work with selections before followUp', () => {
+    const action = Action.create('selectAndChain')
+      .chooseElement('card', { elementClass: Card })
+      .execute((args) => {
+        const card = args.card as Card;
+        return {
+          success: true,
+          followUp: {
+            action: 'processCard',
+            args: { cardId: card.id, value: card.value },
+          },
+        };
+      });
+
+    game.registerAction(action);
+
+    const card = game.first(Card)!;
+    const result = game.performAction('selectAndChain', game.players[0], { card });
+
+    expect(result.success).toBe(true);
+    expect(result.followUp?.action).toBe('processCard');
+    expect(result.followUp?.args?.cardId).toBe(card.id);
+    expect(result.followUp?.args?.value).toBe(card.value);
+  });
+});

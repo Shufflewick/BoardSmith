@@ -601,6 +601,72 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
 ---
 
+## 13. Multi-Phase Actions (Action Chaining)
+
+Many complex game actions need to show updated state between phases. Use `followUp` to chain actions together seamlessly.
+
+### Pattern: Explore and Collect
+
+```typescript
+// First action: performs exploration and draws items
+Action.create('explore')
+  .chooseElement('unit', { elementClass: Unit })
+  .execute((args, ctx) => {
+    const unit = args.unit as Unit;
+    const location = unit.location;
+
+    // Draw items to location
+    for (let i = 0; i < location.lootCount; i++) {
+      const item = ctx.game.drawItem();
+      if (item) item.putInto(location.itemsZone);
+    }
+    location.explored = true;
+
+    // Chain to collect - UI will show drawn items
+    return {
+      success: true,
+      followUp: location.itemsZone.count() > 0
+        ? { action: 'collect', args: { unitId: unit.id, locationId: location.id } }
+        : undefined,
+    };
+  });
+
+// Second action: picks from drawn items
+Action.create('collect')
+  .fromElements<Item>('item', {
+    elements: (ctx) => {
+      const location = ctx.game.getElementById(ctx.args.locationId);
+      return [...location.itemsZone.all(Item)];
+    },
+    optional: 'Done',
+  })
+  .execute((args, ctx) => {
+    if (args.item) {
+      const unit = ctx.game.getElementById(ctx.args.unitId);
+      (args.item as Item).putInto(unit.inventoryZone);
+    }
+    return { success: true };
+  });
+```
+
+### Key Benefits
+
+1. **State visibility**: UI updates between explore and collect
+2. **Context preserved**: unitId and locationId flow automatically
+3. **Seamless UX**: feels like one action to the player
+4. **Conditional**: only chains if there are items to collect
+
+### When to Use
+
+- After combat: resolve abilities, loot defeated enemies
+- After exploration: collect discovered items
+- After card play: trigger effects that require choices
+- After movement: interact with new location
+
+See [Action Chaining](./actions-and-flow.md#action-chaining-with-followup) for complete documentation.
+
+---
+
 ## See Also
 
 - [Common Pitfalls](./common-pitfalls.md) - Mistakes to avoid

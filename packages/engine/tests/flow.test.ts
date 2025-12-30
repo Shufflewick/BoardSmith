@@ -1364,3 +1364,151 @@ describe('Turn Order Presets', () => {
     expect(visitedPlayers).toEqual([0, 2]);
   });
 });
+
+describe('Action Chaining with followUp in FlowState', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+  });
+
+  it('should include followUp in FlowState when action returns one', () => {
+    // Action that returns a followUp
+    const exploreAction = Action.create('explore')
+      .execute(() => ({
+        success: true,
+        followUp: {
+          action: 'collect',
+          args: { mercId: 42, sectorId: 'A1' },
+        },
+      }));
+
+    // The follow-up action
+    const collectAction = Action.create('collect')
+      .execute(() => ({
+        success: true,
+      }));
+
+    game.registerActions(exploreAction, collectAction);
+
+    const flow = defineFlow({
+      root: actionStep({
+        actions: ['explore', 'collect'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    expect(state.awaitingInput).toBe(true);
+
+    // Execute explore action
+    state = engine.resume('explore', {});
+
+    // FlowState should include followUp
+    expect(state.followUp).toBeDefined();
+    expect(state.followUp?.action).toBe('collect');
+    expect(state.followUp?.args).toEqual({ mercId: 42, sectorId: 'A1' });
+  });
+
+  it('should not include followUp in FlowState when action does not return one', () => {
+    const simpleAction = Action.create('simple')
+      .execute(() => ({
+        success: true,
+      }));
+
+    game.registerAction(simpleAction);
+
+    const flow = defineFlow({
+      root: actionStep({
+        actions: ['simple'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    state = engine.resume('simple', {});
+
+    expect(state.followUp).toBeUndefined();
+  });
+
+  it('should clear followUp when subsequent action does not return one', () => {
+    // First action returns followUp
+    const firstAction = Action.create('first')
+      .execute(() => ({
+        success: true,
+        followUp: {
+          action: 'second',
+          args: { data: 'test' },
+        },
+      }));
+
+    // Second action does not return followUp
+    const secondAction = Action.create('second')
+      .execute(() => ({
+        success: true,
+      }));
+
+    game.registerActions(firstAction, secondAction);
+
+    // Use playerActions to keep awaiting input after each action
+    const flow = defineFlow({
+      root: playerActions({
+        actions: ['first', 'second'],
+        // Allow 2 actions total
+        repeatUntil: ({ moveCount }) => moveCount >= 2,
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    // First action - should have followUp
+    state = engine.resume('first', {});
+    expect(state.followUp?.action).toBe('second');
+
+    // Second action - should NOT have followUp (cleared)
+    state = engine.resume('second', {});
+    expect(state.followUp).toBeUndefined();
+  });
+
+  it('should include followUp with element ID from selected element', () => {
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(3, Card, 'card', (i) => ({
+      suit: 'H',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+
+    const selectAndChainAction = Action.create('selectAndChain')
+      .chooseElement('card', { elementClass: Card })
+      .execute((args) => {
+        const card = args.card as Card;
+        return {
+          success: true,
+          followUp: {
+            action: 'processCard',
+            args: { cardId: card.id },
+          },
+        };
+      });
+
+    game.registerAction(selectAndChainAction);
+
+    const flow = defineFlow({
+      root: actionStep({
+        actions: ['selectAndChain'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    const card = deck.first(Card)!;
+    state = engine.resume('selectAndChain', { card });
+
+    expect(state.followUp?.action).toBe('processCard');
+    expect(state.followUp?.args?.cardId).toBe(card.id);
+  });
+});

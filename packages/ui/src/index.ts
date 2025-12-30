@@ -213,6 +213,7 @@ export {
   type SelectionMetadata,
   type ActionMetadata as ControllerActionMetadata,
   type ActionResult as ControllerActionResult,
+  type FollowUpAction,
   type ValidationResult,
   type SelectionStepResult,
   type SelectionChoicesResult,

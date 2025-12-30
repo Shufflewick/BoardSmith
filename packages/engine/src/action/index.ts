@@ -11,6 +11,7 @@ export type {
   ActionContext,
   ActionDefinition,
   ActionResult,
+  FollowUpAction,
   SerializedAction,
   ValidationResult,
   BoardElementRef,

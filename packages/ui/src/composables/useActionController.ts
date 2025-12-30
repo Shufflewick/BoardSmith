@@ -175,11 +175,21 @@ export interface ActionMetadata {
   selections: SelectionMetadata[];
 }
 
+/** Follow-up action to chain after an action completes */
+export interface FollowUpAction {
+  /** Name of the action to chain to */
+  action: string;
+  /** Args to pre-fill in the follow-up action */
+  args?: Record<string, unknown>;
+}
+
 export interface ActionResult {
   success: boolean;
   error?: string;
   data?: Record<string, unknown>;
   message?: string;
+  /** Follow-up action to automatically start after this action completes */
+  followUp?: FollowUpAction;
 }
 
 export interface ValidationResult {
@@ -799,6 +809,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Clear state on success or failure
       currentAction.value = null;
       clearArgs();
+      clearAdvancedState();
+
+      // Handle followUp: automatically start the next action if specified
+      if (result.success && result.followUp) {
+        const { action: followUpAction, args: followUpArgs } = result.followUp;
+        // Use setTimeout to ensure state updates are flushed before starting next action
+        setTimeout(async () => {
+          await start(followUpAction, followUpArgs ?? {});
+        }, 0);
+      }
 
       return result;
     } catch (err) {
@@ -885,6 +905,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (!result.success) {
         lastError.value = result.error || 'Action failed';
       }
+
+      // Handle followUp: automatically start the next action if specified
+      if (result.success && result.followUp) {
+        const { action: followUpAction, args: followUpArgs } = result.followUp;
+        // Use setTimeout to ensure state updates are flushed before starting next action
+        setTimeout(async () => {
+          await start(followUpAction, followUpArgs ?? {});
+        }, 0);
+      }
+
       return result;
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';

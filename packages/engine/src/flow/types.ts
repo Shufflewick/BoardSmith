@@ -1,6 +1,6 @@
 import type { Game } from '../element/game.js';
 import type { Player } from '../player/player.js';
-import type { ActionDefinition, ActionResult } from '../action/types.js';
+import type { ActionDefinition, ActionResult, FollowUpAction } from '../action/types.js';
 
 /**
  * Flow node types
@@ -246,6 +246,12 @@ export interface FlowState {
   movesRequired?: number;
   /** Error from last action if it failed (cleared on success) */
   actionError?: string;
+  /**
+   * Follow-up action to chain after the last action completed.
+   * When present, the client should automatically start this action
+   * with the provided args pre-filled.
+   */
+  followUp?: FollowUpAction;
 }
 
 /**
