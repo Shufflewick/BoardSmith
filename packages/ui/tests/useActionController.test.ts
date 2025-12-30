@@ -1230,10 +1230,14 @@ describe('useActionController', () => {
       await controller.start('repeatAction');
       await controller.fill('items', 1);
 
-      expect(controller.repeatingState.value?.accumulated).toEqual([1]);
+      // accumulated now stores {value, display} objects
+      expect(controller.repeatingState.value?.accumulated).toEqual([{ value: 1, display: 'One' }]);
 
       await controller.fill('items', 2);
-      expect(controller.repeatingState.value?.accumulated).toEqual([1, 2]);
+      expect(controller.repeatingState.value?.accumulated).toEqual([
+        { value: 1, display: 'One' },
+        { value: 2, display: 'Two' },
+      ]);
     });
 
     it('should clear action when actionComplete is true', async () => {

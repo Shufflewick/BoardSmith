@@ -205,6 +205,54 @@ export interface SelectionChoicesResult {
   error?: string;
 }
 
+// ============================================
+// Action State Snapshot Types (Pit of Success)
+// ============================================
+
+/**
+ * Snapshot of a selection's available choices.
+ * Frozen when fetched, not affected by server broadcasts.
+ */
+export interface SelectionSnapshot {
+  /** Choices for choice selections */
+  choices?: Array<{ value: unknown; display: string; sourceRef?: ElementRef; targetRef?: ElementRef }>;
+  /** Valid elements for element selections */
+  validElements?: ValidElement[];
+  /** MultiSelect config (evaluated when fetched) */
+  multiSelect?: { min: number; max?: number };
+}
+
+/**
+ * A collected selection value with its display text.
+ * Display is stored at selection time - single source of truth.
+ */
+export interface CollectedSelection {
+  /** The selected value(s) */
+  value: unknown;
+  /** Display text captured at selection time */
+  display: string;
+  /** Whether this was explicitly skipped */
+  skipped: boolean;
+}
+
+/**
+ * Complete snapshot of an in-progress action.
+ * Created when start() is called, not affected by server broadcasts.
+ * This is the "pit of success" - client owns action state once started.
+ */
+export interface ActionStateSnapshot {
+  /** Action name */
+  actionName: string;
+  /** Full action metadata - frozen at start time */
+  metadata: ActionMetadata;
+  /** Selection snapshots indexed by selection name */
+  selectionSnapshots: Map<string, SelectionSnapshot>;
+  /** Collected selections with value+display stored together */
+  collectedSelections: Map<string, CollectedSelection>;
+  /** For repeating selections: current state (reuses existing RepeatingState) */
+  repeatingState: RepeatingState | null;
+}
+
 export interface UseActionControllerOptions {
   /** Function to send action to server */
   sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ActionResult>;
@@ -255,7 +303,8 @@ export interface UseActionControllerOptions {
 /** State for repeating selections */
 export interface RepeatingState {
   selectionName: string;
-  accumulated: unknown[];
+  /** Accumulated values with their displays (for UI) */
+  accumulated: Array<{ value: unknown; display: string }>;
   awaitingServer: boolean;
   currentChoices?: Array<{ value: unknown; display: string }>;
 }
@@ -313,6 +362,12 @@ export interface UseActionControllerReturn {
   clearArgs: () => void;
   /** Fetch choices for a selection from server (called automatically by start/fill) */
   fetchChoicesForSelection: (selectionName: string) => Promise<void>;
+
+  // === Snapshot API (Pit of Success) ===
+  /** Get a collected selection by name (value + display) */
+  getCollectedSelection: (name: string) => CollectedSelection | undefined;
+  /** Get all collected selections with their names */
+  getCollectedSelections: () => Array<CollectedSelection & { name: string }>;
 }
 
 /**
@@ -344,14 +399,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // === State ===
   const currentAction = ref<string | null>(null);
-  // Use external args if provided (for bidirectional sync with custom UIs),
-  // otherwise create our own reactive object
+
+  // Args storage - uses externalArgs if provided (for custom UI sync), otherwise internal ref
+  // Note: fill() updates both currentArgs AND collectedSelections (for display tracking)
+  // Direct modifications to currentArgs work but lose display info - use fill() for proper display
   const internalArgs = ref<Record<string, unknown>>({});
   const currentArgs = computed({
     get: () => externalArgs ?? internalArgs.value,
     set: (val) => {
       if (externalArgs) {
-        // Clear and copy to external object
         for (const key of Object.keys(externalArgs)) {
           delete externalArgs[key];
         }
@@ -364,18 +420,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const isExecuting = ref(false);
   const lastError = ref<string | null>(null);
 
-  // Selection choices state (always-fetch approach)
+  // Selection choices loading state
   const isLoadingChoices = ref(false);
-  // Cache stores both choices (for choice selections) and validElements (for element selections)
-  // Key format: "actionName:selectionName:JSON(relevantArgs)"
-  const selectionChoicesCache = ref<Record<string, {
-    choices?: Array<{ value: unknown; display: string }>;
-    validElements?: ValidElement[];
-    multiSelect?: { min: number; max?: number };
-  }>>({});
 
-  // Phase 3: Repeating selections state
+  // Repeating selections state
   const repeatingState = ref<RepeatingState | null>(null);
+
+  // Pit of Success: Client-owned action state snapshot
+  // When start() is called, we clone the metadata so we don't depend on server broadcasts
+  // selectionSnapshots stores fetched choices - single source of truth
+  const actionSnapshot = ref<ActionStateSnapshot | null>(null);
 
   // === Helpers ===
 
@@ -389,8 +443,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /** Clear all selection state */
   function clearAdvancedState(): void {
-    selectionChoicesCache.value = {};
     repeatingState.value = null;
+    actionSnapshot.value = null;
   }
 
   function getActionMetadata(actionName: string): ActionMetadata | undefined {
@@ -398,25 +452,34 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Build cache key for a selection (includes dependent args if applicable).
+   * Find the display value for a selection value from snapshot.
+   * Used to store display alongside value in collectedSelections.
    */
-  function buildCacheKey(actionName: string, selection: SelectionMetadata): string {
-    // Include dependent selection value in the key
-    const relevantArgs: Record<string, unknown> = {};
-    if (selection.dependsOn) {
-      relevantArgs[selection.dependsOn] = currentArgs.value[selection.dependsOn];
+  function findDisplayForValue(selectionName: string, value: unknown): string {
+    // Get from snapshot - single source of truth
+    const snapshot = actionSnapshot.value?.selectionSnapshots.get(selectionName);
+
+    if (snapshot?.choices) {
+      const match = snapshot.choices.find(c =>
+        c.value === value || JSON.stringify(c.value) === JSON.stringify(value)
+      );
+      if (match) return match.display;
     }
-    if (selection.filterBy) {
-      relevantArgs[selection.filterBy.selectionName] = currentArgs.value[selection.filterBy.selectionName];
+
+    if (snapshot?.validElements) {
+      const match = snapshot.validElements.find(e =>
+        e.id === value || e.id === Number(value)
+      );
+      if (match && match.display) return match.display;
     }
-    const argsKey = Object.keys(relevantArgs).length > 0 ? JSON.stringify(relevantArgs) : '';
-    return `${actionName}:${selection.name}:${argsKey}`;
+
+    // Fallback
+    return String(value);
   }
 
   /**
    * Get available choices for a selection.
-   * Always uses cache populated by fetchChoicesForSelection.
-   * Falls back to metadata for backward compatibility (number/text selections, or if cache empty).
+   * Priority: selectionSnapshots > static metadata (for execute() and tests)
    */
   function getChoices(selection: SelectionMetadata): Array<{ value: unknown; display: string }> {
     let choices: Array<{ value: unknown; display: string }> = [];
@@ -425,69 +488,55 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (selection.repeat && repeatingState.value?.selectionName === selection.name) {
       if (repeatingState.value.currentChoices) {
         choices = repeatingState.value.currentChoices;
-      } else if (selection.choices) {
-        // Fallback to metadata choices (backward compatibility)
-        choices = selection.choices;
       }
     }
-    // Always check cache first (populated by fetchChoicesForSelection)
-    else if (currentAction.value) {
-      const key = buildCacheKey(currentAction.value, selection);
-      const cached = selectionChoicesCache.value[key];
+    // Primary: Use selectionSnapshots (populated by fetchChoicesForSelection)
+    else if (actionSnapshot.value) {
+      const snapshot = actionSnapshot.value.selectionSnapshots.get(selection.name);
 
-      if (cached) {
-        // Use cached choices or validElements
-        if (cached.choices) {
-          choices = cached.choices;
-        } else if (cached.validElements) {
-          choices = cached.validElements.map(el => ({
-            value: el.id,
-            display: el.display || `Element ${el.id}`,
-          }));
-        }
-      } else {
-        // Fallback to metadata for backward compatibility (if no fetch available)
-        // Handle dependsOn: look up choices from choicesByDependentValue or elementsByDependentValue
-        if (selection.dependsOn) {
-          const dependentValue = currentArgs.value[selection.dependsOn];
-          if (dependentValue !== undefined) {
-            const depKey = String(dependentValue);
-            // For choice selections with dependsOn
-            if (selection.choicesByDependentValue) {
-              choices = selection.choicesByDependentValue[depKey] || [];
-            }
-            // For element selections with dependsOn
-            else if (selection.elementsByDependentValue) {
-              const elements = selection.elementsByDependentValue[depKey] || [];
-              choices = elements.map(el => ({
-                value: el.id,
-                display: el.display || `Element ${el.id}`,
-              }));
-            }
-          }
-        }
-        // Regular static choices from metadata
-        else if (selection.choices) {
-          choices = selection.choices;
-        }
-        // Element selections from metadata
-        else if (selection.validElements) {
-          choices = selection.validElements.map(el => ({
+      if (snapshot) {
+        if (snapshot.choices) {
+          choices = snapshot.choices;
+        } else if (snapshot.validElements) {
+          choices = snapshot.validElements.map(el => ({
             value: el.id,
             display: el.display || `Element ${el.id}`,
           }));
         }
       }
     }
-    // Fallback if no action is active (shouldn't happen normally)
-    else if (selection.choices) {
-      choices = selection.choices;
-    }
-    else if (selection.validElements) {
-      choices = selection.validElements.map(el => ({
-        value: el.id,
-        display: el.display || `Element ${el.id}`,
-      }));
+
+    // Fallback: Use static metadata choices (for execute() and tests without fetch)
+    if (choices.length === 0) {
+      // Handle dependsOn with choicesByDependentValue
+      if (selection.dependsOn && selection.choicesByDependentValue) {
+        const dependentValue = currentArgs.value[selection.dependsOn];
+        if (dependentValue !== undefined) {
+          const depKey = String(dependentValue);
+          choices = selection.choicesByDependentValue[depKey] || [];
+        }
+      }
+      // Handle dependsOn with elementsByDependentValue
+      else if (selection.dependsOn && selection.elementsByDependentValue) {
+        const dependentValue = currentArgs.value[selection.dependsOn];
+        if (dependentValue !== undefined) {
+          const depKey = String(dependentValue);
+          const elements = selection.elementsByDependentValue[depKey] || [];
+          choices = elements.map(el => ({
+            value: el.id,
+            display: el.display || `Element ${el.id}`,
+          }));
+        }
+      }
+      // Regular static choices
+      else if (selection.choices) {
+        choices = selection.choices;
+      } else if (selection.validElements) {
+        choices = selection.validElements.map(el => ({
+          value: el.id,
+          display: el.display || `Element ${el.id}`,
+        }));
+      }
     }
 
     // Apply filterBy if specified
@@ -511,14 +560,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return getChoices(sel);
   }
 
-  /** Get valid elements for an element/elements selection from cache */
+  /** Get valid elements for an element/elements selection from snapshot */
   function getValidElements(selection: SelectionMetadata): ValidElement[] {
-    if (!currentAction.value) return [];
+    if (!actionSnapshot.value) return [];
     if (selection.type !== 'element' && selection.type !== 'elements') return [];
 
-    const key = buildCacheKey(currentAction.value, selection);
-    const cached = selectionChoicesCache.value[key];
-    return cached?.validElements || [];
+    const snapshot = actionSnapshot.value.selectionSnapshots.get(selection.name);
+    return snapshot?.validElements || [];
   }
 
   function selectionNeedsInput(selection: SelectionMetadata): boolean {
@@ -574,7 +622,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const player = playerPosition?.value ?? 0;
-    const key = buildCacheKey(currentAction.value, selection);
 
     isLoadingChoices.value = true;
     try {
@@ -585,23 +632,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         { ...currentArgs.value }
       );
 
-      if (result.success) {
-        // Explicitly replace the whole cache object to ensure Vue reactivity triggers
-        selectionChoicesCache.value = {
-          ...selectionChoicesCache.value,
-          [key]: {
-            choices: result.choices,
-            validElements: result.validElements,
-            multiSelect: result.multiSelect,
-          },
-        };
-      } else {
+      if (result.success && actionSnapshot.value) {
+        // Store in snapshot - this is the single source of truth
+        actionSnapshot.value.selectionSnapshots.set(selectionName, {
+          choices: result.choices as SelectionSnapshot['choices'],
+          validElements: result.validElements,
+          multiSelect: result.multiSelect,
+        });
+      } else if (!result.success) {
         console.error('Failed to fetch selection choices:', result.error);
-        selectionChoicesCache.value = { ...selectionChoicesCache.value, [key]: {} };
       }
     } catch (err) {
       console.error('Error fetching selection choices:', err);
-      selectionChoicesCache.value = { ...selectionChoicesCache.value, [key]: {} };
     } finally {
       isLoadingChoices.value = false;
     }
@@ -611,6 +653,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   const currentActionMeta = computed((): ActionMetadata | undefined => {
     if (!currentAction.value) return undefined;
+
+    // PIT OF SUCCESS: Use snapshot metadata when available
+    // This ensures we don't lose metadata when server broadcasts update
+    // (e.g., when onEach modifies game state and action disappears from availableActions)
+    if (actionSnapshot.value?.actionName === currentAction.value) {
+      return actionSnapshot.value.metadata;
+    }
+
+    // Fallback to live metadata (e.g., for execute() which doesn't use snapshot)
     return getActionMetadata(currentAction.value);
   });
 
@@ -850,15 +901,40 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
+    // Get metadata (only needed at start time)
+    const meta = getActionMetadata(actionName);
+    if (!meta) {
+      lastError.value = `No metadata for action "${actionName}"`;
+      return;
+    }
+
     currentAction.value = actionName;
     clearArgs();
     clearAdvancedState();
     Object.assign(currentArgs.value, initialArgs);
     lastError.value = null;
 
+    // PIT OF SUCCESS: Create snapshot - FREEZE the metadata
+    // Client now owns this metadata and doesn't depend on server broadcasts
+    actionSnapshot.value = {
+      actionName,
+      metadata: JSON.parse(JSON.stringify(meta)), // Deep clone
+      selectionSnapshots: new Map(),
+      collectedSelections: new Map(),
+      repeatingState: null,
+    };
+
+    // Store display values for any initialArgs
+    for (const [name, value] of Object.entries(initialArgs)) {
+      actionSnapshot.value.collectedSelections.set(name, {
+        value,
+        display: String(value), // Best effort for initial args
+        skipped: false,
+      });
+    }
+
     // Always fetch choices for the first selection (unless it's number/text)
-    const meta = getActionMetadata(actionName);
-    if (meta && meta.selections.length > 0) {
+    if (meta.selections.length > 0) {
       const firstSel = meta.selections[0];
       // Fetch choices for choice/element/elements selections
       if (firstSel.type === 'choice' || firstSel.type === 'element' || firstSel.type === 'elements') {
@@ -887,6 +963,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (validation.valid) {
       currentArgs.value[selectionName] = value;
 
+      // PIT OF SUCCESS: Store value+display together in snapshot
+      // Single source of truth for display values
+      if (actionSnapshot.value) {
+        const display = findDisplayForValue(selectionName, value);
+        actionSnapshot.value.collectedSelections.set(selectionName, {
+          value,
+          display,
+          skipped: false,
+        });
+      }
+
       // Always fetch choices for the next selection (unless it's number/text)
       const nextSel = getNextSelection(selectionName);
       if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
@@ -897,7 +984,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (getAutoFill() && !isExecuting.value) {
           const choices = getChoices(nextSel);
           if (choices.length === 1) {
-            currentArgs.value[nextSel.name] = choices[0].value;
+            const autoValue = choices[0].value;
+            currentArgs.value[nextSel.name] = autoValue;
+
+            // Also store auto-filled value in snapshot
+            if (actionSnapshot.value) {
+              actionSnapshot.value.collectedSelections.set(nextSel.name, {
+                value: autoValue,
+                display: choices[0].display,
+                skipped: false,
+              });
+            }
           }
         }
       }
@@ -926,8 +1023,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       };
     }
 
-    // Add to accumulated
-    repeatingState.value.accumulated.push(value);
+    // Find display value from current choices
+    const choices = repeatingState.value.currentChoices || selection.choices || [];
+    const matchedChoice = choices.find(c => c.value === value || JSON.stringify(c.value) === JSON.stringify(value));
+    const display = matchedChoice?.display || String(value);
+
+    // Add to accumulated with display
+    repeatingState.value.accumulated.push({ value, display });
     repeatingState.value.awaitingServer = true;
 
     try {
@@ -958,8 +1060,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Check if this repeating selection is done but action continues
       if (result.done) {
-        // Move accumulated to args and clear repeating state
-        currentArgs.value[selection.name] = repeatingState.value.accumulated;
+        // Move accumulated values to args (server expects raw values, not {value, display} objects)
+        currentArgs.value[selection.name] = repeatingState.value.accumulated.map(a => a.value);
         repeatingState.value = null;
         return { valid: true };
       }
@@ -1011,11 +1113,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (selection?.optional) {
       currentArgs.value[selectionName] = null; // Explicitly skipped
+
+      // Store skipped state in snapshot
+      if (actionSnapshot.value) {
+        actionSnapshot.value.collectedSelections.set(selectionName, {
+          value: null,
+          display: '',
+          skipped: true,
+        });
+      }
     }
   }
 
   function clear(selectionName: string): void {
     delete currentArgs.value[selectionName];
+
+    // Remove from snapshot
+    if (actionSnapshot.value) {
+      actionSnapshot.value.collectedSelections.delete(selectionName);
+    }
   }
 
   function cancel(): void {
@@ -1023,6 +1139,49 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     clearArgs();
     clearAdvancedState();
     lastError.value = null;
+  }
+
+  // === Public API for Snapshot Access ===
+
+  /**
+   * Get a collected selection by name (value + display).
+   * Returns undefined if selection hasn't been filled yet.
+   *
+   * @example
+   * ```typescript
+   * // Get the display for a filled selection
+   * const merc = actionController.getCollectedSelection('merc');
+   * if (merc) {
+   *   console.log(`Selected: ${merc.display}`); // "Selected: John Smith"
+   * }
+   * ```
+   */
+  function getCollectedSelection(name: string): CollectedSelection | undefined {
+    return actionSnapshot.value?.collectedSelections.get(name);
+  }
+
+  /**
+   * Get all collected selections with their names.
+   * Useful for displaying what's been selected so far.
+   *
+   * @example
+   * ```typescript
+   * // Build a summary of selections
+   * const selections = actionController.getCollectedSelections();
+   * const summary = selections
+   *   .filter(s => !s.skipped)
+   *   .map(s => `${s.name}: ${s.display}`)
+   *   .join(', ');
+   * ```
+   */
+  function getCollectedSelections(): Array<CollectedSelection & { name: string }> {
+    if (!actionSnapshot.value) return [];
+
+    const result: Array<CollectedSelection & { name: string }> = [];
+    for (const [name, collected] of actionSnapshot.value.collectedSelections) {
+      result.push({ name, ...collected });
+    }
+    return result;
   }
 
   return {
@@ -1051,6 +1210,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     getActionMetadata,
     clearArgs,
     fetchChoicesForSelection,
+
+    // Snapshot API (Pit of Success)
+    getCollectedSelection,
+    getCollectedSelections,
   };
 }
 

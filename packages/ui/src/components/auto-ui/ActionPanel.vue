@@ -45,9 +45,8 @@ function clearReactiveObject(obj: Record<string, unknown>): void {
 /**
  * Clear action-related state (args and display cache)
  */
-function clearActionState(args: Record<string, unknown>, cache: Record<string, unknown>): void {
+function clearActionState(args: Record<string, unknown>): void {
   clearReactiveObject(args);
-  clearReactiveObject(cache);
 }
 
 // Re-export types for backwards compatibility
@@ -99,8 +98,6 @@ const repeatingState = computed(() => {
   };
 });
 
-// Cache for selection display values (preserves display even after game state changes)
-const displayCache = reactive<Record<string, string>>({});
 
 // Multi-select state: tracks selected values for current multiSelect selection
 const multiSelectState = ref<{
@@ -394,52 +391,35 @@ function handleElementLeave() {
 }
 
 // Get display text for a selection value
+// PIT OF SUCCESS: Uses controller's snapshot as single source of truth
 function getSelectionDisplay(selectionName: string, value: unknown): string {
-  // First check cache (preserves display even after game state changes filter out the element)
-  const cacheKey = `${selectionName}:${JSON.stringify(value)}`;
-  if (displayCache[cacheKey]) {
-    return displayCache[cacheKey];
-  }
-
-  if (!currentActionMeta.value) return getDisplayLabel(value);
-
-  // Find the selection definition
-  const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
-  if (!selection) return getDisplayLabel(value);
-
-  // For element/elements selections, look up display in validElements
-  if ((selection.type === 'element' || selection.type === 'elements') && selection.validElements) {
-    // Handle array of IDs for multiSelect elements
-    if (Array.isArray(value)) {
-      const displays = value.map(id => {
-        const elem = selection.validElements!.find(e => e.id === id);
-        return elem?.display || String(id);
-      });
-      return displays.join(', ');
+  // Check controller's snapshot (single source of truth)
+  const collected = actionController.getCollectedSelection(selectionName);
+  if (collected && !collected.skipped) {
+    // Check if this is the same value (handles array values too)
+    const sameValue = JSON.stringify(collected.value) === JSON.stringify(value);
+    if (sameValue && collected.display) {
+      return collected.display;
     }
-    const elem = selection.validElements.find(e => e.id === value);
-    return elem?.display || getDisplayLabel(value);
   }
 
-  // For choice selections, look up display in choices
-  if (selection.type === 'choice' && selection.choices) {
-    const choice = selection.choices.find(c => c.value === value);
-    return choice?.display || getDisplayLabel(value);
-  }
-
+  // Fallback for edge cases (shouldn't normally be needed)
   return getDisplayLabel(value);
 }
 
-// Cache a display value for a selection
-function cacheSelectionDisplay(selectionName: string, value: unknown, display: string) {
-  const cacheKey = `${selectionName}:${JSON.stringify(value)}`;
-  displayCache[cacheKey] = display;
-}
-
 /**
- * Get display text for an accumulated value in a repeating selection
+ * Get display text for an accumulated value in a repeating selection.
+ * PIT OF SUCCESS: Now that accumulated stores {value, display} objects,
+ * we can directly use the stored display.
  */
-function getAccumulatedDisplay(value: unknown): string {
+function getAccumulatedDisplay(accumulated: unknown): string {
+  // New format: accumulated items are {value, display} objects
+  if (accumulated && typeof accumulated === 'object' && 'display' in accumulated) {
+    return (accumulated as { display: string }).display;
+  }
+
+  // Legacy fallback: accumulated item is just a value
+  const value = accumulated;
   if (!currentSelection.value) return getDisplayLabel(value);
 
   // For choice selections, look up display in choices
@@ -538,7 +518,7 @@ watch(() => props.availableActions, (actions, oldActions) => {
 
   if (shouldClear) {
     actionController.cancel();
-    clearActionState(currentArgs, displayCache);
+    clearActionState(currentArgs);
     multiSelectState.value = null;
     boardInteraction?.clear();
   }
@@ -688,7 +668,7 @@ watch(() => boardInteraction?.currentAction, (boardAction) => {
     // Reset ActionPanel's internal state to match
     actionController.cancel();
     multiSelectState.value = null;
-    clearActionState(currentArgs, displayCache);
+    clearActionState(currentArgs);
     emit('cancelSelection');
   }
 });
@@ -748,7 +728,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
   if (elementAction) {
     currentAction.value = elementAction.name;
-    clearActionState(currentArgs, displayCache);
+    clearActionState(currentArgs);
 
     // Find and set the element in args
     const firstSel = elementAction.selections[0];
@@ -760,10 +740,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
     if (validElem) {
       currentArgs[firstSel.name] = validElem.id;
-      // Cache display for later lookup
-      if (validElem.display) {
-        cacheSelectionDisplay(firstSel.name, validElem.id, validElem.display);
-      }
+      // Note: Display is stored via controller's fill() - direct arg setting loses display info
     }
   }
 });
@@ -865,12 +842,9 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
   // Set up the action state
   currentAction.value = dragAction.name;
-  clearActionState(currentArgs, displayCache);
+  clearActionState(currentArgs);
   currentArgs[firstSel.name] = validPiece.id;
-  // Cache display for later lookup
-  if (validPiece.display) {
-    cacheSelectionDisplay(firstSel.name, validPiece.id, validPiece.display);
-  }
+  // Note: Display is stored via controller's fill() - direct arg setting loses display info
 
   // Get filtered choices for this piece (destinations)
   const allChoices = secondSel.choices || [];
@@ -909,11 +883,7 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 watch(() => props.selectedElementId, (newId) => {
   if (newId !== undefined && (currentSelection.value?.type === 'element' || currentSelection.value?.type === 'elements')) {
     currentArgs[currentSelection.value.name] = newId;
-    // Cache display from validElements
-    const validElem = currentSelection.value.validElements?.find((e: ValidElement) => e.id === newId);
-    if (validElem?.display) {
-      cacheSelectionDisplay(currentSelection.value.name, newId, validElem.display);
-    }
+    // Note: Display is stored via controller's fill() - direct arg setting loses display info
   }
 });
 
@@ -1006,10 +976,7 @@ function toggleMultiSelectValue(selectionName: string, value: unknown, display?:
     const max = multiSelect.max;
     if (max === undefined || state.selectedValues.length < max) {
       state.selectedValues.push(value);
-      // Cache display
-      if (display) {
-        cacheSelectionDisplay(selectionName, value, display);
-      }
+      // Note: Display stored via controller's fill() when multi-select is confirmed
 
       // Auto-confirm when min === max and we've reached exact count (no Done button needed)
       if (multiSelect.min === multiSelect.max && state.selectedValues.length === multiSelect.min) {
@@ -1164,8 +1131,6 @@ async function startAction(actionName: string) {
   // Delegate to controller for core start logic
   // Controller handles: clearing args, fetching choices for first selection
   await actionController.start(actionName);
-  // Also clear ActionPanel-specific cache (controller doesn't know about this)
-  clearReactiveObject(displayCache as unknown as Record<string, unknown>);
 
   // ActionPanel-specific state cleanup (controller doesn't know about these)
   multiSelectState.value = null;
@@ -1185,7 +1150,7 @@ function cancelAction() {
 
   // Clear ActionPanel-specific state
   multiSelectState.value = null;
-  clearActionState(currentArgs, displayCache);
+  clearActionState(currentArgs);
   boardInteraction?.clear();
   emit('cancelSelection');
 }
@@ -1208,12 +1173,8 @@ function cancelAction() {
 async function setSelectionValue(name: string, value: unknown, display?: string) {
   const selection = currentSelection.value;
 
-  // Cache display for later lookup (important for element selections that may be filtered out later)
-  if (display) {
-    cacheSelectionDisplay(name, value, display);
-  }
-
   // Delegate to controller for core fill logic
+  // Controller stores display in collectedSelections automatically
   // Controller handles: validation, repeating selections, auto-execute
   const result = await actionController.fill(name, value);
   if (!result.valid) {
@@ -1277,7 +1238,7 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   } catch (err) {
     console.error('Execute action error:', err);
   } finally {
-    clearActionState(currentArgs, displayCache);
+    clearActionState(currentArgs);
     boardInteraction?.clear();
     emit('cancelSelection');
   }
