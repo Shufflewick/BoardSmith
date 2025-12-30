@@ -89,6 +89,27 @@ Action.create('hireFirstMerc')
 
 > **Note:** Use `game.settings` for temporary state storage since it survives hot-reload. Always clean up in `execute()`.
 
+> **Important: UI Sync Limitation**
+>
+> State changes made in `choices()` or `elements()` callbacks happen **server-side only**. The client's `gameView` is NOT updated until the entire action completes (after `execute()` runs).
+>
+> This means:
+> - The UI won't show the drawn cards, updated counts, or state changes immediately
+> - Custom game boards must read from `game.settings` to see mid-action state
+> - If your UI needs to reflect state changes before selection, consider splitting into two actions in your flow
+>
+> **Example: Two-Action Pattern for UI Updates**
+> ```typescript
+> // flow.ts - Split exploration into two actions
+> phase('explore', {
+>   do: sequence(
+>     actionStep({ actions: ['explore'] }),       // Draws equipment, updates state
+>     actionStep({ actions: ['collectLoot'] }),   // UI now shows updated state
+>   ),
+> })
+> ```
+> This pattern ensures the UI sees the exploration results before the player picks equipment.
+
 #### `chooseElement<T>` - Choose a game element
 
 ```typescript

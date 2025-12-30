@@ -360,6 +360,108 @@ See [On-Demand Choices](./actions-and-flow.md#on-demand-choices) in the Actions 
 
 ---
 
+## 9. Element Storage: Arrays vs Children (CRITICAL)
+
+### The Problem
+
+Storing game elements in property arrays instead of as element children causes serialization issues. The client receives element references instead of full element data:
+
+```typescript
+// WRONG - Elements in array don't serialize properly
+class Sector extends Space {
+  stash: Equipment[] = [];  // BAD!
+
+  addToStash(equipment: Equipment): void {
+    this.stash.push(equipment);  // Just adds a reference
+  }
+}
+
+// When serialized, the client receives:
+// stash: [{ __elementRef: "0/2/1" }, { __elementRef: "0/2/2" }]
+// NOT the full equipment data!
+```
+
+This causes:
+- Broken images in the UI
+- Missing attributes (names, stats, descriptions)
+- Elements that "disappear" from their original location but don't appear in the stash
+- Confusing debugging because server state looks correct
+
+### The Solution
+
+Store elements as **children** in the element tree, not as property arrays:
+
+```typescript
+// CORRECT - Elements as children serialize fully
+class Sector extends Space {
+  // Create a child Space to hold stash items
+  stashZone!: Space;
+
+  setupStash(): void {
+    this.stashZone = this.create(Space, 'stash');
+    this.stashZone.contentsHidden();  // Optional: hide from other players
+  }
+
+  addToStash(equipment: Equipment): void {
+    equipment.putInto(this.stashZone);  // Moves element in tree
+  }
+
+  getStash(): Equipment[] {
+    return [...this.stashZone.all(Equipment)];
+  }
+
+  get stashCount(): number {
+    return this.stashZone.count(Equipment);
+  }
+}
+```
+
+Now equipment serializes with all attributes because it's part of the element tree.
+
+### When to Use Each Pattern
+
+| Pattern | Use For | Example |
+|---------|---------|---------|
+| **Element children** | Game pieces that need UI display | Cards in hand, pieces on board, equipment in stash |
+| **Property arrays** | Simple data, not game elements | List of action names, score history, string IDs |
+| **ID arrays** | References you'll look up later | `selectedCardIds: number[]` then use `getElementById()` |
+
+### Migration Example
+
+If you have existing code with array storage:
+
+```typescript
+// Before (broken)
+class Player extends BasePlayer {
+  inventory: Equipment[] = [];
+
+  addItem(item: Equipment): void {
+    this.inventory.push(item);
+  }
+}
+
+// After (correct)
+class Player extends BasePlayer {
+  inventoryZone!: Space;
+
+  setupInventory(game: Game): void {
+    this.inventoryZone = game.create(Space, `inventory-${this.position}`);
+    this.inventoryZone.player = this;
+    this.inventoryZone.contentsVisibleToOwner();
+  }
+
+  addItem(item: Equipment): void {
+    item.putInto(this.inventoryZone);
+  }
+
+  get inventory(): Equipment[] {
+    return [...this.inventoryZone.all(Equipment)];
+  }
+}
+```
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -373,6 +475,7 @@ See [On-Demand Choices](./actions-and-flow.md#on-demand-choices) in the Actions 
 | Loop safety | No `maxIterations` | Always set `maxIterations` |
 | Class registration | Forget to register | `registerElements([...])` |
 | Side effects in choices | N/A (no longer an issue) | Choices always evaluated on-demand |
+| **Element storage** | `stash: Equipment[] = []` | `stashZone.all(Equipment)` |
 
 ---
 
