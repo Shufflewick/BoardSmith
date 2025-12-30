@@ -7,108 +7,6 @@ import type { GameRunner } from '@boardsmith/runtime';
 import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
 
 /**
- * Build validElements list with auto-disambiguation.
- * Used for both 'element' and 'elements' selection types.
- */
-function buildValidElementsList(
-  elements: any[],
-  elemSel: any,
-  ctx: { game: Game; player: Player; args: Record<string, unknown> }
-): Array<{ id: number; display: string; ref?: any }> {
-  // Auto-disambiguate display names
-  const nameCounts = new Map<string, number>();
-  for (const el of elements) {
-    const name = el.name || 'Element';
-    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-  }
-  const nameIndices = new Map<string, number>();
-
-  return elements.map((element: any) => {
-    const validElem: any = { id: element.id };
-
-    // Add display text if display function provided
-    if (elemSel.display) {
-      try {
-        // Support both display signatures: (element, ctx) and (element, ctx, allElements)
-        validElem.display = elemSel.display(element, ctx, elements);
-      } catch {
-        validElem.display = element.name || String(element.id);
-      }
-    } else {
-      // Auto-disambiguation for elements with same name
-      const baseName = element.name || 'Element';
-      const count = nameCounts.get(baseName) || 1;
-      if (count > 1) {
-        const idx = (nameIndices.get(baseName) || 0) + 1;
-        nameIndices.set(baseName, idx);
-        validElem.display = `${baseName} #${idx}`;
-      } else {
-        // Default display: use element's name or notation if available
-        validElem.display = element.notation || element.name || String(element.id);
-      }
-    }
-
-    // Add board ref if provided
-    if (elemSel.boardRef) {
-      try {
-        validElem.ref = elemSel.boardRef(element, ctx);
-      } catch {
-        // Ignore errors
-      }
-    } else {
-      // Default ref: use element ID and notation if available
-      validElem.ref = { id: element.id };
-      if (element.notation) {
-        validElem.ref.notation = element.notation;
-      }
-    }
-
-    return validElem;
-  });
-}
-
-/**
- * Generate a default display string for a choice value.
- * Priority: display > name > label > JSON > String
- * Never returns [object Object]
- */
-function defaultChoiceDisplay(value: unknown): string {
-  if (value === null || value === undefined) {
-    return String(value);
-  }
-
-  // Primitives: use String directly
-  if (typeof value !== 'object') {
-    return String(value);
-  }
-
-  // Objects: prefer 'display', 'name', or 'label' property if present
-  const obj = value as Record<string, unknown>;
-
-  // Priority 1: display property (most explicit, used by playerChoices)
-  if (typeof obj.display === 'string') {
-    return obj.display;
-  }
-
-  // Priority 2: name property (common for elements/entities)
-  if (typeof obj.name === 'string') {
-    return obj.name;
-  }
-
-  // Priority 3: label property
-  if (typeof obj.label === 'string') {
-    return obj.label;
-  }
-
-  // Fallback to JSON for objects without display/name/label
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '[Complex Object]';
-  }
-}
-
-/**
  * Generate a random 8-character game ID
  */
 export function generateGameId(): string {
@@ -137,7 +35,10 @@ export function isPlayersTurn(flowState: FlowState | undefined, playerPosition: 
 }
 
 /**
- * Build action metadata for auto-UI generation
+ * Build action metadata for auto-UI generation.
+ *
+ * SIMPLIFIED VERSION: Only includes static metadata.
+ * Choices and elements are fetched on-demand via /selection-choices endpoint.
  */
 export function buildActionMetadata(
   game: Game,
@@ -171,31 +72,10 @@ export function buildActionMetadata(
     }
 
     const selectionMetas: SelectionMetadata[] = [];
-    // Track available values for each selection (for dependsOn lookups)
-    const selectionValues: Map<string, { type: string; values: unknown[] }> = new Map();
 
     for (const selection of actionDef.selections) {
-      const selMeta = buildSelectionMetadata(game, player, selection, selectionValues);
+      const selMeta = buildSelectionMetadata(game, player, selection);
       selectionMetas.push(selMeta);
-
-      // Track available values for this selection (for subsequent dependsOn lookups)
-      if (selection.type === 'element' && selMeta.validElements) {
-        selectionValues.set(selection.name, {
-          type: 'element',
-          values: selMeta.validElements.map(ve => ve.id),
-        });
-      } else if (selection.type === 'elements' && selMeta.validElements) {
-        // fromElements() type - values are element IDs
-        selectionValues.set(selection.name, {
-          type: 'elements',
-          values: selMeta.validElements.map(ve => ve.id),
-        });
-      } else if (selection.type === 'choice' && selMeta.choices) {
-        selectionValues.set(selection.name, {
-          type: 'choice',
-          values: selMeta.choices.map(c => c.value),
-        });
-      }
     }
 
     metadata[actionName] = {
@@ -209,13 +89,24 @@ export function buildActionMetadata(
 }
 
 /**
- * Build metadata for a single selection
+ * Build metadata for a single selection.
+ *
+ * Only includes static metadata - choices are always fetched on-demand
+ * via /selection-choices endpoint.
+ *
+ * This keeps:
+ * - name, type, prompt, optional
+ * - dependsOn - client needs to know what args to send
+ * - filterBy - client needs to know what args to send
+ * - repeat - client needs repeat behavior info
+ * - multiSelect - only if static (not function-based)
+ * - elementClassName - for CSS targeting
+ * - min, max, integer, pattern, etc. - for number/text validation
  */
 function buildSelectionMetadata(
   game: Game,
   player: Player,
-  selection: Selection,
-  selectionValues: Map<string, { type: string; values: unknown[] }>
+  selection: Selection
 ): SelectionMetadata {
   // Create context first so we can evaluate dynamic prompts
   const ctx = { game, player, args: {} as Record<string, unknown> };
@@ -232,182 +123,22 @@ function buildSelectionMetadata(
     optional: selection.optional,
   };
 
-  // Type-specific properties
+  // Type-specific properties (static metadata only)
   switch (selection.type) {
     case 'choice': {
       const choiceSel = selection as any;
 
-      // Handle deferred choices - don't evaluate until action is clicked
-      if (choiceSel.defer) {
-        base.deferred = true;
-        // Still include filterBy if present (for UI to know about dependency)
-        if (choiceSel.filterBy) {
-          base.filterBy = choiceSel.filterBy;
-        }
-        // Still include repeat info if present
-        if (choiceSel.repeat || choiceSel.repeatUntil !== undefined) {
-          base.repeat = {
-            hasOnEach: !!choiceSel.repeat?.onEach,
-            terminator: choiceSel.repeatUntil,
-          };
-        }
-        // Still include multiSelect config if it's static (not function-based)
-        if (choiceSel.multiSelect !== undefined && typeof choiceSel.multiSelect !== 'function') {
-          if (typeof choiceSel.multiSelect === 'number') {
-            base.multiSelect = { min: 1, max: choiceSel.multiSelect };
-          } else {
-            base.multiSelect = {
-              min: choiceSel.multiSelect.min ?? 1,
-              max: choiceSel.multiSelect.max,
-            };
-          }
-        }
-        // Don't evaluate choices - that will happen when /deferred-choices is called
-        break;
+      // Include dependsOn info so client knows what args to send when fetching
+      if (choiceSel.dependsOn) {
+        base.dependsOn = choiceSel.dependsOn;
       }
 
-      // Check if this selection depends on a previous selection
-      if (choiceSel.dependsOn && typeof choiceSel.choices === 'function') {
-        const dependentInfo = selectionValues.get(choiceSel.dependsOn);
-
-        if (dependentInfo) {
-          base.dependsOn = choiceSel.dependsOn;
-          base.choicesByDependentValue = {};
-
-          // For each possible value of the dependent selection, compute choices
-          for (const depValue of dependentInfo.values) {
-            // Build args with the dependent value
-            // For element/elements selections, we need to resolve to the actual element
-            let argValue: unknown = depValue;
-            if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
-              argValue = game.getElementById(depValue);
-            }
-
-            const argsWithDep = { [choiceSel.dependsOn]: argValue };
-            const ctxWithDep = { game, player, args: argsWithDep };
-
-            let choices: unknown[];
-            try {
-              choices = choiceSel.choices(ctxWithDep);
-            } catch (error) {
-              console.error(`[buildSelectionMetadata] Error getting choices for "${selection.name}" with ${choiceSel.dependsOn}=${depValue}:`, error);
-              choices = [];
-            }
-
-            // Convert to display format with board refs
-            const formattedChoices = choices.map(value => {
-              const choice: any = {
-                value,
-                display: choiceSel.display ? choiceSel.display(value) : defaultChoiceDisplay(value),
-              };
-
-              if (choiceSel.boardRefs) {
-                try {
-                  const refs = choiceSel.boardRefs(value, ctxWithDep);
-                  if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
-                  if (refs.targetRef) choice.targetRef = refs.targetRef;
-                } catch {
-                  // Ignore errors
-                }
-              }
-
-              return choice;
-            });
-
-            // Key by the serialized value (element ID, player position, etc.)
-            const key = String(depValue);
-            base.choicesByDependentValue[key] = formattedChoices;
-          }
-
-          // Add repeat info if present (must be before break!)
-          if (choiceSel.repeat || choiceSel.repeatUntil !== undefined) {
-            base.repeat = {
-              hasOnEach: !!choiceSel.repeat?.onEach,
-              terminator: choiceSel.repeatUntil,
-            };
-          }
-
-          // Add multiSelect config per dependent value if present
-          // This must be evaluated PER dependent value since multiSelect can vary
-          if (choiceSel.multiSelect !== undefined) {
-            base.multiSelectByDependentValue = {};
-
-            for (const depValue of dependentInfo.values) {
-              // Build args with the dependent value (same as above for choices)
-              let argValue: unknown = depValue;
-              if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
-                argValue = game.getElementById(depValue);
-              }
-
-              const argsWithDep = { [choiceSel.dependsOn]: argValue };
-              const ctxWithDep = { game, player, args: argsWithDep };
-
-              const multiSelectConfig = typeof choiceSel.multiSelect === 'function'
-                ? choiceSel.multiSelect(ctxWithDep)
-                : choiceSel.multiSelect;
-
-              const key = String(depValue);
-              if (multiSelectConfig !== undefined) {
-                if (typeof multiSelectConfig === 'number') {
-                  base.multiSelectByDependentValue[key] = { min: 1, max: multiSelectConfig };
-                } else {
-                  base.multiSelectByDependentValue[key] = {
-                    min: multiSelectConfig.min ?? 1,
-                    max: multiSelectConfig.max,
-                  };
-                }
-              } else {
-                // Explicitly store undefined for single-select
-                base.multiSelectByDependentValue[key] = undefined;
-              }
-            }
-          }
-
-          // Don't populate base.choices for dependsOn selections - client uses choicesByDependentValue
-          break;
-        }
-      }
-
-      // Regular choice handling (no dependsOn or static choices)
-      let choices: unknown[];
-      if (typeof choiceSel.choices === 'function') {
-        try {
-          choices = choiceSel.choices(ctx);
-        } catch (error) {
-          console.error(`[buildSelectionMetadata] Error getting choices for selection "${selection.name}":`, error);
-          choices = [];
-        }
-      } else {
-        choices = choiceSel.choices || [];
-      }
-
-      // Convert to display format with board refs
-      base.choices = choices.map(value => {
-        const choice: any = {
-          value,
-          display: choiceSel.display ? choiceSel.display(value) : defaultChoiceDisplay(value),
-        };
-
-        // Add board refs if provided
-        if (choiceSel.boardRefs) {
-          try {
-            const refs = choiceSel.boardRefs(value, ctx);
-            if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
-            if (refs.targetRef) choice.targetRef = refs.targetRef;
-          } catch {
-            // Ignore errors in boardRefs
-          }
-        }
-
-        return choice;
-      });
-
-      // Add filterBy if present
+      // Include filterBy info so client knows about the dependency
       if (choiceSel.filterBy) {
         base.filterBy = choiceSel.filterBy;
       }
 
-      // Add repeat info if present
+      // Include repeat info if present
       if (choiceSel.repeat || choiceSel.repeatUntil !== undefined) {
         base.repeat = {
           hasOnEach: !!choiceSel.repeat?.onEach,
@@ -415,237 +146,72 @@ function buildSelectionMetadata(
         };
       }
 
-      // Add multiSelect config if present (evaluate function if needed)
-      if (choiceSel.multiSelect !== undefined) {
-        const multiSelectConfig = typeof choiceSel.multiSelect === 'function'
-          ? choiceSel.multiSelect(ctx)
-          : choiceSel.multiSelect;
-
-        if (multiSelectConfig !== undefined) {
-          if (typeof multiSelectConfig === 'number') {
-            // Shorthand: number means { min: 1, max: N }
-            base.multiSelect = { min: 1, max: multiSelectConfig };
-          } else {
-            // Full config object
-            base.multiSelect = {
-              min: multiSelectConfig.min ?? 1,
-              max: multiSelectConfig.max,
-            };
-          }
+      // Include multiSelect config only if it's static (not function-based)
+      if (choiceSel.multiSelect !== undefined && typeof choiceSel.multiSelect !== 'function') {
+        if (typeof choiceSel.multiSelect === 'number') {
+          base.multiSelect = { min: 1, max: choiceSel.multiSelect };
+        } else {
+          base.multiSelect = {
+            min: choiceSel.multiSelect.min ?? 1,
+            max: choiceSel.multiSelect.max,
+          };
         }
       }
+      // Note: If multiSelect is a function, it will be evaluated when fetching choices
       break;
     }
 
     case 'element': {
       const elemSel = selection as any;
+
+      // Include elementClassName for CSS targeting
       if (elemSel.elementClass?.name) {
         base.elementClassName = elemSel.elementClass.name;
       }
 
-      // Handle deferred element selections WITHOUT dependsOn - don't evaluate until action is clicked
-      // Note: If dependsOn is present, we compute elementsByDependentValue even with defer: true
-      // because the client can look up elements from the map without a server round-trip
-      if (elemSel.defer && !elemSel.dependsOn) {
-        base.deferred = true;
-        // Don't evaluate elements - that will happen when /deferred-choices is called
-        break;
+      // Include dependsOn info so client knows what args to send when fetching
+      if (elemSel.dependsOn) {
+        base.dependsOn = elemSel.dependsOn;
       }
 
-      // Check if this selection depends on a previous selection
-      if (elemSel.dependsOn && typeof elemSel.elements === 'function') {
-        const dependentInfo = selectionValues.get(elemSel.dependsOn);
-
-        if (dependentInfo) {
-          base.dependsOn = elemSel.dependsOn;
-          base.elementsByDependentValue = {};
-
-          // For each possible value of the dependent selection, compute elements
-          for (const depValue of dependentInfo.values) {
-            // Build args with the dependent value
-            // For element/elements selections, we need to resolve to the actual element
-            let argValue: unknown = depValue;
-            if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
-              argValue = game.getElementById(depValue);
-            }
-
-            const argsWithDep = { [elemSel.dependsOn]: argValue };
-            const ctxWithDep = { game, player, args: argsWithDep };
-
-            let elements: any[];
-            try {
-              elements = elemSel.elements(ctxWithDep);
-            } catch (error) {
-              console.error(`[buildSelectionMetadata] Error getting elements for "${selection.name}" with ${elemSel.dependsOn}=${depValue}:`, error);
-              elements = [];
-            }
-
-            // Convert elements to validElements format with auto-disambiguation
-            const validElements = buildValidElementsList(elements, elemSel, ctxWithDep);
-
-            // Key by the serialized value (element ID, player position, etc.)
-            const key = String(depValue);
-            base.elementsByDependentValue[key] = validElements;
-          }
-
-          // Don't populate base.validElements for dependsOn selections - client uses elementsByDependentValue
-          break;
-        }
+      // Include repeat info if present
+      if (elemSel.repeat || elemSel.repeatUntil !== undefined) {
+        base.repeat = {
+          hasOnEach: !!elemSel.repeat?.onEach,
+          terminator: elemSel.repeatUntil,
+        };
       }
-
-      let elements: any[];
-
-      // Check if elements array is provided directly (from fromElements without multiSelect)
-      if (elemSel.elements) {
-        if (typeof elemSel.elements === 'function') {
-          try {
-            elements = elemSel.elements(ctx);
-          } catch (error) {
-            console.error(`[buildSelectionMetadata] Error getting elements for selection "${selection.name}":`, error);
-            elements = [];
-          }
-        } else {
-          elements = elemSel.elements || [];
-        }
-      } else {
-        // Original from/filter/elementClass pattern (for chooseElement)
-        const from = typeof elemSel.from === 'function'
-          ? elemSel.from(ctx)
-          : elemSel.from ?? game;
-
-        if (elemSel.elementClass) {
-          elements = [...from.all(elemSel.elementClass)];
-        } else {
-          elements = [...from.all()];
-        }
-
-        if (elemSel.filter) {
-          elements = elements.filter((e: any) => elemSel.filter!(e, ctx));
-        }
-      }
-
-      // Build validElements list with display and refs
-      base.validElements = buildValidElementsList(elements, elemSel, ctx);
       break;
     }
 
     case 'elements': {
-      // New "pit of success" selection type - fromElements()
-      // Value is element ID (number), client sends ID directly
       const elementsSel = selection as any;
 
-      // Handle deferred element selections WITHOUT dependsOn - don't evaluate until action is clicked
-      // Note: If dependsOn is present, we compute elementsByDependentValue even with defer: true
-      // because the client can look up elements from the map without a server round-trip
-      if (elementsSel.defer && !elementsSel.dependsOn) {
-        base.deferred = true;
-        // Still include multiSelect config if it's static (not function-based)
-        if (elementsSel.multiSelect !== undefined && typeof elementsSel.multiSelect !== 'function') {
-          if (typeof elementsSel.multiSelect === 'number') {
-            base.multiSelect = { min: 1, max: elementsSel.multiSelect };
-          } else {
-            base.multiSelect = {
-              min: elementsSel.multiSelect.min ?? 1,
-              max: elementsSel.multiSelect.max,
-            };
-          }
-        }
-        // Don't evaluate elements - that will happen when /deferred-choices is called
-        break;
+      // Include dependsOn info so client knows what args to send when fetching
+      if (elementsSel.dependsOn) {
+        base.dependsOn = elementsSel.dependsOn;
       }
 
-      // Check if this selection depends on a previous selection
-      if (elementsSel.dependsOn && typeof elementsSel.elements === 'function') {
-        const dependentInfo = selectionValues.get(elementsSel.dependsOn);
-
-        if (dependentInfo) {
-          base.dependsOn = elementsSel.dependsOn;
-          base.elementsByDependentValue = {};
-
-          // For each possible value of the dependent selection, compute elements
-          for (const depValue of dependentInfo.values) {
-            // Build args with the dependent value
-            // For element/elements selections, we need to resolve to the actual element
-            let argValue: unknown = depValue;
-            if ((dependentInfo.type === 'element' || dependentInfo.type === 'elements') && typeof depValue === 'number') {
-              argValue = game.getElementById(depValue);
-            }
-
-            const argsWithDep = { [elementsSel.dependsOn]: argValue };
-            const ctxWithDep = { game, player, args: argsWithDep };
-
-            let elements: any[];
-            try {
-              elements = elementsSel.elements(ctxWithDep);
-            } catch (error) {
-              console.error(`[buildSelectionMetadata] Error getting elements for "${selection.name}" with ${elementsSel.dependsOn}=${depValue}:`, error);
-              elements = [];
-            }
-
-            // Convert elements to validElements format with auto-disambiguation
-            const validElements = buildValidElementsList(elements, elementsSel, ctxWithDep);
-
-            // Key by the serialized value (element ID, player position, etc.)
-            const key = String(depValue);
-            base.elementsByDependentValue[key] = validElements;
-          }
-
-          // Add multiSelect config if present (for multi-select element selections)
-          if (elementsSel.multiSelect !== undefined) {
-            const multiSelectConfig = typeof elementsSel.multiSelect === 'function'
-              ? elementsSel.multiSelect(ctx)
-              : elementsSel.multiSelect;
-
-            if (multiSelectConfig !== undefined) {
-              if (typeof multiSelectConfig === 'number') {
-                base.multiSelect = { min: 1, max: multiSelectConfig };
-              } else {
-                base.multiSelect = {
-                  min: multiSelectConfig.min ?? 1,
-                  max: multiSelectConfig.max,
-                };
-              }
-            }
-          }
-
-          // Don't populate base.validElements for dependsOn selections - client uses elementsByDependentValue
-          break;
-        }
+      // Include repeat info if present
+      if (elementsSel.repeat || elementsSel.repeatUntil !== undefined) {
+        base.repeat = {
+          hasOnEach: !!elementsSel.repeat?.onEach,
+          terminator: elementsSel.repeatUntil,
+        };
       }
 
-      // Get elements from the selection
-      let elements: any[];
-      if (typeof elementsSel.elements === 'function') {
-        try {
-          elements = elementsSel.elements(ctx);
-        } catch (error) {
-          console.error(`[buildSelectionMetadata] Error getting elements for selection "${selection.name}":`, error);
-          elements = [];
-        }
-      } else {
-        elements = elementsSel.elements || [];
-      }
-
-      // Build validElements list with auto-disambiguation using shared helper
-      base.validElements = buildValidElementsList(elements, elementsSel, ctx);
-
-      // Add multiSelect config if present
-      if (elementsSel.multiSelect !== undefined) {
-        const multiSelectConfig = typeof elementsSel.multiSelect === 'function'
-          ? elementsSel.multiSelect(ctx)
-          : elementsSel.multiSelect;
-
-        if (multiSelectConfig !== undefined) {
-          if (typeof multiSelectConfig === 'number') {
-            base.multiSelect = { min: 1, max: multiSelectConfig };
-          } else {
-            base.multiSelect = {
-              min: multiSelectConfig.min ?? 1,
-              max: multiSelectConfig.max,
-            };
-          }
+      // Include multiSelect config only if it's static (not function-based)
+      if (elementsSel.multiSelect !== undefined && typeof elementsSel.multiSelect !== 'function') {
+        if (typeof elementsSel.multiSelect === 'number') {
+          base.multiSelect = { min: 1, max: elementsSel.multiSelect };
+        } else {
+          base.multiSelect = {
+            min: elementsSel.multiSelect.min ?? 1,
+            max: elementsSel.multiSelect.max,
+          };
         }
       }
+      // Note: If multiSelect is a function, it will be evaluated when fetching choices
       break;
     }
 

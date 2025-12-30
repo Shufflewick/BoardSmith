@@ -969,14 +969,14 @@ export async function handleShuffleDeck(
 }
 
 // ============================================
-// Deferred Choices Handler
+// Selection Choices Handlers
 // ============================================
 
 /**
- * POST /games/:gameId/deferred-choices - Get choices for a deferred selection
- * Used when an action has defer: true selections that aren't evaluated until clicked.
+ * POST /games/:gameId/selection-choices - Get choices for any selection
+ * This is the unified endpoint for fetching selection choices on-demand.
  */
-export async function handleGetDeferredChoices(
+export async function handleGetSelectionChoices(
   store: GameStore,
   gameId: string,
   actionName: string,
@@ -989,14 +989,16 @@ export async function handleGetDeferredChoices(
     return error('Game not found', 404);
   }
 
-  const result = session.getDeferredChoices(actionName, selectionName, playerPosition, currentArgs);
+  const result = session.getSelectionChoices(actionName, selectionName, playerPosition, currentArgs);
 
   if (result.success) {
     return success({
       success: true,
       choices: result.choices,
+      validElements: result.validElements,
+      multiSelect: result.multiSelect,
     });
   } else {
-    return error(result.error ?? 'Failed to get deferred choices');
+    return error(result.error ?? 'Failed to get selection choices');
   }
 }

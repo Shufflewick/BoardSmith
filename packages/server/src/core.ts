@@ -50,8 +50,8 @@ import {
   handleReorderCard,
   handleTransferCard,
   handleShuffleDeck,
-  // Deferred choices handler
-  handleGetDeferredChoices,
+  // Selection choices handlers
+  handleGetSelectionChoices,
 } from './handlers/games.js';
 import type { ClaimPositionRequest } from './types.js';
 
@@ -270,20 +270,20 @@ export class GameServerCore {
       }
 
       // ============================================
-      // Deferred Choices Route
+      // Selection Choices Routes
       // ============================================
 
-      // POST /games/:gameId/deferred-choices - Get choices for deferred selections
-      const deferredChoicesMatch = path.match(/^\/games\/([^/]+)\/deferred-choices$/);
-      if (deferredChoicesMatch && method === 'POST') {
-        const gameId = deferredChoicesMatch[1];
+      // POST /games/:gameId/selection-choices - Get choices for any selection (unified endpoint)
+      const selectionChoicesMatch = path.match(/^\/games\/([^/]+)\/selection-choices$/);
+      if (selectionChoicesMatch && method === 'POST') {
+        const gameId = selectionChoicesMatch[1];
         const { action, selection, player, currentArgs } = body as {
           action: string;
           selection: string;
           player: number;
           currentArgs?: Record<string, unknown>;
         };
-        return await handleGetDeferredChoices(this.#store, gameId, action, selection, player, currentArgs || {});
+        return await handleGetSelectionChoices(this.#store, gameId, action, selection, player, currentArgs || {});
       }
 
       // POST /games/:gameId/undo - Undo to turn start

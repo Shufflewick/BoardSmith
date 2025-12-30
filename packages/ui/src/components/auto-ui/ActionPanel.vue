@@ -85,7 +85,7 @@ const boardInteraction = useBoardInteraction();
 // Use controller state directly (controller is required)
 const currentAction = actionController.currentAction;
 const isExecuting = actionController.isExecuting;
-const deferredChoicesLoading = actionController.isDeferredLoading;
+const isLoadingChoices = actionController.isLoadingChoices;
 
 // Repeating state from controller
 const repeatingState = computed(() => {
@@ -226,7 +226,7 @@ const displayableArgs = computed(() => {
 const filteredChoices = computed(() => {
   if (!currentSelection.value) return [];
 
-  // Get base choices from controller (handles repeating, deferred, dependsOn, filterBy)
+  // Get base choices from controller (handles repeating, dependsOn, filterBy)
   let choices: ChoiceWithRefs[] = actionController.getCurrentChoices() as ChoiceWithRefs[];
 
   // ActionPanel-specific: Exclude choices that were already selected in previous choice selections
@@ -255,7 +255,10 @@ const filteredChoices = computed(() => {
 // depends on previous selections (e.g., "select second die, excluding the first")
 const filteredValidElements = computed(() => {
   if (!currentSelection.value || (currentSelection.value.type !== 'element' && currentSelection.value.type !== 'elements')) return [];
-  if (!currentSelection.value.validElements) return [];
+
+  // Get valid elements from controller cache
+  const validElements = actionController.getValidElements(currentSelection.value);
+  if (validElements.length === 0) return [];
 
   // Get IDs of elements already selected in previous element/elements selections
   const alreadySelectedIds = new Set<number>();
@@ -277,10 +280,10 @@ const filteredValidElements = computed(() => {
 
   // Filter out already-selected elements
   if (alreadySelectedIds.size === 0) {
-    return currentSelection.value.validElements;
+    return validElements;
   }
 
-  return currentSelection.value.validElements.filter(elem => !alreadySelectedIds.has(elem.id));
+  return validElements.filter(elem => !alreadySelectedIds.has(elem.id));
 });
 
 // Skip an optional selection
@@ -1159,7 +1162,7 @@ async function startAction(actionName: string) {
   const firstSel = meta.selections[0];
 
   // Delegate to controller for core start logic
-  // Controller handles: clearing args, fetching deferred choices for first selection
+  // Controller handles: clearing args, fetching choices for first selection
   await actionController.start(actionName);
   // Also clear ActionPanel-specific cache (controller doesn't know about this)
   clearReactiveObject(displayCache as unknown as Record<string, unknown>);
@@ -1367,7 +1370,7 @@ function clearBoardSelection() {
       <!-- Current selection input -->
       <div v-if="currentSelection" class="selection-input">
         <!-- Element selection with validElements (shows buttons for each valid element) -->
-        <template v-if="currentSelection.type === 'element' && currentSelection.validElements?.length">
+        <template v-if="currentSelection.type === 'element' && filteredValidElements.length">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.elementClassName || 'element'}` }}
             <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
@@ -1394,7 +1397,7 @@ function clearBoardSelection() {
         </template>
 
         <!-- Elements selection with multiSelect (checkboxes for multiple element selection) -->
-        <template v-else-if="currentSelection.type === 'elements' && currentMultiSelect && currentSelection.validElements?.length">
+        <template v-else-if="currentSelection.type === 'elements' && currentMultiSelect && filteredValidElements.length">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
@@ -1428,7 +1431,7 @@ function clearBoardSelection() {
         </template>
 
         <!-- Elements selection without multiSelect (buttons for single element selection) -->
-        <template v-else-if="currentSelection.type === 'elements' && currentSelection.validElements?.length">
+        <template v-else-if="currentSelection.type === 'elements' && filteredValidElements.length">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
             <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
@@ -1455,7 +1458,7 @@ function clearBoardSelection() {
         </template>
 
         <!-- Multi-select choice selection (checkboxes with Done button) - MUST come before dependsOn template -->
-        <template v-else-if="currentSelection.type === 'choice' && currentMultiSelect && (currentSelection.choices || currentSelection.choicesByDependentValue)">
+        <template v-else-if="currentSelection.type === 'choice' && currentMultiSelect && filteredChoices.length">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
@@ -1511,45 +1514,8 @@ function clearBoardSelection() {
           </div>
         </template>
 
-        <!-- Deferred choice selection (choices fetched from server on demand) -->
-        <template v-else-if="currentSelection.type === 'choice' && currentSelection.deferred">
-          <div class="selection-prompt">
-            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
-            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
-          </div>
-          <div class="choice-buttons">
-            <!-- Loading indicator while fetching deferred choices -->
-            <span v-if="deferredChoicesLoading" class="deferred-loading">
-              Loading choices...
-            </span>
-            <!-- Show choices once loaded -->
-            <template v-else>
-              <button
-                v-for="choice in filteredChoices"
-                :key="String(choice.value)"
-                class="choice-btn"
-                @click="setSelectionValue(currentSelection.name, choice.value, choice.display)"
-                @mouseenter="handleChoiceHover(choice)"
-                @mouseleave="handleChoiceLeave"
-              >
-                {{ choice.display }}
-              </button>
-              <button
-                v-if="currentSelection.optional"
-                class="choice-btn skip-btn"
-                @click="skipOptionalSelection"
-              >
-                Skip
-              </button>
-              <span v-if="filteredChoices.length === 0 && !currentSelection.optional" class="no-choices">
-                No options available
-              </span>
-            </template>
-          </div>
-        </template>
-
         <!-- Regular choice selection -->
-        <template v-else-if="currentSelection.type === 'choice' && currentSelection.choices">
+        <template v-else-if="currentSelection.type === 'choice' && filteredChoices.length">
           <div class="selection-prompt">
             {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
             <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
@@ -1578,7 +1544,12 @@ function clearBoardSelection() {
           </div>
         </template>
 
-        <!-- Element selection (fallback when no validElements) -->
+        <!-- Loading choices indicator for element selections -->
+        <div v-else-if="(currentSelection.type === 'element' || currentSelection.type === 'elements') && isLoadingChoices" class="loading-choices">
+          Loading choices...
+        </div>
+
+        <!-- Element selection (fallback when no validElements and not loading) -->
         <div v-else-if="currentSelection.type === 'element' || currentSelection.type === 'elements'" class="element-instruction">
           <span class="instruction-text">
             Click on a {{ currentSelection.elementClassName || 'element' }} to select it
@@ -2003,8 +1974,8 @@ function clearBoardSelection() {
   flex: 1;
 }
 
-/* Deferred choice loading styles */
-.deferred-loading {
+/* Choice loading styles */
+.loading-choices {
   color: #00d9ff;
   font-style: italic;
   font-size: 0.9rem;

@@ -244,6 +244,8 @@ export interface FlowState {
   movesRemaining?: number;
   /** Moves required until minMoves met (if configured) */
   movesRequired?: number;
+  /** Error from last action if it failed (cleared on success) */
+  actionError?: string;
 }
 
 /**

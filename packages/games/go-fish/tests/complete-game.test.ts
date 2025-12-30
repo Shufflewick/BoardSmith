@@ -36,13 +36,14 @@ describe('Complete Go Fish Game', () => {
     // Pick a rank to ask for (just use the first one)
     const rankToAsk = myRanks[0];
 
+    const opponent = game.players[opponentIdx];
     if (verbose) {
       console.log(`Player ${currentPlayerIdx} (${currentPlayer.name}) asks Player ${opponentIdx} for ${rankToAsk}s`);
     }
 
-    // Perform the action using simulateAction
+    // Perform the action using simulateAction with proper choice format
     const result = simulateAction(testGame, currentPlayerIdx, 'ask', {
-      target: opponentIdx,
+      target: { value: opponentIdx, display: opponent.name },
       rank: rankToAsk,
     });
 
@@ -167,7 +168,7 @@ describe('Complete Go Fish Game', () => {
       console.log(`Alice asks for ${goFishRank}s (Bob doesn't have any)`);
 
       const result = testGame.doAction(0, 'ask', {
-        target: bob,
+        target: { value: bob.position, display: bob.name },
         rank: goFishRank,
       });
 
@@ -227,7 +228,7 @@ describe('Complete Go Fish Game', () => {
       console.log(`Alice asks for ${matchingRank}s (Bob has ${bobCardsOfRank})`);
 
       const result = testGame.doAction(0, 'ask', {
-        target: bob,
+        target: { value: bob.position, display: bob.name },
         rank: matchingRank,
       });
 

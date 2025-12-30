@@ -174,26 +174,6 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
    * }
    */
   multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
-  /**
-   * Defer choice evaluation until the player clicks this action.
-   * By default, choices are computed when building action metadata (before player acts).
-   * With defer: true, choices are not evaluated until the player clicks the action button.
-   *
-   * Use this when:
-   * - Choice computation has side effects (e.g., drawing cards from a deck)
-   * - You want to test deck manipulation before the draw occurs
-   * - Choices depend on game state at the moment of clicking
-   *
-   * @example
-   * .chooseFrom('card', {
-   *   defer: true,
-   *   choices: (ctx) => {
-   *     // This runs when player clicks, not at game start
-   *     return ctx.game.deck.drawCards(3);
-   *   }
-   * })
-   */
-  defer?: boolean;
 }
 
 /**
@@ -224,15 +204,16 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
    */
   dependsOn?: string;
   /**
-   * Defer element evaluation until the player clicks this action.
-   * By default, elements are computed when building action metadata.
-   * With defer: true, elements are not evaluated until the player clicks the action button.
-   *
-   * Use this when:
-   * - Element computation has side effects
-   * - Elements depend on game state at the moment of clicking
+   * Repeat this selection until termination condition is met.
+   * When used, the selection value becomes an array of all elements selected.
+   * Each selection round-trips to the server for state updates.
    */
-  defer?: boolean;
+  repeat?: RepeatConfig<T>;
+  /**
+   * Shorthand for repeat.until that terminates when this element is selected.
+   * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
+   */
+  repeatUntil?: T;
 }
 
 /**
@@ -285,15 +266,16 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
    */
   dependsOn?: string;
   /**
-   * Defer element evaluation until the player clicks this action.
-   * By default, elements are computed when building action metadata.
-   * With defer: true, elements are not evaluated until the player clicks the action button.
-   *
-   * Use this when:
-   * - Element computation has side effects
-   * - Elements depend on game state at the moment of clicking
+   * Repeat this selection until termination condition is met.
+   * When used, the selection value becomes an array of all elements selected.
+   * Each selection round-trips to the server for state updates.
    */
-  defer?: boolean;
+  repeat?: RepeatConfig<T>;
+  /**
+   * Shorthand for repeat.until that terminates when this element is selected.
+   * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
+   */
+  repeatUntil?: T;
 }
 
 /**

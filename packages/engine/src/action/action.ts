@@ -245,11 +245,6 @@ export class Action {
        * Can be a static config or dynamic function evaluated per context.
        */
       multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
-      /**
-       * Defer choice evaluation until player clicks the action.
-       * When true, choices are not computed during action availability checking.
-       */
-      defer?: boolean;
     }
   ): this {
     const selection: ChoiceSelection<T> = {
@@ -266,7 +261,6 @@ export class Action {
       repeat: options.repeat,
       repeatUntil: options.repeatUntil,
       multiSelect: options.multiSelect,
-      defer: options.defer,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -357,11 +351,16 @@ export class Action {
        */
       dependsOn?: string;
       /**
-       * Defer element evaluation until the player clicks this action.
-       * By default, elements are computed when building action metadata.
-       * With defer: true, elements are not evaluated until the player clicks the action button.
+       * Repeat this selection until termination condition is met.
+       * When used, the selection value becomes an array of all elements selected.
+       * Each selection round-trips to the server for state updates.
        */
-      defer?: boolean;
+      repeat?: RepeatConfig<T>;
+      /**
+       * Shorthand for repeat.until that terminates when this element is selected.
+       * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
+       */
+      repeatUntil?: T;
     }
   ): this {
     // For single-select (no multiSelect), use 'element' type to leverage existing code paths
@@ -378,7 +377,8 @@ export class Action {
         boardRef: options.boardRef,
         multiSelect: options.multiSelect,
         dependsOn: options.dependsOn,
-        defer: options.defer,
+        repeat: options.repeat,
+        repeatUntil: options.repeatUntil,
       };
       this.definition.selections.push(selection as Selection);
     } else {
@@ -393,7 +393,8 @@ export class Action {
         validate: options.validate,
         boardRef: options.boardRef,
         dependsOn: options.dependsOn,
-        defer: options.defer,
+        repeat: options.repeat,
+        repeatUntil: options.repeatUntil,
       };
       this.definition.selections.push(selection as Selection);
     }
@@ -1245,11 +1246,6 @@ export class ActionExecutor {
     // For element selections, just check they have choices
     // (don't do expensive path validation - trust their filter functions)
     if (selection.type === 'element') {
-      const elemSel = selection as ElementSelection;
-      // If defer: true, skip availability check - elements evaluated when player clicks
-      if (elemSel.defer) {
-        return this.hasValidSelectionPath(selections, player, args, index + 1);
-      }
       const choices = this.getChoices(selection, player, args);
       if (choices.length === 0) {
         return false;
@@ -1259,11 +1255,6 @@ export class ActionExecutor {
 
     // For elements selections (fromElements), just check they have elements
     if (selection.type === 'elements') {
-      const elemsSel = selection as ElementsSelection;
-      // If defer: true, skip availability check - elements evaluated when player clicks
-      if (elemsSel.defer) {
-        return this.hasValidSelectionPath(selections, player, args, index + 1);
-      }
       const elements = this.getChoices(selection, player, args);
       if (elements.length === 0) {
         return false;
@@ -1275,10 +1266,6 @@ export class ActionExecutor {
     // (computing dynamic choices repeatedly is too expensive)
     if (selection.type === 'choice') {
       const choiceSel = selection as ChoiceSelection;
-      // If defer: true, skip availability check - choices evaluated when player clicks
-      if (choiceSel.defer) {
-        return this.hasValidSelectionPath(selections, player, args, index + 1);
-      }
       if (typeof choiceSel.choices === 'function') {
         const choices = this.getChoices(selection, player, args);
         if (choices.length === 0) {
@@ -1326,9 +1313,19 @@ export class ActionExecutor {
    * Check if a selection is configured for repeating.
    */
   isRepeatingSelection(selection: Selection): boolean {
-    if (selection.type !== 'choice') return false;
-    const cs = selection as ChoiceSelection;
-    return cs.repeat !== undefined || cs.repeatUntil !== undefined;
+    if (selection.type === 'choice') {
+      const cs = selection as ChoiceSelection;
+      return cs.repeat !== undefined || cs.repeatUntil !== undefined;
+    }
+    if (selection.type === 'element') {
+      const es = selection as ElementSelection;
+      return es.repeat !== undefined || es.repeatUntil !== undefined;
+    }
+    if (selection.type === 'elements') {
+      const es = selection as ElementsSelection;
+      return es.repeat !== undefined || es.repeatUntil !== undefined;
+    }
+    return false;
   }
 
   /**
@@ -1343,6 +1340,8 @@ export class ActionExecutor {
    * This handles adding a value to the accumulated selections, running onEach,
    * and checking the termination condition.
    *
+   * Supports choice, element, and elements selection types.
+   *
    * @returns Object with:
    *   - done: true if the repeating selection is complete
    *   - nextChoices: available choices for the next iteration (if not done)
@@ -1355,12 +1354,32 @@ export class ActionExecutor {
     value: unknown
   ): { done: boolean; nextChoices?: unknown[]; error?: string } {
     const selection = action.selections[pendingState.currentSelectionIndex];
-    if (!selection || selection.type !== 'choice') {
-      return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found or not a choice` };
+    if (!selection) {
+      return { done: true, error: `Selection at index ${pendingState.currentSelectionIndex} not found` };
     }
 
-    const choiceSel = selection as ChoiceSelection;
-    if (!choiceSel.repeat && choiceSel.repeatUntil === undefined) {
+    // Get repeat config based on selection type
+    let repeatConfig: RepeatConfig<unknown> | undefined;
+    let repeatUntil: unknown | undefined;
+    const isElementSelection = selection.type === 'element' || selection.type === 'elements';
+
+    if (selection.type === 'choice') {
+      const choiceSel = selection as ChoiceSelection;
+      repeatConfig = choiceSel.repeat;
+      repeatUntil = choiceSel.repeatUntil;
+    } else if (selection.type === 'element') {
+      const elemSel = selection as ElementSelection;
+      repeatConfig = elemSel.repeat as RepeatConfig<unknown>;
+      repeatUntil = elemSel.repeatUntil;
+    } else if (selection.type === 'elements') {
+      const elemsSel = selection as ElementsSelection;
+      repeatConfig = elemsSel.repeat as RepeatConfig<unknown>;
+      repeatUntil = elemsSel.repeatUntil;
+    } else {
+      return { done: true, error: `Selection ${selection.name} type ${selection.type} does not support repeat` };
+    }
+
+    if (!repeatConfig && repeatUntil === undefined) {
       return { done: true, error: `Selection ${selection.name} is not repeating` };
     }
 
@@ -1389,7 +1408,17 @@ export class ActionExecutor {
     };
 
     const currentChoices = this.getChoices(selection, player, context.args);
-    if (!this.choicesContain(currentChoices, value)) {
+
+    // For element selections, value is an element ID - validate it exists in choices
+    if (isElementSelection) {
+      const elementId = value as number;
+      const validIds = currentChoices.map((el: any) => el.id);
+      if (!validIds.includes(elementId)) {
+        // Format choices as {value, display} for UI
+        const formattedChoices = this.formatElementChoices(currentChoices as GameElement[]);
+        return { done: false, error: `Invalid element ID: ${elementId}`, nextChoices: formattedChoices };
+      }
+    } else if (!this.choicesContain(currentChoices, value)) {
       return { done: false, error: `Invalid choice: ${JSON.stringify(value)}`, nextChoices: currentChoices };
     }
 
@@ -1401,9 +1430,13 @@ export class ActionExecutor {
     context.args[selection.name] = pendingState.repeating.accumulated;
 
     // Run onEach callback if present
-    if (choiceSel.repeat?.onEach) {
+    if (repeatConfig?.onEach) {
       try {
-        choiceSel.repeat.onEach(context, value);
+        // For element selections, resolve the value to actual element for onEach
+        const resolvedValue = isElementSelection
+          ? this.game.getElementById(value as number)
+          : value;
+        repeatConfig.onEach(context, resolvedValue);
       } catch (error) {
         return { done: true, error: error instanceof Error ? error.message : String(error) };
       }
@@ -1411,13 +1444,23 @@ export class ActionExecutor {
 
     // Check termination condition
     let isDone = false;
-    if (choiceSel.repeatUntil !== undefined) {
+    if (repeatUntil !== undefined) {
       // Simple termination: check if value matches repeatUntil
-      isDone = this.valuesEqual(value, choiceSel.repeatUntil);
-    } else if (choiceSel.repeat?.until) {
+      // For elements, repeatUntil would be an element, so compare IDs
+      if (isElementSelection) {
+        const untilId = typeof repeatUntil === 'number' ? repeatUntil : (repeatUntil as any)?.id;
+        isDone = value === untilId;
+      } else {
+        isDone = this.valuesEqual(value, repeatUntil);
+      }
+    } else if (repeatConfig?.until) {
       // Custom termination function
       try {
-        isDone = choiceSel.repeat.until(context, value);
+        // For element selections, resolve value to actual element for until check
+        const resolvedValue = isElementSelection
+          ? this.game.getElementById(value as number)
+          : value;
+        isDone = repeatConfig.until(context, resolvedValue);
       } catch (error) {
         return { done: true, error: error instanceof Error ? error.message : String(error) };
       }
@@ -1452,7 +1495,41 @@ export class ActionExecutor {
       return { done: true };
     }
 
-    return { done: false, nextChoices };
+    // Format choices for UI - element selections need {value: id, display: name}
+    const formattedChoices = isElementSelection
+      ? this.formatElementChoices(nextChoices as GameElement[])
+      : nextChoices;
+
+    return { done: false, nextChoices: formattedChoices };
+  }
+
+  /**
+   * Format element array as choices for UI (with value/display format)
+   */
+  private formatElementChoices(elements: GameElement[]): Array<{ value: number; display: string }> {
+    // Auto-disambiguate names
+    const nameCounts = new Map<string, number>();
+    for (const el of elements) {
+      const name = el.name || 'Element';
+      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+    }
+    const nameIndices = new Map<string, number>();
+
+    return elements.map(el => {
+      const baseName = el.name || 'Element';
+      const count = nameCounts.get(baseName) || 1;
+      let display: string;
+
+      if (count > 1) {
+        const idx = (nameIndices.get(baseName) || 0) + 1;
+        nameIndices.set(baseName, idx);
+        display = `${baseName} #${idx}`;
+      } else {
+        display = baseName;
+      }
+
+      return { value: el.id, display };
+    });
   }
 
   /**

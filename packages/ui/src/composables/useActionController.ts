@@ -74,15 +74,15 @@
  *
  * @example
  * ```typescript
- * // Full-featured controller with deferred and repeating selections
+ * // Full-featured controller with selection fetching and repeating selections
  * const controller = useActionController({
  *   sendAction,
  *   availableActions,
  *   actionMetadata,
  *   isMyTurn,
  *   playerPosition,
- *   fetchDeferredChoices: async (action, selection, player, args) => {
- *     const result = await fetch('/api/deferred-choices', { ... });
+ *   fetchSelectionChoices: async (action, selection, player, args) => {
+ *     const result = await fetch('/api/selection-choices', { ... });
  *     return result.json();
  *   },
  *   selectionStep: async (player, selection, value, action, args) => {
@@ -140,8 +140,6 @@ export interface SelectionMetadata {
   validElements?: ValidElement[];
   /** For multi-select: min/max selection configuration */
   multiSelect?: { min: number; max?: number };
-  /** Choices are fetched from server at selection time */
-  deferred?: boolean;
   /** Filter choices based on a previous selection's value */
   filterBy?: { key: string; selectionName: string };
   /** Look up choices from choicesByDependentValue based on previous selection */
@@ -197,10 +195,12 @@ export interface SelectionStepResult {
   actionComplete?: boolean;
 }
 
-/** Result from fetching deferred choices */
-export interface DeferredChoicesResult {
+/** Result from fetching selection choices */
+export interface SelectionChoicesResult {
   success: boolean;
-  choices?: Array<{ value: unknown; display: string }>;
+  choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown }>;
+  validElements?: ValidElement[];
+  multiSelect?: { min: number; max?: number };
   error?: string;
 }
 
@@ -215,7 +215,7 @@ export interface UseActionControllerOptions {
   isMyTurn: Ref<boolean>;
   /** Game view (for enriching validElements with full element data) */
   gameView?: Ref<GameElement | null | undefined>;
-  /** Player position (needed for deferred/repeating features) */
+  /** Player position (needed for fetching choices/repeating features) */
   playerPosition?: Ref<number>;
   /** Enable auto-fill for single-choice selections (default: true). Can be reactive. */
   autoFill?: boolean | Ref<boolean>;
@@ -229,15 +229,15 @@ export interface UseActionControllerOptions {
    */
   externalArgs?: Record<string, unknown>;
   /**
-   * Function to fetch deferred choices from server.
-   * Required for selections with `deferred: true`.
+   * Function to fetch selection choices from server.
+   * Required for choice/element/elements selections.
    */
-  fetchDeferredChoices?: (
+  fetchSelectionChoices?: (
     actionName: string,
     selectionName: string,
     player: number,
     currentArgs: Record<string, unknown>
-  ) => Promise<DeferredChoicesResult>;
+  ) => Promise<SelectionChoicesResult>;
   /**
    * Function to process a repeating selection step.
    * Required for selections with `repeat` config.
@@ -273,8 +273,8 @@ export interface UseActionControllerReturn {
   isExecuting: Ref<boolean>;
   /** Last validation error */
   lastError: Ref<string | null>;
-  /** Whether deferred choices are loading */
-  isDeferredLoading: Ref<boolean>;
+  /** Whether choices are being fetched from server */
+  isLoadingChoices: Ref<boolean>;
   /** Repeating selection state (for repeating selections) */
   repeatingState: Ref<RepeatingState | null>;
 
@@ -288,7 +288,7 @@ export interface UseActionControllerReturn {
   execute: (actionName: string, args?: Record<string, unknown>) => Promise<ActionResult>;
 
   // === Step-by-step Methods (wizard mode) ===
-  /** Start an action's selection flow (async for deferred choices) */
+  /** Start an action's selection flow (async - fetches choices from server) */
   start: (actionName: string, initialArgs?: Record<string, unknown>) => Promise<void>;
   /** Fill a selection with a value (async for repeating selections) */
   fill: (selectionName: string, value: unknown) => Promise<ValidationResult>;
@@ -300,15 +300,17 @@ export interface UseActionControllerReturn {
   cancel: () => void;
 
   // === Utility ===
-  /** Get available choices for a selection (handles filterBy, dependsOn, deferred) */
+  /** Get available choices for a selection (handles filterBy, dependsOn) */
   getChoices: (selection: SelectionMetadata) => Array<{ value: unknown; display: string }>;
   /** Get filtered choices for current selection (convenience method) */
   getCurrentChoices: () => Array<{ value: unknown; display: string }>;
+  /** Get valid elements for an element/elements selection from cache */
+  getValidElements: (selection: SelectionMetadata) => ValidElement[];
   /** Get metadata for an action */
   getActionMetadata: (actionName: string) => ActionMetadata | undefined;
   /** Clear all args (preserves reactivity for external args) */
   clearArgs: () => void;
-  /** Fetch deferred choices for a selection (called automatically by start/fill) */
+  /** Fetch choices for a selection from server (called automatically by start/fill) */
   fetchChoicesForSelection: (selectionName: string) => Promise<void>;
 }
 
@@ -327,7 +329,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     autoFill: autoFillOption = true,
     autoExecute: autoExecuteOption = true,
     externalArgs,
-    fetchDeferredChoices,
+    fetchSelectionChoices,
     selectionStep,
   } = options;
 
@@ -361,9 +363,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const isExecuting = ref(false);
   const lastError = ref<string | null>(null);
 
-  // Phase 3: Deferred choices state
-  const isDeferredLoading = ref(false);
-  const deferredChoicesCache = ref<Record<string, Array<{ value: unknown; display: string }>>>({});
+  // Selection choices state (always-fetch approach)
+  const isLoadingChoices = ref(false);
+  // Cache stores both choices (for choice selections) and validElements (for element selections)
+  // Key format: "actionName:selectionName:JSON(relevantArgs)"
+  const selectionChoicesCache = ref<Record<string, {
+    choices?: Array<{ value: unknown; display: string }>;
+    validElements?: ValidElement[];
+    multiSelect?: { min: number; max?: number };
+  }>>({});
 
   // Phase 3: Repeating selections state
   const repeatingState = ref<RepeatingState | null>(null);
@@ -378,9 +386,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  /** Clear all Phase 3 state */
+  /** Clear all selection state */
   function clearAdvancedState(): void {
-    deferredChoicesCache.value = {};
+    selectionChoicesCache.value = {};
     repeatingState.value = null;
   }
 
@@ -389,8 +397,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Build cache key for a selection (includes dependent args if applicable).
+   */
+  function buildCacheKey(actionName: string, selection: SelectionMetadata): string {
+    // Include dependent selection value in the key
+    const relevantArgs: Record<string, unknown> = {};
+    if (selection.dependsOn) {
+      relevantArgs[selection.dependsOn] = currentArgs.value[selection.dependsOn];
+    }
+    if (selection.filterBy) {
+      relevantArgs[selection.filterBy.selectionName] = currentArgs.value[selection.filterBy.selectionName];
+    }
+    const argsKey = Object.keys(relevantArgs).length > 0 ? JSON.stringify(relevantArgs) : '';
+    return `${actionName}:${selection.name}:${argsKey}`;
+  }
+
+  /**
    * Get available choices for a selection.
-   * Handles: static choices, validElements, dependsOn, filterBy, deferred, repeating
+   * Always uses cache populated by fetchChoicesForSelection.
+   * Falls back to metadata for backward compatibility (number/text selections, or if cache empty).
    */
   function getChoices(selection: SelectionMetadata): Array<{ value: unknown; display: string }> {
     let choices: Array<{ value: unknown; display: string }> = [];
@@ -400,39 +425,63 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (repeatingState.value.currentChoices) {
         choices = repeatingState.value.currentChoices;
       } else if (selection.choices) {
+        // Fallback to metadata choices (backward compatibility)
         choices = selection.choices;
       }
     }
-    // For deferred selections, use cached choices from server
-    else if (selection.deferred && currentAction.value) {
-      const key = `${currentAction.value}:${selection.name}`;
-      choices = deferredChoicesCache.value[key] || [];
-    }
-    // Handle dependsOn: look up choices from choicesByDependentValue or elementsByDependentValue
-    else if (selection.dependsOn) {
-      const dependentValue = currentArgs.value[selection.dependsOn];
-      if (dependentValue !== undefined) {
-        const key = String(dependentValue);
-        // For choice selections with dependsOn
-        if (selection.choicesByDependentValue) {
-          choices = selection.choicesByDependentValue[key] || [];
+    // Always check cache first (populated by fetchChoicesForSelection)
+    else if (currentAction.value) {
+      const key = buildCacheKey(currentAction.value, selection);
+      const cached = selectionChoicesCache.value[key];
+
+      if (cached) {
+        // Use cached choices or validElements
+        if (cached.choices) {
+          choices = cached.choices;
+        } else if (cached.validElements) {
+          choices = cached.validElements.map(el => ({
+            value: el.id,
+            display: el.display || `Element ${el.id}`,
+          }));
         }
-        // For element selections with dependsOn
-        else if (selection.elementsByDependentValue) {
-          const elements = selection.elementsByDependentValue[key] || [];
-          choices = elements.map(el => ({
+      } else {
+        // Fallback to metadata for backward compatibility (if no fetch available)
+        // Handle dependsOn: look up choices from choicesByDependentValue or elementsByDependentValue
+        if (selection.dependsOn) {
+          const dependentValue = currentArgs.value[selection.dependsOn];
+          if (dependentValue !== undefined) {
+            const depKey = String(dependentValue);
+            // For choice selections with dependsOn
+            if (selection.choicesByDependentValue) {
+              choices = selection.choicesByDependentValue[depKey] || [];
+            }
+            // For element selections with dependsOn
+            else if (selection.elementsByDependentValue) {
+              const elements = selection.elementsByDependentValue[depKey] || [];
+              choices = elements.map(el => ({
+                value: el.id,
+                display: el.display || `Element ${el.id}`,
+              }));
+            }
+          }
+        }
+        // Regular static choices from metadata
+        else if (selection.choices) {
+          choices = selection.choices;
+        }
+        // Element selections from metadata
+        else if (selection.validElements) {
+          choices = selection.validElements.map(el => ({
             value: el.id,
             display: el.display || `Element ${el.id}`,
           }));
         }
       }
-      // If dependent selection not yet made, return empty
     }
-    // Regular static choices
+    // Fallback if no action is active (shouldn't happen normally)
     else if (selection.choices) {
       choices = selection.choices;
     }
-    // Element selections
     else if (selection.validElements) {
       choices = selection.validElements.map(el => ({
         value: el.id,
@@ -459,6 +508,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const sel = currentSelection.value;
     if (!sel) return [];
     return getChoices(sel);
+  }
+
+  /** Get valid elements for an element/elements selection from cache */
+  function getValidElements(selection: SelectionMetadata): ValidElement[] {
+    if (!currentAction.value) return [];
+    if (selection.type !== 'element' && selection.type !== 'elements') return [];
+
+    const key = buildCacheKey(currentAction.value, selection);
+    const cached = selectionChoicesCache.value[key];
+    return cached?.validElements || [];
   }
 
   function selectionNeedsInput(selection: SelectionMetadata): boolean {
@@ -490,35 +549,60 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return { valid: true };
   }
 
-  /** Fetch deferred choices for a selection from the server */
+  /**
+   * Fetch choices for a selection from the server.
+   */
   async function fetchChoicesForSelection(selectionName: string): Promise<void> {
-    if (!fetchDeferredChoices || !currentAction.value) {
+    if (!fetchSelectionChoices) {
+      return;
+    }
+    if (!currentAction.value) {
+      return;
+    }
+
+    // Get selection metadata to build proper cache key
+    const meta = getActionMetadata(currentAction.value);
+    const selection = meta?.selections.find(s => s.name === selectionName);
+    if (!selection) {
+      return;
+    }
+
+    // Skip fetch for number/text selections - they don't have choices
+    if (selection.type === 'number' || selection.type === 'text') {
       return;
     }
 
     const player = playerPosition?.value ?? 0;
-    const key = `${currentAction.value}:${selectionName}`;
+    const key = buildCacheKey(currentAction.value, selection);
 
-    isDeferredLoading.value = true;
+    isLoadingChoices.value = true;
     try {
-      const result = await fetchDeferredChoices(
+      const result = await fetchSelectionChoices(
         currentAction.value,
         selectionName,
         player,
         { ...currentArgs.value }
       );
 
-      if (result.success && result.choices) {
-        deferredChoicesCache.value[key] = result.choices;
+      if (result.success) {
+        // Explicitly replace the whole cache object to ensure Vue reactivity triggers
+        selectionChoicesCache.value = {
+          ...selectionChoicesCache.value,
+          [key]: {
+            choices: result.choices,
+            validElements: result.validElements,
+            multiSelect: result.multiSelect,
+          },
+        };
       } else {
-        console.error('Failed to fetch deferred choices:', result.error);
-        deferredChoicesCache.value[key] = [];
+        console.error('Failed to fetch selection choices:', result.error);
+        selectionChoicesCache.value = { ...selectionChoicesCache.value, [key]: {} };
       }
     } catch (err) {
-      console.error('Error fetching deferred choices:', err);
-      deferredChoicesCache.value[key] = [];
+      console.error('Error fetching selection choices:', err);
+      selectionChoicesCache.value = { ...selectionChoicesCache.value, [key]: {} };
     } finally {
-      isDeferredLoading.value = false;
+      isLoadingChoices.value = false;
     }
   }
 
@@ -771,12 +855,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     Object.assign(currentArgs.value, initialArgs);
     lastError.value = null;
 
-    // Check if first selection is deferred - if so, fetch choices
-    // But skip if it has dependsOn with pre-computed values (elementsByDependentValue/choicesByDependentValue)
+    // Always fetch choices for the first selection (unless it's number/text)
     const meta = getActionMetadata(actionName);
     if (meta && meta.selections.length > 0) {
       const firstSel = meta.selections[0];
-      if (firstSel.deferred && !firstSel.elementsByDependentValue && !firstSel.choicesByDependentValue) {
+      // Fetch choices for choice/element/elements selections
+      if (firstSel.type === 'choice' || firstSel.type === 'element' || firstSel.type === 'elements') {
         await fetchChoicesForSelection(firstSel.name);
       }
     }
@@ -802,11 +886,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (validation.valid) {
       currentArgs.value[selectionName] = value;
 
-      // Check if next selection is deferred - if so, fetch choices
-      // But skip if it has dependsOn with pre-computed values (elementsByDependentValue/choicesByDependentValue)
+      // Always fetch choices for the next selection (unless it's number/text)
       const nextSel = getNextSelection(selectionName);
-      if (nextSel?.deferred && !nextSel.elementsByDependentValue && !nextSel.choicesByDependentValue) {
+      if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
         await fetchChoicesForSelection(nextSel.name);
+
+        // After fetch, check for auto-fill on the next selection
+        // (the watch may have fired before cache was populated)
+        if (getAutoFill() && !isExecuting.value) {
+          const choices = getChoices(nextSel);
+          if (choices.length === 1) {
+            currentArgs.value[nextSel.name] = choices[0].value;
+          }
+        }
       }
     } else {
       lastError.value = validation.error || 'Validation failed';
@@ -940,7 +1032,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     isReady,
     isExecuting,
     lastError,
-    isDeferredLoading,
+    isLoadingChoices,
     repeatingState,
 
     // Methods
@@ -954,6 +1046,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Utility
     getChoices,
     getCurrentChoices,
+    getValidElements,
     getActionMetadata,
     clearArgs,
     fetchChoicesForSelection,
@@ -1008,21 +1101,6 @@ export type SelectionStepFn = (
 }>;
 
 /**
- * Type for the deferred choices fetch function.
- * Used when choices must be computed by the server at selection time.
- */
-export type FetchDeferredChoicesFn = (
-  actionName: string,
-  selectionName: string,
-  player: number,
-  currentArgs: Record<string, unknown>
-) => Promise<{
-  success: boolean;
-  choices?: Array<{ value: unknown; display: string }>;
-  error?: string;
-}>;
-
-/**
  * Inject the selection step function for repeating selections.
  * Returns undefined if not in a GameShell context (function is optional).
  *
@@ -1041,25 +1119,6 @@ export type FetchDeferredChoicesFn = (
  */
 export function injectSelectionStepFn(): SelectionStepFn | undefined {
   return inject<SelectionStepFn | undefined>('selectionStepFn', undefined);
-}
-
-/**
- * Inject the deferred choices fetch function.
- * Returns undefined if not in a GameShell context (function is optional).
- *
- * @example
- * ```typescript
- * const fetchChoices = injectFetchDeferredChoicesFn();
- * if (fetchChoices && selection.deferred) {
- *   const result = await fetchChoices('move', 'destination', playerPosition, { piece: 5 });
- *   if (result.success) {
- *     // result.choices has the available choices
- *   }
- * }
- * ```
- */
-export function injectFetchDeferredChoicesFn(): FetchDeferredChoicesFn | undefined {
-  return inject<FetchDeferredChoicesFn | undefined>('fetchDeferredChoicesFn', undefined);
 }
 
 /**

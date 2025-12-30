@@ -247,12 +247,6 @@ export interface SelectionMetadata {
   type: 'choice' | 'element' | 'elements' | 'number' | 'text';
   prompt?: string;
   optional?: boolean;
-  /**
-   * For choice selections with defer: true.
-   * When deferred, choices are not evaluated until the player clicks the action.
-   * The UI should call /deferred-choices endpoint to get choices when needed.
-   */
-  deferred?: boolean;
   // Type-specific properties
   choices?: ChoiceWithRefs[];
   min?: number;
@@ -312,6 +306,21 @@ export interface ActionMetadata {
   name: string;
   prompt?: string;
   selections: SelectionMetadata[];
+}
+
+/**
+ * Response from getSelectionChoices endpoint.
+ * Used when fetching choices on-demand for any selection type.
+ */
+export interface SelectionChoicesResponse {
+  success: boolean;
+  error?: string;
+  /** For choice selections: formatted choices with display strings and board refs */
+  choices?: ChoiceWithRefs[];
+  /** For element/elements selections: valid elements the user can select */
+  validElements?: ValidElement[];
+  /** Multi-select configuration (evaluated at request time for function-based configs) */
+  multiSelect?: { min: number; max?: number };
 }
 
 /**

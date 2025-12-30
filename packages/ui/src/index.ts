@@ -208,7 +208,6 @@ export {
   ACTION_CONTROLLER_KEY,
   // Advanced feature injection helpers
   injectSelectionStepFn,
-  injectFetchDeferredChoicesFn,
   injectBoardInteraction,
   // Types
   type SelectionMetadata,
@@ -216,12 +215,11 @@ export {
   type ActionResult as ControllerActionResult,
   type ValidationResult,
   type SelectionStepResult,
-  type DeferredChoicesResult,
+  type SelectionChoicesResult,
   type RepeatingState,
   type UseActionControllerOptions,
   type UseActionControllerReturn,
   type SelectionStepFn,
-  type FetchDeferredChoicesFn,
   // Selection-related types
   type ChoiceWithRefs,
   type ValidElement,

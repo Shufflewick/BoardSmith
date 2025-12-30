@@ -198,13 +198,13 @@ const actionController = useActionController({
   autoExecute: true, // Always auto-execute once all selections are manually filled
   // Share actionArgs with the controller for bidirectional sync with custom UIs
   externalArgs: actionArgs,
-  // Phase 3: Deferred choices - fetched from server at selection time
-  fetchDeferredChoices: async (actionName, selectionName, player, currentArgs) => {
+  // Selection choices - fetched from server on-demand for each selection
+  fetchSelectionChoices: async (actionName, selectionName, player, currentArgs) => {
     if (!gameId.value) {
       return { success: false, error: 'No game ID' };
     }
     try {
-      const response = await fetch(`${props.apiUrl}/games/${gameId.value}/deferred-choices`, {
+      const response = await fetch(`${props.apiUrl}/games/${gameId.value}/selection-choices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,8 +216,8 @@ const actionController = useActionController({
       });
       return await response.json();
     } catch (err) {
-      console.error('Fetch deferred choices error:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Failed to fetch deferred choices' };
+      console.error('Fetch selection choices error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to fetch selection choices' };
     }
   },
   // Phase 3: Repeating selections - processed step by step on server

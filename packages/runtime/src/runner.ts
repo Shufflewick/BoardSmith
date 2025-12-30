@@ -142,6 +142,15 @@ export class GameRunner<G extends Game = Game> {
       };
     }
 
+    // Check if the action failed (flow state contains error)
+    if (flowState.actionError) {
+      return {
+        success: false,
+        error: flowState.actionError,
+        flowState,
+      };
+    }
+
     // Record in history
     this.actionHistory.push(serializedAction);
 

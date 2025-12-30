@@ -35,23 +35,22 @@ Action.create('selectRank')
   })
 ```
 
-#### Deferred Choices (`defer: true`)
+#### On-Demand Choices
 
-By default, choices are evaluated when building action metadata (before the player acts). Use `defer: true` to delay evaluation until the player clicks the action button.
+Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built.
 
-**Use this when:**
-- Choice computation has side effects (e.g., drawing cards from a deck)
-- Choices depend on game state at the moment of clicking
-- You want to manipulate state (like decks) before the draw occurs
+**This enables:**
+- Choice computation with side effects (e.g., drawing cards from a deck)
+- Choices that depend on the current game state
+- Manipulating state (like decks) right before showing choices
 
 ```typescript
 Action.create('hireFirstMerc')
   .prompt('Choose a MERC to hire')
   .condition((ctx) => ctx.player.team.length === 0)
   .chooseFrom('merc', {
-    defer: true,  // Choices evaluated when player clicks, not at game load
     choices: (ctx) => {
-      // This runs AFTER player clicks "Hire First MERC"
+      // This runs when player needs to make the selection
       const drawn = ctx.game.mercDeck.drawCards(3);
 
       // Store drawn cards for custom GameBoard to display

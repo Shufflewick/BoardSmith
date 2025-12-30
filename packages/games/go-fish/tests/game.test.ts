@@ -298,7 +298,7 @@ describe('GoFishGame', () => {
 
       if (aliceRanks.length > 0) {
         const result = simulateAction(testGame, 0, 'ask', {
-          target: bob,
+          target: { value: bob.position, display: bob.name },
           rank: aliceRanks[0],
         });
 
@@ -335,7 +335,7 @@ describe('GoFishGame', () => {
       const aliceRanks = testGame.game.getPlayerRanks(alice);
       if (aliceRanks.length > 0) {
         const result = testGame.doAction(0, 'ask', {
-          target: bob,
+          target: { value: bob.position, display: bob.name },
           rank: aliceRanks[0],
         });
 
@@ -416,7 +416,7 @@ describe('GoFishGame', () => {
       const ranks = testGame.game.getPlayerRanks(alice);
 
       if (ranks.length > 0) {
-        testGame.doAction(0, 'ask', { target: bob, rank: ranks[0] });
+        testGame.doAction(0, 'ask', { target: { value: bob.position, display: bob.name }, rank: ranks[0] });
 
         const after = JSON.stringify(testGame.runner.getSnapshot());
         const diff = diffSnapshots(before, after);

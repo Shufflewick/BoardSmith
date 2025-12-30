@@ -15,7 +15,6 @@ import {
   useActionController,
   injectActionController,
   injectSelectionStepFn,
-  injectFetchDeferredChoicesFn,
   injectBoardInteraction,
   ACTION_CONTROLLER_KEY,
   type ActionMetadata,
@@ -756,14 +755,12 @@ describe('useActionController', () => {
     it('should return undefined for optional injections outside context', () => {
       // These return undefined instead of throwing (optional)
       expect(injectSelectionStepFn()).toBeUndefined();
-      expect(injectFetchDeferredChoicesFn()).toBeUndefined();
       expect(injectBoardInteraction()).toBeUndefined();
     });
 
     it('should export injection helper functions', () => {
       // Verify the functions are exported and callable
       expect(typeof injectSelectionStepFn).toBe('function');
-      expect(typeof injectFetchDeferredChoicesFn).toBe('function');
       expect(typeof injectBoardInteraction).toBe('function');
     });
   });
@@ -974,9 +971,9 @@ describe('useActionController', () => {
     });
   });
 
-  describe('deferred choices', () => {
-    it('should fetch deferred choices when starting action with deferred first selection', async () => {
-      const fetchDeferredChoices = vi.fn().mockResolvedValue({
+  describe('selection choices', () => {
+    it('should fetch choices when starting action', async () => {
+      const fetchSelectionChoices = vi.fn().mockResolvedValue({
         success: true,
         choices: [
           { value: 'A', display: 'Choice A' },
@@ -984,25 +981,23 @@ describe('useActionController', () => {
         ],
       });
 
-      // Create metadata with deferred selection
-      const deferredMeta: Record<string, ActionMetadata> = {
-        deferredAction: {
-          name: 'deferredAction',
+      // Create metadata with choice selection
+      const choiceMeta: Record<string, ActionMetadata> = {
+        choiceAction: {
+          name: 'choiceAction',
           prompt: 'Select something',
           selections: [
             {
               name: 'item',
               type: 'choice',
               prompt: 'Select item',
-              deferred: true,
-              choices: [], // Empty - will be fetched
             },
           ],
         },
       };
 
-      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
-      availableActions.value = [...availableActions.value, 'deferredAction'];
+      actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
+      availableActions.value = [...availableActions.value, 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1011,32 +1006,32 @@ describe('useActionController', () => {
         isMyTurn,
         autoExecute: false,
         playerPosition: ref(0),
-        fetchDeferredChoices,
+        fetchSelectionChoices,
       });
 
-      await controller.start('deferredAction');
+      await controller.start('choiceAction');
 
-      expect(fetchDeferredChoices).toHaveBeenCalledWith('deferredAction', 'item', 0, {});
+      expect(fetchSelectionChoices).toHaveBeenCalledWith('choiceAction', 'item', 0, {});
     });
 
-    it('should track isDeferredLoading state during fetch', async () => {
+    it('should track isLoadingChoices state during fetch', async () => {
       let resolveFetch: (value: any) => void;
       const fetchPromise = new Promise(resolve => { resolveFetch = resolve; });
 
-      const fetchDeferredChoices = vi.fn().mockReturnValue(fetchPromise);
+      const fetchSelectionChoices = vi.fn().mockReturnValue(fetchPromise);
 
-      const deferredMeta: Record<string, ActionMetadata> = {
-        deferredAction: {
-          name: 'deferredAction',
+      const choiceMeta: Record<string, ActionMetadata> = {
+        choiceAction: {
+          name: 'choiceAction',
           prompt: 'Select something',
           selections: [
-            { name: 'item', type: 'choice', prompt: 'Select', deferred: true, choices: [] },
+            { name: 'item', type: 'choice', prompt: 'Select' },
           ],
         },
       };
 
-      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
-      availableActions.value = [...availableActions.value, 'deferredAction'];
+      actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
+      availableActions.value = [...availableActions.value, 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1044,23 +1039,23 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        fetchDeferredChoices,
+        fetchSelectionChoices,
       });
 
-      const startPromise = controller.start('deferredAction');
+      const startPromise = controller.start('choiceAction');
 
       // Should be loading
-      expect(controller.isDeferredLoading.value).toBe(true);
+      expect(controller.isLoadingChoices.value).toBe(true);
 
       resolveFetch!({ success: true, choices: [] });
       await startPromise;
 
       // Should no longer be loading
-      expect(controller.isDeferredLoading.value).toBe(false);
+      expect(controller.isLoadingChoices.value).toBe(false);
     });
 
     it('should use fetched choices in getChoices()', async () => {
-      const fetchDeferredChoices = vi.fn().mockResolvedValue({
+      const fetchSelectionChoices = vi.fn().mockResolvedValue({
         success: true,
         choices: [
           { value: 'fetched1', display: 'Fetched 1' },
@@ -1068,18 +1063,18 @@ describe('useActionController', () => {
         ],
       });
 
-      const deferredMeta: Record<string, ActionMetadata> = {
-        deferredAction: {
-          name: 'deferredAction',
+      const choiceMeta: Record<string, ActionMetadata> = {
+        choiceAction: {
+          name: 'choiceAction',
           prompt: 'Select something',
           selections: [
-            { name: 'item', type: 'choice', prompt: 'Select', deferred: true, choices: [] },
+            { name: 'item', type: 'choice', prompt: 'Select' },
           ],
         },
       };
 
-      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
-      availableActions.value = [...availableActions.value, 'deferredAction'];
+      actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
+      availableActions.value = [...availableActions.value, 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1087,48 +1082,46 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        fetchDeferredChoices,
+        fetchSelectionChoices,
       });
 
-      await controller.start('deferredAction');
+      await controller.start('choiceAction');
 
-      const selection = actionMetadata.value!.deferredAction.selections[0];
+      const selection = actionMetadata.value!.choiceAction.selections[0];
       const choices = controller.getChoices(selection);
 
       expect(choices).toHaveLength(2);
       expect(choices[0].value).toBe('fetched1');
     });
 
-    it('should fetch deferred choices for next selection after fill', async () => {
-      const fetchDeferredChoices = vi.fn().mockResolvedValue({
+    it('should fetch choices for all selections (always-fetch approach)', async () => {
+      // The mock returns choices for both selections - 'x' for both
+      const fetchSelectionChoices = vi.fn().mockResolvedValue({
         success: true,
         choices: [{ value: 'x', display: 'X' }],
       });
 
-      const deferredMeta: Record<string, ActionMetadata> = {
-        twoStepDeferred: {
-          name: 'twoStepDeferred',
+      const twoStepMeta: Record<string, ActionMetadata> = {
+        twoStepAction: {
+          name: 'twoStepAction',
           prompt: 'Two step action',
           selections: [
             {
               name: 'first',
               type: 'choice',
               prompt: 'First',
-              choices: [{ value: 1, display: 'One' }],
             },
             {
               name: 'second',
               type: 'choice',
-              prompt: 'Second (deferred)',
-              deferred: true,
-              choices: [],
+              prompt: 'Second',
             },
           ],
         },
       };
 
-      actionMetadata.value = { ...createTestMetadata(), ...deferredMeta };
-      availableActions.value = [...availableActions.value, 'twoStepDeferred'];
+      actionMetadata.value = { ...createTestMetadata(), ...twoStepMeta };
+      availableActions.value = [...availableActions.value, 'twoStepAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1137,16 +1130,19 @@ describe('useActionController', () => {
         isMyTurn,
         autoFill: false,
         autoExecute: false,
-        fetchDeferredChoices,
+        fetchSelectionChoices,
       });
 
-      await controller.start('twoStepDeferred');
-      expect(fetchDeferredChoices).not.toHaveBeenCalled(); // First selection isn't deferred
+      await controller.start('twoStepAction');
+      // First selection fetches choices
+      expect(fetchSelectionChoices).toHaveBeenCalledWith('twoStepAction', 'first', 0, {});
 
-      await controller.fill('first', 1);
+      fetchSelectionChoices.mockClear();
+      // Fill with 'x' which is what was fetched
+      await controller.fill('first', 'x');
 
-      // Should fetch for the second (deferred) selection
-      expect(fetchDeferredChoices).toHaveBeenCalledWith('twoStepDeferred', 'second', 0, { first: 1 });
+      // Should fetch for the second selection as well
+      expect(fetchSelectionChoices).toHaveBeenCalledWith('twoStepAction', 'second', 0, { first: 'x' });
     });
   });
 
@@ -1967,14 +1963,14 @@ describe('useActionController', () => {
   });
 
   describe('fetchChoicesForSelection()', () => {
-    it('should do nothing without fetchDeferredChoices callback', async () => {
+    it('should do nothing without fetchSelectionChoices callback', async () => {
       const controller = useActionController({
         sendAction,
         availableActions,
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        // No fetchDeferredChoices provided
+        // No fetchSelectionChoices provided
       });
 
       await controller.start('playCard');
@@ -1984,7 +1980,7 @@ describe('useActionController', () => {
     });
 
     it('should do nothing when no action is active', async () => {
-      const fetchDeferredChoices = vi.fn();
+      const fetchSelectionChoices = vi.fn();
 
       const controller = useActionController({
         sendAction,
@@ -1992,12 +1988,12 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        fetchDeferredChoices,
+        fetchSelectionChoices,
       });
 
       await controller.fetchChoicesForSelection('card');
 
-      expect(fetchDeferredChoices).not.toHaveBeenCalled();
+      expect(fetchSelectionChoices).not.toHaveBeenCalled();
     });
   });
 });

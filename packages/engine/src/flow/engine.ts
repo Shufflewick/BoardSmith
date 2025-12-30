@@ -71,6 +71,8 @@ export class FlowEngine<G extends Game = Game> {
   private availableActions: string[] = [];
   private complete = false;
   private lastActionResult?: ActionResult;
+  /** Error from last action if it failed (cleared on success) */
+  private actionError?: string;
   /** For simultaneous action steps - tracks which players can act */
   private awaitingPlayers: PlayerAwaitingState[] = [];
   /** Current named phase (for UI display) */
@@ -129,11 +131,13 @@ export class FlowEngine<G extends Game = Game> {
     this.lastActionResult = result;
 
     if (!result.success) {
-      // Action failed, stay in same state
+      // Action failed, stay in same state and record the error
+      this.actionError = result.error;
       return this.getState();
     }
 
-    // Clear awaiting state
+    // Clear error and awaiting state on success
+    this.actionError = undefined;
     this.awaitingInput = false;
 
     // Handle action step completion logic
@@ -338,6 +342,11 @@ export class FlowEngine<G extends Game = Game> {
       if (this.currentActionConfig.minMoves) {
         state.movesRequired = Math.max(0, this.currentActionConfig.minMoves - this.moveCount);
       }
+    }
+
+    // Include action error if present
+    if (this.actionError) {
+      state.actionError = this.actionError;
     }
 
     return state;

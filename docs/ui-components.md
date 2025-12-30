@@ -422,7 +422,7 @@ boardInteraction.isDraggedElement(element)
 
 Custom game boards can detect which action is currently being filled in. This is useful when:
 - Showing visual feedback based on the active action
-- Displaying deferred choices (cards drawn when action clicked)
+- Displaying on-demand choices (e.g., cards drawn when action clicked)
 - Customizing the board based on current selection step
 
 ```typescript
@@ -459,7 +459,7 @@ const isHiringMerc = computed(() =>
   boardInteraction?.currentAction === 'hireFirstMerc'
 );
 
-// Get drawn mercs from game settings (stored by deferred choices callback)
+// Get drawn mercs from game settings (stored by on-demand choices callback)
 const drawnMercs = computed(() => {
   if (!isHiringMerc.value) return [];
 

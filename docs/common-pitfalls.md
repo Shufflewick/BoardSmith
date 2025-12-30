@@ -342,22 +342,21 @@ This causes:
 
 ### The Solution
 
-Use `defer: true` to delay choice evaluation until the player clicks the action:
+Choices are now always evaluated on-demand when the player needs to make the selection. This is the default behavior - no special configuration needed:
 
 ```typescript
 // CORRECT - Choices evaluated when player clicks
 Action.create('hireFirstMerc')
   .chooseFrom('merc', {
-    defer: true,  // Key addition
     choices: (ctx) => {
-      // This runs AFTER player clicks "Hire First MERC"
+      // This runs when player needs to make the selection
       const drawn = ctx.game.mercDeck.drawCards(3);
       return drawn;
     },
   })
 ```
 
-See [Deferred Choices](./actions-and-flow.md#deferred-choices-defer-true) in the Actions & Flow documentation for full details.
+See [On-Demand Choices](./actions-and-flow.md#on-demand-choices) in the Actions & Flow documentation for full details.
 
 ---
 
@@ -373,7 +372,7 @@ See [Deferred Choices](./actions-and-flow.md#deferred-choices-defer-true) in the
 | Element refs on Player | `selectedCard: Card` | `selectedCardId: number` |
 | Loop safety | No `maxIterations` | Always set `maxIterations` |
 | Class registration | Forget to register | `registerElements([...])` |
-| Side effects in choices | `choices: () => deck.draw()` | `defer: true` with choices |
+| Side effects in choices | N/A (no longer an issue) | Choices always evaluated on-demand |
 
 ---
 
