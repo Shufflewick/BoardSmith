@@ -303,6 +303,39 @@ class ElementCollection<T> extends Array<T> {
 }
 ```
 
+## Debugging Actions
+
+When an action isn't appearing in `availableActions` and you can't figure out why, use `debugActionAvailability()`:
+
+```typescript
+const debug = game.debugActionAvailability('equipItem', player);
+console.log(debug.reason);
+// "Selection 'equipment' has no valid choices (Depends on 'actingMerc' - no valid combinations found)"
+
+// For detailed breakdown:
+console.log('Condition passed:', debug.details.conditionPassed);
+for (const sel of debug.details.selections) {
+  const status = sel.passed ? '✓' : '✗';
+  console.log(`${status} ${sel.name}: ${sel.choices} choices`);
+  if (sel.note) console.log(`    ${sel.note}`);
+}
+```
+
+Common issues this helps diagnose:
+- **Condition returns false**: Check your action's `condition` function
+- **Selection has no choices**: The `from` or `filter` eliminated all options
+- **Dependent selection fails**: When using `dependsOn`, no combination of previous selections leads to valid choices
+
+To debug all actions at once:
+
+```typescript
+const allDebug = game.debugAllActions(player);
+const unavailable = allDebug.filter(d => !d.available);
+for (const d of unavailable) {
+  console.log(`${d.actionName}: ${d.reason}`);
+}
+```
+
 ## See Also
 
 - [Getting Started Guide](../../docs/getting-started.md)

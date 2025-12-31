@@ -128,6 +128,9 @@ export type {
   ConditionDetail,
   SelectionTrace,
   ActionTrace,
+  // Human-readable debug types
+  SelectionDebugInfo,
+  ActionDebugInfo,
   // Repeating selections types
   RepeatConfig,
   RepeatingSelectionState,

@@ -488,3 +488,62 @@ export interface ActionTrace {
   /** Trace of each selection */
   selections: SelectionTrace[];
 }
+
+// ============================================
+// Action Debug Types (human-readable output)
+// ============================================
+
+/**
+ * Detailed info about a selection's availability.
+ * Used by debugActionAvailability() for human-readable output.
+ */
+export interface SelectionDebugInfo {
+  /** Selection name */
+  name: string;
+  /** Number of choices available */
+  choices: number;
+  /** Whether this selection passed (had choices or was optional) */
+  passed: boolean;
+  /** Human-readable note explaining the status */
+  note?: string;
+}
+
+/**
+ * Human-readable debug information about why an action is or isn't available.
+ *
+ * @example
+ * ```typescript
+ * const debug = game.debugActionAvailability('equipItem', player);
+ * if (!debug.available) {
+ *   console.log(debug.reason);
+ *   // "Selection 'equipment' has no valid choices"
+ *
+ *   for (const sel of debug.details.selections) {
+ *     console.log(`${sel.name}: ${sel.choices} choices - ${sel.note}`);
+ *   }
+ * }
+ * ```
+ */
+export interface ActionDebugInfo {
+  /** Action name */
+  actionName: string;
+  /** Whether the action is available */
+  available: boolean;
+  /**
+   * Human-readable explanation of why the action is/isn't available.
+   * Examples:
+   * - "Action is available with 3 choices for 'target'"
+   * - "Condition failed: player has no action points"
+   * - "Selection 'equipment' has no valid choices"
+   */
+  reason: string;
+  /** Detailed breakdown */
+  details: {
+    /** Whether the action's condition passed (true if no condition) */
+    conditionPassed: boolean;
+    /** Condition failure details if available */
+    conditionNote?: string;
+    /** Info about each selection */
+    selections: SelectionDebugInfo[];
+  };
+}

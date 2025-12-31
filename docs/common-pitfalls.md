@@ -634,6 +634,70 @@ const count = getAttr(sectorElement, 'stashCount', 0);
 
 ---
 
+## 12. Debugging "Why Isn't My Action Available?"
+
+### The Problem
+
+Your action isn't appearing in `availableActions` and you can't figure out why. The game silently excludes it with no explanation.
+
+### The Solution: Use `debugActionAvailability()`
+
+The engine provides a built-in debugging method that explains exactly why an action is or isn't available:
+
+```typescript
+// In your game code or browser console:
+const debug = game.debugActionAvailability('equipItem', player);
+console.log(debug.reason);
+// "Selection 'equipment' has no valid choices (Depends on 'actingMerc' - no valid combinations found)"
+
+// For detailed breakdown:
+console.log('Condition passed:', debug.details.conditionPassed);
+for (const sel of debug.details.selections) {
+  const status = sel.passed ? '✓' : '✗';
+  console.log(`${status} ${sel.name}: ${sel.choices} choices`);
+  if (sel.note) console.log(`    ${sel.note}`);
+}
+// ✓ actingMerc: 3 choices
+//     3 valid choices
+// ✗ equipment: 0 choices
+//     Depends on 'actingMerc' - no valid combinations found
+```
+
+### Common Issues and What to Look For
+
+| `debug.reason` says... | Check this... |
+|------------------------|---------------|
+| "Condition returned false" | Your action's `condition` function. Use `ConditionTracer` for details. |
+| "Selection 'X' has no valid choices" | The `from`, `filter`, or `elements` for that selection. |
+| "Depends on 'Y' - no valid combinations" | All choices for Y lead to empty choices for X. Maybe Y has the wrong elements? |
+| "Filter eliminated all choices" | Your `filter` function is too restrictive. |
+| "Action 'X' does not exist" | Typo in action name or action not registered. |
+
+### Debug All Actions At Once
+
+```typescript
+const allDebug = game.debugAllActions(player);
+const unavailable = allDebug.filter(d => !d.available);
+for (const d of unavailable) {
+  console.log(`${d.actionName}: ${d.reason}`);
+}
+```
+
+### In Tests
+
+```typescript
+import { createTestGame } from '@boardsmith/testing';
+
+const testGame = await createTestGame(gameDefinition, { playerCount: 2 });
+
+// Debug why action isn't available
+const debug = testGame.game.debugActionAvailability('attack', testGame.game.players[0]);
+expect(debug.available).toBe(true);
+// If it fails, debug.reason tells you why
+```
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -648,6 +712,7 @@ const count = getAttr(sectorElement, 'stashCount', 0);
 | Class registration | Forget to register | `registerElements([...])` |
 | Side effects in choices | N/A (no longer an issue) | Choices always evaluated on-demand |
 | **Element storage** | `stash: Equipment[] = []` | `stashZone.all(Equipment)` |
+| **Action debugging** | Guessing why action unavailable | `game.debugActionAvailability(name, player)` |
 
 ---
 

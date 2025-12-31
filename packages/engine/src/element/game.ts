@@ -4,7 +4,7 @@ import type { ElementContext, ElementClass, ElementJSON } from './types.js';
 import { Player, PlayerCollection } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand } from '../command/executor.js';
-import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace } from '../action/types.js';
+import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, SelectionDebugInfo } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 
@@ -653,6 +653,158 @@ export class Game<
       traces.push(this._actionExecutor.traceActionAvailability(action, player));
     }
     return traces;
+  }
+
+  /**
+   * Debug why an action is or isn't available for a player.
+   * Returns human-readable information explaining the availability status.
+   *
+   * This is the recommended method for debugging action availability issues.
+   * It provides clear explanations rather than just raw trace data.
+   *
+   * @example
+   * ```typescript
+   * const debug = game.debugActionAvailability('equipItem', player);
+   * console.log(debug.reason);
+   * // "Selection 'equipment' has no valid choices"
+   *
+   * // For more detail:
+   * for (const sel of debug.details.selections) {
+   *   console.log(`${sel.name}: ${sel.choices} choices`);
+   *   if (sel.note) console.log(`  └─ ${sel.note}`);
+   * }
+   * ```
+   *
+   * @param actionName - Name of the action to debug
+   * @param player - Player to check availability for
+   * @returns Human-readable debug information
+   */
+  debugActionAvailability(actionName: string, player: P): ActionDebugInfo {
+    const action = this._actions.get(actionName);
+
+    if (!action) {
+      return {
+        actionName,
+        available: false,
+        reason: `Action '${actionName}' does not exist`,
+        details: {
+          conditionPassed: false,
+          conditionNote: `No action registered with name '${actionName}'. Check for typos or ensure the action is registered.`,
+          selections: [],
+        },
+      };
+    }
+
+    const trace = this._actionExecutor.traceActionAvailability(action, player);
+    return this._formatActionDebugInfo(trace);
+  }
+
+  /**
+   * Debug all actions for a player.
+   * Returns human-readable information for every registered action.
+   *
+   * @example
+   * ```typescript
+   * const allDebug = game.debugAllActions(player);
+   * for (const debug of allDebug) {
+   *   if (!debug.available) {
+   *     console.log(`${debug.actionName}: ${debug.reason}`);
+   *   }
+   * }
+   * ```
+   */
+  debugAllActions(player: P): ActionDebugInfo[] {
+    return this.getActionTraces(player).map(trace => this._formatActionDebugInfo(trace));
+  }
+
+  /**
+   * Convert an ActionTrace to human-readable ActionDebugInfo
+   */
+  private _formatActionDebugInfo(trace: ActionTrace): ActionDebugInfo {
+    const selections: SelectionDebugInfo[] = trace.selections.map(sel => {
+      const passed = !!sel.optional || sel.choiceCount !== 0;
+      let note: string | undefined;
+
+      if (sel.choiceCount === -1) {
+        note = 'Free input (text/number) - always available';
+      } else if (sel.optional) {
+        note = sel.choiceCount > 0
+          ? `Optional with ${sel.choiceCount} choices`
+          : 'Optional - can be skipped';
+      } else if (sel.choiceCount === 0) {
+        if (sel.dependentOn) {
+          note = `Depends on '${sel.dependentOn}' - no valid combinations found`;
+        } else if (sel.filterApplied) {
+          note = 'Filter eliminated all choices';
+        } else {
+          note = 'No elements/choices available';
+        }
+      } else {
+        note = `${sel.choiceCount} valid choice${sel.choiceCount === 1 ? '' : 's'}`;
+      }
+
+      return {
+        name: sel.name,
+        choices: sel.choiceCount,
+        passed,
+        note,
+      };
+    });
+
+    // Determine the reason
+    let reason: string;
+    const conditionPassed = trace.conditionResult !== false;
+    let conditionNote: string | undefined;
+
+    if (trace.conditionError) {
+      reason = `Condition threw an error: ${trace.conditionError}`;
+      conditionNote = trace.conditionError;
+    } else if (!conditionPassed) {
+      // Build condition note from details if available
+      if (trace.conditionDetails && trace.conditionDetails.length > 0) {
+        const failedChecks = trace.conditionDetails.filter(d => !d.passed);
+        if (failedChecks.length > 0) {
+          conditionNote = failedChecks.map(d => `${d.label} = ${JSON.stringify(d.value)}`).join(', ');
+          reason = `Condition failed: ${conditionNote}`;
+        } else {
+          reason = 'Condition returned false';
+          conditionNote = 'Condition returned false (use ConditionTracer for details)';
+        }
+      } else {
+        reason = 'Condition returned false';
+        conditionNote = 'Condition returned false (use ConditionTracer in your condition for detailed info)';
+      }
+    } else if (!trace.available) {
+      // Find the blocking selection
+      const blockingSel = selections.find(s => !s.passed);
+      if (blockingSel) {
+        reason = `Selection '${blockingSel.name}' has no valid choices`;
+        if (blockingSel.note) {
+          reason += ` (${blockingSel.note})`;
+        }
+      } else {
+        reason = 'No valid selection path found';
+      }
+    } else {
+      // Action is available
+      if (selections.length === 0) {
+        reason = 'Action is available (no selections required)';
+      } else {
+        const firstSel = selections[0];
+        reason = `Action is available with ${firstSel.choices} choice${firstSel.choices === 1 ? '' : 's'} for '${firstSel.name}'`;
+      }
+    }
+
+    return {
+      actionName: trace.actionName,
+      available: trace.available,
+      reason,
+      details: {
+        conditionPassed,
+        conditionNote,
+        selections,
+      },
+    };
   }
 
   // ============================================

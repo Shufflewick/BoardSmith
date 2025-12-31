@@ -264,9 +264,36 @@ console.log(toDebugString(testGame.game));
 //   DiscardPile (id=2): 10 children
 ```
 
+### debugActionAvailability (Recommended)
+
+The engine provides a built-in method for debugging action availability with human-readable explanations:
+
+```typescript
+// Using the engine's built-in method (recommended)
+const debug = testGame.game.debugActionAvailability('move', player);
+console.log(debug.reason);
+// "Selection 'destination' has no valid choices (Depends on 'piece' - no valid combinations found)"
+
+for (const sel of debug.details.selections) {
+  const status = sel.passed ? '✓' : '✗';
+  console.log(`${status} ${sel.name}: ${sel.choices} choices`);
+  if (sel.note) console.log(`    ${sel.note}`);
+}
+// ✓ piece: 3 choices
+//     3 valid choices
+// ✗ destination: 0 choices
+//     Depends on 'piece' - no valid combinations found
+
+// Debug all actions at once
+const allDebug = testGame.game.debugAllActions(player);
+for (const d of allDebug.filter(d => !d.available)) {
+  console.log(`${d.actionName}: ${d.reason}`);
+}
+```
+
 ### traceAction
 
-Debug why an action is/isn't available:
+Legacy testing utility for action debugging (prefer `game.debugActionAvailability()` above):
 
 ```typescript
 import { traceAction } from '@boardsmith/testing';
