@@ -147,8 +147,18 @@ const visibleActions = computed(() => {
 });
 
 // Current action metadata
+// Note: For followUp actions, the action may not be in availableActions,
+// so we check the controller's snapshot first (which has the correct metadata)
 const currentActionMeta = computed(() => {
   if (!currentAction.value) return null;
+
+  // Check actionSnapshot first - handles followUp actions that aren't in availableActions
+  const snapshotMeta = actionController.actionSnapshot?.value;
+  if (snapshotMeta?.actionName === currentAction.value && snapshotMeta.metadata) {
+    return snapshotMeta.metadata;
+  }
+
+  // Fall back to looking up in actionsWithMetadata
   return actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
 });
 

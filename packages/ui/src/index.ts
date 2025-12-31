@@ -217,6 +217,7 @@ export {
   type SelectionStepResult,
   type SelectionChoicesResult,
   type RepeatingState,
+  type ActionStateSnapshot,
   type UseActionControllerOptions,
   type UseActionControllerReturn,
   type SelectionStepFn,

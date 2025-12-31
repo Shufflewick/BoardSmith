@@ -403,6 +403,8 @@ export interface UseActionControllerReturn {
   fetchChoicesForSelection: (selectionName: string) => Promise<void>;
 
   // === Snapshot API (Pit of Success) ===
+  /** Frozen action state - contains metadata for followUp actions not in availableActions */
+  actionSnapshot: Ref<ActionStateSnapshot | null>;
   /** Get a collected selection by name (value + display) */
   getCollectedSelection: (name: string) => CollectedSelection | undefined;
   /** Get all collected selections with their names */
@@ -1539,6 +1541,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     fetchChoicesForSelection,
 
     // Snapshot API (Pit of Success)
+    actionSnapshot,  // Readonly access to frozen action state (for followUp metadata)
     getCollectedSelection,
     getCollectedSelections,
   };
