@@ -1012,7 +1012,135 @@ const mercId = merc.id;  // ✓
 const mercId = merc.attributes.id;  // ✗ undefined
 ```
 
+### Finding Elements by ID vs by Attributes
+
+A common pattern is having UI data (like a selected equipment name) and needing to find the element's numeric ID for API calls. The element data you display comes from `attributes`, but the ID you need for actions is at the top level.
+
+**The Problem:**
+```typescript
+// You have equipment stats displayed in the UI
+const selectedEquipment = { name: 'Laser Rifle', damage: 10 };
+
+// But you need the element ID to drop it
+// How do you find the ID?
+```
+
+**The Solution:** Use `findChildByAttribute` to search children:
+
+```typescript
+import { findChildByAttribute, getElementId } from '@boardsmith/ui';
+
+// Find equipment element by its name attribute
+const equipment = findChildByAttribute(merc, 'equipmentName', selectedEquipment.name);
+const equipmentId = getElementId(equipment);
+
+if (equipmentId) {
+  await actionController.execute('dropEquipment', {
+    actingMerc: merc.id,
+    equipment: equipmentId
+  });
+}
+```
+
+### Helper Functions for Finding Elements
+
+The `@boardsmith/ui` package provides several helpers for finding elements:
+
+| Function | Description | Use When |
+|----------|-------------|----------|
+| `findElement(view, { type, name, className })` | Find direct child by type/name/class | Finding top-level containers |
+| `findChildByAttribute(parent, attrName, value)` | Find direct child by attribute | Finding element when you have attribute data |
+| `findElementByAttribute(root, attrName, value)` | Recursive search by attribute | Finding element anywhere in tree |
+| `findElementById(root, id)` | Recursive search by numeric ID | Finding element when you have its ID |
+| `getElementId(element)` | Get numeric ID from element | Extracting ID for action calls |
+
+**Example: Equipment Modal**
+
+```typescript
+// User selects equipment from a modal showing equipment data
+const selectedEquipmentName = 'Plasma Cannon';
+
+// Find the merc that has this equipment
+const merc = findElement(gameView, { className: 'Merc' });
+
+// Find the equipment element by searching merc's children
+const equipment = findChildByAttribute(merc, 'equipmentName', selectedEquipmentName);
+
+if (equipment) {
+  console.log('Found equipment ID:', equipment.id);  // e.g., 42
+  await actionController.execute('dropEquipment', {
+    actingMerc: merc.id,
+    equipment: equipment.id  // Use the numeric ID
+  });
+}
+```
+
+**Example: Finding Any Element by Unique Attribute**
+
+```typescript
+// Find a sector anywhere in the game by its unique sector ID
+const sector = findElementByAttribute(gameView, 'sectorId', 'alpha-3');
+if (sector) {
+  await actionController.execute('moveTo', { destination: sector.id });
+}
+```
+
 ## Calling Actions from Custom UIs
+
+### When to Use `execute()` vs `start()`
+
+The `actionController` has two main ways to trigger actions. Choosing the right one depends on whether you have all the information needed upfront.
+
+| Method | Use When | What Happens |
+|--------|----------|--------------|
+| `execute(name, args)` | You have all selection values ready | Action executes immediately |
+| `start(name, options?)` | User needs to make selections via ActionPanel | Enters wizard mode, ActionPanel shows selection UI |
+
+**Decision Guide:**
+
+```
+Do you have ALL required selection values?
+├── YES → Use execute()
+│   Example: await execute('draw', { count: 3 })
+│
+└── NO → Use start()
+    │
+    ├── Do you have SOME values to pre-fill?
+    │   └── YES → start('action', { args: { known: value } })
+    │
+    └── Should later selections auto-fill when they become active?
+        └── YES → start('action', { prefill: { later: value } })
+```
+
+**Common Patterns:**
+
+```typescript
+// Pattern 1: No selections required (e.g., endTurn, pass)
+await actionController.execute('endTurn');
+
+// Pattern 2: All selections known (direct board click)
+await actionController.execute('move', {
+  piece: clickedPiece.id,
+  destination: clickedCell.id
+});
+
+// Pattern 3: Start wizard mode (let ActionPanel handle selections)
+actionController.start('play');
+
+// Pattern 4: Pre-fill first selection, let user choose rest
+actionController.start('move', { args: { piece: clickedPiece.id } });
+
+// Pattern 5: Pre-fill dependent selection (auto-fills when reached)
+actionController.start('dropEquipment', {
+  args: { actingMerc: merc.id },
+  prefill: { equipment: equipmentId }  // Applied when 'equipment' step activates
+});
+```
+
+**args vs prefill:**
+
+- `args`: Applied immediately when `start()` is called. Use for selections that are available now.
+- `prefill`: Applied later when that selection step becomes active. Use for dependent selections where the choice isn't visible until a prior selection is made.
 
 When calling `actionController.execute()` or `actionController.fill()`, pass **numeric element IDs**:
 

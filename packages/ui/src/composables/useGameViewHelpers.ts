@@ -203,6 +203,114 @@ export function isOpponentElement(
 }
 
 /**
+ * Find a child element by matching an attribute value.
+ * Searches only direct children of the element.
+ *
+ * This is useful when you have element data (like equipment stats) but need the
+ * element's numeric ID for API calls.
+ *
+ * @example
+ * ```typescript
+ * // Find equipment by name
+ * const weapon = findChildByAttribute(merc, 'equipmentName', 'Laser Rifle');
+ * if (weapon) {
+ *   await actionController.execute('dropEquipment', { equipment: weapon.id });
+ * }
+ * ```
+ */
+export function findChildByAttribute(
+  parent: GameElement | null | undefined,
+  attributeName: string,
+  attributeValue: unknown
+): GameElement | undefined {
+  if (!parent?.children) return undefined;
+
+  return parent.children.find((child) => {
+    const attrs = getAttrs(child);
+    return attrs[attributeName] === attributeValue;
+  });
+}
+
+/**
+ * Find an element anywhere in the tree by matching an attribute value.
+ * Performs a recursive depth-first search.
+ *
+ * @example
+ * ```typescript
+ * // Find any element with a specific unique attribute
+ * const sector = findElementByAttribute(gameView, 'sectorId', 'alpha-3');
+ * ```
+ */
+export function findElementByAttribute(
+  root: GameElement | null | undefined,
+  attributeName: string,
+  attributeValue: unknown
+): GameElement | undefined {
+  if (!root) return undefined;
+
+  // Check this element
+  const attrs = getAttrs(root);
+  if (attrs[attributeName] === attributeValue) return root;
+
+  // Recursively search children
+  if (root.children) {
+    for (const child of root.children) {
+      const found = findElementByAttribute(child, attributeName, attributeValue);
+      if (found) return found;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Find all elements in the tree matching an attribute value.
+ * Performs a recursive depth-first search.
+ */
+export function findAllByAttribute(
+  root: GameElement | null | undefined,
+  attributeName: string,
+  attributeValue: unknown
+): GameElement[] {
+  const results: GameElement[] = [];
+
+  function search(element: GameElement | null | undefined): void {
+    if (!element) return;
+
+    const attrs = getAttrs(element);
+    if (attrs[attributeName] === attributeValue) {
+      results.push(element);
+    }
+
+    if (element.children) {
+      for (const child of element.children) {
+        search(child);
+      }
+    }
+  }
+
+  search(root);
+  return results;
+}
+
+/**
+ * Get the numeric element ID from an element.
+ * This is the ID needed for all action API calls (execute, fill, etc.).
+ *
+ * @example
+ * ```typescript
+ * const equipment = findChildByAttribute(merc, 'equipmentName', selectedName);
+ * const equipmentId = getElementId(equipment);  // number | undefined
+ * if (equipmentId) {
+ *   await actionController.execute('dropEquipment', { equipment: equipmentId });
+ * }
+ * ```
+ */
+export function getElementId(element: GameElement | null | undefined): number | undefined {
+  return element?.id;
+}
+
+/**
  * Composable that returns all helper functions.
  * Can be used in Vue components for convenience.
  */
@@ -211,6 +319,10 @@ export function useGameViewHelpers() {
     findElementById,
     findElement,
     findElements,
+    findChildByAttribute,
+    findElementByAttribute,
+    findAllByAttribute,
+    getElementId,
     findPlayerHand,
     findAllHands,
     getElementCount,

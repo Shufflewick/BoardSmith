@@ -45,19 +45,68 @@ export interface BaseElementAttributes {
  *
  * This is the serialized representation of game state elements as sent
  * to the UI from the game engine.
+ *
+ * @example Structure
+ * ```typescript
+ * {
+ *   id: 42,                    // Top-level! NOT in attributes
+ *   className: 'Merc',
+ *   name: 'Squad Leader',
+ *   attributes: {
+ *     health: 10,
+ *     equipmentName: 'Laser Rifle'
+ *   },
+ *   children: [
+ *     { id: 17, className: 'Equipment', attributes: { equipmentName: 'Laser Rifle' } }
+ *   ]
+ * }
+ * ```
+ *
+ * @example Finding element IDs for action calls
+ * ```typescript
+ * import { findChildByAttribute } from '@boardsmith/ui';
+ *
+ * // When you have attribute data but need the element ID:
+ * const equipment = findChildByAttribute(merc, 'equipmentName', 'Laser Rifle');
+ * await actionController.execute('drop', { equipment: equipment.id });  // Pass ID
+ * ```
  */
 export interface GameElement<TAttributes extends BaseElementAttributes = BaseElementAttributes> {
-  /** Unique identifier for this element instance */
+  /**
+   * Unique identifier for this element instance.
+   *
+   * **Important:** This is the value to pass to action execute/fill calls.
+   * The ID is at the TOP LEVEL, not inside attributes.
+   *
+   * @example
+   * ```typescript
+   * // Correct
+   * await execute('drop', { equipment: element.id });
+   *
+   * // Wrong - id is not in attributes!
+   * await execute('drop', { equipment: element.attributes.id });  // undefined!
+   * ```
+   */
   id: number;
   /** Optional display name */
   name?: string;
   /** The class name (type) of this element */
   className: string;
-  /** Element-specific attributes */
+  /**
+   * Element-specific attributes.
+   *
+   * Contains game data like health, rank, suit, position, etc.
+   * Does NOT contain the element ID - that's at the top level.
+   */
   attributes?: TAttributes & Record<string, unknown>;
-  /** Child elements (visible to this player) */
+  /**
+   * Child elements (visible to this player).
+   *
+   * Use helpers like `findChildByAttribute()` to search children
+   * when you need to find an element by its attribute values.
+   */
   children?: GameElement<TAttributes>[];
-  /** Count of children (used when contents are hidden) */
+  /** Count of children (used when contents are hidden from player) */
   childCount?: number;
   /** Internal flag indicating element should be hidden */
   __hidden?: boolean;

@@ -373,6 +373,34 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@22.19.2)(terser@5.44.1)
 
+  packages/games/floss-bitties:
+    dependencies:
+      '@boardsmith/engine':
+        specifier: file:/Users/jtsmith/board_game_service/BoardSmith/packages/engine
+        version: link:../../engine
+      '@boardsmith/ui':
+        specifier: file:/Users/jtsmith/board_game_service/BoardSmith/packages/ui
+        version: file:packages/ui(vue@3.5.25(typescript@5.9.3))
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.25(typescript@5.9.3)
+    devDependencies:
+      '@boardsmith/cli':
+        specifier: file:/Users/jtsmith/board_game_service/BoardSmith/packages/cli
+        version: file:packages/cli(@types/node@22.19.2)(terser@5.44.1)
+      '@boardsmith/testing':
+        specifier: file:/Users/jtsmith/board_game_service/BoardSmith/packages/testing
+        version: file:packages/testing(vitest@2.1.9(@types/node@22.19.2)(terser@5.44.1))
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@7.3.0(@types/node@22.19.2)(jiti@2.6.1)(terser@5.44.1))(vue@3.5.25(typescript@5.9.3))
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@22.19.2)(terser@5.44.1)
+
   packages/games/go-fish/rules:
     dependencies:
       '@boardsmith/ai':
