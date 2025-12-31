@@ -14,7 +14,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { UseActionControllerReturn } from '@boardsmith/ui';
-import { findPlayerHand, findElement, getElementCount, useAutoFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
+import { findPlayerHand, findElement, getElementCount, useAutoFlyingElements, FlyingCardsOverlay } from '@boardsmith/ui';
 
 // Props from GameShell
 const props = defineProps<{
@@ -223,8 +223,8 @@ function getOpponentHandRef(position: number) {
   return opponentHandRefs[position] || opponentHandRefs[0];
 }
 
-// Auto-flying cards - automatically animates cards between containers
-const { flyingElements: flyingCards } = useAutoFlyingCards({
+// Auto-flying elements - automatically animates cards between containers
+const { flyingElements: flyingCards } = useAutoFlyingElements({
   gameView: () => props.gameView,
   // Use a function for containers to support dynamic opponent hands
   containers: () => {

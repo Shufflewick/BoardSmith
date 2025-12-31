@@ -238,14 +238,3 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
   };
 }
 
-// Re-export with old names for backward compatibility
-export type {
-  ElementContainerConfig as ContainerConfig,
-  AutoFlyingElementsOptions as AutoFlyingCardsOptions,
-  AutoFlyingElementsReturn as AutoFlyingCardsReturn,
-};
-
-/**
- * @deprecated Use useAutoFlyingElements instead
- */
-export const useAutoFlyingCards = useAutoFlyingElements;

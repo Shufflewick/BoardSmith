@@ -70,14 +70,9 @@ export {
 // Auto-flying elements (cards, pieces, tokens) between containers
 export {
   useAutoFlyingElements,
-  useAutoFlyingCards, // deprecated alias
   type ElementContainerConfig,
   type AutoFlyingElementsOptions,
   type AutoFlyingElementsReturn,
-  // Backward-compatible aliases
-  type ContainerConfig,
-  type AutoFlyingCardsOptions,
-  type AutoFlyingCardsReturn,
 } from './composables/useAutoFlyingElements.js';
 
 // Automatic FLIP animations within containers
