@@ -983,6 +983,99 @@ if (actionController.pendingAction === 'move') {
 
 ## Building Custom UIs
 
+## Game View Data Structure
+
+The `gameView` prop contains serialized game state. Each element has this structure:
+
+```typescript
+interface GameViewElement {
+  id: number;              // Unique element ID - use this for action args!
+  className: string;       // Element class name (e.g., 'Merc', 'Card')
+  name?: string;           // Optional element name
+  attributes: {            // Game-specific properties
+    rank?: string;
+    suit?: string;
+    health?: number;
+    // ... your custom properties
+  };
+  children?: GameViewElement[];  // Child elements
+}
+```
+
+**Key point:** The `id` is at the top level, NOT inside `attributes`.
+
+```typescript
+// Correct - ID is at top level
+const mercId = merc.id;  // ✓
+
+// Wrong - ID is not in attributes
+const mercId = merc.attributes.id;  // ✗ undefined
+```
+
+## Calling Actions from Custom UIs
+
+When calling `actionController.execute()` or `actionController.fill()`, pass **numeric element IDs**:
+
+```typescript
+// For fromElements / chooseElement selections, pass the element ID
+await actionController.execute('dropEquipment', {
+  actingMerc: merc.id,       // number (e.g., 42)
+  equipment: equipment.id,   // number (e.g., 17)
+});
+
+// For chooseFrom selections, pass the choice value
+await actionController.execute('selectColor', {
+  color: 'red',  // The actual choice value
+});
+```
+
+The framework automatically converts element IDs to actual element objects before passing to the `execute()` handler.
+
+### Complete Custom UI Flow Example
+
+```typescript
+// 1. Find elements in gameView
+const myMercs = computed(() =>
+  findElements(props.gameView, { className: 'Merc' })
+    .filter(m => m.attributes?.player?.position === props.playerPosition)
+);
+
+// 2. User clicks a merc
+async function onMercClick(merc: GameViewElement) {
+  if (!props.availableActions.includes('dropEquipment')) return;
+
+  // 3. Start wizard mode with merc pre-selected
+  await props.actionController.start('dropEquipment', {
+    args: { actingMerc: merc.id }  // Pass numeric ID
+  });
+}
+
+// 4. User clicks equipment (using validElements from actionController)
+async function onEquipmentClick(equipment: GameViewElement) {
+  const { currentSelection, validElements } = props.actionController;
+
+  // Check if this equipment is selectable
+  if (currentSelection.value?.name !== 'equipment') return;
+  if (!validElements.value.some(ve => ve.id === equipment.id)) return;
+
+  // Fill the selection with the equipment ID
+  await props.actionController.fill('equipment', equipment.id);
+}
+```
+
+### Debugging Action Calls
+
+To debug what's being sent to the server, add logging:
+
+```typescript
+async function executeAction(name: string, args: Record<string, unknown>) {
+  console.log('[Action]', name, 'args:', JSON.stringify(args, null, 2));
+  await props.actionController.execute(name, args);
+}
+```
+
+Or check the Network tab in browser dev tools - look for WebSocket messages or `/action` API calls.
+
 ### Example: Custom Game Board
 
 ```vue
