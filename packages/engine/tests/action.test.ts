@@ -6,6 +6,7 @@ import {
   Player,
   Action,
   ActionExecutor,
+  actionTempState,
 } from '../src/index.js';
 import type { ActionContext, ActionDefinition } from '../src/index.js';
 
@@ -1269,5 +1270,73 @@ describe('Action Chaining with followUp', () => {
     expect(result.followUp?.action).toBe('processCard');
     expect(result.followUp?.args?.cardId).toBe(card.id);
     expect(result.followUp?.args?.value).toBe(card.value);
+  });
+});
+
+describe('actionTempState helper', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+  });
+
+  it('should store and retrieve values', () => {
+    const player = game.players[0];
+    const temp = actionTempState(game, player, 'testAction');
+
+    temp.set('key1', 'value1');
+    temp.set('key2', 42);
+
+    expect(temp.get<string>('key1')).toBe('value1');
+    expect(temp.get<number>('key2')).toBe(42);
+    expect(temp.get<string>('nonexistent')).toBeUndefined();
+  });
+
+  it('should clear all values for the action', () => {
+    const player = game.players[0];
+    const temp = actionTempState(game, player, 'testAction');
+
+    temp.set('key1', 'value1');
+    temp.set('key2', 'value2');
+    temp.clear();
+
+    expect(temp.get<string>('key1')).toBeUndefined();
+    expect(temp.get<string>('key2')).toBeUndefined();
+  });
+
+  it('should namespace by action and player', () => {
+    const player0 = game.players[0];
+    const player1 = game.players[1];
+
+    const temp0Action1 = actionTempState(game, player0, 'action1');
+    const temp0Action2 = actionTempState(game, player0, 'action2');
+    const temp1Action1 = actionTempState(game, player1, 'action1');
+
+    temp0Action1.set('key', 'player0-action1');
+    temp0Action2.set('key', 'player0-action2');
+    temp1Action1.set('key', 'player1-action1');
+
+    expect(temp0Action1.get<string>('key')).toBe('player0-action1');
+    expect(temp0Action2.get<string>('key')).toBe('player0-action2');
+    expect(temp1Action1.get<string>('key')).toBe('player1-action1');
+
+    // Clearing one doesn't affect others
+    temp0Action1.clear();
+    expect(temp0Action1.get<string>('key')).toBeUndefined();
+    expect(temp0Action2.get<string>('key')).toBe('player0-action2');
+    expect(temp1Action1.get<string>('key')).toBe('player1-action1');
+  });
+
+  it('should work with ActionContext overload', () => {
+    const ctx: ActionContext = {
+      game,
+      player: game.players[0],
+      args: {},
+    };
+
+    const temp = actionTempState(ctx, 'testAction');
+    temp.set('data', { nested: true });
+
+    expect(temp.get<{ nested: boolean }>('data')).toEqual({ nested: true });
   });
 });

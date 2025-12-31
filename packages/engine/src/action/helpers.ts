@@ -1,5 +1,115 @@
 import type { GameElement } from '../element/game-element.js';
+import type { Game } from '../element/game.js';
+import type { Player } from '../player/player.js';
 import type { ActionContext } from './types.js';
+
+// ============================================
+// Action Temp State (for choices → execute)
+// ============================================
+
+/**
+ * Return type for actionTempState helper.
+ * Provides methods to get, set, and clear temporary action state.
+ */
+export interface ActionTempState {
+  /**
+   * Store a value in temporary state.
+   * Values persist between choices() and execute() calls.
+   */
+  set(key: string, value: unknown): void;
+
+  /**
+   * Retrieve a value from temporary state.
+   */
+  get<T>(key: string): T | undefined;
+
+  /**
+   * Clear all temporary state for this action/player.
+   * Call this in execute() after you're done with the temp state.
+   */
+  clear(): void;
+}
+
+/**
+ * Creates a helper for storing temporary state between choices() and execute().
+ *
+ * **CRITICAL**: Module-level variables (Maps, arrays, etc.) do NOT persist
+ * between choices() and execute() because they run in different contexts.
+ * Always use this helper or game.settings for temporary action state.
+ *
+ * @example
+ * ```typescript
+ * import { actionTempState } from '@boardsmith/engine';
+ *
+ * Action.create('armsDealer')
+ *   .chooseFrom('equipment', {
+ *     choices: (ctx) => {
+ *       const temp = actionTempState(ctx, 'armsDealer');
+ *       const equipment = ctx.game.equipmentDeck.draw();
+ *       temp.set('drawnEquipment', equipment.id);
+ *       return [equipment, { value: 'skip', label: 'Skip' }];
+ *     },
+ *   })
+ *   .execute((args, ctx) => {
+ *     const temp = actionTempState(ctx, 'armsDealer');
+ *     const equipmentId = temp.get<number>('drawnEquipment');
+ *     const equipment = ctx.game.getElementById(equipmentId);
+ *     temp.clear(); // Clean up
+ *     // ... use equipment
+ *   });
+ * ```
+ *
+ * @param ctx - The action context (or game and player separately)
+ * @param actionName - Unique name for this action's temp state namespace
+ */
+export function actionTempState(ctx: ActionContext, actionName: string): ActionTempState;
+export function actionTempState(game: Game, player: Player, actionName: string): ActionTempState;
+export function actionTempState(
+  ctxOrGame: ActionContext | Game,
+  actionNameOrPlayer: string | Player,
+  maybeActionName?: string
+): ActionTempState {
+  let game: Game;
+  let playerPosition: number;
+  let actionName: string;
+
+  if (typeof actionNameOrPlayer === 'string') {
+    // Called with (ctx, actionName)
+    const ctx = ctxOrGame as ActionContext;
+    game = ctx.game;
+    playerPosition = ctx.player.position;
+    actionName = actionNameOrPlayer;
+  } else {
+    // Called with (game, player, actionName)
+    game = ctxOrGame as Game;
+    playerPosition = actionNameOrPlayer.position;
+    actionName = maybeActionName!;
+  }
+
+  const prefix = `_actionTemp_${actionName}_${playerPosition}`;
+
+  return {
+    set(key: string, value: unknown): void {
+      game.settings[`${prefix}_${key}`] = value;
+    },
+
+    get<T>(key: string): T | undefined {
+      return game.settings[`${prefix}_${key}`] as T | undefined;
+    },
+
+    clear(): void {
+      const keysToDelete: string[] = [];
+      for (const k of Object.keys(game.settings)) {
+        if (k.startsWith(prefix)) {
+          keysToDelete.push(k);
+        }
+      }
+      for (const k of keysToDelete) {
+        delete game.settings[k];
+      }
+    },
+  };
+}
 
 /**
  * Options for creating a dependent filter

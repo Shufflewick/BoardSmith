@@ -398,6 +398,77 @@ See [On-Demand Choices](./actions-and-flow.md#on-demand-choices) in the Actions 
 
 ---
 
+## 8.5. Module-Level Caching Doesn't Work (CRITICAL)
+
+### The Problem
+
+You try to cache data in a module-level variable to share between `choices()` and `execute()`, but the data is missing when `execute()` runs:
+
+```typescript
+// ❌ WRONG - Module-level caching will NOT work!
+const drawnEquipmentCache = new Map<string, Equipment>();
+
+Action.create('armsDealer')
+  .chooseFrom('equipment', {
+    choices: (ctx) => {
+      const equipment = ctx.game.equipmentDeck.draw();
+      drawnEquipmentCache.set(`player_${ctx.player.position}`, equipment);  // Set here...
+      return [equipment, { value: 'skip', label: 'Skip' }];
+    },
+  })
+  .execute((args, ctx) => {
+    const key = `player_${ctx.player.position}`;
+    const equipment = drawnEquipmentCache.get(key);  // ...undefined here!
+    console.log('Equipment from cache:', equipment);  // "NONE"
+  });
+```
+
+### Why This Happens
+
+The `choices()` and `execute()` callbacks run in **different contexts**:
+- `choices()` runs when building the UI/validating
+- `execute()` runs when the player submits their choice
+- With network play, these may be completely different server instances
+
+Module-level variables don't survive across these boundaries.
+
+### The Solution: Use `actionTempState()`
+
+```typescript
+import { Action, actionTempState } from '@boardsmith/engine';
+
+Action.create('armsDealer')
+  .chooseFrom('equipment', {
+    choices: (ctx) => {
+      const temp = actionTempState(ctx, 'armsDealer');
+      const equipment = ctx.game.equipmentDeck.draw();
+      temp.set('drawnEquipment', equipment.id);  // Store in game state
+      return [equipment, { value: 'skip', label: 'Skip' }];
+    },
+  })
+  .execute((args, ctx) => {
+    const temp = actionTempState(ctx, 'armsDealer');
+    const equipmentId = temp.get<number>('drawnEquipment');  // ✓ Works!
+    const equipment = ctx.game.getElementById(equipmentId) as Equipment;
+    temp.clear();  // Always clean up
+
+    if (args.equipment === 'skip') {
+      sector.addToStash(equipment);
+    } else {
+      // Equip to merc...
+    }
+  });
+```
+
+**Key points:**
+- `actionTempState()` stores data in `game.settings` which persists correctly
+- Automatically namespaced by action name and player
+- Always call `temp.clear()` in `execute()` to clean up
+
+See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-temp-state) for full documentation.
+
+---
+
 ## 9. Element Storage: Arrays vs Children (CRITICAL)
 
 ### The Problem
@@ -711,6 +782,7 @@ expect(debug.available).toBe(true);
 | Loop safety | No `maxIterations` | Always set `maxIterations` |
 | Class registration | Forget to register | `registerElements([...])` |
 | Side effects in choices | N/A (no longer an issue) | Choices always evaluated on-demand |
+| **Module-level caching** | `const cache = new Map()` | `actionTempState(ctx, 'action')` |
 | **Element storage** | `stash: Equipment[] = []` | `stashZone.all(Equipment)` |
 | **Action debugging** | Guessing why action unavailable | `game.debugActionAvailability(name, player)` |
 

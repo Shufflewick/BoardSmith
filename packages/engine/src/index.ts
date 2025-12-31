@@ -105,6 +105,9 @@ export {
   not,
 } from './action/index.js';
 
+// Action temp state helper (for choices → execute state persistence)
+export { actionTempState, type ActionTempState } from './action/index.js';
+
 export type {
   SelectionType,
   Selection,

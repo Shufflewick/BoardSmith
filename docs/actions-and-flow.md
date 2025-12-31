@@ -44,28 +44,88 @@ Choices are always evaluated on-demand when the player needs to make a selection
 - Choices that depend on the current game state
 - Manipulating state (like decks) right before showing choices
 
+> ⚠️ **CRITICAL: Module-Level Variables Don't Work**
+>
+> The `choices()` and `execute()` callbacks run in **different contexts**. Module-level variables (Maps, arrays, objects outside the action) will NOT persist between them:
+>
+> ```typescript
+> // ❌ WRONG - This will NOT work!
+> const drawnCache = new Map<string, Equipment>();
+>
+> Action.create('armsDealer')
+>   .chooseFrom('equipment', {
+>     choices: (ctx) => {
+>       const equipment = deck.draw();
+>       drawnCache.set('drawn', equipment);  // Set in choices...
+>       return [equipment];
+>     },
+>   })
+>   .execute((args, ctx) => {
+>     const equipment = drawnCache.get('drawn');  // ...empty in execute!
+>   });
+> ```
+>
+> **Use `actionTempState()` instead** (see below).
+
+#### Using `actionTempState()` for Temp State
+
+The `actionTempState()` helper provides a clean API for storing state between `choices()` and `execute()`:
+
+```typescript
+import { Action, actionTempState } from '@boardsmith/engine';
+
+Action.create('armsDealer')
+  .chooseFrom('equipment', {
+    choices: (ctx) => {
+      const temp = actionTempState(ctx, 'armsDealer');
+      const equipment = ctx.game.equipmentDeck.draw();
+      temp.set('drawnEquipment', equipment.id);
+      return [equipment, { value: 'skip', label: 'Skip (add to stash)' }];
+    },
+  })
+  .execute((args, ctx) => {
+    const temp = actionTempState(ctx, 'armsDealer');
+    const equipmentId = temp.get<number>('drawnEquipment');
+    const equipment = ctx.game.getElementById(equipmentId) as Equipment;
+    temp.clear();  // Always clean up!
+
+    if (args.equipment === 'skip') {
+      sector.addToStash(equipment);
+    } else {
+      // Equip to merc...
+    }
+  });
+```
+
+**API:**
+- `temp.set(key, value)` - Store a value
+- `temp.get<T>(key)` - Retrieve a value (typed)
+- `temp.clear()` - Remove all temp state for this action/player
+
+The helper automatically namespaces by action name and player, so multiple players or actions won't conflict.
+
+#### Full On-Demand Choices Example
+
 ```typescript
 Action.create('hireFirstMerc')
   .prompt('Choose a MERC to hire')
   .condition((ctx) => ctx.player.team.length === 0)
   .chooseFrom('merc', {
     choices: (ctx) => {
-      // This runs when player needs to make the selection
+      const temp = actionTempState(ctx, 'hireFirstMerc');
       const drawn = ctx.game.mercDeck.drawCards(3);
-
-      // Store drawn cards for custom GameBoard to display
-      ctx.game.settings._drawnMercsForHiring = drawn.map(m => m.id);
-
+      temp.set('drawnIds', drawn.map(m => m.id));
       return drawn;
     },
     display: (merc) => merc.displayName,
   })
   .execute((args, ctx) => {
+    const temp = actionTempState(ctx, 'hireFirstMerc');
     const merc = args.merc;
     ctx.player.team.push(merc);
 
     // Return unused mercs to deck
-    const drawnIds = ctx.game.settings._drawnMercsForHiring as number[];
+    const drawnIds = temp.get<number[]>('drawnIds') ?? [];
     for (const id of drawnIds) {
       if (id !== merc.id) {
         const card = ctx.game.getElementById(id);
@@ -73,9 +133,7 @@ Action.create('hireFirstMerc')
       }
     }
 
-    // Clean up temporary storage
-    delete ctx.game.settings._drawnMercsForHiring;
-
+    temp.clear();
     return { success: true };
   });
 ```
@@ -83,11 +141,9 @@ Action.create('hireFirstMerc')
 **How it works:**
 1. Player sees "Hire First MERC" button
 2. Player clicks button
-3. Server evaluates choices callback NOW (draws 3 cards)
+3. Server evaluates choices callback NOW (draws 3 cards, stores IDs)
 4. UI receives choices and shows selection dropdown
-5. Player picks one, `execute()` runs
-
-> **Note:** Use `game.settings` for temporary state storage since it survives hot-reload. Always clean up in `execute()`.
+5. Player picks one, `execute()` runs with temp state available
 
 > **Important: UI Sync Limitation**
 >

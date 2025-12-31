@@ -40,3 +40,9 @@ export {
   not,
   type DependentFilterOptions,
 } from './helpers.js';
+
+// Action temp state helper (for choices → execute state persistence)
+export {
+  actionTempState,
+  type ActionTempState,
+} from './helpers.js';
