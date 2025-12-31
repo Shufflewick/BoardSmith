@@ -4,6 +4,65 @@
 
 import type { FlowState, SerializedAction, Game } from '@boardsmith/engine';
 
+// ============================================
+// Error Codes
+// ============================================
+
+/**
+ * Standard error codes for programmatic error handling.
+ * Use these instead of matching error strings.
+ *
+ * @example
+ * ```typescript
+ * import { ErrorCode } from '@boardsmith/session';
+ *
+ * const result = await session.performAction('move', player, args);
+ * if (!result.success) {
+ *   switch (result.errorCode) {
+ *     case ErrorCode.NOT_YOUR_TURN:
+ *       showToast('Please wait for your turn');
+ *       break;
+ *     case ErrorCode.ACTION_NOT_AVAILABLE:
+ *       refreshActions();
+ *       break;
+ *     default:
+ *       showToast(result.error || 'An error occurred');
+ *   }
+ * }
+ * ```
+ */
+export enum ErrorCode {
+  // Player/Turn errors
+  INVALID_PLAYER = 'INVALID_PLAYER',
+  NOT_YOUR_TURN = 'NOT_YOUR_TURN',
+
+  // Action errors
+  ACTION_NOT_FOUND = 'ACTION_NOT_FOUND',
+  ACTION_NOT_AVAILABLE = 'ACTION_NOT_AVAILABLE',
+  INVALID_SELECTION = 'INVALID_SELECTION',
+  SELECTION_NOT_FOUND = 'SELECTION_NOT_FOUND',
+
+  // State errors
+  INVALID_ACTION_INDEX = 'INVALID_ACTION_INDEX',
+  NO_ACTIONS_TO_UNDO = 'NO_ACTIONS_TO_UNDO',
+  CANNOT_REWIND_FORWARD = 'CANNOT_REWIND_FORWARD',
+
+  // Lobby errors
+  POSITION_ALREADY_CLAIMED = 'POSITION_ALREADY_CLAIMED',
+  INVALID_POSITION = 'INVALID_POSITION',
+  NOT_AUTHORIZED = 'NOT_AUTHORIZED',
+  GAME_ALREADY_STARTED = 'GAME_ALREADY_STARTED',
+  LOBBY_NOT_READY = 'LOBBY_NOT_READY',
+
+  // Evaluation errors
+  CHOICES_EVALUATION_ERROR = 'CHOICES_EVALUATION_ERROR',
+  ELEMENTS_EVALUATION_ERROR = 'ELEMENTS_EVALUATION_ERROR',
+
+  // Generic errors
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  REPLAY_FAILED = 'REPLAY_FAILED',
+}
+
 // Re-export debug tracing types from engine for convenience
 export type { ActionTrace, SelectionTrace, ConditionDetail } from '@boardsmith/engine';
 
@@ -316,6 +375,8 @@ export interface ActionMetadata {
 export interface SelectionChoicesResponse {
   success: boolean;
   error?: string;
+  /** Programmatic error code for switch statements. See ErrorCode enum. */
+  errorCode?: ErrorCode;
   /** For choice selections: formatted choices with display strings and board refs */
   choices?: ChoiceWithRefs[];
   /** For element/elements selections: valid elements the user can select */

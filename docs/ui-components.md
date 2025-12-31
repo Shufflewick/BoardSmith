@@ -981,6 +981,220 @@ if (actionController.pendingAction === 'move') {
 </div>
 ```
 
+## Error Handling in UI
+
+The `actionController` provides error state that your UI should handle gracefully.
+
+### Displaying Action Errors
+
+```vue
+<template>
+  <div class="game-board">
+    <!-- Error toast/banner -->
+    <Transition name="fade">
+      <div v-if="actionController.error" class="error-banner">
+        {{ actionController.error }}
+        <button @click="dismissError">×</button>
+      </div>
+    </Transition>
+
+    <!-- Game content -->
+    <GameBoard ... />
+  </div>
+</template>
+
+<script setup lang="ts">
+const props = defineProps<{
+  actionController: UseActionControllerReturn;
+}>();
+
+// Error auto-dismisses after 5 seconds
+watch(() => props.actionController.error, (error) => {
+  if (error) {
+    setTimeout(() => {
+      // Error clears automatically on next successful action
+      // Or clear manually if your UI needs it
+    }, 5000);
+  }
+});
+</script>
+
+<style>
+.error-banner {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #e74c3c;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  z-index: 1000;
+}
+</style>
+```
+
+### Loading States During Execution
+
+Show feedback while actions are processing:
+
+```vue
+<template>
+  <!-- Disable board interactions while executing -->
+  <div
+    class="game-board"
+    :class="{ 'is-loading': actionController.isExecuting }"
+  >
+    <!-- Loading overlay -->
+    <div v-if="actionController.isExecuting" class="loading-overlay">
+      <span class="spinner" />
+    </div>
+
+    <!-- Action buttons -->
+    <button
+      v-for="action in availableActions"
+      :key="action"
+      :disabled="actionController.isExecuting"
+      @click="executeAction(action)"
+    >
+      {{ actionController.isExecuting ? 'Working...' : action }}
+    </button>
+  </div>
+</template>
+
+<style>
+.game-board.is-loading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+}
+</style>
+```
+
+### Handling Specific Error Types
+
+Common error messages and how to handle them:
+
+```typescript
+async function handleAction(name: string, args: Record<string, unknown>) {
+  try {
+    await actionController.execute(name, args);
+  } catch (e) {
+    // actionController.error is already set, but you may want custom handling
+  }
+
+  // Check error after execution
+  const error = actionController.error;
+  if (error) {
+    switch (true) {
+      case error.includes('Not your turn'):
+        // UI should already prevent this, but handle gracefully
+        showToast('Please wait for your turn');
+        break;
+
+      case error.includes('not available'):
+        // Action became unavailable (opponent moved, etc.)
+        showToast('This action is no longer available');
+        refreshAvailableActions();
+        break;
+
+      case error.includes('Invalid selection'):
+        // Selection was rejected by the server
+        showToast('Invalid selection - please try again');
+        actionController.cancel();
+        break;
+
+      default:
+        // Generic error display
+        showToast(error);
+    }
+  }
+}
+```
+
+### Preventing Errors with Validation
+
+Check availability before showing interactive elements:
+
+```vue
+<template>
+  <!-- Only show clickable cards that are valid selections -->
+  <div
+    v-for="card in myHand"
+    :key="card.id"
+    class="card"
+    :class="{
+      'clickable': isCardPlayable(card),
+      'disabled': !isCardPlayable(card),
+    }"
+    @click="isCardPlayable(card) && playCard(card)"
+  >
+    {{ card.rank }}{{ card.suit }}
+  </div>
+</template>
+
+<script setup lang="ts">
+const props = defineProps<{
+  actionController: UseActionControllerReturn;
+  availableActions: string[];
+}>();
+
+// Check if card can be played
+function isCardPlayable(card: GameViewElement): boolean {
+  // Must be our turn and action available
+  if (!props.availableActions.includes('play')) return false;
+
+  // If in wizard mode, check validElements
+  const { currentSelection, validElements } = props.actionController;
+  if (currentSelection.value?.name === 'card') {
+    return validElements.value.some(ve => ve.id === card.id);
+  }
+
+  return true;
+}
+</script>
+```
+
+### Error Recovery Patterns
+
+```typescript
+// Retry failed actions
+async function executeWithRetry(
+  name: string,
+  args: Record<string, unknown>,
+  maxRetries = 2
+) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    await actionController.execute(name, args);
+
+    if (!actionController.error) return; // Success
+
+    if (attempt < maxRetries) {
+      // Wait before retry (connection issues)
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  // All retries failed
+  showToast('Action failed - please try again');
+}
+
+// Reset UI state on persistent errors
+function handlePersistentError() {
+  actionController.cancel();
+  // Refresh game state from server
+  refreshGameState();
+}
+```
+
 ## Building Custom UIs
 
 ## Game View Data Structure

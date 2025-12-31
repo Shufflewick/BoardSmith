@@ -5,24 +5,25 @@
 import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand } from '@boardsmith/engine';
 import { executeCommand } from '@boardsmith/engine';
 import { GameRunner } from '@boardsmith/runtime';
-import type {
-  GameClass,
-  GameDefinition,
-  StoredGameState,
-  PlayerGameState,
-  SessionInfo,
-  StateUpdate,
-  StorageAdapter,
-  BroadcastAdapter,
-  AIConfig,
-  LobbyState,
-  LobbySlot,
-  LobbyInfo,
-  LobbyUpdate,
-  PlayerConfig,
-  PlayerOptionDefinition,
-  GameOptionDefinition,
-  SelectionChoicesResponse,
+import {
+  ErrorCode,
+  type GameClass,
+  type GameDefinition,
+  type StoredGameState,
+  type PlayerGameState,
+  type SessionInfo,
+  type StateUpdate,
+  type StorageAdapter,
+  type BroadcastAdapter,
+  type AIConfig,
+  type LobbyState,
+  type LobbySlot,
+  type LobbyInfo,
+  type LobbyUpdate,
+  type PlayerConfig,
+  type PlayerOptionDefinition,
+  type GameOptionDefinition,
+  type SelectionChoicesResponse,
 } from './types.js';
 import { buildPlayerState, computeUndoInfo, buildActionTraces, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
@@ -65,6 +66,8 @@ export interface GameSessionOptions<G extends Game = Game> {
 export interface ActionResult {
   success: boolean;
   error?: string;
+  /** Programmatic error code for switch statements. See ErrorCode enum. */
+  errorCode?: import('./types.js').ErrorCode;
   flowState?: FlowState;
   state?: PlayerGameState;
   serializedAction?: SerializedAction;
@@ -85,6 +88,8 @@ export interface ActionResult {
 export interface UndoResult {
   success: boolean;
   error?: string;
+  /** Programmatic error code for switch statements. See ErrorCode enum. */
+  errorCode?: ErrorCode;
   flowState?: FlowState;
   state?: PlayerGameState;
   /** Number of actions that were undone */
@@ -622,13 +627,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     args: Record<string, unknown>
   ): Promise<ActionResult> {
     if (player < 0 || player >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${player}` };
+      return { success: false, error: `Invalid player: ${player}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     const result = this.#runner.performAction(action, player, args);
 
     if (!result.success) {
-      return { success: false, error: result.error };
+      // Pass through error, try to infer errorCode from common patterns
+      let errorCode: ErrorCode | undefined;
+      if (result.error?.includes('not available')) {
+        errorCode = ErrorCode.ACTION_NOT_AVAILABLE;
+      } else if (result.error?.includes('not found')) {
+        errorCode = ErrorCode.ACTION_NOT_FOUND;
+      } else if (result.error?.includes('Invalid selection')) {
+        errorCode = ErrorCode.INVALID_SELECTION;
+      }
+      return { success: false, error: result.error, errorCode };
     }
 
     // Update stored action history
@@ -718,13 +732,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   async undoToTurnStart(playerPosition: number): Promise<UndoResult> {
     // Validate player position
     if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}` };
+      return { success: false, error: `Invalid player: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Check if it's this player's turn
     const flowState = this.#runner.getFlowState();
     if (flowState?.currentPlayer !== playerPosition) {
-      return { success: false, error: "It's not your turn" };
+      return { success: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
     }
 
     // Compute where the turn started
@@ -735,7 +749,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Check if there's anything to undo
     if (actionsThisTurn === 0) {
-      return { success: false, error: 'No actions to undo' };
+      return { success: false, error: 'No actions to undo', errorCode: ErrorCode.NO_ACTIONS_TO_UNDO };
     }
 
     // Replay game to the turn start point
@@ -962,25 +976,25 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   ): SelectionChoicesResponse {
     // Validate player position
     if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}` };
+      return { success: false, error: `Invalid player: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Get action definition
     const action = this.#runner.game.getAction(actionName);
     if (!action) {
-      return { success: false, error: `Action not found: ${actionName}` };
+      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
 
     // Find the selection
     const selection = action.selections.find(s => s.name === selectionName);
     if (!selection) {
-      return { success: false, error: `Selection not found: ${selectionName}` };
+      return { success: false, error: `Selection not found: ${selectionName}`, errorCode: ErrorCode.SELECTION_NOT_FOUND };
     }
 
     // Build context with current args
     const player = this.#runner.game.players[playerPosition];
     if (!player) {
-      return { success: false, error: `Player not found: ${playerPosition}` };
+      return { success: false, error: `Player not found: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Resolve any element IDs in currentArgs to actual elements
@@ -1020,7 +1034,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             choices = choiceSel.choices(ctx);
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            return { success: false, error: `Error evaluating choices: ${errorMsg}` };
+            return { success: false, error: `Error evaluating choices: ${errorMsg}`, errorCode: ErrorCode.CHOICES_EVALUATION_ERROR };
           }
         } else {
           choices = choiceSel.choices || [];
@@ -1080,7 +1094,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               elements = elemSel.elements(ctx);
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-              return { success: false, error: `Error evaluating elements: ${errorMsg}` };
+              return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
             }
           } else {
             elements = elemSel.elements || [];
@@ -1117,7 +1131,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             elements = elementsSel.elements(ctx);
           } catch (error) {
             const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            return { success: false, error: `Error evaluating elements: ${errorMsg}` };
+            return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
           }
         } else {
           elements = elementsSel.elements || [];
@@ -1233,15 +1247,16 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   startPendingAction(actionName: string, playerPosition: number): {
     success: boolean;
     error?: string;
+    errorCode?: ErrorCode;
     pendingState?: PendingActionState;
   } {
     if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}` };
+      return { success: false, error: `Invalid player: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     const action = this.#runner.game.getAction(actionName);
     if (!action) {
-      return { success: false, error: `Action not found: ${actionName}` };
+      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
 
     const executor = this.#runner.game.getActionExecutor();
