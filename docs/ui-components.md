@@ -316,64 +316,6 @@ The color picker in PlayerConfigList:
 
 ## Helper Components
 
-### DeckPile
-
-Visual representation of a deck/pile of cards.
-
-```vue
-<template>
-  <DeckPile
-    :count="deckCount"
-    :clickable="canDraw"
-    @click="onDrawCard"
-  />
-</template>
-```
-
-### CardFan
-
-Display cards in a fanned layout (like a hand of cards).
-
-```vue
-<template>
-  <CardFan
-    :cards="playerHand"
-    :selectable="isMyTurn"
-    @select="onCardSelect"
-  />
-</template>
-```
-
-### DiceRoller
-
-Animated dice rolling component.
-
-```vue
-<template>
-  <DiceRoller
-    :value="diceResult"
-    :rolling="isRolling"
-    @roll-complete="onRollComplete"
-  />
-</template>
-```
-
-### Draggable
-
-Wrapper for drag-and-drop interactions.
-
-```vue
-<template>
-  <Draggable
-    :disabled="!canDrag"
-    @drag-start="onDragStart"
-    @drag-end="onDragEnd"
-  >
-    <Card :card="card" />
-  </Draggable>
-</template>
-```
-
 ### FlyingCardsOverlay
 
 Overlay for card flight animations between positions.
@@ -534,39 +476,34 @@ animateToCurrentPositions(containerRef.value, {
 
 Elements must have `data-animatable="true"` and `data-element-id="..."` attributes.
 
-### useCardFlip / useCardReveal
-
-Card flip and reveal animations.
-
-```typescript
-import { useCardFlip, useCardReveal } from '@boardsmith/ui';
-
-const { isFlipped, flip, flipBack } = useCardFlip({
-  duration: 300,
-});
-
-const { isRevealed, reveal } = useCardReveal({
-  delay: 100,
-});
-```
-
 ### useFlyingCards
 
-Manage cards flying between positions manually.
+Manually trigger card/element flight animations between positions.
 
 ```typescript
-import { useFlyingCards, type FlyingCard } from '@boardsmith/ui';
+import { useFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
 
-const { flyingCards, flyCard, clearFlying } = useFlyingCards();
+const { flyingCards, flyCard, flyCards, cancelAll } = useFlyingCards();
 
-// Fly a card from one position to another
-flyCard({
-  id: card.id,
-  from: { x: 100, y: 200 },
-  to: { x: 500, y: 300 },
-  duration: 500,
-  onComplete: () => console.log('Card arrived'),
+// Fly a card from one element to another
+await flyCard({
+  id: 'draw-animation',
+  startRect: deckElement.getBoundingClientRect(),
+  endRect: () => handElement.getBoundingClientRect(),  // Function to track moving targets
+  cardData: { rank: 'A', suit: 'S', faceUp: false },
+  flip: true,           // Flip card during flight
+  duration: 400,        // Animation duration in ms
+  cardSize: { width: 60, height: 84 },
 });
+
+// Fly multiple cards with stagger
+await flyCards([
+  { id: 'card-1', startRect: deck, endRect: () => hand, cardData: { rank: 'K', suit: 'H' } },
+  { id: 'card-2', startRect: deck, endRect: () => hand, cardData: { rank: 'Q', suit: 'H' } },
+], 100);  // 100ms stagger between cards
+
+// In template:
+// <FlyingCardsOverlay :flying-cards="flyingCards" />
 ```
 
 ### useAutoAnimations
@@ -700,11 +637,30 @@ const { flyingElements } = useAutoAnimations({
 });
 ```
 
-### useAutoFlyingCards (Deprecated)
+### useAutoFlyingElements
 
-> **Note:** Use `useAutoAnimations` instead. This composable is kept for backward compatibility.
+Automatically animates elements (cards, pieces, tokens) when they move between registered containers. For new code, prefer `useAutoAnimations` which includes FLIP and fly-to-stat features.
 
-Automatically animates cards when they move between registered containers. Still works but doesn't include FLIP or fly-to-stat features.
+```typescript
+import { useAutoFlyingElements, FlyingCardsOverlay } from '@boardsmith/ui';
+
+const { flyingElements } = useAutoFlyingElements({
+  gameView: () => props.gameView,
+  containers: [
+    { element: deck, ref: deckRef },
+    { element: myHand, ref: handRef },
+    { element: discardPile, ref: discardRef },
+  ],
+  getElementData: (element) => ({
+    rank: element.attributes?.rank,
+    suit: element.attributes?.suit,
+  }),
+  duration: 400,
+});
+
+// In template:
+// <FlyingCardsOverlay :flying-cards="flyingElements" />
+```
 
 ### useFlyOnAppear
 
@@ -733,92 +689,6 @@ flyToPlayerStat({
   statName: 'score',
   onComplete: () => updateScore(),
 });
-```
-
-### useAutoFlyAnimation
-
-Automatic flying animations when elements leave a zone. This composable provides a unified, foolproof way to animate elements flying from a game zone to a player stat display.
-
-```typescript
-import { useAutoFlyAnimation } from '@boardsmith/ui';
-
-const { flyingCards, watchZone } = useAutoFlyAnimation();
-
-// Watch a zone for removals and fly to a stat
-watchZone({
-  containerRef: myHandRef,
-  gameView: () => props.gameView,
-  getElementIds: (gv) => getHandCardIds(gv),
-  targetStat: 'books',
-  getTargetPlayer: (elementData) => props.playerPosition,
-});
-```
-
-**Setup Requirements:**
-
-1. Add data attributes to game elements:
-```html
-<div
-  data-element-id="123"
-  data-face-image="/cards/ah.png"
-  data-back-image="/cards/back.png"
-  data-rank="A"
-  data-suit="H"
-  data-player-position="0"
-  data-face-up="true"
->...</div>
-```
-
-2. Add data attributes to player stat targets:
-```html
-<span data-player-stat="books" data-player-position="0">{{ count }}</span>
-```
-
-3. Include the FlyingCardsOverlay in your template:
-```vue
-<template>
-  <div class="game-board">
-    <!-- Your game content -->
-  </div>
-  <FlyingCardsOverlay :flying-cards="flyingCards" />
-</template>
-```
-
-**Data Attributes:**
-
-| Attribute | Purpose | Example |
-|-----------|---------|---------|
-| `data-element-id` | Unique ID for tracking | "123" |
-| `data-face-image` | URL of card/piece face | "/cards/ah.png" |
-| `data-back-image` | URL of card/piece back | "/cards/back.png" |
-| `data-rank` | Card rank | "A", "K", "10" |
-| `data-suit` | Card suit | "H", "D", "C", "S" |
-| `data-player-position` | Owner position | "0" |
-| `data-face-up` | Whether element shows face | "true" |
-
-**Why This Works:**
-
-Previous implementations had problems where imagery was extracted from game state, which changes before animation. This solution:
-- Uses DOM data attributes as the source of truth for imagery
-- Captures data BEFORE state changes (using `flush: 'sync'` watcher)
-- Provides standard attribute names all games can use
-- Requires zero game-specific animation code
-
-**Helper Function:**
-
-```typescript
-import { getElementDataAttrs } from '@boardsmith/ui';
-
-// In template - automatically generate data attributes
-<div v-bind="getElementDataAttrs({
-  id: card.id,
-  faceImage: card.image,
-  backImage: '/cards/back.png',
-  rank: card.rank,
-  suit: card.suit,
-  playerPosition: card.owner,
-  faceUp: card.faceUp,
-})">
 ```
 
 ### useGameViewHelpers

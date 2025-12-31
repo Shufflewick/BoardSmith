@@ -220,22 +220,22 @@ The `playerChoices()` helper supports:
 - `currentPlayer` - Required when using excludeSelf
 - `filter: (player) => boolean` - Custom filter function
 
-#### `chooseNumber` - Enter a number
+#### `enterNumber` - Enter a number
 
 ```typescript
 Action.create('bid')
-  .chooseNumber('amount', {
+  .enterNumber('amount', {
     prompt: 'Enter your bid',
     min: 1,
     max: (ctx) => ctx.player.coins,
   })
 ```
 
-#### `chooseText` - Enter text
+#### `enterText` - Enter text
 
 ```typescript
 Action.create('name')
-  .chooseText('name', {
+  .enterText('name', {
     prompt: 'Enter a name',
     maxLength: 20,
   })
@@ -613,9 +613,11 @@ eachPlayer({
 ```typescript
 forEach({
   name: 'score-hands',
-  collection: (ctx) => game.players,
-  do: (player) => execute({
-    do: () => game.scoreHand(player),
+  collection: (ctx) => ctx.game.players,
+  as: 'player',  // Variable name to access current item
+  do: execute((ctx) => {
+    const player = ctx.get('player');
+    game.scoreHand(player);
   }),
 })
 ```
@@ -670,46 +672,55 @@ switchOn({
 
 ```typescript
 ifThen({
-  if: (ctx) => game.deck.count(Card) > 0,
+  if: (ctx) => ctx.game.deck.count(Card) > 0,
   then: actionStep({ actions: ['draw'] }),
-  else: execute({ do: () => game.endRound() }),
+  else: execute((ctx) => ctx.game.endRound()),
 })
 ```
 
 #### `execute` - Run code
 
 ```typescript
-execute({
-  name: 'shuffle-deck',
-  do: (ctx) => {
-    game.deck.shuffle();
-    game.message('Deck shuffled!');
-  },
+execute((ctx) => {
+  ctx.game.deck.shuffle();
+  ctx.game.message('Deck shuffled!');
 })
 ```
 
 #### `setVar` - Set flow variable
 
 ```typescript
-setVar({
-  name: 'roundNumber',
-  value: (ctx) => (ctx.vars.roundNumber ?? 0) + 1,
-})
+setVar('roundNumber', (ctx) => (ctx.get('roundNumber') ?? 0) + 1)
 ```
 
 ### Turn Order
 
-Control player order with `TurnOrder`:
+Control player order with `TurnOrder` presets. Use the spread operator to apply them:
 
 ```typescript
+import { TurnOrder } from '@boardsmith/engine';
+
+// Default round-robin from player 0
 eachPlayer({
-  order: TurnOrder.roundRobin(),       // Default: 0, 1, 2, ...
-  order: TurnOrder.clockwise(),        // Same as roundRobin
-  order: TurnOrder.counterClockwise(), // Reverse
-  order: TurnOrder.custom((players, ctx) => {
-    // Return players in custom order
-    return players.sort((a, b) => a.score - b.score);
-  }),
+  ...TurnOrder.DEFAULT,
+  do: actionStep({ actions: ['play'] }),
+})
+
+// Available presets:
+TurnOrder.DEFAULT           // Standard round-robin from player 0
+TurnOrder.REVERSE           // Round-robin backward
+TurnOrder.CONTINUE          // Continue from current player
+TurnOrder.ACTIVE_ONLY       // Only non-eliminated players
+TurnOrder.START_FROM(n)     // Start from position n
+TurnOrder.ONLY([0, 2])      // Specific players only
+TurnOrder.LEFT_OF_DEALER()  // Common for card games (reads ctx.get('dealer'))
+TurnOrder.SKIP_IF(fn)       // Skip players based on condition
+TurnOrder.combine(...)      // Combine multiple configs
+
+// Example with dealer rotation
+eachPlayer({
+  ...TurnOrder.LEFT_OF_DEALER(),
+  do: actionStep({ actions: ['playCard'] }),
 })
 ```
 
@@ -719,12 +730,12 @@ Access and set variables during flow:
 
 ```typescript
 // Set variable
-setVar({ name: 'dealer', value: (ctx) => ctx.players[0] })
+setVar('dealer', (ctx) => ctx.game.players[0])
 
 // Access in conditions
 loop({
-  while: (ctx) => ctx.vars.roundNumber < 10,
-  do: ...
+  while: (ctx) => ctx.get('roundNumber') < 10,
+  do: /* flow node */,
 })
 ```
 
@@ -741,7 +752,7 @@ export function createCribbageFlow(game: CribbageGame): FlowDefinition {
       do: sequence(
         // Deal phase
         phase('deal', {
-          do: execute({ do: () => game.dealHands() }),
+          do: execute(() => game.dealHands()),
         }),
 
         // Discard phase - all players discard simultaneously
@@ -769,14 +780,13 @@ export function createCribbageFlow(game: CribbageGame): FlowDefinition {
         phase('show', {
           do: forEach({
             collection: () => game.getShowOrder(),
-            do: (player) => execute({
-              do: () => game.scoreHand(player),
-            }),
+            as: 'player',
+            do: execute((ctx) => game.scoreHand(ctx.get('player'))),
           }),
         }),
 
         // Rotate dealer
-        execute({ do: () => game.rotateDealer() }),
+        execute(() => game.rotateDealer()),
       ),
     }),
     isComplete: () => game.isFinished(),

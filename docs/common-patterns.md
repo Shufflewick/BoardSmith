@@ -47,7 +47,7 @@ export function createGameFlow(game: MyGame): FlowDefinition {
       while: () => !game.isFinished(),
       do: sequence(
         // Deal from current dealer
-        execute({ do: () => game.deal() }),
+        execute(() => game.deal()),
 
         // Play round starting from player after dealer
         eachPlayer({
@@ -56,7 +56,7 @@ export function createGameFlow(game: MyGame): FlowDefinition {
         }),
 
         // Rotate dealer for next round
-        execute({ do: () => game.rotateDealer() }),
+        execute(() => game.rotateDealer()),
       ),
     }),
     // ...
@@ -120,9 +120,15 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
 Player continues their turn under certain conditions.
 
-### Pattern: Using Flow Variable
+### Pattern: Using Game State
+
+The simplest pattern is to use a game-level property:
 
 ```typescript
+class MyGame extends Game<MyGame, MyPlayer> {
+  playerGoesAgain: boolean = false;
+}
+
 export function createGameFlow(game: MyGame): FlowDefinition {
   return {
     root: loop({
@@ -130,15 +136,15 @@ export function createGameFlow(game: MyGame): FlowDefinition {
       do: eachPlayer({
         do: loop({
           name: 'player-turn',
-          while: (ctx) => ctx.get<boolean>('goAgain') !== false,
+          while: () => game.playerGoesAgain,
           do: sequence(
             // Reset go-again flag
-            setVar({ name: 'goAgain', value: false }),
+            execute(() => { game.playerGoesAgain = false; }),
 
             // Player takes action
             actionStep({ actions: ['play'] }),
 
-            // Action can set goAgain = true to continue
+            // Action can set playerGoesAgain = true to continue
           ),
         }),
       }),
@@ -151,37 +157,39 @@ export function createGameFlow(game: MyGame): FlowDefinition {
   // ... action logic ...
 
   if (shouldGoAgain) {
-    ctx.game.flow.set('goAgain', true);
+    ctx.game.playerGoesAgain = true;
   }
 
   return { success: true };
 });
 ```
 
-### Pattern: Using Game State
+### Alternative: Methods Pattern
+
+For more encapsulation, use methods:
 
 ```typescript
 class MyGame extends Game<MyGame, MyPlayer> {
-  private playerGoesAgain: boolean = false;
+  private _playerGoesAgain: boolean = false;
 
   setPlayerGoesAgain(value: boolean): void {
-    this.playerGoesAgain = value;
+    this._playerGoesAgain = value;
   }
 
   shouldPlayerGoAgain(): boolean {
-    return this.playerGoesAgain;
+    return this._playerGoesAgain;
   }
 
   resetPlayerGoesAgain(): void {
-    this.playerGoesAgain = false;
+    this._playerGoesAgain = false;
   }
 }
 
 // In flow
 loop({
-  while: (ctx) => !ctx.game.shouldPlayerGoAgain(),
+  while: () => game.shouldPlayerGoAgain(),
   do: sequence(
-    execute({ do: (ctx) => ctx.game.resetPlayerGoesAgain() }),
+    execute(() => game.resetPlayerGoesAgain()),
     actionStep({ actions: ['play'] }),
   ),
 })
@@ -248,8 +256,9 @@ class MyGame extends Game<MyGame, MyPlayer> {
     super(options);
 
     for (const player of this.players) {
-      player.hand = player.create(Hand, 'hand');
-      player.hand.contentsVisibleOnlyToOwner();
+      player.hand = this.create(Hand, `hand-${player.position}`);
+      player.hand.player = player;
+      player.hand.contentsVisibleToOwner();
     }
   }
 }
@@ -266,13 +275,19 @@ this.deck.contentsHidden();  // No one sees cards in deck
 
 ```typescript
 // Reveal a single card to all players
-card.setVisibleToAll();
+card.showToAll();
 
-// Reveal to specific player
-card.setVisibleTo([player]);
+// Reveal to specific players
+card.showOnlyTo(player);      // Only this player can see
+card.addVisibleTo(player);    // Add player to visibility list
 
 // Hide again (e.g., after showing)
-card.setHidden();
+card.hideFromAll();
+
+// Set visibility mode
+card.setVisibility('all');     // Everyone sees
+card.setVisibility('owner');   // Only owner sees
+card.setVisibility('hidden');  // No one sees
 ```
 
 ---

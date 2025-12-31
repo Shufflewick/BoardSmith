@@ -254,18 +254,30 @@ The UI uses Vue 3 and the `@boardsmith/ui` package:
     display-name="My Game"
     :player-count="2"
   >
-    <template #game-board="{ gameView, playerPosition, isMyTurn, availableActions, action }">
+    <template #game-board="{
+      gameView,
+      playerPosition,
+      isMyTurn,
+      availableActions,
+      actionArgs,
+      actionController,
+      setBoardPrompt
+    }">
       <GameBoard
         :game-view="gameView"
         :player-position="playerPosition"
         :is-my-turn="isMyTurn"
         :available-actions="availableActions"
-        :action="action"
+        :action-args="actionArgs"
+        :action-controller="actionController"
+        :set-board-prompt="setBoardPrompt"
       />
     </template>
   </GameShell>
 </template>
 ```
+
+The `actionController` is the recommended way to handle actions from custom UIs. See [UI Components](./ui-components.md#action-controller-api) for the full API.
 
 ## Important: Read Before You Start
 

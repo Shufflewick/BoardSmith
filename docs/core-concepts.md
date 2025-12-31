@@ -230,7 +230,7 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 }
 ```
 
-> **Important**: If your custom Player class has properties that need to be visible to the UI (like `score`, `abilities`, custom stats), you **must** override `toJSON()` to include them. The base `Player.toJSON()` only serializes `position`, `name`, `color`, and `avatar`.
+> **Important**: If your custom Player class has properties that need to be visible to the UI (like `score`, `abilities`, custom stats), you **must** override `toJSON()` to include them. The base `Player.toJSON()` only serializes `position`, `name`, and `color`.
 
 ### Player Properties
 
@@ -242,12 +242,13 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 
 ```typescript
 // In game class
-this.players                    // All players array
+this.players                    // PlayerCollection (array-like)
 this.players[0]                 // First player
-this.currentPlayer              // Player whose turn it is
+this.players.current            // Player whose turn it is
 
 // In action context
 ctx.player                      // Current action's player
+ctx.game.players.current        // Current player from game
 ```
 
 ## Game State Serialization
@@ -286,12 +287,16 @@ this.registerElements([Card, Hand, Deck, Board, Piece]);
 
 ### State Snapshots
 
+Use utility functions from `@boardsmith/engine` for state snapshots:
+
 ```typescript
+import { createSnapshot, createPlayerView } from '@boardsmith/engine';
+
 // Get complete state snapshot
-const snapshot = game.getSnapshot();
+const snapshot = createSnapshot(game, 'my-game');
 
 // Get player-specific view (with visibility applied)
-const playerView = game.getPlayerView(playerPosition);
+const playerView = createPlayerView(game, playerPosition);
 ```
 
 ### Player Views
