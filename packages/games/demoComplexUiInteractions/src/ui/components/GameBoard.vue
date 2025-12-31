@@ -299,9 +299,8 @@ function isCardSelectable(cardId: number): boolean {
   // Check if this is a fromElements selection type (type is 'element' singular)
   if (currentSelection.value.type !== 'element') return false;
 
-  // Check if this card is in the valid elements list (from cache, not metadata)
-  const validElements = props.actionController.getValidElements(currentSelection.value);
-  const validIds = validElements.map((e: any) => e.id);
+  // Check if this card is in the valid elements list (reactive computed)
+  const validIds = props.actionController.validElements.value.map((e: any) => e.id);
   return validIds.includes(cardId);
 }
 

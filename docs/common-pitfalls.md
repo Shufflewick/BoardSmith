@@ -59,56 +59,94 @@ Each deserialization creates new object instances with the same data but differe
 
 ---
 
-## 2. Multi-Step Selection Filters
+## 2. Dependent Selections (Selection B depends on Selection A)
 
 ### The Problem
 
-When an action has multiple selections, BoardSmith evaluates **all filters during the availability check**, even for selections the player hasn't made yet. The previous selection will be `undefined`:
+When selection B depends on selection A's value, the filter/elements function for B can't access A during the availability check because A hasn't been selected yet:
 
 ```typescript
-// WRONG - crashes when squad is undefined during availability check
-Action.create('move')
-  .chooseElement<Squad>('squad', { ... })
-  .chooseElement<Sector>('destination', {
-    filter: (sector, ctx) => {
-      const squad = ctx.args.squad as Squad;  // undefined during availability!
-      return isAdjacent(squad.sectorId, sector.id);  // CRASH: Cannot read 'sectorId' of undefined
+// WRONG - crashes when merc is undefined during availability check
+Action.create('dropEquipment')
+  .fromElements('merc', { elements: () => [...game.all(Merc)] })
+  .fromElements('equipment', {
+    elements: (ctx) => {
+      const merc = ctx.args.merc as Merc;  // undefined during availability!
+      return [...merc.equipment.all(Equipment)];  // CRASH!
     }
   })
 ```
 
-### The Solution
+### The Solution: Use `dependsOn`
 
-Always handle the `undefined` case. During availability check, return `true` if the element would be valid for **any** possible previous selection:
+Add `dependsOn` to tell the framework that selection B depends on selection A. The framework will automatically verify the action is available by checking if ANY choice for A leads to valid choices for B:
 
 ```typescript
-// CORRECT - Handle both availability check and actual selection
-Action.create('move')
-  .chooseElement<Squad>('squad', { ... })
-  .chooseElement<Sector>('destination', {
-    filter: (sector, ctx) => {
-      const selectedSquad = ctx.args?.squad as Squad | undefined;
-
-      if (!selectedSquad) {
-        // Availability check - squad not yet selected
-        // Return true if this sector would be valid for ANY movable squad
-        return movableSquads.some(squad =>
-          isAdjacent(squad.sectorId, sector.id)
-        );
-      }
-
-      // Actual selection - filter based on selected squad
-      return isAdjacent(selectedSquad.sectorId, sector.id);
+// CORRECT - use dependsOn for automatic handling
+Action.create('dropEquipment')
+  .fromElements('merc', { elements: () => [...game.all(Merc)] })
+  .fromElements('equipment', {
+    dependsOn: 'merc',  // Framework handles availability check!
+    elements: (ctx) => {
+      const merc = ctx.args.merc as Merc;
+      return [...merc.equipment.all(Equipment)];
     }
   })
 ```
 
-### When This Matters
+**How it works:**
+- During availability check, the framework iterates through all mercs
+- For each merc, it checks if the equipment selection would have choices
+- Action is available if at least one merc has equipment
+- No crashes, no manual undefined handling needed!
 
-This pattern is needed whenever:
-- Selection B depends on Selection A's value
-- The filter uses properties of a previous selection
-- You're building multi-step actions (select piece, then select destination)
+This works with all selection types:
+
+```typescript
+// With chooseElement
+.chooseElement('destination', {
+  dependsOn: 'piece',
+  from: (ctx) => ctx.args.piece as Piece,
+  elementClass: Cell,
+})
+
+// With chooseFrom
+.chooseFrom('item', {
+  dependsOn: 'category',
+  choices: (ctx) => getItemsForCategory(ctx.args.category as string),
+})
+```
+
+### Alternative: Manual Undefined Handling
+
+For complex cases where you need custom availability logic, you can still handle `undefined` manually:
+
+```typescript
+// Manual approach - handle undefined explicitly
+.chooseElement<Sector>('destination', {
+  filter: (sector, ctx) => {
+    const selectedSquad = ctx.args?.squad as Squad | undefined;
+
+    if (!selectedSquad) {
+      // Availability check - return true if valid for ANY squad
+      return movableSquads.some(squad =>
+        isAdjacent(squad.sectorId, sector.id)
+      );
+    }
+
+    // Actual selection - filter based on selected squad
+    return isAdjacent(selectedSquad.sectorId, sector.id);
+  }
+})
+```
+
+### When to Use Which
+
+| Use `dependsOn` when... | Use manual handling when... |
+|------------------------|----------------------------|
+| Simple dependency (B's choices come from A) | Complex availability logic needed |
+| Standard patterns (select container, then contents) | Need to filter A's choices based on B's existence |
+| Want automatic framework handling | Need custom "any possible path" logic |
 
 ---
 

@@ -93,7 +93,7 @@ const props = defineProps<{
 // When user clicks a piece on the board, start the action with that piece pre-selected
 function onPieceClick(pieceId: number) {
   // Pass initial args to start() - they're applied after clearing
-  props.actionController.start('move', { piece: pieceId });
+  props.actionController.start('move', { args: { piece: pieceId } });
 }
 </script>
 ```
@@ -124,11 +124,11 @@ const selectedCards = computed({
 
 **ActionPanel owns the clear lifecycle**
 
-ActionPanel clears `actionArgs` when starting, canceling, or completing actions. To pre-fill selections when starting an action, use the `initialArgs` parameter:
+ActionPanel clears `actionArgs` when starting, canceling, or completing actions. To pre-fill selections when starting an action, use the `args` option:
 
 ```typescript
 // Correct: Pass initial values to start()
-actionController.start('move', { piece: pieceId });
+actionController.start('move', { args: { piece: pieceId } });
 
 // Incorrect: Writing then starting loses the value (cleared on start)
 actionArgs.piece = pieceId;
@@ -867,18 +867,66 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `execute` | `(name: string, args?: Record<string, unknown>) => Promise<void>` | Execute an action immediately with provided args |
-| `start` | `(name: string, initialArgs?: Record<string, unknown>) => void` | Start wizard mode for a multi-selection action |
+| `start` | `(name: string, options?: StartOptions) => void` | Start wizard mode for a multi-selection action |
 | `fill` | `(name: string, value: unknown) => void` | Fill a specific selection in wizard mode |
 | `skip` | `() => void` | Skip an optional selection |
 | `cancel` | `() => void` | Cancel wizard mode and clear selections |
+
+**StartOptions:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `args` | `Record<string, unknown>` | Values applied immediately to matching selections |
+| `prefill` | `Record<string, unknown>` | Values auto-filled when their selection becomes active |
+
+Use `args` for selections that are already available. Use `prefill` for deferred auto-fill of future selections (e.g., when the first selection determines which options appear in the second).
 
 ### Controller State
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `pendingAction` | `string \| null` | Name of action currently in wizard mode |
+| `currentSelection` | `SelectionMetadata \| null` | Metadata for the current selection step |
+| `validElements` | `ComputedRef<ValidElement[]>` | **Reactive** list of valid elements for current selection |
 | `isExecuting` | `boolean` | Whether an action is currently executing |
 | `error` | `string \| null` | Error message from last failed execution |
+
+### Element Selections with validElements
+
+When building custom UIs for element selections (`fromElements`, `chooseElement`), use the **reactive `validElements` computed** instead of `getValidElements()`. This computed automatically updates when:
+- The current selection changes
+- Choices are fetched from the server
+- The gameView updates
+
+```typescript
+const { validElements, currentSelection } = props.actionController;
+
+// Use the reactive computed directly - it updates automatically!
+const selectableCards = computed(() => {
+  if (currentSelection.value?.type !== 'element') return [];
+
+  return validElements.value.map(ve => ({
+    id: ve.id,
+    name: ve.display,
+    // Full element data is included:
+    image: ve.element?.attributes?.image,
+    description: ve.element?.attributes?.description,
+  }));
+});
+```
+
+Each `ValidElement` includes:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `number` | Element ID (for submitting selection) |
+| `display` | `string?` | Display text for UI |
+| `ref` | `{ id: number }?` | Reference for board highlighting |
+| `element` | `GameElement?` | Full element with all attributes |
+
+**Why not `getValidElements()`?** Maps aren't reactive in Vue, so `getValidElements()` won't trigger re-renders when choices load. The `validElements` computed has built-in reactivity tracking.
+
+See [Element Enrichment](./element-enrichment.md) for full documentation.
 
 ### Usage Patterns
 
@@ -896,8 +944,14 @@ await actionController.execute('endTurn');
 // Start wizard mode - ActionPanel shows selection UI
 actionController.start('move');
 
-// Pre-fill a selection when starting
-actionController.start('move', { piece: pieceId });
+// Pre-fill the first selection immediately
+actionController.start('move', { args: { piece: pieceId } });
+
+// Prefill a future selection (auto-filled when that step becomes active)
+actionController.start('move', {
+  args: { piece: pieceId },
+  prefill: { destination: targetCellId }  // Applied when 'destination' selection activates
+});
 
 // Custom boards can fill selections programmatically
 actionController.fill('destination', cellId);
@@ -1012,4 +1066,5 @@ watch(() => props.gameView, (newView, oldView) => {
 
 - [Core Concepts](./core-concepts.md) - Understanding game state
 - [Actions & Flow](./actions-and-flow.md) - How actions work
+- [Element Enrichment](./element-enrichment.md) - Using validElements for custom selection UIs
 - [Game Examples](./game-examples.md) - Real UI implementations

@@ -263,6 +263,8 @@ export interface ActionStateSnapshot {
   collectedSelections: Map<string, CollectedSelection>;
   /** For repeating selections: current state (reuses existing RepeatingState) */
   repeatingState: RepeatingState | null;
+  /** Queued fills for future selections - applied when selection becomes active */
+  prefills: Map<string, unknown>;
 }
 
 export interface UseActionControllerOptions {
@@ -329,6 +331,12 @@ export interface UseActionControllerReturn {
   currentArgs: Ref<Record<string, unknown>>;
   /** Current selection that needs user input (null if all filled or no action) */
   currentSelection: ComputedRef<SelectionMetadata | null>;
+  /**
+   * Valid elements for the current selection (reactive).
+   * Use this in custom UIs instead of getValidElements() for automatic reactivity.
+   * Returns empty array if current selection is not an element type or choices haven't loaded.
+   */
+  validElements: ComputedRef<ValidElement[]>;
   /** Whether all selections are filled and action is ready */
   isReady: ComputedRef<boolean>;
   /** Whether an action is currently executing */
@@ -350,8 +358,27 @@ export interface UseActionControllerReturn {
   execute: (actionName: string, args?: Record<string, unknown>) => Promise<ActionResult>;
 
   // === Step-by-step Methods (wizard mode) ===
-  /** Start an action's selection flow (async - fetches choices from server) */
-  start: (actionName: string, initialArgs?: Record<string, unknown>) => Promise<void>;
+  /**
+   * Start an action's selection flow (async - fetches choices from server).
+   *
+   * @param actionName - The action to start
+   * @param options - Optional configuration:
+   *   - `args`: Initial args to fill immediately (for first selection)
+   *   - `prefill`: Args to auto-fill when their selection becomes active (for later selections)
+   *
+   * @example
+   * ```typescript
+   * // Start 'move' action, auto-fill 'destination' when we reach that selection
+   * await actionController.start('move', {
+   *   prefill: { destination: sectorId }
+   * });
+   * // User selects squad, then destination auto-fills with sectorId
+   * ```
+   */
+  start: (actionName: string, options?: {
+    args?: Record<string, unknown>;
+    prefill?: Record<string, unknown>;
+  }) => Promise<void>;
   /** Fill a selection with a value (async for repeating selections) */
   fill: (selectionName: string, value: unknown) => Promise<ValidationResult>;
   /** Skip an optional selection */
@@ -442,6 +469,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When start() is called, we clone the metadata so we don't depend on server broadcasts
   // selectionSnapshots stores fetched choices - single source of truth
   const actionSnapshot = ref<ActionStateSnapshot | null>(null);
+
+  // Version counter for selection snapshots - increments when choices are fetched
+  // This enables reactive computeds that depend on snapshot data (Maps aren't reactive)
+  const snapshotVersion = ref(0);
 
   // === Helpers ===
 
@@ -658,6 +689,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           validElements: result.validElements,
           multiSelect: result.multiSelect,
         });
+        // Increment version to trigger reactive computeds (Maps aren't reactive)
+        snapshotVersion.value++;
       } else if (!result.success) {
         console.error('Failed to fetch selection choices:', result.error);
       }
@@ -770,8 +803,34 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return currentSelection.value === null;
   });
 
+  /**
+   * Reactive valid elements for the current selection.
+   * This is the "pit of success" for custom UIs - just use this computed directly.
+   * It automatically updates when:
+   * - currentSelection changes
+   * - choices are fetched from server
+   * - gameView updates (elements are enriched with full data)
+   */
+  const validElements = computed((): ValidElement[] => {
+    // Depend on snapshotVersion to re-run when choices are fetched
+    // (Maps aren't reactive, so we use this counter to trigger updates)
+    const _version = snapshotVersion.value;
+
+    const sel = currentSelection.value;
+    if (!sel) return [];
+    if (sel.type !== 'element' && sel.type !== 'elements') return [];
+
+    // Get from snapshot (populated by fetchChoicesForSelection)
+    const snapshot = actionSnapshot.value?.selectionSnapshots.get(sel.name);
+    const elements = snapshot?.validElements || [];
+
+    // Enrich with full element data from gameView
+    return enrichElementsList(elements);
+  });
+
   // === Auto-fill Watch ===
   // When a selection changes, fetch choices if needed and auto-fill if only one choice
+  // Also applies prefills when a selection becomes active
   watch(currentSelection, async (sel) => {
     if (!sel || isExecuting.value) return;
 
@@ -779,6 +838,43 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const snapshot = actionSnapshot.value?.selectionSnapshots.get(sel.name);
     if (!snapshot && (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')) {
       await fetchChoicesForSelection(sel.name);
+    }
+
+    // Check for prefill first - takes priority over auto-fill
+    const prefillValue = actionSnapshot.value?.prefills.get(sel.name);
+    if (prefillValue !== undefined) {
+      // Validate prefill value against available choices
+      const choices = getChoices(sel);
+      const validChoice = choices.find(c => {
+        if (c.value === prefillValue) return true;
+        if (typeof c.value === 'object' && c.value !== null) {
+          return (c.value as Record<string, unknown>).id === prefillValue;
+        }
+        // For element selections, compare IDs directly
+        if (sel.type === 'element' || sel.type === 'elements') {
+          return c.value === prefillValue;
+        }
+        return false;
+      });
+
+      if (validChoice) {
+        // Apply prefill
+        currentArgs.value[sel.name] = validChoice.value;
+
+        // Update collectedSelections
+        if (actionSnapshot.value) {
+          actionSnapshot.value.collectedSelections.set(sel.name, {
+            value: validChoice.value,
+            display: validChoice.display,
+            skipped: false,
+          });
+          // Remove from prefills - it's been applied
+          actionSnapshot.value.prefills.delete(sel.name);
+        }
+        return; // Don't do auto-fill, prefill was applied
+      }
+      // Prefill value not valid - remove it and continue to auto-fill
+      actionSnapshot.value?.prefills.delete(sel.name);
     }
 
     // Now attempt auto-fill if enabled
@@ -984,6 +1080,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       selectionSnapshots: new Map(),
       collectedSelections: new Map(),
       repeatingState: null,
+      prefills: new Map(),
     };
 
     // Store display values for any initialArgs
@@ -1049,7 +1146,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   }
 
-  async function start(actionName: string, initialArgs: Record<string, unknown> = {}): Promise<void> {
+  async function start(
+    actionName: string,
+    options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> } | Record<string, unknown>
+  ): Promise<void> {
+    // Support both old signature (initialArgs object) and new signature (options with args/prefill)
+    let initialArgs: Record<string, unknown> = {};
+    let prefillArgs: Record<string, unknown> = {};
+
+    if (options) {
+      if ('args' in options || 'prefill' in options) {
+        // New signature: { args?, prefill? }
+        initialArgs = (options as { args?: Record<string, unknown> }).args ?? {};
+        prefillArgs = (options as { prefill?: Record<string, unknown> }).prefill ?? {};
+      } else {
+        // Old signature: plain args object (backward compatible)
+        initialArgs = options as Record<string, unknown>;
+      }
+    }
+
     if (!availableActions.value.includes(actionName)) {
       lastError.value = `Action "${actionName}" is not available`;
       return;
@@ -1076,6 +1191,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       selectionSnapshots: new Map(),
       collectedSelections: new Map(),
       repeatingState: null,
+      prefills: new Map(Object.entries(prefillArgs)),
     };
 
     // Store display values for any initialArgs
@@ -1399,6 +1515,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     currentAction,
     currentArgs,
     currentSelection,
+    validElements,  // Reactive! Use this in custom UIs
     isReady,
     isExecuting,
     lastError,
@@ -1416,7 +1533,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Utility
     getChoices,
     getCurrentChoices,
-    getValidElements,
+    getValidElements,  // Non-reactive, prefer validElements computed
     getActionMetadata,
     clearArgs,
     fetchChoicesForSelection,

@@ -1,61 +1,101 @@
 # Automatic Element Enrichment
 
-When using element selections (`fromElements`), the `actionController` automatically enriches `validElements` with full element data from the game view. This is the "pit of success" pattern - designers get everything they need without extra work.
+When using element selections (`fromElements`, `chooseElement`), the `actionController` automatically enriches valid elements with full element data from the game view. This is the "pit of success" pattern - designers get everything they need without extra work.
 
-## How It Works
+## Recommended: Use `validElements` Computed
 
-When you access `currentSelection.validElements`, each item automatically includes the full game element:
+The `actionController` provides a **reactive `validElements` computed** that automatically updates when:
+- The current selection changes
+- Choices are fetched from the server
+- The gameView updates
+
+```typescript
+// In your custom UI component
+const { validElements, currentSelection } = props.actionController;
+
+// Use the reactive computed directly - it updates automatically!
+const selectableCards = computed(() => {
+  if (currentSelection.value?.type !== 'element') return [];
+
+  return validElements.value.map(ve => ({
+    id: ve.id,
+    name: ve.display,
+    // Full element data is included:
+    image: ve.element?.attributes?.image,
+    description: ve.element?.attributes?.description,
+  }));
+});
+```
+
+## ValidElement Interface
+
+Each item in `validElements` includes:
 
 ```typescript
 interface ValidElement {
   id: number;                    // Element ID (for submitting selection)
   display?: string;              // Display text for UI
   ref?: { id: number };          // Reference for board highlighting
-  element?: GameElement;         // ✨ Full element with all attributes!
+  element?: GameElement;         // Full element with all attributes!
 }
 ```
 
-The enrichment happens automatically inside `actionController`. It looks up each element ID in the current `gameView` and attaches the full element data.
+## Common Patterns
 
-## Usage
+### Check if an element is selectable
 
 ```typescript
-const { currentSelection } = props.actionController;
+function isCardSelectable(cardId: number): boolean {
+  if (currentSelection.value?.type !== 'element') return false;
 
-// Access full element data directly - no lookup needed!
-function renderEquipmentChoices() {
-  const selection = currentSelection.value;
-  if (!selection?.validElements) return [];
+  // Use the reactive validElements computed
+  return validElements.value.some(ve => ve.id === cardId);
+}
+```
 
-  return selection.validElements.map(ve => ({
+### Render selection choices with full data
+
+```typescript
+const equipmentChoices = computed(() => {
+  if (currentSelection.value?.name !== 'equipment') return [];
+
+  return validElements.value.map(ve => ({
     id: ve.id,
     name: ve.display,
-    // Full element data is right here:
     image: ve.element?.attributes?.image,
-    description: ve.element?.attributes?.description,
-    equipmentId: ve.element?.attributes?.equipmentId,
     stats: ve.element?.attributes?.stats,
+    description: ve.element?.attributes?.description,
   }));
+});
+```
+
+### Fill a selection when user clicks
+
+```typescript
+async function handleCardClick(cardId: number) {
+  if (!isCardSelectable(cardId)) return;
+  await actionController.fill(currentSelection.value!.name, cardId);
 }
 ```
 
-## Before vs After
+## Why Use `validElements` Instead of `getValidElements()`?
 
-**Before (manual lookup required):**
+The `getValidElements()` method reads from an internal Map which Vue can't track reactively. If you use it in a computed:
+
 ```typescript
-import { findElementById } from '@boardsmith/ui';
-
-// Had to manually look up each element
-const fullElements = selection.validElements.map(ve =>
-  findElementById(props.gameView, ve.id)
-);
+// BAD - Not reactive! Will show empty until something else triggers re-render
+const items = computed(() => {
+  const sel = currentSelection.value;
+  return actionController.getValidElements(sel);  // May be empty!
+});
 ```
 
-**After (automatic):**
+The `validElements` computed is designed to be reactive:
+
 ```typescript
-// Just use it directly!
-selection.validElements.forEach(ve => {
-  console.log(ve.element?.attributes?.image);
+// GOOD - Reactive! Updates automatically when choices load
+const items = computed(() => {
+  return validElements.value;  // Always current
 });
 ```
 
@@ -73,8 +113,6 @@ When this happens, a console warning is logged (once per element):
 This can happen if the element was removed after selection metadata was built.
 ```
 
-This warning helps with debugging but won't spam the console on repeated access.
-
 ## When You Still Need `findElementById`
 
 The `findElementById` utility is still available for cases outside the action flow:
@@ -85,11 +123,8 @@ import { findElementById } from '@boardsmith/ui';
 // Finding container elements for animations
 const deck = findElementById(gameView, deckId);
 
-// Finding related elements
+// Finding related elements not in a selection
 const parentContainer = findElementById(gameView, parentId);
-
-// Custom lookups outside of action selections
-const specificElement = findElementById(gameView, someId);
 ```
 
 ## Type Imports
@@ -102,34 +137,3 @@ import type {
   GameViewElement  // Alias for GameElement
 } from '@boardsmith/ui';
 ```
-
-## Technical Details
-
-### Reactivity
-
-The enrichment is reactive - when `gameView` changes, `currentSelection` recomputes and elements are re-enriched with the latest data.
-
-### Performance
-
-- Element lookup uses depth-first tree traversal: O(n) per element where n = gameView tree size
-- Vue's computed caching prevents redundant lookups when dependencies haven't changed
-- Typical game trees (< 100 elements) have negligible lookup time
-
-### Implementation
-
-The enrichment happens in `useActionController`:
-
-```typescript
-function enrichValidElements(sel: SelectionMetadata): SelectionMetadata {
-  if (!sel.validElements || !gameView?.value) return sel;
-
-  const enrichedElements = sel.validElements.map(ve => ({
-    ...ve,
-    element: findElementById(gameView.value, ve.id),
-  }));
-
-  return { ...sel, validElements: enrichedElements };
-}
-```
-
-This is called automatically when `currentSelection` is accessed, so custom UIs never need to think about it.

@@ -687,6 +687,195 @@ describe('Dependent Selection Filtering (filterBy)', () => {
   });
 });
 
+describe('Dependent Selection with dependsOn', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+
+    // Create mercs with equipment
+    const merc1 = game.create(Space, 'merc1');
+    merc1.createMany(2, Card, 'equipment', (i) => ({
+      suit: 'H',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+
+    const merc2 = game.create(Space, 'merc2');
+    merc2.createMany(3, Card, 'equipment', (i) => ({
+      suit: 'S',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+
+    // Create a merc with no equipment
+    game.create(Space, 'merc3');
+  });
+
+  it('should make action available when dependsOn is used and upstream choices exist', () => {
+    // This is the MERC team pattern: select merc, then select equipment from that merc
+    const mercs = [...game.all(Space)];
+
+    const action = Action.create('dropEquipment')
+      .fromElements('merc', {
+        elements: () => mercs,
+      })
+      .fromElements('equipment', {
+        dependsOn: 'merc',
+        elements: (ctx) => {
+          const merc = ctx.args.merc as Space;
+          return [...merc.all(Card)];
+        },
+      })
+      .execute(() => {});
+
+    // Action should be available because merc1 and merc2 have equipment
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+  });
+
+  it('should make action unavailable when no upstream choice leads to valid downstream choices', () => {
+    // Only merc3 (no equipment) is available
+    const merc3 = game.first(Space, (s) => s.name === 'merc3')!;
+
+    const action = Action.create('dropEquipment')
+      .fromElements('merc', {
+        elements: () => [merc3],
+      })
+      .fromElements('equipment', {
+        dependsOn: 'merc',
+        elements: (ctx) => {
+          const merc = ctx.args.merc as Space;
+          return [...merc.all(Card)];
+        },
+      })
+      .execute(() => {});
+
+    // Action should NOT be available because merc3 has no equipment
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+  });
+
+  it('should be available when at least one upstream choice leads to valid path', () => {
+    // Mix of mercs with and without equipment
+    const mercs = [...game.all(Space)]; // merc1, merc2 have equipment; merc3 doesn't
+
+    const action = Action.create('dropEquipment')
+      .fromElements('merc', {
+        elements: () => mercs,
+      })
+      .fromElements('equipment', {
+        dependsOn: 'merc',
+        elements: (ctx) => {
+          const merc = ctx.args.merc as Space;
+          return [...merc.all(Card)];
+        },
+      })
+      .execute(() => {});
+
+    // Action should be available because merc1 and merc2 have equipment
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+  });
+
+  it('should work with chooseElement selections', () => {
+    const mercs = [...game.all(Space)];
+
+    const action = Action.create('dropEquipment')
+      .chooseElement('merc', {
+        from: game,
+        elementClass: Space,
+      })
+      .chooseElement('equipment', {
+        dependsOn: 'merc',
+        from: (ctx) => ctx.args.merc as Space,
+        elementClass: Card,
+      })
+      .execute(() => {});
+
+    // Action should be available
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+  });
+
+  it('should work with dynamic choice selections', () => {
+    const mercs = [...game.all(Space)];
+
+    const action = Action.create('dropEquipment')
+      .chooseFrom('merc', {
+        choices: () => mercs.map((m) => m.name),
+      })
+      .chooseFrom('equipment', {
+        dependsOn: 'merc',
+        choices: (ctx) => {
+          const mercName = ctx.args.merc as string;
+          const merc = game.first(Space, (s) => s.name === mercName)!;
+          return [...merc.all(Card)].map((c) => c.name);
+        },
+      })
+      .execute(() => {});
+
+    // Action should be available
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+  });
+
+  it('should handle multiple levels of dependencies', () => {
+    // Category -> Item -> Action
+    const action = Action.create('complex')
+      .chooseFrom('category', {
+        choices: ['weapons', 'armor'],
+      })
+      .chooseFrom('item', {
+        dependsOn: 'category',
+        choices: (ctx) => {
+          const cat = ctx.args.category as string;
+          if (cat === 'weapons') return ['sword', 'bow'];
+          if (cat === 'armor') return ['shield', 'helmet'];
+          return [];
+        },
+      })
+      .chooseFrom('action', {
+        dependsOn: 'item',
+        choices: (ctx) => {
+          const item = ctx.args.item as string;
+          if (item === 'sword') return ['equip', 'sell'];
+          if (item === 'bow') return ['equip'];
+          if (item === 'shield') return ['equip', 'polish'];
+          return [];
+        },
+      })
+      .execute(() => {});
+
+    // Action should be available (weapons->sword->equip is a valid path)
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+  });
+
+  it('should be unavailable when multi-level path has no valid terminus', () => {
+    const action = Action.create('complex')
+      .chooseFrom('category', {
+        choices: ['empty'],
+      })
+      .chooseFrom('item', {
+        dependsOn: 'category',
+        choices: (ctx) => {
+          const cat = ctx.args.category as string;
+          if (cat === 'empty') return ['nothing'];
+          return [];
+        },
+      })
+      .chooseFrom('action', {
+        dependsOn: 'item',
+        choices: (ctx) => {
+          const item = ctx.args.item as string;
+          // 'nothing' has no valid actions
+          return [];
+        },
+      })
+      .execute(() => {});
+
+    // Action should NOT be available (empty->nothing->[] has no valid path)
+    expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+  });
+});
+
 describe('Better Filter Error Messages', () => {
   let game: TestGame;
   let executor: ActionExecutor;

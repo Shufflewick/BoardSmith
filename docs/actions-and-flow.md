@@ -241,41 +241,58 @@ Action.create('name')
   })
 ```
 
-### Chaining Selections
+### Chaining Selections with `dependsOn`
 
-Actions can have multiple selections that depend on each other:
+When selection B depends on selection A's value, use the `dependsOn` option:
 
 ```typescript
-Action.create('move')
-  .chooseElement<Piece>('piece', {
-    prompt: 'Select a piece to move',
-    elementClass: Piece,
-    filter: (p, ctx) => p.player === ctx.player,
+Action.create('dropEquipment')
+  .fromElements('merc', {
+    elements: () => [...game.all(Merc)],
   })
-  .chooseElement<Cell>('destination', {
-    prompt: 'Select destination',
-    elementClass: Cell,
-    // Filter depends on previously selected piece
-    filter: (cell, ctx) => {
-      const piece = ctx.args.piece as Piece;
-      return piece.canMoveTo(cell);
+  .fromElements('equipment', {
+    dependsOn: 'merc',  // Tells framework B depends on A
+    elements: (ctx) => {
+      const merc = ctx.args.merc as Merc;
+      return [...merc.equipment.all(Equipment)];
     },
   })
 ```
 
-> **IMPORTANT: Handling Undefined in Multi-Step Selections**
+**What `dependsOn` does:**
+- During availability check, the framework automatically iterates through all choices for A
+- For each A choice, it checks if B would have valid choices
+- Action is available if at least one A choice leads to valid B choices
+- No crashes, no manual undefined handling needed!
+
+Works with all selection types:
+
+```typescript
+// With chooseElement
+Action.create('move')
+  .chooseElement<Piece>('piece', {
+    elementClass: Piece,
+    filter: (p, ctx) => p.player === ctx.player,
+  })
+  .chooseElement<Cell>('destination', {
+    dependsOn: 'piece',
+    from: (ctx) => ctx.args.piece as Piece,
+    elementClass: Cell,
+  })
+
+// With chooseFrom
+Action.create('selectItem')
+  .chooseFrom('category', { choices: ['weapons', 'armor'] })
+  .chooseFrom('item', {
+    dependsOn: 'category',
+    choices: (ctx) => getItemsForCategory(ctx.args.category as string),
+  })
+```
+
+> **Alternative: Manual Undefined Handling**
 >
-> BoardSmith evaluates ALL filters during availability checks, even for selections the player hasn't made yet. This means `ctx.args.piece` will be `undefined` when checking if the action should be available.
+> For complex cases where you need custom availability logic, you can handle `undefined` manually instead of using `dependsOn`:
 >
-> **This will crash:**
-> ```typescript
-> filter: (cell, ctx) => {
->   const piece = ctx.args.piece as Piece;
->   return piece.canMoveTo(cell);  // ERROR: Cannot read 'canMoveTo' of undefined
-> }
-> ```
->
-> **Correct pattern:**
 > ```typescript
 > filter: (cell, ctx) => {
 >   const piece = ctx.args?.piece as Piece | undefined;
@@ -291,7 +308,7 @@ Action.create('move')
 > }
 > ```
 >
-> See [Common Pitfalls](./common-pitfalls.md#2-multi-step-selection-filters) for more details.
+> See [Common Pitfalls](./common-pitfalls.md#2-dependent-selections-selection-b-depends-on-selection-a) for more details.
 
 ### Conditions
 

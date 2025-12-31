@@ -282,6 +282,12 @@ export class Action {
       display?: (element: T, context: ActionContext) => string;
       /** Get board element reference for highlighting */
       boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+      /**
+       * Name of a previous selection this depends on.
+       * When specified, availability checking will verify that at least one
+       * choice from the dependency leads to valid choices for this selection.
+       */
+      dependsOn?: string;
     } = {}
   ): this {
     const selection: ElementSelection<T> = {
@@ -295,6 +301,7 @@ export class Action {
       validate: options.validate,
       display: options.display as ElementSelection<T>['display'],
       boardRef: options.boardRef as ElementSelection<T>['boardRef'],
+      dependsOn: options.dependsOn,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -1200,11 +1207,16 @@ export class ActionExecutor {
   ): boolean {
     for (let i = afterIndex; i < selections.length; i++) {
       const sel = selections[i];
+      // Check for filterBy dependency (choice selections only)
       if (sel.type === 'choice') {
         const choiceSel = sel as ChoiceSelection;
         if (choiceSel.filterBy?.selectionName === selectionName) {
           return true;
         }
+      }
+      // Check for dependsOn dependency (all selection types)
+      if ('dependsOn' in sel && sel.dependsOn === selectionName) {
+        return true;
       }
     }
     return false;
@@ -1243,32 +1255,69 @@ export class ActionExecutor {
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
-    // For element selections, just check they have choices
-    // (don't do expensive path validation - trust their filter functions)
+    // For element selections, check if they have choices
+    // If a later selection depends on this one, do full path validation
     if (selection.type === 'element') {
       const choices = this.getChoices(selection, player, args);
       if (choices.length === 0) {
         return false;
       }
-      return this.hasValidSelectionPath(selections, player, args, index + 1);
-    }
-
-    // For elements selections (fromElements), just check they have elements
-    if (selection.type === 'elements') {
-      const elements = this.getChoices(selection, player, args);
-      if (elements.length === 0) {
+      // Check if any later selection depends on this one
+      const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
+      if (hasDependent) {
+        // Need to verify at least one choice leads to a valid path
+        for (const choice of choices) {
+          const newArgs = { ...args, [selection.name]: choice };
+          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+            return true;
+          }
+        }
         return false;
       }
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
-    // For choice selections with dynamic choices functions, also skip path validation
-    // (computing dynamic choices repeatedly is too expensive)
+    // For elements selections (fromElements), check if they have elements
+    // If a later selection depends on this one, do full path validation
+    if (selection.type === 'elements') {
+      const elements = this.getChoices(selection, player, args);
+      if (elements.length === 0) {
+        return false;
+      }
+      // Check if any later selection depends on this one
+      const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
+      if (hasDependent) {
+        // Need to verify at least one element leads to a valid path
+        for (const element of elements) {
+          const newArgs = { ...args, [selection.name]: element };
+          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+            return true;
+          }
+        }
+        return false;
+      }
+      return this.hasValidSelectionPath(selections, player, args, index + 1);
+    }
+
+    // For choice selections with dynamic choices functions
+    // If a later selection depends on this one, do full path validation
     if (selection.type === 'choice') {
       const choiceSel = selection as ChoiceSelection;
       if (typeof choiceSel.choices === 'function') {
         const choices = this.getChoices(selection, player, args);
         if (choices.length === 0) {
+          return false;
+        }
+        // Check if any later selection depends on this one
+        const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
+        if (hasDependent) {
+          // Need to verify at least one choice leads to a valid path
+          for (const choice of choices) {
+            const newArgs = { ...args, [selection.name]: choice };
+            if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+              return true;
+            }
+          }
           return false;
         }
         return this.hasValidSelectionPath(selections, player, args, index + 1);
