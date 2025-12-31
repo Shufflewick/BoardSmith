@@ -181,6 +181,8 @@ export interface FollowUpAction {
   action: string;
   /** Args to pre-fill in the follow-up action */
   args?: Record<string, unknown>;
+  /** Metadata for the follow-up action (for actions not in availableActions) */
+  metadata?: ActionMetadata;
 }
 
 export interface ActionResult {
@@ -619,10 +621,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
-    // Get selection metadata to build proper cache key
-    const meta = getActionMetadata(currentAction.value);
+    // Get selection metadata - check snapshot first (for followUp actions), then live metadata
+    let meta: ActionMetadata | undefined;
+    if (actionSnapshot.value?.actionName === currentAction.value) {
+      meta = actionSnapshot.value.metadata;
+    } else {
+      meta = getActionMetadata(currentAction.value);
+    }
+
     const selection = meta?.selections.find(s => s.name === selectionName);
     if (!selection) {
+      console.warn(`[ActionController] fetchChoicesForSelection: selection "${selectionName}" not found in metadata`);
       return;
     }
 
@@ -831,10 +840,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
-        const { action: followUpAction, args: followUpArgs } = result.followUp;
+        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata } = result.followUp;
         // Use setTimeout to ensure state updates are flushed before starting next action
         setTimeout(async () => {
-          await start(followUpAction, followUpArgs ?? {});
+          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata);
         }, 0);
       }
 
@@ -926,10 +935,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
-        const { action: followUpAction, args: followUpArgs } = result.followUp;
+        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata } = result.followUp;
         // Use setTimeout to ensure state updates are flushed before starting next action
         setTimeout(async () => {
-          await start(followUpAction, followUpArgs ?? {});
+          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata);
         }, 0);
       }
 
@@ -941,6 +950,103 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     } finally {
       isExecuting.value = false;
     }
+  }
+
+  /**
+   * Start a follow-up action (bypasses availability check).
+   * Used internally when chaining actions via followUp - the server already validated this chain.
+   * @param actionName The action to start
+   * @param initialArgs Pre-filled arguments for the action
+   * @param providedMetadata Optional metadata from the server (for actions not in availableActions)
+   */
+  async function startFollowUp(
+    actionName: string,
+    initialArgs: Record<string, unknown> = {},
+    providedMetadata?: ActionMetadata
+  ): Promise<void> {
+    // Use provided metadata first, then fall back to looking up from actionMetadata
+    const meta = providedMetadata ?? getActionMetadata(actionName);
+
+    if (!meta) {
+      console.warn(`[ActionController] No metadata for followUp action "${actionName}" - action may not have selections`);
+    }
+
+    currentAction.value = actionName;
+    clearArgs();
+    clearAdvancedState();
+    Object.assign(currentArgs.value, initialArgs);
+    lastError.value = null;
+
+    // PIT OF SUCCESS: Create snapshot - FREEZE the metadata
+    actionSnapshot.value = {
+      actionName,
+      metadata: meta ? JSON.parse(JSON.stringify(meta)) : { name: actionName, selections: [] },
+      selectionSnapshots: new Map(),
+      collectedSelections: new Map(),
+      repeatingState: null,
+    };
+
+    // Store display values for any initialArgs
+    for (const [name, value] of Object.entries(initialArgs)) {
+      actionSnapshot.value.collectedSelections.set(name, {
+        value,
+        display: String(value),
+        skipped: false,
+      });
+    }
+
+    // If we have metadata with selections, fetch choices for the first unfilled selection
+    if (meta && meta.selections.length > 0) {
+      let selectionToFetch: SelectionMetadata | undefined;
+      for (const sel of meta.selections) {
+        if (initialArgs[sel.name] === undefined) {
+          selectionToFetch = sel;
+          break;
+        }
+      }
+
+      if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
+        await fetchChoicesForSelection(selectionToFetch.name);
+
+        // After fetching, check for auto-fill
+        if (getAutoFill() && !isExecuting.value) {
+          const choices = getChoices(selectionToFetch);
+          if (choices.length === 1) {
+            const choice = choices[0];
+            currentArgs.value[selectionToFetch.name] = choice.value;
+
+            if (actionSnapshot.value) {
+              actionSnapshot.value.collectedSelections.set(selectionToFetch.name, {
+                value: choice.value,
+                display: choice.display,
+                skipped: false,
+              });
+            }
+
+            // Fetch next selection if needed
+            const nextSel = getNextSelection(selectionToFetch.name);
+            if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
+              await fetchChoicesForSelection(nextSel.name);
+
+              if (getAutoFill() && !isExecuting.value) {
+                const nextChoices = getChoices(nextSel);
+                if (nextChoices.length === 1) {
+                  currentArgs.value[nextSel.name] = nextChoices[0].value;
+                  if (actionSnapshot.value) {
+                    actionSnapshot.value.collectedSelections.set(nextSel.name, {
+                      value: nextChoices[0].value,
+                      display: nextChoices[0].display,
+                      skipped: false,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
   }
 
   async function start(actionName: string, initialArgs: Record<string, unknown> = {}): Promise<void> {
@@ -1138,6 +1244,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         currentAction.value,
         { ...currentArgs.value }
       );
+
+      // Guard: repeatingState may have been cleared by startFollowUp during the await
+      if (!repeatingState.value) {
+        // State was cleared (e.g., by followUp) - just return success
+        return { valid: true };
+      }
 
       if (!result.success) {
         // Remove from accumulated on error

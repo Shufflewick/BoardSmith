@@ -195,14 +195,23 @@ const selectedElementId = computed(() => {
 
 // Filter args for display - exclude internal keys and current multiSelect selection
 // (multiSelect shows its state via checkboxes, not chips)
+// Also exclude args that don't correspond to selections (e.g., followUp context args)
 const displayableArgs = computed(() => {
   const result: Record<string, unknown> = {};
   const currentSelName = currentSelection.value?.name;
   const isMultiSelectActive = currentMultiSelect.value !== undefined;
 
+  // Get selection names from action metadata to filter out context args (from followUp)
+  const selectionNames = new Set(
+    currentActionMeta.value?.selections?.map(s => s.name) ?? []
+  );
+
   for (const [key, value] of Object.entries(currentArgs)) {
     // Skip internal preview keys
     if (key.startsWith('_preview_')) continue;
+
+    // Skip args that don't correspond to selections (e.g., followUp context args like mercId, sectorId)
+    if (selectionNames.size > 0 && !selectionNames.has(key)) continue;
 
     // Skip the current multiSelect selection (checkboxes show it)
     if (isMultiSelectActive && key === currentSelName) continue;

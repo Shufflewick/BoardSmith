@@ -508,6 +508,7 @@ export class GameServerCore {
           error: result.error,
           data: result.data,
           message: result.message,
+          followUp: result.followUp,
         });
         // Success case: broadcast of state update happens automatically in GameSession
         break;

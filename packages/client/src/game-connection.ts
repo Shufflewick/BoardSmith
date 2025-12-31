@@ -299,6 +299,7 @@ export class GameConnection {
                 error: message.error,
                 data: message.data,
                 message: message.message,
+                followUp: message.followUp,
               });
             }
           }

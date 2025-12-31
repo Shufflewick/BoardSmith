@@ -34,3 +34,9 @@ export {
 export type {
   ReplayFile,
 } from './replay.js';
+
+// Action helpers
+export {
+  resolveElementArg,
+  isResolvedElement,
+} from './action-helpers.js';

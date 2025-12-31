@@ -173,6 +173,23 @@ export interface ActionResult {
   data?: Record<string, unknown>;
   /** Message from the action (for logging/display) */
   message?: string;
+  /** Follow-up action to chain to (for action chaining) */
+  followUp?: {
+    action: string;
+    args?: Record<string, unknown>;
+    /** Metadata for the followUp action (so client can execute without it being in availableActions) */
+    metadata?: {
+      name: string;
+      prompt?: string;
+      selections: Array<{
+        name: string;
+        type: string;
+        prompt?: string;
+        optional?: boolean;
+        [key: string]: unknown;
+      }>;
+    };
+  };
 }
 
 // ============================================
@@ -210,6 +227,23 @@ export interface WebSocketIncomingMessage {
   success?: boolean;
   data?: Record<string, unknown>;
   message?: string;
+  /** Follow-up action to chain to (for action chaining) */
+  followUp?: {
+    action: string;
+    args?: Record<string, unknown>;
+    /** Metadata for the followUp action (so client can execute without it being in availableActions) */
+    metadata?: {
+      name: string;
+      prompt?: string;
+      selections: Array<{
+        name: string;
+        type: string;
+        prompt?: string;
+        optional?: boolean;
+        [key: string]: unknown;
+      }>;
+    };
+  };
 }
 
 // ============================================

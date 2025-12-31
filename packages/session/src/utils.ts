@@ -89,6 +89,38 @@ export function buildActionMetadata(
 }
 
 /**
+ * Build metadata for a single action by name.
+ * Used for followUp actions that aren't in the current available actions.
+ * Does NOT check the action's condition (followUp actions bypass conditions).
+ */
+export function buildSingleActionMetadata(
+  game: Game,
+  player: Player,
+  actionName: string
+): ActionMetadata | undefined {
+  const actions = (game as any)._actions as Map<string, ActionDefinition>;
+  const actionDef = actions?.get(actionName);
+
+  if (!actionDef) {
+    console.warn(`[buildSingleActionMetadata] Action "${actionName}" not found in game._actions`);
+    return undefined;
+  }
+
+  const selectionMetas: SelectionMetadata[] = [];
+
+  for (const selection of actionDef.selections) {
+    const selMeta = buildSelectionMetadata(game, player, selection);
+    selectionMetas.push(selMeta);
+  }
+
+  return {
+    name: actionName,
+    prompt: actionDef.prompt,
+    selections: selectionMetas,
+  };
+}
+
+/**
  * Build metadata for a single selection.
  *
  * Only includes static metadata - choices are always fetched on-demand

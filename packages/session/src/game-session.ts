@@ -24,7 +24,7 @@ import type {
   GameOptionDefinition,
   SelectionChoicesResponse,
 } from './types.js';
-import { buildPlayerState, computeUndoInfo, buildActionTraces } from './utils.js';
+import { buildPlayerState, computeUndoInfo, buildActionTraces, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
 
 // ============================================
@@ -645,13 +645,25 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Check if AI should respond
     this.#scheduleAICheck();
 
+    // Build followUp with metadata if present
+    const followUp = result.flowState?.followUp;
+    let followUpWithMetadata: typeof followUp & { metadata?: ReturnType<typeof buildSingleActionMetadata> } | undefined;
+    if (followUp) {
+      const playerObj = this.#runner.game.players[player];
+      const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, followUp.action) : undefined;
+      followUpWithMetadata = {
+        ...followUp,
+        metadata: followUpMetadata,
+      };
+    }
+
     return {
       success: true,
       flowState: result.flowState,
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: true }),
       serializedAction: result.serializedAction,
-      // Pass through action chaining info from flowState
-      followUp: result.flowState?.followUp,
+      // Pass through action chaining info from flowState, including metadata for the followUp action
+      followUp: followUpWithMetadata,
     };
   }
 

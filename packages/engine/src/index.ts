@@ -180,7 +180,7 @@ export type {
   TurnOrderConfig,
 } from './flow/index.js';
 
-// Utilities (serialization, snapshots, replays)
+// Utilities (serialization, snapshots, replays, action helpers)
 export {
   serializeValue,
   deserializeValue,
@@ -193,6 +193,8 @@ export {
   createReplayFile,
   validateReplayFile,
   parseReplayFile,
+  resolveElementArg,
+  isResolvedElement,
 } from './utils/index.js';
 
 export type {

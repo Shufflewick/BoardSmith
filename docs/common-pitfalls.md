@@ -462,6 +462,140 @@ class Player extends BasePlayer {
 
 ---
 
+## 10. followUp Args Auto-Resolution
+
+### The Problem
+
+When using `followUp` to chain actions with pre-filled args, the server **automatically resolves numeric IDs to elements** before calling your callbacks. Your code may expect an ID but receive an element:
+
+```typescript
+// In explore action execute():
+return {
+  success: true,
+  followUp: {
+    action: 'collectEquipment',
+    args: { mercId: merc.id, sectorId: sector.id }  // Passing numeric IDs
+  }
+};
+
+// In collectEquipment filter() - WRONG assumption:
+filter: (element, ctx) => {
+  // ctx.args.sectorId is NOT a number - it's the resolved Sector element!
+  const sector = game.getElementById(ctx.args.sectorId);  // FAILS - already an object
+  return element.container === sector;
+}
+```
+
+### The Solution
+
+Use the `resolveElementArg()` helper to handle both cases:
+
+```typescript
+import { resolveElementArg } from '@boardsmith/engine';
+
+// In collectEquipment filter():
+filter: (element, ctx) => {
+  const sector = resolveElementArg<Sector>(game, ctx.args.sectorId);
+  if (!sector) return false;
+  return element.container === sector;
+}
+```
+
+Or handle both cases manually:
+
+```typescript
+function getSector(ctx: any): Sector | undefined {
+  const sectorArg = ctx.args?.sectorId;
+  if (typeof sectorArg === 'number') {
+    return game.getElementById(sectorArg) as Sector | undefined;
+  } else if (sectorArg && typeof sectorArg === 'object' && 'id' in sectorArg) {
+    return sectorArg as Sector;
+  }
+  return undefined;
+}
+```
+
+### Why This Happens
+
+The server resolves numeric args to elements so that most action callbacks "just work" with element objects. However, if your code explicitly calls `getElementById()` on an already-resolved element, it fails.
+
+---
+
+## 11. Computed Getters Not Serialized
+
+### The Problem
+
+Computed getters on element classes are **not included in serialization**. The UI only receives the raw serialized properties:
+
+```typescript
+// Server-side element class
+class Sector extends Space {
+  get stash(): Equipment[] {
+    return [...this.stashZone.all(Equipment)];  // Computed from children
+  }
+}
+
+// UI code - WRONG:
+const stash = getAttr(sectorElement, 'stash', []);  // Returns [] - not serialized!
+```
+
+The UI receives the raw element tree, not computed properties.
+
+### The Solution
+
+In UI code, query the element tree directly instead of expecting computed properties:
+
+```typescript
+// UI code - CORRECT:
+function getStashFromSector(sectorElement: any): Equipment[] {
+  // Find the stash zone child
+  const stashZone = sectorElement.children?.find((c: any) =>
+    c.className === 'Space' && getAttr(c, 'name', '') === 'stash'
+  );
+
+  if (!stashZone?.children) return [];
+
+  // Get equipment from the zone
+  return stashZone.children
+    .filter((e: any) => e.className === 'Equipment')
+    .map((e: any) => ({
+      id: e.id,
+      name: getAttr(e, 'equipmentName', 'Unknown'),
+      type: getAttr(e, 'equipmentType', 'item'),
+    }));
+}
+```
+
+### Best Practices
+
+1. **Design for serialization**: Store data as element children or explicit properties, not computed getters
+2. **UI mirrors structure**: Write UI code that queries the same element tree structure as the server
+3. **Use attributes**: Store frequently-accessed values as actual attributes, not computed
+
+### Example: Exposing Computed Data
+
+If you need a computed value available to the UI, store it as an attribute:
+
+```typescript
+// Server-side
+class Sector extends Space {
+  updateStashCount(): void {
+    // Store as explicit attribute for UI access
+    this.stashCount = this.stashZone.count(Equipment);
+  }
+
+  addToStash(equipment: Equipment): void {
+    equipment.putInto(this.stashZone);
+    this.updateStashCount();  // Keep attribute in sync
+  }
+}
+
+// UI can now access directly
+const count = getAttr(sectorElement, 'stashCount', 0);
+```
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
