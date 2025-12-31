@@ -459,6 +459,64 @@ describe('Action Executor', () => {
       expect(receivedArgs.choice).toBe('a');
     });
 
+    it('should extract value from {value, label} choice objects', () => {
+      let receivedArgs: Record<string, unknown> = {};
+      const action = Action.create('test')
+        .chooseFrom('option', {
+          choices: [
+            { value: 'skip', label: 'Skip this step' },
+            { value: 'continue', label: 'Continue' },
+          ],
+        })
+        .execute((args) => {
+          receivedArgs = args;
+        });
+
+      // UI sends just the value string
+      executor.executeAction(action, game.players[0], { option: 'skip' });
+
+      // Execute handler should receive just the value, not the full object
+      expect(receivedArgs.option).toBe('skip');
+    });
+
+    it('should extract value from {value, display} choice objects', () => {
+      let receivedArgs: Record<string, unknown> = {};
+      const action = Action.create('test')
+        .chooseFrom('action', {
+          choices: [
+            { value: 'attack', display: 'Attack the enemy' },
+            { value: 'defend', display: 'Defend position' },
+          ],
+        })
+        .execute((args) => {
+          receivedArgs = args;
+        });
+
+      executor.executeAction(action, game.players[0], { action: 'attack' });
+
+      expect(receivedArgs.action).toBe('attack');
+    });
+
+    it('should NOT extract value from element-like objects (preserve element)', () => {
+      const deck = game.create(Deck, 'deck');
+      const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
+
+      let receivedArgs: Record<string, unknown> = {};
+      const action = Action.create('test')
+        .chooseFrom('card', {
+          choices: (ctx) => [...ctx.game.all(Card)],
+        })
+        .execute((args) => {
+          receivedArgs = args;
+        });
+
+      // UI sends element ID
+      executor.executeAction(action, game.players[0], { card: card.id });
+
+      // Execute handler should receive the full element (not just its 'value' attribute)
+      expect(receivedArgs.card).toBe(card);
+    });
+
     it('should pass context to execute handler', () => {
       let receivedContext: ActionContext | null = null;
       const action = Action.create('test').execute((args, ctx) => {

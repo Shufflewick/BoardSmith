@@ -553,7 +553,14 @@ export class ActionExecutor {
             // Try smart resolution: element ID or display string → actual choice
             // This supports custom UIs sending element IDs for chooseFrom selections
             const choices = this.getChoices(selection, player, resolved);
-            const resolvedValue = this.smartResolveChoiceValue(value, choices);
+            let resolvedValue = this.smartResolveChoiceValue(value, choices);
+
+            // Extract just the 'value' property from {value, label/display} pattern choices
+            // This makes chooseFrom with simple value objects work intuitively:
+            //   choices: [{ value: 'skip', label: 'Skip' }]
+            //   args.myChoice === 'skip' (not { value: 'skip', label: 'Skip' })
+            resolvedValue = this.extractChoiceValue(resolvedValue);
+
             if (resolvedValue !== value) {
               resolved[selection.name] = resolvedValue;
             }
@@ -573,6 +580,44 @@ export class ActionExecutor {
     if (typeof value !== 'object' || value === null) return false;
     const obj = value as Record<string, unknown>;
     return typeof obj.id === 'number' && typeof obj.className === 'string';
+  }
+
+  /**
+   * Extract the 'value' property from a {value, label/display} choice object.
+   * This enables the intuitive pattern where:
+   *   choices: [{ value: 'skip', label: 'Skip' }]
+   *   args.selection === 'skip'  // not the full object
+   *
+   * Only extracts if:
+   * - The choice is an object with a 'value' property
+   * - The choice is NOT a game element (no 'id' and 'className')
+   * - The choice is NOT an element-like object (has 'id' but looks like metadata)
+   */
+  private extractChoiceValue(choice: unknown): unknown {
+    if (typeof choice !== 'object' || choice === null) {
+      return choice;
+    }
+
+    const obj = choice as Record<string, unknown>;
+
+    // Don't extract from game elements
+    if (this.isSerializedElement(choice)) {
+      return choice;
+    }
+
+    // Don't extract from element-like objects (have numeric id but no className)
+    // These are likely actual game elements or element references
+    if (typeof obj.id === 'number') {
+      return choice;
+    }
+
+    // If it has a 'value' property, extract just the value
+    // This handles { value: 'skip', label: 'Skip' } → 'skip'
+    if ('value' in obj) {
+      return obj.value;
+    }
+
+    return choice;
   }
 
   /**
