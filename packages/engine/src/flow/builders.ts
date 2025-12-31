@@ -14,6 +14,23 @@ import type {
   PhaseConfig,
 } from './types.js';
 
+// ============================================
+// Development Mode Warnings
+// ============================================
+
+function isDevMode(): boolean {
+  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+}
+
+const shownWarnings = new Set<string>();
+
+function devWarn(key: string, message: string): void {
+  if (!isDevMode()) return;
+  if (shownWarnings.has(key)) return;
+  shownWarnings.add(key);
+  console.warn(`[BoardSmith] ${message}`);
+}
+
 /**
  * Create a sequence of steps executed in order
  *
@@ -91,6 +108,19 @@ export function loop(config: {
   maxIterations?: number;
   do: FlowNode;
 }): FlowNode {
+  // Warn if no maxIterations provided (common cause of infinite loops)
+  if (config.maxIterations === undefined) {
+    const loopName = config.name ?? 'unnamed';
+    devWarn(
+      `loop-no-max:${loopName}`,
+      `loop(${config.name ? `'${config.name}'` : ''}) has no maxIterations set.\n` +
+      `  This can cause infinite loops if the 'while' condition never becomes false.\n` +
+      `  Add maxIterations to set a safety limit:\n` +
+      `    loop({ maxIterations: 100, while: ..., do: ... })\n` +
+      `  See: https://boardsmith.io/docs/common-pitfalls#loop-safety`
+    );
+  }
+
   return {
     type: 'loop',
     config: {

@@ -1,6 +1,23 @@
 import type { GameElement } from './game-element.js';
 import type { ElementClass, ElementFinder, Sorter } from './types.js';
 
+// ============================================
+// Development Mode Warnings
+// ============================================
+
+function isDevMode(): boolean {
+  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+}
+
+const shownWarnings = new Set<string>();
+
+function devWarn(key: string, message: string): void {
+  if (!isDevMode()) return;
+  if (shownWarnings.has(key)) return;
+  shownWarnings.add(key);
+  console.warn(`[BoardSmith] ${message}`);
+}
+
 /**
  * Options for the internal finder method
  */
@@ -237,14 +254,12 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
    * @deprecated Use contains() instead - includes() uses reference equality which fails after serialization
    */
   override includes(searchElement: T, fromIndex?: number): boolean {
-    // Development mode warning
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
-      console.warn(
-        `[BoardSmith] ElementCollection.includes() uses reference equality, which fails after serialization.\n` +
-        `  Use .contains(element) instead for correct element comparison by ID.\n` +
-        `  See: https://boardsmith.io/docs/common-pitfalls#object-reference-comparison`
-      );
-    }
+    devWarn(
+      'element-includes',
+      `ElementCollection.includes() uses reference equality, which fails after serialization.\n` +
+      `  Use .contains(element) instead for correct element comparison by ID.\n` +
+      `  See: https://boardsmith.io/docs/common-pitfalls#object-reference-comparison`
+    );
     return super.includes(searchElement, fromIndex);
   }
 
@@ -255,14 +270,12 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
    * @deprecated Use indexOfElement() instead - indexOf() uses reference equality which fails after serialization
    */
   override indexOf(searchElement: T, fromIndex?: number): number {
-    // Development mode warning
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
-      console.warn(
-        `[BoardSmith] ElementCollection.indexOf() uses reference equality, which fails after serialization.\n` +
-        `  Use .indexOfElement(element) instead for correct element comparison by ID.\n` +
-        `  See: https://boardsmith.io/docs/common-pitfalls#object-reference-comparison`
-      );
-    }
+    devWarn(
+      'element-indexOf',
+      `ElementCollection.indexOf() uses reference equality, which fails after serialization.\n` +
+      `  Use .indexOfElement(element) instead for correct element comparison by ID.\n` +
+      `  See: https://boardsmith.io/docs/common-pitfalls#object-reference-comparison`
+    );
     return super.indexOf(searchElement, fromIndex);
   }
 
