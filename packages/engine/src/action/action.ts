@@ -25,6 +25,32 @@ import type {
 import type { ElementClass } from '../element/types.js';
 
 // ============================================
+// Development Mode Warnings
+// ============================================
+
+/**
+ * Check if we're in development mode
+ */
+function isDevMode(): boolean {
+  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+}
+
+/**
+ * Set of warning keys that have already been shown (to avoid spam)
+ */
+const shownWarnings = new Set<string>();
+
+/**
+ * Emit a development mode warning (once per unique key)
+ */
+function devWarn(key: string, message: string): void {
+  if (!isDevMode()) return;
+  if (shownWarnings.has(key)) return;
+  shownWarnings.add(key);
+  console.warn(`[BoardSmith] ${message}`);
+}
+
+// ============================================
 // Condition Tracing (for debug interface)
 // ============================================
 
@@ -1173,12 +1199,28 @@ export class ActionExecutor {
       }
     }
 
+    // Check dependsOn for element/elements selections too
+    if ((selection.type === 'element' || selection.type === 'elements') && 'dependsOn' in selection) {
+      selTrace.dependentOn = (selection as ElementSelection | ElementsSelection).dependsOn;
+    }
+
     // Get choices for this selection
     const choices = this.getChoices(selection, player, args);
     selTrace.choiceCount = choices.length;
     selectionTraces.push(selTrace);
 
     if (choices.length === 0) {
+      // Development mode warning: suggest dependsOn if there are prior selections
+      if (index > 0 && !selTrace.dependentOn) {
+        const priorSelections = selections.slice(0, index).map(s => s.name);
+        devWarn(
+          `dependsOn-hint:${selection.name}`,
+          `Selection '${selection.name}' returned 0 choices during availability check.\n` +
+          `  If it depends on a prior selection (${priorSelections.join(', ')}), add \`dependsOn: "${priorSelections[priorSelections.length - 1]}"\`.\n` +
+          `  This tells the framework to check availability for each prior choice.\n` +
+          `  See: https://boardsmith.io/docs/common-pitfalls#dependent-selections`
+        );
+      }
       return false;
     }
 

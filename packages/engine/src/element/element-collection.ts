@@ -231,6 +231,42 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
   // ============================================
 
   /**
+   * Override includes() to warn about element comparison issues.
+   * Use contains() instead for correct element comparison by ID.
+   *
+   * @deprecated Use contains() instead - includes() uses reference equality which fails after serialization
+   */
+  override includes(searchElement: T, fromIndex?: number): boolean {
+    // Development mode warning
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+      console.warn(
+        `[BoardSmith] ElementCollection.includes() uses reference equality, which fails after serialization.\n` +
+        `  Use .contains(element) instead for correct element comparison by ID.\n` +
+        `  See: https://boardsmith.io/docs/common-pitfalls#object-reference-comparison`
+      );
+    }
+    return super.includes(searchElement, fromIndex);
+  }
+
+  /**
+   * Override indexOf() to warn about element comparison issues.
+   * Use indexOfElement() instead for correct element comparison by ID.
+   *
+   * @deprecated Use indexOfElement() instead - indexOf() uses reference equality which fails after serialization
+   */
+  override indexOf(searchElement: T, fromIndex?: number): number {
+    // Development mode warning
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+      console.warn(
+        `[BoardSmith] ElementCollection.indexOf() uses reference equality, which fails after serialization.\n` +
+        `  Use .indexOfElement(element) instead for correct element comparison by ID.\n` +
+        `  See: https://boardsmith.io/docs/common-pitfalls#object-reference-comparison`
+      );
+    }
+    return super.indexOf(searchElement, fromIndex);
+  }
+
+  /**
    * Check if this collection contains an element by ID comparison.
    * Use this instead of .includes() which fails due to object reference issues.
    *
