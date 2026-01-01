@@ -69,11 +69,33 @@ Auto-generated action UI from game metadata.
   <Die3D
     :value="dieValue"
     :rolling="isRolling"
-    :die-type="6"
-    @roll-complete="onRollComplete"
+    :sides="6"
+    :size="60"
+    @click="onDieClick"
   />
 </template>
+
+<script setup>
+const dieValue = ref(1);
+const isRolling = ref(false);
+
+function rollDie() {
+  isRolling.value = true;
+  // After animation completes (timing based on your preference)
+  setTimeout(() => {
+    dieValue.value = Math.floor(Math.random() * 6) + 1;
+    isRolling.value = false;
+  }, 1000);
+}
+</script>
 ```
+
+**Props:**
+- `value` - Current face value (1-indexed by default)
+- `rolling` - Whether the die is currently rolling
+- `sides` - Die type: 4, 6, 8, 10, 12, or 20
+- `size` - Size in pixels (default: 60)
+- `color` - Custom die color (optional)
 
 **Supported die types:** d4, d6, d8, d10, d12, d20
 

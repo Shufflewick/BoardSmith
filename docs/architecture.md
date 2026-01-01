@@ -8,6 +8,9 @@ This document provides an overview of the BoardSmith package architecture and ho
                               ┌─────────────────┐
                               │  eslint-plugin  │  (standalone)
                               └─────────────────┘
+                               Sandbox security rules
+                               (no-network, no-filesystem,
+                                no-timers, no-eval, etc.)
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                                                             │
