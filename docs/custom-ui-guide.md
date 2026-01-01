@@ -358,6 +358,37 @@ watch(
 );
 ```
 
+### Loading State for Dependent Choices
+
+When a selection depends on a previous one, choices are fetched from the server. Show a loading indicator while fetching:
+
+```vue
+<template>
+  <div class="selection-panel">
+    <!-- Loading spinner while fetching choices -->
+    <div v-if="actionController.isLoadingChoices.value" class="loading">
+      Loading options...
+    </div>
+
+    <!-- Show choices when loaded -->
+    <div v-else-if="actionController.validElements.value.length">
+      <div
+        v-for="el in actionController.validElements.value"
+        :key="el.id"
+        @click="selectElement(el)"
+      >
+        {{ el.display }}
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div v-else class="empty">
+      No options available
+    </div>
+  </div>
+</template>
+```
+
 ## Debugging
 
 ### Why Isn't My Action Available?
