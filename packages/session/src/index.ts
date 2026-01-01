@@ -71,6 +71,9 @@ export type {
   UpdateNameRequest,
 } from './types.js';
 
+// Error codes enum (value export, not just type)
+export { ErrorCode } from './types.js';
+
 // ============================================
 // Utilities
 // ============================================
