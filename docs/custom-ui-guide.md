@@ -389,6 +389,120 @@ When a selection depends on a previous one, choices are fetched from the server.
 </template>
 ```
 
+## Step 7: Reacting to Action Context
+
+Sometimes UI panels need to react to action state. For example, showing a detail panel when an action targets a specific element.
+
+### Accessing Current Action Args
+
+The `actionController.currentArgs` ref contains all args for the in-progress action, including followUp context:
+
+```typescript
+import { computed } from 'vue';
+
+// Get sector ID from current action (if any)
+const actionContextSectorId = computed(() => {
+  const args = actionController.currentArgs.value;
+  if (!args?.sectorId) return null;
+
+  // Handle both plain ID and {id, name} object formats
+  const sectorId = args.sectorId;
+  if (typeof sectorId === 'object' && sectorId !== null) {
+    return (sectorId as { id: number }).id;
+  }
+  return sectorId as number;
+});
+```
+
+### Example: Auto-Opening a Detail Panel
+
+When a sector-related action starts (either from ActionPanel or via followUp), automatically show the sector's detail panel:
+
+```vue
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import type { UseActionControllerReturn } from '@boardsmith/ui';
+
+const props = defineProps<{
+  actionController: UseActionControllerReturn;
+  sectors: Array<{ id: number; name: string }>;
+}>();
+
+// Sector selected by clicking on map
+const selectedSectorId = ref<number | null>(null);
+
+// Sector from action context (e.g., followUp.args.sectorId)
+const actionContextSectorId = computed(() => {
+  const args = props.actionController.currentArgs.value;
+  if (!args?.sectorId) return null;
+
+  // Handle both plain ID and {id, name} object formats
+  const sectorId = args.sectorId;
+  if (typeof sectorId === 'object' && sectorId !== null) {
+    return (sectorId as { id: number }).id;
+  }
+  return sectorId as number;
+});
+
+// Show panel if either source has a sector
+const activeSectorId = computed(() =>
+  selectedSectorId.value ?? actionContextSectorId.value
+);
+
+const activeSector = computed(() =>
+  props.sectors.find(s => s.id === activeSectorId.value)
+);
+</script>
+
+<template>
+  <div class="game-layout">
+    <GameMap
+      :sectors="sectors"
+      @sector-click="selectedSectorId = $event"
+    />
+
+    <!-- Panel shows for clicked sector OR action context sector -->
+    <SectorPanel
+      v-if="activeSector"
+      :sector="activeSector"
+      @close="selectedSectorId = null"
+    />
+  </div>
+</template>
+```
+
+### Watching for Action Changes
+
+To run side effects when actions start or complete:
+
+```typescript
+import { watch } from 'vue';
+
+// React when action starts
+watch(
+  () => actionController.currentAction.value,
+  (newAction, oldAction) => {
+    if (newAction && !oldAction) {
+      console.log('Action started:', newAction);
+      console.log('Initial args:', actionController.currentArgs.value);
+    }
+    if (!newAction && oldAction) {
+      console.log('Action completed/cancelled:', oldAction);
+    }
+  }
+);
+
+// React to specific arg changes
+watch(
+  () => actionController.currentArgs.value?.targetId,
+  (targetId) => {
+    if (targetId) {
+      highlightElement(targetId);
+    }
+  }
+);
+```
+
 ## Debugging
 
 ### Why Isn't My Action Available?
