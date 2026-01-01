@@ -97,6 +97,23 @@ import { ref, computed, watch, inject, type Ref, type ComputedRef } from 'vue';
 import type { GameElement } from '../types.js';
 import { findElementById } from './useGameViewHelpers.js';
 
+// ============================================
+// Development Mode Warnings
+// ============================================
+
+function isDevMode(): boolean {
+  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+}
+
+const shownWarnings = new Set<string>();
+
+function devWarn(key: string, message: string): void {
+  if (!isDevMode()) return;
+  if (shownWarnings.has(key)) return;
+  shownWarnings.add(key);
+  console.warn(`[BoardSmith] ${message}`);
+}
+
 // Re-export GameElement as GameViewElement for external use
 export type { GameElement as GameViewElement };
 
@@ -181,6 +198,8 @@ export interface FollowUpAction {
   action: string;
   /** Args to pre-fill in the follow-up action */
   args?: Record<string, unknown>;
+  /** Display strings for args (use instead of { id, name } objects) */
+  display?: Record<string, string>;
   /** Metadata for the follow-up action (for actions not in availableActions) */
   metadata?: ActionMetadata;
 }
@@ -477,6 +496,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const snapshotVersion = ref(0);
 
   // === Helpers ===
+
+  /**
+   * Extract a display string from a value.
+   * Handles objects with display/name properties (e.g., followUp context args).
+   */
+  function getDisplayFromValue(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value !== 'object') return String(value);
+
+    const obj = value as Record<string, unknown>;
+    // Priority 1: display property
+    if (typeof obj.display === 'string') return obj.display;
+    // Priority 2: name property (common for elements/entities)
+    if (typeof obj.name === 'string') return obj.name;
+    // Priority 3: primitive value property
+    if (obj.value !== undefined && typeof obj.value !== 'object') return String(obj.value);
+    // Fallback
+    return String(value);
+  }
 
   /** Clear all keys from the args object while preserving reactivity */
   function clearArgs(): void {
@@ -938,10 +976,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
-        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata } = result.followUp;
+        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
         // Use setTimeout to ensure state updates are flushed before starting next action
         setTimeout(async () => {
-          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata);
+          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
         }, 0);
       }
 
@@ -1033,10 +1071,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
-        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata } = result.followUp;
+        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
         // Use setTimeout to ensure state updates are flushed before starting next action
         setTimeout(async () => {
-          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata);
+          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
         }, 0);
       }
 
@@ -1056,11 +1094,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @param actionName The action to start
    * @param initialArgs Pre-filled arguments for the action
    * @param providedMetadata Optional metadata from the server (for actions not in availableActions)
+   * @param displayOverrides Optional display strings for args (use instead of { id, name } objects)
    */
   async function startFollowUp(
     actionName: string,
     initialArgs: Record<string, unknown> = {},
-    providedMetadata?: ActionMetadata
+    providedMetadata?: ActionMetadata,
+    displayOverrides?: Record<string, string>
   ): Promise<void> {
     // Use provided metadata first, then fall back to looking up from actionMetadata
     const meta = providedMetadata ?? getActionMetadata(actionName);
@@ -1086,10 +1126,28 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     };
 
     // Store display values for any initialArgs
+    // Use displayOverrides if provided (cleaner API), otherwise extract from value
     for (const [name, value] of Object.entries(initialArgs)) {
+      // Warn if a plain number is used without a display override
+      if (typeof value === 'number' && !displayOverrides?.[name]) {
+        devWarn(
+          `followUp-plain-number:${actionName}:${name}`,
+          `followUp arg "${name}" is a plain number (${value}).\n` +
+          `  This displays as "${value}" in the action panel, which may not be user-friendly.\n` +
+          `  Consider using the display option:\n` +
+          `    followUp: {\n` +
+          `      action: '${actionName}',\n` +
+          `      args: { ${name}: ${value} },\n` +
+          `      display: { ${name}: 'Human-readable name' },\n` +
+          `    }\n` +
+          `  Or pass an object with a name property:\n` +
+          `    args: { ${name}: { id: ${value}, name: 'Human-readable name' } }`
+        );
+      }
+
       actionSnapshot.value.collectedSelections.set(name, {
         value,
-        display: String(value),
+        display: displayOverrides?.[name] ?? getDisplayFromValue(value),
         skipped: false,
       });
     }
@@ -1200,7 +1258,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     for (const [name, value] of Object.entries(initialArgs)) {
       actionSnapshot.value.collectedSelections.set(name, {
         value,
-        display: String(value), // Best effort for initial args
+        display: getDisplayFromValue(value),
         skipped: false,
       });
     }

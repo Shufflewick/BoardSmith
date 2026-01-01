@@ -365,6 +365,19 @@ export interface FollowUpAction {
   action: string;
   /** Args to pre-fill in the follow-up action (e.g., element IDs, context) */
   args?: Record<string, unknown>;
+  /**
+   * Display strings for args shown in the action panel.
+   * Use this to provide user-friendly names for ID-based args.
+   * @example
+   * ```typescript
+   * followUp: {
+   *   action: 'collectEquipment',
+   *   args: { mercId: merc.id, sectorId: sector.id },
+   *   display: { mercId: 'Bronson', sectorId: 'Diamond Industry' },
+   * }
+   * ```
+   */
+  display?: Record<string, string>;
 }
 
 /**

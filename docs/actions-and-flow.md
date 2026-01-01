@@ -543,6 +543,63 @@ Don't use `followUp` when:
 - A single action with multiple selections is sufficient
 - The follow-up is mandatory and unconditional (consider putting both in the same action)
 
+### Displaying followUp Args
+
+When followUp args are displayed in the action panel (as chips showing context), plain IDs like `mercId: 51` display as "51" which isn't user-friendly.
+
+**Option 1: Pass objects with name/display properties**
+
+```typescript
+return {
+  success: true,
+  followUp: {
+    action: 'collectEquipment',
+    args: {
+      // Plain ID - displays as "51" ❌
+      // mercId: merc.id,
+
+      // Object with name - displays as "Bronson" ✓
+      mercId: { id: merc.id, name: merc.mercName },
+      sectorId: { id: sector.id, name: sector.sectorName },
+    },
+  },
+};
+```
+
+The UI extracts the `name` (or `display`) property automatically. Your follow-up action's helpers should handle both formats:
+
+```typescript
+function getMerc(ctx: ActionContext): Merc {
+  const arg = ctx.args.mercId;
+  // Handle both plain ID and object format
+  const id = typeof arg === 'object' && arg !== null ? (arg as { id: number }).id : arg;
+  return ctx.game.first(Merc, m => m.id === id)!;
+}
+```
+
+**Option 2: Use the display option (recommended)**
+
+For cleaner separation of value and display:
+
+```typescript
+return {
+  success: true,
+  followUp: {
+    action: 'collectEquipment',
+    args: {
+      mercId: merc.id,
+      sectorId: sector.id,
+    },
+    display: {
+      mercId: merc.mercName,      // "Bronson"
+      sectorId: sector.sectorName, // "Diamond Industry"
+    },
+  },
+};
+```
+
+This keeps the args as plain IDs (no helper changes needed) while providing display strings for the UI.
+
 ### Example: Attack with Damage Resolution
 
 ```typescript
