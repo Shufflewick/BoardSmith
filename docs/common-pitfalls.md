@@ -840,6 +840,145 @@ const visibleEquipment = merc.children?.filter(c =>
 
 ---
 
+## 14. Action Availability = Conditions AND Flow (CRITICAL)
+
+### The Problem
+
+Your action passes all its conditions (shown as available in the debug panel), but it doesn't appear in `availableActions` in the UI. You've verified the condition logic, checked your selections, and everything looks correct - but the action is silently excluded.
+
+```typescript
+// Debug panel shows:
+// ✓ move - conditionResult: true, selections: [{ name: 'piece', choiceCount: 5 }]
+//
+// But in your game UI:
+// availableActions = ['endTurn']  // Where's 'move'??
+```
+
+### The Root Cause
+
+BoardSmith has **two layers** of action availability:
+
+1. **Action conditions** - Does the action's `condition()` pass? Do all selections have valid choices?
+2. **Flow restrictions** - Is the action listed in the current `actionStep({ actions: [...] })`?
+
+An action must pass BOTH to appear in `availableActions`. The debug panel's "Actions" tab shows all actions that pass layer 1, but doesn't show layer 2 restrictions.
+
+### The Solution
+
+Check your flow definition - the action must be listed in the `actionStep({ actions: [...] })`:
+
+```typescript
+// WRONG - 'move' not in flow's action list
+actionStep({
+  name: 'player-turn',
+  actions: ['endTurn'],  // Only endTurn is allowed!
+})
+
+// CORRECT - include all actions you want available
+actionStep({
+  name: 'player-turn',
+  actions: ['move', 'attack', 'useAbility', 'endTurn'],
+})
+```
+
+### Use the Debug Panel's Flow Context
+
+The debug panel now shows flow context information:
+
+```
+⚡ FLOW CONTEXT
+Phase: playerTurn
+Current player: 0 [Your turn]
+Flow allows: endTurn
+
+✓ AVAILABLE (1)
+  endTurn
+
+🚫 FLOW-RESTRICTED (3)
+  These actions pass their conditions but are not allowed by the current flow step.
+  move          [would be available]
+  attack        [would be available]
+  useAbility    [would be available]
+```
+
+The **Flow-Restricted** section shows exactly which actions are being blocked by the flow.
+
+### Common Scenarios
+
+#### 1. Renamed/Consolidated Actions
+After refactoring, the flow references old action names:
+
+```typescript
+// Old code had separate actions
+actions: ['dictatorMove', 'dictatorAttack']
+
+// After consolidation, actions are unified
+// But flow still references old names!
+game.defineAction('move', ...)  // 'dictatorMove' no longer exists
+```
+
+**Fix:** Update flow to use new action names. The engine now warns about unknown actions:
+```
+[BoardSmith] Flow step 'player-turn' references unknown action 'dictatorMove'.
+Did you forget to register it with game.defineAction('dictatorMove', ...)?
+```
+
+#### 2. Dynamic Action Lists
+Use a function for conditional action lists:
+
+```typescript
+actionStep({
+  name: 'merc-action',
+  actions: (ctx) => {
+    const baseActions = ['move', 'attack', 'endTurn'];
+    const player = ctx.player as MyPlayer;
+
+    // Only add special actions if player has capabilities
+    if (player.hasTactics) baseActions.push('playTactics');
+    if (player.canReinforce) baseActions.push('reinforce');
+
+    return baseActions;
+  },
+})
+```
+
+#### 3. Phase-Based Actions
+Different phases allow different actions:
+
+```typescript
+const combatPhase = phase('combat', {
+  do: actionStep({
+    actions: ['attack', 'defend', 'retreat'],
+  }),
+});
+
+const buildPhase = phase('build', {
+  do: actionStep({
+    actions: ['construct', 'recruit', 'upgrade'],
+  }),
+});
+```
+
+### Why This Design?
+
+The flow-based restriction is intentional - it enforces game structure:
+
+- **Phases**: Only certain actions make sense during specific phases
+- **Sequences**: Ensure players complete steps in order (draft → play → score)
+- **Turn structure**: Separate "main actions" from "free actions"
+
+Without flow restrictions, any action could be taken at any time, breaking game rules.
+
+### Debugging Checklist
+
+1. **Open debug panel → Actions tab** - Check the Flow Context section
+2. **Look at "Flow allows"** - Is your action listed?
+3. **Check "Flow-Restricted" section** - Is your action there?
+4. **If flow-restricted**: Update your flow's `actionStep({ actions: [...] })` to include it
+5. **If not even in conditions-passed**: Use `game.debugActionAvailability()` to find why
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -857,6 +996,7 @@ const visibleEquipment = merc.children?.filter(c =>
 | **Element storage** | `stash: Equipment[] = []` | `stashZone.all(Equipment)` |
 | **Action debugging** | Guessing why action unavailable | `game.debugActionAvailability(name, player)` |
 | **Client-side elements** | `element.attributes.slot` | `element.children?.find(...)` |
+| **Flow restrictions** | Action passes conditions but not in UI | Check flow's `actionStep({ actions: [...] })` |
 
 ---
 

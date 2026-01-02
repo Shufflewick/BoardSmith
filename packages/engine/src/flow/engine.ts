@@ -77,6 +77,8 @@ export class FlowEngine<G extends Game = Game> {
   private awaitingPlayers: PlayerAwaitingState[] = [];
   /** Current named phase (for UI display) */
   private currentPhase?: string;
+  /** Track warned actions to avoid console spam */
+  private warnedUnknownActions = new Set<string>();
   /** Move count for current action step with move limits */
   private moveCount = 0;
   /** Current action step config (for move limit tracking) */
@@ -719,11 +721,21 @@ export class FlowEngine<G extends Game = Game> {
       ? config.actions(context)
       : config.actions;
 
-    // Filter to only available actions
+    // Filter to only available actions, warning about non-existent ones
     const allAvailable = this.game.getAvailableActions(player as any);
     const available = actions.filter((actionName) => {
       const action = this.game.getAction(actionName);
-      if (!action) return false;
+      if (!action) {
+        // Warn once per action name to avoid console spam
+        if (!this.warnedUnknownActions.has(actionName)) {
+          this.warnedUnknownActions.add(actionName);
+          console.warn(
+            `[BoardSmith] Flow step '${config.name ?? 'action-step'}' references unknown action '${actionName}'. ` +
+            `Did you forget to register it with game.defineAction('${actionName}', ...)?`
+          );
+        }
+        return false;
+      }
       return allAvailable.some((a) => a.name === actionName);
     });
 
@@ -788,7 +800,17 @@ export class FlowEngine<G extends Game = Game> {
 
       const available = actions.filter((actionName) => {
         const action = this.game.getAction(actionName);
-        if (!action) return false;
+        if (!action) {
+          // Warn once per action name to avoid console spam
+          if (!this.warnedUnknownActions.has(actionName)) {
+            this.warnedUnknownActions.add(actionName);
+            console.warn(
+              `[BoardSmith] Flow step '${config.name ?? 'simultaneous-action-step'}' references unknown action '${actionName}'. ` +
+              `Did you forget to register it with game.defineAction('${actionName}', ...)?`
+            );
+          }
+          return false;
+        }
         return this.game.getAvailableActions(player as any).some((a) => a.name === actionName);
       });
 

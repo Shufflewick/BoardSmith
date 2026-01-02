@@ -71,8 +71,13 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
   if (allPassed) {
     console.log(chalk.green('All validation checks passed!\n'));
     console.log(chalk.cyan('Next steps:'));
+    console.log(chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'));
     console.log(chalk.dim('  boardsmith build    - Build for production'));
     console.log(chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'));
+    console.log(chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'));
+    console.log(chalk.dim('     The engine will warn about issues like:'));
+    console.log(chalk.dim('     - Flow steps referencing non-existent actions'));
+    console.log(chalk.dim('     - Element reference comparisons instead of ID comparisons\n'));
   } else {
     console.log(chalk.red('Validation failed. Please fix the issues above.\n'));
     process.exit(1);
