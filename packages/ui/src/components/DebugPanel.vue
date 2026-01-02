@@ -256,6 +256,15 @@ const tracesLoading = ref(false);
 const tracesError = ref<string | null>(null);
 const tracesLastFetched = ref<number>(0);
 
+// Flow context state (from action-traces response)
+interface FlowContext {
+  flowAllowedActions: string[];
+  currentPlayer?: number;
+  isMyTurn: boolean;
+  currentPhase?: string;
+}
+const flowContext = ref<FlowContext | null>(null);
+
 // Element inspector state
 const selectedElementId = ref<number | null>(null);
 const elementSearchQuery = ref('');
@@ -458,6 +467,7 @@ async function fetchActionTraces() {
     }
 
     actionTraces.value = data.traces || [];
+    flowContext.value = data.flowContext || null;
     tracesLastFetched.value = Date.now();
   } catch (e) {
     tracesError.value = e instanceof Error ? e.message : 'Unknown error';
@@ -465,6 +475,32 @@ async function fetchActionTraces() {
     tracesLoading.value = false;
   }
 }
+
+// Computed: actions that pass conditions but are blocked by flow
+const flowRestrictedActions = computed(() => {
+  if (!flowContext.value) return [];
+  const flowAllowed = new Set(flowContext.value.flowAllowedActions);
+  return actionTraces.value.filter(t =>
+    t.available && !flowAllowed.has(t.actionName)
+  );
+});
+
+// Computed: actions that are truly available (pass conditions AND in flow)
+const trulyAvailableActions = computed(() => {
+  if (!flowContext.value) {
+    // No flow context - show all available as truly available
+    return actionTraces.value.filter(t => t.available);
+  }
+  const flowAllowed = new Set(flowContext.value.flowAllowedActions);
+  return actionTraces.value.filter(t =>
+    t.available && flowAllowed.has(t.actionName)
+  );
+});
+
+// Computed: actions that fail their conditions
+const conditionFailedActions = computed(() => {
+  return actionTraces.value.filter(t => !t.available);
+});
 
 // Copy available actions to clipboard
 async function copyAvailableActions() {
@@ -1665,6 +1701,37 @@ const displayedState = computed(() => {
             </button>
           </div>
 
+          <!-- Flow Context Info Box -->
+          <div v-if="flowContext" class="flow-context-box">
+            <div class="flow-context-header">
+              <span class="flow-context-icon">⚡</span>
+              <span class="flow-context-title">Flow Context</span>
+            </div>
+            <div class="flow-context-details">
+              <div v-if="flowContext.currentPhase" class="flow-context-item">
+                <span class="flow-context-label">Phase:</span>
+                <span class="flow-context-value">{{ flowContext.currentPhase }}</span>
+              </div>
+              <div class="flow-context-item">
+                <span class="flow-context-label">Current player:</span>
+                <span class="flow-context-value">{{ flowContext.currentPlayer ?? 'none' }}</span>
+                <span v-if="flowContext.isMyTurn" class="flow-context-badge my-turn">Your turn</span>
+                <span v-else class="flow-context-badge not-turn">Not your turn</span>
+              </div>
+              <div class="flow-context-item">
+                <span class="flow-context-label">Flow allows:</span>
+                <span class="flow-context-value flow-allowed-list">
+                  <template v-if="flowContext.flowAllowedActions.length > 0">
+                    {{ flowContext.flowAllowedActions.join(', ') }}
+                  </template>
+                  <template v-else>
+                    <em>no actions</em>
+                  </template>
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div v-if="tracesError" class="traces-error">
             {{ tracesError }}
           </div>
@@ -1674,11 +1741,11 @@ const displayedState = computed(() => {
           </div>
 
           <div v-else class="traces-list">
-            <!-- Available Actions -->
+            <!-- Truly Available Actions (pass conditions AND in flow) -->
             <div class="trace-group">
               <div class="trace-group-header available">
                 <span class="trace-icon">✓</span>
-                <span class="trace-group-label">Available ({{ actionTraces.filter(t => t.available).length }})</span>
+                <span class="trace-group-label">Available ({{ trulyAvailableActions.length }})</span>
                 <button
                   class="debug-btn small trace-copy-btn"
                   @click="copyAvailableActions"
@@ -1689,7 +1756,7 @@ const displayedState = computed(() => {
               </div>
               <div class="trace-items">
                 <div
-                  v-for="trace in actionTraces.filter(t => t.available)"
+                  v-for="trace in trulyAvailableActions"
                   :key="trace.actionName"
                   class="trace-item available"
                 >
@@ -1698,14 +1765,42 @@ const displayedState = computed(() => {
                     ({{ trace.selections.map(s => `${s.name}: ${s.choiceCount}`).join(', ') }})
                   </span>
                 </div>
+                <div v-if="trulyAvailableActions.length === 0" class="trace-empty">
+                  No actions currently available
+                </div>
               </div>
             </div>
 
-            <!-- Unavailable Actions -->
+            <!-- Flow-Restricted Actions (pass conditions but blocked by flow) -->
+            <div v-if="flowRestrictedActions.length > 0" class="trace-group">
+              <div class="trace-group-header flow-restricted">
+                <span class="trace-icon">🚫</span>
+                <span class="trace-group-label">Flow-Restricted ({{ flowRestrictedActions.length }})</span>
+              </div>
+              <div class="trace-items">
+                <div class="flow-restricted-explanation">
+                  These actions pass their conditions but are not allowed by the current flow step.
+                  Add them to <code>actionStep({ actions: [...] })</code> in the flow definition.
+                </div>
+                <div
+                  v-for="trace in flowRestrictedActions"
+                  :key="trace.actionName"
+                  class="trace-item flow-restricted"
+                >
+                  <span class="trace-name">{{ trace.actionName }}</span>
+                  <span class="trace-badge">would be available</span>
+                  <span v-if="trace.selections.length > 0" class="trace-selections">
+                    ({{ trace.selections.map(s => `${s.name}: ${s.choiceCount}`).join(', ') }})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Unavailable Actions (fail conditions) -->
             <div class="trace-group">
               <div class="trace-group-header unavailable">
                 <span class="trace-icon">✗</span>
-                <span class="trace-group-label">Unavailable ({{ actionTraces.filter(t => !t.available).length }})</span>
+                <span class="trace-group-label">Condition Failed ({{ conditionFailedActions.length }})</span>
                 <button
                   class="debug-btn small trace-copy-btn"
                   @click="copyUnavailableActions"
@@ -1716,7 +1811,7 @@ const displayedState = computed(() => {
               </div>
               <div class="trace-items">
                 <div
-                  v-for="trace in actionTraces.filter(t => !t.available)"
+                  v-for="trace in conditionFailedActions"
                   :key="trace.actionName"
                   class="trace-item-detailed unavailable"
                 >
@@ -2752,8 +2847,127 @@ const displayedState = computed(() => {
   color: #f87171;
 }
 
+.trace-group-header.flow-restricted {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
 .trace-group-label {
   flex: 1;
+}
+
+/* Flow Context Box */
+.flow-context-box {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.flow-context-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.15);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #60a5fa;
+}
+
+.flow-context-icon {
+  font-size: 12px;
+}
+
+.flow-context-details {
+  padding: 8px 12px;
+  font-size: 11px;
+}
+
+.flow-context-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.flow-context-label {
+  color: #888;
+  min-width: 100px;
+}
+
+.flow-context-value {
+  color: #ddd;
+}
+
+.flow-context-value.flow-allowed-list {
+  color: #4ade80;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.flow-context-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.flow-context-badge.my-turn {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.flow-context-badge.not-turn {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+}
+
+/* Flow-restricted action items */
+.trace-item.flow-restricted {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fbbf24;
+}
+
+.trace-item.flow-restricted .trace-name {
+  color: #fbbf24;
+}
+
+.trace-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+.flow-restricted-explanation {
+  padding: 8px 12px;
+  font-size: 10px;
+  color: #9ca3af;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.flow-restricted-explanation code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  color: #fbbf24;
+}
+
+.trace-empty {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
 }
 
 .trace-copy-btn {

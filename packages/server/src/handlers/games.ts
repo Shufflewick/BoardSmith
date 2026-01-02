@@ -271,6 +271,7 @@ export async function handleGetStateDiff(
 /**
  * GET /games/:gameId/action-traces - Get action availability traces (debug)
  * Returns detailed information about why each action is or isn't available.
+ * Also returns flowContext showing which actions are restricted by the current flow step.
  */
 export async function handleGetActionTraces(
   store: GameStore,
@@ -284,7 +285,11 @@ export async function handleGetActionTraces(
 
   const result = session.getActionTraces(playerPosition);
   if (result.success) {
-    return success({ success: true, traces: result.traces });
+    return success({
+      success: true,
+      traces: result.traces,
+      flowContext: result.flowContext,
+    });
   } else {
     return error(result.error ?? 'Failed to get action traces');
   }

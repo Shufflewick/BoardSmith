@@ -598,14 +598,54 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Get action traces for debugging (shows why actions are available/unavailable)
    * @param playerPosition Player's position
    */
-  getActionTraces(playerPosition: number): { success: boolean; traces?: import('./types.js').ActionTrace[]; error?: string } {
+  getActionTraces(playerPosition: number): {
+    success: boolean;
+    traces?: import('./types.js').ActionTrace[];
+    flowContext?: {
+      flowAllowedActions: string[];
+      currentPlayer?: number;
+      isMyTurn: boolean;
+      currentPhase?: string;
+    };
+    error?: string;
+  } {
     if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
       return { success: false, error: `Invalid player position: ${playerPosition}` };
     }
 
     try {
       const traces = buildActionTraces(this.#runner, playerPosition);
-      return { success: true, traces };
+
+      // Get flow context to show which actions are restricted by flow
+      const flowState = this.#runner.getFlowState();
+      let flowAllowedActions: string[] = [];
+      let isMyTurn = false;
+
+      if (flowState?.awaitingInput) {
+        // Handle simultaneous actions
+        if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
+          const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === playerPosition);
+          if (playerState && !playerState.completed) {
+            flowAllowedActions = playerState.availableActions;
+            isMyTurn = true;
+          }
+        } else {
+          // Regular turn-based flow
+          flowAllowedActions = flowState.availableActions ?? [];
+          isMyTurn = flowState.currentPlayer === playerPosition;
+        }
+      }
+
+      return {
+        success: true,
+        traces,
+        flowContext: {
+          flowAllowedActions,
+          currentPlayer: flowState?.currentPlayer,
+          isMyTurn,
+          currentPhase: flowState?.currentPhase,
+        },
+      };
     } catch (error) {
       return {
         success: false,
