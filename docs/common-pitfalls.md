@@ -769,6 +769,77 @@ expect(debug.available).toBe(true);
 
 ---
 
+## 13. Client-Side vs Server-Side Element Access
+
+### The Problem
+
+On the **server side** (engine), you access elements via methods like `first()`, `all()`, and properties:
+```typescript
+// Server-side - returns GameElement with ._t.id
+const weapon = merc.first(Equipment, e => e.equippedSlot === 'weapon');
+console.log(weapon?.id); // 42 (numeric ID from _t.id)
+```
+
+On the **client side** (UI), you access elements via the serialized `gameView` tree:
+```typescript
+// Client-side - gameView has { id, className, attributes, children }
+const weapon = merc.children?.find(c =>
+  c.className === 'Equipment' && c.attributes?.equippedSlot === 'weapon'
+);
+console.log(weapon?.id); // 42 (numeric ID at top level)
+```
+
+### Common Mistake: Accessing Attributes Instead of Children
+
+```typescript
+// WRONG - Accessing an attribute that might store element DATA (not the element)
+const slot = merc.attributes.weaponSlot;
+// Returns: { equipmentId: "45-caliber...", ... } - plain object, NO id!
+
+// CORRECT - Find in children array
+const slot = merc.children?.find(c =>
+  c.attributes?.equippedSlot === 'weapon'
+);
+// Returns: { id: 42, className: 'Equipment', attributes: {...} }
+```
+
+### The Symptom
+
+If you see:
+- `element.id` is `undefined`
+- Object has game-specific attributes like `equipmentId` (string) instead of numeric `id`
+- Element has no `className` property
+
+You're likely looking at an **attribute object**, not a proper element from the tree.
+
+### Visibility Can Hide Children
+
+If an element belongs to an opponent, its children may be hidden:
+```typescript
+// Hidden child elements appear with __hidden flag and may have negative IDs
+{
+  id: -5001,  // Negative = hidden placeholder
+  className: 'Equipment',
+  attributes: { __hidden: true }
+}
+```
+
+Check for `__hidden` when iterating children:
+```typescript
+const visibleEquipment = merc.children?.filter(c =>
+  c.className === 'Equipment' && !c.attributes?.__hidden
+);
+```
+
+### Debugging Checklist
+
+1. **Server-side**: Use `element._t.children` to see actual children
+2. **Client-side**: Use `element.children` from gameView
+3. **Check visibility**: Look for `__hidden: true` in attributes
+4. **Verify IDs**: Real elements have positive numeric `id`, hidden placeholders have negative `id`
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -785,6 +856,7 @@ expect(debug.available).toBe(true);
 | **Module-level caching** | `const cache = new Map()` | `actionTempState(ctx, 'action')` |
 | **Element storage** | `stash: Equipment[] = []` | `stashZone.all(Equipment)` |
 | **Action debugging** | Guessing why action unavailable | `game.debugActionAvailability(name, player)` |
+| **Client-side elements** | `element.attributes.slot` | `element.children?.find(...)` |
 
 ---
 
