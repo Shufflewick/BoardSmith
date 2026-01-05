@@ -483,6 +483,11 @@ function tryAutoStartSingleAction(skipNoSelections = false): void {
   if (!props.isMyTurn) return;
   if (currentAction.value) return;
   if (isExecuting.value) return;
+  // CRITICAL: Don't start new action if a followUp is pending (race condition fix)
+  // After execute() completes with followUp, currentAction is cleared but
+  // startFollowUp is scheduled via setTimeout. Without this check, we could
+  // start a new action here that runs in parallel with the followUp.
+  if (actionController.pendingFollowUp.value) return;
 
   const actions = actionsWithMetadata.value;
   if (actions.length !== 1) return;

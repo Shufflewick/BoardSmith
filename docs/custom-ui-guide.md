@@ -548,7 +548,8 @@ for (const sel of debug.details.selections) {
 | "Invalid selection" error | Passed wrong value type | Check you're passing element ID (number) not object |
 | Element not found in gameView | ID mismatch or element moved | Use `findElementById()` to verify |
 | validElements is empty | Choices not fetched yet | Check `isLoadingChoices`, wait for fetch |
-| Selection not applying | Wrote to actionArgs after clear | Use `start()` with `args` option |
+| Selection not applying | Wrote to actionArgs directly | Use `actionController.fill()` instead |
+| Spurious values in followUp args | Custom UI writing to actionArgs | See warning in console, use `fill()` |
 
 ### ID vs Object Confusion
 

@@ -42,6 +42,16 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
       const index = oldParent._t.children.indexOf(this);
       if (index !== -1) {
         oldParent._t.children.splice(index, 1);
+      } else if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+        // DEV: Element has a parent reference but isn't in parent's children array
+        // This indicates tree corruption - element may end up in multiple places
+        console.error(
+          `[BoardSmith] 🚨 TREE CORRUPTION in moveToInternal:\n` +
+          `  Element ${this.name ?? this.constructor.name} (id: ${this.id}) has parent reference to\n` +
+          `  "${oldParent.name ?? oldParent.constructor.name}" (id: ${oldParent.id})\n` +
+          `  but was NOT found in parent's children array!\n` +
+          `  This element will now exist in multiple places in the tree.`
+        );
       }
 
       // Trigger exit event if parent is a Space

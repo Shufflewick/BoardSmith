@@ -92,11 +92,14 @@ export function buildActionMetadata(
  * Build metadata for a single action by name.
  * Used for followUp actions that aren't in the current available actions.
  * Does NOT check the action's condition (followUp actions bypass conditions).
+ *
+ * @param knownArgs Optional args to use when evaluating dynamic prompts (for followUp actions)
  */
 export function buildSingleActionMetadata(
   game: Game,
   player: Player,
-  actionName: string
+  actionName: string,
+  knownArgs?: Record<string, unknown>
 ): ActionMetadata | undefined {
   const actions = (game as any)._actions as Map<string, ActionDefinition>;
   const actionDef = actions?.get(actionName);
@@ -109,7 +112,7 @@ export function buildSingleActionMetadata(
   const selectionMetas: SelectionMetadata[] = [];
 
   for (const selection of actionDef.selections) {
-    const selMeta = buildSelectionMetadata(game, player, selection);
+    const selMeta = buildSelectionMetadata(game, player, selection, knownArgs);
     selectionMetas.push(selMeta);
   }
 
@@ -134,14 +137,17 @@ export function buildSingleActionMetadata(
  * - multiSelect - only if static (not function-based)
  * - elementClassName - for CSS targeting
  * - min, max, integer, pattern, etc. - for number/text validation
+ *
+ * @param knownArgs Optional args for evaluating dynamic prompts (for followUp actions with pre-filled args)
  */
 function buildSelectionMetadata(
   game: Game,
   player: Player,
-  selection: Selection
+  selection: Selection,
+  knownArgs?: Record<string, unknown>
 ): SelectionMetadata {
-  // Create context first so we can evaluate dynamic prompts
-  const ctx = { game, player, args: {} as Record<string, unknown> };
+  // Create context with known args if provided (for followUp actions)
+  const ctx = { game, player, args: knownArgs ?? {} };
 
   // Evaluate prompt - can be static string or function returning string
   const evaluatedPrompt = typeof selection.prompt === 'function'

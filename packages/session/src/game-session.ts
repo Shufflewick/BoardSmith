@@ -704,7 +704,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     let followUpWithMetadata: typeof followUp & { metadata?: ReturnType<typeof buildSingleActionMetadata> } | undefined;
     if (followUp) {
       const playerObj = this.#runner.game.players[player];
-      const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, followUp.action) : undefined;
+      // Pass followUp.args so dynamic prompts can access them (e.g., showing sector name)
+      const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, followUp.action, followUp.args) : undefined;
       followUpWithMetadata = {
         ...followUp,
         metadata: followUpMetadata,
@@ -749,6 +750,27 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       },
       this.#storedState.actionHistory
     );
+
+    // DEV: Log state after reload to detect mismatches
+    if (process.env.NODE_ENV !== 'production') {
+      const newSequence = (newRunner.game as any)._ctx?.sequence;
+      const newElementCount = newRunner.game.all().length;
+      const oldSequence = (this.#runner.game as any)._ctx?.sequence;
+      const oldElementCount = this.#runner.game.all().length;
+
+      if (newSequence !== oldSequence || newElementCount !== oldElementCount) {
+        console.warn(
+          `[BoardSmith HMR] ⚠️ STATE MISMATCH after reload!\n` +
+          `  Before: seq=${oldSequence}, elements=${oldElementCount}\n` +
+          `  After:  seq=${newSequence}, elements=${newElementCount}\n` +
+          `  This may cause game corruption. Check if your game has randomness outside seed control.`
+        );
+      } else {
+        console.log(
+          `[BoardSmith HMR] ✓ State matches: seq=${newSequence}, elements=${newElementCount}`
+        );
+      }
+    }
 
     // Replace the current runner and game class
     this.#runner = newRunner;
@@ -1038,11 +1060,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     }
 
     // Resolve any element IDs in currentArgs to actual elements
+    // Handles both plain numbers (id) and serialized element objects ({ id: number, ... })
     const resolvedArgs: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(currentArgs)) {
       if (typeof value === 'number') {
-        // Try to resolve as element ID
+        // Plain element ID
         const element = this.#runner.game.getElementById(value);
+        resolvedArgs[key] = element || value;
+      } else if (typeof value === 'object' && value !== null && 'id' in value && typeof (value as { id: unknown }).id === 'number') {
+        // Serialized element object from followUp args (e.g., { id: 123, name: 'Coffee Industry' })
+        // When an action returns followUp.args with elements, they get JSON-serialized.
+        // The client sends them back as objects, so we need to resolve them here.
+        const element = this.#runner.game.getElementById((value as { id: number }).id);
         resolvedArgs[key] = element || value;
       } else {
         resolvedArgs[key] = value;
@@ -1141,9 +1170,25 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           }
         } else {
           // Original from/filter/elementClass pattern
-          const from = typeof elemSel.from === 'function'
-            ? elemSel.from(ctx)
-            : elemSel.from ?? this.#runner.game;
+          let from: any;
+
+          if (typeof elemSel.from === 'function') {
+            from = elemSel.from(ctx);
+            // DEV WARNING: from function returned undefined/null - this will cause errors
+            if (from === undefined || from === null) {
+              if (process.env.NODE_ENV !== 'production') {
+                console.warn(
+                  `[BoardSmith] chooseElement '${selectionName}' from() returned ${from}.\n` +
+                  `  This will cause errors. Check your from() function and ensure ctx.args has the expected values.\n` +
+                  `  ctx.args: ${JSON.stringify(ctx.args)}`
+                );
+              }
+              // Fall back to game to avoid crash, but this is likely a bug
+              from = this.#runner.game;
+            }
+          } else {
+            from = elemSel.from ?? this.#runner.game;
+          }
 
           if (elemSel.elementClass) {
             elements = [...from.all(elemSel.elementClass)];

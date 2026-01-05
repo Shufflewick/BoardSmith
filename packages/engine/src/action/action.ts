@@ -532,7 +532,9 @@ export class ActionExecutor {
     player?: Player
   ): Record<string, unknown> {
     const resolved = { ...args };
+    const selectionNames = new Set(action.selections.map(s => s.name));
 
+    // First pass: resolve selection args based on their type
     for (const selection of action.selections) {
       const value = args[selection.name];
       if (value === undefined) continue;
@@ -542,6 +544,12 @@ export class ActionExecutor {
           // If value is a number, resolve to actual GameElement by ID
           if (typeof value === 'number') {
             const element = this.game.getElementById(value);
+            if (element) {
+              resolved[selection.name] = element;
+            }
+          } else if (this.looksLikeSerializedElement(value)) {
+            // Handle serialized element objects from followUp args
+            const element = this.game.getElementById((value as { id: number }).id);
             if (element) {
               resolved[selection.name] = element;
             }
@@ -558,10 +566,16 @@ export class ActionExecutor {
               resolved[selection.name] = element;
             }
           } else if (Array.isArray(value)) {
-            // Multi-select: array of element IDs
+            // Multi-select: array of element IDs or serialized elements
             const elements = value
-              .filter((v): v is number => typeof v === 'number')
-              .map(id => this.game.getElementById(id))
+              .map(v => {
+                if (typeof v === 'number') {
+                  return this.game.getElementById(v);
+                } else if (this.looksLikeSerializedElement(v)) {
+                  return this.game.getElementById((v as { id: number }).id);
+                }
+                return null;
+              })
               .filter((el): el is GameElement => el !== null);
             resolved[selection.name] = elements;
           }
@@ -596,7 +610,40 @@ export class ActionExecutor {
       }
     }
 
+    // Second pass: resolve non-selection args that look like element references
+    // This handles followUp args like { sectorId: { id: 145, name: 'Silver Industry' } }
+    for (const [key, value] of Object.entries(args)) {
+      if (selectionNames.has(key)) continue; // Already processed above
+      if (value === undefined) continue;
+
+      // Resolve numeric IDs
+      if (typeof value === 'number') {
+        const element = this.game.getElementById(value);
+        if (element) {
+          resolved[key] = element;
+        }
+      }
+      // Resolve serialized element objects (from followUp args)
+      else if (this.looksLikeSerializedElement(value)) {
+        const element = this.game.getElementById((value as { id: number }).id);
+        if (element) {
+          resolved[key] = element;
+        }
+      }
+    }
+
     return resolved;
+  }
+
+  /**
+   * Check if a value looks like a serialized element (has numeric id property).
+   * This is a looser check than isSerializedElement - used for followUp args
+   * which may not have className but still represent elements.
+   */
+  private looksLikeSerializedElement(value: unknown): boolean {
+    if (typeof value !== 'object' || value === null) return false;
+    const obj = value as Record<string, unknown>;
+    return typeof obj.id === 'number';
   }
 
   /**
@@ -714,6 +761,16 @@ export class ActionExecutor {
               ? elementSel.from(context)
               : elementSel.from ?? this.game;
 
+          // DEV: Check if 'from' is an ElementCollection (likely a bug in action definition)
+          if (isDevMode() && Array.isArray(from) && from.length > 0 && 'all' in from) {
+            console.warn(
+              `[BoardSmith] ⚠️ Selection "${selection.name}" 'from' returned an ElementCollection!\n` +
+              `  This is likely a bug - 'from' should return a container (Space/Game), not elements.\n` +
+              `  Example fix: from: () => game.stash  (not game.stash.all(Equipment))\n` +
+              `  The 'from' collection has ${from.length} elements. Calling .all() on it will search WITHIN these.`
+            );
+          }
+
           if (elementSel.elementClass) {
             elements = [...from.all(elementSel.elementClass)];
           } else {
@@ -735,6 +792,7 @@ export class ActionExecutor {
         const elements = typeof elementsSel.elements === 'function'
           ? elementsSel.elements(context)
           : [...elementsSel.elements];
+
         return elements;
       }
 

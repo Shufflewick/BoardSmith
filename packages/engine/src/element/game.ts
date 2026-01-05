@@ -718,6 +718,186 @@ export class Game<
   }
 
   /**
+   * Debug element tree to diagnose element count issues.
+   * Returns detailed information about the element tree structure.
+   *
+   * Use this when debugging issues like:
+   * - Element count explosion (too many elements)
+   * - Missing elements (elements not found)
+   * - Tree corruption (circular references)
+   *
+   * @example
+   * ```typescript
+   * const treeInfo = game.debugElementTree();
+   * console.log(treeInfo.summary);
+   * // "Total: 205 elements in tree, 12 in pile, sequence at 217"
+   *
+   * console.log(treeInfo.byClass);
+   * // { Equipment: 198, Sector: 5, Player: 2 }
+   * ```
+   */
+  debugElementTree(): {
+    /** Total elements in main game tree */
+    totalInTree: number;
+    /** Total elements in the pile (removed elements) */
+    totalInPile: number;
+    /** Element sequence counter (total elements ever created) */
+    sequenceCounter: number;
+    /** Element counts by class name */
+    byClass: Record<string, number>;
+    /** Max tree depth */
+    maxDepth: number;
+    /** Summary string */
+    summary: string;
+    /** Any integrity issues detected */
+    issues: string[];
+  } {
+    const byClass: Record<string, number> = {};
+    let maxDepth = 0;
+    const issues: string[] = [];
+    const seenIds = new Set<number>();
+    const seenElements = new Set<GameElement>();
+
+    const processElement = (el: GameElement, depth: number, expectedParent?: GameElement) => {
+      // Check for circular reference (same element visited twice)
+      if (seenElements.has(el)) {
+        issues.push(`Circular reference detected: element ${el.name} (id: ${el.id}) visited twice`);
+        return;
+      }
+      seenElements.add(el);
+
+      // Check for duplicate IDs
+      if (seenIds.has(el.id)) {
+        issues.push(`Duplicate ID detected: ${el.id} (${el.name})`);
+      }
+      seenIds.add(el.id);
+
+      // Check parent-child consistency
+      if (expectedParent && el._t.parent !== expectedParent) {
+        const actualParentName = el._t.parent?.name ?? el._t.parent?.constructor.name ?? 'undefined';
+        const expectedParentName = expectedParent.name ?? expectedParent.constructor.name;
+        issues.push(
+          `Parent mismatch: ${el.name} (id: ${el.id}) is in ${expectedParentName}'s children ` +
+          `but its _t.parent points to ${actualParentName} (id: ${el._t.parent?.id ?? 'none'})`
+        );
+      }
+
+      // Count by class
+      const className = el.constructor.name;
+      byClass[className] = (byClass[className] || 0) + 1;
+
+      // Track depth
+      maxDepth = Math.max(maxDepth, depth);
+
+      // Process children
+      for (const child of el._t.children) {
+        processElement(child, depth + 1, el);
+      }
+    };
+
+    // Process main tree (starting from game's children, not game itself)
+    for (const child of this._t.children) {
+      processElement(child, 1, this);
+    }
+
+    const totalInTree = seenElements.size;
+
+    // Reset for pile processing
+    seenElements.clear();
+    seenIds.clear();
+
+    // Process pile
+    for (const child of this.pile._t.children) {
+      processElement(child, 1, this.pile);
+    }
+
+    const totalInPile = seenElements.size;
+    const sequenceCounter = this._ctx.sequence;
+
+    // Check if sequence is much higher than element count (suggests many deletions)
+    if (sequenceCounter > totalInTree + totalInPile + 100) {
+      issues.push(
+        `Sequence counter (${sequenceCounter}) is much higher than total elements (${totalInTree + totalInPile}). ` +
+        `This suggests many elements were created and removed, which is normal but could indicate unexpected element creation.`
+      );
+    }
+
+    const summary = `Total: ${totalInTree} elements in tree, ${totalInPile} in pile, sequence at ${sequenceCounter}`;
+
+    return {
+      totalInTree,
+      totalInPile,
+      sequenceCounter,
+      byClass,
+      maxDepth,
+      summary,
+      issues,
+    };
+  }
+
+  /**
+   * Debug helper: Check if an element's parent-child relationships are consistent.
+   * Use this to diagnose tree corruption issues.
+   *
+   * @example
+   * ```typescript
+   * const info = game.debugElement(suspiciousElement);
+   * if (info.issues.length > 0) {
+   *   console.error('Tree corruption:', info.issues);
+   * }
+   * ```
+   *
+   * @returns Object with validation results and any issues found
+   */
+  debugElement(element: GameElement): {
+    id: number;
+    name: string;
+    parentId: number | undefined;
+    parentName: string | undefined;
+    childIds: number[];
+    isInParentChildren: boolean;
+    childrenPointToThis: boolean[];
+    issues: string[];
+  } {
+    const issues: string[] = [];
+
+    // Check if this element is in its parent's children
+    const parent = element._t.parent;
+    const isInParentChildren = parent
+      ? parent._t.children.includes(element)
+      : true; // No parent = OK
+
+    if (parent && !isInParentChildren) {
+      issues.push(
+        `Element "${element.name}" (id: ${element.id}) has parent "${parent.name}" (id: ${parent.id}) ` +
+        `but is NOT in parent's _t.children array`
+      );
+    }
+
+    // Check if all children point back to this element
+    const childrenPointToThis = element._t.children.map(child => child._t.parent === element);
+    const wrongParentChildren = element._t.children.filter(child => child._t.parent !== element);
+    for (const child of wrongParentChildren) {
+      const actualParent = child._t.parent;
+      issues.push(
+        `Child "${child.name}" (id: ${child.id}) is in "${element.name}"'s children ` +
+        `but _t.parent points to "${actualParent?.name}" (id: ${actualParent?.id ?? 'none'})`
+      );
+    }
+
+    return {
+      id: element.id,
+      name: element.name ?? element.constructor.name,
+      parentId: parent?.id,
+      parentName: parent?.name ?? parent?.constructor.name,
+      childIds: element._t.children.map(c => c.id),
+      isInParentChildren,
+      childrenPointToThis,
+      issues,
+    };
+  }
+
+  /**
    * Convert an ActionTrace to human-readable ActionDebugInfo
    */
   private _formatActionDebugInfo(trace: ActionTrace): ActionDebugInfo {

@@ -334,14 +334,28 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
     const result = new ElementCollection<F>();
     if (options.limit !== undefined && options.limit <= 0) return result;
 
+    // DEV: Track visited elements to detect tree corruption (only at top level)
+    const visitedIds = isDevMode() ? new Set<number>() : null;
+    const duplicates: Array<{ id: number; name: string; depth: number }> = [];
+
     // Convert finders to predicate functions
     const predicates = finders.map((finder) => this.finderToPredicate<F>(finder));
 
-    const process = (elements: GameElement[], order: 'asc' | 'desc') => {
+    // Recursive traversal function
+    const traverse = (elements: GameElement[], order: 'asc' | 'desc', depth: number) => {
       const items = order === 'desc' ? [...elements].reverse() : elements;
 
       for (const el of items) {
         if (options.limit !== undefined && result.length >= options.limit) break;
+
+        // DEV: Check for tree corruption (element visited multiple times)
+        if (visitedIds) {
+          if (visitedIds.has(el.id)) {
+            duplicates.push({ id: el.id, name: el.name ?? el.constructor.name, depth });
+            continue; // Skip duplicate to prevent infinite loops
+          }
+          visitedIds.add(el.id);
+        }
 
         // Check if element matches class and all predicates
         const matchesClass = !className || el instanceof className;
@@ -357,20 +371,26 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
 
         // Recurse into children unless disabled
         if (!options.noRecursive && el._t.children.length > 0) {
-          const childCollection = new ElementCollection(...el._t.children);
-          const remaining = options.limit !== undefined
-            ? options.limit - result.length
-            : undefined;
-          const childResults = childCollection._finder(className, {
-            ...options,
-            limit: remaining,
-          }, ...finders);
-          result.push(...childResults);
+          traverse(el._t.children, order, depth + 1);
         }
       }
     };
 
-    process(this as unknown as GameElement[], options.order ?? 'asc');
+    traverse(this as unknown as GameElement[], options.order ?? 'asc', 0);
+
+    // DEV: Log if duplicates were found (indicates tree corruption)
+    if (visitedIds && duplicates.length > 0) {
+      // Only log first few duplicates to avoid spam
+      const shown = duplicates.slice(0, 5);
+      const more = duplicates.length > 5 ? ` (and ${duplicates.length - 5} more)` : '';
+      console.error(
+        `[BoardSmith] 🚨 TREE CORRUPTION: ${duplicates.length} duplicate element visits detected!\n` +
+        shown.map(d => `  - ${d.name} (id: ${d.id}) at depth ${d.depth}`).join('\n') + more + '\n' +
+        `  This indicates elements exist in multiple places in the tree.\n` +
+        `  Call game.validateTree() to diagnose.`
+      );
+    }
+
     return result;
   }
 

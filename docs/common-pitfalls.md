@@ -979,6 +979,194 @@ Without flow restrictions, any action could be taken at any time, breaking game 
 
 ---
 
+## 15. Using followUp Args in prompt/filter
+
+### The Problem
+
+When using `followUp` to chain actions, the args passed in `followUp.args` need to be available in `prompt` and `filter` functions. A common pattern is filtering choices based on a context element:
+
+```typescript
+Action.create('collectEquipment')
+  .chooseElement('equipment', {
+    prompt: (ctx) => {
+      // You want ctx.args.sectorId to show "Select from Sector X"
+      const sector = ctx.game.getElementById(ctx.args?.sectorId);
+      return `Select from ${sector?.name}`;
+    },
+    filter: (element, ctx) => {
+      // You want ctx.args.sectorId to filter to only this sector's items
+      const sector = ctx.game.getElementById(ctx.args?.sectorId);
+      return sector?.stash.contains(element);
+    },
+  })
+  .execute((args, ctx) => {
+    // Process the selection...
+    if (moreItemsAvailable) {
+      return {
+        followUp: {
+          action: 'collectEquipment',
+          args: { sectorId: ctx.args.sectorId }  // Pass element or ID
+        }
+      };
+    }
+  });
+```
+
+### The Solution
+
+This pattern works correctly in BoardSmith. When you return `followUp.args`:
+
+1. **Elements are automatically resolved everywhere**: Whether you pass an element or an ID, the server resolves it to the actual Element when:
+   - Evaluating `prompt` and `filter` functions
+   - Calling the `execute` function (in both `args` and `ctx.args`)
+2. **Consistent args**: The same resolved `ctx.args` is available in prompt, filter, and execute
+
+### Best Practices for followUp Args
+
+1. **Pass elements directly** - the framework handles serialization automatically:
+
+```typescript
+return {
+  followUp: {
+    action: 'collectEquipment',
+    args: { sectorId: sector }  // Element gets serialized/deserialized automatically
+  }
+};
+```
+
+2. **Access directly via ctx.args** - already resolved to Elements:
+
+```typescript
+prompt: (ctx) => {
+  // ctx.args.sectorId is the resolved Element
+  return `Select from ${ctx.args.sectorId?.name}`;
+},
+filter: (element, ctx) => {
+  // Same - ctx.args.sectorId is the Element
+  return ctx.args.sectorId?.stash.contains(element);
+},
+execute: (args, ctx) => {
+  // args.sectorId is also the resolved Element (not just in ctx.args)
+  const sector = args.sectorId;
+  sector.stash.remove(args.equipment);
+}
+```
+
+### Why This Works
+
+BoardSmith automatically resolves element references throughout the action lifecycle:
+
+1. **Action returns followUp**: Elements in `followUp.args` get JSON-serialized (keeping their `id`)
+2. **Client stores and sends back**: Args are sent to server for choices and execution
+3. **Server resolves everywhere**:
+   - In `getSelectionChoices`: Resolves args before evaluating `prompt`, `filter`, `elements()`
+   - In `executeAction`: Resolves ALL args (selection args AND followUp args) before calling `execute`
+4. **Consistent element access**: `ctx.args.sectorId` is the same Element in prompt, filter, and execute
+
+---
+
+## 16. Element Count Explosion During followUp Chains
+
+### The Problem
+
+After many followUp iterations (e.g., 20+), your element queries suddenly return far more elements than expected:
+
+```typescript
+// Expected: ~200 Equipment elements
+// Actual: 15,698 Equipment elements after 20 followUp iterations!
+const equipment = [...game.all(Equipment)];
+```
+
+### Diagnosis
+
+BoardSmith provides development mode warnings and debug methods:
+
+1. **Automatic warning in development mode**: When element count doubles unexpectedly, you'll see:
+
+```
+[BoardSmith] Element count explosion detected for 'equipment'!
+  Previous count: 200
+  Current count: 15698 (78.5x increase)
+  Element class: Equipment
+  Total elements in game tree: 15700
+  Element sequence counter: 15700
+  ...
+```
+
+2. **Use `debugElementTree()` for detailed diagnostics**:
+
+```typescript
+const treeInfo = game.debugElementTree();
+console.log(treeInfo.summary);
+// "Total: 15698 elements in tree, 12 in pile, sequence at 15710"
+
+console.log(treeInfo.byClass);
+// { Equipment: 15690, Sector: 5, Player: 2, Space: 3 }
+
+if (treeInfo.issues.length > 0) {
+  console.log('Issues:', treeInfo.issues);
+  // Any circular references or duplicate IDs detected
+}
+```
+
+### Common Causes
+
+1. **Action execute handler creating elements**:
+
+```typescript
+// WRONG - creates elements on every iteration!
+.execute((args, ctx) => {
+  // This creates a new Equipment every time the action runs
+  const newItem = sector.create(Equipment, 'Item', { ... });
+
+  return {
+    followUp: { action: 'sameAction', args: { ... } }
+  };
+})
+```
+
+2. **Setup code running on every action** (HMR issue):
+
+```typescript
+// WRONG - if this runs on hot reload, it creates duplicates
+game.all(Sector).forEach(sector => {
+  sector.create(Equipment, 'Loot1');  // Runs again on HMR!
+});
+```
+
+### The Solution
+
+1. **Check your execute handler** - make sure you're not creating elements unintentionally
+
+2. **Guard against duplicate creation**:
+
+```typescript
+// CORRECT - check before creating
+if (!sector.first(Equipment, { name: 'Loot1' })) {
+  sector.create(Equipment, 'Loot1');
+}
+```
+
+3. **Use `debugElementTree()` in your game to track element growth**:
+
+```typescript
+// Add this to your game for debugging
+this.registerDebug('Element Tree', () => this.debugElementTree());
+```
+
+4. **Check the sequence counter** - if it's much higher than element count, elements are being created and removed (normal but worth investigating)
+
+### Key Diagnostic Values
+
+| Metric | Meaning |
+|--------|---------|
+| `totalInTree` | Current elements in game tree (should be stable) |
+| `sequenceCounter` | Total elements ever created (always increases) |
+| `byClass` | Breakdown by element type (find which class is exploding) |
+| `issues` | Circular references or duplicate IDs (tree corruption) |
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -997,6 +1185,8 @@ Without flow restrictions, any action could be taken at any time, breaking game 
 | **Action debugging** | Guessing why action unavailable | `game.debugActionAvailability(name, player)` |
 | **Client-side elements** | `element.attributes.slot` | `element.children?.find(...)` |
 | **Flow restrictions** | Action passes conditions but not in UI | Check flow's `actionStep({ actions: [...] })` |
+| **followUp args in filter** | `ctx.args.sectorId` undefined in filter/prompt | Args are resolved - use `ctx.args.sectorId` |
+| **Element count explosion** | Elements mysteriously multiply | `game.debugElementTree()` to diagnose |
 
 ---
 

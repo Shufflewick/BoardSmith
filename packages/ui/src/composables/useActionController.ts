@@ -102,6 +102,12 @@ import { findElementById } from './useGameViewHelpers.js';
 // ============================================
 
 function isDevMode(): boolean {
+  // Browser (Vite) - check import.meta.env first
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    const env = (import.meta as any).env;
+    return env.DEV === true || env.MODE !== 'production';
+  }
+  // Node.js fallback
   return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
 }
 
@@ -366,6 +372,13 @@ export interface UseActionControllerReturn {
   isLoadingChoices: Ref<boolean>;
   /** Repeating selection state (for repeating selections) */
   repeatingState: Ref<RepeatingState | null>;
+  /**
+   * Whether a followUp action is pending (scheduled but not yet started).
+   * Use this to prevent starting new actions while a followUp is queued.
+   * This prevents the race condition where currentAction is null but
+   * a followUp is about to start via setTimeout.
+   */
+  pendingFollowUp: Ref<boolean>;
 
   // === High-level Methods ===
   /**
@@ -480,6 +493,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const isExecuting = ref(false);
   const lastError = ref<string | null>(null);
 
+  // Track pending followUp to prevent race condition with auto-start
+  // When execute() returns with followUp, it clears currentAction but schedules
+  // startFollowUp via setTimeout. During this window, external code might see
+  // currentAction === null and try to start a new action, causing parallel actions.
+  const pendingFollowUp = ref(false);
+
   // Selection choices loading state
   const isLoadingChoices = ref(false);
 
@@ -490,6 +509,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When start() is called, we clone the metadata so we don't depend on server broadcasts
   // selectionSnapshots stores fetched choices - single source of truth
   const actionSnapshot = ref<ActionStateSnapshot | null>(null);
+
+  // Flag to prevent double-fetch when startFollowUp/start already fetched choices
+  // The currentSelection watcher would otherwise also trigger a fetch
+  let suppressNextWatcherFetch = false;
 
   // Version counter for selection snapshots - increments when choices are fetched
   // This enables reactive computeds that depend on snapshot data (Maps aren't reactive)
@@ -682,6 +705,42 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Build args for server requests from the controller's source of truth.
+   * This prevents pollution from external code writing to the shared externalArgs.
+   * Only includes args that the controller explicitly set via fill/startFollowUp.
+   */
+  function buildServerArgs(): Record<string, unknown> {
+    const args: Record<string, unknown> = {};
+
+    // Use collectedSelections as the source of truth
+    if (actionSnapshot.value) {
+      for (const [name, collected] of actionSnapshot.value.collectedSelections) {
+        args[name] = collected.value;
+      }
+    }
+
+    // Development warning: detect when externalArgs has been polluted by external code
+    if (externalArgs && actionSnapshot.value) {
+      const controllerKeys = new Set(actionSnapshot.value.collectedSelections.keys());
+      const externalKeys = Object.keys(externalArgs);
+      const unknownKeys = externalKeys.filter(k => !controllerKeys.has(k));
+
+      if (unknownKeys.length > 0) {
+        devWarn(
+          `externalArgs-pollution:${currentAction.value}`,
+          `Detected unexpected keys in actionArgs during '${currentAction.value}': ${unknownKeys.join(', ')}\n` +
+          `  These were NOT set by the action controller (start/fill/startFollowUp).\n` +
+          `  This usually means your custom UI is writing to actionArgs in a watcher/computed.\n` +
+          `  The controller ignores these to prevent bugs - use actionController.fill() instead.\n` +
+          `  Controller knows: ${[...controllerKeys].join(', ') || '(none)'}`
+        );
+      }
+    }
+
+    return args;
+  }
+
+  /**
    * Fetch choices for a selection from the server.
    */
   async function fetchChoicesForSelection(selectionName: string): Promise<void> {
@@ -714,15 +773,26 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const player = playerPosition?.value ?? 0;
 
     isLoadingChoices.value = true;
+    const fetchStartTime = Date.now();
     try {
+
+      // Use controller's source of truth for args, not the shared externalArgs
+      // This prevents pollution from custom UI code writing to the shared args object
       const result = await fetchSelectionChoices(
         currentAction.value,
         selectionName,
         player,
-        { ...currentArgs.value }
+        buildServerArgs()
       );
 
+      const fetchDuration = Date.now() - fetchStartTime;
+
       if (result.success && actionSnapshot.value) {
+        if (isDevMode()) {
+          const choiceCount = result.choices?.length ?? result.validElements?.length ?? 0;
+          console.log(`[BoardSmith] Got ${choiceCount} choices for '${selectionName}' in ${fetchDuration}ms`);
+        }
+
         // Store in snapshot - this is the single source of truth
         actionSnapshot.value.selectionSnapshots.set(selectionName, {
           choices: result.choices as SelectionSnapshot['choices'],
@@ -732,10 +802,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Increment version to trigger reactive computeds (Maps aren't reactive)
         snapshotVersion.value++;
       } else if (!result.success) {
-        console.error('Failed to fetch selection choices:', result.error);
+        console.error(`[BoardSmith] Failed to fetch selection choices for '${selectionName}' after ${fetchDuration}ms:`, result.error);
       }
     } catch (err) {
-      console.error('Error fetching selection choices:', err);
+      const fetchDuration = Date.now() - fetchStartTime;
+      console.error(
+        `[BoardSmith] Error fetching selection choices for '${selectionName}' after ${fetchDuration}ms:`,
+        err
+      );
     } finally {
       isLoadingChoices.value = false;
     }
@@ -874,10 +948,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   watch(currentSelection, async (sel) => {
     if (!sel || isExecuting.value) return;
 
+    // Skip fetch if start/startFollowUp already handled it (prevents double-fetch)
+    // But still continue to handle prefills and auto-fill below
+    const shouldSkipFetch = suppressNextWatcherFetch;
+    if (shouldSkipFetch) {
+      suppressNextWatcherFetch = false;
+    }
+
     // Fetch choices if not in snapshot yet (handles case where board sets args directly)
-    const snapshot = actionSnapshot.value?.selectionSnapshots.get(sel.name);
-    if (!snapshot && (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')) {
-      await fetchChoicesForSelection(sel.name);
+    if (!shouldSkipFetch) {
+      const snapshot = actionSnapshot.value?.selectionSnapshots.get(sel.name);
+      if (!snapshot && (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')) {
+        await fetchChoicesForSelection(sel.name);
+      }
     }
 
     // Check for prefill first - takes priority over auto-fill
@@ -969,6 +1052,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         lastError.value = result.error || 'Action failed';
       }
 
+      // IMPORTANT: Set pendingFollowUp BEFORE clearing currentAction to prevent race condition.
+      // Without this, external code (like ActionPanel's tryAutoStartSingleAction) might see
+      // currentAction === null and start a new action before the followUp runs.
+      if (result.success && result.followUp) {
+        pendingFollowUp.value = true;
+      }
+
       // Clear state on success or failure
       currentAction.value = null;
       clearArgs();
@@ -979,7 +1069,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
         // Use setTimeout to ensure state updates are flushed before starting next action
         setTimeout(async () => {
-          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
+          try {
+            await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
+          } finally {
+            pendingFollowUp.value = false;
+          }
         }, 0);
       }
 
@@ -1071,10 +1165,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
+        pendingFollowUp.value = true;
         const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
         // Use setTimeout to ensure state updates are flushed before starting next action
         setTimeout(async () => {
-          await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
+          try {
+            await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
+          } finally {
+            pendingFollowUp.value = false;
+          }
         }, 0);
       }
 
@@ -1163,6 +1262,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
 
       if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
+        // Prevent the watcher from also fetching (would cause double-fetch)
+        suppressNextWatcherFetch = true;
         await fetchChoicesForSelection(selectionToFetch.name);
 
         // After fetching, check for auto-fill
@@ -1278,6 +1379,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Fetch choices for the selection that actually needs input
       if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
+        // Prevent the watcher from also fetching (would cause double-fetch)
+        suppressNextWatcherFetch = true;
         await fetchChoicesForSelection(selectionToFetch.name);
 
         // After fetching, manually trigger auto-fill if there's exactly one choice
@@ -1581,6 +1684,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     lastError,
     isLoadingChoices,
     repeatingState,
+    pendingFollowUp,  // Use to prevent starting new actions during followUp transition
 
     // Methods
     execute,

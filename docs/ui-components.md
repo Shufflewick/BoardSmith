@@ -64,41 +64,17 @@ The `#game-board` slot receives:
 | `playerPosition` | `number` | Current player's position |
 | `isMyTurn` | `boolean` | Whether it's this player's turn |
 | `availableActions` | `string[]` | Actions available to the player |
-| `actionArgs` | `object` | Shared reactive object for action selections (bidirectional sync with ActionPanel) |
+| `actionArgs` | `object` | Current action selections - **read-only for display**, use `actionController` methods to modify |
 | `actionController` | `UseActionControllerReturn` | Unified action handling - execute, start, fill, cancel actions |
 | `setBoardPrompt` | `function` | Set a prompt message: `(text) => void` |
 | `canUndo` | `boolean` | Whether undo is available |
 | `undo` | `function` | Undo to turn start: `() => Promise` |
 
-#### Shared Action State (actionArgs)
+#### Action State (actionArgs)
 
-The `actionArgs` object provides **bidirectional synchronization** between custom game boards and ActionPanel:
+The `actionArgs` object contains the current action's selection values. **Use it for reading/display only** - all modifications should go through `actionController` methods.
 
-- **ActionPanel writes** to `actionArgs` when users make selections in the auto-generated UI
-- **Custom boards can write** to `actionArgs` to pre-fill selections or respond to board interactions
-- **Both see updates** immediately due to Vue's reactivity
-
-This enables powerful hybrid UIs where users can interact with either the game board or the action panel.
-
-**Example: Board pre-filling selections with actionController.start()**
-```vue
-<script setup lang="ts">
-import type { UseActionControllerReturn } from '@boardsmith/ui';
-
-const props = defineProps<{
-  actionArgs: Record<string, unknown>;
-  actionController: UseActionControllerReturn;
-}>();
-
-// When user clicks a piece on the board, start the action with that piece pre-selected
-function onPieceClick(pieceId: number) {
-  // Pass initial args to start() - they're applied after clearing
-  props.actionController.start('move', { args: { piece: pieceId } });
-}
-</script>
-```
-
-**Example: Board reading from actionArgs**
+**Reading actionArgs (safe)**
 ```vue
 <template>
   <div
@@ -112,30 +88,51 @@ function onPieceClick(pieceId: number) {
 </template>
 ```
 
-**Example: Writable computed for card selection**
+**Modifying selections (use actionController)**
 ```typescript
-const selectedCards = computed({
-  get: () => (props.actionArgs.cards as string[]) || [],
-  set: (value: string[]) => {
-    props.actionArgs.cards = value;
-  }
-});
-```
-
-**ActionPanel owns the clear lifecycle**
-
-ActionPanel clears `actionArgs` when starting, canceling, or completing actions. To pre-fill selections when starting an action, use the `args` option:
-
-```typescript
-// Correct: Pass initial values to start()
+// Starting an action with pre-filled values
 actionController.start('move', { args: { piece: pieceId } });
 
-// Incorrect: Writing then starting loses the value (cleared on start)
-actionArgs.piece = pieceId;
-actionController.start('move');  // piece gets cleared!
+// Filling a selection during an action
+actionController.fill('destination', squareId);
+
+// DON'T write directly to actionArgs - use fill() instead
+// actionArgs.destination = squareId;  // Wrong!
 ```
 
-For ongoing updates during an action (after it's started), write directly to `actionArgs`.
+**Why not write directly?**
+
+The controller tracks which values it has set. When fetching choices from the server, it only sends values it knows about. Direct writes to `actionArgs` are ignored by the controller, preventing race conditions during async operations like `followUp` chains.
+
+If you write to `actionArgs` directly, you'll see a development warning:
+```
+Detected unexpected keys in actionArgs during 'collectEquipment': equipment
+  These were NOT set by the action controller (start/fill/startFollowUp).
+  This usually means your custom UI is writing to actionArgs in a watcher/computed.
+  The controller ignores these to prevent bugs - use actionController.fill() instead.
+```
+
+**Board interactions pattern**
+```vue
+<script setup lang="ts">
+const props = defineProps<{
+  actionArgs: Record<string, unknown>;
+  actionController: UseActionControllerReturn;
+}>();
+
+// When user clicks a piece, start the action with that piece pre-selected
+function onPieceClick(pieceId: number) {
+  props.actionController.start('move', { args: { piece: pieceId } });
+}
+
+// When user clicks a destination during an active action
+function onSquareClick(squareId: number) {
+  if (props.actionController.currentAction.value === 'move') {
+    props.actionController.fill('destination', squareId);
+  }
+}
+</script>
+```
 
 ### AutoUI
 
