@@ -1511,4 +1511,59 @@ describe('Action Chaining with followUp in FlowState', () => {
     expect(state.followUp?.action).toBe('processCard');
     expect(state.followUp?.args?.cardId).toBe(card.id);
   });
+
+  it('should not count followUp chains against loop maxIterations', () => {
+    // This test verifies the fix for a bug where followUp action chains
+    // counted against the parent loop's maxIterations, causing premature
+    // turn endings when using recursive followUp patterns within loops.
+
+    let chainDepth = 0;
+    const maxChainDepth = 5;
+
+    // Action that chains to itself (like MERC's applyImpact pattern)
+    const chainAction = Action.create('chain')
+      .execute(() => {
+        chainDepth++;
+        if (chainDepth < maxChainDepth) {
+          return {
+            success: true,
+            followUp: { action: 'chain', args: {} },
+          };
+        }
+        return { success: true };
+      });
+
+    game.registerAction(chainAction);
+
+    // Create a loop with maxIterations: 2 - if followUp counted as iterations,
+    // the chain of 5 would exceed this and fail
+    const flow = defineFlow({
+      root: loop({
+        maxIterations: 2,
+        while: () => chainDepth < maxChainDepth,
+        do: actionStep({
+          actions: ['chain'],
+        }),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    let state = engine.start();
+
+    // First loop iteration - triggers chain of 5 followUps
+    expect(state.awaitingInput).toBe(true);
+    state = engine.resume('chain', {});
+
+    // Execute all the followUps (each triggered automatically via the flow engine)
+    while (state.followUp && !state.complete) {
+      state = engine.resume('chain', {});
+    }
+
+    // The entire chain should complete successfully
+    expect(chainDepth).toBe(maxChainDepth);
+    expect(state.complete).toBe(true);
+
+    // If followUp counted as iterations, we would have failed at iteration 2
+    // with chainDepth still less than maxChainDepth
+  });
 });

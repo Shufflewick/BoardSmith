@@ -146,7 +146,16 @@ export class FlowEngine<G extends Game = Game> {
     if (currentFrame?.node.type === 'action-step') {
       const config = currentFrame.node.config as ActionStepConfig;
 
-      // Increment move count
+      // If action returned a followUp, don't complete the step or count the move yet.
+      // The followUp chain must complete first. Only when the final action in the chain
+      // completes (no followUp) do we count it as a move and check completion.
+      // This prevents followUp chains from counting against parent loop's maxIterations.
+      if (result.followUp) {
+        // Stay in the same actionStep, waiting for the followUp to be executed
+        return this.run();
+      }
+
+      // Increment move count (only when action chain is complete - no followUp)
       const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
       const newMoveCount = currentMoveCount + 1;
       currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };
@@ -204,7 +213,16 @@ export class FlowEngine<G extends Game = Game> {
     if (currentFrame?.node.type === 'action-step') {
       const config = currentFrame.node.config as ActionStepConfig;
 
-      // Increment move count
+      // If action returned a followUp, don't complete the step or count the move yet.
+      // The followUp chain must complete first. Only when the final action in the chain
+      // completes (no followUp) do we count it as a move and check completion.
+      // This prevents followUp chains from counting against parent loop's maxIterations.
+      if (result.followUp) {
+        // Stay in the same actionStep, waiting for the followUp to be executed
+        return this.run();
+      }
+
+      // Increment move count (only when action chain is complete - no followUp)
       const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
       const newMoveCount = currentMoveCount + 1;
       currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };

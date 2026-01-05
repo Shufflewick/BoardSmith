@@ -316,6 +316,78 @@ loop({
 
 ---
 
+## 6.5. followUp Chains Don't Count Against Loop Iterations
+
+### How It Works
+
+When using `followUp` to chain actions within a `loop`, only the **final action in the chain** counts as a move/iteration. This allows patterns like recursive impact resolution:
+
+```typescript
+// Player turn loop - maxIterations: 30 prevents runaway loops
+loop({
+  maxIterations: 30,
+  while: (ctx) => !ctx.game.isFinished(),
+  do: actionStep({
+    actions: ['explore', 'attack', 'endTurn'],
+  }),
+})
+
+// Explore action that can trigger long followUp chains
+Action.create('explore')
+  .execute((args, ctx) => {
+    const impacts = detectImpacts();  // Could return 5, 10, 20+ impacts
+
+    if (impacts.length > 0) {
+      return {
+        success: true,
+        followUp: {
+          action: 'applyImpact',
+          args: { impactIndex: 0, allImpacts: impacts }
+        }
+      };
+    }
+    return { success: true };
+  });
+
+// Recursive impact resolution - chains to itself
+Action.create('applyImpact')
+  .execute((args, ctx) => {
+    applyImpact(args.allImpacts[args.impactIndex]);
+
+    const nextIndex = args.impactIndex + 1;
+    if (nextIndex < args.allImpacts.length) {
+      return {
+        success: true,
+        followUp: {
+          action: 'applyImpact',
+          args: { impactIndex: nextIndex, allImpacts: args.allImpacts }
+        }
+      };
+    }
+    // Chain complete - NOW counts as 1 move
+    return { success: true };
+  });
+```
+
+In this example, if `explore` triggers 20 impact followUps, they all count as **1 loop iteration**, not 20. This is the intended behavior.
+
+### Why This Matters
+
+Without this behavior, recursive `followUp` patterns would quickly exhaust `maxIterations`:
+- Player explores → triggers 20 impacts
+- Each impact was counting as 1 iteration
+- maxIterations: 30 would be reached after 1-2 player turns
+- The game would end prematurely or require absurdly high maxIterations
+
+### The Rule
+
+A `loop` iteration is only incremented when an action completes **without returning a followUp**. This means:
+- `action → followUp → followUp → done` = 1 iteration
+- `action → done` = 1 iteration
+- `action → followUp (chain of 100) → done` = 1 iteration
+
+---
+
 ## 7. Element Class Registration
 
 ### The Problem
