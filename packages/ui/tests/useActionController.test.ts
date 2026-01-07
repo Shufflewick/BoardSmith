@@ -86,6 +86,46 @@ function createTestMetadata(): Record<string, ActionMetadata> {
         },
       ],
     },
+    // Action with optional selection AND single choice (should NOT auto-fill)
+    optionalSingleChoice: {
+      name: 'optionalSingleChoice',
+      prompt: 'Take optional equipment',
+      selections: [
+        {
+          name: 'item',
+          type: 'choice',
+          prompt: 'Select equipment (or skip)',
+          optional: 'Done equipping',
+          choices: [
+            { value: 'sword', display: 'Sword' },
+          ],
+        },
+      ],
+    },
+    // Action where first selection auto-fills, second is optional with single choice
+    twoStepOptionalSecond: {
+      name: 'twoStepOptionalSecond',
+      prompt: 'First auto-fills, second is optional single choice',
+      selections: [
+        {
+          name: 'first',
+          type: 'choice',
+          prompt: 'Select first (only one option)',
+          choices: [
+            { value: 'auto', display: 'Auto Value' },
+          ],
+        },
+        {
+          name: 'second',
+          type: 'choice',
+          prompt: 'Optional second (single choice)',
+          optional: true,
+          choices: [
+            { value: 'optional', display: 'Optional Value' },
+          ],
+        },
+      ],
+    },
     // Action with element selection
     movePiece: {
       name: 'movePiece',
@@ -158,7 +198,7 @@ describe('useActionController', () => {
 
   beforeEach(() => {
     sendAction = createMockSendAction();
-    availableActions = ref(['endTurn', 'playCard', 'forcedPlay', 'optionalDiscard', 'movePiece', 'attack', 'discardMultiple']);
+    availableActions = ref(['endTurn', 'playCard', 'forcedPlay', 'optionalDiscard', 'optionalSingleChoice', 'twoStepOptionalSecond', 'movePiece', 'attack', 'discardMultiple']);
     actionMetadata = ref(createTestMetadata());
     isMyTurn = ref(true);
   });
@@ -511,6 +551,51 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentArgs.value.card).toBeUndefined();
+    });
+
+    it('should not auto-fill optional selection with single choice', async () => {
+      // When a selection has optional set, user must consciously choose or skip,
+      // even if there's only one choice. Auto-fill would bypass the skip button.
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+      });
+
+      await controller.start('optionalSingleChoice');
+      await nextTick();
+
+      // Should NOT auto-fill - user must choose or skip
+      expect(controller.currentArgs.value.item).toBeUndefined();
+      // Should show the selection with optional skip button
+      expect(controller.currentSelection.value?.optional).toBe('Done equipping');
+    });
+
+    it('should not auto-fill optional second selection even when first auto-fills', async () => {
+      // Tests the case where: first selection has 1 choice (auto-fills),
+      // second selection is optional with 1 choice (should NOT auto-fill)
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+      });
+
+      await controller.start('twoStepOptionalSecond');
+      await nextTick();
+
+      // First selection should auto-fill (not optional)
+      expect(controller.currentArgs.value.first).toBe('auto');
+      // Second selection should NOT auto-fill because it's optional
+      expect(controller.currentArgs.value.second).toBeUndefined();
+      // Should show the optional selection
+      expect(controller.currentSelection.value?.name).toBe('second');
+      expect(controller.currentSelection.value?.optional).toBe(true);
     });
   });
 

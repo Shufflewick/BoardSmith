@@ -1001,9 +1001,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     // Now attempt auto-fill if enabled
+    // Don't auto-fill optional selections - user must consciously choose or skip
     if (getAutoFill()) {
       const choices = getChoices(sel);
-      if (choices.length === 1) {
+      if (choices.length === 1 && !sel.optional) {
         // Auto-fill
         const choice = choices[0];
         currentArgs.value[sel.name] = choice.value;
@@ -1121,10 +1122,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     for (const selection of meta.selections) {
       if (finalArgs[selection.name] === undefined) {
-        // Try auto-fill
+        // Try auto-fill (but not for optional selections - user must consciously choose or skip)
         if (getAutoFill()) {
           const choices = getChoices(selection);
-          if (choices.length === 1) {
+          if (choices.length === 1 && !selection.optional) {
             finalArgs[selection.name] = choices[0].value;
             continue;
           }
@@ -1266,10 +1267,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         suppressNextWatcherFetch = true;
         await fetchChoicesForSelection(selectionToFetch.name);
 
-        // After fetching, check for auto-fill
+        // After fetching, check for auto-fill (but not for optional selections)
         if (getAutoFill() && !isExecuting.value) {
           const choices = getChoices(selectionToFetch);
-          if (choices.length === 1) {
+          if (choices.length === 1 && !selectionToFetch.optional) {
             const choice = choices[0];
             currentArgs.value[selectionToFetch.name] = choice.value;
 
@@ -1286,9 +1287,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
             if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
               await fetchChoicesForSelection(nextSel.name);
 
+              // Don't auto-fill optional selections - user must consciously choose or skip
               if (getAutoFill() && !isExecuting.value) {
                 const nextChoices = getChoices(nextSel);
-                if (nextChoices.length === 1) {
+                if (nextChoices.length === 1 && !nextSel.optional) {
                   currentArgs.value[nextSel.name] = nextChoices[0].value;
                   if (actionSnapshot.value) {
                     actionSnapshot.value.collectedSelections.set(nextSel.name, {
@@ -1385,9 +1387,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
         // After fetching, manually trigger auto-fill if there's exactly one choice
         // The watch may have fired before choices were fetched, so we need to check again
+        // Don't auto-fill optional selections - user must consciously choose or skip
         if (getAutoFill() && !isExecuting.value) {
           const choices = getChoices(selectionToFetch);
-          if (choices.length === 1) {
+          if (choices.length === 1 && !selectionToFetch.optional) {
             const choice = choices[0];
             currentArgs.value[selectionToFetch.name] = choice.value;
 
@@ -1406,9 +1409,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
               await fetchChoicesForSelection(nextSel.name);
 
               // Check for auto-fill on the next selection too
+              // Don't auto-fill optional selections - user must consciously choose or skip
               if (getAutoFill() && !isExecuting.value) {
                 const nextChoices = getChoices(nextSel);
-                if (nextChoices.length === 1) {
+                if (nextChoices.length === 1 && !nextSel.optional) {
                   currentArgs.value[nextSel.name] = nextChoices[0].value;
                   if (actionSnapshot.value) {
                     actionSnapshot.value.collectedSelections.set(nextSel.name, {
@@ -1464,9 +1468,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
         // After fetch, check for auto-fill on the next selection
         // (the watch may have fired before cache was populated)
+        // Don't auto-fill optional selections - user must consciously choose or skip
         if (getAutoFill() && !isExecuting.value) {
           const choices = getChoices(nextSel);
-          if (choices.length === 1) {
+          if (choices.length === 1 && !nextSel.optional) {
             const autoValue = choices[0].value;
             currentArgs.value[nextSel.name] = autoValue;
 
