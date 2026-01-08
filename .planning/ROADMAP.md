@@ -26,15 +26,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 ### Phase 1: game-session refactoring
 **Goal**: Split `packages/session/src/game-session.ts` (2,585 lines) into focused modules while maintaining the unified GameSession API
 **Depends on**: Nothing (first phase)
-**Research**: Unlikely (internal refactoring of existing code)
-**Plans**: TBD
+**Research**: None needed (internal refactoring of existing code)
+**Plans**: 4
 
 Plans:
-- [ ] 01-01: Analyze GameSession structure and identify extraction boundaries
-- [ ] 01-02: Extract storage adapter handling
-- [ ] 01-03: Extract broadcast adapter handling
-- [ ] 01-04: Extract AI controller logic
-- [ ] 01-05: Extract game lifecycle state machine
+- [ ] 01-01: Extract lobby management (~900 lines → LobbyManager)
+- [ ] 01-02: Extract selection & pending action handling (~550 lines → SelectionHandler, PendingActionManager)
+- [ ] 01-03: Extract state history & debug (~360 lines → StateHistory, DebugController)
+- [ ] 01-04: Verify and clean up
 
 ### Phase 2: useActionController refactoring
 **Goal**: Split `packages/ui/src/composables/useActionController.ts` (1,807 lines) into focused Vue composables
@@ -78,7 +77,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. game-session refactoring | 0/5 | Not started | - |
+| 1. game-session refactoring | 0/4 | Planning complete | - |
 | 2. useActionController refactoring | 0/4 | Not started | - |
 | 3. action refactoring | 0/4 | Not started | - |
 | 4. test file refactoring | 0/3 | Not started | - |
