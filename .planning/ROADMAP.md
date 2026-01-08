@@ -42,10 +42,10 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 02-01: Analyze useActionController and identify extraction boundaries
-- [ ] 02-02: Extract selection state management
-- [ ] 02-03: Extract followUp handling logic
-- [ ] 02-04: Extract action execution state
+- [x] 02-01: Analyze useActionController and identify extraction boundaries
+- [ ] 02-02: Extract types to useActionControllerTypes.ts (~350 lines)
+- [ ] 02-03: Extract pure helpers to actionControllerHelpers.ts (~100 lines)
+- [ ] 02-04: (Optional) Extract enrichment to useGameViewEnrichment.ts (~50 lines)
 
 ### Phase 3: action refactoring
 **Goal**: Split `packages/engine/src/action/action.ts` (1,845 lines) into focused modules while preserving fluent builder API
@@ -78,6 +78,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. game-session refactoring | 4/4 | Complete | 2026-01-08 |
-| 2. useActionController refactoring | 0/4 | Not started | - |
+| 2. useActionController refactoring | 1/4 | In progress | - |
 | 3. action refactoring | 0/4 | Not started | - |
 | 4. test file refactoring | 0/3 | Not started | - |
