@@ -54,7 +54,7 @@ Plans:
 **Plans**: 3
 
 Plans:
-- [ ] 03-01: Extract ConditionTracer and dev utilities (~85 lines)
+- [x] 03-01: Extract ConditionTracer and dev utilities (~85 lines)
 - [ ] 03-02: Extract Action builder class (~340 lines)
 - [ ] 03-03: Verify and document final structure
 
@@ -78,5 +78,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. game-session refactoring | 4/4 | Complete | 2026-01-08 |
 | 2. useActionController refactoring | 4/4 | Complete | 2026-01-08 |
-| 3. action refactoring | 0/3 | Not started | - |
+| 3. action refactoring | 1/3 | In progress | - |
 | 4. test file refactoring | 0/3 | Not started | - |
