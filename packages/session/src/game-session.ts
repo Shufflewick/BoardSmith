@@ -1,5 +1,19 @@
 /**
- * Core GameSession class for managing game state and lifecycle
+ * GameSession - Unified game session management across platforms.
+ *
+ * Architecture: GameSession delegates to focused helper classes:
+ * - LobbyManager: Player slots, ready state, game start
+ * - SelectionHandler: Action selection choice resolution
+ * - PendingActionManager: Repeating selection state machine
+ * - StateHistory: Time travel, undo, action traces
+ * - DebugController: Debug deck manipulation
+ *
+ * This keeps GameSession focused on core concerns:
+ * - Game lifecycle (create, restore)
+ * - Action execution
+ * - State queries
+ * - Broadcasting
+ * - AI scheduling
  */
 
 import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand } from '@boardsmith/engine';
