@@ -18,8 +18,8 @@ import type {
   PendingActionState,
 } from './types.js';
 import { ConditionTracer } from './condition-tracer.js';
-import { isDevMode, devWarn } from './helpers.js';
-import { Action, wrapFilterWithHelpfulErrors } from './action-builder.js';
+import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
+import { Action } from './action-builder.js';
 
 // Re-export Action class from action-builder
 export { Action };

@@ -15,61 +15,6 @@ import type {
   RepeatConfig,
   MultiSelectConfig,
 } from './types.js';
-import { devWarn } from './helpers.js';
-
-/**
- * Wrap a filter function to provide helpful error messages when it crashes
- * due to accessing undefined args properties.
- */
-export function wrapFilterWithHelpfulErrors<T>(
-  filter: (item: T, context: ActionContext) => boolean,
-  selectionName: string
-): (item: T, context: ActionContext) => boolean {
-  return (item: T, context: ActionContext) => {
-    try {
-      return filter(item, context);
-    } catch (error) {
-      if (error instanceof TypeError && error.message.includes('Cannot read properties of undefined')) {
-        // Extract the property name from the error
-        const match = error.message.match(/reading '(\w+)'/);
-        const prop = match?.[1] || 'unknown';
-
-        // Find which args are undefined (during availability check)
-        const argsKeys = Object.keys(context.args || {});
-        const undefinedArgs = argsKeys.filter(k => context.args[k] === undefined);
-
-        if (undefinedArgs.length > 0 || argsKeys.length === 0) {
-          const undefinedList = undefinedArgs.length > 0
-            ? undefinedArgs.join(', ')
-            : '(no previous selections made yet)';
-
-          throw new Error(
-            `Filter for selection '${selectionName}' crashed accessing undefined property '${prop}'.\n\n` +
-            `This likely happened because the filter runs during availability checks when ` +
-            `previous selections haven't been made yet.\n\n` +
-            `Undefined args: ${undefinedList}\n\n` +
-            `Fix: Use the dependentFilter helper or add a null check:\n\n` +
-            `  // Option 1: Use dependentFilter (recommended)\n` +
-            `  import { dependentFilter } from '@boardsmith/engine';\n` +
-            `  filter: dependentFilter({\n` +
-            `    dependsOn: 'previousSelection',\n` +
-            `    whenUndefined: (element) => true, // Allow during availability check\n` +
-            `    whenSelected: (element, prev) => /* your filter logic */,\n` +
-            `  })\n\n` +
-            `  // Option 2: Manual null check\n` +
-            `  filter: (element, ctx) => {\n` +
-            `    const prev = ctx.args?.previousSelection;\n` +
-            `    if (!prev) return true; // Allow during availability check\n` +
-            `    return /* your actual filter logic */;\n` +
-            `  }`
-          );
-        }
-      }
-      // Re-throw if it's a different kind of error
-      throw error;
-    }
-  };
-}
 
 /**
  * Builder class for creating game actions with a fluent API.
