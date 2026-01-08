@@ -17,7 +17,7 @@ None
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: game-session refactoring** - Split GameSession class into focused modules
-- [ ] **Phase 2: useActionController refactoring** - Split Vue composable into focused composables
+- [x] **Phase 2: useActionController refactoring** - Split Vue composable into focused composables
 - [ ] **Phase 3: action refactoring** - Split Action class into focused modules
 - [ ] **Phase 4: test file refactoring** - Restructure tests to mirror composable structure
 
@@ -50,14 +50,13 @@ Plans:
 ### Phase 3: action refactoring
 **Goal**: Split `packages/engine/src/action/action.ts` (1,845 lines) into focused modules while preserving fluent builder API
 **Depends on**: Phase 2
-**Research**: Unlikely (internal refactoring of existing code)
-**Plans**: TBD
+**Research**: None needed (internal refactoring of existing code)
+**Plans**: 3
 
 Plans:
-- [ ] 03-01: Analyze Action class and identify extraction boundaries
-- [ ] 03-02: Extract selection definitions
-- [ ] 03-03: Extract condition logic
-- [ ] 03-04: Extract execution logic
+- [ ] 03-01: Extract ConditionTracer and dev utilities (~85 lines)
+- [ ] 03-02: Extract Action builder class (~340 lines)
+- [ ] 03-03: Verify and document final structure
 
 ### Phase 4: test file refactoring
 **Goal**: Restructure `packages/ui/tests/useActionController.test.ts` (2,088 lines) to mirror the new composable structure
@@ -79,5 +78,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. game-session refactoring | 4/4 | Complete | 2026-01-08 |
 | 2. useActionController refactoring | 4/4 | Complete | 2026-01-08 |
-| 3. action refactoring | 0/4 | Not started | - |
+| 3. action refactoring | 0/3 | Not started | - |
 | 4. test file refactoring | 0/3 | Not started | - |
