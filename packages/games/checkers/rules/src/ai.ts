@@ -9,11 +9,12 @@ import type { CheckersPlayer } from './elements.js';
  */
 export function getCheckersObjectives(
   game: Game,
-  playerIndex: number
+  playerPosition: number
 ): Record<string, Objective> {
   const checkersGame = game as CheckersGame;
-  const player = checkersGame.players[playerIndex] as CheckersPlayer;
-  const opponent = checkersGame.players[1 - playerIndex] as CheckersPlayer;
+  const player = checkersGame.players.get(playerPosition) as CheckersPlayer;
+  const opponentPosition = playerPosition === 1 ? 2 : 1;
+  const opponent = checkersGame.players.get(opponentPosition) as CheckersPlayer;
 
   return {
     // Having more pieces is good
@@ -55,7 +56,7 @@ export function getCheckersObjectives(
         const myPieces = checkersGame.getPlayerPieces(player).filter(p => !p.isKing);
         if (myPieces.length === 0) return false;
 
-        const kingRow = player.position === 0 ? 7 : 0;
+        const kingRow = player.position === 1 ? 7 : 0;
         const avgDistance = myPieces.reduce((sum, p) => {
           const square = checkersGame.getPieceSquare(p);
           if (!square) return sum;
@@ -71,7 +72,7 @@ export function getCheckersObjectives(
     // Protect the back row (prevent opponent kings)
     'back-row-defense': {
       checker: () => {
-        const backRow = player.position === 0 ? 0 : 7;
+        const backRow = player.position === 1 ? 0 : 7;
         const myPieces = checkersGame.getPlayerPieces(player);
         const backRowPieces = myPieces.filter(p => {
           const square = checkersGame.getPieceSquare(p);

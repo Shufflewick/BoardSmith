@@ -401,7 +401,7 @@ export function buildPlayerState(
 
   // Optionally include action metadata for auto-UI
   if (options?.includeActionMetadata && availableActions.length > 0) {
-    const player = runner.game.players[playerPosition];
+    const player = runner.game.players.get(playerPosition);
     if (player) {
       state.actionMetadata = buildActionMetadata(runner.game, player, availableActions);
     }
@@ -426,7 +426,8 @@ export function buildActionTraces(
   runner: GameRunner,
   playerPosition: number
 ): ActionTrace[] {
-  const player = runner.game.players[playerPosition];
+  // playerPosition is 1-indexed
+  const player = runner.game.players.get(playerPosition);
   if (!player) {
     return [];
   }

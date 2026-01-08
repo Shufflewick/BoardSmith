@@ -128,7 +128,7 @@ describe('GameRunner', () => {
       const state = runner.start();
 
       expect(state.awaitingInput).toBe(true);
-      expect(state.currentPlayer).toBe(0);
+      expect(state.currentPlayer).toBe(1);
       expect(state.availableActions).toContain('draw');
       expect(state.availableActions).toContain('pass');
     });
@@ -136,19 +136,20 @@ describe('GameRunner', () => {
     it('should perform an action and record it', () => {
       runner.start();
 
-      const result = runner.performAction('draw', 0, {});
+      const result = runner.performAction('draw', 1, {});
 
       expect(result.success).toBe(true);
       expect(result.serializedAction).toBeDefined();
       expect(result.serializedAction?.name).toBe('draw');
-      expect(result.serializedAction?.player).toBe(0);
+      expect(result.serializedAction?.player).toBe(1);
       expect(runner.actionHistory).toHaveLength(1);
     });
 
     it('should reject action from wrong player', () => {
       runner.start();
 
-      const result = runner.performAction('draw', 1, {});
+      // Player 2 tries to act when it's player 1's turn
+      const result = runner.performAction('draw', 2, {});
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('turn');
@@ -157,7 +158,7 @@ describe('GameRunner', () => {
     it('should provide player views after action', () => {
       runner.start();
 
-      const result = runner.performAction('draw', 0, {});
+      const result = runner.performAction('draw', 1, {});
 
       expect(result.playerViews).toBeDefined();
       expect(result.playerViews).toHaveLength(2);
@@ -177,7 +178,7 @@ describe('GameRunner', () => {
     });
 
     it('should create a snapshot', () => {
-      runner.performAction('draw', 0, {});
+      runner.performAction('draw', 1, {});
 
       const snapshot = runner.getSnapshot();
 
@@ -187,9 +188,9 @@ describe('GameRunner', () => {
     });
 
     it('should get player views', () => {
-      const view = runner.getPlayerView(0);
+      const view = runner.getPlayerView(1);
 
-      expect(view.player).toBe(0);
+      expect(view.player).toBe(1);
       expect(view.flowState?.isMyTurn).toBe(true);
     });
 
@@ -211,8 +212,8 @@ describe('GameRunner', () => {
         gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'replay-test' },
       });
       runner1.start();
-      runner1.performAction('draw', 0, {});
-      runner1.performAction('pass', 1, {});
+      runner1.performAction('draw', 1, {}); // Player 1 draws
+      runner1.performAction('pass', 2, {}); // Player 2 passes (it's now their turn)
 
       // Replay it
       const runner2 = GameRunner.replay(
@@ -228,7 +229,7 @@ describe('GameRunner', () => {
       expect(runner2.actionHistory).toHaveLength(2);
 
       // Cards should be in same positions (deterministic with seed)
-      const hand1_1 = runner1.game.hands[0].count(Card);
+      const hand1_1 = runner1.game.hands[0].count(Card); // hands is a regular array, keep 0-indexed
       const hand1_2 = runner2.game.hands[0].count(Card);
       expect(hand1_2).toBe(hand1_1);
     });

@@ -24,7 +24,7 @@ describe('MCTSBot Performance', () => {
       game,
       CheckersGame,
       'checkers',
-      0,
+      1,  // 1-indexed player position
       [],
       { iterations: 1, playoutDepth: 1 }
     );
@@ -48,7 +48,7 @@ describe('MCTSBot Performance', () => {
       game,
       CheckersGame,
       'checkers',
-      0,
+      1,  // 1-indexed player position
       [],
       { iterations: 1, playoutDepth: 5, async: false }
     );
@@ -72,7 +72,7 @@ describe('MCTSBot Performance', () => {
       game,
       CheckersGame,
       'checkers',
-      0,
+      1,  // 1-indexed player position
       [],
       { ...DIFFICULTY_PRESETS.easy, async: false }
     );
@@ -95,7 +95,7 @@ describe('MCTSBot Performance', () => {
       game,
       CheckersGame,
       'checkers',
-      0,
+      1,  // 1-indexed player position
       [],
       { ...DIFFICULTY_PRESETS.medium, async: false }
     );
@@ -119,7 +119,7 @@ describe('MCTSBot Performance', () => {
       game,
       CheckersGame,
       'checkers',
-      0,
+      1,  // 1-indexed player position
       [],
       { iterations: 1, playoutDepth: 1, async: false }
     );

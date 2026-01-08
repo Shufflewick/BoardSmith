@@ -6,10 +6,13 @@ import type { TestGame } from '@boardsmith/testing';
 
 describe('Complete Go Fish Game', () => {
   /**
-   * Helper to get the opponent's player index
+   * Helper to get the opponent's player position (1-indexed)
+   * For 2 players: opponent of player 1 is player 2, and vice versa
    */
-  function getOpponent(currentPlayer: number, playerCount: number): number {
-    return (currentPlayer + 1) % playerCount;
+  function getOpponentPosition(currentPosition: number, playerCount: number): number {
+    // For 2 players: 3 - 1 = 2, 3 - 2 = 1
+    // For N players: cycle through positions 1 to N
+    return currentPosition === playerCount ? 1 : currentPosition + 1;
   }
 
   /**
@@ -22,28 +25,28 @@ describe('Complete Go Fish Game', () => {
     verbose = false
   ): FlowState {
     const game = testGame.game;
-    const currentPlayerIdx = flowState.currentPlayer!;
-    const currentPlayer = game.players[currentPlayerIdx] as GoFishPlayer;
-    const opponentIdx = getOpponent(currentPlayerIdx, game.players.length);
+    const currentPosition = flowState.currentPlayer!;
+    const currentPlayer = game.players.get(currentPosition)! as GoFishPlayer;
+    const opponentPosition = getOpponentPosition(currentPosition, game.players.length);
 
     // Get ranks the current player holds
     const myRanks = game.getPlayerRanks(currentPlayer);
 
     if (myRanks.length === 0) {
-      throw new Error(`Player ${currentPlayerIdx} has no cards to ask for`);
+      throw new Error(`Player ${currentPosition} has no cards to ask for`);
     }
 
     // Pick a rank to ask for (just use the first one)
     const rankToAsk = myRanks[0];
 
-    const opponent = game.players[opponentIdx];
+    const opponent = game.players.get(opponentPosition)!;
     if (verbose) {
-      console.log(`Player ${currentPlayerIdx} (${currentPlayer.name}) asks Player ${opponentIdx} for ${rankToAsk}s`);
+      console.log(`Player ${currentPosition} (${currentPlayer.name}) asks Player ${opponentPosition} for ${rankToAsk}s`);
     }
 
     // Perform the action using simulateAction with proper choice format
-    const result = simulateAction(testGame, currentPlayerIdx, 'ask', {
-      target: { value: opponentIdx, display: opponent.name },
+    const result = simulateAction(testGame, currentPosition, 'ask', {
+      target: { value: opponentPosition, display: opponent.name },
       rank: rankToAsk,
     });
 
@@ -65,7 +68,7 @@ describe('Complete Go Fish Game', () => {
     const game = testGame.game;
 
     expect(flowState.awaitingInput).toBe(true);
-    expect(flowState.currentPlayer).toBe(0);
+    expect(flowState.currentPlayer).toBe(1);
 
     let turnCount = 0;
     const maxTurns = 500; // Safety limit
@@ -84,8 +87,8 @@ describe('Complete Go Fish Game', () => {
 
       // Fail if same player is going too many times in a row
       if (consecutiveSamePlayer > MAX_CONSECUTIVE) {
-        const alice = game.players[0] as GoFishPlayer;
-        const bob = game.players[1] as GoFishPlayer;
+        const alice = game.players.get(1)! as GoFishPlayer;
+        const bob = game.players.get(2)! as GoFishPlayer;
         console.log(`Turn ${turnCount}: Player ${flowState.currentPlayer}'s turn (${consecutiveSamePlayer} consecutive)`);
         console.log(`Alice: ${game.getPlayerHand(alice).count(Card)} cards, ${alice.bookCount} books`);
         console.log(`Bob: ${game.getPlayerHand(bob).count(Card)} cards, ${bob.bookCount} books`);
@@ -104,7 +107,7 @@ describe('Complete Go Fish Game', () => {
         flowState = playTurn(testGame, flowState);
       } catch (error) {
         // If player has no cards, the turn should have been skipped
-        const currentPlayer = game.players[flowState.currentPlayer!] as GoFishPlayer;
+        const currentPlayer = game.players.get(flowState.currentPlayer!)! as GoFishPlayer;
         const hand = game.getPlayerHand(currentPlayer);
         if (hand.count(Card) === 0 && game.pond.count(Card) === 0) {
           // Both hand and pond empty - game should be ending
@@ -125,8 +128,8 @@ describe('Complete Go Fish Game', () => {
     const winners = game.getWinners();
     expect(winners.length).toBeGreaterThan(0);
 
-    const alice = game.players[0] as GoFishPlayer;
-    const bob = game.players[1] as GoFishPlayer;
+    const alice = game.players.get(1)! as GoFishPlayer;
+    const bob = game.players.get(2)! as GoFishPlayer;
 
     console.log(`\n=== Game Complete ===`);
     console.log(`Total turns: ${turnCount}`);
@@ -145,11 +148,11 @@ describe('Complete Go Fish Game', () => {
     let flowState = testGame.getFlowState()!;
     const game = testGame.game;
 
-    const alice = game.players[0] as GoFishPlayer;
-    const bob = game.players[1] as GoFishPlayer;
+    const alice = game.players.get(1)! as GoFishPlayer;
+    const bob = game.players.get(2)! as GoFishPlayer;
 
     // Get initial state
-    expect(flowState.currentPlayer).toBe(0); // Alice's turn
+    expect(flowState.currentPlayer).toBe(1); // Alice's turn
 
     // Find a rank Alice has that Bob doesn't have (Go Fish scenario)
     const aliceRanks = game.getPlayerRanks(alice);
@@ -167,7 +170,7 @@ describe('Complete Go Fish Game', () => {
       // Alice asks for a rank Bob doesn't have
       console.log(`Alice asks for ${goFishRank}s (Bob doesn't have any)`);
 
-      const result = testGame.doAction(0, 'ask', {
+      const result = testGame.doAction(1, 'ask', {
         target: { value: bob.position, display: bob.name },
         rank: goFishRank,
       });
@@ -182,12 +185,12 @@ describe('Complete Go Fish Game', () => {
       );
 
       if (!drewMatchMessage) {
-        // Alice Go Fished and didn't get a match - Bob's turn
-        expect(flowState.currentPlayer).toBe(1);
-        console.log(`Turn correctly switched to Bob (player 1)`);
+        // Alice Go Fished and didn't get a match - Bob's turn (player 2)
+        expect(flowState.currentPlayer).toBe(2);
+        console.log(`Turn correctly switched to Bob (player 2)`);
       } else {
-        // Alice Go Fished but drew a match - still Alice's turn
-        expect(flowState.currentPlayer).toBe(0);
+        // Alice Go Fished but drew a match - still Alice's turn (player 1)
+        expect(flowState.currentPlayer).toBe(1);
         console.log(`Alice drew a match, keeps her turn`);
       }
     } else {
@@ -205,11 +208,11 @@ describe('Complete Go Fish Game', () => {
     let flowState = testGame.getFlowState()!;
     const game = testGame.game;
 
-    const alice = game.players[0] as GoFishPlayer;
-    const bob = game.players[1] as GoFishPlayer;
+    const alice = game.players.get(1)! as GoFishPlayer;
+    const bob = game.players.get(2)! as GoFishPlayer;
 
     // Get initial state
-    expect(flowState.currentPlayer).toBe(0); // Alice's turn
+    expect(flowState.currentPlayer).toBe(1); // Alice's turn
 
     // Find a rank Alice has that Bob also has (get cards scenario)
     const aliceRanks = game.getPlayerRanks(alice);
@@ -227,7 +230,7 @@ describe('Complete Go Fish Game', () => {
       const bobCardsOfRank = game.getCardsOfRank(bob, matchingRank).length;
       console.log(`Alice asks for ${matchingRank}s (Bob has ${bobCardsOfRank})`);
 
-      const result = testGame.doAction(0, 'ask', {
+      const result = testGame.doAction(1, 'ask', {
         target: { value: bob.position, display: bob.name },
         rank: matchingRank,
       });
@@ -236,7 +239,7 @@ describe('Complete Go Fish Game', () => {
       flowState = testGame.getFlowState()!;
 
       // Alice got cards, should still be her turn
-      expect(flowState.currentPlayer).toBe(0);
+      expect(flowState.currentPlayer).toBe(1);
       console.log(`Alice got ${bobCardsOfRank} card(s), keeps her turn`);
 
       // Verify the cards moved
@@ -258,7 +261,7 @@ describe('Complete Go Fish Game', () => {
     let flowState = testGame.getFlowState()!;
     const game = testGame.game;
 
-    const turnCounts = [0, 0]; // Track turns per player
+    const turnCounts = [0, 0]; // Track turns per player (index 0 = position 1, index 1 = position 2)
     let totalTurns = 0;
     const maxTurns = 500;
 
@@ -267,8 +270,8 @@ describe('Complete Go Fish Game', () => {
         throw new Error(`Flow not awaiting input at turn ${totalTurns}`);
       }
 
-      const currentPlayerIdx = flowState.currentPlayer!;
-      turnCounts[currentPlayerIdx]++;
+      const currentPlayerPosition = flowState.currentPlayer!;
+      turnCounts[currentPlayerPosition - 1]++; // Convert 1-indexed position to 0-indexed array
 
       try {
         flowState = playTurn(testGame, flowState);
@@ -344,8 +347,8 @@ describe('Complete Go Fish Game', () => {
     let flowState = testGame.getFlowState()!;
     const game = testGame.game;
 
-    const alice = game.players[0] as GoFishPlayer;
-    const bob = game.players[1] as GoFishPlayer;
+    const alice = game.players.get(1)! as GoFishPlayer;
+    const bob = game.players.get(2)! as GoFishPlayer;
 
     const initialAliceBooks = alice.bookCount;
     const initialBobBooks = bob.bookCount;

@@ -2,16 +2,18 @@
 import { GameShell, AutoUI } from '@boardsmith/ui';
 import CheckersBoard from './components/CheckersBoard.vue';
 
-// Default checkers colors
+// Default checkers colors (0-indexed array)
 const DEFAULT_CHECKERS_COLORS = ['#e74c3c', '#2c3e50'] as const;
 
 // Get player color hex code (falls back to position-based default)
+// player.position is 1-indexed, so use position - 1 for array access
 function getPlayerColorHex(player: { position: number; color?: string }): string {
   if (player.color) {
     return player.color;
   }
-  // Fallback to default colors
-  return DEFAULT_CHECKERS_COLORS[player.position] ?? DEFAULT_CHECKERS_COLORS[0];
+  // Fallback to default colors (position is 1-indexed, array is 0-indexed)
+  const arrayIndex = player.position - 1;
+  return DEFAULT_CHECKERS_COLORS[arrayIndex] ?? DEFAULT_CHECKERS_COLORS[0];
 }
 
 // Get display name for a color
@@ -68,7 +70,8 @@ function getKingCount(playerPosition: number, gameView: any): number {
 // Get captured count from player data
 function getCapturedCount(playerPosition: number, gameView: any): number {
   // Calculate from missing opponent pieces (12 - opponent's pieces)
-  const opponentPosition = playerPosition === 0 ? 1 : 0;
+  // Player positions are 1-indexed: Player 1's opponent is Player 2, and vice versa
+  const opponentPosition = playerPosition === 1 ? 2 : 1;
   const opponentPieces = getPieceCount(opponentPosition, gameView);
   return 12 - opponentPieces;
 }

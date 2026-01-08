@@ -218,7 +218,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     if (useLobby && playerConfigs) {
       lobbySlots = playerConfigs.map((config, i) => {
         const isAI = config.isAI ?? false;
-        const isCreator = i === 0; // Position 0 is always the creator
+        const position = i + 1; // 1-indexed positions
+        const isCreator = position === 1; // Position 1 is always the creator
 
         // Extract player options (everything except name, isAI, aiLevel)
         const playerOptions: Record<string, unknown> = {};
@@ -229,9 +230,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         }
 
         return {
-          position: i,
+          position,
           status: isAI ? 'ai' : (isCreator ? 'claimed' : 'open'),
-          name: config.name ?? (isAI ? 'Bot' : `Player ${i + 1}`),
+          name: config.name ?? (isAI ? 'Bot' : `Player ${position}`),
           playerId: isCreator ? creatorId : undefined,
           aiLevel: isAI ? (config.aiLevel ?? 'medium') : undefined,
           playerOptions: Object.keys(playerOptions).length > 0 ? playerOptions : undefined,
@@ -415,14 +416,14 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
   /**
    * Update a player's name
-   * @param position Player position (0-indexed)
+   * @param position Player position (1-indexed)
    * @param name New name for the player
    */
   updatePlayerName(position: number, name: string): void {
-    if (position < 0 || position >= this.#storedState.playerCount) {
-      throw new Error(`Invalid player position: ${position}`);
+    if (position < 1 || position > this.#storedState.playerCount) {
+      throw new Error(`Invalid player position: ${position}. Expected 1 to ${this.#storedState.playerCount}.`);
     }
-    this.#storedState.playerNames[position] = name;
+    this.#storedState.playerNames[position - 1] = name;
 
     // Broadcast the update to all connected clients
     this.broadcast();
@@ -609,8 +610,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     };
     error?: string;
   } {
-    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player position: ${playerPosition}` };
+    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player position: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).` };
     }
 
     try {
@@ -666,8 +667,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     player: number,
     args: Record<string, unknown>
   ): Promise<ActionResult> {
-    if (player < 0 || player >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${player}`, errorCode: ErrorCode.INVALID_PLAYER };
+    if (player < 1 || player > this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player: ${player}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     const result = this.#runner.performAction(action, player, args);
@@ -703,7 +704,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const followUp = result.flowState?.followUp;
     let followUpWithMetadata: typeof followUp & { metadata?: ReturnType<typeof buildSingleActionMetadata> } | undefined;
     if (followUp) {
-      const playerObj = this.#runner.game.players[player];
+      const playerObj = this.#runner.game.players.get(player);
       // Pass followUp.args so dynamic prompts can access them (e.g., showing sector name)
       const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, followUp.action, followUp.args) : undefined;
       followUpWithMetadata = {
@@ -792,9 +793,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Only works if it's the player's turn and they've made at least one action.
    */
   async undoToTurnStart(playerPosition: number): Promise<UndoResult> {
-    // Validate player position
-    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
+    // Validate player position (1-indexed)
+    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Check if it's this player's turn
@@ -924,7 +925,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return {
         success: true,
         actionsDiscarded,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, 0, { includeActionMetadata: true, includeDebugData: true }),
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, 1, { includeActionMetadata: true, includeDebugData: true }),
       };
     } catch (error) {
       return {
@@ -1036,9 +1037,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     playerPosition: number,
     currentArgs: Record<string, unknown> = {}
   ): SelectionChoicesResponse {
-    // Validate player position
-    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
+    // Validate player position (1-indexed)
+    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Get action definition
@@ -1053,10 +1054,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: `Selection not found: ${selectionName}`, errorCode: ErrorCode.SELECTION_NOT_FOUND };
     }
 
-    // Build context with current args
-    const player = this.#runner.game.players[playerPosition];
+    // Build context with current args (playerPosition is 1-indexed)
+    const player = this.#runner.game.players.get(playerPosition);
     if (!player) {
-      return { success: false, error: `Player not found: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
+      return { success: false, error: `Player not found at position ${playerPosition}. Expected 1 to ${this.#runner.game.players.length}.`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Resolve any element IDs in currentArgs to actual elements
@@ -1110,16 +1111,29 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         }
 
         // Convert to display format with board refs
-        const formattedChoices = choices.map(value => {
-          const choice: any = {
-            value,
-            display: choiceSel.display ? choiceSel.display(value) : defaultDisplay(value),
-          };
+        const formattedChoices = choices.map(rawValue => {
+          // Check if the choice already has { value, display } structure (e.g., from playerChoices())
+          // If so, use those directly instead of wrapping again
+          let value: unknown;
+          let display: string;
 
-          // Add board refs if provided
+          if (rawValue && typeof rawValue === 'object' && 'value' in rawValue && 'display' in rawValue) {
+            // Already formatted choice (like from playerChoices)
+            const formatted = rawValue as { value: unknown; display: string };
+            value = formatted.value;
+            display = formatted.display;
+          } else {
+            // Raw value - wrap it
+            value = rawValue;
+            display = choiceSel.display ? choiceSel.display(rawValue) : defaultDisplay(rawValue);
+          }
+
+          const choice: any = { value, display };
+
+          // Add board refs if provided (pass the original rawValue for compatibility)
           if (choiceSel.boardRefs) {
             try {
-              const refs = choiceSel.boardRefs(value, ctx);
+              const refs = choiceSel.boardRefs(rawValue, ctx);
               if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
               if (refs.targetRef) choice.targetRef = refs.targetRef;
             } catch {
@@ -1335,8 +1349,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     errorCode?: ErrorCode;
     pendingState?: PendingActionState;
   } {
-    if (playerPosition < 0 || playerPosition >= this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
+    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
+      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     const action = this.#runner.game.getAction(actionName);
@@ -1413,7 +1427,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     }
 
     const executor = this.#runner.game.getActionExecutor();
-    const player = this.#runner.game.players[playerPosition];
+    const player = this.#runner.game.players.get(playerPosition);
     const selection = action.selections[pendingState.currentSelectionIndex];
 
     if (!selection) {
@@ -1965,9 +1979,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#storedState.playerNames.splice(position, 1);
     this.#storedState.playerCount = this.#storedState.lobbySlots.length;
 
-    // Renumber remaining slots
+    // Renumber remaining slots (1-indexed)
     this.#storedState.lobbySlots.forEach((s, i) => {
-      s.position = i;
+      s.position = i + 1; // 1-indexed
       if (s.status === 'open') {
         s.name = `Player ${i + 1}`;
       }

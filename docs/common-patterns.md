@@ -12,28 +12,28 @@ Many card games rotate who deals each round.
 
 ```typescript
 class MyGame extends Game<MyGame, MyPlayer> {
-  dealerPosition: number = 0;
+  dealerPosition: number = 1;  // 1-indexed: player 1 starts as dealer
 
   /**
    * Get the current dealer
    */
   get dealer(): MyPlayer {
-    return this.players[this.dealerPosition] as MyPlayer;
+    return this.players.get(this.dealerPosition) as MyPlayer;
   }
 
   /**
    * Get the player to the dealer's left (usually plays first)
    */
   get playerAfterDealer(): MyPlayer {
-    const nextPosition = (this.dealerPosition + 1) % this.players.length;
-    return this.players[nextPosition] as MyPlayer;
+    return this.players.nextAfter(this.dealer) as MyPlayer;
   }
 
   /**
    * Rotate dealer to the next player
    */
   rotateDealer(): void {
-    this.dealerPosition = (this.dealerPosition + 1) % this.players.length;
+    const nextDealer = this.players.nextAfter(this.dealer);
+    this.dealerPosition = nextDealer.position;
   }
 }
 ```
@@ -324,7 +324,7 @@ class CheckerPiece extends Piece {
    * Get valid move directions
    */
   getMoveDirections(): Array<{ row: number; col: number }> {
-    const forward = this.player?.position === 0 ? -1 : 1;
+    const forward = this.player?.position === 1 ? -1 : 1;  // Player 1 moves "up"
 
     if (this.isKing) {
       return [
@@ -353,8 +353,8 @@ class CheckerPiece extends Piece {
   // Move the piece
   piece.putInto(destination);
 
-  // Check for promotion
-  const promotionRow = piece.player?.position === 0 ? 0 : 7;
+  // Check for promotion (player 1 promotes at row 0, player 2 at row 7)
+  const promotionRow = piece.player?.position === 1 ? 0 : 7;
   if (destination.row === promotionRow && !piece.isKing) {
     piece.promote();
     game.message(`${piece} was crowned king!`);

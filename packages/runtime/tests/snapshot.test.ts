@@ -85,20 +85,20 @@ describe('GameStateSnapshot', () => {
   });
 
   describe('createPlayerView', () => {
-    it('should create a view for player 0', () => {
-      const view = createPlayerView(game, 0);
+    it('should create a view for player 1', () => {
+      const view = createPlayerView(game, 1);  // 1-indexed
 
-      expect(view.player).toBe(0);
+      expect(view.player).toBe(1);
       expect(view.phase).toBe('setup');
       expect(view.complete).toBe(false);
       expect(view.state).toBeDefined();
     });
 
     it('should show player their own cards', () => {
-      const view = createPlayerView(game, 0);
+      const view = createPlayerView(game, 1);  // 1-indexed
 
-      // Find the player's hand in the view
-      const handJson = view.state.children?.find(c => c.name === 'hand-0');
+      // Find the player's hand in the view (hand-1 for player at position 1)
+      const handJson = view.state.children?.find(c => c.name === 'hand-1');
       expect(handJson).toBeDefined();
 
       // Cards should be visible (not hidden)
@@ -110,10 +110,10 @@ describe('GameStateSnapshot', () => {
     });
 
     it('should hide opponent cards from player', () => {
-      const view = createPlayerView(game, 0);
+      const view = createPlayerView(game, 1);  // 1-indexed
 
-      // Find the opponent's hand in the view
-      const opponentHand = view.state.children?.find(c => c.name === 'hand-1');
+      // Find the opponent's hand in the view (hand-2 for player at position 2)
+      const opponentHand = view.state.children?.find(c => c.name === 'hand-2');
       expect(opponentHand).toBeDefined();
 
       // Cards should be hidden
@@ -125,14 +125,14 @@ describe('GameStateSnapshot', () => {
     });
 
     it('should hide deck cards from all players', () => {
-      const view0 = createPlayerView(game, 0);
-      const view1 = createPlayerView(game, 1);
+      const view1 = createPlayerView(game, 1);  // 1-indexed
+      const view2 = createPlayerView(game, 2);
 
-      const deckInView0 = view0.state.children?.find(c => c.name === 'deck');
       const deckInView1 = view1.state.children?.find(c => c.name === 'deck');
+      const deckInView2 = view2.state.children?.find(c => c.name === 'deck');
 
       // Both players should see deck cards as hidden
-      for (const deckView of [deckInView0, deckInView1]) {
+      for (const deckView of [deckInView1, deckInView2]) {
         if (deckView?.children) {
           for (const cardJson of deckView.children) {
             expect(cardJson.attributes.__hidden).toBe(true);
@@ -147,8 +147,8 @@ describe('GameStateSnapshot', () => {
       const views = createAllPlayerViews(game);
 
       expect(views).toHaveLength(2);
-      expect(views[0].player).toBe(0);
-      expect(views[1].player).toBe(1);
+      expect(views[0].player).toBe(1);  // 1-indexed
+      expect(views[1].player).toBe(2);
     });
   });
 });

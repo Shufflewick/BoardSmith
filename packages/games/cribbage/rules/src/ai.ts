@@ -9,11 +9,12 @@ import type { CribbagePlayer } from './elements.js';
  */
 export function getCribbageObjectives(
   game: Game,
-  playerIndex: number
+  playerPosition: number
 ): Record<string, Objective> {
   const cribbageGame = game as CribbageGame;
-  const player = cribbageGame.players[playerIndex] as CribbagePlayer;
-  const opponent = cribbageGame.players[1 - playerIndex] as CribbagePlayer;
+  const player = cribbageGame.players.get(playerPosition) as CribbagePlayer;
+  const opponentPosition = playerPosition === 1 ? 2 : 1;
+  const opponent = cribbageGame.players.get(opponentPosition) as CribbagePlayer;
 
   return {
     // Having a score lead is good

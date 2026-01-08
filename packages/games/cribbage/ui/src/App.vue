@@ -4,7 +4,7 @@ import CribbageBoard from './components/CribbageBoard.vue';
 
 // Check if a player is the dealer based on gameView
 function isDealer(playerPosition: number, gameView: any): boolean {
-  const dealerPosition = gameView?.attributes?.dealerPosition ?? 0;
+  const dealerPosition = gameView?.attributes?.dealerPosition ?? 1;  // 1-indexed
   return playerPosition === dealerPosition;
 }
 

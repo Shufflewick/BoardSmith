@@ -10,7 +10,7 @@ export function getHexObjectives(game: HexGame, player: HexPlayer) {
   if (!board) return { score: 0 };
 
   const size = board.boardSize;
-  const isRed = player.position === 0;
+  const isRed = player.position === 1;
 
   // Check for win/loss
   if (game.winner) {

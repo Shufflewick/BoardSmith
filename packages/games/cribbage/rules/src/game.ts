@@ -55,8 +55,8 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
   /** Target score to win */
   targetScore: number;
 
-  /** Current dealer position (alternates each round) */
-  dealerPosition: number = 0;
+  /** Current dealer position (1-indexed, alternates each round) */
+  dealerPosition: number = 1;  // Set properly in chooseFirstDealer()
 
   // ---- HMR-safe state (stored in settings) ----
 
@@ -187,8 +187,8 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     }
 
     // Randomly determine first dealer (simulates cutting for deal)
-    this.dealerPosition = this.random() < 0.5 ? 0 : 1;
-    (this.players[this.dealerPosition] as CribbagePlayer).isDealer = true;
+    this.dealerPosition = this.random() < 0.5 ? 1 : 2;
+    (this.players.get(this.dealerPosition) as CribbagePlayer).isDealer = true;
 
     // Register actions
     this.registerAction(createDiscardAction(this));
@@ -316,37 +316,37 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * Get the dealer
    */
   getDealer(): CribbagePlayer {
-    return this.players[this.dealerPosition] as CribbagePlayer;
+    return this.players.get(this.dealerPosition) as CribbagePlayer;
   }
 
   /**
    * Get the non-dealer
    */
   getNonDealer(): CribbagePlayer {
-    return this.players[1 - this.dealerPosition] as CribbagePlayer;
+    return this.players.get(3 - this.dealerPosition) as CribbagePlayer;
   }
 
   /**
    * Rotate dealer for next round
    */
   rotateDealer(): void {
-    (this.players[this.dealerPosition] as CribbagePlayer).isDealer = false;
-    this.dealerPosition = 1 - this.dealerPosition;
-    (this.players[this.dealerPosition] as CribbagePlayer).isDealer = true;
+    (this.players.get(this.dealerPosition) as CribbagePlayer).isDealer = false;
+    this.dealerPosition = 3 - this.dealerPosition;
+    (this.players.get(this.dealerPosition) as CribbagePlayer).isDealer = true;
   }
 
   /**
    * Get the current player during play phase
    */
   getCurrentPlayPlayer(): CribbagePlayer {
-    return this.players[this.currentPlayTurn] as CribbagePlayer;
+    return this.players.get(this.currentPlayTurn) as CribbagePlayer;
   }
 
   /**
    * Switch to the other player's turn
    */
   switchPlayTurn(): void {
-    this.currentPlayTurn = 1 - this.currentPlayTurn;
+    this.currentPlayTurn = 3 - this.currentPlayTurn;
   }
 
   /**

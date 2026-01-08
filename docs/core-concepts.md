@@ -234,7 +234,7 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 
 ### Player Properties
 
-- `position`: 0-indexed player position
+- `position`: 1-indexed player position (Player 1 = position 1)
 - `name`: Display name
 - `game`: Reference to the game instance
 
@@ -242,9 +242,11 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 
 ```typescript
 // In game class
-this.players                    // PlayerCollection (array-like)
-this.players[0]                 // First player
+this.players                    // PlayerCollection
+this.players.get(1)             // First player (1-indexed)
+this.players.get(2)             // Second player
 this.players.current            // Player whose turn it is
+this.players.all()              // Array of all players
 
 // In action context
 ctx.player                      // Current action's player
@@ -489,11 +491,11 @@ class MyGame extends Game<MyGame, MyPlayer> {
     // Access game options
     const boardSize = options.boardSize ?? 11;
 
-    // Access player configs
-    for (let i = 0; i < this.players.length; i++) {
-      const config = options.playerConfigs?.[i];
+    // Access player configs (players are 1-indexed)
+    for (const player of this.players) {
+      const config = options.playerConfigs?.[player.position - 1];  // configs array is 0-indexed
       if (config?.color) {
-        this.players[i].color = config.color;
+        player.color = config.color;
       }
     }
   }

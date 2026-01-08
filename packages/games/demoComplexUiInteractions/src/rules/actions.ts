@@ -98,7 +98,7 @@ export function createTradeAction(game: DemoGame): ActionDefinition {
       prompt: 'Select a player to trade with',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number }) => {
-        const targetPlayer = game.players[choice.value] as DemoPlayer;
+        const targetPlayer = game.players.get(choice.value) as DemoPlayer;
         const hand = game.getPlayerHand(targetPlayer);
         return { targetRef: { id: hand.id } };
       },
@@ -111,8 +111,9 @@ export function createTradeAction(game: DemoGame): ActionDefinition {
       const player = ctx.player as DemoPlayer;
       // fromElements() resolves the ID to the actual Card element
       const myCard = args.myCard as Card;
-      const targetChoice = args.targetPlayer as { value: number; display: string };
-      const targetPlayer = game.players[targetChoice.value] as DemoPlayer;
+      // extractChoiceValue extracts the 'value' from { value, display } objects
+      const targetPosition = args.targetPlayer as number;
+      const targetPlayer = game.players.get(targetPosition) as DemoPlayer;
 
       // Move card to target
       myCard.putInto(game.getPlayerHand(targetPlayer));
@@ -157,7 +158,7 @@ export function createGiftAction(game: DemoGame): ActionDefinition {
       prompt: 'Select who to gift the card to',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number }) => {
-        const targetPlayer = game.players[choice.value] as DemoPlayer;
+        const targetPlayer = game.players.get(choice.value) as DemoPlayer;
         const hand = game.getPlayerHand(targetPlayer);
         return { targetRef: { id: hand.id } };
       },
@@ -170,8 +171,9 @@ export function createGiftAction(game: DemoGame): ActionDefinition {
       const player = ctx.player as DemoPlayer;
       // fromElements() resolves the ID to the actual Card element
       const card = args.card as Card;
-      const recipientChoice = args.recipient as { value: number; display: string };
-      const recipient = game.players[recipientChoice.value] as DemoPlayer;
+      // extractChoiceValue extracts the 'value' from { value, display } objects
+      const recipientPosition = args.recipient as number;
+      const recipient = game.players.get(recipientPosition) as DemoPlayer;
 
       card.putInto(game.getPlayerHand(recipient));
       player.score += card.pointValue; // Gifting scores points!

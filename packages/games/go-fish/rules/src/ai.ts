@@ -10,10 +10,10 @@ import { Card } from './elements.js';
  */
 export function getGoFishObjectives(
   game: Game,
-  playerIndex: number
+  playerPosition: number
 ): Record<string, Objective> {
   const goFishGame = game as GoFishGame;
-  const player = goFishGame.players[playerIndex] as GoFishPlayer;
+  const player = goFishGame.players.get(playerPosition) as GoFishPlayer;
 
   return {
     // Having more books is the main goal

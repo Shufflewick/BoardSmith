@@ -91,10 +91,10 @@ export function deserializeValue(
     return game.first({ id: ref.__elementId } as Record<string, unknown>);
   }
 
-  // Handle player reference
+  // Handle player reference (stored as 1-indexed position)
   if (typeof value === 'object' && value !== null && '__playerRef' in value) {
     const ref = value as { __playerRef: number };
-    return game.players[ref.__playerRef];
+    return game.players.get(ref.__playerRef);
   }
 
   // Handle arrays
@@ -148,9 +148,10 @@ export function deserializeAction(
   serialized: SerializedAction,
   game: Game
 ): { actionName: string; player: Player; args: Record<string, unknown> } {
-  const player = game.players[serialized.player];
+  // serialized.player is 1-indexed position
+  const player = game.players.get(serialized.player);
   if (!player) {
-    throw new Error(`Player ${serialized.player} not found`);
+    throw new Error(`Player at position ${serialized.player} not found. Expected 1 to ${game.players.length}.`);
   }
 
   return {

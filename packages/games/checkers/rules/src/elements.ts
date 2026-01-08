@@ -13,9 +13,9 @@ export class CheckerPiece extends Piece<CheckersGame, CheckersPlayer> {
    * Regular pieces move toward opponent's side, kings move both ways
    */
   get forwardDirection(): number {
-    // Player 0 (dark) starts at top, moves down (+1)
-    // Player 1 (light) starts at bottom, moves up (-1)
-    return this.player?.position === 0 ? 1 : -1;
+    // Player 1 (dark) starts at top, moves down (+1)
+    // Player 2 (light) starts at bottom, moves up (-1)
+    return this.player?.position === 1 ? 1 : -1;
   }
 
   /**

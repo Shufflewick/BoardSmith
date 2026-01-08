@@ -290,8 +290,11 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Action ${actionName} is not available for player ${actingPlayerIndex}`);
     }
 
-    // Execute the action
-    const player = this.game.players[actingPlayerIndex];
+    // Execute the action (actingPlayerIndex is 1-indexed position)
+    const player = this.game.players.get(actingPlayerIndex);
+    if (!player) {
+      throw new Error(`Invalid player position: ${actingPlayerIndex}`);
+    }
     const result = this.game.performAction(actionName, player as any, args);
     this.lastActionResult = result;
 
@@ -402,9 +405,9 @@ export class FlowEngine<G extends Game = Game> {
       currentNode = this.getChildNode(currentNode, index);
     }
 
-    // Set player from position
+    // Set player from position (playerIndex is 1-indexed)
     if (position.playerIndex !== undefined) {
-      this.currentPlayer = this.game.players[position.playerIndex];
+      this.currentPlayer = this.game.players.get(position.playerIndex);
     }
   }
 

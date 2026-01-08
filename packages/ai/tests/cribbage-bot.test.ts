@@ -25,19 +25,19 @@ describe('MCTSBot Cribbage', () => {
     expect(flowState?.awaitingPlayers).toBeDefined();
     expect(flowState?.awaitingPlayers?.length).toBe(2);
 
-    // Create bot for player 0
+    // Create bot for player 1 (1-indexed)
     const bot = new MCTSBot(
       game,
       CribbageGame,
       'cribbage',
-      0,
+      1,  // 1-indexed player position
       [],
       { iterations: 1, playoutDepth: 1, async: false }
     );
 
     // Bot should be able to enumerate moves
     const moves = (bot as any).enumerateMoves(game, flowState);
-    console.log(`Bot found ${moves.length} moves for player 0`);
+    console.log(`Bot found ${moves.length} moves for player 1`);
     console.log('First 5 moves:', moves.slice(0, 5));
 
     expect(moves.length).toBeGreaterThan(0);
@@ -50,77 +50,77 @@ describe('MCTSBot Cribbage', () => {
     expect(move.action).toBe('discard');
   });
 
-  it('should handle simultaneous discard phase for player 1', async () => {
+  it('should handle simultaneous discard phase for player 2', async () => {
     const game = createCribbageGame();
     const flowState = game.getFlowState();
 
-    // Create bot for player 1 (the typical AI player)
+    // Create bot for player 2 (1-indexed, the typical AI player)
     const bot = new MCTSBot(
       game,
       CribbageGame,
       'cribbage',
-      1, // Player 1
+      2,  // 1-indexed player position
       [],
       { iterations: 1, playoutDepth: 1, async: false }
     );
 
-    // Bot should be able to enumerate moves for player 1
+    // Bot should be able to enumerate moves for player 2
     const moves = (bot as any).enumerateMoves(game, flowState);
-    console.log(`Bot found ${moves.length} moves for player 1`);
+    console.log(`Bot found ${moves.length} moves for player 2`);
 
     expect(moves.length).toBeGreaterThan(0);
 
-    // canBotAct should return true for player 1 in simultaneous phase
+    // canBotAct should return true for player 2 in simultaneous phase
     const canAct = (bot as any).canBotAct(flowState);
-    console.log('canBotAct for player 1:', canAct);
+    console.log('canBotAct for player 2:', canAct);
     expect(canAct).toBe(true);
 
     // Bot should be able to play
     const move = await bot.play();
-    console.log('Bot (player 1) chose move:', move);
+    console.log('Bot (player 2) chose move:', move);
 
     expect(move).toBeDefined();
     expect(move.action).toBe('discard');
   });
 
-  it('should complete multiple discards', async () => {
+  it('should complete discards for both players', async () => {
     const game = createCribbageGame();
 
-    // Create bot for player 0
-    const bot0 = new MCTSBot(
+    // Create bot for player 1 (1-indexed)
+    const bot1 = new MCTSBot(
       game,
       CribbageGame,
       'cribbage',
-      0,
+      1,  // 1-indexed player position
       [],
       { iterations: 1, playoutDepth: 1, async: false }
     );
 
-    // First discard
-    const move1 = await bot0.play();
-    console.log('Bot discard 1:', move1);
+    // Player 1 discards (uses multiSelect to discard 2 cards at once)
+    const move1 = await bot1.play();
+    console.log('Bot 1 discard:', move1);
     expect(move1.action).toBe('discard');
 
-    // Apply the move
-    game.continueFlow(move1.action, move1.args, 0);
+    // Apply player 1's move
+    game.continueFlow(move1.action, move1.args, 1);
 
-    // Check if bot can still act (should need 2nd discard)
+    // Check game state - player 2 should now need to discard
     const flowState2 = game.getFlowState();
-    console.log('After first discard:', JSON.stringify(flowState2, null, 2));
+    console.log('After player 1 discard:', JSON.stringify(flowState2, null, 2));
 
-    // Create new bot instance with updated state
-    const bot0b = new MCTSBot(
+    // Create bot for player 2
+    const bot2 = new MCTSBot(
       game,
       CribbageGame,
       'cribbage',
-      0,
+      2,  // 1-indexed player position
       [],
       { iterations: 1, playoutDepth: 1, async: false }
     );
 
-    // Second discard
-    const move2 = await bot0b.play();
-    console.log('Bot discard 2:', move2);
+    // Player 2 discards
+    const move2 = await bot2.play();
+    console.log('Bot 2 discard:', move2);
     expect(move2.action).toBe('discard');
   });
 });

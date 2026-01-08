@@ -30,7 +30,7 @@ export class AIController<G extends Game = Game> {
     this.#gameType = gameType;
     this.#aiLevel = config.level;
     this.#aiPlayers = new Set(
-      config.players.filter(p => p >= 0 && p < playerCount)
+      config.players.filter(p => p >= 1 && p <= playerCount)  // 1-indexed positions
     );
   }
 

@@ -264,9 +264,10 @@ Action.create('askPlayer')
     choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
   })
   .execute((args, ctx) => {
-    // playerChoices returns { value: number; display: string } objects
+    // playerChoices returns { value: position; display: string } objects
+    // Position values are 1-indexed
     const choice = args.target as { value: number; display: string };
-    const targetPlayer = game.players[choice.value];
+    const targetPlayer = game.players.get(choice.value)!;
     // ...
   });
 ```
@@ -637,7 +638,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
       prompt: 'Who do you want to ask?',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number; display: string }, ctx) => {
-        const targetPlayer = game.players[choice.value] as GoFishPlayer;
+        const targetPlayer = game.players.get(choice.value) as GoFishPlayer;
         return { targetRef: { id: game.getPlayerHand(targetPlayer).id } };
       },
     })
@@ -656,7 +657,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
     .execute((args, ctx) => {
       const player = ctx.player as GoFishPlayer;
       const targetChoice = args.target as { value: number; display: string };
-      const target = game.players[targetChoice.value] as GoFishPlayer;
+      const target = game.players.get(targetChoice.value) as GoFishPlayer;
       const rank = args.rank as string;
 
       const matchingCards = game.getCardsOfRank(target, rank);
@@ -830,19 +831,19 @@ Control player order with `TurnOrder` presets. Use the spread operator to apply 
 ```typescript
 import { TurnOrder } from '@boardsmith/engine';
 
-// Default round-robin from player 0
+// Default round-robin from player 1
 eachPlayer({
   ...TurnOrder.DEFAULT,
   do: actionStep({ actions: ['play'] }),
 })
 
-// Available presets:
-TurnOrder.DEFAULT           // Standard round-robin from player 0
+// Available presets (player positions are 1-indexed):
+TurnOrder.DEFAULT           // Standard round-robin from player 1
 TurnOrder.REVERSE           // Round-robin backward
 TurnOrder.CONTINUE          // Continue from current player
 TurnOrder.ACTIVE_ONLY       // Only non-eliminated players
-TurnOrder.START_FROM(n)     // Start from position n
-TurnOrder.ONLY([0, 2])      // Specific players only
+TurnOrder.START_FROM(n)     // Start from position n (1-indexed)
+TurnOrder.ONLY([1, 3])      // Specific players only (positions 1 and 3)
 TurnOrder.LEFT_OF_DEALER()  // Common for card games (reads ctx.get('dealer'))
 TurnOrder.SKIP_IF(fn)       // Skip players based on condition
 TurnOrder.combine(...)      // Combine multiple configs
@@ -859,8 +860,8 @@ eachPlayer({
 Access and set variables during flow:
 
 ```typescript
-// Set variable
-setVar('dealer', (ctx) => ctx.game.players[0])
+// Set variable (player positions are 1-indexed)
+setVar('dealer', (ctx) => ctx.game.players.get(1))
 
 // Access in conditions
 loop({

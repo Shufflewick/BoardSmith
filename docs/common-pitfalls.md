@@ -834,7 +834,7 @@ import { createTestGame } from '@boardsmith/testing';
 const testGame = await createTestGame(gameDefinition, { playerCount: 2 });
 
 // Debug why action isn't available
-const debug = testGame.game.debugActionAvailability('attack', testGame.game.players[0]);
+const debug = testGame.game.debugActionAvailability('attack', testGame.game.players.get(1)!);
 expect(debug.available).toBe(true);
 // If it fails, debug.reason tells you why
 ```

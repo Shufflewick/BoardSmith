@@ -6,7 +6,7 @@ import { ElementCollection } from '../element/element-collection.js';
  * Base Player class. Extend this to add custom player properties.
  */
 export class Player<G extends Game = Game> {
-  /** Immutable seat position (0-indexed) */
+  /** Immutable seat position (1-indexed: Player 1 = position 1) */
   readonly position: number;
 
   /** Player display name */
@@ -24,6 +24,13 @@ export class Player<G extends Game = Game> {
   constructor(position: number, name: string) {
     this.position = position;
     this.name = name;
+  }
+
+  /**
+   * Check if this player is the first player (position 1)
+   */
+  get isFirstPlayer(): boolean {
+    return this.position === 1;
   }
 
   /**
@@ -90,75 +97,322 @@ export class Player<G extends Game = Game> {
 }
 
 /**
- * Collection of players with query methods
+ * Collection of players with query and iteration methods.
+ *
+ * Player positions are 1-indexed: Player 1 has position 1, Player 2 has position 2, etc.
+ * Use `players.get(1)` to get the first player.
+ *
+ * This class does NOT support array indexing (`players[0]`). Use explicit methods instead:
+ * - `players.get(position)` - Get player by 1-indexed position
+ * - `players.all()` - Get all players as array for iteration
+ * - `players.forEach()`, `players.map()`, etc. - Iteration methods
  */
-export class PlayerCollection<P extends Player = Player> extends Array<P> {
-  /** Index of the current player */
-  private _currentIndex: number = 0;
+export class PlayerCollection<P extends Player = Player> {
+  /** Internal 0-indexed storage (external API is 1-indexed) */
+  #players: P[] = [];
+
+  /** Index of the current player in internal array */
+  #currentIndex: number = 0;
+
+  /**
+   * Add a player to the collection (internal use only)
+   */
+  add(player: P): void {
+    this.#players.push(player);
+  }
+
+  /**
+   * Get the number of players
+   */
+  get length(): number {
+    return this.#players.length;
+  }
+
+  /**
+   * Get all valid positions as an array [1, 2, 3, ...]
+   */
+  get positions(): number[] {
+    return this.#players.map((_, i) => i + 1);
+  }
+
+  // ============================================
+  // Access Methods (with validation)
+  // ============================================
+
+  /**
+   * Get player by 1-indexed position.
+   * Throws helpful error if position is invalid.
+   *
+   * @example
+   * players.get(1) // First player
+   * players.get(2) // Second player
+   */
+  get(position: number): P | undefined {
+    this.#validatePosition(position);
+    return this.#players[position - 1];
+  }
+
+  /**
+   * Get player by 1-indexed position, throwing if not found.
+   *
+   * @example
+   * players.getOrThrow(1) // First player, throws if doesn't exist
+   */
+  getOrThrow(position: number): P {
+    const player = this.get(position);
+    if (!player) {
+      throw new Error(
+        `No player at position ${position}. ` +
+        `This game has ${this.length} players (positions 1 to ${this.length}).`
+      );
+    }
+    return player;
+  }
+
+  /**
+   * Validate a position and throw helpful error if invalid
+   */
+  #validatePosition(position: number): void {
+    if (!Number.isInteger(position)) {
+      throw new Error(
+        `Invalid player position: ${position}. ` +
+        `Position must be an integer.`
+      );
+    }
+    if (position < 1) {
+      throw new Error(
+        `Invalid player position: ${position}. ` +
+        `Player positions are 1-indexed (1 to ${this.length}). ` +
+        `Use players.get(1) for the first player.`
+      );
+    }
+    if (this.length > 0 && position > this.length) {
+      throw new Error(
+        `Invalid player position: ${position}. ` +
+        `This game has ${this.length} players (positions 1 to ${this.length}).`
+      );
+    }
+  }
+
+  // ============================================
+  // Iteration Methods
+  // ============================================
+
+  /**
+   * Get all players as an array.
+   * Use this for iteration when you need array methods.
+   *
+   * @example
+   * for (const player of players.all()) { ... }
+   * players.all().map(p => p.name)
+   */
+  all(): P[] {
+    return [...this.#players];
+  }
+
+  /**
+   * Execute a function for each player
+   */
+  forEach(fn: (player: P, index: number) => void): void {
+    this.#players.forEach((player, index) => fn(player, index + 1));
+  }
+
+  /**
+   * Map players to a new array
+   */
+  map<T>(fn: (player: P, position: number) => T): T[] {
+    return this.#players.map((player, index) => fn(player, index + 1));
+  }
+
+  /**
+   * Filter players
+   */
+  filter(fn: (player: P) => boolean): P[] {
+    return this.#players.filter(fn);
+  }
+
+  /**
+   * Find a player matching a condition
+   */
+  find(fn: (player: P) => boolean): P | undefined {
+    return this.#players.find(fn);
+  }
+
+  /**
+   * Check if any player matches a condition
+   */
+  some(fn: (player: P) => boolean): boolean {
+    return this.#players.some(fn);
+  }
+
+  /**
+   * Check if all players match a condition
+   */
+  every(fn: (player: P) => boolean): boolean {
+    return this.#players.every(fn);
+  }
+
+  /**
+   * Make PlayerCollection iterable
+   */
+  [Symbol.iterator](): Iterator<P> {
+    return this.#players[Symbol.iterator]();
+  }
+
+  // ============================================
+  // Current Player Management
+  // ============================================
 
   /**
    * Get the current player
    */
   get current(): P | undefined {
-    return this[this._currentIndex];
+    return this.#players[this.#currentIndex];
   }
 
   /**
-   * Set the current player
+   * Set the current player by player object or 1-indexed position.
+   *
+   * @example
+   * players.setCurrent(1) // Set first player as current
+   * players.setCurrent(somePlayer) // Set by player object
    */
-  setCurrent(player: P | number): void {
-    const index = typeof player === 'number' ? player : player.position;
-
+  setCurrent(playerOrPosition: P | number): void {
     // Clear previous current
-    if (this[this._currentIndex]) {
-      this[this._currentIndex].setCurrent(false);
+    const prevPlayer = this.#players[this.#currentIndex];
+    if (prevPlayer) {
+      prevPlayer.setCurrent(false);
     }
 
-    this._currentIndex = index;
+    // Calculate new index
+    let newIndex: number;
+    if (typeof playerOrPosition === 'number') {
+      this.#validatePosition(playerOrPosition);
+      newIndex = playerOrPosition - 1;
+    } else {
+      // Find player in collection
+      const foundIndex = this.#players.findIndex(p => p === playerOrPosition);
+      if (foundIndex === -1) {
+        throw new Error(`Player not found in collection`);
+      }
+      newIndex = foundIndex;
+    }
+
+    this.#currentIndex = newIndex;
 
     // Set new current
-    if (this[this._currentIndex]) {
-      this[this._currentIndex].setCurrent(true);
+    const newPlayer = this.#players[this.#currentIndex];
+    if (newPlayer) {
+      newPlayer.setCurrent(true);
     }
   }
 
+  // ============================================
+  // Turn Rotation (encapsulates modulo arithmetic)
+  // ============================================
+
   /**
-   * Get the next player in turn order
+   * Get the next player after the current player (circular).
+   * Player 4 → Player 1 in a 4-player game.
    */
-  next(from?: P): P {
-    const currentPos = from?.position ?? this._currentIndex;
-    const nextPos = (currentPos + 1) % this.length;
-    return this[nextPos];
+  next(): P {
+    const nextIndex = (this.#currentIndex + 1) % this.length;
+    return this.#players[nextIndex];
   }
 
   /**
-   * Get the previous player in turn order
+   * Get the previous player before the current player (circular).
+   * Player 1 → Player 4 in a 4-player game.
    */
-  previous(from?: P): P {
-    const currentPos = from?.position ?? this._currentIndex;
-    const prevPos = (currentPos - 1 + this.length) % this.length;
-    return this[prevPos];
+  previous(): P {
+    const prevIndex = (this.#currentIndex - 1 + this.length) % this.length;
+    return this.#players[prevIndex];
   }
 
   /**
-   * Get all other players (excluding the given player or current player)
+   * Get the next player after a specific player (circular).
+   *
+   * @example
+   * players.nextAfter(player4) // Returns player 1 in a 4-player game
    */
-  others(excluding?: P): PlayerCollection<P> {
-    const excludePos = excluding?.position ?? this._currentIndex;
-    const result = new PlayerCollection<P>();
-    for (const player of this) {
-      if (player.position !== excludePos) {
-        result.push(player);
-      }
+  nextAfter(player: P): P {
+    const index = this.#players.findIndex(p => p === player);
+    if (index === -1) {
+      throw new Error(`Player not found in collection`);
+    }
+    const nextIndex = (index + 1) % this.length;
+    return this.#players[nextIndex];
+  }
+
+  /**
+   * Get the previous player before a specific player (circular).
+   *
+   * @example
+   * players.previousBefore(player1) // Returns player 4 in a 4-player game
+   */
+  previousBefore(player: P): P {
+    const index = this.#players.findIndex(p => p === player);
+    if (index === -1) {
+      throw new Error(`Player not found in collection`);
+    }
+    const prevIndex = (index - 1 + this.length) % this.length;
+    return this.#players[prevIndex];
+  }
+
+  /**
+   * Get all players in order, starting from a specific player.
+   * Useful for turn order that starts from a specific position.
+   *
+   * @example
+   * // In a 4-player game, starting from player 2:
+   * players.rotateFrom(player2) // [player2, player3, player4, player1]
+   */
+  rotateFrom(startPlayer: P): P[] {
+    const startIndex = this.#players.findIndex(p => p === startPlayer);
+    if (startIndex === -1) {
+      throw new Error(`Player not found in collection`);
+    }
+    const result: P[] = [];
+    for (let i = 0; i < this.length; i++) {
+      result.push(this.#players[(startIndex + i) % this.length]);
     }
     return result;
+  }
+
+  /**
+   * Get all players in order, starting from a specific 1-indexed position.
+   *
+   * @example
+   * // In a 4-player game, starting from position 2:
+   * players.inOrderFrom(2) // [player2, player3, player4, player1]
+   */
+  inOrderFrom(startPosition: number): P[] {
+    this.#validatePosition(startPosition);
+    const startIndex = startPosition - 1;
+    const result: P[] = [];
+    for (let i = 0; i < this.length; i++) {
+      result.push(this.#players[(startIndex + i) % this.length]);
+    }
+    return result;
+  }
+
+  // ============================================
+  // Utility Methods
+  // ============================================
+
+  /**
+   * Get all players except the given player (or current player if not specified)
+   */
+  others(excluding?: P): P[] {
+    const excludePlayer = excluding ?? this.current;
+    return this.#players.filter(p => p !== excludePlayer);
   }
 
   /**
    * Serialize to JSON
    */
   toJSON(): Record<string, unknown>[] {
-    return this.map(p => {
+    return this.#players.map(p => {
       // Defensive check for when prototype chain is broken (bundler issues)
       if (typeof p.toJSON === 'function') {
         return p.toJSON();
@@ -170,5 +424,21 @@ export class PlayerCollection<P extends Player = Player> extends Array<P> {
         color: p.color,
       };
     });
+  }
+
+  /**
+   * Get the internal current index (for serialization only)
+   * @internal
+   */
+  get _currentIndex(): number {
+    return this.#currentIndex;
+  }
+
+  /**
+   * Set the internal current index (for deserialization only)
+   * @internal
+   */
+  set _currentIndex(index: number) {
+    this.#currentIndex = index;
   }
 }

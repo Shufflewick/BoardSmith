@@ -25,7 +25,7 @@ export function createTestFlow(game: TestActionPanelGame): FlowDefinition {
       maxIterations: 100,
       do: actionStep({
         name: 'player-action',
-        player: () => game.players[0],
+        player: () => game.players.get(1)!,
         actions: [
           'chooseFromDemo',
           'optionalDemo',

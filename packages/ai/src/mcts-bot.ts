@@ -323,7 +323,7 @@ export class MCTSBot<G extends Game = Game> {
   private enumerateMoves(game: G, flowState: FlowState): BotMove[] {
     const moves: BotMove[] = [];
     const actions = this.getAvailableActionsForBot(flowState);
-    const player = game.players[this.playerIndex];
+    const player = game.players.get(this.playerIndex);
 
     for (const actionName of actions) {
       const actionDef = game.getAction(actionName);
@@ -363,7 +363,7 @@ export class MCTSBot<G extends Game = Game> {
       return moves;
     }
 
-    const player = game.players[currentPlayerIndex];
+    const player = game.players.get(currentPlayerIndex);
     if (!player) {
       return moves;
     }

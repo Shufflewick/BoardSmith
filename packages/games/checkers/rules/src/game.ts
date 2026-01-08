@@ -79,21 +79,24 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
     this.setFlow(createCheckersFlow(this));
 
     // Announce player colors
-    this.message(`${this.players[0].name} plays ${this.players[0].color}`);
-    this.message(`${this.players[1].name} plays ${this.players[1].color}`);
+    this.message(`${this.players.get(1)!.name} plays ${this.players.get(1)!.color}`);
+    this.message(`${this.players.get(2)!.name} plays ${this.players.get(2)!.color}`);
   }
 
   /**
    * Apply colors from player configs
    */
   private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
-    for (let i = 0; i < this.players.length; i++) {
-      const config = playerConfigs?.[i];
+    // playerConfigs and CHECKERS_DEFAULT_COLORS are 0-indexed arrays,
+    // but player.position is 1-indexed, so use position - 1 for array access
+    for (const player of this.players) {
+      const arrayIndex = player.position - 1;
+      const config = playerConfigs?.[arrayIndex];
       if (config?.color) {
-        this.players[i].color = config.color;
+        player.color = config.color;
       } else {
-        // Default colors: Player 0 = red (#e74c3c), Player 1 = black (#2c3e50)
-        this.players[i].color = CHECKERS_DEFAULT_COLORS[i] ?? CHECKERS_DEFAULT_COLORS[0];
+        // Default colors: Player 1 = red (#e74c3c), Player 2 = black (#2c3e50)
+        player.color = CHECKERS_DEFAULT_COLORS[arrayIndex] ?? CHECKERS_DEFAULT_COLORS[0];
       }
     }
   }
@@ -125,8 +128,8 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
 
   /**
    * Place initial pieces on the board
-   * Player 0 (dark pieces) on rows 0-2
-   * Player 1 (light pieces) on rows 5-7
+   * Player 1 (dark pieces) on rows 0-2
+   * Player 2 (light pieces) on rows 5-7
    */
   private placePieces(): void {
     for (let row = 0; row < 8; row++) {
@@ -134,15 +137,15 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
         const square = this.board.getSquare(row, col);
         if (!square || !square.isDark) continue;
 
-        // Player 0 pieces on top 3 rows
+        // Player 1 pieces on top 3 rows
         if (row < 3) {
-          const piece = square.create(CheckerPiece, `p0-${row}-${col}`);
-          piece.player = this.players[0];
-        }
-        // Player 1 pieces on bottom 3 rows
-        else if (row > 4) {
           const piece = square.create(CheckerPiece, `p1-${row}-${col}`);
-          piece.player = this.players[1];
+          piece.player = this.players.get(1);
+        }
+        // Player 2 pieces on bottom 3 rows
+        else if (row > 4) {
+          const piece = square.create(CheckerPiece, `p2-${row}-${col}`);
+          piece.player = this.players.get(2);
         }
       }
     }
@@ -386,8 +389,8 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
    * Check if a row is the king row for a player
    */
   isKingRow(row: number, player: CheckersPlayer): boolean {
-    // Player 0 kings at row 7, Player 1 kings at row 0
-    return player.position === 0 ? row === 7 : row === 0;
+    // Player 1 kings at row 7, Player 2 kings at row 0
+    return player.position === 1 ? row === 7 : row === 0;
   }
 
   /**

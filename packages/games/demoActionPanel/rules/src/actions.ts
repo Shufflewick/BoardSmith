@@ -195,7 +195,7 @@ export function createChoosePlayerDemo(game: TestActionPanelGame): ActionDefinit
     })
     .execute((args, ctx) => {
       const choice = args.player as { value: number; display: string };
-      const selectedPlayer = game.players[choice.value] as TestPlayer;
+      const selectedPlayer = game.players.get(choice.value) as TestPlayer;
       game.message(`playerChoices demo: selected "${selectedPlayer.name}"`);
       return { success: true };
     });

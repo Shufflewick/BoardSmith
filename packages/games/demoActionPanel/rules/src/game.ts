@@ -74,7 +74,7 @@ export class TestActionPanelGame extends Game<TestActionPanelGame, TestPlayer> {
   }
 
   private createPlayerUnits(): void {
-    const player = this.players[0];
+    const player = this.players.get(1)!;
 
     // Unit with single target (no multiSelect)
     const sniper = this.battlefield.create(Unit, 'sniper', {
@@ -151,7 +151,7 @@ export class TestActionPanelGame extends Game<TestActionPanelGame, TestPlayer> {
 
   override getWinners(): TestPlayer[] {
     if (this.isFinished()) {
-      return [this.players[0]];
+      return [this.players.get(1)!];
     }
     return [];
   }

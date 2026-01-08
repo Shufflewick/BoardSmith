@@ -79,7 +79,7 @@ export class HexGame extends Game<HexGame, HexPlayer> {
 
     this.message('Hex game started!');
     this.message(`Board size: ${this.boardSize}x${this.boardSize}`);
-    this.message(`${this.players[0].name} connects top to bottom, ${this.players[1].name} connects left to right.`);
+    this.message(`${this.players.get(1)!.name} connects top to bottom, ${this.players.get(2)!.name} connects left to right.`);
   }
 
   /**
@@ -93,12 +93,15 @@ export class HexGame extends Game<HexGame, HexPlayer> {
    * Apply colors from player configs
    */
   private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
-    for (let i = 0; i < this.players.length; i++) {
-      const config = playerConfigs?.[i];
+    // playerConfigs and DEFAULT_PLAYER_COLORS are 0-indexed arrays,
+    // but player.position is 1-indexed, so use position - 1 for array access
+    for (const player of this.players) {
+      const arrayIndex = player.position - 1;
+      const config = playerConfigs?.[arrayIndex];
       if (config?.color) {
-        this.players[i].color = config.color;
+        player.color = config.color;
       } else {
-        this.players[i].color = DEFAULT_PLAYER_COLORS[i] ?? DEFAULT_PLAYER_COLORS[0];
+        player.color = DEFAULT_PLAYER_COLORS[arrayIndex] ?? DEFAULT_PLAYER_COLORS[0];
       }
     }
   }

@@ -106,11 +106,20 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const workerPort = parseInt(options.workerPort, 10);
   const cwd = process.cwd();
 
-  // Parse AI options
+  // Parse AI options (player positions are 1-indexed)
   const aiPlayers = options.ai
     ? options.ai.flatMap(s => s.split(',').map(n => parseInt(n.trim(), 10))).filter(n => !isNaN(n))
     : [];
   const aiLevel = options.aiLevel ?? 'medium';
+
+  // Validate AI player positions are 1-indexed
+  const invalidAiPlayers = aiPlayers.filter(p => p < 1 || p > playerCount);
+  if (invalidAiPlayers.length > 0) {
+    console.error(chalk.red(`Error: Invalid AI player position(s): ${invalidAiPlayers.join(', ')}`));
+    console.error(chalk.dim(`Player positions are 1-indexed (1 to ${playerCount}).`));
+    console.error(chalk.dim(`Example: --ai 2 for a 2-player game means player 2 is AI.`));
+    process.exit(1);
+  }
 
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) {
@@ -252,38 +261,40 @@ export async function devCommand(options: DevOptions): Promise<void> {
         const gameId = persistedGames[0]; // Most recently updated game
         console.log(chalk.cyan(`\n  Resuming persisted game: ${gameId}`));
 
-        // Open browser tabs for players
+        // Open browser tabs for players (1-indexed positions)
         console.log(chalk.cyan(`  Opening ${playerCount} player tab(s)...`));
-        for (let i = 0; i < playerCount; i++) {
-          const url = `http://localhost:${port}/game/${gameId}/${i}`;
+        for (let position = 1; position <= playerCount; position++) {
+          const url = `http://localhost:${port}/game/${gameId}/${position}`;
           await open(url);
-          console.log(chalk.dim(`  Player ${i + 1}: ${url}`));
+          console.log(chalk.dim(`  Player ${position}: ${url}`));
         }
       } else {
         // No persisted games - create a new one
+        // aiPlayers contains 1-indexed positions from user input
         const playerNames = Array.from({ length: playerCount }, (_, i) =>
-          aiPlayers.includes(i) ? 'Bot' : `Player ${i + 1}`
+          aiPlayers.includes(i + 1) ? 'Bot' : `Player ${i + 1}`  // i+1 for 1-indexed
         );
         const gameId = await createGame(workerPort, gameDefinition.gameType, playerCount, playerNames);
 
         if (gameId) {
           console.log(chalk.cyan(`\n  Game created: ${gameId}`));
 
-          const humanPlayers = Array.from({ length: playerCount }, (_, i) => i)
-            .filter(i => !aiPlayers.includes(i));
+          // humanPlayers are 1-indexed positions
+          const humanPlayers = Array.from({ length: playerCount }, (_, i) => i + 1)
+            .filter(position => !aiPlayers.includes(position));
 
           if (humanPlayers.length > 0) {
             console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
-            for (const i of humanPlayers) {
-              const url = `http://localhost:${port}/game/${gameId}/${i}`;
+            for (const position of humanPlayers) {
+              const url = `http://localhost:${port}/game/${gameId}/${position}`;
               await open(url);
-              console.log(chalk.dim(`  Player ${i + 1}: ${url}`));
+              console.log(chalk.dim(`  Player ${position}: ${url}`));
             }
           }
 
-          for (const i of aiPlayers) {
-            if (i < playerCount) {
-              console.log(chalk.dim(`  Player ${i + 1}: AI (${aiLevel})`));
+          for (const position of aiPlayers) {
+            if (position >= 1 && position <= playerCount) {
+              console.log(chalk.dim(`  Player ${position}: AI (${aiLevel})`));
             }
           }
         } else {
@@ -293,31 +304,32 @@ export async function devCommand(options: DevOptions): Promise<void> {
       }
     } else {
       // Create a game with appropriate names for AI and human players
+      // aiPlayers contains 1-indexed positions from user input
       const playerNames = Array.from({ length: playerCount }, (_, i) =>
-        aiPlayers.includes(i) ? 'Bot' : `Player ${i + 1}`
+        aiPlayers.includes(i + 1) ? 'Bot' : `Player ${i + 1}`  // i+1 for 1-indexed
       );
       const gameId = await createGame(workerPort, gameDefinition.gameType, playerCount, playerNames);
 
       if (gameId) {
         console.log(chalk.cyan(`\n  Game created: ${gameId}`));
 
-        // Only open browser tabs for human players
-        const humanPlayers = Array.from({ length: playerCount }, (_, i) => i)
-          .filter(i => !aiPlayers.includes(i));
+        // Only open browser tabs for human players (1-indexed positions)
+        const humanPlayers = Array.from({ length: playerCount }, (_, i) => i + 1)
+          .filter(position => !aiPlayers.includes(position));
 
         if (humanPlayers.length > 0) {
           console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
-          for (const i of humanPlayers) {
-            const url = `http://localhost:${port}/game/${gameId}/${i}`;
+          for (const position of humanPlayers) {
+            const url = `http://localhost:${port}/game/${gameId}/${position}`;
             await open(url);
-            console.log(chalk.dim(`  Player ${i + 1}: ${url}`));
+            console.log(chalk.dim(`  Player ${position}: ${url}`));
           }
         }
 
         // Log AI player info
-        for (const i of aiPlayers) {
-          if (i < playerCount) {
-            console.log(chalk.dim(`  Player ${i + 1}: AI (${aiLevel})`));
+        for (const position of aiPlayers) {
+          if (position >= 1 && position <= playerCount) {
+            console.log(chalk.dim(`  Player ${position}: AI (${aiLevel})`));
           }
         }
       } else {

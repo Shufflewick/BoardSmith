@@ -98,7 +98,7 @@ const aiConfig: AIConfig = {
     // Negative weight = bad for the player
     exposedKing: {
       checker: (g, p) => {
-        const king = g.players[p].king;
+        const king = g.players.get(p)!.king;
         return king.isExposed();
       },
       weight: -0.5,

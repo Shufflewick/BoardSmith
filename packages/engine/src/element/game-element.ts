@@ -631,10 +631,10 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       return game.getElementById(ref.__elementId);
     }
 
-    // Handle player reference
+    // Handle player reference (stored as 1-indexed position)
     if (typeof value === 'object' && value !== null && '__playerRef' in value) {
       const ref = value as { __playerRef: number };
-      return game.players[ref.__playerRef];
+      return game.players.get(ref.__playerRef);
     }
 
     // Handle arrays

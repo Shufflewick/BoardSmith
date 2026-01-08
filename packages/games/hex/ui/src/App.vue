@@ -3,8 +3,11 @@ import { GameShell, AutoUI, findElement, getElementOwner, DEFAULT_PLAYER_COLORS 
 import HexBoard from './components/HexBoard.vue';
 
 // Get player color from player object or fallback
+// player.position is 1-indexed, DEFAULT_PLAYER_COLORS is 0-indexed
 function getPlayerColorHex(player: any): string {
-  return player?.color || DEFAULT_PLAYER_COLORS[player?.position ?? 0];
+  if (player?.color) return player.color;
+  const arrayIndex = (player?.position ?? 1) - 1;
+  return DEFAULT_PLAYER_COLORS[arrayIndex] ?? DEFAULT_PLAYER_COLORS[0];
 }
 
 // Count stones for a player from gameView using shared helpers
@@ -76,7 +79,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
       </div>
       <div class="player-stat">
         <span class="stat-label">Goal:</span>
-        <span class="stat-value goal">{{ player.position === 0 ? 'Top-Bottom' : 'Left-Right' }}</span>
+        <span class="stat-value goal">{{ player.position === 1 ? 'Top-Bottom' : 'Left-Right' }}</span>
       </div>
     </template>
   </GameShell>

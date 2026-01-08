@@ -17,8 +17,8 @@ describe('CribbageGame', () => {
         seed: 'test-seed',
       });
 
-      // Get game view for player 0
-      const gameView = testGame.game.toJSONForPlayer(0);
+      // Get game view for player 1 (1-indexed)
+      const gameView = testGame.game.toJSONForPlayer(1);
 
       // Find deck in gameView - search by $type or name (className can be mangled by bundlers)
       const deck = gameView.children?.find(c =>
@@ -27,7 +27,14 @@ describe('CribbageGame', () => {
 
       expect(deck).toBeDefined();
       expect(deck?.childCount).toBe(40); // 52 - 12 dealt
-      expect(deck?.children).toBeUndefined(); // Children should be hidden
+      // Children are included as hidden placeholders for UI rendering
+      // Each child should have __hidden: true (no real card data exposed)
+      if (deck?.children) {
+        for (const child of deck.children) {
+          expect(child.attributes.__hidden).toBe(true);
+          expect(child.name).toBeUndefined(); // Name hidden to prevent cheating
+        }
+      }
     });
   });
 
@@ -42,9 +49,9 @@ describe('CribbageGame', () => {
     });
 
     it('should randomly select first dealer', () => {
-      // Run multiple games and verify dealer is sometimes 0 and sometimes 1
-      let dealer0Count = 0;
+      // Run multiple games and verify dealer is sometimes position 1 and sometimes position 2
       let dealer1Count = 0;
+      let dealer2Count = 0;
 
       for (let i = 0; i < 20; i++) {
         const testGame = createTestGame(CribbageGame, {
@@ -53,13 +60,13 @@ describe('CribbageGame', () => {
           seed: `test-seed-${i}`,
         });
 
-        if (testGame.game.dealerPosition === 0) dealer0Count++;
-        else dealer1Count++;
+        if (testGame.game.dealerPosition === 1) dealer1Count++;
+        else dealer2Count++;
       }
 
       // With 20 games and random selection, both should have at least 1
-      expect(dealer0Count).toBeGreaterThan(0);
       expect(dealer1Count).toBeGreaterThan(0);
+      expect(dealer2Count).toBeGreaterThan(0);
     });
 
     it('should deal 6 cards to each player after startNewRound', () => {
@@ -69,8 +76,8 @@ describe('CribbageGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players[0] as CribbagePlayer;
-      const bob = testGame.game.players[1] as CribbagePlayer;
+      const alice = testGame.game.players.get(1)! as CribbagePlayer;
+      const bob = testGame.game.players.get(2)! as CribbagePlayer;
 
       const aliceHand = testGame.game.getPlayerHand(alice);
       const bobHand = testGame.game.getPlayerHand(bob);
@@ -89,8 +96,8 @@ describe('CribbageGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players[0] as CribbagePlayer;
-      const bob = testGame.game.players[1] as CribbagePlayer;
+      const alice = testGame.game.players.get(1)! as CribbagePlayer;
+      const bob = testGame.game.players.get(2)! as CribbagePlayer;
 
       // Get the cards in each hand before discarding
       const aliceHandBefore = [...testGame.game.getPlayerHand(alice).all(Card)];
@@ -122,7 +129,7 @@ describe('CribbageGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players[0] as CribbagePlayer;
+      const alice = testGame.game.players.get(1)! as CribbagePlayer;
 
       // Simulate discarding
       const aliceHand = testGame.game.getPlayerHand(alice);
@@ -162,7 +169,7 @@ describe('CribbageGame', () => {
         seed: 'scoring-test',
       });
 
-      const alice = testGame.game.players[0] as CribbagePlayer;
+      const alice = testGame.game.players.get(1)! as CribbagePlayer;
       const aliceHand = testGame.game.getPlayerHand(alice);
 
       // Game already dealt 6 cards to each player
@@ -209,8 +216,8 @@ describe('CribbageGame', () => {
       expect(testGame.game.playerSaidGo[0]).toBe(false);
       expect(testGame.game.playerSaidGo[1]).toBe(false);
 
-      // Simulate player 0 saying Go
-      testGame.game.playerSaidGo[0] = true;
+      // Simulate player 1 (Alice) saying Go - must set entire array since getter returns new array
+      testGame.game.playerSaidGo = [true, false];
 
       expect(testGame.game.playerSaidGo[0]).toBe(true);
       expect(testGame.game.playerSaidGo[1]).toBe(false);
@@ -223,9 +230,8 @@ describe('CribbageGame', () => {
         seed: 'go-reset-test',
       });
 
-      // Set both players as having said Go
-      testGame.game.playerSaidGo[0] = true;
-      testGame.game.playerSaidGo[1] = true;
+      // Set both players as having said Go - must set entire array
+      testGame.game.playerSaidGo = [true, true];
 
       // Reset count
       testGame.game.resetCount();
@@ -392,7 +398,7 @@ describe('CribbageGame', () => {
         seed: 'trace-demo',
       });
 
-      const alice = testGame.game.players[0] as CribbagePlayer;
+      const alice = testGame.game.players.get(1)! as CribbagePlayer;
       const trace = traceAction(testGame.game, 'discardToCrib', alice);
 
       // traceAction returns structured info about action availability
@@ -414,7 +420,7 @@ describe('CribbageGame', () => {
         seed: 'log-demo',
       });
 
-      const alice = testGame.game.players[0] as CribbagePlayer;
+      const alice = testGame.game.players.get(1)! as CribbagePlayer;
       const actionLog = logAvailableActions(testGame.game, alice);
 
       // Returns a string summarizing available actions
@@ -435,7 +441,7 @@ describe('CribbageGame', () => {
       const before = JSON.stringify(testGame.runner.getSnapshot());
 
       // Simulate a game state change
-      const alice = testGame.game.players[0] as CribbagePlayer;
+      const alice = testGame.game.players.get(1)! as CribbagePlayer;
       alice.score = 10;
 
       const after = JSON.stringify(testGame.runner.getSnapshot());

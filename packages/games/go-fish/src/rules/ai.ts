@@ -28,11 +28,11 @@ import type { GoFishGame } from './game.js';
  */
 export function getGoFishObjectives(
   game: Game,
-  playerIndex: number
+  playerIndex: number  // 1-indexed player position
 ): Record<string, Objective> {
   const goFishGame = game as GoFishGame;
-  const player = goFishGame.players[playerIndex] as Player;
-  const opponent = goFishGame.players[1 - playerIndex] as Player;
+  const player = goFishGame.players.get(playerIndex) as Player;
+  const opponent = goFishGame.players.get(playerIndex === 1 ? 2 : 1) as Player;
 
   return {
     // Player has higher bookCount than opponent

@@ -71,15 +71,15 @@ export function createCribbageFlow(): FlowDefinition {
         execute((ctx) => {
           const game = ctx.game as CribbageGame;
           const currentPlayer = game.getCurrentPlayPlayer();
-          const otherPlayer = game.players[1 - game.currentPlayTurn] as CribbagePlayer;
+          const otherPlayer = game.players.get(3 - game.currentPlayTurn) as CribbagePlayer;
 
           const currentCanPlay = game.getPlayableCards(currentPlayer).length > 0;
           const currentHasCards = game.getPlayerHand(currentPlayer).count(Card) > 0;
-          const currentSaidGo = game.playerSaidGo[currentPlayer.position];
+          const currentSaidGo = game.playerSaidGo[currentPlayer.position - 1];
 
           const otherCanPlay = game.getPlayableCards(otherPlayer).length > 0;
           const otherHasCards = game.getPlayerHand(otherPlayer).count(Card) > 0;
-          const otherSaidGo = game.playerSaidGo[otherPlayer.position];
+          const otherSaidGo = game.playerSaidGo[otherPlayer.position - 1];
 
           // Check if current player is stuck (said Go or can't play)
           const currentStuck = currentSaidGo || !currentCanPlay;
@@ -89,14 +89,14 @@ export function createCribbageFlow(): FlowDefinition {
           // If both players are stuck but at least one still has cards, reset count
           if (currentStuck && otherStuck && (currentHasCards || otherHasCards)) {
             // Award "Go" point to last player who played a card (if not already at 31)
-            if (game.lastPlayerToPlay >= 0 && game.runningTotal > 0 && game.runningTotal < 31) {
-              const lastPlayer = game.players[game.lastPlayerToPlay] as CribbagePlayer;
+            if (game.lastPlayerToPlay >= 1 && game.runningTotal > 0 && game.runningTotal < 31) {
+              const lastPlayer = game.players.get(game.lastPlayerToPlay) as CribbagePlayer;
               game.addPoints(lastPlayer, 1, 'Go');
             }
             game.resetCount();
             // Player who didn't play last leads the new count
-            if (game.lastPlayerToPlay >= 0) {
-              game.currentPlayTurn = 1 - game.lastPlayerToPlay;
+            if (game.lastPlayerToPlay >= 1) {
+              game.currentPlayTurn = 3 - game.lastPlayerToPlay;
             }
           }
         }),
@@ -119,7 +119,7 @@ export function createCribbageFlow(): FlowDefinition {
             // Skip if player has no cards
             if (!hasCards) return true;
 
-            const alreadySaidGo = game.playerSaidGo[currentPlayer.position];
+            const alreadySaidGo = game.playerSaidGo[currentPlayer.position - 1];
 
             // Skip if already said Go - once you say Go, you're out until count resets
             if (alreadySaidGo) return true;
@@ -134,10 +134,10 @@ export function createCribbageFlow(): FlowDefinition {
           const game = ctx.game as CribbageGame;
           if (game.isFinished() || game.allCardsPlayed()) return;
 
-          const otherPosition = 1 - game.currentPlayTurn;
-          const otherPlayer = game.players[otherPosition] as CribbagePlayer;
+          const otherPosition = 3 - game.currentPlayTurn;
+          const otherPlayer = game.players.get(otherPosition) as CribbagePlayer;
           const otherHasCards = game.getPlayerHand(otherPlayer).count(Card) > 0;
-          const otherSaidGo = game.playerSaidGo[otherPosition];
+          const otherSaidGo = game.playerSaidGo[otherPosition - 1];
 
           // Switch to other player only if they have cards AND haven't said Go
           // Once you say Go, you're done until count resets (even if you could now play)
@@ -153,7 +153,7 @@ export function createCribbageFlow(): FlowDefinition {
       execute((ctx) => {
         const game = ctx.game as CribbageGame;
         if (game.lastPlayerToPlay >= 0 && game.runningTotal > 0 && game.runningTotal < 31) {
-          const lastPlayer = game.players[game.lastPlayerToPlay] as CribbagePlayer;
+          const lastPlayer = game.players.get(game.lastPlayerToPlay) as CribbagePlayer;
           game.addPoints(lastPlayer, 1, 'Last card');
         }
         // Final reset

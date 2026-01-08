@@ -42,7 +42,7 @@ export interface MatchmakingResult {
   /** Game ID (if matched) */
   gameId?: string;
 
-  /** Player's position in the game (0-indexed, if matched) */
+  /** Player's position in the game (1-indexed, if matched) */
   playerPosition?: number;
 
   /** All player names in the match (if matched) */
@@ -302,7 +302,7 @@ export type SlotStatus = 'open' | 'ai' | 'claimed';
 
 /** Information about a player slot in the lobby */
 export interface LobbySlot {
-  /** Position index (0-based) */
+  /** Position index (1-based) */
   position: number;
   /** Current status of this slot */
   status: SlotStatus;

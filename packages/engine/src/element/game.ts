@@ -179,6 +179,14 @@ export class Game<
   /** All players in the game */
   players: PlayerCollection<P> = new PlayerCollection<P>();
 
+  /**
+   * Get the first player (position 1).
+   * Shorthand for `this.players.get(1)`.
+   */
+  get firstPlayer(): P {
+    return this.players.getOrThrow(1);
+  }
+
   /** Current game phase */
   phase: GamePhase = 'setup';
 
@@ -261,17 +269,17 @@ export class Game<
     this.pile = this.createElement(Space, '__pile__');
     this.pile._t.parent = undefined; // Remove from main tree
 
-    // Create players
+    // Create players (1-indexed: Player 1 has position 1)
     for (let i = 0; i < options.playerCount; i++) {
       const name = options.playerNames?.[i] ?? `Player ${i + 1}`;
-      const player = this.createPlayer(i, name);
+      const player = this.createPlayer(i + 1, name);  // 1-indexed position
       player.game = this as unknown as Game;
-      this.players.push(player as P);
+      this.players.add(player as P);
     }
 
     // Set first player as current
     if (this.players.length > 0) {
-      this.players.setCurrent(0);
+      this.players.setCurrent(1);  // Position 1 is first player
     }
 
     // Initialize action executor
@@ -593,9 +601,9 @@ export class Game<
    * Perform an action from serialized form (for network play)
    */
   performSerializedAction(serialized: SerializedAction): ActionResult {
-    const player = this.players[serialized.player];
+    const player = this.players.get(serialized.player);
     if (!player) {
-      return { success: false, error: `Invalid player: ${serialized.player}` };
+      return { success: false, error: `Invalid player position: ${serialized.player}. Expected 1 to ${this.players.length}.` };
     }
 
     return this.performAction(serialized.name, player as P, serialized.args);
@@ -1106,7 +1114,7 @@ export class Game<
   getCurrentFlowPlayer(): P | undefined {
     const state = this._flowEngine?.getState();
     if (state?.currentPlayer !== undefined) {
-      return this.players[state.currentPlayer];
+      return this.players.get(state.currentPlayer);
     }
     return undefined;
   }
@@ -1222,7 +1230,7 @@ export class Game<
   getWinners(): P[] {
     const positions = this.settings.winners as number[] | undefined;
     if (!positions) return [];
-    return positions.map(pos => this.players[pos]);
+    return positions.map(pos => this.players.get(pos)).filter((p): p is P => p !== undefined);
   }
 
   // ============================================
@@ -1231,12 +1239,13 @@ export class Game<
 
   /**
    * Set the current player context for "mine" queries
+   * @param player - Player object or 1-indexed position
    */
   setPlayerContext(player: P | number | undefined): void {
     if (player === undefined) {
       this._ctx.player = undefined;
     } else if (typeof player === 'number') {
-      this._ctx.player = this.players[player];
+      this._ctx.player = this.players.get(player);
     } else {
       this._ctx.player = player;
     }

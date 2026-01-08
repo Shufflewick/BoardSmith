@@ -87,8 +87,8 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
   /** Whether a poison was crafted this turn (vs potion) */
   craftedPoison: boolean = false;
 
-  /** Current player index for display functions */
-  currentPlayerIndex: number = 0;
+  /** Current player position for display functions (1-indexed) */
+  currentPlayerIndex: number = 1;
 
   /** Whether game end has been triggered */
   gameEndTriggered: boolean = false;

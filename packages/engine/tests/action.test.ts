@@ -116,7 +116,7 @@ describe('Action Builder', () => {
 
   it('should set condition', () => {
     const action = Action.create('test')
-      .condition((ctx) => ctx.player.position === 0)
+      .condition((ctx) => ctx.player.position === 1)
       .execute(() => {});
 
     expect(action.condition).toBeDefined();
@@ -140,7 +140,7 @@ describe('Action Executor', () => {
 
       const choices = executor.getChoices(
         action.selections[0],
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -154,23 +154,24 @@ describe('Action Executor', () => {
         })
         .execute(() => {});
 
+      // Player at position 2, so position * 2 = 4
       const choices = executor.getChoices(
         action.selections[0],
-        game.players[1],
+        game.players.get(2)!,
         {}
       );
 
-      expect(choices).toEqual([2]);
+      expect(choices).toEqual([4]);
     });
 
     it('should get player choices from playerChoices helper', () => {
       // With playerChoices helper, players are just choice objects
-      const playerChoices = game.playerChoices({ excludeSelf: true, currentPlayer: game.players[0] });
+      const playerChoices = game.playerChoices({ excludeSelf: true, currentPlayer: game.players.get(1)! });
 
       expect(playerChoices).toHaveLength(2);
-      expect(playerChoices.map(p => p.value)).not.toContain(0);
-      expect(playerChoices.map(p => p.value)).toContain(1);
+      expect(playerChoices.map(p => p.value)).not.toContain(1); // excludeSelf excludes player 1
       expect(playerChoices.map(p => p.value)).toContain(2);
+      expect(playerChoices.map(p => p.value)).toContain(3);
     });
 
     it('should filter elements by class', () => {
@@ -189,7 +190,7 @@ describe('Action Executor', () => {
 
       const choices = executor.getChoices(
         action.selections[0],
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -213,7 +214,7 @@ describe('Action Executor', () => {
 
       const choices = executor.getChoices(
         action.selections[0],
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -233,7 +234,7 @@ describe('Action Executor', () => {
 
       const result = executor.shouldSkip(
         action.selections[0],
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -250,14 +251,14 @@ describe('Action Executor', () => {
       const valid = executor.validateSelection(
         action.selections[0],
         'red',
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
       const invalid = executor.validateSelection(
         action.selections[0],
         'green',
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -273,21 +274,21 @@ describe('Action Executor', () => {
       const tooShort = executor.validateSelection(
         action.selections[0],
         'a',
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
       const tooLong = executor.validateSelection(
         action.selections[0],
         'abcdef',
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
       const justRight = executor.validateSelection(
         action.selections[0],
         'abc',
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -304,21 +305,21 @@ describe('Action Executor', () => {
       const tooSmall = executor.validateSelection(
         action.selections[0],
         0,
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
       const tooBig = executor.validateSelection(
         action.selections[0],
         11,
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
       const justRight = executor.validateSelection(
         action.selections[0],
         5,
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -335,14 +336,14 @@ describe('Action Executor', () => {
       const notInt = executor.validateSelection(
         action.selections[0],
         3.5,
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
       const isInt = executor.validateSelection(
         action.selections[0],
         3,
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -360,14 +361,14 @@ describe('Action Executor', () => {
       const forbidden = executor.validateSelection(
         action.selections[0],
         'forbidden',
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
       const allowed = executor.validateSelection(
         action.selections[0],
         'allowed',
-        game.players[0],
+        game.players.get(1)!,
         {}
       );
 
@@ -380,7 +381,7 @@ describe('Action Executor', () => {
   describe('validateAction', () => {
     it('should validate complete action args', () => {
       // Using playerChoices helper pattern
-      const playerChoices = game.playerChoices({ excludeSelf: true, currentPlayer: game.players[0] });
+      const playerChoices = game.playerChoices({ excludeSelf: true, currentPlayer: game.players.get(1)! });
       const action = Action.create('ask')
         .chooseFrom('target', {
           choices: playerChoices,
@@ -388,7 +389,7 @@ describe('Action Executor', () => {
         .chooseFrom('rank', { choices: ['A', 'K', 'Q'] })
         .execute(() => {});
 
-      const result = executor.validateAction(action, game.players[0], {
+      const result = executor.validateAction(action, game.players.get(1)!, {
         target: playerChoices[0], // First player choice (position 1)
         rank: 'A',
       });
@@ -401,7 +402,7 @@ describe('Action Executor', () => {
         .chooseFrom('required', { choices: ['a', 'b'] })
         .execute(() => {});
 
-      const result = executor.validateAction(action, game.players[0], {});
+      const result = executor.validateAction(action, game.players.get(1)!, {});
 
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('Missing required');
@@ -415,7 +416,7 @@ describe('Action Executor', () => {
         })
         .execute(() => {});
 
-      const result = executor.validateAction(action, game.players[0], {});
+      const result = executor.validateAction(action, game.players.get(1)!, {});
 
       expect(result.valid).toBe(true);
     });
@@ -425,7 +426,7 @@ describe('Action Executor', () => {
         .condition(() => false)
         .execute(() => {});
 
-      const result = executor.validateAction(action, game.players[0], {});
+      const result = executor.validateAction(action, game.players.get(1)!, {});
 
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('not available');
@@ -440,7 +441,7 @@ describe('Action Executor', () => {
         return { success: true, message: 'Done!' };
       });
 
-      const result = executor.executeAction(action, game.players[0], {});
+      const result = executor.executeAction(action, game.players.get(1)!, {});
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Done!');
@@ -455,7 +456,7 @@ describe('Action Executor', () => {
           receivedArgs = args;
         });
 
-      executor.executeAction(action, game.players[0], { choice: 'a' });
+      executor.executeAction(action, game.players.get(1)!, { choice: 'a' });
 
       expect(receivedArgs.choice).toBe('a');
     });
@@ -474,7 +475,7 @@ describe('Action Executor', () => {
         });
 
       // UI sends just the value string
-      executor.executeAction(action, game.players[0], { option: 'skip' });
+      executor.executeAction(action, game.players.get(1)!, { option: 'skip' });
 
       // Execute handler should receive just the value, not the full object
       expect(receivedArgs.option).toBe('skip');
@@ -493,7 +494,7 @@ describe('Action Executor', () => {
           receivedArgs = args;
         });
 
-      executor.executeAction(action, game.players[0], { action: 'attack' });
+      executor.executeAction(action, game.players.get(1)!, { action: 'attack' });
 
       expect(receivedArgs.action).toBe('attack');
     });
@@ -512,7 +513,7 @@ describe('Action Executor', () => {
         });
 
       // UI sends element ID
-      executor.executeAction(action, game.players[0], { card: card.id });
+      executor.executeAction(action, game.players.get(1)!, { card: card.id });
 
       // Execute handler should receive the full element (not just its 'value' attribute)
       expect(receivedArgs.card).toBe(card);
@@ -524,9 +525,9 @@ describe('Action Executor', () => {
         receivedContext = ctx;
       });
 
-      executor.executeAction(action, game.players[1], {});
+      executor.executeAction(action, game.players.get(2)!, {});
 
-      expect(receivedContext?.player).toBe(game.players[1]);
+      expect(receivedContext?.player).toBe(game.players.get(2)!);
       expect(receivedContext?.game).toBe(game);
     });
 
@@ -535,7 +536,7 @@ describe('Action Executor', () => {
         .chooseFrom('choice', { choices: ['a', 'b'] })
         .execute(() => {});
 
-      const result = executor.executeAction(action, game.players[0], {
+      const result = executor.executeAction(action, game.players.get(1)!, {
         choice: 'invalid',
       });
 
@@ -548,7 +549,7 @@ describe('Action Executor', () => {
         throw new Error('Something went wrong');
       });
 
-      const result = executor.executeAction(action, game.players[0], {});
+      const result = executor.executeAction(action, game.players.get(1)!, {});
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Something went wrong');
@@ -561,7 +562,7 @@ describe('Action Executor', () => {
         .condition(() => true)
         .execute(() => {});
 
-      expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+      expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
     });
 
     it('should return false when condition fails', () => {
@@ -569,7 +570,7 @@ describe('Action Executor', () => {
         .condition(() => false)
         .execute(() => {});
 
-      expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+      expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(false);
     });
 
     it('should return false when no valid choices for required selection', () => {
@@ -578,7 +579,7 @@ describe('Action Executor', () => {
         .execute(() => {});
 
       // No cards in game
-      expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+      expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(false);
     });
 
     it('should return true when optional selection has no choices', () => {
@@ -589,7 +590,7 @@ describe('Action Executor', () => {
         })
         .execute(() => {});
 
-      expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+      expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
     });
   });
 });
@@ -626,7 +627,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
     // Without previous selection, all destinations available
     const allDests = executor.getChoices(
       action.selections[1],
-      game.players[0],
+      game.players.get(1)!,
       {}
     );
     expect(allDests).toHaveLength(4);
@@ -634,7 +635,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
     // With piece 1 selected, only A and B should be available
     const destsForPiece1 = executor.getChoices(
       action.selections[1],
-      game.players[0],
+      game.players.get(1)!,
       { piece: { pieceId: 1 } }
     );
     expect(destsForPiece1).toHaveLength(2);
@@ -646,7 +647,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
     // With piece 2 selected, only C should be available
     const destsForPiece2 = executor.getChoices(
       action.selections[1],
-      game.players[0],
+      game.players.get(1)!,
       { piece: { pieceId: 2 } }
     );
     expect(destsForPiece2).toHaveLength(1);
@@ -668,7 +669,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
 
     const itemsForA = executor.getChoices(
       action.selections[1],
-      game.players[0],
+      game.players.get(1)!,
       { category: 'A' }
     );
     expect(itemsForA).toHaveLength(2);
@@ -691,7 +692,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
       .execute(() => {});
 
     // Action should not be available because piece 3 has no destinations
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(false);
   });
 
   it('should show action when at least one valid path exists', () => {
@@ -709,7 +710,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
       .execute(() => {});
 
     // Action should be available because piece 1 has valid destinations
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
   });
 
   it('should handle multiple levels of dependent selections', () => {
@@ -738,7 +739,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
     // Get actions for item 10 (which belongs to category 1)
     const actionsForItem10 = executor.getChoices(
       action.selections[2],
-      game.players[0],
+      game.players.get(1)!,
       { category: { categoryId: 1 }, item: { categoryId: 1, itemId: 10 } }
     );
     expect(actionsForItem10).toHaveLength(2);
@@ -791,7 +792,7 @@ describe('Dependent Selection with dependsOn', () => {
       .execute(() => {});
 
     // Action should be available because merc1 and merc2 have equipment
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
   });
 
   it('should make action unavailable when no upstream choice leads to valid downstream choices', () => {
@@ -812,7 +813,7 @@ describe('Dependent Selection with dependsOn', () => {
       .execute(() => {});
 
     // Action should NOT be available because merc3 has no equipment
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(false);
   });
 
   it('should be available when at least one upstream choice leads to valid path', () => {
@@ -833,7 +834,7 @@ describe('Dependent Selection with dependsOn', () => {
       .execute(() => {});
 
     // Action should be available because merc1 and merc2 have equipment
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
   });
 
   it('should work with chooseElement selections', () => {
@@ -852,7 +853,7 @@ describe('Dependent Selection with dependsOn', () => {
       .execute(() => {});
 
     // Action should be available
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
   });
 
   it('should work with dynamic choice selections', () => {
@@ -873,7 +874,7 @@ describe('Dependent Selection with dependsOn', () => {
       .execute(() => {});
 
     // Action should be available
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
   });
 
   it('should handle multiple levels of dependencies', () => {
@@ -904,7 +905,7 @@ describe('Dependent Selection with dependsOn', () => {
       .execute(() => {});
 
     // Action should be available (weapons->sword->equip is a valid path)
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(true);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(true);
   });
 
   it('should be unavailable when multi-level path has no valid terminus', () => {
@@ -931,7 +932,7 @@ describe('Dependent Selection with dependsOn', () => {
       .execute(() => {});
 
     // Action should NOT be available (empty->nothing->[] has no valid path)
-    expect(executor.isActionAvailable(action, game.players[0])).toBe(false);
+    expect(executor.isActionAvailable(action, game.players.get(1)!)).toBe(false);
   });
 });
 
@@ -972,7 +973,7 @@ describe('Better Filter Error Messages', () => {
     // When checking availability, the filter runs with ctx.args.piece = undefined
     // This should throw a helpful error instead of generic "Cannot read properties of undefined"
     expect(() => {
-      executor.getChoices(action.selections[1], game.players[0], {});
+      executor.getChoices(action.selections[1], game.players.get(1)!, {});
     }).toThrowError(/Filter for selection 'destination' crashed/);
   });
 
@@ -989,7 +990,7 @@ describe('Better Filter Error Messages', () => {
       .execute(() => {});
 
     try {
-      executor.getChoices(action.selections[1], game.players[0], {});
+      executor.getChoices(action.selections[1], game.players.get(1)!, {});
       expect.fail('Should have thrown');
     } catch (e) {
       const message = (e as Error).message;
@@ -1010,7 +1011,7 @@ describe('Better Filter Error Messages', () => {
       .execute(() => {});
 
     expect(() => {
-      executor.getChoices(action.selections[0], game.players[0], {});
+      executor.getChoices(action.selections[0], game.players.get(1)!, {});
     }).toThrowError('Custom error');
   });
 
@@ -1029,7 +1030,7 @@ describe('Better Filter Error Messages', () => {
       .execute(() => {});
 
     // Should not throw
-    const choices = executor.getChoices(action.selections[1], game.players[0], {});
+    const choices = executor.getChoices(action.selections[1], game.players.get(1)!, {});
     expect(choices.length).toBe(5); // All cards available during availability check
   });
 });
@@ -1039,8 +1040,8 @@ describe('Game Action Integration', () => {
 
   beforeEach(() => {
     game = new TestGame({ playerCount: 2 });
-    game.create(Hand, 'hand', { player: game.players[0] });
-    game.create(Hand, 'hand', { player: game.players[1] });
+    game.create(Hand, 'hand', { player: game.players.get(1)! });
+    game.create(Hand, 'hand', { player: game.players.get(2)! });
     const deck = game.create(Deck, 'deck');
     deck.createMany(10, Card, 'card', (i) => ({
       suit: i < 5 ? 'H' : 'S',
@@ -1081,7 +1082,7 @@ describe('Game Action Integration', () => {
 
     game.registerActions(always, never);
 
-    const available = game.getAvailableActions(game.players[0]);
+    const available = game.getAvailableActions(game.players.get(1)!);
 
     expect(available).toContain(always);
     expect(available).not.toContain(never);
@@ -1097,7 +1098,7 @@ describe('Game Action Integration', () => {
     const choices = game.getSelectionChoices(
       'choose',
       'color',
-      game.players[0]
+      game.players.get(1)!
     );
 
     expect(choices).toEqual(['red', 'blue']);
@@ -1116,14 +1117,14 @@ describe('Game Action Integration', () => {
     game.registerAction(action);
 
     const card = game.first(Card)!;
-    const result = game.performAction('draw', game.players[0], { card });
+    const result = game.performAction('draw', game.players.get(1)!, { card });
 
     expect(result.success).toBe(true);
     expect(moved).toBe(true);
   });
 
   it('should fail for unknown action', () => {
-    const result = game.performAction('unknown', game.players[0], {});
+    const result = game.performAction('unknown', game.players.get(1)!, {});
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Unknown action');
@@ -1139,7 +1140,7 @@ describe('Game Action Integration', () => {
 
     const result = game.performSerializedAction({
       name: 'test',
-      player: 0,
+      player: 1,
       args: {},
     });
 
@@ -1173,7 +1174,7 @@ describe('Action Chaining with followUp', () => {
 
     game.registerAction(action);
 
-    const result = game.performAction('explore', game.players[0], {});
+    const result = game.performAction('explore', game.players.get(1)!, {});
 
     expect(result.success).toBe(true);
     expect(result.followUp).toBeDefined();
@@ -1189,7 +1190,7 @@ describe('Action Chaining with followUp', () => {
 
     game.registerAction(action);
 
-    const result = game.performAction('simple', game.players[0], {});
+    const result = game.performAction('simple', game.players.get(1)!, {});
 
     expect(result.success).toBe(true);
     expect(result.followUp).toBeUndefined();
@@ -1220,7 +1221,7 @@ describe('Action Chaining with followUp', () => {
     game.registerAction(explore);
 
     // Execute explore - should have followUp since we drew a card
-    const result = game.performAction('explore', game.players[0], {});
+    const result = game.performAction('explore', game.players.get(1)!, {});
 
     expect(result.success).toBe(true);
     expect(result.followUp).toBeDefined();
@@ -1240,7 +1241,7 @@ describe('Action Chaining with followUp', () => {
 
     game.registerAction(action);
 
-    const result = game.performAction('trigger', game.players[0], {});
+    const result = game.performAction('trigger', game.players.get(1)!, {});
 
     expect(result.success).toBe(true);
     expect(result.followUp?.action).toBe('nextAction');
@@ -1264,7 +1265,7 @@ describe('Action Chaining with followUp', () => {
     game.registerAction(action);
 
     const card = game.first(Card)!;
-    const result = game.performAction('selectAndChain', game.players[0], { card });
+    const result = game.performAction('selectAndChain', game.players.get(1)!, { card });
 
     expect(result.success).toBe(true);
     expect(result.followUp?.action).toBe('processCard');
@@ -1281,7 +1282,7 @@ describe('actionTempState helper', () => {
   });
 
   it('should store and retrieve values', () => {
-    const player = game.players[0];
+    const player = game.players.get(1)!;
     const temp = actionTempState(game, player, 'testAction');
 
     temp.set('key1', 'value1');
@@ -1293,7 +1294,7 @@ describe('actionTempState helper', () => {
   });
 
   it('should clear all values for the action', () => {
-    const player = game.players[0];
+    const player = game.players.get(1)!;
     const temp = actionTempState(game, player, 'testAction');
 
     temp.set('key1', 'value1');
@@ -1305,8 +1306,8 @@ describe('actionTempState helper', () => {
   });
 
   it('should namespace by action and player', () => {
-    const player0 = game.players[0];
-    const player1 = game.players[1];
+    const player0 = game.players.get(1)!;
+    const player1 = game.players.get(2)!;
 
     const temp0Action1 = actionTempState(game, player0, 'action1');
     const temp0Action2 = actionTempState(game, player0, 'action2');
@@ -1330,7 +1331,7 @@ describe('actionTempState helper', () => {
   it('should work with ActionContext overload', () => {
     const ctx: ActionContext = {
       game,
-      player: game.players[0],
+      player: game.players.get(1)!,
       args: {},
     };
 

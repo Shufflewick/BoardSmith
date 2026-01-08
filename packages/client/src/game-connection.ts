@@ -214,7 +214,7 @@ export class GameConnection {
     const wsUrl = new URL(`${wsProtocol}//${httpUrl.host}${httpUrl.pathname}`);
 
     wsUrl.searchParams.set('playerId', this.config.playerId);
-    if (this.config.playerPosition >= 0) {
+    if (this.config.playerPosition >= 1) {
       wsUrl.searchParams.set('player', String(this.config.playerPosition));
     }
     if (this.config.spectator) {

@@ -142,7 +142,7 @@ export class Board extends HexGrid<HexGame, HexPlayer> {
    * Uses flood fill / BFS from starting edge
    */
   checkWin(player: HexPlayer): boolean {
-    const isRed = player.position === 0;
+    const isRed = player.position === 1;
     const size = this.boardSize;
 
     // Get all cells on player's starting edge that have their stone

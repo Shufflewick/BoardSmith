@@ -166,7 +166,7 @@ export class GameServerCore {
       if (stateAtMatch && method === 'GET') {
         const gameId = stateAtMatch[1];
         const actionIndex = parseInt(stateAtMatch[2], 10);
-        const playerPosition = parseInt(query.player || '0', 10);
+        const playerPosition = parseInt(query.player || '1', 10);
         return await handleGetStateAt(this.#store, gameId, actionIndex, playerPosition);
       }
 
@@ -176,7 +176,7 @@ export class GameServerCore {
         const gameId = stateDiffMatch[1];
         const fromIndex = parseInt(stateDiffMatch[2], 10);
         const toIndex = parseInt(stateDiffMatch[3], 10);
-        const playerPosition = parseInt(query.player || '0', 10);
+        const playerPosition = parseInt(query.player || '1', 10);
         return await handleGetStateDiff(this.#store, gameId, fromIndex, toIndex, playerPosition);
       }
 
@@ -185,7 +185,7 @@ export class GameServerCore {
       if (actionTracesMatch && method === 'GET') {
         // Note: This is a debug endpoint. Consider disabling in production.
         const gameId = actionTracesMatch[1];
-        const playerPosition = parseInt(query.player || '0', 10);
+        const playerPosition = parseInt(query.player || '1', 10);
         return await handleGetActionTraces(this.#store, gameId, playerPosition);
       }
 
@@ -221,7 +221,7 @@ export class GameServerCore {
       const pendingActionMatch = path.match(/^\/games\/([^/]+)\/pending-action$/);
       if (pendingActionMatch && method === 'GET') {
         const gameId = pendingActionMatch[1];
-        const playerPosition = parseInt(query.player || '0', 10);
+        const playerPosition = parseInt(query.player || '1', 10);
         return await handleGetPendingAction(this.#store, gameId, playerPosition);
       }
 
@@ -290,7 +290,7 @@ export class GameServerCore {
       const undoMatch = path.match(/^\/games\/([^/]+)\/undo$/);
       if (undoMatch && method === 'POST') {
         const gameId = undoMatch[1];
-        const playerPosition = (body as { player?: number })?.player ?? 0;
+        const playerPosition = (body as { player?: number })?.player ?? 1;
         return await handleUndo(this.#store, gameId, playerPosition);
       }
 

@@ -149,7 +149,8 @@ export async function handleCreateGame(
     useLobby,
   });
 
-  const state = session.getState(0);
+  // Get initial state from player 1's perspective
+  const state = session.getState(1);
 
   // Include lobby info if using lobby flow
   const lobby = useLobby ? session.getLobbyInfo() : undefined;
@@ -179,7 +180,8 @@ export async function handleGetGame(
     return error('Game not found', 404);
   }
 
-  const player = playerPosition ?? 0;
+  // Default to player 1 if not specified (1-indexed)
+  const player = playerPosition ?? 1;
   const result = session.getState(player);
 
   return success(result);
@@ -350,7 +352,8 @@ export async function handleRestart(
     gameOptions: storedState.gameOptions,
   });
 
-  const state = newSession.getState(0);
+  // Get initial state from player 1's perspective
+  const state = newSession.getState(1);
 
   return success({
     success: true,

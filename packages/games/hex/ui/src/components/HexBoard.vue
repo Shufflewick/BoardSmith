@@ -120,10 +120,10 @@ async function handleCellClick(cell: Cell) {
   await props.actionController.execute('placeStone', { cell: cell.id });
 }
 
-// Get stone color class
+// Get stone color class (player positions are 1-indexed)
 function getStoneClass(stone: Stone): string {
   const playerPos = stone.attributes?.player?.position;
-  return playerPos === 0 ? 'player-0' : 'player-1';
+  return playerPos === 1 ? 'player-1' : 'player-2';
 }
 
 // Check stone ownership
@@ -135,19 +135,23 @@ function isOpponentStone(stone: Stone | undefined): boolean {
   return isOpponentElement(stone as GameViewElement | undefined, props.playerPosition);
 }
 
-// Get player colors from game state
+// Get player colors from game state (returns 0-indexed array)
 const getPlayerColors = computed(() => {
   const board = props.gameView?.children?.find((c: any) => c.className === 'Board');
   if (!board) return [...DEFAULT_PLAYER_COLORS];
 
   // Extract player colors from the game state
-  // Players are available in the parent game view
+  // Players array is 0-indexed (players[0] = Player 1)
   const players = props.gameView?.players || [];
   return players.map((p: any, i: number) => p.color || DEFAULT_PLAYER_COLORS[i] || DEFAULT_PLAYER_COLORS[0]);
 });
 
-const myColor = computed(() => getPlayerColors.value[props.playerPosition] || DEFAULT_PLAYER_COLORS[0]);
-const opponentColor = computed(() => getPlayerColors.value[1 - props.playerPosition] || DEFAULT_PLAYER_COLORS[1]);
+// playerPosition is 1-indexed, so use position - 1 for array access
+const myColor = computed(() => getPlayerColors.value[props.playerPosition - 1] || DEFAULT_PLAYER_COLORS[0]);
+const opponentColor = computed(() => {
+  const opponentArrayIndex = props.playerPosition === 1 ? 1 : 0;
+  return getPlayerColors.value[opponentArrayIndex] || DEFAULT_PLAYER_COLORS[1];
+});
 
 // Helper to lighten a hex color
 function lightenColor(hex: string, percent: number): string {
@@ -167,10 +171,10 @@ function darkenColor(hex: string, percent: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-// Get stone fill color
+// Get stone fill color (playerPos is 1-indexed, array is 0-indexed)
 function getStoneColor(stone: Stone): string {
-  const playerPos = stone.attributes?.player?.position ?? 0;
-  return getPlayerColors.value[playerPos] || '#888888';
+  const playerPos = stone.attributes?.player?.position ?? 1;
+  return getPlayerColors.value[playerPos - 1] || '#888888';
 }
 
 // Get stone glow color (lighter version)
@@ -286,7 +290,7 @@ watch(
             class="hex-stone"
             :class="{ 'is-mine': isMyStone(stone), 'is-opponent': isOpponentStone(stone) }"
             :style="{
-              fill: `url(#player${stone.attributes?.player?.position ?? 0}StoneGradient)`,
+              fill: `url(#player${(stone.attributes?.player?.position ?? 1) - 1}StoneGradient)`,
               stroke: lightenColor(getStoneColor(stone), 0.2),
             }"
           />

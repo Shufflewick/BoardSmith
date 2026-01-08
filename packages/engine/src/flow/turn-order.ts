@@ -83,21 +83,22 @@ export const TurnOrder = {
     direction: 'forward' as const,
     startingPlayer: (ctx: FlowContext) => {
       if (typeof getPlayer === 'number') {
-        return ctx.game.players[getPlayer];
+        // Position is 1-indexed
+        return ctx.game.players.getOrThrow(getPlayer);
       }
       return getPlayer(ctx);
     },
   }),
 
   /**
-   * Only include specific players by position.
-   * Players are still visited in their natural order (0, 1, 2...).
+   * Only include specific players by position (1-indexed).
+   * Players are still visited in their natural order (1, 2, 3...).
    *
    * @example
    * ```typescript
-   * // Only players 0 and 2 participate
+   * // Only players 1 and 3 participate
    * eachPlayer({
-   *   ...TurnOrder.ONLY([0, 2]),
+   *   ...TurnOrder.ONLY([1, 3]),
    *   do: actionStep({ actions: ['bid'] })
    * })
    * ```
@@ -113,16 +114,17 @@ export const TurnOrder = {
    *
    * @example
    * ```typescript
-   * // In game class: dealerPosition: number = 0;
+   * // In game class: dealerPosition: number = 1; (1-indexed)
    *
    * eachPlayer({
    *   ...TurnOrder.LEFT_OF_DEALER(ctx => ctx.game.dealerPosition),
    *   do: actionStep({ actions: ['bet', 'fold'] })
    * })
    *
-   * // At end of hand:
+   * // At end of hand - use nextAfter to handle wrap-around:
    * execute(ctx => {
-   *   ctx.game.dealerPosition = (ctx.game.dealerPosition + 1) % ctx.game.players.length;
+   *   const dealer = ctx.game.players.get(ctx.game.dealerPosition);
+   *   ctx.game.dealerPosition = ctx.game.players.nextAfter(dealer).position;
    * })
    * ```
    */
@@ -130,8 +132,8 @@ export const TurnOrder = {
     direction: 'forward' as const,
     startingPlayer: (ctx: FlowContext) => {
       const dealerPos = getDealerPosition(ctx);
-      const nextPos = (dealerPos + 1) % ctx.game.players.length;
-      return ctx.game.players[nextPos];
+      const dealer = ctx.game.players.getOrThrow(dealerPos);
+      return ctx.game.players.nextAfter(dealer);
     },
   }),
 

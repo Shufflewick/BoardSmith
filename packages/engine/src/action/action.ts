@@ -853,12 +853,16 @@ export class ActionExecutor {
    * @returns true if the value can be resolved to a valid choice
    */
   private trySmartResolveChoice(value: unknown, choices: unknown[]): boolean {
-    // Try element ID match
+    // Try element ID match or value match for numbers
     if (typeof value === 'number') {
       for (const choice of choices) {
-        // Check if choice is an element with matching ID
-        if (choice && typeof choice === 'object' && 'id' in choice) {
-          if ((choice as { id: number }).id === value) {
+        if (choice && typeof choice === 'object') {
+          // Check if choice is an element with matching ID
+          if ('id' in choice && (choice as { id: number }).id === value) {
+            return true;
+          }
+          // Check if choice has matching 'value' property (for playerChoices pattern)
+          if ('value' in choice && (choice as { value: number }).value === value) {
             return true;
           }
         }

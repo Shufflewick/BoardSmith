@@ -209,7 +209,7 @@ const isPerformingAction = ref(false);
 // Computed properties
 const cribbagePhase = computed(() => props.gameView?.attributes?.cribbagePhase || 'dealing');
 const runningTotal = computed(() => props.gameView?.attributes?.runningTotal || 0);
-const dealerPosition = computed(() => props.gameView?.attributes?.dealerPosition ?? 0);
+const dealerPosition = computed(() => props.gameView?.attributes?.dealerPosition ?? 1);  // 1-indexed
 const targetScore = computed(() => props.gameView?.attributes?.targetScore || 121);
 
 // Find player hands using helper (searches by $type which handles bundler mangling)

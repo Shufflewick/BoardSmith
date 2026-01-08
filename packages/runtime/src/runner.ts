@@ -89,7 +89,7 @@ export class GameRunner<G extends Game = Game> {
     args: Record<string, unknown>
   ): ActionExecutionResult {
     const playerObj = typeof player === 'number'
-      ? this.game.players[player]
+      ? this.game.players.get(player)
       : player;
 
     if (!playerObj) {

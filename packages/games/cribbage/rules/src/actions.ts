@@ -136,24 +136,24 @@ export function createSayGoAction(game: CribbageGame): ActionDefinition {
       // Must say Go if in play phase, has cards in hand, but none are playable
       return game.cribbagePhase === 'play' &&
              game.mustSayGo(player) &&
-             !game.playerSaidGo[player.position];
+             !game.playerSaidGo[player.position - 1];
     })
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;
       const player = ctx.player as CribbagePlayer;
-      game.playerSaidGo[player.position] = true;
+      game.playerSaidGo[player.position - 1] = true;
       game.message(`${player.name} says "Go"`);
 
       // Check if both players have said Go
       const otherPlayer = game.players.find(p => p.position !== player.position) as CribbagePlayer;
-      const otherSaidGo = game.playerSaidGo[otherPlayer.position];
+      const otherSaidGo = game.playerSaidGo[otherPlayer.position - 1];
       const otherCanPlay = game.getPlayableCards(otherPlayer).length > 0;
       const otherHasCards = game.getPlayerHand(otherPlayer).count(Card) > 0;
 
       // If other player already said Go or has no cards, last player to play gets 1 point
       if ((otherSaidGo && !otherCanPlay) || !otherHasCards) {
         // Award point for "Go" or "Last card"
-        const lastPlayer = game.players[game.lastPlayerToPlay] as CribbagePlayer;
+        const lastPlayer = game.players.get(game.lastPlayerToPlay) as CribbagePlayer;
         if (lastPlayer) {
           game.addPoints(lastPlayer, 1, game.runningTotal === 31 ? 'Thirty-one' : 'Go');
         }

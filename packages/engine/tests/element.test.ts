@@ -32,8 +32,8 @@ describe('Element Tree', () => {
   describe('Game creation', () => {
     it('should create a game with players', () => {
       expect(game.players.length).toBe(2);
-      expect(game.players[0].position).toBe(0);
-      expect(game.players[1].position).toBe(1);
+      expect(game.players.get(1)!.position).toBe(1);
+      expect(game.players.get(2)!.position).toBe(2);
     });
 
     it('should have a pile for removed elements', () => {
@@ -49,8 +49,8 @@ describe('Element Tree', () => {
         playerCount: 2,
         playerNames: ['Alice', 'Bob'],
       });
-      expect(namedGame.players[0].name).toBe('Alice');
-      expect(namedGame.players[1].name).toBe('Bob');
+      expect(namedGame.players.get(1)!.name).toBe('Alice');
+      expect(namedGame.players.get(2)!.name).toBe('Bob');
     });
   });
 
@@ -313,31 +313,31 @@ describe('Visibility', () => {
   beforeEach(() => {
     game = new TestGame({ playerCount: 2 });
     hand = game.create(Hand, 'hand');
-    hand.player = game.players[0];
+    hand.player = game.players.get(1)!;
     card = hand.create(Card, 'card', { suit: 'H', rank: 'A', value: 14 });
   });
 
   it('should show piece to all by default', () => {
-    expect(card.isVisibleTo(0)).toBe(true);
     expect(card.isVisibleTo(1)).toBe(true);
+    expect(card.isVisibleTo(2)).toBe(true);
   });
 
   it('should hide piece from all', () => {
     card.hideFromAll();
-    expect(card.isVisibleTo(0)).toBe(false);
     expect(card.isVisibleTo(1)).toBe(false);
+    expect(card.isVisibleTo(2)).toBe(false);
   });
 
   it('should show only to specific player', () => {
-    card.showOnlyTo(0);
-    expect(card.isVisibleTo(0)).toBe(true);
-    expect(card.isVisibleTo(1)).toBe(false);
+    card.showOnlyTo(1);
+    expect(card.isVisibleTo(1)).toBe(true);
+    expect(card.isVisibleTo(2)).toBe(false);
   });
 
   it('should hide from specific player', () => {
-    card.hideFrom(1);
-    expect(card.isVisibleTo(0)).toBe(true);
-    expect(card.isVisibleTo(1)).toBe(false);
+    card.hideFrom(2);
+    expect(card.isVisibleTo(1)).toBe(true);
+    expect(card.isVisibleTo(2)).toBe(false);
   });
 
   it('should apply space visibility rules on enter', () => {
@@ -345,8 +345,8 @@ describe('Visibility', () => {
 
     const newCard = hand.create(Card, 'newCard', { suit: 'S', rank: 'K', value: 13 });
 
-    expect(newCard.isVisibleTo(0)).toBe(true); // Owner
-    expect(newCard.isVisibleTo(1)).toBe(false); // Not owner
+    expect(newCard.isVisibleTo(1)).toBe(true); // Owner (player 1)
+    expect(newCard.isVisibleTo(2)).toBe(false); // Not owner (player 2)
   });
 });
 
@@ -436,23 +436,23 @@ describe('Serialization', () => {
 
   it('should serialize per-player view', () => {
     const hand = game.create(Hand, 'hand');
-    hand.player = game.players[0];
+    hand.player = game.players.get(1)!;
     hand.contentsVisibleToOwner();
 
     const card = hand.create(Card, 'secret', { suit: 'S', rank: 'A', value: 14 });
 
-    const player0View = game.toJSONForPlayer(0);
-    const player1View = game.toJSONForPlayer(1);
+    const player1View = game.toJSONForPlayer(1); // Player 1 is the owner
+    const player2View = game.toJSONForPlayer(2); // Player 2 is not the owner
 
-    // Player 0 should see the card
-    const hand0 = player0View.children?.find(c => c.name === 'hand');
-    const card0 = hand0?.children?.[0];
-    expect(card0?.attributes.__hidden).toBeUndefined();
-
-    // Player 1 should see hidden placeholder
+    // Player 1 (owner) should see the card
     const hand1 = player1View.children?.find(c => c.name === 'hand');
     const card1 = hand1?.children?.[0];
-    expect(card1?.attributes.__hidden).toBe(true);
+    expect(card1?.attributes.__hidden).toBeUndefined();
+
+    // Player 2 (non-owner) should see hidden placeholder
+    const hand2 = player2View.children?.find(c => c.name === 'hand');
+    const card2 = hand2?.children?.[0];
+    expect(card2?.attributes.__hidden).toBe(true);
   });
 });
 
@@ -464,48 +464,48 @@ describe('Player', () => {
   });
 
   it('should track current player', () => {
-    expect(game.players.current).toBe(game.players[0]);
-    expect(game.players[0].isCurrent()).toBe(true);
+    expect(game.players.current).toBe(game.players.get(1)!);
+    expect(game.players.get(1)!.isCurrent()).toBe(true);
 
-    game.players.setCurrent(1);
-    expect(game.players.current).toBe(game.players[1]);
-    expect(game.players[0].isCurrent()).toBe(false);
-    expect(game.players[1].isCurrent()).toBe(true);
+    game.players.setCurrent(2);
+    expect(game.players.current).toBe(game.players.get(2)!);
+    expect(game.players.get(1)!.isCurrent()).toBe(false);
+    expect(game.players.get(2)!.isCurrent()).toBe(true);
   });
 
   it('should get next/previous player', () => {
-    expect(game.players.next(game.players[0])).toBe(game.players[1]);
-    expect(game.players.next(game.players[2])).toBe(game.players[0]); // Wrap around
+    expect(game.players.nextAfter(game.players.get(1)!)).toBe(game.players.get(2)!);
+    expect(game.players.nextAfter(game.players.get(3)!)).toBe(game.players.get(1)!); // Wrap around
 
-    expect(game.players.previous(game.players[1])).toBe(game.players[0]);
-    expect(game.players.previous(game.players[0])).toBe(game.players[2]); // Wrap around
+    expect(game.players.previousBefore(game.players.get(2)!)).toBe(game.players.get(1)!);
+    expect(game.players.previousBefore(game.players.get(1)!)).toBe(game.players.get(3)!); // Wrap around
   });
 
   it('should get other players', () => {
-    const others = game.players.others(game.players[0]);
+    const others = game.players.others(game.players.get(1)!);
     expect(others.length).toBe(2);
-    expect(others).not.toContain(game.players[0]);
+    expect(others).not.toContain(game.players.get(1)!);
   });
 
   it('should find player elements with my()', () => {
     const hand = game.create(Hand, 'hand');
-    hand.player = game.players[0];
+    hand.player = game.players.get(1)!;
     const card = hand.create(Card, 'card', { suit: 'H', rank: 'A', value: 14 });
 
-    const found = game.players[0].my(Hand);
+    const found = game.players.get(1)!.my(Hand);
     expect(found).toBe(hand);
   });
 
   it('should query mine with player context', () => {
     const hand1 = game.create(Hand, 'p1hand');
-    hand1.player = game.players[0];
+    hand1.player = game.players.get(1)!;
     hand1.create(Card, 'card1', { suit: 'H', rank: 'A', value: 14 });
 
     const hand2 = game.create(Hand, 'p2hand');
-    hand2.player = game.players[1];
+    hand2.player = game.players.get(2)!;
     hand2.create(Card, 'card2', { suit: 'S', rank: 'K', value: 13 });
 
-    game.setPlayerContext(game.players[0]);
+    game.setPlayerContext(game.players.get(1)!);
     const myHand = game.first(Hand, { mine: true });
     expect(myHand).toBe(hand1);
   });

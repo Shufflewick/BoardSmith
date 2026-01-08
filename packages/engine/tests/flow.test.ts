@@ -260,7 +260,7 @@ describe('FlowEngine', () => {
       const engine = new FlowEngine(game, flow);
       engine.start();
 
-      expect(visitedPlayers).toEqual([0, 1, 2]);
+      expect(visitedPlayers).toEqual([1, 2, 3]);
     });
 
     it('should filter players', () => {
@@ -268,7 +268,7 @@ describe('FlowEngine', () => {
 
       const flow = defineFlow({
         root: eachPlayer({
-          filter: (p) => p.position !== 1,
+          filter: (p) => p.position !== 2,  // Skip player at position 2
           do: execute((ctx) => {
             visitedPlayers.push(ctx.player!.position);
           }),
@@ -278,7 +278,7 @@ describe('FlowEngine', () => {
       const engine = new FlowEngine(game, flow);
       engine.start();
 
-      expect(visitedPlayers).toEqual([0, 2]);
+      expect(visitedPlayers).toEqual([1, 3]);  // Positions 1 and 3, skipping 2
     });
 
     it('should iterate backward', () => {
@@ -296,7 +296,7 @@ describe('FlowEngine', () => {
       const engine = new FlowEngine(game, flow);
       engine.start();
 
-      expect(visitedPlayers).toEqual([2, 1, 0]);
+      expect(visitedPlayers).toEqual([3, 2, 1]);
     });
   });
 
@@ -465,7 +465,7 @@ describe('FlowEngine', () => {
 
       expect(state.awaitingInput).toBe(true);
       expect(state.availableActions).toContain('test');
-      expect(state.currentPlayer).toBe(0);
+      expect(state.currentPlayer).toBe(1);
     });
 
     it('should resume after action', () => {
@@ -600,8 +600,8 @@ describe('Game Flow Integration', () => {
       value: i + 1,
     }));
 
-    game.create(Hand, 'hand0', { player: game.players[0] });
-    game.create(Hand, 'hand1', { player: game.players[1] });
+    game.create(Hand, 'hand0', { player: game.players.get(1)! });
+    game.create(Hand, 'hand1', { player: game.players.get(2)! });
 
     // Register actions
     const drawAction = Action.create('draw')
@@ -640,7 +640,7 @@ describe('Game Flow Integration', () => {
 
     expect(game.phase).toBe('started');
     expect(state.awaitingInput).toBe(true);
-    expect(state.currentPlayer).toBe(0);
+    expect(state.currentPlayer).toBe(1);
   });
 
   it('should continue flow after action', () => {
@@ -655,11 +655,11 @@ describe('Game Flow Integration', () => {
     game.setFlow(flow);
     let state = game.startFlow();
 
-    // Player 0 draws
+    // Player 1 draws
     state = game.continueFlow('draw', {});
-    expect(state.currentPlayer).toBe(1);
+    expect(state.currentPlayer).toBe(2);
 
-    // Player 1 passes
+    // Player 2 passes
     state = game.continueFlow('pass', {});
     expect(state.complete).toBe(true);
   });
@@ -702,11 +702,11 @@ describe('Game Flow Integration', () => {
     game.setFlow(flow);
     game.startFlow();
 
-    expect(game.getCurrentFlowPlayer()).toBe(game.players[0]);
+    expect(game.getCurrentFlowPlayer()).toBe(game.players.get(1)!);
 
     game.continueFlow('pass', {});
 
-    expect(game.getCurrentFlowPlayer()).toBe(game.players[1]);
+    expect(game.getCurrentFlowPlayer()).toBe(game.players.get(2)!);
   });
 
   it('should get available flow actions', () => {
@@ -737,7 +737,7 @@ describe('Game Flow Integration', () => {
   it('should determine winners when flow completes', () => {
     const flow = defineFlow({
       root: actionStep({ actions: ['pass'] }),
-      getWinners: (ctx) => [ctx.game.players[0]],
+      getWinners: (ctx) => [ctx.game.players.get(1)!],
     });
 
     game.setFlow(flow);
@@ -745,7 +745,7 @@ describe('Game Flow Integration', () => {
     game.continueFlow('pass', {});
 
     expect(game.getWinners()).toHaveLength(1);
-    expect(game.getWinners()[0]).toBe(game.players[0]);
+    expect(game.getWinners()[0]).toBe(game.players.get(1)!);
   });
 });
 
@@ -975,11 +975,11 @@ describe('Move Limits', () => {
     expect(state.movesRemaining).toBe(1);
 
     state = engine.resume('count', {});
-    // Should auto-advance to player 1
+    // Should auto-advance to player 2
     expect(state.moveCount).toBe(0);
-    expect(state.currentPlayer).toBe(1);
+    expect(state.currentPlayer).toBe(2);
 
-    // Player 1: 2 actions
+    // Player 2: 2 actions
     state = engine.resume('count', {});
     state = engine.resume('count', {});
 
@@ -1254,7 +1254,7 @@ describe('Turn Order Presets', () => {
     const engine = new FlowEngine(game, flow);
     engine.start();
 
-    expect(visitedPlayers).toEqual([0, 1, 2]);
+    expect(visitedPlayers).toEqual([1, 2, 3]);
   });
 
   it('should use REVERSE turn order', () => {
@@ -1272,7 +1272,7 @@ describe('Turn Order Presets', () => {
     const engine = new FlowEngine(game, flow);
     engine.start();
 
-    expect(visitedPlayers).toEqual([2, 1, 0]);
+    expect(visitedPlayers).toEqual([3, 2, 1]);
   });
 
   it('should use ONLY to filter players', () => {
@@ -1280,7 +1280,7 @@ describe('Turn Order Presets', () => {
 
     const flow = defineFlow({
       root: eachPlayer({
-        ...TurnOrder.ONLY([0, 2]),
+        ...TurnOrder.ONLY([1, 3]),  // 1-indexed: players at positions 1 and 3
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.position);
         }),
@@ -1290,8 +1290,8 @@ describe('Turn Order Presets', () => {
     const engine = new FlowEngine(game, flow);
     engine.start();
 
-    // Only players 0 and 2, in natural order
-    expect(visitedPlayers).toEqual([0, 2]);
+    // Only players at positions 1 and 3
+    expect(visitedPlayers).toEqual([1, 3]);
   });
 
   it('should use START_FROM with position (no wrap-around)', () => {
@@ -1299,7 +1299,7 @@ describe('Turn Order Presets', () => {
 
     const flow = defineFlow({
       root: eachPlayer({
-        ...TurnOrder.START_FROM(1),
+        ...TurnOrder.START_FROM(2),  // 1-indexed: start from player at position 2
         do: execute((ctx) => {
           visitedPlayers.push(ctx.player!.position);
         }),
@@ -1309,13 +1309,13 @@ describe('Turn Order Presets', () => {
     const engine = new FlowEngine(game, flow);
     engine.start();
 
-    // Starts from player 1, goes to end (no wrap-around)
-    expect(visitedPlayers).toEqual([1, 2]);
+    // Starts from player at position 2, goes to end (no wrap-around)
+    expect(visitedPlayers).toEqual([2, 3]);
   });
 
   it('should use CONTINUE from current player', () => {
     // Set current player to position 2
-    game.players.setCurrent(game.players[2]);
+    game.players.setCurrent(game.players.get(3)!);
 
     const visitedPlayers: number[] = [];
 
@@ -1332,7 +1332,7 @@ describe('Turn Order Presets', () => {
     engine.start();
 
     // Should start from player 2, goes to end
-    expect(visitedPlayers).toEqual([2]);
+    expect(visitedPlayers).toEqual([3]);
   });
 
   it('should use ACTIVE_ONLY to skip eliminated players', () => {
@@ -1343,8 +1343,8 @@ describe('Turn Order Presets', () => {
     class EliminableGame extends Game<EliminableGame, EliminablePlayer> {}
 
     const eliminableGame = new EliminableGame({ playerCount: 3 });
-    // Mark player 1 as eliminated
-    (eliminableGame.players[1] as any).eliminated = true;
+    // Mark player at position 2 as eliminated (1-indexed)
+    (eliminableGame.players.get(2) as any).eliminated = true;
 
     const visitedPlayers: number[] = [];
 
@@ -1361,7 +1361,7 @@ describe('Turn Order Presets', () => {
     engine.start();
 
     // Player 1 is eliminated, should be skipped
-    expect(visitedPlayers).toEqual([0, 2]);
+    expect(visitedPlayers).toEqual([1, 3]);
   });
 });
 

@@ -18,8 +18,8 @@ describe('HexGame', () => {
       });
 
       expect(testGame.game.players.length).toBe(2);
-      expect(testGame.game.players[0].name).toBe('Alice');
-      expect(testGame.game.players[1].name).toBe('Bob');
+      expect(testGame.game.players.get(1)!.name).toBe('Alice');
+      expect(testGame.game.players.get(2)!.name).toBe('Bob');
     });
 
     it('should create a board with default size 7', () => {
@@ -204,8 +204,8 @@ describe('HexGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players[0] as HexPlayer;
-      const bob = testGame.game.players[1] as HexPlayer;
+      const alice = testGame.game.players.get(1)! as HexPlayer;
+      const bob = testGame.game.players.get(2)! as HexPlayer;
 
       expect(testGame.game.board.checkWin(alice)).toBe(false);
       expect(testGame.game.board.checkWin(bob)).toBe(false);
@@ -237,7 +237,7 @@ describe('HexGame', () => {
         seed: 'trace-demo',
       });
 
-      const alice = testGame.game.players[0] as HexPlayer;
+      const alice = testGame.game.players.get(1)! as HexPlayer;
       const trace = traceAction(testGame.game, 'placeStone', alice);
 
       // traceAction returns structured info about action availability
@@ -259,7 +259,7 @@ describe('HexGame', () => {
         seed: 'log-demo',
       });
 
-      const alice = testGame.game.players[0] as HexPlayer;
+      const alice = testGame.game.players.get(1)! as HexPlayer;
       const actionLog = logAvailableActions(testGame.game, alice);
 
       // Returns a string summarizing available actions
@@ -280,7 +280,7 @@ describe('HexGame', () => {
       const before = JSON.stringify(testGame.runner.getSnapshot());
 
       // Simulate a game state change
-      const alice = testGame.game.players[0] as HexPlayer;
+      const alice = testGame.game.players.get(1)! as HexPlayer;
       alice.stonesPlaced = 5;
 
       const after = JSON.stringify(testGame.runner.getSnapshot());
