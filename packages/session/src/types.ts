@@ -180,9 +180,9 @@ export interface ExclusivePlayerOption {
   description?: string;
   /**
    * Which player has this option by default.
-   * - 'first': Player 0 (first player)
-   * - 'last': Last player (player count - 1)
-   * - number: Specific player index
+   * - 'first': Player 1 (first player)
+   * - 'last': Last player
+   * - number: Specific player position (1-indexed)
    */
   default?: 'first' | 'last' | number;
 }

@@ -34,7 +34,7 @@ const props = defineProps<{
   displayName: string;
   /** API base URL (optional, defaults to same origin with port 8787) */
   apiUrl?: string;
-  /** Player positions that should be AI by default (0-indexed). E.g., [1] makes player 2 AI */
+  /** Player positions that should be AI by default (1-indexed). E.g., [2] makes player 2 AI */
   defaultAIPlayers?: number[];
 }>();
 

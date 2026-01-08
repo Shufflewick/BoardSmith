@@ -118,5 +118,5 @@ export function createPlayerView(
  * Create views for all players
  */
 export function createAllPlayerViews(game: Game): PlayerStateView[] {
-  return game.players.map((_, i) => createPlayerView(game, i));
+  return game.players.map((p) => createPlayerView(game, p.position));
 }

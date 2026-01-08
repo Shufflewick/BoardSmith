@@ -1740,11 +1740,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: 'Game has already started' };
     }
 
-    if (position < 0 || position >= this.#storedState.lobbySlots.length) {
+    // Position is 1-indexed, convert to array index
+    const arrayIndex = position - 1;
+    if (position < 1 || position > this.#storedState.lobbySlots.length) {
       return { success: false, error: 'Invalid position' };
     }
 
-    const slot = this.#storedState.lobbySlots[position];
+    const slot = this.#storedState.lobbySlots[arrayIndex];
 
     if (slot.status === 'ai') {
       return { success: false, error: 'This position is reserved for AI' };
@@ -1762,7 +1764,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // Release the old position
       existingSlot.status = 'open';
       existingSlot.playerId = undefined;
-      existingSlot.name = `Player ${existingSlot.position + 1}`;
+      existingSlot.name = `Player ${existingSlot.position}`;
       existingSlot.ready = false;
     }
 
@@ -1777,8 +1779,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       slot.playerOptions = this.#computeDefaultPlayerOptions(position);
     }
 
-    // Update player names in stored state
-    this.#storedState.playerNames[position] = name;
+    // Update player names in stored state (convert 1-indexed position to array index)
+    this.#storedState.playerNames[position - 1] = name;
 
     // Note: Game no longer auto-starts when slots are filled
     // Players must use setReady() to ready up, and game starts when all are ready
@@ -1817,7 +1819,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     }
 
     slot.name = name;
-    this.#storedState.playerNames[slot.position] = name;
+    // Convert 1-indexed position to array index
+    this.#storedState.playerNames[slot.position - 1] = name;
 
     // Persist changes
     if (this.#storage) {
@@ -1908,17 +1911,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: `Cannot exceed ${maxPlayers} players` };
     }
 
-    const newPosition = currentCount;
+    const newPosition = currentCount + 1;  // 1-indexed
     this.#storedState.lobbySlots.push({
       position: newPosition,
       status: 'open',
-      name: `Player ${newPosition + 1}`,
+      name: `Player ${newPosition}`,
       ready: false,
     });
 
     // Update player count and names
     this.#storedState.playerCount = currentCount + 1;
-    this.#storedState.playerNames.push(`Player ${newPosition + 1}`);
+    this.#storedState.playerNames.push(`Player ${newPosition}`);
 
     // Persist changes
     if (this.#storage) {
@@ -1961,22 +1964,24 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: `Cannot have fewer than ${minPlayers} players` };
     }
 
-    if (position === 0) {
+    // Position is 1-indexed
+    if (position === 1) {
       return { success: false, error: 'Cannot remove the host slot' };
     }
 
-    if (position < 0 || position >= currentCount) {
+    if (position < 1 || position > currentCount) {
       return { success: false, error: 'Invalid position' };
     }
 
-    const slot = this.#storedState.lobbySlots[position];
+    const arrayIndex = position - 1;
+    const slot = this.#storedState.lobbySlots[arrayIndex];
     if (slot.status === 'claimed') {
       return { success: false, error: 'Cannot remove a slot with a player - they must leave first' };
     }
 
     // Remove the slot
-    this.#storedState.lobbySlots.splice(position, 1);
-    this.#storedState.playerNames.splice(position, 1);
+    this.#storedState.lobbySlots.splice(arrayIndex, 1);
+    this.#storedState.playerNames.splice(arrayIndex, 1);
     this.#storedState.playerCount = this.#storedState.lobbySlots.length;
 
     // Renumber remaining slots (1-indexed)
@@ -2025,15 +2030,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: 'Only the host can modify slots' };
     }
 
-    if (position === 0) {
+    // Position is 1-indexed
+    if (position === 1) {
       return { success: false, error: 'Cannot change the host slot to AI' };
     }
 
-    if (position < 0 || position >= this.#storedState.lobbySlots.length) {
+    if (position < 1 || position > this.#storedState.lobbySlots.length) {
       return { success: false, error: 'Invalid position' };
     }
 
-    const slot = this.#storedState.lobbySlots[position];
+    const arrayIndex = position - 1;
+    const slot = this.#storedState.lobbySlots[arrayIndex];
 
     if (slot.status === 'claimed') {
       return { success: false, error: 'Cannot change a claimed slot - player must leave first' };
@@ -2047,7 +2054,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       slot.ready = true; // AI is always ready
     } else {
       slot.status = 'open';
-      slot.name = `Player ${position + 1}`;
+      slot.name = `Player ${slot.position}`;
       slot.aiLevel = undefined;
       slot.playerId = undefined;
       slot.ready = false;
@@ -2279,20 +2286,20 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: 'Player has not claimed a position' };
     }
 
-    // Cannot leave if you're the creator/host (position 0)
-    if (slot.position === 0) {
+    // Cannot leave if you're the creator/host (position 1)
+    if (slot.position === 1) {
       return { success: false, error: 'Host cannot leave. Cancel the game instead.' };
     }
 
     // Release the position
     slot.status = 'open';
     slot.playerId = undefined;
-    slot.name = `Player ${slot.position + 1}`;
+    slot.name = `Player ${slot.position}`;
     slot.ready = false;
     slot.connected = undefined;
 
     // Update player names in stored state
-    this.#storedState.playerNames[slot.position] = slot.name;
+    this.#storedState.playerNames[slot.position - 1] = slot.name;
 
     // Persist changes
     if (this.#storage) {
@@ -2326,7 +2333,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       }
 
       // Start timeout for auto-kick (non-host players only)
-      if (slot.position !== 0 && this.#storedState.lobbyState === 'waiting') {
+      if (slot.position !== 1 && this.#storedState.lobbyState === 'waiting') {
         // Clear any existing timeout first
         const existingTimeout = this.#disconnectTimeouts.get(playerId);
         if (existingTimeout) {
@@ -2385,16 +2392,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return { success: false, error: 'Only the host can kick players' };
     }
 
-    // Can't kick yourself (host is position 0)
-    if (position === 0) {
+    // Position is 1-indexed. Can't kick yourself (host is position 1)
+    if (position === 1) {
       return { success: false, error: 'Cannot kick the host' };
     }
 
-    if (position < 0 || position >= this.#storedState.lobbySlots.length) {
+    if (position < 1 || position > this.#storedState.lobbySlots.length) {
       return { success: false, error: 'Invalid position' };
     }
 
-    const slot = this.#storedState.lobbySlots[position];
+    const arrayIndex = position - 1;
+    const slot = this.#storedState.lobbySlots[arrayIndex];
 
     if (slot.status !== 'claimed') {
       return { success: false, error: 'Position is not occupied by a player' };
@@ -2412,12 +2420,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Release the slot
     slot.status = 'open';
     slot.playerId = undefined;
-    slot.name = `Player ${slot.position + 1}`;
+    slot.name = `Player ${slot.position}`;
     slot.ready = false;
     slot.connected = undefined;
 
     // Update player names in stored state
-    this.#storedState.playerNames[position] = slot.name;
+    this.#storedState.playerNames[slot.position - 1] = slot.name;
 
     // Persist changes
     if (this.#storage) {

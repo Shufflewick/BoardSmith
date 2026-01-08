@@ -1060,7 +1060,8 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
       this.#gameSession.setBroadcaster(broadcaster);
 
       const flowState = this.#gameSession.getFlowState();
-      const state = this.#gameSession.buildPlayerState(0);
+      // Use player 1's view for initial creation response (clients get their own view via WebSocket)
+      const state = this.#gameSession.buildPlayerState(1);
 
       return Response.json({
         success: true,

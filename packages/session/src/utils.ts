@@ -400,7 +400,8 @@ export function buildPlayerState(
   };
 
   // Optionally include action metadata for auto-UI
-  if (options?.includeActionMetadata && availableActions.length > 0) {
+  // Skip for spectators (position 0) - they don't need action metadata and players.get(0) is invalid
+  if (options?.includeActionMetadata && availableActions.length > 0 && playerPosition > 0) {
     const player = runner.game.players.get(playerPosition);
     if (player) {
       state.actionMetadata = buildActionMetadata(runner.game, player, availableActions);

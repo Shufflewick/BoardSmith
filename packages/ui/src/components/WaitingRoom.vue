@@ -259,18 +259,18 @@ function canJoinSlot(slot: LobbySlot): boolean {
 }
 
 function canHostManageSlot(slot: LobbySlot): boolean {
-  // Host can manage open or AI slots (not claimed by humans, not position 0)
-  return props.isCreator && slot.position !== 0 && slot.status !== 'claimed';
+  // Host can manage open or AI slots (not claimed by humans, not position 1/host)
+  return props.isCreator && slot.position !== 1 && slot.status !== 'claimed';
 }
 
 function canHostRemoveSlot(slot: LobbySlot): boolean {
-  // Host can remove open slots (not claimed, not position 0, above min players)
-  return props.isCreator && slot.position !== 0 && slot.status === 'open' && canRemoveSlots.value;
+  // Host can remove open slots (not claimed, not position 1/host, above min players)
+  return props.isCreator && slot.position !== 1 && slot.status === 'open' && canRemoveSlots.value;
 }
 
 function canHostKickPlayer(slot: LobbySlot): boolean {
-  // Host can kick claimed players (not themselves, not AI, not position 0)
-  return props.isCreator && slot.position !== 0 && slot.status === 'claimed';
+  // Host can kick claimed players (not themselves at position 1, not AI)
+  return props.isCreator && slot.position !== 1 && slot.status === 'claimed';
 }
 
 function handleKickPlayer(position: number) {
@@ -517,7 +517,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
             { 'is-me': slot.playerId === playerId }
           ]"
         >
-          <div class="slot-position">P{{ slot.position + 1 }}</div>
+          <div class="slot-position">P{{ slot.position }}</div>
 
           <!-- Open slot that joiner can claim: show name input + Join button -->
           <template v-if="canJoinSlot(slot)">
@@ -569,7 +569,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
               <span class="slot-name ai-name">{{ slot.name }}</span>
               <span class="slot-badge ai-badge">AI ({{ slot.aiLevel || 'medium' }})</span>
               <span class="ready-indicator ready">Ready</span>
-              <div v-if="isCreator && slot.position !== 0" class="slot-controls">
+              <div v-if="isCreator && slot.position !== 1" class="slot-controls">
                 <button
                   @click="handleToggleAI(slot)"
                   class="btn small control-btn"

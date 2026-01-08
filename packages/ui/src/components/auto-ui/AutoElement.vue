@@ -1216,10 +1216,11 @@ const cardBackPreviewData = computed(() => {
               :key="grandchild.id"
               :r="hexGridProps.hexSize * 0.35"
               class="hex-piece-circle"
-              :class="{
-                'player-0': (grandchild.attributes?.player as any)?.position === 0,
-                'player-1': (grandchild.attributes?.player as any)?.position === 1,
-              }"
+              :class="[
+                (grandchild.attributes?.player as any)?.position
+                  ? `player-${(grandchild.attributes?.player as any)?.position}`
+                  : ''
+              ]"
             >
               <title>{{ grandchild.name }}</title>
             </circle>
