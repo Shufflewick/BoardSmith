@@ -197,6 +197,85 @@ export function createControllerTestSetup(): {
 
 Each test file imports from this shared location.
 
+## Implementation Details for Plan 04-02
+
+### Step 1: Create Shared Fixtures File
+
+Create `packages/ui/tests/testUtils/actionControllerTestUtils.ts`:
+
+```typescript
+import { vi } from 'vitest';
+import { ref, type Ref } from 'vue';
+import type { ActionMetadata, ActionResult } from '../../src/composables/useActionController.js';
+
+export function createMockSendAction() {
+  return vi.fn().mockImplementation(async (actionName: string, args: Record<string, unknown>): Promise<ActionResult> => {
+    return { success: true, data: { actionName, args } };
+  });
+}
+
+export function createTestMetadata(): Record<string, ActionMetadata> {
+  // ... existing implementation from lines 32-191
+}
+
+export function createControllerTestSetup() {
+  const sendAction = createMockSendAction();
+  const availableActions = ref([...]);
+  const actionMetadata = ref(createTestMetadata());
+  const isMyTurn = ref(true);
+  return { sendAction, availableActions, actionMetadata, isMyTurn };
+}
+```
+
+### Step 2: Split Test Files
+
+#### A. Create `useActionController.choices.test.ts`
+
+Move these describe blocks (in order):
+1. `getChoices utility` (lines 639-684)
+2. `selection choices` (lines 1059-1232)
+3. `getCurrentChoices()` (lines 1769-1801)
+4. `fetchChoicesForSelection()` (lines 2054-2087)
+
+#### B. Create `useActionController.selections.test.ts`
+
+Move these describe blocks (in order):
+1. `repeating selections` (lines 1234-1499)
+2. `dependsOn selections` (lines 1501-1668)
+3. `filterBy selections` (lines 1670-1767)
+4. `multiSelect validation` (lines 1803-1862)
+5. `text and number inputs` (lines 1864-1959)
+6. `element selections` (lines 1961-2010)
+
+#### C. Keep in `useActionController.test.ts`
+
+These blocks remain (Core API):
+1. `initialization` (lines 206-222)
+2. `execute() method` (lines 224-376)
+3. `step-by-step mode (wizard)` (lines 378-520)
+4. `auto-fill behavior` (lines 522-600)
+5. `auto-execute behavior` (lines 602-637)
+6. `getActionMetadata utility` (lines 686-714)
+7. `isExecuting guard` (lines 716-746)
+8. `state cleanup` (lines 748-827)
+9. `injection helpers` (lines 829-851)
+10. `externalArgs (bidirectional sync)` (lines 853-1001)
+11. `start() with initialArgs` (lines 1003-1057)
+12. `error recovery` (lines 2012-2052)
+
+### Step 3: Update Imports
+
+Each new test file needs:
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ref, reactive, nextTick } from 'vue';
+import {
+  useActionController,
+  type ActionMetadata,
+} from '../../src/composables/useActionController.js';
+import { createMockSendAction, createTestMetadata } from './testUtils/actionControllerTestUtils.js';
+```
+
 ## Next Steps
 
 1. **Plan 04-02:** Extract shared fixtures and split test files
