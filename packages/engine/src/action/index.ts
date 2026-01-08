@@ -1,4 +1,5 @@
-export { Action, ActionExecutor, ConditionTracer } from './action.js';
+export { Action, ActionExecutor } from './action.js';
+export { ConditionTracer } from './condition-tracer.js';
 export type {
   SelectionType,
   Selection,

@@ -326,8 +326,8 @@ export interface ActionContext {
   args: Record<string, unknown>;
 }
 
-// Forward declaration for ConditionTracer (class defined in action.ts)
-import type { ConditionTracer } from './action.js';
+// Import ConditionTracer from its dedicated module
+import type { ConditionTracer } from './condition-tracer.js';
 
 /**
  * Definition of an action
