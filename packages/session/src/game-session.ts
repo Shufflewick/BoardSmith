@@ -28,6 +28,8 @@ import {
 import { buildPlayerState, computeUndoInfo, buildActionTraces, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
 import { LobbyManager } from './lobby-manager.js';
+import { SelectionHandler } from './selection-handler.js';
+import { PendingActionManager } from './pending-action-manager.js';
 
 // ============================================
 // Types
@@ -156,8 +158,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #displayName?: string;
   /** Lobby manager for games with lobby flow */
   #lobbyManager?: LobbyManager<TSession>;
-  /** Map of player position -> pending action state for repeating selections */
-  #pendingActions: Map<number, PendingActionState> = new Map();
+  /** Selection handler for resolving selection choices */
+  #selectionHandler: SelectionHandler<G>;
+  /** Pending action manager for repeating selections */
+  #pendingActionManager: PendingActionManager<G>;
 
   private constructor(
     runner: GameRunner<G>,
@@ -166,7 +170,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     storage?: StorageAdapter,
     aiController?: AIController<G>,
     displayName?: string,
-    lobbyManager?: LobbyManager<TSession>
+    lobbyManager?: LobbyManager<TSession>,
+    selectionHandler?: SelectionHandler<G>,
+    pendingActionManager?: PendingActionManager<G>
   ) {
     this.#runner = runner;
     this.#storedState = storedState;
@@ -175,6 +181,24 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#aiController = aiController;
     this.#displayName = displayName;
     this.#lobbyManager = lobbyManager;
+
+    // Initialize handlers - create them if not provided (for backward compatibility during construction)
+    // The factory methods will create and pass these in
+    this.#selectionHandler = selectionHandler ?? new SelectionHandler(runner, storedState.playerCount);
+    this.#pendingActionManager = pendingActionManager ?? new PendingActionManager(
+      runner,
+      storedState,
+      storage,
+      {
+        save: async () => {
+          if (this.#storage) {
+            await this.#storage.save(this.#storedState);
+          }
+        },
+        broadcast: () => this.broadcast(),
+        scheduleAICheck: () => this.#scheduleAICheck(),
+      }
+    );
   }
 
   // ============================================
@@ -847,8 +871,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#runner = newRunner;
     this.#GameClass = definition.gameClass as GameClass<G>;
 
-    // Clear any pending actions (they may reference old game state)
-    this.#pendingActions.clear();
+    // Update handlers with new runner reference
+    this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+    this.#pendingActionManager.updateRunner(newRunner);
 
     // Broadcast updated state to all clients
     this.broadcast();
@@ -980,8 +1005,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       this.#runner = newRunner;
       this.#storedState.actionHistory = actionsToReplay;
 
-      // Clear any pending actions (they reference old game state)
-      this.#pendingActions.clear();
+      // Update handlers with new runner reference (clears pending actions)
+      this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+      this.#pendingActionManager.updateRunner(newRunner);
 
       // Persist
       if (this.#storage) {
@@ -1087,7 +1113,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   // ============================================
-  // Selection Choices Methods
+  // Selection Choices Methods (delegated to SelectionHandler)
   // ============================================
 
   /**
@@ -1107,306 +1133,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     playerPosition: number,
     currentArgs: Record<string, unknown> = {}
   ): SelectionChoicesResponse {
-    // Validate player position (1-indexed)
-    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    // Get action definition
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
-    }
-
-    // Find the selection
-    const selection = action.selections.find(s => s.name === selectionName);
-    if (!selection) {
-      return { success: false, error: `Selection not found: ${selectionName}`, errorCode: ErrorCode.SELECTION_NOT_FOUND };
-    }
-
-    // Build context with current args (playerPosition is 1-indexed)
-    const player = this.#runner.game.players.get(playerPosition);
-    if (!player) {
-      return { success: false, error: `Player not found at position ${playerPosition}. Expected 1 to ${this.#runner.game.players.length}.`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    // Resolve any element IDs in currentArgs to actual elements
-    // Handles both plain numbers (id) and serialized element objects ({ id: number, ... })
-    const resolvedArgs: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(currentArgs)) {
-      if (typeof value === 'number') {
-        // Plain element ID
-        const element = this.#runner.game.getElementById(value);
-        resolvedArgs[key] = element || value;
-      } else if (typeof value === 'object' && value !== null && 'id' in value && typeof (value as { id: unknown }).id === 'number') {
-        // Serialized element object from followUp args (e.g., { id: 123, name: 'Coffee Industry' })
-        // When an action returns followUp.args with elements, they get JSON-serialized.
-        // The client sends them back as objects, so we need to resolve them here.
-        const element = this.#runner.game.getElementById((value as { id: number }).id);
-        resolvedArgs[key] = element || value;
-      } else {
-        resolvedArgs[key] = value;
-      }
-    }
-
-    const ctx = { game: this.#runner.game, player, args: resolvedArgs };
-
-    // Helper function to generate default display
-    const defaultDisplay = (value: unknown): string => {
-      if (value === null || value === undefined) return String(value);
-      if (typeof value !== 'object') return String(value);
-      const obj = value as Record<string, unknown>;
-      if (typeof obj.display === 'string') return obj.display;
-      if (typeof obj.name === 'string') return obj.name;
-      if (typeof obj.label === 'string') return obj.label;
-      try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
-    };
-
-    // Handle based on selection type
-    switch (selection.type) {
-      case 'choice': {
-        const choiceSel = selection as any;
-
-        // Evaluate choices NOW
-        let choices: unknown[];
-        if (typeof choiceSel.choices === 'function') {
-          try {
-            choices = choiceSel.choices(ctx);
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            return { success: false, error: `Error evaluating choices: ${errorMsg}`, errorCode: ErrorCode.CHOICES_EVALUATION_ERROR };
-          }
-        } else {
-          choices = choiceSel.choices || [];
-        }
-
-        // Convert to display format with board refs
-        const formattedChoices = choices.map(rawValue => {
-          // Check if the choice already has { value, display } structure (e.g., from playerChoices())
-          // If so, use those directly instead of wrapping again
-          let value: unknown;
-          let display: string;
-
-          if (rawValue && typeof rawValue === 'object' && 'value' in rawValue && 'display' in rawValue) {
-            // Already formatted choice (like from playerChoices)
-            const formatted = rawValue as { value: unknown; display: string };
-            value = formatted.value;
-            display = formatted.display;
-          } else {
-            // Raw value - wrap it
-            value = rawValue;
-            display = choiceSel.display ? choiceSel.display(rawValue) : defaultDisplay(rawValue);
-          }
-
-          const choice: any = { value, display };
-
-          // Add board refs if provided (pass the original rawValue for compatibility)
-          if (choiceSel.boardRefs) {
-            try {
-              const refs = choiceSel.boardRefs(rawValue, ctx);
-              if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
-              if (refs.targetRef) choice.targetRef = refs.targetRef;
-            } catch {
-              // Ignore errors in boardRefs
-            }
-          }
-
-          return choice;
-        });
-
-        // Evaluate multiSelect config if present
-        let multiSelect: { min: number; max?: number } | undefined;
-        if (choiceSel.multiSelect !== undefined) {
-          const multiSelectConfig = typeof choiceSel.multiSelect === 'function'
-            ? choiceSel.multiSelect(ctx)
-            : choiceSel.multiSelect;
-
-          if (multiSelectConfig !== undefined) {
-            if (typeof multiSelectConfig === 'number') {
-              multiSelect = { min: 1, max: multiSelectConfig };
-            } else {
-              multiSelect = {
-                min: multiSelectConfig.min ?? 1,
-                max: multiSelectConfig.max,
-              };
-            }
-          }
-        }
-
-        return { success: true, choices: formattedChoices, multiSelect };
-      }
-
-      case 'element': {
-        const elemSel = selection as any;
-        let elements: any[];
-
-        // Get elements - either from elements property or from/filter/elementClass pattern
-        if (elemSel.elements) {
-          if (typeof elemSel.elements === 'function') {
-            try {
-              elements = elemSel.elements(ctx);
-            } catch (error) {
-              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-              return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
-            }
-          } else {
-            elements = elemSel.elements || [];
-          }
-        } else {
-          // Original from/filter/elementClass pattern
-          let from: any;
-
-          if (typeof elemSel.from === 'function') {
-            from = elemSel.from(ctx);
-            // DEV WARNING: from function returned undefined/null - this will cause errors
-            if (from === undefined || from === null) {
-              if (process.env.NODE_ENV !== 'production') {
-                console.warn(
-                  `[BoardSmith] chooseElement '${selectionName}' from() returned ${from}.\n` +
-                  `  This will cause errors. Check your from() function and ensure ctx.args has the expected values.\n` +
-                  `  ctx.args: ${JSON.stringify(ctx.args)}`
-                );
-              }
-              // Fall back to game to avoid crash, but this is likely a bug
-              from = this.#runner.game;
-            }
-          } else {
-            from = elemSel.from ?? this.#runner.game;
-          }
-
-          if (elemSel.elementClass) {
-            elements = [...from.all(elemSel.elementClass)];
-          } else {
-            elements = [...from.all()];
-          }
-
-          if (elemSel.filter) {
-            elements = elements.filter((e: any) => elemSel.filter!(e, ctx));
-          }
-        }
-
-        // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(elements, elemSel, ctx);
-
-        return { success: true, validElements };
-      }
-
-      case 'elements': {
-        const elementsSel = selection as any;
-        let elements: any[];
-
-        if (typeof elementsSel.elements === 'function') {
-          try {
-            elements = elementsSel.elements(ctx);
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
-          }
-        } else {
-          elements = elementsSel.elements || [];
-        }
-
-        // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(elements, elementsSel, ctx);
-
-        // Evaluate multiSelect config if present
-        let multiSelect: { min: number; max?: number } | undefined;
-        if (elementsSel.multiSelect !== undefined) {
-          const multiSelectConfig = typeof elementsSel.multiSelect === 'function'
-            ? elementsSel.multiSelect(ctx)
-            : elementsSel.multiSelect;
-
-          if (multiSelectConfig !== undefined) {
-            if (typeof multiSelectConfig === 'number') {
-              multiSelect = { min: 1, max: multiSelectConfig };
-            } else {
-              multiSelect = {
-                min: multiSelectConfig.min ?? 1,
-                max: multiSelectConfig.max,
-              };
-            }
-          }
-        }
-
-        return { success: true, validElements, multiSelect };
-      }
-
-      case 'number':
-      case 'text':
-        // These types don't have choices - return empty success
-        return { success: true };
-
-      default: {
-        // Exhaustive check - this should never happen
-        const _exhaustiveCheck: never = selection;
-        return { success: false, error: `Unsupported selection type: ${(_exhaustiveCheck as any).type}` };
-      }
-    }
-  }
-
-  /**
-   * Build validElements list with auto-disambiguation.
-   * Used internally by getSelectionChoices.
-   */
-  #buildValidElementsList(
-    elements: any[],
-    elemSel: any,
-    ctx: { game: Game; player: import('@boardsmith/engine').Player; args: Record<string, unknown> }
-  ): Array<{ id: number; display: string; ref?: any }> {
-    // Auto-disambiguate display names
-    const nameCounts = new Map<string, number>();
-    for (const el of elements) {
-      const name = el.name || 'Element';
-      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-    }
-    const nameIndices = new Map<string, number>();
-
-    return elements.map((element: any) => {
-      const validElem: any = { id: element.id };
-
-      // Add display text if display function provided
-      if (elemSel.display) {
-        try {
-          // Support both display signatures: (element, ctx) and (element, ctx, allElements)
-          validElem.display = elemSel.display(element, ctx, elements);
-        } catch {
-          validElem.display = element.name || String(element.id);
-        }
-      } else {
-        // Auto-disambiguation for elements with same name
-        const baseName = element.name || 'Element';
-        const count = nameCounts.get(baseName) || 1;
-        if (count > 1) {
-          const idx = (nameIndices.get(baseName) || 0) + 1;
-          nameIndices.set(baseName, idx);
-          validElem.display = `${baseName} #${idx}`;
-        } else {
-          // Default display: use element's name or notation if available
-          validElem.display = element.notation || element.name || String(element.id);
-        }
-      }
-
-      // Add board ref if provided
-      if (elemSel.boardRef) {
-        try {
-          validElem.ref = elemSel.boardRef(element, ctx);
-        } catch {
-          // Ignore errors
-        }
-      } else {
-        // Default ref: use element ID and notation if available
-        validElem.ref = { id: element.id };
-        if (element.notation) {
-          validElem.ref.notation = element.notation;
-        }
-      }
-
-      return validElem;
-    });
+    return this.#selectionHandler.getSelectionChoices(actionName, selectionName, playerPosition, currentArgs);
   }
 
   // ============================================
-  // Pending Action Methods (for repeating selections)
+  // Pending Action Methods (delegated to PendingActionManager)
   // ============================================
 
   /**
@@ -1419,20 +1150,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     errorCode?: ErrorCode;
     pendingState?: PendingActionState;
   } {
-    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
-    }
-
-    const executor = this.#runner.game.getActionExecutor();
-    const pendingState = executor.createPendingActionState(actionName, playerPosition);
-    this.#pendingActions.set(playerPosition, pendingState);
-
-    return { success: true, pendingState };
+    return this.#pendingActionManager.startPendingAction(actionName, playerPosition);
   }
 
   /**
@@ -1456,202 +1174,28 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     actionResult?: ActionResult;
     state?: PlayerGameState;
   }> {
-    let pendingState = this.#pendingActions.get(playerPosition);
-
-    // Auto-create pending action if it doesn't exist and actionName is provided
-    if (!pendingState && actionName) {
-      const startResult = this.startPendingAction(actionName, playerPosition);
-      if (!startResult.success) {
-        return { success: false, error: startResult.error };
-      }
-      pendingState = startResult.pendingState;
-      this.#pendingActions.set(playerPosition, pendingState!);
-
-      // If initialArgs provided, populate the pending state and advance to correct selection
-      if (initialArgs && Object.keys(initialArgs).length > 0) {
-        const action = this.#runner.game.getAction(actionName);
-        if (action) {
-          // Copy initialArgs to collectedArgs (filter out null/undefined)
-          for (const [key, val] of Object.entries(initialArgs)) {
-            if (val !== undefined && val !== null) {
-              pendingState!.collectedArgs[key] = val;
-            }
-          }
-
-          // Find the index of the selection we're about to process
-          const targetIndex = action.selections.findIndex(s => s.name === selectionName);
-          if (targetIndex > 0) {
-            pendingState!.currentSelectionIndex = targetIndex;
-          }
-        }
-      }
-    }
-
-    if (!pendingState) {
-      return { success: false, error: 'No pending action for this player. Provide actionName to auto-create.' };
-    }
-
-    const action = this.#runner.game.getAction(pendingState.actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${pendingState.actionName}` };
-    }
-
-    const executor = this.#runner.game.getActionExecutor();
-    const player = this.#runner.game.players.get(playerPosition);
-    const selection = action.selections[pendingState.currentSelectionIndex];
-
-    if (!selection) {
-      return { success: false, error: 'No current selection' };
-    }
-
-    // Verify we're processing the expected selection
-    if (selection.name !== selectionName) {
-      return { success: false, error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${action.selections.findIndex(s => s.name === selectionName)}` };
-    }
-
-    // Check if it's a repeating selection
-    if (executor.isRepeatingSelection(selection)) {
-      const result = executor.processRepeatingStep(action, player, pendingState, value);
-
-      if (result.error) {
-        return { success: false, error: result.error, nextChoices: result.nextChoices };
-      }
-
-      // Persist if storage adapter is provided (onEach may have modified game state)
-      if (this.#storage) {
-        await this.#storage.save(this.#storedState);
-      }
-
-      // Broadcast state updates to all clients
-      this.broadcast();
-
-      // Check if the action is now complete
-      if (result.done && executor.isPendingActionComplete(action, pendingState)) {
-        // Execute the final action
-        const actionResult = executor.executePendingAction(action, player, pendingState);
-        this.#pendingActions.delete(playerPosition);
-
-        if (actionResult.success) {
-          // Continue the flow to update available actions
-          this.#runner.game.continueFlowAfterPendingAction(actionResult);
-
-          // Update stored action history
-          this.#storedState.actionHistory = this.#runner.actionHistory;
-
-          // Persist
-          if (this.#storage) {
-            await this.#storage.save(this.#storedState);
-          }
-
-          // Broadcast
-          this.broadcast();
-
-          // Check if AI should respond
-          this.#scheduleAICheck();
-        }
-
-        return {
-          success: actionResult.success,
-          error: actionResult.error,
-          done: true,
-          actionComplete: true,
-          actionResult: {
-            success: actionResult.success,
-            error: actionResult.error,
-            flowState: this.#runner.getFlowState(),
-            state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-          },
-          state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-        };
-      }
-
-      // More selections needed
-      return {
-        success: true,
-        done: result.done,
-        nextChoices: result.nextChoices,
-        actionComplete: false,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-      };
-    }
-
-    // Regular (non-repeating) selection
-    const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
-
-    if (!stepResult.success) {
-      return { success: false, error: stepResult.error };
-    }
-
-    // Check if action is now complete
-    if (executor.isPendingActionComplete(action, pendingState)) {
-      const actionResult = executor.executePendingAction(action, player, pendingState);
-      this.#pendingActions.delete(playerPosition);
-
-      if (actionResult.success) {
-        // Continue the flow to update available actions
-        this.#runner.game.continueFlowAfterPendingAction(actionResult);
-
-        // Update stored action history
-        this.#storedState.actionHistory = this.#runner.actionHistory;
-
-        // Persist
-        if (this.#storage) {
-          await this.#storage.save(this.#storedState);
-        }
-
-        // Broadcast
-        this.broadcast();
-
-        // Check if AI should respond
-        this.#scheduleAICheck();
-      }
-
-      return {
-        success: actionResult.success,
-        error: actionResult.error,
-        done: true,
-        actionComplete: true,
-        actionResult: {
-          success: actionResult.success,
-          error: actionResult.error,
-          flowState: this.#runner.getFlowState(),
-          state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-        },
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-      };
-    }
-
-    // More selections needed
-    return {
-      success: true,
-      done: true,
-      actionComplete: false,
-      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-    };
+    return this.#pendingActionManager.processSelectionStep(playerPosition, selectionName, value, actionName, initialArgs);
   }
 
   /**
    * Get the current pending action for a player.
    */
   getPendingAction(playerPosition: number): PendingActionState | undefined {
-    return this.#pendingActions.get(playerPosition);
+    return this.#pendingActionManager.getPendingAction(playerPosition);
   }
 
   /**
    * Cancel a pending action for a player.
    */
   cancelPendingAction(playerPosition: number): void {
-    this.#pendingActions.delete(playerPosition);
+    this.#pendingActionManager.cancelPendingAction(playerPosition);
   }
 
   /**
    * Check if an action has repeating selections.
    */
   hasRepeatingSelections(actionName: string): boolean {
-    const action = this.#runner.game.getAction(actionName);
-    if (!action) return false;
-    const executor = this.#runner.game.getActionExecutor();
-    return executor.hasRepeatingSelections(action);
+    return this.#pendingActionManager.hasRepeatingSelections(actionName);
   }
 
   // ============================================
