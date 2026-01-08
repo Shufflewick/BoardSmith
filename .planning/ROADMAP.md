@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01: Extract lobby management (~900 lines → LobbyManager)
-- [ ] 01-02: Extract selection & pending action handling (~550 lines → SelectionHandler, PendingActionManager)
+- [x] 01-02: Extract selection & pending action handling (~550 lines → SelectionHandler, PendingActionManager)
 - [ ] 01-03: Extract state history & debug (~360 lines → StateHistory, DebugController)
 - [ ] 01-04: Verify and clean up
 
@@ -77,7 +77,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. game-session refactoring | 1/4 | In progress | - |
+| 1. game-session refactoring | 2/4 | In progress | - |
 | 2. useActionController refactoring | 0/4 | Not started | - |
 | 3. action refactoring | 0/4 | Not started | - |
 | 4. test file refactoring | 0/3 | Not started | - |

@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-01-08)
 ## Current Position
 
 Phase: 1 of 4 (game-session refactoring)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-01-08 — Completed 01-01-PLAN.md
+Last activity: 2026-01-08 — Completed 01-02-PLAN.md
 
-Progress: █░░░░░░░░░ 7%
+Progress: ██░░░░░░░░ 13%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 8 min
-- Total execution time: 0.13 hours
+- Total plans completed: 2
+- Average duration: 12 min
+- Total execution time: 0.38 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. game-session | 1 | 8 min | 8 min |
+| 1. game-session | 2 | 23 min | 12 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (8 min)
+- Last 5 plans: 01-01 (8 min), 01-02 (15 min)
 - Trend: —
 
 ## Accumulated Context
@@ -44,6 +44,8 @@ Recent decisions affecting current work:
 |-------|----------|-----------|
 | 01-01 | LobbyManager holds reference to StoredGameState | Mutations flow through without copying |
 | 01-01 | Callback pattern for cross-module coordination | GameSession controls AI scheduling |
+| 01-02 | Handlers expose updateRunner() method | Hot reload support for reloadWithCurrentRules |
+| 01-02 | PendingActionManager uses callbacks | Avoid circular imports |
 
 ### Deferred Issues
 
@@ -55,6 +57,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-08T18:22:20Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-01-08T18:37:03Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
