@@ -44,7 +44,7 @@ Plans:
 Plans:
 - [x] 02-01: Analyze useActionController and identify extraction boundaries
 - [x] 02-02: Extract types to useActionControllerTypes.ts (~350 lines)
-- [ ] 02-03: Extract pure helpers to actionControllerHelpers.ts (~100 lines)
+- [x] 02-03: Extract pure helpers to actionControllerHelpers.ts (~100 lines)
 - [ ] 02-04: (Optional) Extract enrichment to useGameViewEnrichment.ts (~50 lines)
 
 ### Phase 3: action refactoring
@@ -78,6 +78,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. game-session refactoring | 4/4 | Complete | 2026-01-08 |
-| 2. useActionController refactoring | 2/4 | In progress | - |
+| 2. useActionController refactoring | 3/4 | In progress | - |
 | 3. action refactoring | 0/4 | Not started | - |
 | 4. test file refactoring | 0/3 | Not started | - |
