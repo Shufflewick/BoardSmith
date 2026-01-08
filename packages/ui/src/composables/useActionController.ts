@@ -94,8 +94,8 @@
  */
 
 import { ref, computed, watch, inject } from 'vue';
-import { findElementById } from './useGameViewHelpers.js';
 import { isDevMode, devWarn, getDisplayFromValue } from './actionControllerHelpers.js';
+import { createEnrichment } from './useGameViewEnrichment.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -208,8 +208,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // This enables reactive computeds that depend on snapshot data (Maps aren't reactive)
   const snapshotVersion = ref(0);
 
+  // === Element Enrichment ===
+  // Creates functions to enrich validElements with full element data from gameView
+  const { enrichElementsList, enrichValidElements } = createEnrichment(gameView, currentArgs);
+
   // === Helpers ===
   // Note: isDevMode, devWarn, getDisplayFromValue are imported from actionControllerHelpers.ts
+  // Note: enrichElementsList, enrichValidElements are from useGameViewEnrichment.ts
 
   /** Clear all keys from the args object while preserving reactivity */
   function clearArgs(): void {
@@ -502,67 +507,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Fallback to live metadata (e.g., for execute() which doesn't use snapshot)
     return getActionMetadata(currentAction.value);
   });
-
-  // Track which element IDs we've already warned about (to avoid spam)
-  const warnedMissingElements = new Set<number>();
-
-  /**
-   * Enrich a list of valid elements with full element data from gameView.
-   */
-  function enrichElementsList(elements: ValidElement[]): ValidElement[] {
-    if (!gameView?.value) return elements;
-
-    return elements.map(ve => {
-      const element = findElementById(gameView.value, ve.id);
-
-      // Warning: element not found in gameView (only warn once per element)
-      if (!element && !warnedMissingElements.has(ve.id)) {
-        warnedMissingElements.add(ve.id);
-        console.warn(
-          `[actionController] Element ${ve.id} (${ve.display}) not found in gameView. ` +
-          `This can happen if the element was removed after selection metadata was built.`
-        );
-      }
-
-      return { ...ve, element };
-    });
-  }
-
-  /**
-   * Enrich validElements with full element data from gameView.
-   * This is the "pit of success" - designers get full element data automatically.
-   * Handles both static validElements and dependent elementsByDependentValue.
-   */
-  function enrichValidElements(sel: SelectionMetadata): SelectionMetadata {
-    if (!gameView?.value) return sel;
-
-    // Handle elementsByDependentValue (for element selections with dependsOn)
-    if (sel.dependsOn && sel.elementsByDependentValue) {
-      const dependentValue = currentArgs.value[sel.dependsOn];
-      if (dependentValue !== undefined) {
-        const key = String(dependentValue);
-        const elements = sel.elementsByDependentValue[key] || [];
-        const enrichedElements = enrichElementsList(elements);
-
-        return {
-          ...sel,
-          validElements: enrichedElements,
-        };
-      }
-      // Dependent value not set yet - return with empty validElements
-      return { ...sel, validElements: [] };
-    }
-
-    // Handle static validElements
-    if (!sel.validElements) return sel;
-
-    const enrichedElements = enrichElementsList(sel.validElements);
-
-    return {
-      ...sel,
-      validElements: enrichedElements,
-    };
-  }
 
   const currentSelection = computed((): SelectionMetadata | null => {
     if (!currentActionMeta.value) return null;
