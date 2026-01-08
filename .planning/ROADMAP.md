@@ -65,7 +65,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 04-01: Analyze test structure and map to new composable modules
+- [x] 04-01: Analyze test structure and map to new composable modules
 - [ ] 04-02: Split tests into separate files mirroring composable structure
 - [ ] 04-03: Verify all tests pass after restructure
 
@@ -79,4 +79,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. game-session refactoring | 4/4 | Complete | 2026-01-08 |
 | 2. useActionController refactoring | 4/4 | Complete | 2026-01-08 |
 | 3. action refactoring | 3/3 | Complete | 2026-01-08 |
-| 4. test file refactoring | 0/3 | Not started | - |
+| 4. test file refactoring | 1/3 | In progress | - |
