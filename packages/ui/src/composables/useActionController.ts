@@ -95,6 +95,7 @@
 
 import { ref, computed, watch, inject } from 'vue';
 import { findElementById } from './useGameViewHelpers.js';
+import { isDevMode, devWarn, getDisplayFromValue } from './actionControllerHelpers.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -131,29 +132,6 @@ import type {
   RepeatingState,
   UseActionControllerReturn,
 } from './useActionControllerTypes.js';
-
-// ============================================
-// Development Mode Warnings
-// ============================================
-
-function isDevMode(): boolean {
-  // Browser (Vite) - check import.meta.env first
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    const env = (import.meta as any).env;
-    return env.DEV === true || env.MODE !== 'production';
-  }
-  // Node.js fallback
-  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
-}
-
-const shownWarnings = new Set<string>();
-
-function devWarn(key: string, message: string): void {
-  if (!isDevMode()) return;
-  if (shownWarnings.has(key)) return;
-  shownWarnings.add(key);
-  console.warn(`[BoardSmith] ${message}`);
-}
 
 /**
  * Create an action controller for handling game actions.
@@ -231,25 +209,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const snapshotVersion = ref(0);
 
   // === Helpers ===
-
-  /**
-   * Extract a display string from a value.
-   * Handles objects with display/name properties (e.g., followUp context args).
-   */
-  function getDisplayFromValue(value: unknown): string {
-    if (value === null || value === undefined) return '';
-    if (typeof value !== 'object') return String(value);
-
-    const obj = value as Record<string, unknown>;
-    // Priority 1: display property
-    if (typeof obj.display === 'string') return obj.display;
-    // Priority 2: name property (common for elements/entities)
-    if (typeof obj.name === 'string') return obj.name;
-    // Priority 3: primitive value property
-    if (obj.value !== undefined && typeof obj.value !== 'object') return String(obj.value);
-    // Fallback
-    return String(value);
-  }
+  // Note: isDevMode, devWarn, getDisplayFromValue are imported from actionControllerHelpers.ts
 
   /** Clear all keys from the args object while preserving reactivity */
   function clearArgs(): void {
