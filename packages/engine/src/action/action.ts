@@ -23,32 +23,7 @@ import type {
 } from './types.js';
 import type { ElementClass } from '../element/types.js';
 import { ConditionTracer } from './condition-tracer.js';
-
-// ============================================
-// Development Mode Warnings
-// ============================================
-
-/**
- * Check if we're in development mode
- */
-function isDevMode(): boolean {
-  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
-}
-
-/**
- * Set of warning keys that have already been shown (to avoid spam)
- */
-const shownWarnings = new Set<string>();
-
-/**
- * Emit a development mode warning (once per unique key)
- */
-function devWarn(key: string, message: string): void {
-  if (!isDevMode()) return;
-  if (shownWarnings.has(key)) return;
-  shownWarnings.add(key);
-  console.warn(`[BoardSmith] ${message}`);
-}
+import { isDevMode, devWarn } from './helpers.js';
 
 /**
  * Wrap a filter function to provide helpful error messages when it crashes
