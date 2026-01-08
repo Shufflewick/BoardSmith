@@ -3,7 +3,6 @@
  */
 
 import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand } from '@boardsmith/engine';
-import { executeCommand } from '@boardsmith/engine';
 import { GameRunner } from '@boardsmith/runtime';
 import {
   ErrorCode,
@@ -25,11 +24,13 @@ import {
   type GameOptionDefinition,
   type SelectionChoicesResponse,
 } from './types.js';
-import { buildPlayerState, computeUndoInfo, buildActionTraces, buildSingleActionMetadata } from './utils.js';
+import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
 import { LobbyManager } from './lobby-manager.js';
 import { SelectionHandler } from './selection-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
+import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
+import { DebugController } from './debug-controller.js';
 
 // ============================================
 // Types
@@ -85,35 +86,8 @@ export interface ActionResult {
   };
 }
 
-/**
- * Result of undoing actions
- */
-export interface UndoResult {
-  success: boolean;
-  error?: string;
-  /** Programmatic error code for switch statements. See ErrorCode enum. */
-  errorCode?: ErrorCode;
-  flowState?: FlowState;
-  state?: PlayerGameState;
-  /** Number of actions that were undone */
-  actionsUndone?: number;
-}
-
-/**
- * Element-level diff between two game states
- */
-export interface ElementDiff {
-  /** Element IDs that were added */
-  added: number[];
-  /** Element IDs that were removed */
-  removed: number[];
-  /** Element IDs that changed (attributes, children, etc.) */
-  changed: number[];
-  /** The from action index */
-  fromIndex: number;
-  /** The to action index */
-  toIndex: number;
-}
+// UndoResult and ElementDiff are now exported from state-history.ts
+export type { UndoResult, ElementDiff } from './state-history.js';
 
 // ============================================
 // GameSession Class
@@ -162,6 +136,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #selectionHandler: SelectionHandler<G>;
   /** Pending action manager for repeating selections */
   #pendingActionManager: PendingActionManager<G>;
+  /** State history for time travel and undo */
+  #stateHistory: StateHistory<G>;
+  /** Debug controller for deck manipulation */
+  #debugController: DebugController<G>;
 
   private constructor(
     runner: GameRunner<G>,
@@ -197,6 +175,33 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         },
         broadcast: () => this.broadcast(),
         scheduleAICheck: () => this.#scheduleAICheck(),
+      }
+    );
+
+    // Initialize state history and debug controller
+    this.#stateHistory = new StateHistory(
+      GameClass,
+      storedState,
+      () => this.#runner,
+      {
+        replaceRunner: (newRunner) => {
+          this.#runner = newRunner;
+          // Update handlers with new runner reference
+          this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+          this.#pendingActionManager.updateRunner(newRunner);
+        },
+        save: async () => {
+          if (this.#storage) {
+            await this.#storage.save(this.#storedState);
+          }
+        },
+        broadcast: () => this.broadcast(),
+      }
+    );
+    this.#debugController = new DebugController(
+      () => this.#runner,
+      {
+        broadcast: () => this.broadcast(),
       }
     );
   }
@@ -538,47 +543,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Creates a temporary game and replays actions up to the specified index.
    */
   getStateAtAction(actionIndex: number, playerPosition: number): { success: boolean; state?: PlayerGameState; error?: string } {
-    const history = this.#storedState.actionHistory;
-
-    // Validate index
-    if (actionIndex < 0 || actionIndex > history.length) {
-      return { success: false, error: `Invalid action index: ${actionIndex}. History has ${history.length} actions.` };
-    }
-
-    try {
-      // Get subset of actions to replay
-      const actionsToReplay = history.slice(0, actionIndex);
-
-      // Create a temporary runner and replay
-      const tempRunner = GameRunner.replay<G>(
-        {
-          GameClass: this.#GameClass,
-          gameType: this.#storedState.gameType,
-          gameOptions: {
-            playerCount: this.#storedState.playerCount,
-            playerNames: this.#storedState.playerNames,
-            seed: this.#storedState.seed,
-            ...this.#storedState.gameOptions,
-          },
-        },
-        actionsToReplay
-      );
-
-      // Build state for the requested player
-      const state = buildPlayerState(
-        tempRunner,
-        this.#storedState.playerNames,
-        playerPosition,
-        { includeActionMetadata: false }
-      );
-
-      return { success: true, state };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to replay game state',
-      };
-    }
+    return this.#stateHistory.getStateAtAction(actionIndex, playerPosition);
   }
 
   /**
@@ -590,103 +555,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     toIndex: number,
     playerPosition: number
   ): { success: boolean; diff?: ElementDiff; error?: string } {
-    const history = this.#storedState.actionHistory;
-
-    // Validate indices
-    if (fromIndex < 0 || fromIndex > history.length) {
-      return { success: false, error: `Invalid fromIndex: ${fromIndex}` };
-    }
-    if (toIndex < 0 || toIndex > history.length) {
-      return { success: false, error: `Invalid toIndex: ${toIndex}` };
-    }
-
-    try {
-      // Get states at both points
-      const fromResult = this.getStateAtAction(fromIndex, playerPosition);
-      const toResult = this.getStateAtAction(toIndex, playerPosition);
-
-      if (!fromResult.success || !fromResult.state) {
-        return { success: false, error: fromResult.error || 'Failed to get from state' };
-      }
-      if (!toResult.success || !toResult.state) {
-        return { success: false, error: toResult.error || 'Failed to get to state' };
-      }
-
-      // Extract element IDs from view trees, tracking parent relationships
-      // Map: element id -> { parentId, attributes (without children/player metadata) }
-      const fromElements = new Map<number, { parentId: number | null; attrs: string }>();
-      const toElements = new Map<number, { parentId: number | null; attrs: string }>();
-
-      function getComparableAttrs(obj: Record<string, unknown>): string {
-        // Only compare attributes that represent actual game state, not metadata
-        const attrs = obj.attributes as Record<string, unknown> | undefined;
-        if (!attrs) return '';
-        // Filter out player object (has _isCurrent that changes), keep game-relevant attrs
-        const filtered: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(attrs)) {
-          // Skip player objects and internal metadata
-          if (key === 'player' || key === 'game' || key.startsWith('_')) continue;
-          filtered[key] = value;
-        }
-        return JSON.stringify(filtered);
-      }
-
-      function collectElements(node: unknown, map: Map<number, { parentId: number | null; attrs: string }>, parentId: number | null = null) {
-        if (!node || typeof node !== 'object') return;
-        const obj = node as Record<string, unknown>;
-        if (typeof obj.id === 'number') {
-          map.set(obj.id, {
-            parentId,
-            attrs: getComparableAttrs(obj),
-          });
-          // Recurse into children with this node as parent
-          if (Array.isArray(obj.children)) {
-            for (const child of obj.children) {
-              collectElements(child, map, obj.id);
-            }
-          }
-        } else if (Array.isArray(obj.children)) {
-          // Node without id, just recurse
-          for (const child of obj.children) {
-            collectElements(child, map, parentId);
-          }
-        }
-      }
-
-      collectElements(fromResult.state.view, fromElements);
-      collectElements(toResult.state.view, toElements);
-
-      // Compute diff - focus on elements that moved (parent changed) or whose attributes changed
-      const added: number[] = [];
-      const removed: number[] = [];
-      const changed: number[] = [];
-
-      for (const [id, toData] of toElements.entries()) {
-        const fromData = fromElements.get(id);
-        if (!fromData) {
-          added.push(id);
-        } else if (fromData.parentId !== toData.parentId || fromData.attrs !== toData.attrs) {
-          // Element moved to different parent OR its attributes changed
-          changed.push(id);
-        }
-      }
-
-      for (const id of fromElements.keys()) {
-        if (!toElements.has(id)) {
-          removed.push(id);
-        }
-      }
-
-      return {
-        success: true,
-        diff: { added, removed, changed, fromIndex, toIndex },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to compute diff',
-      };
-    }
+    return this.#stateHistory.getStateDiff(fromIndex, toIndex, playerPosition);
   }
 
   /**
@@ -704,49 +573,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     };
     error?: string;
   } {
-    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player position: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).` };
-    }
-
-    try {
-      const traces = buildActionTraces(this.#runner, playerPosition);
-
-      // Get flow context to show which actions are restricted by flow
-      const flowState = this.#runner.getFlowState();
-      let flowAllowedActions: string[] = [];
-      let isMyTurn = false;
-
-      if (flowState?.awaitingInput) {
-        // Handle simultaneous actions
-        if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-          const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === playerPosition);
-          if (playerState && !playerState.completed) {
-            flowAllowedActions = playerState.availableActions;
-            isMyTurn = true;
-          }
-        } else {
-          // Regular turn-based flow
-          flowAllowedActions = flowState.availableActions ?? [];
-          isMyTurn = flowState.currentPlayer === playerPosition;
-        }
-      }
-
-      return {
-        success: true,
-        traces,
-        flowContext: {
-          flowAllowedActions,
-          currentPlayer: flowState?.currentPlayer,
-          isMyTurn,
-          currentPhase: flowState?.currentPhase,
-        },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to get action traces',
-      };
-    }
+    return this.#stateHistory.getActionTraces(playerPosition);
   }
 
   // ============================================
@@ -888,75 +715,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Only works if it's the player's turn and they've made at least one action.
    */
   async undoToTurnStart(playerPosition: number): Promise<UndoResult> {
-    // Validate player position (1-indexed)
-    if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
-    }
-
-    // Check if it's this player's turn
-    const flowState = this.#runner.getFlowState();
-    if (flowState?.currentPlayer !== playerPosition) {
-      return { success: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
-    }
-
-    // Compute where the turn started
-    const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
-      this.#storedState.actionHistory,
-      flowState.currentPlayer
-    );
-
-    // Check if there's anything to undo
-    if (actionsThisTurn === 0) {
-      return { success: false, error: 'No actions to undo', errorCode: ErrorCode.NO_ACTIONS_TO_UNDO };
-    }
-
-    // Replay game to the turn start point
-    const actionsToReplay = this.#storedState.actionHistory.slice(0, turnStartActionIndex);
-
-    try {
-      // Create a new runner replayed to the turn start
-      const newRunner = GameRunner.replay<G>(
-        {
-          GameClass: this.#GameClass,
-          gameType: this.#storedState.gameType,
-          gameOptions: {
-            playerCount: this.#storedState.playerCount,
-            playerNames: this.#storedState.playerNames,
-            seed: this.#storedState.seed,
-            ...this.#storedState.gameOptions,
-          },
-        },
-        actionsToReplay
-      );
-
-      // Replace the current runner
-      this.#runner = newRunner;
-
-      // Update stored action history
-      this.#storedState.actionHistory = actionsToReplay;
-
-      // Persist if storage adapter is provided
-      if (this.#storage) {
-        await this.#storage.save(this.#storedState);
-      }
-
-      // Broadcast to all connected clients
-      this.broadcast();
-
-      const newFlowState = this.#runner.getFlowState();
-
-      return {
-        success: true,
-        flowState: newFlowState,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-        actionsUndone: actionsThisTurn,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to undo',
-      };
-    }
+    return this.#stateHistory.undoToTurnStart(playerPosition);
   }
 
   /**
@@ -970,69 +729,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     actionsDiscarded?: number;
     state?: PlayerGameState;
   }> {
-    const currentLength = this.#storedState.actionHistory.length;
-
-    // Validate target index
-    if (targetActionIndex < 0) {
-      return { success: false, error: `Invalid action index: ${targetActionIndex}` };
-    }
-
-    if (targetActionIndex >= currentLength) {
-      return { success: false, error: `Cannot rewind forward: target ${targetActionIndex} >= current ${currentLength}` };
-    }
-
-    // Slice history to target point
-    const actionsToReplay = this.#storedState.actionHistory.slice(0, targetActionIndex);
-    const actionsDiscarded = currentLength - targetActionIndex;
-
-    try {
-      // Replay game to that point
-      const newRunner = GameRunner.replay<G>(
-        {
-          GameClass: this.#GameClass,
-          gameType: this.#storedState.gameType,
-          gameOptions: {
-            playerCount: this.#storedState.playerCount,
-            playerNames: this.#storedState.playerNames,
-            seed: this.#storedState.seed,
-            ...this.#storedState.gameOptions,
-          },
-        },
-        actionsToReplay
-      );
-
-      // Replace current state
-      this.#runner = newRunner;
-      this.#storedState.actionHistory = actionsToReplay;
-
-      // Update handlers with new runner reference (clears pending actions)
-      this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
-      this.#pendingActionManager.updateRunner(newRunner);
-
-      // Persist
-      if (this.#storage) {
-        await this.#storage.save(this.#storedState);
-      }
-
-      // Broadcast new state to all clients
-      this.broadcast();
-
-      // Return state for the first player (caller should handle their own player position)
-      return {
-        success: true,
-        actionsDiscarded,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, 1, { includeActionMetadata: true, includeDebugData: true }),
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to rewind',
-      };
-    }
+    return this.#stateHistory.rewindToAction(targetActionIndex);
   }
 
   // ============================================
-  // Debug Deck Manipulation Methods
+  // Debug Deck Manipulation Methods (delegated to DebugController)
   // ============================================
 
   /**
@@ -1044,12 +745,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status and error message if failed
    */
   executeDebugCommand(command: GameCommand): { success: boolean; error?: string } {
-    const result = executeCommand(this.#runner.game, command);
-    if (result.success) {
-      // Broadcast the updated state to all clients
-      this.broadcast();
-    }
-    return result;
+    return this.#debugController.executeDebugCommand(command);
   }
 
   /**
@@ -1060,11 +756,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   moveCardToTop(cardId: number): { success: boolean; error?: string } {
-    return this.executeDebugCommand({
-      type: 'REORDER_CHILD',
-      elementId: cardId,
-      targetIndex: 0,
-    });
+    return this.#debugController.moveCardToTop(cardId);
   }
 
   /**
@@ -1075,11 +767,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   reorderCard(cardId: number, targetIndex: number): { success: boolean; error?: string } {
-    return this.executeDebugCommand({
-      type: 'REORDER_CHILD',
-      elementId: cardId,
-      targetIndex,
-    });
+    return this.#debugController.reorderCard(cardId, targetIndex);
   }
 
   /**
@@ -1091,12 +779,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   transferCard(cardId: number, targetDeckId: number, position: 'first' | 'last' = 'first'): { success: boolean; error?: string } {
-    return this.executeDebugCommand({
-      type: 'MOVE',
-      elementId: cardId,
-      destinationId: targetDeckId,
-      position,
-    });
+    return this.#debugController.transferCard(cardId, targetDeckId, position);
   }
 
   /**
@@ -1106,10 +789,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @returns Result with success status
    */
   shuffleDeck(deckId: number): { success: boolean; error?: string } {
-    return this.executeDebugCommand({
-      type: 'SHUFFLE',
-      spaceId: deckId,
-    });
+    return this.#debugController.shuffleDeck(deckId);
   }
 
   // ============================================
