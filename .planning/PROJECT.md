@@ -20,13 +20,14 @@ Improve code maintainability, testability, and navigability equally—making it 
 - ✓ Vue 3 UI component library — existing
 - ✓ AI bot support (MCTS, random) — existing
 - ✓ CLI tooling (dev, build, test, validate) — existing
+- ✓ Split `game-session.ts` into focused modules — v0.1 (2,585 → 1,249 lines)
+- ✓ Split `useActionController.ts` into focused composables — v0.1 (1,807 → 1,423 lines)
+- ✓ Split `action.ts` into focused modules — v0.1 (1,845 → 1,361 lines)
+- ✓ Split `useActionController.test.ts` into focused test files — v0.1 (2,088 → 3 files)
 
 ### Active
 
-- [ ] Split `game-session.ts` (2,585 lines) into focused modules
-- [ ] Split `useActionController.ts` (1,807 lines) into focused composables
-- [ ] Split `action.ts` (1,845 lines) into focused modules
-- [ ] Split `useActionController.test.ts` (2,088 lines) into focused test files
+(None — milestone complete)
 
 ### Out of Scope
 
@@ -34,31 +35,6 @@ Improve code maintainability, testability, and navigability equally—making it 
 - New test coverage — restructure existing tests, don't add new ones
 - API changes — public exports must remain compatible
 - Other tech debt items — type safety, error handling, docs are separate efforts
-
-## Context
-
-BoardSmith is a library for designing digital board games. The codebase is a TypeScript monorepo with 11 packages spanning engine, runtime, session, server, client, and UI layers.
-
-**Target files and their responsibilities:**
-
-1. **`packages/session/src/game-session.ts`** (2,585 lines)
-   - GameSession class: unified session management across platforms
-   - Handles storage adapters, broadcast adapters, AI controller
-   - Complex state machine for game lifecycle
-
-2. **`packages/ui/src/composables/useActionController.ts`** (1,807 lines)
-   - Vue composable for action UI state management
-   - Complex state machine with setTimeout-based followUp handling
-   - Known fragile area with race conditions
-
-3. **`packages/engine/src/action/action.ts`** (1,845 lines)
-   - Action class with fluent builder API
-   - Selection definitions, conditions, execution logic
-   - Core abstraction used throughout the engine
-
-4. **`packages/ui/tests/useActionController.test.ts`** (2,088 lines)
-   - Comprehensive test suite for useActionController
-   - Should mirror the structure of the refactored composable
 
 ## Constraints
 
@@ -70,8 +46,19 @@ BoardSmith is a library for designing digital board games. The codebase is a Typ
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Refactor all four files | Complete the tech debt cleanup for large files | — Pending |
-| Pure refactoring only | Minimize risk, changes are easier to verify | — Pending |
+| Refactor all four files | Complete the tech debt cleanup for large files | ✓ Good |
+| Pure refactoring only | Minimize risk, changes are easier to verify | ✓ Good |
+| LobbyManager holds reference to StoredGameState | Mutations flow through without copying | ✓ Good |
+| Callback pattern for cross-module coordination | GameSession controls AI scheduling | ✓ Good |
+| Handlers expose updateRunner() method | Hot reload support for reloadWithCurrentRules | ✓ Good |
+| Extract types + helpers only, not stateful composables | actionSnapshot is central; Pit of Success pattern requires centralized state | ✓ Good |
+| ActionExecutor kept intact | Cohesive class with internal method dependencies | ✓ Good |
+
+## Context
+
+Shipped v0.1 with ~99k LOC TypeScript/Vue.
+Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
+All 442 unit tests passing.
 
 ---
-*Last updated: 2026-01-08 after initialization*
+*Last updated: 2026-01-08 after v0.1 milestone*
