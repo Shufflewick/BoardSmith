@@ -495,9 +495,6 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
    * Used when a player leaves the waiting room
    */
   async leavePosition(playerId: string): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
-    console.log('[LobbyManager] leavePosition called with playerId:', playerId);
-    console.log('[LobbyManager] lobbySlots:', JSON.stringify(this.#storedState.lobbySlots?.map(s => ({ pos: s.position, playerId: s.playerId, status: s.status }))));
-
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
     }
@@ -508,7 +505,6 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
 
     // Find the slot claimed by this player
     const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
-    console.log('[LobbyManager] Found slot:', slot ? `position ${slot.position}` : 'none');
     if (!slot) {
       return { success: false, error: 'Player has not claimed a position' };
     }

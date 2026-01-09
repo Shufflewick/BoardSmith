@@ -1330,9 +1330,7 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
         case 'leave-position': {
           const { playerId } = body as { playerId: string };
-          console.log('[DO] leave-position called with playerId:', playerId);
           const result = await this.#gameSession.leavePosition(playerId);
-          console.log('[DO] leave-position result:', result);
           return Response.json(result, { status: result.success ? 200 : 400 });
         }
 

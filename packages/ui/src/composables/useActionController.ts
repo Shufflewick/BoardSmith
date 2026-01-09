@@ -476,11 +476,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       const fetchDuration = Date.now() - fetchStartTime;
 
       if (result.success && actionSnapshot.value) {
-        if (isDevMode()) {
-          const choiceCount = result.choices?.length ?? result.validElements?.length ?? 0;
-          console.log(`[BoardSmith] Got ${choiceCount} choices for '${selectionName}' in ${fetchDuration}ms`);
-        }
-
         // Store in snapshot - this is the single source of truth
         actionSnapshot.value.selectionSnapshots.set(selectionName, {
           choices: result.choices as SelectionSnapshot['choices'],

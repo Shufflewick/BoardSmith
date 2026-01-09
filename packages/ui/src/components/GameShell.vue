@@ -834,16 +834,12 @@ async function handleUpdateSlotPlayerOptions(position: number, options: Record<s
 async function handleLobbyCancel() {
   // For non-hosts, release our slot before leaving
   if (!isCreator.value && createdGameId.value) {
-    console.log('[Leave] Calling leavePosition for game:', createdGameId.value, 'playerId:', playerId.value);
     try {
-      const result = await client.leavePosition(createdGameId.value);
-      console.log('[Leave] leavePosition result:', result);
+      await client.leavePosition(createdGameId.value);
     } catch (err) {
       console.error('[Leave] Failed to leave position:', err);
       // Continue with cleanup even if leave fails
     }
-  } else {
-    console.log('[Leave] Skipping leavePosition - isCreator:', isCreator.value, 'createdGameId:', createdGameId.value);
   }
 
   disconnectFromLobby();
