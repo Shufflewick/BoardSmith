@@ -338,7 +338,8 @@ function generateCheckerFunction(
   );
   return `() => {
         // ${obj.description}
-        // TODO: Implement this checker based on game-specific logic
+        // WARNING: Auto-generated fallback - always returns true
+        // Implement game-specific logic for better AI performance
         return true;
       }`;
 }
