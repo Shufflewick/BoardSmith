@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-01-09)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** v0.5 ESLint No-Shadow
+**Current focus:** v0.6 Players in Element Tree
 
 ## Current Position
 
-Phase: 11 of 11 (eslint-no-shadow)
-Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-01-09 — Completed 11-01-PLAN.md
+Phase: 12 of 13 (player-in-tree)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-09 — Milestone v0.6 created
 
-Progress: ██████████ 100%
+Progress: ░░░░░░░░░░ 0%
 
 ## Milestones
 
 **In Progress:**
-- None
+- v0.6 Players in Element Tree (Phases 12-13) — in progress
 
 **Completed:**
 - v0.1 Large File Refactoring (Phases 1-4) — shipped 2026-01-08
@@ -36,9 +36,10 @@ Progress: ██████████ 100%
 - Milestone v0.4 complete: All public APIs documented with JSDoc
 - Milestone v0.5 created: ESLint no-shadow rule, 1 phase (Phase 11)
 - Milestone v0.5 complete: Variable shadowing caught at build time
+- Milestone v0.6 created: Players in element tree, 2 phases (Phases 12-13)
 
 ## Session Continuity
 
 Last session: 2026-01-09
-Stopped at: Milestone v0.5 complete
+Stopped at: Milestone v0.6 initialization
 Resume file: None

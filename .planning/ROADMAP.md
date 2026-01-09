@@ -6,6 +6,7 @@
 - ✅ [v0.2 Concerns Cleanup](milestones/v0.2-ROADMAP.md) (Phases 5-8) — SHIPPED 2026-01-09
 - ✅ [v0.3 Flow Engine Docs](milestones/v0.3-ROADMAP.md) (Phase 9) — SHIPPED 2026-01-09
 - ✅ [v0.4 Public API Docs](milestones/v0.4-ROADMAP.md) (Phase 10) — SHIPPED 2026-01-09
+- ✅ [v0.5 ESLint No-Shadow](milestones/v0.5-ROADMAP.md) (Phase 11) — SHIPPED 2026-01-09
 
 ## Overview
 
@@ -18,6 +19,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.3 Flow Engine Docs** — Phase 9 (shipped 2026-01-09)
 - ✅ **v0.4 Public API Docs** — Phase 10 (shipped 2026-01-09)
 - ✅ **v0.5 ESLint No-Shadow** — Phase 11 (shipped 2026-01-09)
+- 🚧 **v0.6 Players in Element Tree** — Phases 12-13 (in progress)
 
 ## Phases
 
@@ -114,6 +116,28 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 
 </details>
 
+### 🚧 v0.6 Players in Element Tree (In Progress)
+
+**Milestone Goal:** Make Player extend GameElement so players are in the searchable tree, fixing the "player data in two worlds" problem from MERC post-mortem.
+
+#### Phase 12: player-in-tree
+**Goal**: Make Player extend GameElement, remove PlayerCollection, migrate to `game.all(Player)`
+**Depends on**: v0.5 complete
+**Research**: Unlikely (internal refactoring)
+**Plans**: TBD
+
+Plans:
+- [ ] 12-01: TBD (run /gsd:plan-phase 12 to break down)
+
+#### Phase 13: player-access-docs
+**Goal**: Document the new player access pattern (players as GameElements, anti-patterns to avoid)
+**Depends on**: Phase 12
+**Research**: Unlikely (documentation only)
+**Plans**: TBD
+
+Plans:
+- [ ] 13-01: TBD (run /gsd:plan-phase 13 to break down)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -129,3 +153,5 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 | 9. flow-engine-docs | v0.3 | 1/1 | Complete | 2026-01-09 |
 | 10. public-api-jsdoc | v0.4 | 3/3 | Complete | 2026-01-09 |
 | 11. eslint-no-shadow | v0.5 | 1/1 | Complete | 2026-01-09 |
+| 12. player-in-tree | v0.6 | 0/? | Not started | - |
+| 13. player-access-docs | v0.6 | 0/? | Not started | - |
