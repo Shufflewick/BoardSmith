@@ -87,10 +87,10 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 **Goal**: Add JSDoc documentation to all public APIs since BoardSmith is a library for others to use
 **Depends on**: v0.3 complete
 **Research**: None needed (documentation only, following established patterns)
-**Plans**: 0/3 complete
+**Plans**: 1/3 complete
 
 Plans:
-- [ ] 10-01: Add JSDoc to engine element system (Game, GameElement, Space, Piece, Card, etc.)
+- [x] 10-01: Add JSDoc to engine element system (Game, GameElement, Space, Piece, Card, etc.)
 - [ ] 10-02: Add JSDoc to engine action and flow systems (Action builder, flow DSL)
 - [ ] 10-03: Add JSDoc to testing package (test utilities, assertions, debug)
 
@@ -110,4 +110,4 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 | 7. documentation | v0.2 | 3/3 | Complete | 2026-01-09 |
 | 8. concerns-cleanup | v0.2 | 1/1 | Complete | 2026-01-09 |
 | 9. flow-engine-docs | v0.3 | 1/1 | Complete | 2026-01-09 |
-| 10. public-api-jsdoc | v0.4 | 0/3 | Planned | - |
+| 10. public-api-jsdoc | v0.4 | 1/3 | In Progress | - |
