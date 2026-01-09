@@ -36,7 +36,14 @@ export class SqliteStorageAdapter implements StorageAdapter {
 
   async load(): Promise<StoredGameState | null> {
     const row = this.#loadStmt.get(this.#gameId) as { state_json: string } | undefined;
-    return row ? JSON.parse(row.state_json) : null;
+    if (!row) return null;
+
+    try {
+      return JSON.parse(row.state_json);
+    } catch (e) {
+      console.error(`Failed to parse game state for ${this.#gameId}:`, e);
+      return null;
+    }
   }
 }
 
