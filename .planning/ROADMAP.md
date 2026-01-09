@@ -109,11 +109,11 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 #### Phase 11: eslint-no-shadow
 **Goal**: Add ESLint with @typescript-eslint/no-shadow rule and fix all existing violations
 **Depends on**: v0.4 complete
-**Research**: Unlikely (well-documented ESLint setup)
-**Plans**: TBD
+**Research**: None needed (well-documented ESLint setup)
+**Plans**: 1
 
 Plans:
-- [ ] 11-01: TBD (run /gsd:plan-phase 11 to break down)
+- [ ] 11-01: Add ESLint with no-shadow rule, fix 5 violations
 
 ## Progress
 
@@ -129,4 +129,4 @@ Plans:
 | 8. concerns-cleanup | v0.2 | 1/1 | Complete | 2026-01-09 |
 | 9. flow-engine-docs | v0.3 | 1/1 | Complete | 2026-01-09 |
 | 10. public-api-jsdoc | v0.4 | 3/3 | Complete | 2026-01-09 |
-| 11. eslint-no-shadow | v0.5 | 0/? | Not started | - |
+| 11. eslint-no-shadow | v0.5 | 0/1 | Planned | - |
