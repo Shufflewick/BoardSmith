@@ -107,14 +107,12 @@
 - File: Previously `packages/session/src/game-session.ts` (2,585 lines)
 - **Resolution:** File split into 5 focused modules with clear responsibilities (v0.1 milestone)
 
-### ⏸️ DEFERRED: flow/engine.ts documentation
+### ✅ RESOLVED: flow/engine.ts documentation
 - File: `packages/engine/src/flow/engine.ts` (968 lines)
-- Status: Not addressed in v0.2 milestone
-- Rationale: Good existing test coverage (1,569-line test file); documentation would improve readability but is not critical
-- Future work: Add section comments explaining flow execution state machine when modifying this file
+- **Resolution:** Added section dividers and JSDoc improvements to FlowEngine, matching MCTS Bot pattern (v0.3 Phase 09-01)
 
 ---
 
 *Concerns audit: 2026-01-08*
-*v0.2 milestone completed: 2026-01-09*
+*v0.3 milestone completed: 2026-01-09*
 *Update as issues are fixed or new ones discovered*
