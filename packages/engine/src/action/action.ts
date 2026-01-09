@@ -25,7 +25,22 @@ import { Action } from './action-builder.js';
 export { Action };
 
 /**
- * Action executor handles resolving selections and executing actions
+ * Handles validation, argument resolution, and execution of player actions.
+ *
+ * ActionExecutor is an internal class used by the game session to process
+ * incoming action requests. It resolves serialized arguments (element IDs,
+ * player indices) to actual game objects before calling action handlers.
+ *
+ * Most game developers won't interact with ActionExecutor directly - instead
+ * use the {@link Action} builder to define actions and the game session's
+ * `sendAction` to execute them.
+ *
+ * Key responsibilities:
+ * - Resolving element IDs to GameElement objects
+ * - Validating selections against available choices
+ * - Checking action availability (conditions and selection paths)
+ * - Executing action handlers with resolved arguments
+ * - Supporting repeating selections and pending action state
  */
 export class ActionExecutor {
   private game: Game;
