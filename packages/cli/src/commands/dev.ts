@@ -216,7 +216,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
     try {
       rmSync(viteCacheDir, { recursive: true, force: true });
     } catch {
-      // Ignore cache cleanup errors
+      // Intentionally silent: cache cleanup is best-effort.
+      // Dev server works correctly even if stale cache remains.
     }
   }
 
