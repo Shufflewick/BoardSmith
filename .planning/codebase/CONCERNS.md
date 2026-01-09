@@ -1,51 +1,47 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-01-08
+**Last Updated:** 2026-01-09
+
+> ✅ **v0.2 Concerns Cleanup milestone completed.** All actionable concerns have been addressed or documented.
 
 ## Tech Debt
 
-**Large, complex files:**
-- Issue: Several files exceed 2000 lines, making them hard to navigate and maintain
-- Files:
-  - `packages/session/src/game-session.ts` - 2,585 lines
-  - `packages/ui/tests/useActionController.test.ts` - 2,088 lines
-  - `packages/engine/src/action/action.ts` - 1,845 lines
-  - `packages/ui/src/composables/useActionController.ts` - 1,807 lines
-- Why: Organic growth as features added
-- Impact: Harder to understand, navigate, and modify
-- Fix approach: Split into smaller, focused modules by responsibility
+### ✅ RESOLVED: Large, complex files
+- Issue: Several files exceeded 2000 lines, making them hard to navigate and maintain
+- Files split in v0.1 Large File Refactoring milestone:
+  - `packages/session/src/game-session.ts` — Split into 5 focused modules
+  - `packages/ui/tests/useActionController.test.ts` — Split into 4 test modules
+  - `packages/engine/src/action/action.ts` — Split into 3 action modules
+  - `packages/ui/src/composables/useActionController.ts` — Split into 3 controller modules
+- **Resolution:** v0.1 milestone (Phases 1-4) — Shipped 2026-01-08
 
-**Type assertions bypassing safety:**
+### ✅ RESOLVED: Type assertions bypassing safety
 - Issue: Multiple `as any` type assertions in UI code
-- Files:
-  - `packages/ui/src/composables/useActionController.ts` - Lines 276, 277, 534
-  - `packages/ui/src/composables/useZoomPreview.ts` - Lines 94-100, 134-140
-  - `packages/ai-trainer/src/introspector.ts` - Dynamic property access
-- Why: Dynamic typing needed for Vue/Vite environment access, DOM cleanup
-- Impact: Bypasses TypeScript safety, potential runtime errors
-- Fix approach: Create proper typed interfaces, use WeakMap for DOM cleanup
+- Resolutions:
+  - `packages/ui/src/composables/useActionController.ts` — Fixed with type guards (Phase 05-01)
+  - `packages/ui/src/composables/useZoomPreview.ts` — Fixed with WeakMaps for DOM cleanup (Phase 05-02)
+  - `packages/ai-trainer/src/introspector.ts` — Documented as intentional; runtime introspection of game objects requires dynamic property access (Phase 05-03)
+- **Resolution:** v0.2 Phase 5 (type-safety) — 2026-01-08
 
 ## Known Bugs
 
-**No critical bugs detected** - The codebase appears stable with good test coverage.
+**No critical bugs detected** — The codebase appears stable with good test coverage.
 
 ## Security Considerations
 
-**Silent error suppression:**
+### ✅ RESOLVED: Silent error suppression
 - Risk: Errors swallowed without logging make debugging difficult
-- Files:
-  - `packages/session/src/game-session.ts:1140` - Ignores `boardRefs()` errors silently
-  - `packages/worker/src/index.ts:752` - Ignores WebSocket attachment errors
-  - `packages/cli/src/commands/dev.ts:219` - Ignores cache cleanup failures
-- Current mitigation: None
-- Recommendations: Add error logging before suppression, use try/catch with console.error
+- Resolutions:
+  - `packages/session/src/selection-handler.ts` (boardRefs) — Added console.error logging (Phase 06-01)
+  - `packages/worker/src/index.ts` — Documented as best-effort WebSocket cleanup (Phase 06-03)
+  - `packages/cli/src/commands/dev.ts` — Documented as best-effort cache cleanup (Phase 06-03)
+- **Resolution:** v0.2 Phase 6 (error-handling) — 2026-01-09
 
-**JSON parsing without error handling:**
+### ✅ RESOLVED: JSON parsing without error handling
 - Risk: Corrupted database state could crash server
-- File: `packages/server/src/stores/sqlite-storage.ts:39`
-- Code: `return row ? JSON.parse(row.state_json) : null;`
-- Current mitigation: None
-- Recommendations: Wrap in try/catch, return null or throw descriptive error
+- File: `packages/server/src/stores/sqlite-storage.ts`
+- **Resolution:** Added try/catch, returns null on parse failure (Phase 06-02)
 
 ## Performance Bottlenecks
 
@@ -54,18 +50,18 @@
 ## Fragile Areas
 
 **Action controller state machine:**
-- File: `packages/ui/src/composables/useActionController.ts`
-- Why fragile: 1,807 lines with complex state transitions, setTimeout-based followUp handling
-- Common failures: Race conditions with pendingFollowUp (documented at lines 378-379, 1056)
+- File: `packages/ui/src/composables/useActionController.ts` (now split into focused modules)
+- Why fragile: Complex state transitions, setTimeout-based followUp handling
+- Common failures: Race conditions with pendingFollowUp (documented in code)
 - Safe modification: Test thoroughly, understand state machine before changes
-- Test coverage: Extensive (2,088-line test file)
+- Test coverage: Extensive (test file also split into focused test modules)
 
 **Flow engine execution:**
 - File: `packages/engine/src/flow/engine.ts` (968 lines)
 - Why fragile: Complex state machine for turn/phase sequencing
 - Common failures: Incorrect flow node evaluation
 - Safe modification: Run all flow tests, test with multiple game types
-- Test coverage: Good (`packages/engine/tests/flow.test.ts` - 1,569 lines)
+- Test coverage: Good (`packages/engine/tests/flow.test.ts` — 1,569 lines)
 
 ## Scaling Limits
 
@@ -91,32 +87,34 @@
 
 ## Test Coverage Gaps
 
-**Unimplemented TODO items:**
-- What's not tested: `boardRefs()` validation in assertions
+### ✅ RESOLVED: assertions.ts incomplete API
+- What: `boardRefs()` validation TODO with unused parameter
 - File: `packages/testing/src/assertions.ts:248`
-- Code: `// TODO: Add withChoices validation when action tracing is available`
-- Risk: Cannot verify complex selection choices in tests
-- Priority: Low (workaround: manual verification)
-- Difficulty: Requires action tracing feature first
+- **Resolution:** Removed unused `withChoices` parameter from `expect.toHaveAction()` signature; the option was never implemented and caused API confusion (Phase 07-02)
 
-**AI code generator fallback:**
-- What's not tested: Auto-generated AI checker functions
-- File: `packages/ai-trainer/src/code-generator.ts:336`
-- Code: `// TODO: Implement this checker based on game-specific logic`
-- Risk: Generated AI code may have incomplete evaluation functions
-- Priority: Medium (affects AI training quality)
-- Difficulty: Requires game-specific heuristics analysis
+### ✅ RESOLVED: AI code generator fallback
+- What: Auto-generated AI checker functions using basic fallback
+- File: `packages/ai-trainer/src/code-generator.ts`
+- **Resolution:** Added console.warn when fallback checker generation is used, making it visible that game-specific logic needs implementation (Phase 07-03)
 
 ## Documentation Gaps
 
-**Complex systems lacking inline documentation:**
-- `packages/engine/src/flow/engine.ts` (968 lines) - Flow execution state machine
-- `packages/ai/src/mcts-bot.ts` (786 lines) - MCTS algorithm implementation
-- `packages/session/src/game-session.ts` (2,585 lines) - Session management
+### ✅ RESOLVED: mcts-bot.ts inline documentation
+- File: `packages/ai/src/mcts-bot.ts` (786 lines)
+- **Resolution:** Added section dividers and JSDoc comments for major subsystems (Phase 07-01)
 
-**Recommendation:** Add section comments explaining major subsystems within these files.
+### ✅ RESOLVED: game-session.ts documentation
+- File: Previously `packages/session/src/game-session.ts` (2,585 lines)
+- **Resolution:** File split into 5 focused modules with clear responsibilities (v0.1 milestone)
+
+### ⏸️ DEFERRED: flow/engine.ts documentation
+- File: `packages/engine/src/flow/engine.ts` (968 lines)
+- Status: Not addressed in v0.2 milestone
+- Rationale: Good existing test coverage (1,569-line test file); documentation would improve readability but is not critical
+- Future work: Add section comments explaining flow execution state machine when modifying this file
 
 ---
 
 *Concerns audit: 2026-01-08*
+*v0.2 milestone completed: 2026-01-09*
 *Update as issues are fixed or new ones discovered*
