@@ -13,6 +13,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 
 - ✅ **v0.1 Large File Refactoring** — Phases 1-4 (shipped 2026-01-08)
 - ✅ **v0.2 Concerns Cleanup** — Phases 5-8 (shipped 2026-01-09)
+- 🚧 **v0.3 Flow Engine Docs** — Phase 9 (in progress)
 
 ## Phases
 
@@ -65,6 +66,20 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 
 </details>
 
+### 🚧 v0.3 Flow Engine Docs (In Progress)
+
+**Milestone Goal:** Add section comments to flow/engine.ts for improved navigability
+
+#### Phase 9: flow-engine-docs
+
+**Goal**: Add section dividers to group major subsystems in the 968-line flow engine file
+**Depends on**: v0.2 complete
+**Research**: Unlikely (documentation only, following established MCTS Bot pattern)
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01: TBD (run /gsd:plan-phase 9 to break down)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -77,3 +92,4 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 | 6. error-handling | v0.2 | 3/3 | Complete | 2026-01-09 |
 | 7. documentation | v0.2 | 3/3 | Complete | 2026-01-09 |
 | 8. concerns-cleanup | v0.2 | 1/1 | Complete | 2026-01-09 |
+| 9. flow-engine-docs | v0.3 | 0/? | Not started | - |

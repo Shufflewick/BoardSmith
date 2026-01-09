@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-09)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** Planning next milestone
+**Current focus:** v0.3 Flow Engine Docs
 
 ## Current Position
 
-Phase: 8 of 8 (all phases complete)
-Plan: N/A
-Status: Ready for next milestone
-Last activity: 2026-01-09 — v0.2 milestone archived
+Phase: 9 of 9 (flow-engine-docs)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-09 — Milestone v0.3 created
 
-Progress: ██████████ 100%
+Progress: ░░░░░░░░░░ 0%
 
 ## Milestones
 
@@ -23,10 +23,14 @@ Progress: ██████████ 100%
 - v0.2 Concerns Cleanup (Phases 5-8) — shipped 2026-01-09
 
 **In Progress:**
-- None — ready for next milestone planning
+- v0.3 Flow Engine Docs (Phase 9) — in progress
+
+## Roadmap Evolution
+
+- Milestone v0.3 created: flow engine documentation, 1 phase (Phase 9)
 
 ## Session Continuity
 
 Last session: 2026-01-09
-Stopped at: v0.2 milestone complete and archived
+Stopped at: Milestone v0.3 initialization
 Resume file: None
