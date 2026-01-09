@@ -8,6 +8,17 @@ import type {
 } from './types.js';
 
 /**
+ * Game Introspector
+ *
+ * This module discovers game structure at runtime by examining actual game instances.
+ * It uses dynamic property access (`as any`) intentionally - the purpose of introspection
+ * is to analyze properties that cannot be known at compile time.
+ *
+ * This is similar to reflection in other languages or JSON.parse() returning unknown types.
+ * The dynamic access is confined to this module and produces typed results (GameStructure).
+ */
+
+/**
  * Properties to skip when introspecting elements
  */
 const SKIP_PROPERTIES = new Set([
@@ -120,6 +131,8 @@ function discoverProperties(element: GameElement, typeInfo: ElementTypeInfo): vo
       continue;
     }
 
+    // Dynamic property access is intentional - introspection discovers unknown properties
+    // at runtime. TypeScript cannot statically type properties that vary per game.
     try {
       const value = (element as any)[prop];
       if (value === undefined || value === null) continue;
@@ -178,6 +191,8 @@ function discoverPlayerInfo(game: Game): PlayerTypeInfo {
     if (skipPlayerProps.has(prop)) continue;
     if (prop.startsWith('_')) continue;
 
+    // Dynamic property access is intentional - introspection discovers unknown player
+    // properties at runtime. Each game defines different custom player properties.
     try {
       const value = (player as any)[prop];
       if (value === undefined || value === null) continue;
@@ -255,7 +270,8 @@ function discoverSpatialInfo(
       maxCol = Math.max(maxCol, element.column);
     }
 
-    // Also check for hex coordinates (q, r, s)
+    // Dynamic property access is intentional - hex coordinates (q, r, s) may or may
+    // not exist depending on whether the game uses hex grids.
     const elem = element as any;
     if (elem.q !== undefined && elem.r !== undefined) {
       info.isHex = true;
