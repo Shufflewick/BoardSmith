@@ -1301,9 +1301,50 @@ export class Game<
   // ============================================
   // Player Helpers
   // ============================================
+  //
+  // Players are direct children of the Game in the element tree. These helper
+  // methods provide convenient access to players without requiring manual tree
+  // queries. For complex player queries, use `game.all(Player, ...)` directly.
+  //
+  // **Custom Player types**: If you use a custom Player subclass, set
+  // `static PlayerClass = MyPlayer` on your Game class:
+  //
+  //   class MyGame extends Game<MyGame, MyPlayer> {
+  //     static PlayerClass = MyPlayer;
+  //   }
+  //
+  // This ensures these helpers return your custom type with full type safety.
+  //
+  // @see {@link Player} for player-side methods like `allMy()`, `my()`
+  // ============================================
 
   /**
    * Get the current player (the player whose turn it is).
+   *
+   * The current player is determined by the `_isCurrent` flag on Player instances,
+   * managed via `setCurrentPlayer()` and the flow engine.
+   *
+   * @returns The current player, or `undefined` if no player is current
+   *
+   * @example
+   * ```typescript
+   * // In a flow action
+   * const player = game.currentPlayer;
+   * if (player) {
+   *   player.gold += 10;
+   * }
+   *
+   * // In an eachPlayer flow, currentPlayer is automatically set
+   * eachPlayer({
+   *   do: actionStep({
+   *     actions: ['takeTurn'],
+   *     // game.currentPlayer is the player whose turn it is
+   *   })
+   * })
+   * ```
+   *
+   * @see {@link setCurrentPlayer} - Change the current player
+   * @see {@link Player.isCurrent} - Check if a specific player is current
    */
   get currentPlayer(): P | undefined {
     return this.first(Player as unknown as ElementClass<P>, p => p.isCurrent()) as P | undefined;
@@ -1311,20 +1352,81 @@ export class Game<
 
   /**
    * Get the first player (position 1).
+   *
+   * Shorthand for `game.getPlayer(1)`. Useful for first-player-related logic.
+   *
+   * @returns Player at position 1, or `undefined` if no players
+   *
+   * @example
+   * ```typescript
+   * // Give first player advantage
+   * if (player === game.firstPlayer) {
+   *   player.gold += 5;
+   * }
+   *
+   * // Start with first player
+   * game.setCurrentPlayer(game.firstPlayer!);
+   * ```
+   *
+   * @see {@link getPlayer} - Get player by any position
+   * @see {@link Player.isFirstPlayer} - Check if a player is first
    */
   get firstPlayer(): P | undefined {
     return this.first(Player as unknown as ElementClass<P>, p => p.position === 1) as P | undefined;
   }
 
   /**
-   * Get a player by position (1-indexed).
+   * Get a player by their position (1-indexed).
+   *
+   * Positions are assigned at game creation and remain constant. Use position
+   * as a stable identifier for players across serialization/deserialization.
+   *
+   * @param position - Player position (1 = first player, 2 = second player, etc.)
+   * @returns The player at that position, or `undefined` if not found
+   *
+   * @example
+   * ```typescript
+   * // Get specific players
+   * const player1 = game.getPlayer(1);
+   * const player2 = game.getPlayer(2);
+   *
+   * // With custom Player type (type assertion needed for custom properties)
+   * const player = game.getPlayer(1) as MyPlayer;
+   * console.log(player.customProperty);
+   * ```
+   *
+   * @see {@link getPlayerOrThrow} - Throws if player not found (use in actions)
+   * @see {@link Player.position} - The position property on players
    */
   getPlayer(position: number): P | undefined {
     return this.first(Player as unknown as ElementClass<P>, p => p.position === position) as P | undefined;
   }
 
   /**
-   * Get a player by position, throwing if not found.
+   * Get a player by position, throwing an error if not found.
+   *
+   * Use this in action handlers and flow logic where a player MUST exist.
+   * The error message includes diagnostic info to help debug the issue.
+   *
+   * **Prefer this over `getPlayer()` when the player must exist** - it fails
+   * loudly rather than silently returning undefined.
+   *
+   * @param position - Player position (1-indexed)
+   * @returns The player at that position
+   * @throws Error if no player exists at that position
+   *
+   * @example
+   * ```typescript
+   * // In an action - player position comes from serialized action
+   * const targetPlayer = game.getPlayerOrThrow(targetPosition);
+   * targetPlayer.health -= damage;
+   *
+   * // In flow logic
+   * const player = game.getPlayerOrThrow(1);
+   * player.setCurrent(true);
+   * ```
+   *
+   * @see {@link getPlayer} - Returns undefined instead of throwing
    */
   getPlayerOrThrow(position: number): P {
     const player = this.getPlayer(position);
@@ -1338,7 +1440,35 @@ export class Game<
   }
 
   /**
-   * Set the current player by player object or position.
+   * Set the current player (whose turn it is).
+   *
+   * Automatically clears the previous current player before setting the new one.
+   * Accepts either a Player object or a position number.
+   *
+   * @param playerOrPosition - Player object or position number (1-indexed)
+   * @throws Error if position doesn't correspond to an existing player
+   *
+   * @example
+   * ```typescript
+   * // Set by player object
+   * game.setCurrentPlayer(player);
+   *
+   * // Set by position
+   * game.setCurrentPlayer(1);
+   *
+   * // Advance to next player in a turn-based game
+   * game.setCurrentPlayer(game.nextPlayer()!);
+   *
+   * // In a manual turn flow
+   * action('endTurn')
+   *   .do(() => {
+   *     const next = game.nextPlayer();
+   *     if (next) game.setCurrentPlayer(next);
+   *   })
+   * ```
+   *
+   * @see {@link currentPlayer} - Get the current player
+   * @see {@link nextPlayer} - Get the next player in turn order
    */
   setCurrentPlayer(playerOrPosition: P | number): void {
     // Clear previous current
@@ -1355,8 +1485,31 @@ export class Game<
   }
 
   /**
-   * Get the next player after the current player (circular).
-   * Player 4 → Player 1 in a 4-player game.
+   * Get the next player after the current player (circular turn order).
+   *
+   * Returns the player with the next-highest position, wrapping from the last
+   * player back to player 1. Returns `undefined` if there's no current player.
+   *
+   * In a 4-player game: Player 1 → 2 → 3 → 4 → 1 → ...
+   *
+   * @returns The next player in turn order, or `undefined` if no current player
+   *
+   * @example
+   * ```typescript
+   * // End turn and advance to next player
+   * action('endTurn')
+   *   .do(() => {
+   *     const next = game.nextPlayer();
+   *     if (next) game.setCurrentPlayer(next);
+   *   })
+   *
+   * // Check who's up next
+   * const nextUp = game.nextPlayer();
+   * game.message(`${nextUp?.name} is next`);
+   * ```
+   *
+   * @see {@link nextAfter} - Get next player after any specific player
+   * @see {@link previousPlayer} - Get previous player instead
    */
   nextPlayer(): P | undefined {
     const current = this.currentPlayer;
@@ -1369,8 +1522,30 @@ export class Game<
   }
 
   /**
-   * Get the previous player before the current player (circular).
-   * Player 1 → Player 4 in a 4-player game.
+   * Get the previous player before the current player (circular turn order).
+   *
+   * Returns the player with the next-lowest position, wrapping from player 1
+   * back to the last player. Returns `undefined` if there's no current player.
+   *
+   * In a 4-player game: Player 1 → 4 → 3 → 2 → 1 → ...
+   *
+   * @returns The previous player in turn order, or `undefined` if no current player
+   *
+   * @example
+   * ```typescript
+   * // Go back to previous player (undo last turn change)
+   * const prev = game.previousPlayer();
+   * if (prev) game.setCurrentPlayer(prev);
+   *
+   * // Reverse turn order mechanic
+   * action('reverseOrder')
+   *   .do(() => {
+   *     game.setCurrentPlayer(game.previousPlayer()!);
+   *   })
+   * ```
+   *
+   * @see {@link previousBefore} - Get previous player before any specific player
+   * @see {@link nextPlayer} - Get next player instead
    */
   previousPlayer(): P | undefined {
     const current = this.currentPlayer;
@@ -1383,7 +1558,36 @@ export class Game<
   }
 
   /**
-   * Get the next player after a specific player (circular).
+   * Get the next player after a specific player (circular turn order).
+   *
+   * Unlike `nextPlayer()`, this takes any player as input rather than using
+   * the current player. Useful when you need to iterate through players or
+   * find who comes after a non-current player.
+   *
+   * @param player - The reference player
+   * @returns The next player after the given player, or `undefined` if player not found
+   *
+   * @example
+   * ```typescript
+   * // Find who's clockwise from a specific player
+   * const leftNeighbor = game.nextAfter(player);
+   *
+   * // Pass cards to the left
+   * for (const player of game.all(Player)) {
+   *   const recipient = game.nextAfter(player);
+   *   player.hand.first(Card)?.putInto(recipient.incoming);
+   * }
+   *
+   * // Custom turn order starting from a specific player
+   * let current = startingPlayer;
+   * for (let i = 0; i < game.all(Player).length; i++) {
+   *   doSomething(current);
+   *   current = game.nextAfter(current)!;
+   * }
+   * ```
+   *
+   * @see {@link nextPlayer} - Uses current player as reference
+   * @see {@link previousBefore} - Get player before any specific player
    */
   nextAfter(player: P): P | undefined {
     const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
@@ -1394,7 +1598,28 @@ export class Game<
   }
 
   /**
-   * Get the previous player before a specific player (circular).
+   * Get the previous player before a specific player (circular turn order).
+   *
+   * Unlike `previousPlayer()`, this takes any player as input rather than using
+   * the current player. Useful for finding neighbors or reverse iteration.
+   *
+   * @param player - The reference player
+   * @returns The previous player before the given player, or `undefined` if player not found
+   *
+   * @example
+   * ```typescript
+   * // Find who's counter-clockwise from a specific player
+   * const rightNeighbor = game.previousBefore(player);
+   *
+   * // Pass cards to the right
+   * for (const player of game.all(Player)) {
+   *   const recipient = game.previousBefore(player);
+   *   player.hand.first(Card)?.putInto(recipient.incoming);
+   * }
+   * ```
+   *
+   * @see {@link previousPlayer} - Uses current player as reference
+   * @see {@link nextAfter} - Get player after any specific player
    */
   previousBefore(player: P): P | undefined {
     const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
@@ -1406,6 +1631,34 @@ export class Game<
 
   /**
    * Get all players other than the specified player.
+   *
+   * Useful for targeting opponents or excluding a player from a selection.
+   *
+   * @param player - The player to exclude
+   * @returns Array of all other players
+   *
+   * @example
+   * ```typescript
+   * // Get all opponents
+   * const opponents = game.others(currentPlayer);
+   *
+   * // Deal damage to all other players
+   * for (const opponent of game.others(attacker)) {
+   *   opponent.health -= 1;
+   * }
+   *
+   * // Create choices for target selection (other players only)
+   * action('attack')
+   *   .chooseFrom('target', {
+   *     prompt: 'Choose target',
+   *     choices: ctx => game.others(ctx.player).map(p => ({
+   *       value: p.position,
+   *       display: p.name
+   *     }))
+   *   })
+   * ```
+   *
+   * @see {@link playerChoices} - Build choice arrays for actions
    */
   others(player: P): P[] {
     return [...this.all(Player as unknown as ElementClass<P>)].filter(
@@ -1414,20 +1667,52 @@ export class Game<
   }
 
   /**
-   * Get player choices for use with chooseFrom selection.
-   * Returns an array of choices with player position as value and name as display.
+   * Get player choices formatted for use with `chooseFrom` selection.
    *
+   * Returns an array of choice objects with player position as `value` (stable
+   * across serialization) and player name as `display`.
+   *
+   * @param options - Configuration options
    * @param options.excludeSelf - If true, excludes the current player from choices
-   * @param options.filter - Optional filter function to narrow down players
-   * @param options.currentPlayer - The current player (required if excludeSelf is true)
+   * @param options.filter - Optional predicate to filter which players appear
+   * @param options.currentPlayer - The player making the choice (required if excludeSelf is true)
+   * @returns Array of choice objects for use with `chooseFrom`
    *
    * @example
    * ```typescript
-   * .chooseFrom('target', {
-   *   prompt: 'Choose a player',
-   *   choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
-   * })
+   * // Choose any other player as target
+   * action('attack')
+   *   .chooseFrom('target', {
+   *     prompt: 'Choose a player to attack',
+   *     choices: ctx => game.playerChoices({
+   *       excludeSelf: true,
+   *       currentPlayer: ctx.player
+   *     }),
+   *   })
+   *   .do(({ target }) => {
+   *     const targetPlayer = game.getPlayerOrThrow(target);
+   *     targetPlayer.health -= 1;
+   *   })
+   *
+   * // Choose from players meeting a condition
+   * action('heal')
+   *   .chooseFrom('target', {
+   *     prompt: 'Choose a wounded player',
+   *     choices: ctx => game.playerChoices({
+   *       filter: p => p.health < p.maxHealth
+   *     }),
+   *   })
+   *
+   * // Choose any player including self
+   * action('inspect')
+   *   .chooseFrom('target', {
+   *     prompt: 'Choose a player',
+   *     choices: () => game.playerChoices(),
+   *   })
    * ```
+   *
+   * @see {@link others} - Get array of other players directly
+   * @see {@link getPlayerOrThrow} - Convert position back to player
    */
   playerChoices(options: {
     excludeSelf?: boolean;
