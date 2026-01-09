@@ -5,26 +5,34 @@ import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 
 /**
- * Deck - A stack of cards, typically face-down
+ * Stacked container for cards, typically a draw pile.
  *
- * Decks are spaces that:
- * - Contain cards in a stacked order
- * - Usually have hidden contents (draw pile)
- * - Support shuffling
- * - Use "stacking" order (new cards go on top)
+ * Deck is a specialized Space with:
+ * - Stacking order (new cards go on top by default)
+ * - Visual layout for overlapping cards
+ * - Convenience method for drawing cards
  *
- * Examples: draw pile, discard pile, stock pile
- *
- * Usage:
- * ```ts
+ * @example
+ * ```typescript
+ * // Create and populate a deck
  * const deck = game.create(Deck, 'draw-pile');
- * deck.setOrder('stacking'); // Cards stack on top
- * deck.contentsHidden(); // No one sees the cards
- * deck.shuffle(); // Randomize order
+ * for (const cardData of CARDS) {
+ *   deck.create(Card, cardData.name, cardData);
+ * }
+ * deck.shuffle();
+ * deck.contentsHidden(); // Hide contents from all players
  *
- * // Draw a card (returns and removes from deck)
- * const card = deck.draw(Card);
+ * // Draw cards to a player's hand
+ * deck.drawTo(player.hand, 5);
+ *
+ * // Check if deck is empty
+ * if (deck.isEmpty()) {
+ *   // Reshuffle discard pile...
+ * }
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class Deck<G extends Game = any, P extends Player = any> extends Space<G, P> {
   /**

@@ -15,17 +15,42 @@ export type ElementLayout =
   | 'free-form';     // No specific layout (custom positioning)
 
 /**
- * A grid-based board container
+ * Rectangular grid board container.
  *
- * Grid is a Space that contains GridCell children arranged in a 2D rectangular grid.
- * Game designers should extend this class when creating grid-based boards.
+ * Grid contains GridCell children arranged in rows and columns.
+ * Use for chess-like boards, tic-tac-toe, or any rectangular grid game.
  *
- * Example:
+ * **Key features:**
+ * - Automatic grid layout rendering
+ * - Row/column labels for UI display
+ * - Coordinate attributes on cells for positioning
+ *
+ * @example
  * ```typescript
- * class CheckerBoard extends Grid {}
- * class ChessBoard extends Grid {}
- * class GoBoard extends Grid {}
+ * // Define a chess board
+ * class ChessBoard extends Grid {
+ *   $rowLabels = ['8', '7', '6', '5', '4', '3', '2', '1'];
+ *   $columnLabels = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+ *   $rowCoord = 'rank';
+ *   $colCoord = 'file';
+ * }
+ *
+ * class Square extends GridCell {
+ *   rank!: number; // 1-8
+ *   file!: number; // 1-8
+ * }
+ *
+ * // Create the board with cells
+ * const board = game.create(ChessBoard, 'board');
+ * for (let rank = 1; rank <= 8; rank++) {
+ *   for (let file = 1; file <= 8; file++) {
+ *     board.create(Square, `${file}${rank}`, { rank, file });
+ *   }
+ * }
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class Grid<G extends Game = any, P extends Player = any> extends Space<G, P> {
   /**
@@ -69,25 +94,30 @@ export class Grid<G extends Game = any, P extends Player = any> extends Space<G,
 }
 
 /**
- * A single cell within a Grid
+ * Single cell within a rectangular Grid.
  *
- * GridCell is a Space that represents one position in a grid.
- * It must have numeric position coordinates (the attribute names are flexible).
+ * GridCell represents one position in a grid board. Extend this class
+ * to add coordinate attributes (row/col, rank/file, etc.) and any
+ * game-specific properties.
  *
- * The game designer defines which attributes represent coordinates.
- *
- * Example:
+ * @example
  * ```typescript
+ * // Simple grid cell
  * class Square extends GridCell {
  *   row!: number;
  *   col!: number;
  * }
  *
+ * // Chess-style with custom coordinate names
  * class ChessSquare extends GridCell {
  *   rank!: number;  // 1-8
  *   file!: number;  // 1-8
+ *   color!: 'light' | 'dark';
  * }
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class GridCell<G extends Game = any, P extends Player = any> extends Space<G, P> {
   /**

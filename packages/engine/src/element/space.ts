@@ -24,18 +24,39 @@ export type LayoutDirection = 'horizontal' | 'vertical';
 export type LayoutAlignment = 'start' | 'center' | 'end' | 'stretch';
 
 /**
- * Spaces are static areas of the game board. They act as containers for Pieces
- * and other elements. Spaces are created during setup and their structure
- * doesn't change during play (though their contents do).
+ * Container element for game components. Spaces represent fixed locations
+ * on the board where pieces can be placed.
  *
- * Zone-based visibility: Space defines default visibility for its contents.
- * The Space itself is always visible - only the contents get the visibility rules.
- * Children inherit the zone visibility unless they explicitly override it.
+ * Use Space (or subclasses like Deck, Hand) for:
+ * - Board regions (play areas, scoring zones)
+ * - Card containers (decks, discard piles, hands)
+ * - Any fixed location that holds other elements
  *
- * Layout properties: Spaces can define how their children are arranged using
- * $ prefixed properties that AutoUI reads for rendering.
+ * **Key features:**
+ * - Zone visibility: Control who sees contents via `contentsHidden()`, `contentsVisibleToOwner()`
+ * - Events: React to elements entering/exiting via `onEnter()`, `onExit()`
+ * - Shuffle: Randomize children order via `shuffle()`
+ * - Layout: Configure visual arrangement via `$direction`, `$overlap`, `$fan`
  *
- * Examples: a deck, a player's hand, a discard pile, a board region
+ * @example
+ * ```typescript
+ * // Create a deck with hidden contents
+ * const deck = game.create(Deck, 'draw-pile');
+ * deck.contentsHidden();
+ * deck.shuffle();
+ *
+ * // Create a player's hand visible only to owner
+ * const hand = game.create(Hand, 'hand', { player });
+ * hand.contentsVisibleToOwner();
+ *
+ * // React to cards entering a discard pile
+ * discardPile.onEnter((card: Card) => {
+ *   game.message('{{player}} discarded {{card}}', { player, card });
+ * }, Card);
+ * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class Space<G extends Game = any, P extends Player = any> extends GameElement<G, P> {
   // ============================================
@@ -230,7 +251,22 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   // ============================================
 
   /**
-   * Shuffle the direct children of this space
+   * Randomly reorder the children of this space.
+   *
+   * Uses the game's seeded random number generator for deterministic shuffling
+   * (same seed = same shuffle order). Typically used on decks during setup.
+   *
+   * @example
+   * ```typescript
+   * // Shuffle the deck during game setup
+   * deck.shuffle();
+   *
+   * // Create and shuffle a deck
+   * for (const cardData of CARDS) {
+   *   deck.create(Card, cardData.name, cardData);
+   * }
+   * deck.shuffle();
+   * ```
    */
   shuffle(): void {
     this.shuffleInternal();

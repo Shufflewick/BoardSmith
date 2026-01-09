@@ -17,16 +17,46 @@ export type HexOrientation = 'flat' | 'pointy';
 export type HexCoordSystem = 'offset' | 'axial' | 'cube';
 
 /**
- * A hexagonal grid container
+ * Hexagonal grid board container.
  *
- * HexGrid is a Space that contains HexCell children arranged in a hexagonal pattern.
- * Supports both flat-top and pointy-top orientations.
+ * HexGrid contains HexCell children arranged in a honeycomb pattern.
+ * Use for Catan-style games, wargames, or any hex-based board.
  *
- * Example:
+ * **Key features:**
+ * - Flat-top or pointy-top orientation
+ * - Axial or cube coordinate systems
+ * - Automatic hex layout rendering
+ *
+ * @example
  * ```typescript
- * class CatanBoard extends HexGrid {}
- * class BattletechMap extends HexGrid {}
+ * // Define a Catan-style board
+ * class CatanBoard extends HexGrid {
+ *   $hexOrientation = 'pointy';
+ *   $coordSystem = 'axial';
+ *   $qCoord = 'q';
+ *   $rCoord = 'r';
+ * }
+ *
+ * class Tile extends HexCell {
+ *   q!: number;
+ *   r!: number;
+ *   terrain!: 'forest' | 'mountain' | 'plains' | 'water';
+ *   number?: number; // Dice roll number
+ * }
+ *
+ * // Create hex tiles
+ * const board = game.create(CatanBoard, 'board');
+ * for (const tileData of TILE_DATA) {
+ *   board.create(Tile, tileData.name, {
+ *     q: tileData.q,
+ *     r: tileData.r,
+ *     terrain: tileData.terrain
+ *   });
+ * }
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class HexGrid<G extends Game = any, P extends Player = any> extends Space<G, P> {
   /**
@@ -80,20 +110,34 @@ export class HexGrid<G extends Game = any, P extends Player = any> extends Space
 }
 
 /**
- * A single cell within a HexGrid
+ * Single cell within a hexagonal grid.
  *
- * HexCell is a Space that represents one hexagonal position in a hex grid.
- * It must have coordinate attributes (q, r for axial; q, r, s for cube).
+ * HexCell represents one hexagonal position in a HexGrid. Extend this class
+ * to add coordinate attributes (q/r for axial, q/r/s for cube) and any
+ * game-specific properties.
  *
- * Example:
+ * @example
  * ```typescript
+ * // Catan-style tile with terrain
  * class Tile extends HexCell {
  *   q!: number;
  *   r!: number;
  *   terrain!: 'forest' | 'mountain' | 'plains' | 'water';
  *   resource?: 'wood' | 'brick' | 'sheep' | 'wheat' | 'ore';
+ *   diceNumber?: number;
+ * }
+ *
+ * // Wargame hex with terrain features
+ * class MapHex extends HexCell {
+ *   q!: number;
+ *   r!: number;
+ *   elevation!: number;
+ *   cover!: 'none' | 'light' | 'heavy';
  * }
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class HexCell<G extends Game = any, P extends Player = any> extends Space<G, P> {
   /**

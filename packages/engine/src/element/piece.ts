@@ -7,13 +7,37 @@ import type { VisibilityMode } from '../command/visibility.js';
 import { visibilityFromMode } from '../command/visibility.js';
 
 /**
- * Pieces are game elements that can move during play.
- * Unlike Spaces, Pieces can be relocated between containers.
+ * Movable game element. Pieces represent items that can be relocated during play.
  *
- * Visibility: Pieces inherit visibility from their parent Space by default.
- * They can explicitly override this to be different from their zone.
+ * Use Piece (or subclasses like Card, Die) for:
+ * - Tokens and meeples
+ * - Cards
+ * - Dice
+ * - Any component players can move around
  *
- * Examples: cards, tokens, meeples, dice
+ * **Key features:**
+ * - Movement: Relocate via `putInto(destination)`
+ * - Removal: Remove from play via `remove()` (goes to game.pile)
+ * - Visibility: Override zone visibility via `showToAll()`, `hideFromAll()`, etc.
+ *
+ * @example
+ * ```typescript
+ * // Move a piece to a new location
+ * piece.putInto(targetSpace);
+ *
+ * // Draw a card from deck to hand
+ * const card = deck.first(Card);
+ * card?.putInto(player.hand);
+ *
+ * // Remove a captured piece
+ * capturedPiece.remove();
+ *
+ * // Show a card to specific player
+ * card.showOnlyTo(player);
+ * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class Piece<G extends Game = any, P extends Player = any> extends GameElement<G, P> {
   constructor(ctx: Partial<ElementContext>) {
@@ -25,7 +49,26 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
   // ============================================
 
   /**
-   * Move this piece into another element (Space or Piece)
+   * Move this piece into another container.
+   *
+   * The piece is removed from its current parent and added to the destination.
+   * Triggers `onExit` on the old parent and `onEnter` on the new parent.
+   *
+   * @param destination - The Space or Piece to move into
+   * @param options.position - Where to insert: 'first' (top/front) or 'last' (bottom/back).
+   *                           Default depends on destination's order mode.
+   *
+   * @example
+   * ```typescript
+   * // Move card to player's hand
+   * card.putInto(player.hand);
+   *
+   * // Put on top of a stacking container (like a deck)
+   * card.putInto(discardPile); // Goes on top due to 'stacking' order
+   *
+   * // Force position
+   * card.putInto(deck, { position: 'last' }); // Bottom of deck
+   * ```
    */
   putInto(destination: GameElement, options?: { position?: 'first' | 'last' }): void {
     this.moveToInternal(destination, options?.position);
@@ -77,7 +120,19 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
   }
 
   /**
-   * Remove this piece from play (moves to game.pile)
+   * Remove this piece from play.
+   *
+   * The piece is moved to `game.pile`, a hidden container for removed elements.
+   * Use this for captured pieces, discarded cards, or any element taken out of play.
+   *
+   * @example
+   * ```typescript
+   * // Remove a captured piece
+   * capturedPiece.remove();
+   *
+   * // Remove all damage tokens from a unit
+   * unit.all(DamageToken).forEach(t => t.remove());
+   * ```
    */
   remove(): void {
     if (this.game.pile) {

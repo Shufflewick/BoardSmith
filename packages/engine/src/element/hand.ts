@@ -4,22 +4,31 @@ import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 
 /**
- * Hand - A collection of cards held by a player
+ * Player's hand of cards with fanned display layout.
  *
- * Hands are spaces that:
- * - Are owned by a specific player
- * - Typically contain cards
- * - Have visibility rules (usually visible only to owner)
- * - Often displayed in a fan or row
+ * Hand is a specialized Space for cards held by a player, with:
+ * - Default fanned layout for visual presentation
+ * - Typically owner-only visibility
  *
- * Examples: player's hand in card games, tiles in tile-based games
+ * @example
+ * ```typescript
+ * // Create hands for each player
+ * for (const player of game.players) {
+ *   const hand = game.create(Hand, `hand-${player.position}`, {
+ *     player
+ *   });
+ *   hand.contentsVisibleToOwner(); // Only owner sees their cards
+ * }
  *
- * Usage:
- * ```ts
- * const hand = game.create(Hand, `hand-${player.position}`);
- * hand.player = player;
- * hand.contentsVisibleToOwner(); // Only owner sees cards
+ * // Deal cards
+ * deck.drawTo(player.hand, 7);
+ *
+ * // Query cards in hand
+ * const playableCards = player.hand.all(Card, c => c.cost <= player.mana);
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class Hand<G extends Game = any, P extends Player = any> extends Space<G, P> {
   /**

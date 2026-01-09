@@ -9,24 +9,40 @@ import type { Game } from './game.js';
 export type DieSides = 4 | 6 | 8 | 10 | 12 | 20;
 
 /**
- * Die - A polyhedral die game piece
+ * Rollable die piece for random value generation.
  *
- * Dice are pieces that can be rolled to produce random values.
- * Supports standard polyhedral dice: d4, d6, d8, d10, d12, d20.
+ * Die supports standard polyhedral dice (d4, d6, d8, d10, d12, d20) and
+ * custom dice with labeled faces. Uses the game's seeded RNG for
+ * deterministic rolls.
  *
- * Usage:
- * ```ts
- * // Create a d6
- * const die = board.create(Die, 'd6', { sides: 6 });
- * die.roll(); // Uses game's seeded RNG
- * console.log(die.value); // 1-6
+ * **Key features:**
+ * - Roll: Generate random value via `roll()`
+ * - Value: Current face value via `value` property
+ * - Custom faces: Set `faceLabels` for non-numeric dice (Fudge, symbols)
  *
- * // Create a custom die with labels
- * const fudgeDie = board.create(Die, 'fudge', {
+ * @example
+ * ```typescript
+ * // Create and roll a d6
+ * const die = game.create(Die, 'd6', { sides: 6 });
+ * const result = die.roll(); // 1-6
+ * console.log(`Rolled: ${die.value}`);
+ *
+ * // Create multiple dice
+ * const dice = game.createMany(2, Die, 'd6', { sides: 6 });
+ * dice.forEach(d => d.roll());
+ * const total = dice.reduce((sum, d) => sum + d.value, 0);
+ *
+ * // Custom Fudge die
+ * const fudgeDie = game.create(Die, 'fudge', {
  *   sides: 6,
  *   faceLabels: ['-', '-', ' ', ' ', '+', '+']
  * });
+ * fudgeDie.roll();
+ * console.log(fudgeDie.getLabel()); // '-', ' ', or '+'
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class Die<G extends Game = any, P extends Player = any> extends Piece<G, P> {
   /**

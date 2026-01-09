@@ -4,22 +4,38 @@ import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 
 /**
- * Card - A two-sided game piece commonly used in card games
+ * Two-sided game piece with face-up/face-down state.
  *
- * Cards are pieces that typically have:
- * - Two faces (front and back)
- * - Attributes like rank, suit, value, etc.
- * - Can be face-up or face-down
+ * Cards represent any game component with two sides (front and back).
+ * Extend this class to create your game's card types with custom attributes.
  *
- * Examples: playing cards, tarot cards, game cards
+ * **Key features:**
+ * - Face state: Track via `faceUp` property
+ * - Flip: Toggle face via `flip()`
+ * - Images: Set `$images: { face: '...', back: '...' }` for rendering
  *
- * Usage:
- * ```ts
+ * @example
+ * ```typescript
+ * // Define a custom card class
  * class PlayingCard extends Card {
  *   rank!: string; // 'A', '2'-'10', 'J', 'Q', 'K'
  *   suit!: 'hearts' | 'diamonds' | 'clubs' | 'spades';
  * }
+ *
+ * // Create cards in a deck
+ * deck.create(PlayingCard, 'Ace of Spades', {
+ *   rank: 'A',
+ *   suit: 'spades',
+ *   $images: { face: 'cards/ace-spades.png', back: 'cards/back.png' }
+ * });
+ *
+ * // Flip a card
+ * card.flip();
+ * if (card.faceUp) { ... }
  * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class Card<G extends Game = any, P extends Player = any> extends Piece<G, P> {
   /**
