@@ -145,7 +145,9 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Select child using UCT (Upper Confidence Bound for Trees)
+   * Select the most promising child node using the UCT (Upper Confidence Bound for Trees) formula.
+   * Balances exploitation (nodes with high win rates) vs exploration (less-visited nodes).
+   * Uses C=sqrt(2) as the exploration constant to ensure adequate tree coverage.
    */
   private selectChild(node: MCTSNode): MCTSNode {
     const C = Math.sqrt(2); // Exploration constant
@@ -167,8 +169,10 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * EXPANSION: Add one child node for an untried move
-   * Returns both the child node and the game instance for reuse in playout
+   * Grow the search tree by adding a child node for one unexplored move.
+   * Picks a random untried move from the leaf node, applies it to a restored game,
+   * and creates a new node representing the resulting state.
+   * Returns both the child and the game instance for efficient playout reuse.
    */
   private expand(node: MCTSNode): { child: MCTSNode; game: Game | null } {
     if (node.untriedMoves.length === 0 || node.flowState.complete) {
@@ -226,8 +230,10 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * PLAYOUT: Random simulation until game ends or depth limit
-   * Can optionally receive a pre-created game instance from expand()
+   * Simulate a game from the given node to estimate position value.
+   * Plays random moves until the game ends or playoutDepth is reached.
+   * Returns a score in [0,1]: 1=win for bot, 0=loss, 0.5=draw/unknown.
+   * Can reuse a game instance from expand() to avoid redundant restoration.
    */
   private playout(node: MCTSNode, existingGame: Game | null): number {
     // Reuse existing game if provided, otherwise restore
@@ -273,7 +279,9 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * BACKPROPAGATION: Update statistics up the tree
+   * Propagate simulation results from leaf to root, updating statistics.
+   * Increments visit count and accumulates value at each ancestor node.
+   * Adjusts perspective so each node's value reflects the player whose turn it is.
    */
   private backpropagate(node: MCTSNode | null, result: number): void {
     while (node !== null) {
@@ -347,8 +355,10 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Enumerate all valid moves for the bot player at current game state
-   * Used for the initial move selection
+   * Discover all legal moves available to the bot player at the current game state.
+   * Queries available actions from flowState, then generates all valid argument
+   * combinations for each action by examining selection definitions.
+   * Returns an array of {action, args} pairs ready for tree expansion.
    */
   private enumerateMoves(game: G, flowState: FlowState): BotMove[] {
     const moves: BotMove[] = [];
