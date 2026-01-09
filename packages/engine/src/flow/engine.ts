@@ -89,6 +89,11 @@ export class FlowEngine<G extends Game = Game> {
     this.definition = definition;
   }
 
+  // ============================================================================
+  // SECTION: Public API
+  // Purpose: External interface - start, resume, getState, restore, isComplete, getWinners
+  // ============================================================================
+
   /**
    * Start the flow from the beginning
    */
@@ -252,6 +257,11 @@ export class FlowEngine<G extends Game = Game> {
 
     return this.run();
   }
+
+  // ============================================================================
+  // SECTION: Resume Handling
+  // Purpose: Private methods for handling different resume scenarios
+  // ============================================================================
 
   /**
    * Resume a simultaneous action step after a player's action
@@ -429,9 +439,10 @@ export class FlowEngine<G extends Game = Game> {
     return [];
   }
 
-  // ============================================
-  // Private Methods
-  // ============================================
+  // ============================================================================
+  // SECTION: Core Execution Loop
+  // Purpose: Context creation, position tracking, main execution loop
+  // ============================================================================
 
   private createContext(): FlowContext<G> {
     const context = createContext(this.game, this.currentPlayer, this.variables);
@@ -543,6 +554,11 @@ export class FlowEngine<G extends Game = Game> {
     return this.getState();
   }
 
+  // ============================================================================
+  // SECTION: Node Dispatch
+  // Purpose: Node type dispatch and routing
+  // ============================================================================
+
   /**
    * Execute a single flow node
    */
@@ -575,6 +591,11 @@ export class FlowEngine<G extends Game = Game> {
         return { continue: true, awaitingInput: false };
     }
   }
+
+  // ============================================================================
+  // SECTION: Flow Control Executors
+  // Purpose: Sequence, loop, each-player, for-each execution
+  // ============================================================================
 
   private executeSequence(
     frame: ExecutionFrame,
@@ -693,6 +714,11 @@ export class FlowEngine<G extends Game = Game> {
 
     return { continue: true, awaitingInput: false };
   }
+
+  // ============================================================================
+  // SECTION: Action Step Executors
+  // Purpose: Action step and simultaneous action step execution
+  // ============================================================================
 
   private executeActionStep(
     frame: ExecutionFrame,
@@ -864,6 +890,11 @@ export class FlowEngine<G extends Game = Game> {
       awaitingInput: true,
     };
   }
+
+  // ============================================================================
+  // SECTION: Conditional Executors
+  // Purpose: Switch, if, execute, phase execution
+  // ============================================================================
 
   private executeSwitch(
     frame: ExecutionFrame,
