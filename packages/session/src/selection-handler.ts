@@ -151,8 +151,8 @@ export class SelectionHandler<G extends Game = Game> {
               const refs = choiceSel.boardRefs(rawValue, ctx);
               if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
               if (refs.targetRef) choice.targetRef = refs.targetRef;
-            } catch {
-              // Ignore errors in boardRefs
+            } catch (e) {
+              console.error('boardRefs() error (ignored):', e);
             }
           }
 
