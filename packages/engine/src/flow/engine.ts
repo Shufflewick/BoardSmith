@@ -264,7 +264,16 @@ export class FlowEngine<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Resume a simultaneous action step after a player's action
+   * Resume a simultaneous action step after a player's action.
+   *
+   * Handles multi-player concurrent action scenarios where all players can act
+   * independently. Validates the acting player, executes their action, then
+   * re-evaluates completion conditions:
+   * - playerDone: Per-player completion check (called after each action)
+   * - allDone: Global completion check (step completes when true)
+   * - Auto-completes players with no remaining available actions
+   *
+   * Continues awaiting input until all players are done or allDone returns true.
    */
   private resumeSimultaneousAction(
     actionName: string,
@@ -491,7 +500,17 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * Main execution loop - runs until awaiting input or complete
+   * Main execution loop - runs until awaiting input or complete.
+   *
+   * Uses a stack-based state machine to execute nested flow nodes. Each iteration
+   * processes one node, which may push children onto the stack (e.g., sequence steps)
+   * or mark itself complete. The loop exits when:
+   * - A node requires player input (awaitingInput)
+   * - The game's isComplete() returns true
+   * - The stack empties (all nodes processed)
+   *
+   * Includes iteration safety (DEFAULT_MAX_ITERATIONS) to detect infinite loops
+   * from misconfigured while/repeatUntil conditions.
    */
   private run(): FlowState {
     let iterations = 0;
@@ -720,6 +739,20 @@ export class FlowEngine<G extends Game = Game> {
   // Purpose: Action step and simultaneous action step execution
   // ============================================================================
 
+  /**
+   * Execute an action step - the primary player interaction point.
+   *
+   * Handles complex move counting logic:
+   * - minMoves: Minimum actions required before step can complete
+   * - maxMoves: Maximum actions allowed (auto-completes when reached)
+   * - repeatUntil: Condition-based completion (only checked after minMoves met)
+   *
+   * Move counting only increments when a full action chain completes (no followUp),
+   * preventing followUp chains from counting against move limits.
+   *
+   * Filters available actions to those actually valid for the current player,
+   * warning once about unknown action names to help catch typos.
+   */
   private executeActionStep(
     frame: ExecutionFrame,
     config: ActionStepConfig,
