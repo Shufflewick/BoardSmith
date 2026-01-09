@@ -5,6 +5,7 @@
 - ✅ [v0.1 Large File Refactoring](milestones/v0.1-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-01-08
 - ✅ [v0.2 Concerns Cleanup](milestones/v0.2-ROADMAP.md) (Phases 5-8) — SHIPPED 2026-01-09
 - ✅ [v0.3 Flow Engine Docs](milestones/v0.3-ROADMAP.md) (Phase 9) — SHIPPED 2026-01-09
+- ✅ [v0.4 Public API Docs](milestones/v0.4-ROADMAP.md) (Phase 10) — SHIPPED 2026-01-09
 
 ## Overview
 
@@ -15,7 +16,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.1 Large File Refactoring** — Phases 1-4 (shipped 2026-01-08)
 - ✅ **v0.2 Concerns Cleanup** — Phases 5-8 (shipped 2026-01-09)
 - ✅ **v0.3 Flow Engine Docs** — Phase 9 (shipped 2026-01-09)
-- 🚧 **v0.4 Public API Docs** — Phase 10 (in progress)
+- ✅ **v0.4 Public API Docs** — Phase 10 (shipped 2026-01-09)
 
 ## Phases
 
@@ -81,21 +82,24 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 
 </details>
 
-### 🚧 v0.4 Public API Docs (In Progress)
+<details>
+<summary>✅ v0.4 Public API Docs (Phase 10) — SHIPPED 2026-01-09</summary>
 
 ### Phase 10: public-api-jsdoc
 **Goal**: Add JSDoc documentation to all public APIs since BoardSmith is a library for others to use
 **Depends on**: v0.3 complete
 **Research**: None needed (documentation only, following established patterns)
-**Plans**: 2/3 complete
+**Plans**: 3/3 complete
 
 Plans:
 - [x] 10-01: Add JSDoc to engine element system (Game, GameElement, Space, Piece, Card, etc.)
 - [x] 10-02: Add JSDoc to engine action and flow systems (Action builder, flow DSL)
-- [ ] 10-03: Add JSDoc to testing package (test utilities, assertions, debug)
+- [x] 10-03: Add JSDoc to testing package (test utilities, assertions, debug)
 
 **Details:**
 BoardSmith is a library. Library users need clear JSDoc documentation for IDE autocompletion and understanding APIs. Focus on the core packages game developers use: engine (element, action, flow systems) and testing utilities.
+
+</details>
 
 ## Progress
 
@@ -110,4 +114,4 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 | 7. documentation | v0.2 | 3/3 | Complete | 2026-01-09 |
 | 8. concerns-cleanup | v0.2 | 1/1 | Complete | 2026-01-09 |
 | 9. flow-engine-docs | v0.3 | 1/1 | Complete | 2026-01-09 |
-| 10. public-api-jsdoc | v0.4 | 2/3 | In Progress | - |
+| 10. public-api-jsdoc | v0.4 | 3/3 | Complete | 2026-01-09 |
