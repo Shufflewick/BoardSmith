@@ -24,17 +24,21 @@ Improve code maintainability, testability, and navigability equally—making it 
 - ✓ Split `useActionController.ts` into focused composables — v0.1 (1,807 → 1,423 lines)
 - ✓ Split `action.ts` into focused modules — v0.1 (1,845 → 1,361 lines)
 - ✓ Split `useActionController.test.ts` into focused test files — v0.1 (2,088 → 3 files)
+- ✓ Type-safe choice validation in useActionController — v0.2 (type guards replace `as any`)
+- ✓ WeakMap pattern for DOM metadata in useZoomPreview — v0.2 (eliminates `as any`)
+- ✓ Error logging for silent catch blocks — v0.2 (boardRefs, JSON.parse)
+- ✓ MCTS Bot documentation — v0.2 (section dividers + JSDoc)
+- ✓ CONCERNS.md all items resolved — v0.2
 
 ### Active
 
-(None — milestone complete)
+(None — all refactoring milestones complete)
 
 ### Out of Scope
 
 - Behavior changes — pure refactoring only, no bug fixes or feature work
 - New test coverage — restructure existing tests, don't add new ones
 - API changes — public exports must remain compatible
-- Other tech debt items — type safety, error handling, docs are separate efforts
 
 ## Constraints
 
@@ -56,9 +60,10 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ## Context
 
-Shipped v0.1 with ~99k LOC TypeScript/Vue.
+Shipped v0.2 with ~99k LOC TypeScript/Vue.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 442 unit tests passing.
+Both large file refactoring (v0.1) and concerns cleanup (v0.2) complete.
 
 ---
-*Last updated: 2026-01-08 after v0.1 milestone*
+*Last updated: 2026-01-09 after v0.2 milestone*
