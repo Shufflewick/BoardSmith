@@ -716,6 +716,7 @@ export class ActionExecutor {
       const result = action.execute(resolvedArgs, context);
       return result ?? { success: true };
     } catch (error) {
+      console.error(`[BoardSmith] Action '${action.name}' execution failed:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -1367,6 +1368,7 @@ export class ActionExecutor {
       const result = action.execute(resolvedArgs, context);
       return result ?? { success: true };
     } catch (error) {
+      console.error(`[BoardSmith] Action '${action.name}' execution failed:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
