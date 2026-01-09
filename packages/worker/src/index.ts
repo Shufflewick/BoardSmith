@@ -750,7 +750,8 @@ function getWebSocketSession(ws: WebSocket): WebSocketSession | undefined {
       return attachment as WebSocketSession;
     }
   } catch {
-    // Ignore errors
+    // Intentionally silent: attachment retrieval is best-effort for debugging.
+    // If it fails, returning undefined is the correct fallback behavior.
   }
   return undefined;
 }
