@@ -56,6 +56,11 @@ export class MCTSBot<G extends Game = Game> {
     this.rng = createSeededRandom(this.config.seed);
   }
 
+  // ============================================================================
+  // SECTION: Core Algorithm
+  // Purpose: Main MCTS loop implementing SELECT, EXPAND, PLAYOUT, BACKPROPAGATE
+  // ============================================================================
+
   /**
    * Run MCTS and return the best move
    */
@@ -123,6 +128,11 @@ export class MCTSBot<G extends Game = Game> {
 
     return best.parentMove!;
   }
+
+  // ============================================================================
+  // SECTION: Tree Operations
+  // Purpose: SELECT and EXPAND phases - navigate and grow the search tree
+  // ============================================================================
 
   /**
    * SELECTION: Walk down tree using UCT until we find a node with untried moves
@@ -210,6 +220,11 @@ export class MCTSBot<G extends Game = Game> {
     return { child, game };
   }
 
+  // ============================================================================
+  // SECTION: Simulation
+  // Purpose: PLAYOUT phase - random rollout to estimate position value
+  // ============================================================================
+
   /**
    * PLAYOUT: Random simulation until game ends or depth limit
    * Can optionally receive a pre-created game instance from expand()
@@ -252,6 +267,11 @@ export class MCTSBot<G extends Game = Game> {
     return this.evaluateTerminalFromGame(game, flowState);
   }
 
+  // ============================================================================
+  // SECTION: Backpropagation
+  // Purpose: BACKPROPAGATE phase - update visit counts and values up the tree
+  // ============================================================================
+
   /**
    * BACKPROPAGATION: Update statistics up the tree
    */
@@ -267,6 +287,11 @@ export class MCTSBot<G extends Game = Game> {
       node = node.parent;
     }
   }
+
+  // ============================================================================
+  // SECTION: Utility
+  // Purpose: Helper methods for bot turn detection and position evaluation
+  // ============================================================================
 
   /**
    * Check if the bot can act in the current flow state
@@ -315,6 +340,11 @@ export class MCTSBot<G extends Game = Game> {
 
     return [];
   }
+
+  // ============================================================================
+  // SECTION: Move Enumeration
+  // Purpose: Discover and enumerate all legal moves for action selection
+  // ============================================================================
 
   /**
    * Enumerate all valid moves for the bot player at current game state
@@ -605,6 +635,11 @@ export class MCTSBot<G extends Game = Game> {
 
     return sampled;
   }
+
+  // ============================================================================
+  // SECTION: State Management
+  // Purpose: Snapshot capture and game restoration for tree search
+  // ============================================================================
 
   /**
    * Capture current game state as snapshot
