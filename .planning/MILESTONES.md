@@ -1,5 +1,57 @@
 # Project Milestones: BoardSmith Large File Refactoring
 
+## v0.4 Public API Docs (Shipped: 2026-01-09)
+
+**Delivered:** Comprehensive JSDoc documentation for all public APIs in @boardsmith/engine and @boardsmith/testing packages, enabling IDE autocompletion and clear API understanding.
+
+**Phases completed:** 10 (3 plans total)
+
+**Key accomplishments:**
+
+- Element system JSDoc: Game, GameElement, Space, Piece, Card, Deck, Hand, Die, Grid classes
+- Action/flow system JSDoc: Action builder methods, ActionExecutor, FlowEngine class docs
+- Testing package JSDoc: TestGame, assertions, fixtures, debug utilities with @throws and @example
+- Package-level @packageDocumentation with usage examples
+- Established patterns: @module, @internal, @typeParam, @throws
+
+**Stats:**
+
+- 14 files modified
+- +866 / -78 lines
+- 1 phase, 3 plans
+- Same day start to ship (2026-01-09)
+
+**Git range:** `docs(10-01)` → `docs(10-03)`
+
+**What's next:** Documentation complete. Ready for new feature work.
+
+---
+
+## v0.3 Flow Engine Docs (Shipped: 2026-01-09)
+
+**Delivered:** Section dividers and JSDoc improvements to the 1032-line FlowEngine file, following the established MCTS Bot documentation pattern.
+
+**Phases completed:** 9 (1 plan total)
+
+**Key accomplishments:**
+
+- 7 section dividers grouping major FlowEngine subsystems
+- Enhanced JSDoc for 3 key complex methods (run, executeActionStep, resumeSimultaneousAction)
+- Section divider pattern now applied to both major engine files
+
+**Stats:**
+
+- 4 files created/modified
+- +192 / -23 lines
+- 1 phase, 1 plan
+- Same day start to ship (2026-01-09)
+
+**Git range:** `docs(09-01)` commits
+
+**What's next:** Public API JSDoc documentation (v0.4)
+
+---
+
 ## v0.2 Concerns Cleanup (Shipped: 2026-01-09)
 
 **Delivered:** Addressed all technical concerns from v0.1: eliminated type assertions, added error logging, improved documentation, and updated CONCERNS.md with resolution status.

@@ -29,10 +29,15 @@ Improve code maintainability, testability, and navigability equally—making it 
 - ✓ Error logging for silent catch blocks — v0.2 (boardRefs, JSON.parse)
 - ✓ MCTS Bot documentation — v0.2 (section dividers + JSDoc)
 - ✓ CONCERNS.md all items resolved — v0.2
+- ✓ FlowEngine section dividers — v0.3 (7 sections grouping major subsystems)
+- ✓ FlowEngine JSDoc improvements — v0.3 (key complex methods documented)
+- ✓ Element system JSDoc — v0.4 (Game, GameElement, Space, Piece, Card, etc.)
+- ✓ Action/Flow system JSDoc — v0.4 (Action builder, ActionExecutor, FlowEngine)
+- ✓ Testing package JSDoc — v0.4 (TestGame, assertions, fixtures, debug)
 
 ### Active
 
-(None — all refactoring milestones complete)
+(None — all documentation milestones complete)
 
 ### Out of Scope
 
@@ -60,10 +65,10 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ## Context
 
-Shipped v0.2 with ~99k LOC TypeScript/Vue.
+Shipped v0.4 with ~99k LOC TypeScript/Vue.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 442 unit tests passing.
-Both large file refactoring (v0.1) and concerns cleanup (v0.2) complete.
+All milestones complete: v0.1 (file refactoring), v0.2 (concerns cleanup), v0.3 (FlowEngine docs), v0.4 (public API docs).
 
 ---
-*Last updated: 2026-01-09 after v0.2 milestone*
+*Last updated: 2026-01-09 after v0.4 milestone*
