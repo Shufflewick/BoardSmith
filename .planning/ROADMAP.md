@@ -17,7 +17,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.2 Concerns Cleanup** — Phases 5-8 (shipped 2026-01-09)
 - ✅ **v0.3 Flow Engine Docs** — Phase 9 (shipped 2026-01-09)
 - ✅ **v0.4 Public API Docs** — Phase 10 (shipped 2026-01-09)
-- 🚧 **v0.5 ESLint No-Shadow** — Phase 11 (in progress)
+- ✅ **v0.5 ESLint No-Shadow** — Phase 11 (shipped 2026-01-09)
 
 ## Phases
 
@@ -102,18 +102,17 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 
 </details>
 
-### 🚧 v0.5 ESLint No-Shadow (In Progress)
+<details>
+<summary>✅ v0.5 ESLint No-Shadow (Phase 11) — SHIPPED 2026-01-09</summary>
 
-**Milestone Goal:** Add @typescript-eslint/no-shadow rule to catch variable shadowing bugs at build time (prompted by train action silent failure post-mortem)
-
-#### Phase 11: eslint-no-shadow
+### Phase 11: eslint-no-shadow
 **Goal**: Add ESLint with @typescript-eslint/no-shadow rule and fix all existing violations
 **Depends on**: v0.4 complete
-**Research**: None needed (well-documented ESLint setup)
-**Plans**: 1
+**Plans**: 1/1 complete
 
-Plans:
-- [ ] 11-01: Add ESLint with no-shadow rule, fix 5 violations
+- [x] 11-01: Add ESLint with no-shadow rule, fix 5 violations
+
+</details>
 
 ## Progress
 
@@ -129,4 +128,4 @@ Plans:
 | 8. concerns-cleanup | v0.2 | 1/1 | Complete | 2026-01-09 |
 | 9. flow-engine-docs | v0.3 | 1/1 | Complete | 2026-01-09 |
 | 10. public-api-jsdoc | v0.4 | 3/3 | Complete | 2026-01-09 |
-| 11. eslint-no-shadow | v0.5 | 0/1 | Planned | - |
+| 11. eslint-no-shadow | v0.5 | 1/1 | Complete | 2026-01-09 |
