@@ -357,6 +357,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return value === undefined;
   }
 
+  /** Type guard for values that may have an id property */
+  function hasId(obj: unknown): obj is { id: unknown } {
+    return typeof obj === 'object' && obj !== null && 'id' in obj;
+  }
+
+  /** Type guard for values that may have a value property */
+  function hasValue(obj: unknown): obj is { value: unknown } {
+    return typeof obj === 'object' && obj !== null && 'value' in obj;
+  }
+
   function validateSelection(selection: SelectionMetadata, value: unknown): ValidationResult {
     // For repeating selections, validation is done by the server
     if (selection.repeat) {
@@ -370,7 +380,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Handle both direct match and value property match
         if (c.value === value) return true;
         if (typeof c.value === 'object' && c.value !== null) {
-          return (c.value as any).value === value || (c.value as any).id === value;
+          return (hasValue(c.value) && c.value.value === value) ||
+                 (hasId(c.value) && c.value.id === value);
         }
         return false;
       });
