@@ -221,14 +221,12 @@ export function assertGameFinished(
  * @example
  * ```typescript
  * assertActionAvailable(testGame, 0, 'move');
- * assertActionAvailable(testGame, 1, 'attack', { withChoices: true });
  * ```
  */
 export function assertActionAvailable(
   testGame: TestGame,
   playerIndex: number,
-  actionName: string,
-  options?: { withChoices?: boolean }
+  actionName: string
 ): void {
   const flowState = testGame.getFlowState();
 
@@ -244,8 +242,6 @@ export function assertActionAvailable(
       `Action "${actionName}" is not available for player ${playerIndex}. Available actions: [${availableActions.join(', ')}]`
     );
   }
-
-  // TODO: Add withChoices validation when action tracing is available
 }
 
 /**
