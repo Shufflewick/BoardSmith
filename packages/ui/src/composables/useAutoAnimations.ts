@@ -214,7 +214,7 @@ export function useAutoAnimations(options: AutoAnimationsOptions): AutoAnimation
   const statResetters: Array<() => void> = [];
 
   for (const statConfig of flyToStats) {
-    const { reset } = useAutoFlyToStat({
+    const { reset: statReset } = useAutoFlyToStat({
       gameView,
       containerRef: statConfig.containerRef,
       selector: statConfig.selector,
@@ -244,7 +244,7 @@ export function useAutoAnimations(options: AutoAnimationsOptions): AutoAnimation
       elementSize,
     });
 
-    statResetters.push(reset);
+    statResetters.push(statReset);
   }
 
   // Combine all flying elements

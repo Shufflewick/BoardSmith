@@ -933,20 +933,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   async function start(
     actionName: string,
-    options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> } | Record<string, unknown>
+    startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> } | Record<string, unknown>
   ): Promise<void> {
     // Support both old signature (initialArgs object) and new signature (options with args/prefill)
     let initialArgs: Record<string, unknown> = {};
     let prefillArgs: Record<string, unknown> = {};
 
-    if (options) {
-      if ('args' in options || 'prefill' in options) {
+    if (startOptions) {
+      if ('args' in startOptions || 'prefill' in startOptions) {
         // New signature: { args?, prefill? }
-        initialArgs = (options as { args?: Record<string, unknown> }).args ?? {};
-        prefillArgs = (options as { prefill?: Record<string, unknown> }).prefill ?? {};
+        initialArgs = (startOptions as { args?: Record<string, unknown> }).args ?? {};
+        prefillArgs = (startOptions as { prefill?: Record<string, unknown> }).prefill ?? {};
       } else {
         // Old signature: plain args object (backward compatible)
-        initialArgs = options as Record<string, unknown>;
+        initialArgs = startOptions as Record<string, unknown>;
       }
     }
 

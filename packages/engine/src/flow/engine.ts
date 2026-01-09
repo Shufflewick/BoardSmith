@@ -365,10 +365,10 @@ export class FlowEngine<G extends Game = Game> {
       const actions = typeof config.actions === 'function'
         ? config.actions(context, player)
         : config.actions;
-      playerState.availableActions = actions.filter((actionName) => {
-        const action = this.game.getAction(actionName);
+      playerState.availableActions = actions.filter((availableActionName) => {
+        const action = this.game.getAction(availableActionName);
         if (!action) return false;
-        return this.game.getAvailableActions(player as any).some((a) => a.name === actionName);
+        return this.game.getAvailableActions(player as any).some((a) => a.name === availableActionName);
       });
       // If no available actions left, mark as completed
       if (playerState.availableActions.length === 0) {

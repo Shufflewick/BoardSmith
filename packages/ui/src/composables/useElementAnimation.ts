@@ -149,16 +149,16 @@ export function useElementAnimation() {
         const progress = easeOutCubic(rawProgress);
 
         // Get the element's CURRENT position in the DOM (may have moved)
-        const currentRect = htmlEl.getBoundingClientRect();
+        const animatingRect = htmlEl.getBoundingClientRect();
 
         // Calculate where we want to visually appear
         // Interpolate from start position towards current DOM position
-        const visualLeft = capturedStartPos.left + (currentRect.left - capturedStartPos.left) * progress;
-        const visualTop = capturedStartPos.top + (currentRect.top - capturedStartPos.top) * progress;
+        const visualLeft = capturedStartPos.left + (animatingRect.left - capturedStartPos.left) * progress;
+        const visualTop = capturedStartPos.top + (animatingRect.top - capturedStartPos.top) * progress;
 
         // Calculate the transform needed to move from current DOM position to visual position
-        const offsetX = visualLeft - currentRect.left;
-        const offsetY = visualTop - currentRect.top;
+        const offsetX = visualLeft - animatingRect.left;
+        const offsetY = visualTop - animatingRect.top;
 
         if (Math.abs(offsetX) > 0.5 || Math.abs(offsetY) > 0.5) {
           htmlEl.style.transform = `translate(${offsetX}px, ${offsetY}px)`;

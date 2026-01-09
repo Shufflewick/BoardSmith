@@ -175,9 +175,9 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
         // Initialize count trackers
         for (const stat of stats) {
           if (stat.trackCount) {
-            const tracker = countTrackers.get(stat.stat);
-            if (tracker) {
-              tracker.initialize(stat.trackCount());
+            const countTracker = countTrackers.get(stat.stat);
+            if (countTracker) {
+              countTracker.initialize(stat.trackCount());
             }
           }
         }
