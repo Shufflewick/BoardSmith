@@ -56,11 +56,11 @@ Plans:
 **Depends on**: Phase 6
 **Research**: Unlikely (internal patterns)
 **Plans**: 3
-**Status**: In progress (1/3 plans complete)
+**Status**: In progress (2/3 plans complete)
 
 Plans:
 - [x] 07-01: Add MCTS Bot inline documentation
-- [ ] 07-02: Fix assertions.ts incomplete API (remove unused param)
+- [x] 07-02: Fix assertions.ts incomplete API (remove unused param)
 - [ ] 07-03: Add code-generator fallback warning
 
 #### Phase 8: concerns-cleanup
@@ -82,5 +82,5 @@ Plans:
 | 4. test file refactoring | v0.1 | 3/3 | Complete | 2026-01-08 |
 | 5. type-safety | v0.2 | 3/3 | Complete | 2026-01-08 |
 | 6. error-handling | v0.2 | 3/3 | Complete | 2026-01-09 |
-| 7. documentation | v0.2 | 1/3 | In progress | - |
+| 7. documentation | v0.2 | 2/3 | In progress | - |
 | 8. concerns-cleanup | v0.2 | 0/1 | Not started | - |
