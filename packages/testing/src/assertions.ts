@@ -1,8 +1,17 @@
+/**
+ * Assertion helpers for testing BoardSmith games.
+ *
+ * Provides test assertions for checking game state, player elements,
+ * action availability, and game completion.
+ *
+ * @module
+ */
+
 import type { Game, GameElement, Player } from '@boardsmith/engine';
 import type { TestGame } from './test-game.js';
 
 /**
- * Expected flow state for assertions
+ * Expected flow state for assertions.
  */
 export interface ExpectedFlowState {
   /** Player position who should be acting */
@@ -18,7 +27,7 @@ export interface ExpectedFlowState {
 }
 
 /**
- * Result of a flow state assertion
+ * Result of a flow state assertion.
  */
 export interface FlowStateAssertionResult {
   passed: boolean;
@@ -35,6 +44,14 @@ export interface FlowStateAssertionResult {
 
 /**
  * Assert that the game flow is in the expected state.
+ *
+ * Checks any combination of: current player, available actions,
+ * completion status, awaiting input status, and phase.
+ *
+ * @param testGame - The test game instance
+ * @param expected - The expected flow state properties
+ * @returns The assertion result with actual vs expected values
+ * @throws Error if any expected property doesn't match
  *
  * @example
  * ```typescript
@@ -96,6 +113,15 @@ export function assertFlowState(
 /**
  * Assert that a player has specific elements in a zone.
  *
+ * Checks element counts in a player's zone with exact, min, or max constraints.
+ *
+ * @param testGame - The test game instance
+ * @param playerIndex - The player to check (0-indexed)
+ * @param zoneName - The name of the zone property on the player (e.g., 'hand', 'board')
+ * @param elementClass - The element class to count
+ * @param countOrOptions - Exact count or { min?, max?, exact? } options
+ * @throws Error if the count doesn't match the expected constraint
+ *
  * @example
  * ```typescript
  * assertPlayerHas(testGame, 0, 'hand', Card, 5);  // Player 0 has 5 cards in hand
@@ -141,6 +167,13 @@ export function assertPlayerHas<E extends GameElement>(
 /**
  * Assert that the game has a specific number of elements of a type.
  *
+ * Checks total element counts across the entire game with exact, min, or max constraints.
+ *
+ * @param testGame - The test game instance
+ * @param elementClass - The element class to count
+ * @param countOrOptions - Exact count or { min?, max?, exact? } options
+ * @throws Error if the count doesn't match the expected constraint
+ *
  * @example
  * ```typescript
  * assertElementCount(testGame, Card, 52);  // Game has 52 cards total
@@ -177,6 +210,12 @@ export function assertElementCount<E extends GameElement>(
 
 /**
  * Assert that the game is finished with expected winner(s).
+ *
+ * Verifies the game is complete and optionally checks the winning player(s).
+ *
+ * @param testGame - The test game instance
+ * @param options - Optional winner constraints: { winner } for single winner, { winners } for multiple
+ * @throws Error if game is not complete or winners don't match
  *
  * @example
  * ```typescript
@@ -218,6 +257,13 @@ export function assertGameFinished(
 /**
  * Assert that a specific action is available for a player.
  *
+ * Verifies that it's the player's turn and the action is in their available actions.
+ *
+ * @param testGame - The test game instance
+ * @param playerIndex - The player to check (0-indexed)
+ * @param actionName - The action that should be available
+ * @throws Error if it's not the player's turn or action is not available
+ *
  * @example
  * ```typescript
  * assertActionAvailable(testGame, 0, 'move');
@@ -246,6 +292,13 @@ export function assertActionAvailable(
 
 /**
  * Assert that a specific action is NOT available for a player.
+ *
+ * Passes if it's not the player's turn or if the action is not in their available actions.
+ *
+ * @param testGame - The test game instance
+ * @param playerIndex - The player to check (0-indexed)
+ * @param actionName - The action that should not be available
+ * @throws Error if the action is available for this player
  *
  * @example
  * ```typescript

@@ -1,16 +1,32 @@
+/**
+ * Fixture and scenario helpers for testing BoardSmith games.
+ *
+ * Provides utilities for creating test games with specific states,
+ * running action sequences, and generating multiple test configurations.
+ *
+ * @module
+ */
+
 import type { Game, GameElement, GameOptions, Player } from '@boardsmith/engine';
 import { TestGame, type TestGameOptions } from './test-game.js';
 
 /**
  * Builder for creating test scenarios with specific game states.
  *
+ * Use method chaining to configure player count, seed, and custom setup
+ * functions before building the test game.
+ *
+ * @typeParam G - The game class type
+ *
  * @example
  * ```typescript
  * const scenario = new ScenarioBuilder(MyGame)
  *   .withPlayers(2)
  *   .withSeed('deterministic-seed')
- *   .setupHand(0, [card1, card2, card3])
- *   .setupBoard({ 'A1': piece1, 'B2': piece2 })
+ *   .setup(game => {
+ *     // Custom setup logic
+ *     game.game.deck.shuffle();
+ *   })
  *   .build();
  * ```
  */
@@ -19,13 +35,22 @@ export class ScenarioBuilder<G extends Game = Game> {
   private options: TestGameOptions;
   private setupFunctions: Array<(testGame: TestGame<G>) => void> = [];
 
+  /**
+   * Create a new ScenarioBuilder for a game class.
+   *
+   * @param GameClass - The game class constructor
+   */
   constructor(GameClass: new (options: GameOptions) => G) {
     this.GameClass = GameClass;
     this.options = { playerCount: 2 };
   }
 
   /**
-   * Set the number of players
+   * Set the number of players.
+   *
+   * @param count - Number of players
+   * @param names - Optional player names
+   * @returns This builder for chaining
    */
   withPlayers(count: number, names?: string[]): this {
     this.options.playerCount = count;
@@ -36,7 +61,10 @@ export class ScenarioBuilder<G extends Game = Game> {
   }
 
   /**
-   * Set a deterministic seed for reproducible tests
+   * Set a deterministic seed for reproducible tests.
+   *
+   * @param seed - The random seed string
+   * @returns This builder for chaining
    */
   withSeed(seed: string): this {
     this.options.seed = seed;
@@ -44,7 +72,13 @@ export class ScenarioBuilder<G extends Game = Game> {
   }
 
   /**
-   * Add a custom setup function to run after game creation
+   * Add a custom setup function to run after game creation.
+   *
+   * Setup functions run before the game starts, allowing you to
+   * manipulate the initial game state.
+   *
+   * @param fn - Function that receives the test game for setup
+   * @returns This builder for chaining
    */
   setup(fn: (testGame: TestGame<G>) => void): this {
     this.setupFunctions.push(fn);
@@ -52,7 +86,11 @@ export class ScenarioBuilder<G extends Game = Game> {
   }
 
   /**
-   * Build the test game with all configured options and setup
+   * Build the test game with all configured options and setup.
+   *
+   * Runs all setup functions, then starts the game.
+   *
+   * @returns The configured and started test game
    */
   build(): TestGame<G> {
     const testGame = TestGame.create(this.GameClass, {
@@ -72,7 +110,12 @@ export class ScenarioBuilder<G extends Game = Game> {
   }
 
   /**
-   * Build without starting (for setup-only scenarios)
+   * Build without starting (for setup-only scenarios).
+   *
+   * Runs all setup functions but does not start the game flow.
+   * Useful when you need to inspect or modify the game before starting.
+   *
+   * @returns The configured but not started test game
    */
   buildWithoutStart(): TestGame<G> {
     const testGame = TestGame.create(this.GameClass, {
@@ -92,6 +135,11 @@ export class ScenarioBuilder<G extends Game = Game> {
 /**
  * Create a scenario builder for a game class.
  *
+ * Convenience function that creates a new {@link ScenarioBuilder}.
+ *
+ * @param GameClass - The game class constructor
+ * @returns A new ScenarioBuilder instance
+ *
  * @example
  * ```typescript
  * const testGame = scenario(MyGame)
@@ -110,7 +158,14 @@ export function scenario<G extends Game>(
 }
 
 /**
- * Helper to quickly create a test game with common options.
+ * Quickly create a test game with minimal configuration.
+ *
+ * A shorthand for creating a test game when you just need player count and optional seed.
+ *
+ * @param GameClass - The game class constructor
+ * @param playerCount - Number of players
+ * @param seed - Optional random seed for deterministic tests
+ * @returns A started test game
  *
  * @example
  * ```typescript
@@ -131,11 +186,19 @@ export function quickGame<G extends Game>(
 
 /**
  * Run a sequence of actions and return the final state.
- * Useful for setting up a game to a specific point.
+ *
+ * Creates a test game, then executes the provided actions in order.
+ * Useful for setting up a game to a specific point for testing.
+ *
+ * @param GameClass - The game class constructor
+ * @param options - Test game configuration options
+ * @param actions - Array of actions to perform in sequence
+ * @returns The test game after all actions have been performed
+ * @throws Error if any action in the sequence fails
  *
  * @example
  * ```typescript
- * const testGame = await playSequence(MyGame, { playerCount: 2 }, [
+ * const testGame = playSequence(MyGame, { playerCount: 2 }, [
  *   { player: 0, action: 'move', args: { to: 'A1' } },
  *   { player: 1, action: 'move', args: { to: 'B2' } },
  *   { player: 0, action: 'attack', args: { target: 'B2' } },
@@ -163,7 +226,15 @@ export function playSequence<G extends Game>(
 
 /**
  * Play random moves until a condition is met or max moves reached.
+ *
+ * Picks random available actions and executes them until the condition
+ * returns true, the game completes, or max moves is reached.
  * Useful for getting to mid-game states quickly.
+ *
+ * @param testGame - The test game to play
+ * @param condition - Function that returns true when play should stop
+ * @param maxMoves - Maximum number of moves before stopping (default: 1000)
+ * @returns The test game after playing
  *
  * @example
  * ```typescript
@@ -205,7 +276,13 @@ export function playUntil<G extends Game>(
 
 /**
  * Create multiple test games with different configurations.
- * Useful for parameterized testing.
+ *
+ * Creates one test game for each configuration in the array.
+ * Useful for parameterized testing across different player counts or seeds.
+ *
+ * @param GameClass - The game class constructor
+ * @param configurations - Array of test game configurations
+ * @returns Array of configured test games
  *
  * @example
  * ```typescript
