@@ -6,6 +6,7 @@ import {
   logAvailableActions,
   diffSnapshots,
 } from '@boardsmith/testing';
+import { Player } from '@boardsmith/engine';
 import { CheckersGame, CheckerPiece, CheckersPlayer, Square } from '@boardsmith/checkers-rules';
 
 describe('CheckersGame', () => {
@@ -17,9 +18,9 @@ describe('CheckersGame', () => {
         seed: 'test-seed',
       });
 
-      expect(testGame.game.players.length).toBe(2);
-      expect(testGame.game.players.get(1)!.name).toBe('Alice');
-      expect(testGame.game.players.get(2)!.name).toBe('Bob');
+      expect([...testGame.game.all(Player)].length).toBe(2);
+      expect(testGame.game.getPlayer(1)!.name).toBe('Alice');
+      expect(testGame.game.getPlayer(2)!.name).toBe('Bob');
     });
 
     it('should create an 8x8 board', () => {
@@ -40,8 +41,8 @@ describe('CheckersGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
-      const bob = testGame.game.players.get(2)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
+      const bob = testGame.game.getPlayer(2)! as CheckersPlayer;
 
       const alicePieces = testGame.game.getPlayerPieces(alice);
       const bobPieces = testGame.game.getPlayerPieces(bob);
@@ -105,7 +106,7 @@ describe('CheckersGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
       const validMoves = testGame.game.getValidMoves(alice);
 
       // Player 0's pieces are on rows 0-2, they move toward row 7
@@ -121,7 +122,7 @@ describe('CheckersGame', () => {
       });
 
       // Initial position should have moves
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
       expect(testGame.game.hasAnyValidMove(alice)).toBe(true);
     });
 
@@ -144,7 +145,7 @@ describe('CheckersGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
 
       // At game start, no captures are possible (pieces are 2 rows apart)
       expect(testGame.game.playerHasCaptures(alice)).toBe(false);
@@ -159,8 +160,8 @@ describe('CheckersGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
-      const bob = testGame.game.players.get(2)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
+      const bob = testGame.game.getPlayer(2)! as CheckersPlayer;
 
       // Player 0 kings at row 7, Player 1 kings at row 0
       expect(testGame.game.isKingRow(7, alice)).toBe(true);
@@ -195,7 +196,7 @@ describe('CheckersGame', () => {
         seed: 'trace-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
       const trace = traceAction(testGame.game, 'move', alice);
 
       // traceAction returns structured info about action availability
@@ -217,7 +218,7 @@ describe('CheckersGame', () => {
         seed: 'log-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
       const actionLog = logAvailableActions(testGame.game, alice);
 
       // Returns a string summarizing available actions
@@ -238,7 +239,7 @@ describe('CheckersGame', () => {
       const before = JSON.stringify(testGame.runner.getSnapshot());
 
       // Simulate a game state change
-      const alice = testGame.game.players.get(1)! as CheckersPlayer;
+      const alice = testGame.game.getPlayer(1)! as CheckersPlayer;
       alice.capturedCount = 3;
 
       const after = JSON.stringify(testGame.runner.getSnapshot());

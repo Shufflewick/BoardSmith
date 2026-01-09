@@ -600,8 +600,8 @@ describe('Game Flow Integration', () => {
       value: i + 1,
     }));
 
-    game.create(Hand, 'hand0', { player: game.players.get(1)! });
-    game.create(Hand, 'hand1', { player: game.players.get(2)! });
+    game.create(Hand, 'hand0', { player: game.getPlayer(1)! });
+    game.create(Hand, 'hand1', { player: game.getPlayer(2)! });
 
     // Register actions
     const drawAction = Action.create('draw')
@@ -702,11 +702,11 @@ describe('Game Flow Integration', () => {
     game.setFlow(flow);
     game.startFlow();
 
-    expect(game.getCurrentFlowPlayer()).toBe(game.players.get(1)!);
+    expect(game.getCurrentFlowPlayer()).toBe(game.getPlayer(1)!);
 
     game.continueFlow('pass', {});
 
-    expect(game.getCurrentFlowPlayer()).toBe(game.players.get(2)!);
+    expect(game.getCurrentFlowPlayer()).toBe(game.getPlayer(2)!);
   });
 
   it('should get available flow actions', () => {
@@ -737,7 +737,7 @@ describe('Game Flow Integration', () => {
   it('should determine winners when flow completes', () => {
     const flow = defineFlow({
       root: actionStep({ actions: ['pass'] }),
-      getWinners: (ctx) => [ctx.game.players.get(1)!],
+      getWinners: (ctx) => [ctx.game.getPlayer(1)!],
     });
 
     game.setFlow(flow);
@@ -745,7 +745,7 @@ describe('Game Flow Integration', () => {
     game.continueFlow('pass', {});
 
     expect(game.getWinners()).toHaveLength(1);
-    expect(game.getWinners()[0]).toBe(game.players.get(1)!);
+    expect(game.getWinners()[0]).toBe(game.getPlayer(1)!);
   });
 });
 
@@ -1315,7 +1315,7 @@ describe('Turn Order Presets', () => {
 
   it('should use CONTINUE from current player', () => {
     // Set current player to position 2
-    game.players.setCurrent(game.players.get(3)!);
+    game.setCurrentPlayer(game.getPlayer(3)!);
 
     const visitedPlayers: number[] = [];
 
@@ -1344,7 +1344,7 @@ describe('Turn Order Presets', () => {
 
     const eliminableGame = new EliminableGame({ playerCount: 3 });
     // Mark player at position 2 as eliminated (1-indexed)
-    (eliminableGame.players.get(2) as any).eliminated = true;
+    (eliminableGame.getPlayer(2) as any).eliminated = true;
 
     const visitedPlayers: number[] = [];
 

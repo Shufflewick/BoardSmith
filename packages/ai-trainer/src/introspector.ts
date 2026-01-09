@@ -1,4 +1,4 @@
-import type { Game, GameElement, Player } from '@boardsmith/engine';
+import { Player, type Game, type GameElement } from '@boardsmith/engine';
 import type {
   GameStructure,
   ElementTypeInfo,
@@ -55,7 +55,7 @@ export function introspectGame(game: Game): GameStructure {
     elementTypes,
     playerInfo,
     spatialInfo,
-    playerCount: game.players.length,
+    playerCount: game.all(Player).length,
   };
 }
 
@@ -167,9 +167,10 @@ function discoverPlayerInfo(game: Game): PlayerTypeInfo {
     stringProperties: [],
   };
 
-  if (game.players.length === 0) return info;
+  const players = [...game.all(Player)];
+  if (players.length === 0) return info;
 
-  const player = game.players[0];
+  const player = players[0];
   const proto = Object.getPrototypeOf(player);
 
   // Skip standard Player properties

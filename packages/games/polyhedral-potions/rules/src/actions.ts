@@ -199,7 +199,7 @@ export function createRecordAction(game: PolyPotionsGame): ActionDefinition {
         return choices;
       },
       display: (choice) => {
-        const player = game.players.get(game.currentPlayerIndex) as PolyPotionsPlayer;
+        const player = game.getPlayer(game.currentPlayerIndex) as PolyPotionsPlayer;
 
         if (choice.startsWith('distill-')) {
           const col = parseInt(choice.split('-')[1], 10);

@@ -1,4 +1,4 @@
-import { Action, type ActionDefinition, type ActionContext } from '@boardsmith/engine';
+import { Action, Player, type ActionDefinition, type ActionContext } from '@boardsmith/engine';
 import type { TestActionPanelGame } from './game.js';
 import { Unit, Enemy, TestPlayer } from './elements.js';
 
@@ -188,14 +188,14 @@ export function createRepeatUntilDemo(game: TestActionPanelGame): ActionDefiniti
 export function createChoosePlayerDemo(game: TestActionPanelGame): ActionDefinition {
   return Action.create('playerChoicesDemo')
     .prompt('playerChoices')
-    .condition(() => game.players.length > 1)
+    .condition(() => game.all(Player).length > 1)
     .chooseFrom('player', {
       prompt: 'playerChoices (excludeSelf)',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
     })
     .execute((args, ctx) => {
       const choice = args.player as { value: number; display: string };
-      const selectedPlayer = game.players.get(choice.value) as TestPlayer;
+      const selectedPlayer = game.getPlayer(choice.value) as TestPlayer;
       game.message(`playerChoices demo: selected "${selectedPlayer.name}"`);
       return { success: true };
     });

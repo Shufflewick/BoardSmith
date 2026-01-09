@@ -12,9 +12,9 @@ export function getCheckersObjectives(
   playerPosition: number
 ): Record<string, Objective> {
   const checkersGame = game as CheckersGame;
-  const player = checkersGame.players.get(playerPosition) as CheckersPlayer;
+  const player = checkersGame.getPlayer(playerPosition) as CheckersPlayer;
   const opponentPosition = playerPosition === 1 ? 2 : 1;
-  const opponent = checkersGame.players.get(opponentPosition) as CheckersPlayer;
+  const opponent = checkersGame.getPlayer(opponentPosition) as CheckersPlayer;
 
   return {
     // Having more pieces is good

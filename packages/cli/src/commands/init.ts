@@ -296,7 +296,7 @@ describe('${pascal}Game', () => {
     const game = new ${pascal}Game({ playerCount: 2, seed: 'test' });
     game.setup();
     game.start();
-    for (const player of game.players) {
+    for (const player of game.all(Player)) {
       expect(player.hand.all().length).toBe(5);
     }
   });

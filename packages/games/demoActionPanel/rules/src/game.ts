@@ -1,4 +1,4 @@
-import { Game, type GameOptions } from '@boardsmith/engine';
+import { Game, Player, type GameOptions } from '@boardsmith/engine';
 import { Battlefield, Unit, Enemy, TestPlayer } from './elements.js';
 import {
   createAttackAction,
@@ -28,6 +28,9 @@ import { createTestFlow } from './flow.js';
  * Note: Auto-select for single choices is controlled by the UI's Auto toggle
  */
 export class TestActionPanelGame extends Game<TestActionPanelGame, TestPlayer> {
+  // Use custom player class
+  static PlayerClass = TestPlayer;
+
   /** The battlefield containing all units */
   battlefield!: Battlefield;
 
@@ -69,12 +72,8 @@ export class TestActionPanelGame extends Game<TestActionPanelGame, TestPlayer> {
     this.message('Each action demonstrates a different BoardSmith feature.');
   }
 
-  protected override createPlayer(position: number, name: string): TestPlayer {
-    return new TestPlayer(position, name);
-  }
-
   private createPlayerUnits(): void {
-    const player = this.players.get(1)!;
+    const player = this.getPlayer(1)!;
 
     // Unit with single target (no multiSelect)
     const sniper = this.battlefield.create(Unit, 'sniper', {
@@ -151,7 +150,7 @@ export class TestActionPanelGame extends Game<TestActionPanelGame, TestPlayer> {
 
   override getWinners(): TestPlayer[] {
     if (this.isFinished()) {
-      return [this.players.get(1)!];
+      return [this.getPlayer(1)!];
     }
     return [];
   }

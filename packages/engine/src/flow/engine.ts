@@ -1,5 +1,5 @@
 import type { Game } from '../element/game.js';
-import type { Player } from '../player/player.js';
+import { Player } from '../player/player.js';
 import type { ActionResult } from '../action/types.js';
 import type {
   FlowNode,
@@ -139,7 +139,7 @@ export class FlowEngine<G extends Game = Game> {
     // Initialize stack with root node
     this.stack = [{ node: this.definition.root, index: 0, completed: false }];
     this.variables = { ...context.variables };
-    this.currentPlayer = this.game.players.current;
+    this.currentPlayer = this.game.currentPlayer;
     this.awaitingInput = false;
     this.complete = false;
 
@@ -342,7 +342,7 @@ export class FlowEngine<G extends Game = Game> {
     }
 
     // Execute the action (actingPlayerIndex is 1-indexed position)
-    const player = this.game.players.get(actingPlayerIndex);
+    const player = this.game.getPlayer(actingPlayerIndex);
     if (!player) {
       throw new Error(`Invalid player position: ${actingPlayerIndex}`);
     }
@@ -458,7 +458,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Set player from position (playerIndex is 1-indexed)
     if (position.playerIndex !== undefined) {
-      this.currentPlayer = this.game.players.get(position.playerIndex);
+      this.currentPlayer = this.game.getPlayer(position.playerIndex);
     }
   }
 
@@ -699,7 +699,7 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext
   ): FlowStepResult {
     // Get players to iterate over
-    let players = [...this.game.players];
+    let players = [...this.game.all(Player as any)] as Player[];
 
     if (config.filter) {
       players = players.filter((p) => config.filter!(p, context));
@@ -887,9 +887,9 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext
   ): FlowStepResult {
     // Get players who should participate
-    const players = config.players
+    const players: Player[] = config.players
       ? config.players(context)
-      : [...this.game.players];
+      : [...this.game.all(Player as any)] as Player[];
 
     // Build awaiting state for each player
     this.awaitingPlayers = [];

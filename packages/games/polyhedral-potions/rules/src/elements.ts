@@ -187,22 +187,52 @@ export class PolyPotionsPlayer extends Player {
   /**
    * Poison track - uses CounterTrack from engine
    */
-  poisonTrack: CounterTrack;
+  private _poisonTrack?: CounterTrack;
+  get poisonTrack(): CounterTrack {
+    if (!this._poisonTrack) {
+      this._poisonTrack = createPoisonTrack();
+    }
+    return this._poisonTrack;
+  }
 
   /**
    * Distillation tracks - 4 columns using MonotonicTrack
    */
-  distillationTracks: MonotonicTrack[];
+  private _distillationTracks?: MonotonicTrack[];
+  get distillationTracks(): MonotonicTrack[] {
+    if (!this._distillationTracks) {
+      this._distillationTracks = [
+        createDistillationTrack(0),
+        createDistillationTrack(1),
+        createDistillationTrack(2),
+        createDistillationTrack(3),
+      ];
+    }
+    return this._distillationTracks;
+  }
 
   /**
    * Fulminate track - uses MonotonicTrack
    */
-  fulminateTrack: MonotonicTrack;
+  private _fulminateTrack?: MonotonicTrack;
+  get fulminateTrack(): MonotonicTrack {
+    if (!this._fulminateTrack) {
+      this._fulminateTrack = createFulminateTrack();
+    }
+    return this._fulminateTrack;
+  }
 
   /**
    * Abilities - uses AbilityManager from engine
    */
-  abilityManager: AbilityManager<AbilityType>;
+  private _abilityManager?: AbilityManager<AbilityType>;
+  get abilityManager(): AbilityManager<AbilityType> {
+    if (!this._abilityManager) {
+      this._abilityManager = new AbilityManager<AbilityType>();
+      this._abilityManager.add('reroll-2', 'starting');
+    }
+    return this._abilityManager;
+  }
 
   /**
    * Stars earned (10 points each, from completing rows)
@@ -229,24 +259,14 @@ export class PolyPotionsPlayer extends Player {
    */
   craftedPoisonThisTurn: boolean = false;
 
-  constructor(position: number, name: string) {
-    super(position, name);
+  /**
+   * Initialize ingredient tracks on first access
+   */
+  private _ingredientTracksInitialized = false;
+  private ensureIngredientTracks(): void {
+    if (this._ingredientTracksInitialized) return;
+    this._ingredientTracksInitialized = true;
 
-    // Initialize ability manager with starting reroll ability
-    this.abilityManager = new AbilityManager<AbilityType>();
-    this.abilityManager.add('reroll-2', 'starting');
-
-    // Initialize scoring tracks using engine abstractions
-    this.distillationTracks = [
-      createDistillationTrack(0),
-      createDistillationTrack(1),
-      createDistillationTrack(2),
-      createDistillationTrack(3),
-    ];
-    this.fulminateTrack = createFulminateTrack();
-    this.poisonTrack = createPoisonTrack();
-
-    // Initialize ingredient tracks (game-specific unlock system)
     for (const [dieType, config] of Object.entries(INGREDIENT_TRACK_CONFIG)) {
       this.ingredientTracks[dieType] = [];
       for (let i = 0; i < config.boxes; i++) {
@@ -399,6 +419,7 @@ export class PolyPotionsPlayer extends Player {
    * Mark an ingredient as used and check for ability unlocks
    */
   useIngredient(dieType: string): AbilityType | null {
+    this.ensureIngredientTracks();
     const key = dieType.toLowerCase();
     const track = this.ingredientTracks[key];
     if (!track) return null;
@@ -429,6 +450,7 @@ export class PolyPotionsPlayer extends Player {
    * Get how many boxes are marked in an ingredient track
    */
   getIngredientCount(dieType: string): number {
+    this.ensureIngredientTracks();
     const key = dieType.toLowerCase();
     const track = this.ingredientTracks[key];
     if (!track) return 0;
@@ -439,6 +461,7 @@ export class PolyPotionsPlayer extends Player {
    * Check if ingredient track is complete
    */
   isIngredientComplete(dieType: string): boolean {
+    this.ensureIngredientTracks();
     const key = dieType.toLowerCase();
     const track = this.ingredientTracks[key];
     if (!track) return false;
@@ -515,26 +538,23 @@ export class PolyPotionsPlayer extends Player {
   /**
    * Serialize player to JSON for the game view
    */
-  override toJSON(): Record<string, unknown> {
-    return {
-      // Base player properties
-      position: this.position,
-      name: this.name,
-      color: this.color,
-      // Computed properties
-      score: this.score,
-      stars: this.stars,
-      ingredientStars: this.ingredientStars,
-      potionStars: this.potionStars,
-      // Ability manager data (backwards compatible format)
-      abilities: this.abilities,
-      // Track data (backwards compatible format)
-      ingredientTracks: this.ingredientTracks,
-      potionsCrafted: this.potionsCrafted,
-      poisonSkulls: this.poisonSkulls,
-      poisonStarEarned: this.poisonStarEarned,
-      distillations: this.distillations,
-      fulminates: this.fulminates,
-    };
+  override toJSON() {
+    this.ensureIngredientTracks();
+    const json = super.toJSON();
+    // Add computed properties to attributes
+    json.attributes.score = this.score;
+    json.attributes.stars = this.stars;
+    json.attributes.ingredientStars = this.ingredientStars;
+    json.attributes.potionStars = this.potionStars;
+    // Ability manager data (backwards compatible format)
+    json.attributes.abilities = this.abilities;
+    // Track data (backwards compatible format)
+    json.attributes.ingredientTracks = this.ingredientTracks;
+    json.attributes.potionsCrafted = this.potionsCrafted;
+    json.attributes.poisonSkulls = this.poisonSkulls;
+    json.attributes.poisonStarEarned = this.poisonStarEarned;
+    json.attributes.distillations = this.distillations;
+    json.attributes.fulminates = this.fulminates;
+    return json;
   }
 }

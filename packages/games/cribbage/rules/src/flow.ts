@@ -5,6 +5,7 @@ import {
   execute,
   sequence,
   phase,
+  Player,
   type FlowDefinition,
   type FlowContext,
 } from '@boardsmith/engine';
@@ -71,7 +72,7 @@ export function createCribbageFlow(): FlowDefinition {
         execute((ctx) => {
           const game = ctx.game as CribbageGame;
           const currentPlayer = game.getCurrentPlayPlayer();
-          const otherPlayer = game.players.get(3 - game.currentPlayTurn) as CribbagePlayer;
+          const otherPlayer = game.getPlayer(3 - game.currentPlayTurn) as CribbagePlayer;
 
           const currentCanPlay = game.getPlayableCards(currentPlayer).length > 0;
           const currentHasCards = game.getPlayerHand(currentPlayer).count(Card) > 0;
@@ -90,7 +91,7 @@ export function createCribbageFlow(): FlowDefinition {
           if (currentStuck && otherStuck && (currentHasCards || otherHasCards)) {
             // Award "Go" point to last player who played a card (if not already at 31)
             if (game.lastPlayerToPlay >= 1 && game.runningTotal > 0 && game.runningTotal < 31) {
-              const lastPlayer = game.players.get(game.lastPlayerToPlay) as CribbagePlayer;
+              const lastPlayer = game.getPlayer(game.lastPlayerToPlay) as CribbagePlayer;
               game.addPoints(lastPlayer, 1, 'Go');
             }
             game.resetCount();
@@ -135,7 +136,7 @@ export function createCribbageFlow(): FlowDefinition {
           if (game.isFinished() || game.allCardsPlayed()) return;
 
           const otherPosition = 3 - game.currentPlayTurn;
-          const otherPlayer = game.players.get(otherPosition) as CribbagePlayer;
+          const otherPlayer = game.getPlayer(otherPosition) as CribbagePlayer;
           const otherHasCards = game.getPlayerHand(otherPlayer).count(Card) > 0;
           const otherSaidGo = game.playerSaidGo[otherPosition - 1];
 
@@ -153,7 +154,7 @@ export function createCribbageFlow(): FlowDefinition {
       execute((ctx) => {
         const game = ctx.game as CribbageGame;
         if (game.lastPlayerToPlay >= 0 && game.runningTotal > 0 && game.runningTotal < 31) {
-          const lastPlayer = game.players.get(game.lastPlayerToPlay) as CribbagePlayer;
+          const lastPlayer = game.getPlayer(game.lastPlayerToPlay) as CribbagePlayer;
           game.addPoints(lastPlayer, 1, 'Last card');
         }
         // Final reset
@@ -254,7 +255,7 @@ export function createCribbageFlow(): FlowDefinition {
           game.message(`${winners[0].name} wins with ${winners[0].score} points!`);
 
           // Check for skunk (opponent < 91) or double skunk (< 61)
-          const loser = game.players.find(p => !winners.includes(p as CribbagePlayer)) as CribbagePlayer;
+          const loser = game.all(Player).find(p => !winners.includes(p as CribbagePlayer)) as CribbagePlayer;
           if (loser) {
             if (loser.score < 61) {
               game.message(`Double skunk! ${loser.name} didn't pass 60.`);

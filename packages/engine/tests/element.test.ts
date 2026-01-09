@@ -31,9 +31,9 @@ describe('Element Tree', () => {
 
   describe('Game creation', () => {
     it('should create a game with players', () => {
-      expect(game.players.length).toBe(2);
-      expect(game.players.get(1)!.position).toBe(1);
-      expect(game.players.get(2)!.position).toBe(2);
+      expect(game.all(Player).length).toBe(2);
+      expect(game.getPlayer(1)!.position).toBe(1);
+      expect(game.getPlayer(2)!.position).toBe(2);
     });
 
     it('should have a pile for removed elements', () => {
@@ -49,8 +49,8 @@ describe('Element Tree', () => {
         playerCount: 2,
         playerNames: ['Alice', 'Bob'],
       });
-      expect(namedGame.players.get(1)!.name).toBe('Alice');
-      expect(namedGame.players.get(2)!.name).toBe('Bob');
+      expect(namedGame.getPlayer(1)!.name).toBe('Alice');
+      expect(namedGame.getPlayer(2)!.name).toBe('Bob');
     });
   });
 
@@ -59,7 +59,8 @@ describe('Element Tree', () => {
       const deck = game.create(Deck, 'deck');
       expect(deck.name).toBe('deck');
       expect(deck.parent).toBe(game);
-      expect(game.children.length).toBe(1);
+      // Players are now children of game, plus the deck
+      expect(game.children.length).toBe(3); // 2 players + 1 deck
     });
 
     it('should assign unique IDs', () => {
@@ -93,16 +94,18 @@ describe('Element Tree', () => {
       const card1 = deck.create(Card, 'card1', { suit: 'H', rank: '2', value: 2 });
       const card2 = deck.create(Card, 'card2', { suit: 'H', rank: '3', value: 3 });
 
-      expect(deck.branch()).toBe('0');
-      expect(card1.branch()).toBe('0/0');
-      expect(card2.branch()).toBe('0/1');
+      // With players as children of game (at indices 0, 1), deck is at index 2
+      expect(deck.branch()).toBe('2');
+      expect(card1.branch()).toBe('2/0');
+      expect(card2.branch()).toBe('2/1');
     });
 
     it('should find element by branch', () => {
       const deck = game.create(Deck, 'deck');
       const card = deck.create(Card, 'card', { suit: 'H', rank: '2', value: 2 });
 
-      const found = game.atBranch('0/0');
+      // With players as children of game, deck is at index 2
+      const found = game.atBranch('2/0');
       expect(found).toBe(card);
     });
 
@@ -313,7 +316,7 @@ describe('Visibility', () => {
   beforeEach(() => {
     game = new TestGame({ playerCount: 2 });
     hand = game.create(Hand, 'hand');
-    hand.player = game.players.get(1)!;
+    hand.player = game.getPlayer(1)!;
     card = hand.create(Card, 'card', { suit: 'H', rank: 'A', value: 14 });
   });
 
@@ -419,14 +422,16 @@ describe('Serialization', () => {
     const json = game.toJSON();
 
     expect(json.className).toBe('TestGame');
-    expect(json.players.length).toBe(2);
+    // Players are now children of the game
+    expect(json.children?.filter((c: any) => c.className === 'Player').length).toBe(2);
     expect(json.phase).toBe('setup');
-    expect(json.children?.length).toBe(1); // deck
+    expect(json.children?.length).toBe(3); // 2 players + 1 deck
   });
 
   it('should serialize elements with attributes', () => {
     const json = game.toJSON();
-    const deckJson = json.children![0];
+    // Deck is the third child (after 2 players)
+    const deckJson = json.children![2];
     const cardJson = deckJson.children![0];
 
     expect(cardJson.className).toBe('Card');
@@ -436,7 +441,7 @@ describe('Serialization', () => {
 
   it('should serialize per-player view', () => {
     const hand = game.create(Hand, 'hand');
-    hand.player = game.players.get(1)!;
+    hand.player = game.getPlayer(1)!;
     hand.contentsVisibleToOwner();
 
     const card = hand.create(Card, 'secret', { suit: 'S', rank: 'A', value: 14 });
@@ -464,48 +469,48 @@ describe('Player', () => {
   });
 
   it('should track current player', () => {
-    expect(game.players.current).toBe(game.players.get(1)!);
-    expect(game.players.get(1)!.isCurrent()).toBe(true);
+    expect(game.currentPlayer).toBe(game.getPlayer(1)!);
+    expect(game.getPlayer(1)!.isCurrent()).toBe(true);
 
-    game.players.setCurrent(2);
-    expect(game.players.current).toBe(game.players.get(2)!);
-    expect(game.players.get(1)!.isCurrent()).toBe(false);
-    expect(game.players.get(2)!.isCurrent()).toBe(true);
+    game.setCurrentPlayer(2);
+    expect(game.currentPlayer).toBe(game.getPlayer(2)!);
+    expect(game.getPlayer(1)!.isCurrent()).toBe(false);
+    expect(game.getPlayer(2)!.isCurrent()).toBe(true);
   });
 
   it('should get next/previous player', () => {
-    expect(game.players.nextAfter(game.players.get(1)!)).toBe(game.players.get(2)!);
-    expect(game.players.nextAfter(game.players.get(3)!)).toBe(game.players.get(1)!); // Wrap around
+    expect(game.nextAfter(game.getPlayer(1)!)).toBe(game.getPlayer(2)!);
+    expect(game.nextAfter(game.getPlayer(3)!)).toBe(game.getPlayer(1)!); // Wrap around
 
-    expect(game.players.previousBefore(game.players.get(2)!)).toBe(game.players.get(1)!);
-    expect(game.players.previousBefore(game.players.get(1)!)).toBe(game.players.get(3)!); // Wrap around
+    expect(game.previousBefore(game.getPlayer(2)!)).toBe(game.getPlayer(1)!);
+    expect(game.previousBefore(game.getPlayer(1)!)).toBe(game.getPlayer(3)!); // Wrap around
   });
 
   it('should get other players', () => {
-    const others = game.players.others(game.players.get(1)!);
+    const others = game.others(game.getPlayer(1)!);
     expect(others.length).toBe(2);
-    expect(others).not.toContain(game.players.get(1)!);
+    expect(others).not.toContain(game.getPlayer(1)!);
   });
 
   it('should find player elements with my()', () => {
     const hand = game.create(Hand, 'hand');
-    hand.player = game.players.get(1)!;
+    hand.player = game.getPlayer(1)!;
     const card = hand.create(Card, 'card', { suit: 'H', rank: 'A', value: 14 });
 
-    const found = game.players.get(1)!.my(Hand);
+    const found = game.getPlayer(1)!.my(Hand);
     expect(found).toBe(hand);
   });
 
   it('should query mine with player context', () => {
     const hand1 = game.create(Hand, 'p1hand');
-    hand1.player = game.players.get(1)!;
+    hand1.player = game.getPlayer(1)!;
     hand1.create(Card, 'card1', { suit: 'H', rank: 'A', value: 14 });
 
     const hand2 = game.create(Hand, 'p2hand');
-    hand2.player = game.players.get(2)!;
+    hand2.player = game.getPlayer(2)!;
     hand2.create(Card, 'card2', { suit: 'S', rank: 'K', value: 13 });
 
-    game.setPlayerContext(game.players.get(1)!);
+    game.setPlayerContext(game.getPlayer(1)!);
     const myHand = game.first(Hand, { mine: true });
     expect(myHand).toBe(hand1);
   });
@@ -598,8 +603,10 @@ describe('playerView Function', () => {
     const view = game.toJSONForPlayer(0);
 
     expect(view.className).toBe('TestGame');
-    expect(view.children?.length).toBe(1);
-    expect(view.children?.[0].children?.length).toBe(3);
+    // 2 players + 1 deck = 3 children
+    expect(view.children?.length).toBe(3);
+    // Deck is the 3rd child (index 2)
+    expect(view.children?.[2].children?.length).toBe(3);
   });
 });
 
@@ -635,7 +642,8 @@ describe('Game Restoration', () => {
 
     // Verify serialization encoded references correctly
     const rebelJson = json.children?.find(c => c.name === 'rebel1');
-    expect(rebelJson?.attributes.primarySquad).toEqual({ __elementRef: '1' }); // squad1 is at index 1
+    // With 2 players as children (indices 0, 1), then rebel (2), squad1 (3), squad2 (4)
+    expect(rebelJson?.attributes.primarySquad).toEqual({ __elementRef: '3' }); // squad1 is at index 3
 
     // Restore game
     const classRegistry = new Map<string, any>();

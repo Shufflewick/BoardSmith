@@ -1,0 +1,21 @@
+{
+  "$schema": "https://boardsmith.io/schemas/game.json",
+  "name": "floss-bitties",
+  "displayName": "Floss Bitties",
+  "description": "A 2-player press-your-luck card game where players build ascending sequences to explore the galaxy",
+  "playerCount": {
+    "min": 2,
+    "max": 2
+  },
+  "estimatedDuration": "15-30 minutes",
+  "complexity": 2,
+  "categories": [
+    "card-game"
+  ],
+  "thumbnail": "./public/thumbnail.png",
+  "scoreboard": {
+    "stats": [
+      "score"
+    ]
+  }
+}

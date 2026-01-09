@@ -8,9 +8,9 @@
 
 import {
   Game,
+  Player,
   type GameOptions,
   type FlowState,
-  type Player,
 } from '@boardsmith/engine';
 import { GameRunner, type ActionExecutionResult } from '@boardsmith/runtime';
 
@@ -136,7 +136,7 @@ export class TestGame<G extends Game = Game> {
   getCurrentPlayer(): Player | undefined {
     const flowState = this.getFlowState();
     if (flowState?.currentPlayer !== undefined) {
-      return this.game.players[flowState.currentPlayer];
+      return this.game.getPlayer(flowState.currentPlayer);
     }
     return undefined;
   }
@@ -147,20 +147,20 @@ export class TestGame<G extends Game = Game> {
    * @returns Array of all players
    */
   getPlayers(): Player[] {
-    return [...this.game.players];
+    return [...this.game.all(Player)];
   }
 
   /**
-   * Get a player by index.
+   * Get a player by position.
    *
-   * @param index - The player position (0-indexed)
-   * @returns The player at the given index
-   * @throws Error if player index is out of bounds
+   * @param position - The player position (1-indexed)
+   * @returns The player at the given position
+   * @throws Error if player position is invalid
    */
-  getPlayer(index: number): Player {
-    const player = this.game.players[index];
+  getPlayer(position: number): Player {
+    const player = this.game.getPlayer(position);
     if (!player) {
-      throw new Error(`Player ${index} not found`);
+      throw new Error(`Player ${position} not found`);
     }
     return player;
   }

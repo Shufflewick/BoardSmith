@@ -182,7 +182,7 @@ function executeAddVisibleTo(game: Game, command: AddVisibleToCommand): CommandR
 }
 
 function executeSetCurrentPlayer(game: Game, command: SetCurrentPlayerCommand): CommandResult {
-  game.players.setCurrent(command.playerPosition);
+  game.setCurrentPlayer(command.playerPosition);
   return { success: true };
 }
 

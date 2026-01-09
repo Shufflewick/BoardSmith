@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createTestGame, simulateAction } from '@boardsmith/testing';
+import { Player } from '@boardsmith/engine';
 import { GoFishGame, Card, GoFishPlayer } from '@boardsmith/gofish-rules';
 import type { FlowState } from '@boardsmith/engine';
 import type { TestGame } from '@boardsmith/testing';
@@ -26,8 +27,8 @@ describe('Complete Go Fish Game', () => {
   ): FlowState {
     const game = testGame.game;
     const currentPosition = flowState.currentPlayer!;
-    const currentPlayer = game.players.get(currentPosition)! as GoFishPlayer;
-    const opponentPosition = getOpponentPosition(currentPosition, game.players.length);
+    const currentPlayer = game.getPlayer(currentPosition)! as GoFishPlayer;
+    const opponentPosition = getOpponentPosition(currentPosition, [...game.all(Player)].length);
 
     // Get ranks the current player holds
     const myRanks = game.getPlayerRanks(currentPlayer);
@@ -39,7 +40,7 @@ describe('Complete Go Fish Game', () => {
     // Pick a rank to ask for (just use the first one)
     const rankToAsk = myRanks[0];
 
-    const opponent = game.players.get(opponentPosition)!;
+    const opponent = game.getPlayer(opponentPosition)!;
     if (verbose) {
       console.log(`Player ${currentPosition} (${currentPlayer.name}) asks Player ${opponentPosition} for ${rankToAsk}s`);
     }
@@ -87,8 +88,8 @@ describe('Complete Go Fish Game', () => {
 
       // Fail if same player is going too many times in a row
       if (consecutiveSamePlayer > MAX_CONSECUTIVE) {
-        const alice = game.players.get(1)! as GoFishPlayer;
-        const bob = game.players.get(2)! as GoFishPlayer;
+        const alice = game.getPlayer(1)! as GoFishPlayer;
+        const bob = game.getPlayer(2)! as GoFishPlayer;
         console.log(`Turn ${turnCount}: Player ${flowState.currentPlayer}'s turn (${consecutiveSamePlayer} consecutive)`);
         console.log(`Alice: ${game.getPlayerHand(alice).count(Card)} cards, ${alice.bookCount} books`);
         console.log(`Bob: ${game.getPlayerHand(bob).count(Card)} cards, ${bob.bookCount} books`);
@@ -107,7 +108,7 @@ describe('Complete Go Fish Game', () => {
         flowState = playTurn(testGame, flowState);
       } catch (error) {
         // If player has no cards, the turn should have been skipped
-        const currentPlayer = game.players.get(flowState.currentPlayer!)! as GoFishPlayer;
+        const currentPlayer = game.getPlayer(flowState.currentPlayer!)! as GoFishPlayer;
         const hand = game.getPlayerHand(currentPlayer);
         if (hand.count(Card) === 0 && game.pond.count(Card) === 0) {
           // Both hand and pond empty - game should be ending
@@ -128,8 +129,8 @@ describe('Complete Go Fish Game', () => {
     const winners = game.getWinners();
     expect(winners.length).toBeGreaterThan(0);
 
-    const alice = game.players.get(1)! as GoFishPlayer;
-    const bob = game.players.get(2)! as GoFishPlayer;
+    const alice = game.getPlayer(1)! as GoFishPlayer;
+    const bob = game.getPlayer(2)! as GoFishPlayer;
 
     console.log(`\n=== Game Complete ===`);
     console.log(`Total turns: ${turnCount}`);
@@ -148,8 +149,8 @@ describe('Complete Go Fish Game', () => {
     let flowState = testGame.getFlowState()!;
     const game = testGame.game;
 
-    const alice = game.players.get(1)! as GoFishPlayer;
-    const bob = game.players.get(2)! as GoFishPlayer;
+    const alice = game.getPlayer(1)! as GoFishPlayer;
+    const bob = game.getPlayer(2)! as GoFishPlayer;
 
     // Get initial state
     expect(flowState.currentPlayer).toBe(1); // Alice's turn
@@ -208,8 +209,8 @@ describe('Complete Go Fish Game', () => {
     let flowState = testGame.getFlowState()!;
     const game = testGame.game;
 
-    const alice = game.players.get(1)! as GoFishPlayer;
-    const bob = game.players.get(2)! as GoFishPlayer;
+    const alice = game.getPlayer(1)! as GoFishPlayer;
+    const bob = game.getPlayer(2)! as GoFishPlayer;
 
     // Get initial state
     expect(flowState.currentPlayer).toBe(1); // Alice's turn
@@ -347,8 +348,8 @@ describe('Complete Go Fish Game', () => {
     let flowState = testGame.getFlowState()!;
     const game = testGame.game;
 
-    const alice = game.players.get(1)! as GoFishPlayer;
-    const bob = game.players.get(2)! as GoFishPlayer;
+    const alice = game.getPlayer(1)! as GoFishPlayer;
+    const bob = game.getPlayer(2)! as GoFishPlayer;
 
     const initialAliceBooks = alice.bookCount;
     const initialBobBooks = bob.bookCount;

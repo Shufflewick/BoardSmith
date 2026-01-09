@@ -1,4 +1,5 @@
 import type { Game } from '../element/game.js';
+import { Player } from '../player/player.js';
 import type { GameCommand } from '../command/types.js';
 import type { SerializedAction } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
@@ -14,9 +15,8 @@ export interface GameStateSnapshot {
   /** Game class name for reconstruction */
   gameType: string;
 
-  /** Full element tree state */
+  /** Full element tree state (players are now children in the tree) */
   state: {
-    players: Record<string, unknown>[];
     phase: string;
     messages: Array<{ text: string; data?: Record<string, unknown> }>;
     settings: Record<string, unknown>;
@@ -118,5 +118,5 @@ export function createPlayerView(
  * Create views for all players
  */
 export function createAllPlayerViews(game: Game): PlayerStateView[] {
-  return game.players.map((p) => createPlayerView(game, p.position));
+  return (game.all(Player as any) as Player[]).map((p) => createPlayerView(game, p.position));
 }

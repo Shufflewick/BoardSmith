@@ -9,6 +9,7 @@ import {
   diffSnapshots,
   logAvailableActions,
 } from '@boardsmith/testing';
+import { Player } from '@boardsmith/engine';
 import { GoFishGame, Card, Hand, Pond, Books, GoFishPlayer } from '@boardsmith/gofish-rules';
 
 describe('GoFishGame', () => {
@@ -19,10 +20,10 @@ describe('GoFishGame', () => {
         playerNames: ['Alice', 'Bob'],
       });
 
-      expect(testGame.game.players.length).toBe(2);
+      expect([...testGame.game.all(Player)].length).toBe(2);
 
-      const alice = testGame.game.players.get(1)! as GoFishPlayer;
-      const bob = testGame.game.players.get(2)! as GoFishPlayer;
+      const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
+      const bob = testGame.game.getPlayer(2)! as GoFishPlayer;
 
       const aliceHand = testGame.game.getPlayerHand(alice);
       const bobHand = testGame.game.getPlayerHand(bob);
@@ -38,7 +39,7 @@ describe('GoFishGame', () => {
         playerNames: ['Alice', 'Bob', 'Charlie'],
       });
 
-      for (const player of testGame.game.players) {
+      for (const player of testGame.game.all(Player)) {
         const hand = testGame.game.getPlayerHand(player as GoFishPlayer);
         expect(hand.count(Card)).toBe(7);
       }
@@ -51,7 +52,7 @@ describe('GoFishGame', () => {
         playerNames: ['Alice', 'Bob', 'Charlie', 'Dave'],
       });
 
-      for (const player of testGame.game.players) {
+      for (const player of testGame.game.all(Player)) {
         const hand = testGame.game.getPlayerHand(player as GoFishPlayer);
         expect(hand.count(Card)).toBe(5);
       }
@@ -64,7 +65,7 @@ describe('GoFishGame', () => {
         playerNames: ['Alice', 'Bob'],
       });
 
-      for (const player of testGame.game.players) {
+      for (const player of testGame.game.all(Player)) {
         const books = testGame.game.getPlayerBooks(player as GoFishPlayer);
         expect(books).toBeDefined();
         expect(books.count(Card)).toBe(0);
@@ -83,7 +84,7 @@ describe('GoFishGame', () => {
         seed: 'test-seed',
       });
       game = testGame.game;
-      alice = game.players.get(1)! as GoFishPlayer;
+      alice = game.getPlayer(1)! as GoFishPlayer;
     });
 
     it('should get player ranks', () => {
@@ -128,7 +129,7 @@ describe('GoFishGame', () => {
         playerNames: ['Alice', 'Bob'],
       });
       game = testGame.game;
-      alice = game.players.get(1)! as GoFishPlayer;
+      alice = game.getPlayer(1)! as GoFishPlayer;
     });
 
     it('should form a book when player has 4 of a kind', () => {
@@ -186,7 +187,7 @@ describe('GoFishGame', () => {
         playerNames: ['Alice', 'Bob'],
       });
       game = testGame.game;
-      alice = game.players.get(1)! as GoFishPlayer;
+      alice = game.getPlayer(1)! as GoFishPlayer;
     });
 
     it('should draw a card from the pond', () => {
@@ -222,8 +223,8 @@ describe('GoFishGame', () => {
         playerNames: ['Alice', 'Bob'],
       });
       game = testGame.game;
-      alice = game.players.get(1)! as GoFishPlayer;
-      bob = game.players.get(2)! as GoFishPlayer;
+      alice = game.getPlayer(1)! as GoFishPlayer;
+      bob = game.getPlayer(2)! as GoFishPlayer;
     });
 
     it('should not be finished when no books formed', () => {
@@ -279,7 +280,7 @@ describe('GoFishGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as GoFishPlayer;
+      const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
       // canPlayerAct takes a player index, not a player object
       expect(testGame.game.canPlayerAct(alice.position)).toBe(true);
     });
@@ -292,8 +293,8 @@ describe('GoFishGame', () => {
       });
 
       // Get Alice's ranks to ask for
-      const alice = testGame.game.players.get(1)! as GoFishPlayer;
-      const bob = testGame.game.players.get(2)! as GoFishPlayer;
+      const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
+      const bob = testGame.game.getPlayer(2)! as GoFishPlayer;
       const aliceRanks = testGame.game.getPlayerRanks(alice);
 
       if (aliceRanks.length > 0) {
@@ -329,8 +330,8 @@ describe('GoFishGame', () => {
         seed: 'action-test',
       });
 
-      const alice = testGame.game.players.get(1)! as GoFishPlayer;
-      const bob = testGame.game.players.get(2)! as GoFishPlayer;
+      const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
+      const bob = testGame.game.getPlayer(2)! as GoFishPlayer;
 
       const aliceRanks = testGame.game.getPlayerRanks(alice);
       if (aliceRanks.length > 0) {
@@ -369,7 +370,7 @@ describe('GoFishGame', () => {
         seed: 'trace-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as GoFishPlayer;
+      const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
       const trace = traceAction(testGame.game, 'ask', alice);
 
       // traceAction returns structured info about action availability
@@ -391,7 +392,7 @@ describe('GoFishGame', () => {
         seed: 'log-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as GoFishPlayer;
+      const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
       const actionLog = logAvailableActions(testGame.game, alice);
 
       // Returns a string summarizing available actions
@@ -411,8 +412,8 @@ describe('GoFishGame', () => {
 
       const before = JSON.stringify(testGame.runner.getSnapshot());
 
-      const alice = testGame.game.players.get(1)! as GoFishPlayer;
-      const bob = testGame.game.players.get(2)! as GoFishPlayer;
+      const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
+      const bob = testGame.game.getPlayer(2)! as GoFishPlayer;
       const ranks = testGame.game.getPlayerRanks(alice);
 
       if (ranks.length > 0) {

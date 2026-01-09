@@ -1,4 +1,4 @@
-import type { Game, GameElement, Player } from '@boardsmith/engine';
+import { Player, type Game, type GameElement } from '@boardsmith/engine';
 import type { GameStructure, ElementTypeInfo, CandidateFeature } from './types.js';
 
 /**
@@ -403,8 +403,8 @@ function createCountComparisonEvaluator(
   operator: '>' | '<' | '>=' | '<=' | '=='
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const myPlayer = game.players[playerIndex];
-    const opponent = game.players[1 - playerIndex]; // Assumes 2 players
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex); // Assumes 2 players
 
     const myCount = countElementsForPlayer(game, className, myPlayer);
     const theirCount = countElementsForPlayer(game, className, opponent);
@@ -425,7 +425,7 @@ function createCountThresholdEvaluator(
   operator: '>=' | '<=' | '==' | '>'
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const count = countElementsForPlayer(game, className, player);
 
     switch (operator) {
@@ -444,7 +444,7 @@ function createBooleanPropertyEvaluator(
   mode: 'any' | 'all'
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const elements = getElementsForPlayer(game, className, player);
 
     if (elements.length === 0) return false;
@@ -462,8 +462,8 @@ function createBooleanPropertyComparisonEvaluator(
   property: string
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const myPlayer = game.players[playerIndex];
-    const opponent = game.players[1 - playerIndex];
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
 
     const myCount = getElementsForPlayer(game, className, myPlayer)
       .filter(e => (e as any)[property] === true).length;
@@ -479,8 +479,8 @@ function createNumericSumComparisonEvaluator(
   property: string
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const myPlayer = game.players[playerIndex];
-    const opponent = game.players[1 - playerIndex];
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
 
     const mySum = getElementsForPlayer(game, className, myPlayer)
       .reduce((sum, e) => sum + ((e as any)[property] ?? 0), 0);
@@ -497,7 +497,7 @@ function createNumericSumThresholdEvaluator(
   threshold: number
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const sum = getElementsForPlayer(game, className, player)
       .reduce((s, e) => s + ((e as any)[property] ?? 0), 0);
     return sum >= threshold;
@@ -509,8 +509,8 @@ function createPlayerPropertyComparisonEvaluator(
   operator: '>' | '<'
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const myPlayer = game.players[playerIndex];
-    const opponent = game.players[1 - playerIndex];
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
 
     const myValue = (myPlayer as any)[property] ?? 0;
     const theirValue = (opponent as any)[property] ?? 0;
@@ -524,7 +524,7 @@ function createPlayerPropertyThresholdEvaluator(
   threshold: number
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     return ((player as any)[property] ?? 0) >= threshold;
   };
 }
@@ -534,12 +534,12 @@ function createPlayerPropertyNearMaxEvaluator(
 ): CandidateFeature['evaluate'] {
   // Dynamically determine "near max" based on all players' values
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const myValue = (player as any)[property] ?? 0;
 
     // Find the max value across all players
     let maxValue = 0;
-    for (const p of game.players) {
+    for (const p of getAllPlayers(game)) {
       maxValue = Math.max(maxValue, (p as any)[property] ?? 0);
     }
 
@@ -553,7 +553,7 @@ function createCenterControlEvaluator(
   center: { minRow: number; maxRow: number; minCol: number; maxCol: number }
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const elements = getElementsForPlayer(game, className, player);
 
     return elements.some(e => {
@@ -571,8 +571,8 @@ function createCenterAdvantageEvaluator(
   center: { minRow: number; maxRow: number; minCol: number; maxCol: number }
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const myPlayer = game.players[playerIndex];
-    const opponent = game.players[1 - playerIndex];
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
 
     const countInCenter = (player: Player) => {
       return getElementsForPlayer(game, className, player).filter(e => {
@@ -593,7 +593,7 @@ function createAdvancementEvaluator(
   totalRows: number
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const elements = getElementsForPlayer(game, className, player);
 
     if (elements.length === 0) return false;
@@ -622,7 +622,7 @@ function createBackRowEvaluator(
   totalRows: number
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const elements = getElementsForPlayer(game, className, player);
 
     const backRow = playerIndex === 0 ? 0 : totalRows - 1;
@@ -633,7 +633,7 @@ function createBackRowEvaluator(
 
 function createMajorityEvaluator(className: string): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const myCount = countElementsForPlayer(game, className, player);
     const totalCount = countAllElements(game, className);
 
@@ -643,7 +643,7 @@ function createMajorityEvaluator(className: string): CandidateFeature['evaluate'
 
 function createDominanceEvaluator(className: string): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const myCount = countElementsForPlayer(game, className, player);
     const totalCount = countAllElements(game, className);
 
@@ -657,7 +657,7 @@ function createStringPropertyEvaluator(
   value: string
 ): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
-    const player = game.players[playerIndex];
+    const player = getPlayerByIndex(game, playerIndex);
     const elements = getElementsForPlayer(game, className, player);
 
     return elements.some(e => (e as any)[property] === value);
@@ -667,6 +667,22 @@ function createStringPropertyEvaluator(
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+/**
+ * Get a player by 0-based index.
+ * The AI trainer uses 0-indexed player positions (0, 1, etc.) but the new API uses 1-indexed positions.
+ */
+function getPlayerByIndex(game: Game, playerIndex: number): Player {
+  // Convert 0-based index to 1-based position
+  return game.getPlayer(playerIndex + 1)!;
+}
+
+/**
+ * Get all players as an array (for iteration and opponent lookup)
+ */
+function getAllPlayers(game: Game): Player[] {
+  return [...game.all(Player)];
+}
 
 function getElementsForPlayer(game: Game, className: string, player: Player): GameElement[] {
   const results: GameElement[] = [];

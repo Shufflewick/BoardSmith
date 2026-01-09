@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createTestGame } from '@boardsmith/testing';
+import { Player } from '@boardsmith/engine';
 import { DemoGame, DemoPlayer } from '../src/rules/game.js';
 import { Card } from '../src/rules/elements.js';
 
@@ -13,7 +14,7 @@ describe('DemoGame', () => {
 
   it('should deal 5 cards to each player', () => {
     const testGame = createTestGame(DemoGame, { playerCount: 2, seed: 'test' });
-    for (const player of testGame.game.players as DemoPlayer[]) {
+    for (const player of testGame.game.all(Player) as DemoPlayer[]) {
       expect(player.hand.all(Card).length).toBe(5);
     }
   });
@@ -21,8 +22,8 @@ describe('DemoGame', () => {
   it('should execute trade action with { value, display } choice object', () => {
     const testGame = createTestGame(DemoGame, { playerCount: 2, seed: 'test' });
     const game = testGame.game;
-    const player1 = game.players.get(1) as DemoPlayer;
-    const player2 = game.players.get(2) as DemoPlayer;
+    const player1 = game.getPlayer(1) as DemoPlayer;
+    const player2 = game.getPlayer(2) as DemoPlayer;
 
     // Get a card from player 1's hand
     const myCard = player1.hand.first(Card)!;
@@ -45,8 +46,8 @@ describe('DemoGame', () => {
   it('should execute gift action with { value, display } choice object', () => {
     const testGame = createTestGame(DemoGame, { playerCount: 2, seed: 'test' });
     const game = testGame.game;
-    const player1 = game.players.get(1) as DemoPlayer;
-    const player2 = game.players.get(2) as DemoPlayer;
+    const player1 = game.getPlayer(1) as DemoPlayer;
+    const player2 = game.getPlayer(2) as DemoPlayer;
 
     // Get a card from player 1's hand
     const card = player1.hand.first(Card)!;

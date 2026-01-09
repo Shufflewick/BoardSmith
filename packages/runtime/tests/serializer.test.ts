@@ -55,7 +55,7 @@ describe('Value Serialization', () => {
     });
 
     it('should serialize players', () => {
-      const player = game.players.get(1)!;
+      const player = game.getPlayer(1)!;
       const serialized = serializeValue(player, game);
       expect(serialized).toEqual({ __playerRef: 1 });
     });
@@ -72,7 +72,7 @@ describe('Value Serialization', () => {
 
     it('should serialize nested objects', () => {
       const obj = {
-        target: game.players.get(2)!,
+        target: game.getPlayer(2)!,
         card: card,
         value: 'test',
       };
@@ -107,7 +107,7 @@ describe('Value Serialization', () => {
     it('should deserialize player refs', () => {
       const ref = { __playerRef: 1 };
       const deserialized = deserializeValue(ref, game);
-      expect(deserialized).toBe(game.players.get(1)!);
+      expect(deserialized).toBe(game.getPlayer(1)!);
     });
 
     it('should deserialize arrays', () => {
@@ -119,7 +119,7 @@ describe('Value Serialization', () => {
       const deserialized = deserializeValue(arr, game) as unknown[];
       expect(deserialized[0]).toBe(card);
       expect(deserialized[1]).toBe('test');
-      expect(deserialized[2]).toBe(game.players.get(1)!);
+      expect(deserialized[2]).toBe(game.getPlayer(1)!);
     });
 
     it('should deserialize nested objects', () => {
@@ -129,7 +129,7 @@ describe('Value Serialization', () => {
         value: 'test',
       };
       const deserialized = deserializeValue(obj, game) as Record<string, unknown>;
-      expect(deserialized.target).toBe(game.players.get(1)!);
+      expect(deserialized.target).toBe(game.getPlayer(1)!);
       expect(deserialized.card).toBe(card);
       expect(deserialized.value).toBe('test');
     });
@@ -138,7 +138,7 @@ describe('Value Serialization', () => {
   describe('round-trip', () => {
     it('should preserve values through serialize/deserialize', () => {
       const original = {
-        player: game.players.get(1)!,
+        player: game.getPlayer(1)!,
         cards: [card],
         rank: 'A',
         count: 3,
@@ -167,7 +167,7 @@ describe('Action Serialization', () => {
     it('should serialize an action with element args', () => {
       const serialized = serializeAction(
         'play',
-        game.players.get(1)!,
+        game.getPlayer(1)!,
         { card },
         game
       );
@@ -181,8 +181,8 @@ describe('Action Serialization', () => {
     it('should serialize an action with player args', () => {
       const serialized = serializeAction(
         'attack',
-        game.players.get(1)!,
-        { target: game.players.get(2)! },
+        game.getPlayer(1)!,
+        { target: game.getPlayer(2)! },
         game
       );
 
@@ -202,7 +202,7 @@ describe('Action Serialization', () => {
       const { actionName, player, args } = deserializeAction(serialized, game);
 
       expect(actionName).toBe('play');
-      expect(player).toBe(game.players.get(1)!);
+      expect(player).toBe(game.getPlayer(1)!);
       expect(args.card).toBe(card);
     });
 
@@ -214,7 +214,7 @@ describe('Action Serialization', () => {
         timestamp: Date.now(),
       };
 
-      expect(() => deserializeAction(serialized, game)).toThrow('Invalid player position: 99');
+      expect(() => deserializeAction(serialized, game)).toThrow('Player at position 99 not found.');
     });
   });
 
@@ -222,8 +222,8 @@ describe('Action Serialization', () => {
     it('should preserve action through serialize/deserialize', () => {
       const original = {
         actionName: 'attack',
-        player: game.players.get(1)!,
-        args: { target: game.players.get(2)!, card, damage: 5 },
+        player: game.getPlayer(1)!,
+        args: { target: game.getPlayer(2)!, card, damage: 5 },
       };
 
       const serialized = serializeAction(

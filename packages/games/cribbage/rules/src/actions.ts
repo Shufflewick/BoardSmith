@@ -1,4 +1,4 @@
-import { Action, type ActionDefinition } from '@boardsmith/engine';
+import { Action, Player, type ActionDefinition } from '@boardsmith/engine';
 import type { CribbageGame } from './game.js';
 import { Card, CribbagePlayer } from './elements.js';
 
@@ -145,7 +145,7 @@ export function createSayGoAction(game: CribbageGame): ActionDefinition {
       game.message(`${player.name} says "Go"`);
 
       // Check if both players have said Go
-      const otherPlayer = game.players.find(p => p.position !== player.position) as CribbagePlayer;
+      const otherPlayer = game.all(Player).find(p => p.position !== player.position) as CribbagePlayer;
       const otherSaidGo = game.playerSaidGo[otherPlayer.position - 1];
       const otherCanPlay = game.getPlayableCards(otherPlayer).length > 0;
       const otherHasCards = game.getPlayerHand(otherPlayer).count(Card) > 0;
@@ -153,7 +153,7 @@ export function createSayGoAction(game: CribbageGame): ActionDefinition {
       // If other player already said Go or has no cards, last player to play gets 1 point
       if ((otherSaidGo && !otherCanPlay) || !otherHasCards) {
         // Award point for "Go" or "Last card"
-        const lastPlayer = game.players.get(game.lastPlayerToPlay) as CribbagePlayer;
+        const lastPlayer = game.getPlayer(game.lastPlayerToPlay) as CribbagePlayer;
         if (lastPlayer) {
           game.addPoints(lastPlayer, 1, game.runningTotal === 31 ? 'Thirty-one' : 'Go');
         }

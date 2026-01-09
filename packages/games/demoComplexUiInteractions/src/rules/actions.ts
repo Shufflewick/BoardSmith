@@ -10,7 +10,7 @@
  * 3. Different visual feedback for different actions
  */
 
-import { Action, type ActionDefinition } from '@boardsmith/engine';
+import { Action, Player, type ActionDefinition } from '@boardsmith/engine';
 import type { DemoGame, DemoPlayer } from './game.js';
 import { Card } from './elements.js';
 
@@ -98,14 +98,14 @@ export function createTradeAction(game: DemoGame): ActionDefinition {
       prompt: 'Select a player to trade with',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number }) => {
-        const targetPlayer = game.players.get(choice.value) as DemoPlayer;
+        const targetPlayer = game.getPlayer(choice.value) as DemoPlayer;
         const hand = game.getPlayerHand(targetPlayer);
         return { targetRef: { id: hand.id } };
       },
     })
     .condition((ctx) => {
       const player = ctx.player as DemoPlayer;
-      return game.getPlayerHand(player).count(Card) > 0 && game.players.length > 1;
+      return game.getPlayerHand(player).count(Card) > 0 && game.all(Player).length > 1;
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
@@ -113,7 +113,7 @@ export function createTradeAction(game: DemoGame): ActionDefinition {
       const myCard = args.myCard as Card;
       // extractChoiceValue extracts the 'value' from { value, display } objects
       const targetPosition = args.targetPlayer as number;
-      const targetPlayer = game.players.get(targetPosition) as DemoPlayer;
+      const targetPlayer = game.getPlayer(targetPosition) as DemoPlayer;
 
       // Move card to target
       myCard.putInto(game.getPlayerHand(targetPlayer));
@@ -158,14 +158,14 @@ export function createGiftAction(game: DemoGame): ActionDefinition {
       prompt: 'Select who to gift the card to',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number }) => {
-        const targetPlayer = game.players.get(choice.value) as DemoPlayer;
+        const targetPlayer = game.getPlayer(choice.value) as DemoPlayer;
         const hand = game.getPlayerHand(targetPlayer);
         return { targetRef: { id: hand.id } };
       },
     })
     .condition((ctx) => {
       const player = ctx.player as DemoPlayer;
-      return game.getPlayerHand(player).count(Card) > 0 && game.players.length > 1;
+      return game.getPlayerHand(player).count(Card) > 0 && game.all(Player).length > 1;
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
@@ -173,7 +173,7 @@ export function createGiftAction(game: DemoGame): ActionDefinition {
       const card = args.card as Card;
       // extractChoiceValue extracts the 'value' from { value, display } objects
       const recipientPosition = args.recipient as number;
-      const recipient = game.players.get(recipientPosition) as DemoPlayer;
+      const recipient = game.getPlayer(recipientPosition) as DemoPlayer;
 
       card.putInto(game.getPlayerHand(recipient));
       player.score += card.pointValue; // Gifting scores points!

@@ -1,4 +1,4 @@
-import { Game, type GameOptions } from '@boardsmith/engine';
+import { Game, Player, type GameOptions } from '@boardsmith/engine';
 import { DEFAULT_PLAYER_COLORS } from '@boardsmith/session';
 import { Board, Square, CheckerPiece, CheckersPlayer, type CheckersMove } from './elements.js';
 import { createMoveAction, createEndTurnAction } from './actions.js';
@@ -42,6 +42,9 @@ export interface CheckersOptions extends GameOptions {
  * - Win by capturing all opponent pieces or blocking all their moves
  */
 export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
+  // Use custom player class
+  static PlayerClass = CheckersPlayer;
+
   /** The game board */
   board!: Board;
 
@@ -79,8 +82,8 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
     this.setFlow(createCheckersFlow(this));
 
     // Announce player colors
-    this.message(`${this.players.get(1)!.name} plays ${this.players.get(1)!.color}`);
-    this.message(`${this.players.get(2)!.name} plays ${this.players.get(2)!.color}`);
+    this.message(`${this.getPlayer(1)!.name} plays ${this.getPlayer(1)!.color}`);
+    this.message(`${this.getPlayer(2)!.name} plays ${this.getPlayer(2)!.color}`);
   }
 
   /**
@@ -89,7 +92,7 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
   private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
     // playerConfigs and CHECKERS_DEFAULT_COLORS are 0-indexed arrays,
     // but player.position is 1-indexed, so use position - 1 for array access
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const arrayIndex = player.position - 1;
       const config = playerConfigs?.[arrayIndex];
       if (config?.color) {
@@ -99,13 +102,6 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
         player.color = CHECKERS_DEFAULT_COLORS[arrayIndex] ?? CHECKERS_DEFAULT_COLORS[0];
       }
     }
-  }
-
-  /**
-   * Override to create CheckersPlayer instances
-   */
-  protected override createPlayer(position: number, name: string): CheckersPlayer {
-    return new CheckersPlayer(position, name);
   }
 
   /**
@@ -140,12 +136,12 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
         // Player 1 pieces on top 3 rows
         if (row < 3) {
           const piece = square.create(CheckerPiece, `p1-${row}-${col}`);
-          piece.player = this.players.get(1);
+          piece.player = this.getPlayer(1);
         }
         // Player 2 pieces on bottom 3 rows
         else if (row > 4) {
           const piece = square.create(CheckerPiece, `p2-${row}-${col}`);
-          piece.player = this.players.get(2);
+          piece.player = this.getPlayer(2);
         }
       }
     }
@@ -427,7 +423,7 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
    */
   override isFinished(): boolean {
     // Game is over if either player has no pieces or no valid moves
-    for (const player of this.players) {
+    for (const player of [...this.all(Player)] as CheckersPlayer[]) {
       if (!this.hasAnyValidMove(player)) return true;
     }
     return false;
@@ -440,10 +436,11 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
   override getWinners(): CheckersPlayer[] {
     if (!this.isFinished()) return [];
 
+    const players = [...this.all(Player)] as CheckersPlayer[];
     // Check each player - whoever has no moves loses
-    for (const player of this.players) {
+    for (const player of players) {
       if (!this.hasAnyValidMove(player)) {
-        const opponent = this.players.find(p => p !== player);
+        const opponent = players.find(p => p !== player);
         return opponent ? [opponent] : [];
       }
     }

@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import type { FlowState, Game, Player, Selection, ActionDefinition, ActionTrace } from '@boardsmith/engine';
+import { Player, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '@boardsmith/engine';
 import type { GameRunner } from '@boardsmith/runtime';
 import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
 
@@ -377,15 +377,15 @@ export function buildPlayerState(
 
   // Get the full player data including custom properties (abilities, score, etc.)
   // from the game's player objects via their toJSON methods
-  // IMPORTANT: Use spread [...] to convert from PlayerCollection to plain Array,
-  // because PlayerCollection extends Array and has its own toJSON that would strip data
-  const fullPlayerData = [...runner.game.players.map((player: Player) => {
+  const fullPlayerData = [...runner.game.all(Player)].map((player: Player) => {
     if (typeof player.toJSON === 'function') {
-      return player.toJSON() as { name: string; position: number; [key: string]: unknown };
+      // toJSON returns ElementJSON which includes position for Players
+      const json = player.toJSON() as unknown as { name: string; position: number; [key: string]: unknown };
+      return json;
     }
     // Fallback for players without toJSON
-    return { name: player.name, position: player.position };
-  })];
+    return { name: player.name ?? `Player ${player.position}`, position: player.position };
+  });
 
   const state: PlayerGameState = {
     phase: runner.game.phase,
@@ -400,9 +400,9 @@ export function buildPlayerState(
   };
 
   // Optionally include action metadata for auto-UI
-  // Skip for spectators (position 0) - they don't need action metadata and players.get(0) is invalid
+  // Skip for spectators (position 0) - they don't need action metadata and getPlayer(0) is invalid
   if (options?.includeActionMetadata && availableActions.length > 0 && playerPosition > 0) {
-    const player = runner.game.players.get(playerPosition);
+    const player = runner.game.getPlayer(playerPosition);
     if (player) {
       state.actionMetadata = buildActionMetadata(runner.game, player, availableActions);
     }
@@ -428,7 +428,7 @@ export function buildActionTraces(
   playerPosition: number
 ): ActionTrace[] {
   // playerPosition is 1-indexed
-  const player = runner.game.players.get(playerPosition);
+  const player = runner.game.getPlayer(playerPosition);
   if (!player) {
     return [];
   }

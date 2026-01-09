@@ -6,6 +6,7 @@ import {
   logAvailableActions,
   diffSnapshots,
 } from '@boardsmith/testing';
+import { Player } from '@boardsmith/engine';
 import { CribbageGame, Card, CribbagePlayer, scoreHand, scoreHandDetailed } from '@boardsmith/cribbage-rules';
 
 describe('CribbageGame', () => {
@@ -45,7 +46,7 @@ describe('CribbageGame', () => {
         playerNames: ['Alice', 'Bob'],
       });
 
-      expect(testGame.game.players.length).toBe(2);
+      expect([...testGame.game.all(Player)].length).toBe(2);
     });
 
     it('should randomly select first dealer', () => {
@@ -76,8 +77,8 @@ describe('CribbageGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as CribbagePlayer;
-      const bob = testGame.game.players.get(2)! as CribbagePlayer;
+      const alice = testGame.game.getPlayer(1)! as CribbagePlayer;
+      const bob = testGame.game.getPlayer(2)! as CribbagePlayer;
 
       const aliceHand = testGame.game.getPlayerHand(alice);
       const bobHand = testGame.game.getPlayerHand(bob);
@@ -96,8 +97,8 @@ describe('CribbageGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as CribbagePlayer;
-      const bob = testGame.game.players.get(2)! as CribbagePlayer;
+      const alice = testGame.game.getPlayer(1)! as CribbagePlayer;
+      const bob = testGame.game.getPlayer(2)! as CribbagePlayer;
 
       // Get the cards in each hand before discarding
       const aliceHandBefore = [...testGame.game.getPlayerHand(alice).all(Card)];
@@ -129,7 +130,7 @@ describe('CribbageGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as CribbagePlayer;
+      const alice = testGame.game.getPlayer(1)! as CribbagePlayer;
 
       // Simulate discarding
       const aliceHand = testGame.game.getPlayerHand(alice);
@@ -169,7 +170,7 @@ describe('CribbageGame', () => {
         seed: 'scoring-test',
       });
 
-      const alice = testGame.game.players.get(1)! as CribbagePlayer;
+      const alice = testGame.game.getPlayer(1)! as CribbagePlayer;
       const aliceHand = testGame.game.getPlayerHand(alice);
 
       // Game already dealt 6 cards to each player
@@ -398,7 +399,7 @@ describe('CribbageGame', () => {
         seed: 'trace-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as CribbagePlayer;
+      const alice = testGame.game.getPlayer(1)! as CribbagePlayer;
       const trace = traceAction(testGame.game, 'discardToCrib', alice);
 
       // traceAction returns structured info about action availability
@@ -420,7 +421,7 @@ describe('CribbageGame', () => {
         seed: 'log-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as CribbagePlayer;
+      const alice = testGame.game.getPlayer(1)! as CribbagePlayer;
       const actionLog = logAvailableActions(testGame.game, alice);
 
       // Returns a string summarizing available actions
@@ -441,7 +442,7 @@ describe('CribbageGame', () => {
       const before = JSON.stringify(testGame.runner.getSnapshot());
 
       // Simulate a game state change
-      const alice = testGame.game.players.get(1)! as CribbagePlayer;
+      const alice = testGame.game.getPlayer(1)! as CribbagePlayer;
       alice.score = 10;
 
       const after = JSON.stringify(testGame.runner.getSnapshot());

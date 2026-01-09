@@ -10,7 +10,7 @@
  * - Custom UI that reacts to action state
  */
 
-import { Game, Player, type GameOptions } from '@boardsmith/engine';
+import { Game, Player as BasePlayer, type GameOptions } from '@boardsmith/engine';
 import { Card, Hand, Deck, DiscardPile } from './elements.js';
 import { createGameFlow } from './flow.js';
 import {
@@ -25,7 +25,14 @@ export interface DemoGameOptions extends GameOptions {
   seed?: string;
 }
 
+// Define DemoPlayer first to avoid circular reference in static property
+export class DemoPlayer extends BasePlayer<DemoGame, DemoPlayer> {
+  hand!: Hand;
+  score: number = 0;
+}
+
 export class DemoGame extends Game<DemoGame, DemoPlayer> {
+
   deck!: Deck;
   discardPile!: DiscardPile;
 
@@ -34,6 +41,14 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
 
     // Register element classes
     this.registerElements([Card, Hand, Deck, DiscardPile]);
+
+    // Create hands for each player
+    for (const player of this.all(BasePlayer)) {
+      const demoPlayer = player as DemoPlayer;
+      demoPlayer.hand = this.create(Hand, `hand-${player.position}`);
+      demoPlayer.hand.player = player;
+      demoPlayer.hand.contentsVisibleToOwner();
+    }
 
     // Create deck and discard pile
     this.deck = this.create(Deck, 'deck');
@@ -51,7 +66,7 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
 
     // Shuffle and deal 5 cards to each player
     this.deck.shuffle();
-    for (const player of this.players) {
+    for (const player of this.all(BasePlayer)) {
       for (let i = 0; i < 5; i++) {
         const card = this.deck.first(Card);
         if (card) {
@@ -72,16 +87,6 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
     this.setFlow(createGameFlow(this));
   }
 
-  protected override createPlayer(position: number, name: string): DemoPlayer {
-    const player = new DemoPlayer(position, name);
-    player.game = this;
-    // Create player's hand
-    player.hand = this.create(Hand, `hand-${position}`);
-    player.hand.player = player;
-    player.hand.contentsVisibleToOwner();
-    return player;
-  }
-
   getPlayerHand(player: DemoPlayer): Hand {
     return this.first(Hand, `hand-${player.position}`)!;
   }
@@ -89,7 +94,7 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
   override isFinished(): boolean {
     // Game ends when deck is empty and all players have no cards
     if (this.deck.count(Card) > 0) return false;
-    for (const player of this.players) {
+    for (const player of this.all(BasePlayer)) {
       if (this.getPlayerHand(player).count(Card) > 0) return false;
     }
     return true;
@@ -99,7 +104,7 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
     if (!this.isFinished()) return [];
     let maxScore = -1;
     let winners: DemoPlayer[] = [];
-    for (const player of this.players) {
+    for (const player of this.all(BasePlayer)) {
       if (player.score > maxScore) {
         maxScore = player.score;
         winners = [player];
@@ -111,7 +116,5 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
   }
 }
 
-export class DemoPlayer extends Player<DemoGame> {
-  hand!: Hand;
-  score: number = 0;
-}
+// Set PlayerClass after both classes are defined to avoid circular reference
+DemoGame.PlayerClass = DemoPlayer;

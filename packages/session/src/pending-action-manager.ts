@@ -160,7 +160,7 @@ export class PendingActionManager<G extends Game = Game> {
     }
 
     const executor = this.#runner.game.getActionExecutor();
-    const player = this.#runner.game.players.get(playerPosition);
+    const player = this.#runner.game.getPlayer(playerPosition);
     const selection = action.selections[pendingState.currentSelectionIndex];
 
     if (!selection) {

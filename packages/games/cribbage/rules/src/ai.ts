@@ -12,9 +12,9 @@ export function getCribbageObjectives(
   playerPosition: number
 ): Record<string, Objective> {
   const cribbageGame = game as CribbageGame;
-  const player = cribbageGame.players.get(playerPosition) as CribbagePlayer;
+  const player = cribbageGame.getPlayer(playerPosition) as CribbagePlayer;
   const opponentPosition = playerPosition === 1 ? 2 : 1;
-  const opponent = cribbageGame.players.get(opponentPosition) as CribbagePlayer;
+  const opponent = cribbageGame.getPlayer(opponentPosition) as CribbagePlayer;
 
   return {
     // Having a score lead is good

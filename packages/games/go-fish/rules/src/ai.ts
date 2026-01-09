@@ -1,4 +1,4 @@
-import type { Game } from '@boardsmith/engine';
+import { Player, type Game } from '@boardsmith/engine';
 import type { Objective } from '@boardsmith/ai';
 import type { GoFishGame } from './game.js';
 import type { GoFishPlayer } from './elements.js';
@@ -13,7 +13,8 @@ export function getGoFishObjectives(
   playerPosition: number
 ): Record<string, Objective> {
   const goFishGame = game as GoFishGame;
-  const player = goFishGame.players.get(playerPosition) as GoFishPlayer;
+  const player = goFishGame.getPlayer(playerPosition) as GoFishPlayer;
+  const allPlayers = [...goFishGame.all(Player)] as GoFishPlayer[];
 
   return {
     // Having more books is the main goal
@@ -21,7 +22,7 @@ export function getGoFishObjectives(
       checker: () => {
         const myBooks = player.bookCount;
         const maxOpponentBooks = Math.max(
-          ...goFishGame.players
+          ...allPlayers
             .filter(p => p !== player)
             .map(p => (p as GoFishPlayer).bookCount)
         );
@@ -77,9 +78,9 @@ export function getGoFishObjectives(
     // Opponent running out of cards
     'opponent-low-cards': {
       checker: () => {
-        for (const p of goFishGame.players) {
+        for (const p of allPlayers) {
           if (p === player) continue;
-          const hand = goFishGame.getPlayerHand(p as GoFishPlayer);
+          const hand = goFishGame.getPlayerHand(p);
           if (hand.all(Card).length <= 2) return true;
         }
         return false;

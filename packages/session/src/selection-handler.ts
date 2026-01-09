@@ -70,9 +70,9 @@ export class SelectionHandler<G extends Game = Game> {
     }
 
     // Build context with current args (playerPosition is 1-indexed)
-    const player = this.#runner.game.players.get(playerPosition);
+    const player = this.#runner.game.getPlayer(playerPosition);
     if (!player) {
-      return { success: false, error: `Player not found at position ${playerPosition}. Expected 1 to ${this.#runner.game.players.length}.`, errorCode: ErrorCode.INVALID_PLAYER };
+      return { success: false, error: `Player not found at position ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Resolve any element IDs in currentArgs to actual elements

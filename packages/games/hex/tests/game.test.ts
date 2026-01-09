@@ -6,6 +6,7 @@ import {
   logAvailableActions,
   diffSnapshots,
 } from '@boardsmith/testing';
+import { Player } from '@boardsmith/engine';
 import { HexGame, Cell, Stone, HexPlayer, Board } from '@boardsmith/hex-rules';
 
 describe('HexGame', () => {
@@ -17,9 +18,9 @@ describe('HexGame', () => {
         seed: 'test-seed',
       });
 
-      expect(testGame.game.players.length).toBe(2);
-      expect(testGame.game.players.get(1)!.name).toBe('Alice');
-      expect(testGame.game.players.get(2)!.name).toBe('Bob');
+      expect([...testGame.game.all(Player)].length).toBe(2);
+      expect(testGame.game.getPlayer(1)!.name).toBe('Alice');
+      expect(testGame.game.getPlayer(2)!.name).toBe('Bob');
     });
 
     it('should create a board with default size 7', () => {
@@ -204,8 +205,8 @@ describe('HexGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as HexPlayer;
-      const bob = testGame.game.players.get(2)! as HexPlayer;
+      const alice = testGame.game.getPlayer(1)! as HexPlayer;
+      const bob = testGame.game.getPlayer(2)! as HexPlayer;
 
       expect(testGame.game.board.checkWin(alice)).toBe(false);
       expect(testGame.game.board.checkWin(bob)).toBe(false);
@@ -237,7 +238,7 @@ describe('HexGame', () => {
         seed: 'trace-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as HexPlayer;
+      const alice = testGame.game.getPlayer(1)! as HexPlayer;
       const trace = traceAction(testGame.game, 'placeStone', alice);
 
       // traceAction returns structured info about action availability
@@ -259,7 +260,7 @@ describe('HexGame', () => {
         seed: 'log-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as HexPlayer;
+      const alice = testGame.game.getPlayer(1)! as HexPlayer;
       const actionLog = logAvailableActions(testGame.game, alice);
 
       // Returns a string summarizing available actions
@@ -280,7 +281,7 @@ describe('HexGame', () => {
       const before = JSON.stringify(testGame.runner.getSnapshot());
 
       // Simulate a game state change
-      const alice = testGame.game.players.get(1)! as HexPlayer;
+      const alice = testGame.game.getPlayer(1)! as HexPlayer;
       alice.stonesPlaced = 5;
 
       const after = JSON.stringify(testGame.runner.getSnapshot());

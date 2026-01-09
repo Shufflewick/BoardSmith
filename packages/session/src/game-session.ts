@@ -639,7 +639,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const followUp = result.flowState?.followUp;
     let followUpWithMetadata: typeof followUp & { metadata?: ReturnType<typeof buildSingleActionMetadata> } | undefined;
     if (followUp) {
-      const playerObj = this.#runner.game.players.get(player);
+      const playerObj = this.#runner.game.getPlayer(player);
       // Pass followUp.args so dynamic prompts can access them (e.g., showing sector name)
       const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, followUp.action, followUp.args) : undefined;
       followUpWithMetadata = {

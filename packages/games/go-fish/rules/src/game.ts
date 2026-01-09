@@ -1,4 +1,4 @@
-import { Game, type GameOptions } from '@boardsmith/engine';
+import { Game, Player, type GameOptions } from '@boardsmith/engine';
 import { Card, Hand, Pond, Books, GoFishPlayer } from './elements.js';
 import { createAskAction } from './actions.js';
 import { createGoFishFlow } from './flow.js';
@@ -26,6 +26,9 @@ export interface GoFishOptions extends GameOptions {
  * - Player with most books wins
  */
 export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
+  // Use custom player class
+  static PlayerClass = GoFishPlayer;
+
   /** The pond (draw pile) */
   pond!: Pond;
 
@@ -49,7 +52,7 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
     this.pond.$images = { back: '/cards/back.svg' };
 
     // Create hands and books for each player
-    for (const player of this.players) {
+    for (const player of this.all(Player) as unknown as GoFishPlayer[]) {
       const hand = this.create(Hand, `hand-${player.position}`);
       hand.player = player;
       hand.contentsVisibleToOwner(); // Only owner sees their hand
@@ -74,13 +77,6 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
   }
 
   /**
-   * Override to create GoFishPlayer instances
-   */
-  protected override createPlayer(position: number, name: string): GoFishPlayer {
-    return new GoFishPlayer(position, name);
-  }
-
-  /**
    * Create a standard 52-card deck in the pond
    */
   private createDeck(): void {
@@ -102,11 +98,11 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
    * 4-6 players: 5 cards each
    */
   private dealCards(): void {
-    const cardsPerPlayer = this.players.length <= 3 ? 7 : 5;
+    const cardsPerPlayer = this.all(Player).length <= 3 ? 7 : 5;
 
     // Deal one card at a time to each player, rotating
     for (let i = 0; i < cardsPerPlayer; i++) {
-      for (const player of this.players) {
+      for (const player of this.all(Player) as unknown as GoFishPlayer[]) {
         this.pond.drawTo(this.getPlayerHand(player), 1, Card);
       }
     }
@@ -205,7 +201,7 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
    */
   getTotalBooks(): number {
     let total = 0;
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       total += (player as GoFishPlayer).bookCount;
     }
     return total;
@@ -227,7 +223,7 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
     let maxBooks = 0;
     const winners: GoFishPlayer[] = [];
 
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const p = player as GoFishPlayer;
       if (p.bookCount > maxBooks) {
         maxBooks = p.bookCount;

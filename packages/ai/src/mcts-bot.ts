@@ -360,10 +360,11 @@ export class MCTSBot<G extends Game = Game> {
    * combinations for each action by examining selection definitions.
    * Returns an array of {action, args} pairs ready for tree expansion.
    */
-  private enumerateMoves(game: G, flowState: FlowState): BotMove[] {
+  private enumerateMoves(game: G | null, flowState: FlowState): BotMove[] {
     const moves: BotMove[] = [];
+    if (!game) return moves;
     const actions = this.getAvailableActionsForBot(flowState);
-    const player = game.players.get(this.playerIndex);
+    const player = game.getPlayer(this.playerIndex);
 
     for (const actionName of actions) {
       const actionDef = game.getAction(actionName);
@@ -403,7 +404,7 @@ export class MCTSBot<G extends Game = Game> {
       return moves;
     }
 
-    const player = game.players.get(currentPlayerIndex);
+    const player = game.getPlayer(currentPlayerIndex);
     if (!player) {
       return moves;
     }
@@ -665,8 +666,8 @@ export class MCTSBot<G extends Game = Game> {
   private restoreGame(snapshot: GameStateSnapshot): Game | null {
     try {
       const game = new this.GameClass({
-        playerCount: snapshot.state.players.length,
-        playerNames: snapshot.state.players.map(p => p.name as string),
+        playerCount: snapshot.state.settings.playerCount as number,
+        playerNames: snapshot.state.settings.playerNames as string[],
         seed: snapshot.seed,
       });
 

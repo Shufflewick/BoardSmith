@@ -1,4 +1,4 @@
-export { Player, PlayerCollection } from './player.js';
+export { Player } from './player.js';
 
 export { AbilityManager } from './abilities.js';
 

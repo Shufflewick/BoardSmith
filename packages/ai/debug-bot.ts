@@ -17,13 +17,13 @@ async function main() {
   // Profile getValidMoves
   let start = performance.now();
   for (let i = 0; i < 100; i++) {
-    game.getValidMoves(game.players.get(1)! as any);  // 1-indexed
+    game.getValidMoves(game.getPlayer(1)! as any);  // 1-indexed
   }
   console.log(`100 getValidMoves(player1): ${(performance.now() - start).toFixed(1)}ms`);
 
   start = performance.now();
   for (let i = 0; i < 100; i++) {
-    game.getValidMoves(game.players.get(2)! as any);  // 1-indexed
+    game.getValidMoves(game.getPlayer(2)! as any);  // 1-indexed
   }
   console.log(`100 getValidMoves(player2): ${(performance.now() - start).toFixed(1)}ms`);
 

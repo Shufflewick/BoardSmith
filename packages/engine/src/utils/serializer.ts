@@ -1,6 +1,6 @@
 import type { Game } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
-import type { Player } from '../player/player.js';
+import { Player } from '../player/player.js';
 import type { SerializedAction } from '../action/types.js';
 
 /**
@@ -33,6 +33,12 @@ export function serializeValue(
     return value;
   }
 
+  // Handle Player references (check before GameElement since Player now extends GameElement)
+  if (value instanceof Player) {
+    const player = value as Player;
+    return { __playerRef: player.position };
+  }
+
   // Handle GameElement references
   if (value instanceof Object && 'branch' in value && typeof (value as GameElement).branch === 'function') {
     const element = value as GameElement;
@@ -40,12 +46,6 @@ export function serializeValue(
       return { __elementRef: element.branch() };
     }
     return { __elementId: element.id };
-  }
-
-  // Handle Player references
-  if (value instanceof Object && 'position' in value && typeof (value as Player).position === 'number') {
-    const player = value as Player;
-    return { __playerRef: player.position };
   }
 
   // Handle arrays
@@ -94,7 +94,7 @@ export function deserializeValue(
   // Handle player reference (stored as 1-indexed position)
   if (typeof value === 'object' && value !== null && '__playerRef' in value) {
     const ref = value as { __playerRef: number };
-    return game.players.get(ref.__playerRef);
+    return game.getPlayer(ref.__playerRef);
   }
 
   // Handle arrays
@@ -149,9 +149,9 @@ export function deserializeAction(
   game: Game
 ): { actionName: string; player: Player; args: Record<string, unknown> } {
   // serialized.player is 1-indexed position
-  const player = game.players.get(serialized.player);
+  const player = game.getPlayer(serialized.player);
   if (!player) {
-    throw new Error(`Player at position ${serialized.player} not found. Expected 1 to ${game.players.length}.`);
+    throw new Error(`Player at position ${serialized.player} not found.`);
   }
 
   return {

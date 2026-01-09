@@ -36,7 +36,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
       prompt: 'Choose a player to ask',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number; display: string }, ctx) => {
-        const targetPlayer = game.players.get(choice.value) as GoFishPlayer;
+        const targetPlayer = game.getPlayer(choice.value) as GoFishPlayer;
         const hand = game.getPlayerHand(targetPlayer);
         return {
           targetRef: {
@@ -77,7 +77,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
       const player = ctx.player as GoFishPlayer;
       // After extractChoiceValue, args.target is just the position number
       const targetPosition = args.target as number;
-      const target = game.players.get(targetPosition) as GoFishPlayer;
+      const target = game.getPlayer(targetPosition) as GoFishPlayer;
       const rank = args.rank as string;
 
       // Get hands for logging

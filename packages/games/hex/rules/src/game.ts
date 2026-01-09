@@ -1,4 +1,4 @@
-import { Game, type GameOptions } from '@boardsmith/engine';
+import { Game, Player, type GameOptions } from '@boardsmith/engine';
 import { DEFAULT_PLAYER_COLORS } from '@boardsmith/session';
 import { Board, Cell, Stone, HexPlayer } from './elements.js';
 import { createPlaceStoneAction } from './actions.js';
@@ -35,6 +35,9 @@ export interface HexOptions extends GameOptions {
  * - No draws possible (mathematically proven)
  */
 export class HexGame extends Game<HexGame, HexPlayer> {
+  // Use custom player class
+  static PlayerClass = HexPlayer;
+
   // Game configuration
   boardSize: number = 7;
 
@@ -79,14 +82,7 @@ export class HexGame extends Game<HexGame, HexPlayer> {
 
     this.message('Hex game started!');
     this.message(`Board size: ${this.boardSize}x${this.boardSize}`);
-    this.message(`${this.players.get(1)!.name} connects top to bottom, ${this.players.get(2)!.name} connects left to right.`);
-  }
-
-  /**
-   * Override to create HexPlayer instances
-   */
-  protected override createPlayer(position: number, name: string): HexPlayer {
-    return new HexPlayer(position, name);
+    this.message(`${this.getPlayer(1)!.name} connects top to bottom, ${this.getPlayer(2)!.name} connects left to right.`);
   }
 
   /**
@@ -95,7 +91,7 @@ export class HexGame extends Game<HexGame, HexPlayer> {
   private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
     // playerConfigs and DEFAULT_PLAYER_COLORS are 0-indexed arrays,
     // but player.position is 1-indexed, so use position - 1 for array access
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const arrayIndex = player.position - 1;
       const config = playerConfigs?.[arrayIndex];
       if (config?.color) {

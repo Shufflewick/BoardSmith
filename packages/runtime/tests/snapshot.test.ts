@@ -39,7 +39,7 @@ describe('GameStateSnapshot', () => {
     deck.contentsHidden();
 
     hands = [];
-    for (const player of game.players) {
+    for (const player of game.all(Player)) {
       const hand = game.create(Hand, `hand-${player.position}`);
       hand.player = player;
       hand.contentsVisibleToOwner();
@@ -68,7 +68,9 @@ describe('GameStateSnapshot', () => {
       expect(snapshot.gameType).toBe('test-game');
       expect(snapshot.seed).toBe('test');
       expect(snapshot.state).toBeDefined();
-      expect(snapshot.state.players).toHaveLength(2);
+      // Players are now children of the game element tree
+      const playerChildren = snapshot.state.children?.filter((c: any) => c.className === 'Player') ?? [];
+      expect(playerChildren.length).toBe(2);
       expect(snapshot.commandHistory).toBeDefined();
       expect(snapshot.actionHistory).toEqual([]);
     });

@@ -1,4 +1,4 @@
-import { Game, type GameOptions, type DieSides } from '@boardsmith/engine';
+import { Game, Player, type GameOptions, type DieSides } from '@boardsmith/engine';
 import {
   IngredientDie,
   IngredientShelf,
@@ -56,6 +56,8 @@ const DIE_CONFIG: Array<{ name: string; sides: DieSides; color: string; dieType:
  * - Highest score wins (tiebreaker: most stars, then most unused abilities)
  */
 export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
+  // Use custom player class
+  static PlayerClass = PolyPotionsPlayer;
   /** The shared ingredient shelf with 7 dice */
   shelf!: IngredientShelf;
 
@@ -119,7 +121,7 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
     this.rollAllDice();
 
     // Create draft areas for each player
-    for (const player of this.players) {
+    for (const player of this.all(Player) as unknown as PolyPotionsPlayer[]) {
       const draftArea = this.create(DraftArea, `draft-${player.position}`);
       draftArea.player = player;
       draftArea.$direction = 'horizontal';
@@ -138,13 +140,6 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
 
     // Set up the game flow
     this.setFlow(createPolyPotionsFlow());
-  }
-
-  /**
-   * Override to create PolyPotionsPlayer instances
-   */
-  protected override createPlayer(position: number, name: string): PolyPotionsPlayer {
-    return new PolyPotionsPlayer(position, name);
   }
 
   /**
@@ -310,7 +305,7 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
     }
 
     // Also check all draft areas and move dice back
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const draftArea = this.getPlayerDraftArea(player as PolyPotionsPlayer);
       if (draftArea) {
         for (const die of draftArea.all(IngredientDie)) {
@@ -420,7 +415,7 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
     let maxScore = -1;
     let winners: PolyPotionsPlayer[] = [];
 
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const p = player as PolyPotionsPlayer;
       if (p.score > maxScore) {
         maxScore = p.score;

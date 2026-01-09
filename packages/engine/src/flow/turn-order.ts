@@ -49,7 +49,7 @@ export const TurnOrder = {
    */
   CONTINUE: {
     direction: 'forward' as const,
-    startingPlayer: (ctx: FlowContext) => ctx.game.players.current,
+    startingPlayer: (ctx: FlowContext) => ctx.game.currentPlayer,
   } satisfies TurnOrderConfig,
 
   /**
@@ -84,7 +84,7 @@ export const TurnOrder = {
     startingPlayer: (ctx: FlowContext) => {
       if (typeof getPlayer === 'number') {
         // Position is 1-indexed
-        return ctx.game.players.getOrThrow(getPlayer);
+        return ctx.game.getPlayerOrThrow(getPlayer);
       }
       return getPlayer(ctx);
     },
@@ -132,8 +132,8 @@ export const TurnOrder = {
     direction: 'forward' as const,
     startingPlayer: (ctx: FlowContext) => {
       const dealerPos = getDealerPosition(ctx);
-      const dealer = ctx.game.players.getOrThrow(dealerPos);
-      return ctx.game.players.nextAfter(dealer);
+      const dealer = ctx.game.getPlayerOrThrow(dealerPos);
+      return ctx.game.nextAfter(dealer);
     },
   }),
 

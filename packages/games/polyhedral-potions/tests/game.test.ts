@@ -6,6 +6,7 @@ import {
   logAvailableActions,
   diffSnapshots,
 } from '@boardsmith/testing';
+import { Player } from '@boardsmith/engine';
 import {
   PolyPotionsGame,
   IngredientDie,
@@ -25,9 +26,9 @@ describe('PolyPotionsGame', () => {
         seed: 'test-seed',
       });
 
-      expect(testGame.game.players.length).toBe(2);
-      expect(testGame.game.players.get(1)!.name).toBe('Alice');
-      expect(testGame.game.players.get(2)!.name).toBe('Bob');
+      expect([...testGame.game.all(Player)].length).toBe(2);
+      expect(testGame.game.getPlayer(1)!.name).toBe('Alice');
+      expect(testGame.game.getPlayer(2)!.name).toBe('Bob');
     });
 
     it('should support 1-5 players', () => {
@@ -39,7 +40,7 @@ describe('PolyPotionsGame', () => {
           seed: 'test-seed',
         });
 
-        expect(testGame.game.players.length).toBe(count);
+        expect([...testGame.game.all(Player)].length).toBe(count);
       }
     });
 
@@ -102,8 +103,8 @@ describe('PolyPotionsGame', () => {
         seed: 'test-seed',
       });
 
-      const alice = testGame.game.players.get(1)! as PolyPotionsPlayer;
-      const bob = testGame.game.players.get(2)! as PolyPotionsPlayer;
+      const alice = testGame.game.getPlayer(1)! as PolyPotionsPlayer;
+      const bob = testGame.game.getPlayer(2)! as PolyPotionsPlayer;
 
       const aliceDraft = testGame.game.getPlayerDraftArea(alice);
       const bobDraft = testGame.game.getPlayerDraftArea(bob);
@@ -210,7 +211,7 @@ describe('PolyPotionsGame', () => {
         seed: 'test-seed',
       });
 
-      for (const player of testGame.game.players) {
+      for (const player of testGame.game.all(Player)) {
         expect((player as PolyPotionsPlayer).stars).toBe(0);
       }
     });
@@ -222,7 +223,7 @@ describe('PolyPotionsGame', () => {
         seed: 'test-seed',
       });
 
-      for (const player of testGame.game.players) {
+      for (const player of testGame.game.all(Player)) {
         expect((player as PolyPotionsPlayer).score).toBe(0);
       }
     });
@@ -253,7 +254,7 @@ describe('PolyPotionsGame', () => {
         seed: 'trace-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as PolyPotionsPlayer;
+      const alice = testGame.game.getPlayer(1)! as PolyPotionsPlayer;
       const trace = traceAction(testGame.game, 'draft', alice);
 
       // traceAction returns structured info about action availability
@@ -275,7 +276,7 @@ describe('PolyPotionsGame', () => {
         seed: 'log-demo',
       });
 
-      const alice = testGame.game.players.get(1)! as PolyPotionsPlayer;
+      const alice = testGame.game.getPlayer(1)! as PolyPotionsPlayer;
       const actionLog = logAvailableActions(testGame.game, alice);
 
       // Returns a string summarizing available actions

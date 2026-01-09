@@ -4,6 +4,7 @@ import {
   actionStep,
   execute,
   sequence,
+  Player,
   type FlowDefinition,
 } from '@boardsmith/engine';
 import type { PolyPotionsGame } from './game.js';
@@ -59,7 +60,7 @@ export function createPolyPotionsFlow(): FlowDefinition {
     execute((ctx) => {
       const game = ctx.game as PolyPotionsGame;
       const available = game.getAvailableDice();
-      const playerCount = game.players.length;
+      const playerCount = game.all(Player).length;
 
       // Standard rule: if only 1 die left after first draft
       if (available.length === 1 && game.draftedDice.length === 1) {
@@ -99,7 +100,7 @@ export function createPolyPotionsFlow(): FlowDefinition {
         // Skip if already have 2 dice
         if (game.draftedDice.length >= 2) return true;
         // Skip for Rule of Three (3 players and only 1 die was available)
-        if (game.players.length === 3 && game.getAvailableDice().length === 0) return true;
+        if (game.all(Player).length === 3 && game.getAvailableDice().length === 0) return true;
         return false;
       },
     }),
@@ -107,7 +108,7 @@ export function createPolyPotionsFlow(): FlowDefinition {
     // Handle Rule of Three - skip craft/record if only 1 die drafted
     execute((ctx) => {
       const game = ctx.game as PolyPotionsGame;
-      if (game.draftedDice.length === 1 && game.players.length === 3) {
+      if (game.draftedDice.length === 1 && game.all(Player).length === 3) {
         // Rule of Three: Player only drafted 1 die, no crafting
         // Next player will roll all 7 fresh
         game.rollAllDice();

@@ -39,7 +39,6 @@ export type {
 // Player system
 export {
   Player,
-  PlayerCollection,
   AbilityManager,
 } from './player/index.js';
 

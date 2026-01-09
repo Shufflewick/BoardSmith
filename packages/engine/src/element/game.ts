@@ -1,7 +1,7 @@
 import { Space } from './space.js';
 import { GameElement } from './game-element.js';
 import type { ElementContext, ElementClass, ElementJSON } from './types.js';
-import { Player, PlayerCollection } from '../player/player.js';
+import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand } from '../command/executor.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, SelectionDebugInfo } from '../action/types.js';
@@ -166,12 +166,14 @@ function createSeededRandom(seed: string): () => number {
  * - **Element tree root**: All game elements (boards, cards, pieces) are children of Game
  * - **Action registry**: Define and register player actions via `registerActions()`
  * - **Flow controller**: Define game flow via `setFlow()` and `startFlow()`
- * - **Player manager**: Access players via `players` collection
+ * - **Player manager**: Access players via `game.all(Player)` or helper methods
  * - **Message log**: Record game events via `message()`
  *
  * @example
  * ```typescript
  * class MyGame extends Game<MyGame, MyPlayer> {
+ *   static PlayerClass = MyPlayer;  // Optional: custom Player type
+ *
  *   board!: Board;
  *   deck!: Deck;
  *
@@ -189,7 +191,7 @@ function createSeededRandom(seed: string): () => number {
  *     }
  *
  *     // Deal to players
- *     for (const player of this.players) {
+ *     for (const player of this.all(Player)) {
  *       this.deck.dealTo(player.hand, 5);
  *     }
  *   }
@@ -201,7 +203,7 @@ function createSeededRandom(seed: string): () => number {
  *         .chooseOnBoard('card', Card)
  *         .do(({ card }) => card.flip()),
  *       action('endTurn')
- *         .do(() => this.players.next())
+ *         .do(() => this.nextPlayer())
  *     );
  *   }
  *
@@ -214,7 +216,7 @@ function createSeededRandom(seed: string): () => number {
  *           do: actionStep({ actions: ['playCard', 'endTurn'] })
  *         })
  *       }),
- *       getWinners: () => [this.players.withHighestScore()]
+ *       getWinners: () => [this.getHighestScoringPlayer()]
  *     }));
  *   }
  * }
@@ -233,19 +235,23 @@ export class Game<
    */
   static playerView?: PlayerViewFunction;
 
+  /**
+   * Optional custom Player class to use when creating players.
+   * Set this in subclasses that need custom Player types.
+   * Using `any` to avoid TypeScript generic variance issues with subclass assignments.
+   *
+   * @example
+   * ```typescript
+   * class MyGame extends Game<MyGame, MyPlayer> {
+   *   static PlayerClass = MyPlayer;
+   * }
+   * ```
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static PlayerClass?: any;
+
   /** Container for removed elements */
   pile!: GameElement;
-
-  /** All players in the game */
-  players: PlayerCollection<P> = new PlayerCollection<P>();
-
-  /**
-   * Get the first player (position 1).
-   * Shorthand for `this.players.get(1)`.
-   */
-  get firstPlayer(): P {
-    return this.players.getOrThrow(1);
-  }
 
   /** Current game phase */
   phase: GamePhase = 'setup';
@@ -285,7 +291,7 @@ export class Game<
     // Base GameElement properties
     '_t', '_ctx', 'game', 'name', 'player',
     // Game internal properties
-    'pile', 'players', 'phase', 'random', 'messages', 'settings',
+    'pile', 'phase', 'random', 'messages', 'settings',
     'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
     '_flowEngine', '_debugRegistry', '_persistentMaps',
   ]);
@@ -293,7 +299,6 @@ export class Game<
   static override unserializableAttributes = [
     ...Space.unserializableAttributes,
     'pile',
-    'players',
     'random',
     'commandHistory',
     '_actions',
@@ -355,17 +360,28 @@ export class Game<
     this.pile = this.createElement(Space, '__pile__');
     this.pile._t.parent = undefined; // Remove from main tree
 
-    // Create players (1-indexed: Player 1 has position 1)
-    for (let i = 0; i < options.playerCount; i++) {
-      const name = options.playerNames?.[i] ?? `Player ${i + 1}`;
-      const player = this.createPlayer(i + 1, name);  // 1-indexed position
-      player.game = this as unknown as Game;
-      this.players.add(player as P);
+    // Store player config in settings for snapshot restoration
+    this.settings.playerCount = options.playerCount;
+    this.settings.playerNames = options.playerNames ?? Array.from(
+      { length: options.playerCount },
+      (_, i) => `Player ${i + 1}`
+    );
+
+    // Register Player class for serialization
+    this._ctx.classRegistry.set('Player', Player as unknown as ElementClass);
+
+    // Get the Player class to use (subclass may define a custom one)
+    const PlayerClassToUse = (this.constructor as typeof Game).PlayerClass ?? Player;
+    if (PlayerClassToUse !== Player) {
+      // Register custom Player class for serialization
+      this._ctx.classRegistry.set(PlayerClassToUse.name, PlayerClassToUse as unknown as ElementClass);
     }
 
-    // Set first player as current
-    if (this.players.length > 0) {
-      this.players.setCurrent(1);  // Position 1 is first player
+    // Create players (1-indexed: Player 1 has position 1)
+    for (let i = 0; i < options.playerCount; i++) {
+      const playerName = options.playerNames?.[i] ?? `Player ${i + 1}`;
+      const player = this.create(PlayerClassToUse as unknown as ElementClass<P>, playerName, { position: i + 1 } as any);
+      if (i === 0) player.setCurrent(true);
     }
 
     // Initialize action executor
@@ -421,7 +437,7 @@ export class Game<
     }
 
     // Also check Player instances
-    for (const player of this.players) {
+    for (const player of this.all(Player as unknown as ElementClass<P>)) {
       for (const key of Object.keys(player)) {
         if (key.startsWith('_')) continue;
         if (['position', 'name', 'game', 'score'].includes(key)) continue;
@@ -453,13 +469,6 @@ export class Game<
         '\n\n  Learn more: https://boardsmith.dev/docs/hmr-state\n'
       );
     }
-  }
-
-  /**
-   * Factory method to create players - override to use custom Player class
-   */
-  protected createPlayer(position: number, name: string): P {
-    return new Player(position, name) as P;
   }
 
   // ============================================
@@ -713,9 +722,9 @@ export class Game<
    * Perform an action from serialized form (for network play)
    */
   performSerializedAction(serialized: SerializedAction): ActionResult {
-    const player = this.players.get(serialized.player);
+    const player = this.getPlayer(serialized.player);
     if (!player) {
-      return { success: false, error: `Invalid player position: ${serialized.player}. Expected 1 to ${this.players.length}.` };
+      return { success: false, error: `Invalid player position: ${serialized.player}. Expected 1 to ${this.all(Player as unknown as ElementClass<P>).length}.` };
     }
 
     return this.performAction(serialized.name, player as P, serialized.args);
@@ -1251,7 +1260,7 @@ export class Game<
   getCurrentFlowPlayer(): P | undefined {
     const state = this._flowEngine?.getState();
     if (state?.currentPlayer !== undefined) {
-      return this.players.get(state.currentPlayer);
+      return this.getPlayer(state.currentPlayer);
     }
     return undefined;
   }
@@ -1294,6 +1303,117 @@ export class Game<
   // ============================================
 
   /**
+   * Get the current player (the player whose turn it is).
+   */
+  get currentPlayer(): P | undefined {
+    return this.first(Player as unknown as ElementClass<P>, p => p.isCurrent()) as P | undefined;
+  }
+
+  /**
+   * Get the first player (position 1).
+   */
+  get firstPlayer(): P | undefined {
+    return this.first(Player as unknown as ElementClass<P>, p => p.position === 1) as P | undefined;
+  }
+
+  /**
+   * Get a player by position (1-indexed).
+   */
+  getPlayer(position: number): P | undefined {
+    return this.first(Player as unknown as ElementClass<P>, p => p.position === position) as P | undefined;
+  }
+
+  /**
+   * Get a player by position, throwing if not found.
+   */
+  getPlayerOrThrow(position: number): P {
+    const player = this.getPlayer(position);
+    if (!player) {
+      throw new Error(
+        `No player at position ${position}. ` +
+        `This game has ${this.all(Player as unknown as ElementClass<P>).length} players.`
+      );
+    }
+    return player;
+  }
+
+  /**
+   * Set the current player by player object or position.
+   */
+  setCurrentPlayer(playerOrPosition: P | number): void {
+    // Clear previous current
+    const prev = this.currentPlayer;
+    if (prev) {
+      prev.setCurrent(false);
+    }
+
+    // Set new current
+    const player = typeof playerOrPosition === 'number'
+      ? this.getPlayerOrThrow(playerOrPosition)
+      : playerOrPosition;
+    player.setCurrent(true);
+  }
+
+  /**
+   * Get the next player after the current player (circular).
+   * Player 4 → Player 1 in a 4-player game.
+   */
+  nextPlayer(): P | undefined {
+    const current = this.currentPlayer;
+    if (!current) return undefined;
+
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
+    const idx = players.findIndex(p => p.position === current.position);
+    const nextIdx = (idx + 1) % players.length;
+    return players[nextIdx] as P | undefined;
+  }
+
+  /**
+   * Get the previous player before the current player (circular).
+   * Player 1 → Player 4 in a 4-player game.
+   */
+  previousPlayer(): P | undefined {
+    const current = this.currentPlayer;
+    if (!current) return undefined;
+
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
+    const idx = players.findIndex(p => p.position === current.position);
+    const prevIdx = (idx - 1 + players.length) % players.length;
+    return players[prevIdx] as P | undefined;
+  }
+
+  /**
+   * Get the next player after a specific player (circular).
+   */
+  nextAfter(player: P): P | undefined {
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
+    const idx = players.findIndex(p => p.position === player.position);
+    if (idx === -1) return undefined;
+    const nextIdx = (idx + 1) % players.length;
+    return players[nextIdx] as P | undefined;
+  }
+
+  /**
+   * Get the previous player before a specific player (circular).
+   */
+  previousBefore(player: P): P | undefined {
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
+    const idx = players.findIndex(p => p.position === player.position);
+    if (idx === -1) return undefined;
+    const prevIdx = (idx - 1 + players.length) % players.length;
+    return players[prevIdx] as P | undefined;
+  }
+
+  /**
+   * Get all players other than the specified player.
+   */
+  others(player: P): P[] {
+    return [...this.all(Player as unknown as ElementClass<P>)].filter(
+      p => p.position !== player.position
+    ) as P[];
+  }
+
+  /**
    * Get player choices for use with chooseFrom selection.
    * Returns an array of choices with player position as value and name as display.
    *
@@ -1314,7 +1434,7 @@ export class Game<
     filter?: (player: P) => boolean;
     currentPlayer?: Player;
   } = {}): { value: number; display: string }[] {
-    let players = [...this.players] as P[];
+    let players = [...this.all(Player as unknown as ElementClass<P>)] as P[];
 
     if (options.excludeSelf && options.currentPlayer) {
       players = players.filter(p => p.position !== options.currentPlayer!.position);
@@ -1326,7 +1446,7 @@ export class Game<
 
     return players.map(p => ({
       value: p.position,
-      display: p.name,
+      display: p.name ?? `Player ${p.position}`,
     }));
   }
 
@@ -1415,7 +1535,7 @@ export class Game<
   getWinners(): P[] {
     const positions = this.settings.winners as number[] | undefined;
     if (!positions) return [];
-    return positions.map(pos => this.players.get(pos)).filter((p): p is P => p !== undefined);
+    return positions.map(pos => this.getPlayer(pos)).filter((p): p is P => p !== undefined);
   }
 
   // ============================================
@@ -1430,7 +1550,7 @@ export class Game<
     if (player === undefined) {
       this._ctx.player = undefined;
     } else if (typeof player === 'number') {
-      this._ctx.player = this.players.get(player);
+      this._ctx.player = this.getPlayer(player);
     } else {
       this._ctx.player = player;
     }
@@ -1502,7 +1622,7 @@ export class Game<
         const replacement = value instanceof GameElement
           ? value.toString()
           : value instanceof Player
-            ? value.name
+            ? (value.name ?? `Player ${value.position}`)
             : String(value);
         processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), replacement);
       }
@@ -1518,14 +1638,12 @@ export class Game<
    * Serialize the complete game state
    */
   override toJSON(): ElementJSON & {
-    players: Record<string, unknown>[];
     phase: GamePhase;
     messages: Array<{ text: string; data?: Record<string, unknown> }>;
     settings: Record<string, unknown>;
   } {
     return {
       ...super.toJSON(),
-      players: this.players.toJSON(),
       phase: this.phase,
       messages: this.messages,
       settings: this.settings,
@@ -1672,9 +1790,14 @@ export class Game<
     GameClass: new (options: GameOptions) => G,
     classRegistry: Map<string, ElementClass>
   ): G {
+    // Count players from serialized children (players are now part of the element tree)
+    const playerChildren = json.children?.filter(c => c.className === 'Player') ?? [];
+    const playerCount = playerChildren.length;
+    const playerNames = playerChildren.map(p => p.name as string);
+
     const game = new GameClass({
-      playerCount: json.players.length,
-      playerNames: json.players.map(p => p.name as string),
+      playerCount,
+      playerNames,
     });
 
     // Merge class registry

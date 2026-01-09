@@ -89,7 +89,7 @@ export class GameRunner<G extends Game = Game> {
     args: Record<string, unknown>
   ): ActionExecutionResult {
     const playerObj = typeof player === 'number'
-      ? this.game.players.get(player)
+      ? this.game.getPlayer(player)
       : player;
 
     if (!playerObj) {
@@ -243,8 +243,8 @@ export class GameRunner<G extends Game = Game> {
       GameClass,
       gameType: snapshot.gameType,
       gameOptions: {
-        playerCount: snapshot.state.players.length,
-        playerNames: snapshot.state.players.map(p => p.name as string),
+        playerCount: snapshot.state.settings.playerCount as number,
+        playerNames: snapshot.state.settings.playerNames as string[],
         seed: snapshot.seed,
       },
     });

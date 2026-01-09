@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { Game, GameElement, Player, FlowEngine, FlowNode, Action, ActionContext } from '@boardsmith/engine';
+import { Player, type Game, type GameElement, type FlowEngine, type FlowNode, type Action, type ActionContext } from '@boardsmith/engine';
 
 /**
  * Options for {@link toDebugString}.
@@ -58,14 +58,14 @@ export function toDebugString(game: Game, options: DebugStringOptions = {}): str
   if ((game as any).phase) {
     lines.push(`Phase: ${(game as any).phase}`);
   }
-  if (game.players.current) {
-    lines.push(`Current Player: ${game.players.current.name} (position ${game.players.current.position})`);
+  if (game.currentPlayer) {
+    lines.push(`Current Player: ${game.currentPlayer.name} (position ${game.currentPlayer.position})`);
   }
   lines.push('');
 
   // Players summary
   lines.push('Players:');
-  for (const player of game.players) {
+  for (const player of game.all(Player)) {
     const attrs: string[] = [];
     const playerAny = player as any;
 
@@ -177,7 +177,7 @@ export function traceAction(
   player?: Player
 ): ActionTraceResult {
   const details: ActionTraceDetail[] = [];
-  const currentPlayer = player || game.players.current;
+  const currentPlayer = player || game.currentPlayer;
 
   // Find the action
   const actions = (game as any).actions || {};
@@ -419,7 +419,7 @@ export function visualizeFlow(flow: FlowNode, indent: string = ''): string {
  * ```
  */
 export function logAvailableActions(game: Game, player?: Player): string {
-  const currentPlayer = player || game.players.current;
+  const currentPlayer = player || game.currentPlayer;
   const lines: string[] = [`Available actions for ${currentPlayer?.name || 'current player'}:`];
 
   const actions = (game as any).actions || {};

@@ -1,4 +1,4 @@
-import { Game, type GameOptions } from '@boardsmith/engine';
+import { Game, Player, type GameOptions } from '@boardsmith/engine';
 import { Card, Hand, Crib, Deck, PlayArea, PlayedCards, StarterArea, CribbagePlayer } from './elements.js';
 import { createDiscardAction, createPlayCardAction, createSayGoAction, createAcknowledgeScoreAction } from './actions.js';
 import { createCribbageFlow } from './flow.js';
@@ -31,6 +31,9 @@ export type CribbagePhase = 'dealing' | 'discarding' | 'play' | 'scoring' | 'gam
  * - Rotate dealer and repeat
  */
 export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
+  // Use custom player class
+  static PlayerClass = CribbagePlayer;
+
   /** The deck */
   deck!: Deck;
 
@@ -180,7 +183,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     this.starterArea.contentsVisible();
 
     // Create hands for each player
-    for (const player of this.players) {
+    for (const player of this.all(Player) as unknown as CribbagePlayer[]) {
       const hand = this.create(Hand, `hand-${player.position}`);
       hand.player = player;
       hand.contentsVisibleToOwner();
@@ -188,7 +191,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
 
     // Randomly determine first dealer (simulates cutting for deal)
     this.dealerPosition = this.random() < 0.5 ? 1 : 2;
-    (this.players.get(this.dealerPosition) as CribbagePlayer).isDealer = true;
+    (this.getPlayer(this.dealerPosition) as CribbagePlayer).isDealer = true;
 
     // Register actions
     this.registerAction(createDiscardAction(this));
@@ -198,13 +201,6 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
 
     // Set up the game flow
     this.setFlow(createCribbageFlow());
-  }
-
-  /**
-   * Override to create CribbagePlayer instances
-   */
-  protected override createPlayer(position: number, name: string): CribbagePlayer {
-    return new CribbagePlayer(position, name);
   }
 
   /**
@@ -265,7 +261,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     this.moveAllToArea(this.playedCards, this.deck);
     this.moveAllToArea(this.starterArea, this.deck);
 
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const hand = this.getPlayerHand(player as CribbagePlayer);
       this.moveAllToArea(hand, this.deck);
       (player as CribbagePlayer).cardsPlayedThisRound = 0;
@@ -316,30 +312,30 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * Get the dealer
    */
   getDealer(): CribbagePlayer {
-    return this.players.get(this.dealerPosition) as CribbagePlayer;
+    return this.getPlayer(this.dealerPosition) as CribbagePlayer;
   }
 
   /**
    * Get the non-dealer
    */
   getNonDealer(): CribbagePlayer {
-    return this.players.get(3 - this.dealerPosition) as CribbagePlayer;
+    return this.getPlayer(3 - this.dealerPosition) as CribbagePlayer;
   }
 
   /**
    * Rotate dealer for next round
    */
   rotateDealer(): void {
-    (this.players.get(this.dealerPosition) as CribbagePlayer).isDealer = false;
+    (this.getPlayer(this.dealerPosition) as CribbagePlayer).isDealer = false;
     this.dealerPosition = 3 - this.dealerPosition;
-    (this.players.get(this.dealerPosition) as CribbagePlayer).isDealer = true;
+    (this.getPlayer(this.dealerPosition) as CribbagePlayer).isDealer = true;
   }
 
   /**
    * Get the current player during play phase
    */
   getCurrentPlayPlayer(): CribbagePlayer {
-    return this.players.get(this.currentPlayTurn) as CribbagePlayer;
+    return this.getPlayer(this.currentPlayTurn) as CribbagePlayer;
   }
 
   /**
@@ -376,7 +372,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * This is needed because cards move during play phase but we need originals for scoring
    */
   storeOriginalHands(): void {
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const p = player as CribbagePlayer;
       const hand = this.getPlayerHand(p);
       p.originalHandCardIds = [...hand.all(Card)].map(c => c.name!);
@@ -483,7 +479,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
       active: true,
       type: 'hand',
       playerPosition: player.position,
-      playerName: player.name,
+      playerName: player.name!,
       handCards: handCards.map(c => c.name!),
       starterCard: starter?.name ?? null,
       items: score.items.map(item => ({
@@ -533,7 +529,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
       active: true,
       type: 'crib',
       playerPosition: dealer.position,
-      playerName: dealer.name,
+      playerName: dealer.name!,
       handCards: cribCards.map(c => c.name!),
       starterCard: starter?.name ?? null,
       items: score.items.map(item => ({
@@ -692,7 +688,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
       active: true,
       starterCard: starter?.name ?? null,
       nonDealerHand: {
-        playerName: nonDealer.name,
+        playerName: nonDealer.name!,
         playerPosition: nonDealer.position,
         cardIds: nonDealerCards.map(c => c.name!),
         items: nonDealerScore.items.map(item => ({
@@ -704,7 +700,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
         totalPoints: nonDealerScore.total,
       },
       dealerHand: dealerCards && dealerScore ? {
-        playerName: dealer.name,
+        playerName: dealer.name!,
         playerPosition: dealer.position,
         cardIds: dealerCards.map(c => c.name!),
         items: dealerScore.items.map(item => ({
@@ -716,7 +712,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
         totalPoints: dealerScore.total,
       } : null,
       crib: cribCards && cribScore ? {
-        playerName: dealer.name,
+        playerName: dealer.name!,
         cardIds: cribCards.map(c => c.name!),
         items: cribScore.items.map(item => ({
           category: item.category,
@@ -734,7 +730,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * Check if both players have played all their cards
    */
   allCardsPlayed(): boolean {
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const hand = this.getPlayerHand(player as CribbagePlayer);
       if (hand.count(Card) > 0) return false;
     }
@@ -745,7 +741,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * Check if the game is complete
    */
   override isFinished(): boolean {
-    return this.cribbagePhase === 'gameOver' || this.players.some(p => (p as CribbagePlayer).score >= this.targetScore);
+    return this.cribbagePhase === 'gameOver' || this.all(Player).some(p => (p as CribbagePlayer).score >= this.targetScore);
   }
 
   /**
@@ -755,9 +751,9 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     if (!this.isFinished()) return [];
 
     // Winner is first to reach target score
-    const winners = this.players.filter(p => (p as CribbagePlayer).score >= this.targetScore);
+    const winners = ([...this.all(Player)] as CribbagePlayer[]).filter(p => p.score >= this.targetScore);
     if (winners.length > 0) {
-      return winners as CribbagePlayer[];
+      return winners;
     }
 
     // Shouldn't reach here normally
@@ -769,7 +765,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    */
   getDiscardCounts(): Map<number, number> {
     const counts = new Map<number, number>();
-    for (const player of this.players) {
+    for (const player of this.all(Player)) {
       const p = player as CribbagePlayer;
       const hand = this.getPlayerHand(p);
       // Started with 6, discarded = 6 - current hand size (during discard phase)
