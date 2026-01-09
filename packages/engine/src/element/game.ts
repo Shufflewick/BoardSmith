@@ -161,7 +161,67 @@ function createSeededRandom(seed: string): () => number {
 
 /**
  * Base Game class. The root of the element tree and container for all game state.
- * Extend this class to create your game.
+ *
+ * Extend this class to create your game. The Game class serves as:
+ * - **Element tree root**: All game elements (boards, cards, pieces) are children of Game
+ * - **Action registry**: Define and register player actions via `registerActions()`
+ * - **Flow controller**: Define game flow via `setFlow()` and `startFlow()`
+ * - **Player manager**: Access players via `players` collection
+ * - **Message log**: Record game events via `message()`
+ *
+ * @example
+ * ```typescript
+ * class MyGame extends Game<MyGame, MyPlayer> {
+ *   board!: Board;
+ *   deck!: Deck;
+ *
+ *   setup() {
+ *     // Register element classes for serialization
+ *     this.registerElements([Board, Deck, Card, Piece]);
+ *
+ *     // Create the game board and components
+ *     this.board = this.create(Board, 'board');
+ *     this.deck = this.create(Deck, 'deck');
+ *
+ *     // Create cards in the deck
+ *     for (const cardData of CARD_DATA) {
+ *       this.deck.create(Card, cardData.name, cardData);
+ *     }
+ *
+ *     // Deal to players
+ *     for (const player of this.players) {
+ *       this.deck.dealTo(player.hand, 5);
+ *     }
+ *   }
+ *
+ *   defineActions() {
+ *     // Define player actions
+ *     this.registerActions(
+ *       action('playCard')
+ *         .chooseOnBoard('card', Card)
+ *         .do(({ card }) => card.flip()),
+ *       action('endTurn')
+ *         .do(() => this.players.next())
+ *     );
+ *   }
+ *
+ *   defineFlow() {
+ *     // Define game flow
+ *     this.setFlow(defineFlow({
+ *       root: loop({
+ *         while: () => !this.isFinished(),
+ *         do: eachPlayer({
+ *           do: actionStep({ actions: ['playCard', 'endTurn'] })
+ *         })
+ *       }),
+ *       getWinners: () => [this.players.withHighestScore()]
+ *     }));
+ *   }
+ * }
+ * ```
+ *
+ * @typeParam G - The concrete Game subclass type (for type-safe self-references)
+ * @typeParam P - The Player subclass type used in this game
  */
 export class Game<
   G extends Game = any,
@@ -243,6 +303,32 @@ export class Game<
     '_debugRegistry',
   ];
 
+  /**
+   * Create a new game instance.
+   *
+   * @param options - Configuration for the new game
+   * @param options.playerCount - Number of players (creates Player 1 through Player N)
+   * @param options.playerNames - Optional custom names for players
+   * @param options.seed - Optional random seed for deterministic gameplay (for replays/testing)
+   *
+   * @example
+   * ```typescript
+   * // Create a 4-player game
+   * const game = new MyGame({ playerCount: 4 });
+   *
+   * // With custom names
+   * const game = new MyGame({
+   *   playerCount: 2,
+   *   playerNames: ['Alice', 'Bob']
+   * });
+   *
+   * // With seed for reproducible randomness
+   * const game = new MyGame({
+   *   playerCount: 4,
+   *   seed: 'my-test-seed'
+   * });
+   * ```
+   */
   constructor(options: GameOptions) {
     // Create seed for random
     const seed = options.seed ?? Math.random().toString(36).substring(2);
@@ -514,14 +600,40 @@ export class Game<
   // ============================================
 
   /**
-   * Register an action definition
+   * Register a single action definition.
+   *
+   * Prefer `registerActions()` for registering multiple actions at once.
+   *
+   * @param action - The action definition to register
    */
   registerAction(action: ActionDefinition): void {
     this._actions.set(action.name, action);
   }
 
   /**
-   * Register multiple actions
+   * Register multiple action definitions.
+   *
+   * Actions define what players can do during the game. Each action has a name,
+   * optional selections (choices the player must make), and an effect.
+   *
+   * @param actions - Action definitions created with the `action()` builder
+   *
+   * @example
+   * ```typescript
+   * // In your game's defineActions() method
+   * this.registerActions(
+   *   action('drawCard')
+   *     .do(() => this.deck.dealTo(ctx.player.hand, 1)),
+   *
+   *   action('playCard')
+   *     .chooseOnBoard('card', Card, { from: () => ctx.player.hand })
+   *     .chooseOnBoard('target', Space)
+   *     .do(({ card, target }) => card.putInto(target)),
+   *
+   *   action('endTurn')
+   *     .do(() => this.players.next())
+   * );
+   * ```
    */
   registerActions(...actions: ActionDefinition[]): void {
     for (const action of actions) {
@@ -1000,7 +1112,32 @@ export class Game<
   // ============================================
 
   /**
-   * Set the flow definition for this game
+   * Set the flow definition for this game.
+   *
+   * The flow defines the structure of your game: the order of turns,
+   * phases, and when the game ends. Use the flow builder functions
+   * (`defineFlow`, `loop`, `eachPlayer`, `actionStep`, etc.) to create
+   * the flow definition.
+   *
+   * @param definition - Flow definition created with `defineFlow()`
+   *
+   * @example
+   * ```typescript
+   * // In your game's defineFlow() method
+   * this.setFlow(defineFlow({
+   *   root: loop({
+   *     while: () => !this.isFinished(),
+   *     do: eachPlayer({
+   *       do: sequence(
+   *         actionStep({ actions: ['draw'] }),
+   *         actionStep({ actions: ['play', 'endTurn'] })
+   *       )
+   *     })
+   *   }),
+   *   isComplete: () => this.deck.isEmpty(),
+   *   getWinners: () => [this.players.withHighestScore()]
+   * }));
+   * ```
    */
   setFlow(definition: FlowDefinition): void {
     this._flowDefinition = definition;
@@ -1198,7 +1335,12 @@ export class Game<
   // ============================================
 
   /**
-   * Start the game (called after setup)
+   * Start the game (called after setup).
+   *
+   * Transitions the game from 'setup' phase to 'started' phase.
+   * Typically called automatically by the flow engine.
+   *
+   * @throws Error if the game has already started
    */
   start(): void {
     if (this.phase !== 'setup') {
@@ -1208,7 +1350,25 @@ export class Game<
   }
 
   /**
-   * End the game
+   * End the game with optional winners.
+   *
+   * Transitions the game to 'finished' phase. Once finished, no more
+   * actions can be taken. Use `getWinners()` to retrieve the winners.
+   *
+   * @param winners - Optional array of winning players. If not provided,
+   *                  use `getWinners()` to let the flow engine determine winners.
+   *
+   * @example
+   * ```typescript
+   * // End with a single winner
+   * this.finish([player]);
+   *
+   * // End with multiple winners (tie)
+   * this.finish([player1, player2]);
+   *
+   * // End without specifying winners (flow's getWinners will be used)
+   * this.finish();
+   * ```
    */
   finish(winners?: P[]): void {
     this.phase = 'finished';
@@ -1218,14 +1378,39 @@ export class Game<
   }
 
   /**
-   * Check if the game is finished
+   * Check if the game is finished.
+   *
+   * @returns `true` if the game phase is 'finished'
+   *
+   * @example
+   * ```typescript
+   * // In a flow condition
+   * loop({
+   *   while: () => !this.isFinished(),
+   *   do: eachPlayer({ ... })
+   * })
+   * ```
    */
   isFinished(): boolean {
     return this.phase === 'finished';
   }
 
   /**
-   * Get the winners (if game is finished)
+   * Get the winners of the game.
+   *
+   * @returns Array of winning players, or empty array if no winners set
+   *
+   * @example
+   * ```typescript
+   * if (game.isFinished()) {
+   *   const winners = game.getWinners();
+   *   if (winners.length === 1) {
+   *     console.log(`${winners[0].name} wins!`);
+   *   } else if (winners.length > 1) {
+   *     console.log(`Tie between ${winners.map(p => p.name).join(' and ')}!`);
+   *   }
+   * }
+   * ```
    */
   getWinners(): P[] {
     const positions = this.settings.winners as number[] | undefined;
@@ -1263,7 +1448,37 @@ export class Game<
   // ============================================
 
   /**
-   * Add a message to the game log
+   * Add a message to the game log.
+   *
+   * Messages are stored and can be displayed in the UI to show game history.
+   * Supports template substitution with `{{key}}` placeholders.
+   *
+   * @param text - Message text, optionally with `{{key}}` placeholders
+   * @param data - Optional data for template substitution. GameElement and Player
+   *               values are automatically converted to their display names.
+   *
+   * @example
+   * ```typescript
+   * // Simple message
+   * this.message('Game started!');
+   *
+   * // With template substitution
+   * this.message('{{player}} played {{card}}', {
+   *   player: currentPlayer,
+   *   card: playedCard
+   * });
+   *
+   * // In an action
+   * action('attack')
+   *   .chooseOnBoard('target', Piece)
+   *   .do(({ target }) => {
+   *     target.remove();
+   *     this.message('{{player}} destroyed {{target}}', {
+   *       player: ctx.player,
+   *       target
+   *     });
+   *   })
+   * ```
    */
   message(text: string, data?: Record<string, unknown>): void {
     this.addMessageInternal(text, data);
