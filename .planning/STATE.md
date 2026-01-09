@@ -5,29 +5,27 @@
 See: .planning/PROJECT.md (updated 2026-01-08)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** v0.1 milestone shipped
+**Current focus:** v0.2 Concerns Cleanup — Phase 5 (type-safety)
 
 ## Current Position
 
-Phase: 4 of 4 (complete)
-Plan: Complete
-Status: v0.1 milestone shipped
-Last activity: 2026-01-08 — v0.1 milestone complete
+Phase: 5 of 8 (type-safety)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-08 — Milestone v0.2 created
 
-Progress: ██████████ 100%
+Progress: ░░░░░░░░░░ 0%
 
-## v0.1 Milestone Summary
+## Milestones
 
-**Shipped:** 2026-01-08
-**Phases:** 4
-**Plans:** 14
-**Total execution time:** ~2.5 hours
+**Completed:**
+- v0.1 Large File Refactoring (Phases 1-4) — shipped 2026-01-08
 
-See: .planning/MILESTONES.md for full details
-See: .planning/milestones/v0.1-ROADMAP.md for archive
+**In Progress:**
+- v0.2 Concerns Cleanup (Phases 5-8)
 
 ## Session Continuity
 
 Last session: 2026-01-08
-Stopped at: v0.1 milestone complete
+Stopped at: Milestone v0.2 initialization
 Resume file: None
