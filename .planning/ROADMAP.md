@@ -4,6 +4,7 @@
 
 - ✅ [v0.1 Large File Refactoring](milestones/v0.1-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-01-08
 - ✅ [v0.2 Concerns Cleanup](milestones/v0.2-ROADMAP.md) (Phases 5-8) — SHIPPED 2026-01-09
+- ✅ [v0.3 Flow Engine Docs](milestones/v0.3-ROADMAP.md) (Phase 9) — SHIPPED 2026-01-09
 
 ## Overview
 
@@ -13,7 +14,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 
 - ✅ **v0.1 Large File Refactoring** — Phases 1-4 (shipped 2026-01-08)
 - ✅ **v0.2 Concerns Cleanup** — Phases 5-8 (shipped 2026-01-09)
-- 🚧 **v0.3 Flow Engine Docs** — Phase 9 (in progress)
+- ✅ **v0.3 Flow Engine Docs** — Phase 9 (shipped 2026-01-09)
 
 ## Phases
 
@@ -66,19 +67,18 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 
 </details>
 
-### 🚧 v0.3 Flow Engine Docs (In Progress)
+<details>
+<summary>✅ v0.3 Flow Engine Docs (Phase 9) — SHIPPED 2026-01-09</summary>
 
-**Milestone Goal:** Add section comments to flow/engine.ts for improved navigability
-
-#### Phase 9: flow-engine-docs
-
+### Phase 9: flow-engine-docs
 **Goal**: Add section dividers to group major subsystems in the 968-line flow engine file
 **Depends on**: v0.2 complete
-**Research**: Unlikely (documentation only, following established MCTS Bot pattern)
-**Plans**: TBD
+**Research**: None needed (documentation only, following established MCTS Bot pattern)
+**Plans**: 1/1 complete
 
-Plans:
-- [ ] 09-01: TBD (run /gsd:plan-phase 9 to break down)
+- [x] 09-01: Add section dividers and JSDoc improvements to FlowEngine
+
+</details>
 
 ## Progress
 
@@ -92,4 +92,4 @@ Plans:
 | 6. error-handling | v0.2 | 3/3 | Complete | 2026-01-09 |
 | 7. documentation | v0.2 | 3/3 | Complete | 2026-01-09 |
 | 8. concerns-cleanup | v0.2 | 1/1 | Complete | 2026-01-09 |
-| 9. flow-engine-docs | v0.3 | 0/? | Not started | - |
+| 9. flow-engine-docs | v0.3 | 1/1 | Complete | 2026-01-09 |
