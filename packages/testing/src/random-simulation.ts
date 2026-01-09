@@ -1,8 +1,17 @@
+/**
+ * Random game simulation for BoardSmith games.
+ *
+ * Run many random games to verify game completeness, find bugs,
+ * and check for edge cases.
+ *
+ * @module
+ */
+
 import type { Game, GameOptions, FlowState } from '@boardsmith/engine';
 import { createTestGame, type TestGame, type TestGameOptions } from './test-game.js';
 
 /**
- * Options for random game simulation
+ * Options for {@link simulateRandomGames}.
  */
 export interface SimulateRandomGamesOptions {
   /** Number of games to simulate */
@@ -18,7 +27,7 @@ export interface SimulateRandomGamesOptions {
 }
 
 /**
- * Result of a single simulated game
+ * Result of a single simulated game.
  */
 export interface SingleGameResult {
   /** Whether the game completed successfully */
@@ -44,7 +53,7 @@ export interface SingleGameResult {
 }
 
 /**
- * Aggregated results from random game simulation
+ * Aggregated results from random game simulation.
  */
 export interface SimulationResults {
   /** Number of games that completed successfully */
@@ -68,7 +77,8 @@ export interface SimulationResults {
 }
 
 /**
- * Simple random number generator for reproducible simulations
+ * Simple random number generator for reproducible simulations.
+ * @internal
  */
 class SeededRandom {
   private seed: number;
@@ -105,7 +115,8 @@ class SeededRandom {
 }
 
 /**
- * Run a single random game simulation
+ * Run a single random game simulation.
+ * @internal
  */
 async function simulateSingleGame<G extends Game>(
   GameClass: new (options: GameOptions) => G,
@@ -214,8 +225,9 @@ async function simulateSingleGame<G extends Game>(
 }
 
 /**
- * Get available actions for a player
- * This is a simplified heuristic - games should provide this introspection
+ * Get available actions for a player.
+ * This is a simplified heuristic - games should provide this introspection.
+ * @internal
  */
 function getAvailableActions<G extends Game>(
   testGame: TestGame<G>,
@@ -238,7 +250,14 @@ function getAvailableActions<G extends Game>(
 }
 
 /**
- * Simulate multiple random games to verify game completeness
+ * Simulate multiple random games to verify game completeness.
+ *
+ * Runs many games with random moves to find bugs, verify all games
+ * can complete, and check for edge cases across different player counts.
+ *
+ * @param GameClass - The game class constructor
+ * @param options - Simulation configuration
+ * @returns Aggregated results including completion rate, errors, and timing
  *
  * @example
  * ```typescript

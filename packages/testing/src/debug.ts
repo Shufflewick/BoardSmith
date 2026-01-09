@@ -1,12 +1,16 @@
 /**
  * Debug utilities for BoardSmith game development.
+ *
  * These tools help diagnose issues with game state, actions, and flow.
+ * Use during development to understand what's happening in your game.
+ *
+ * @module
  */
 
 import type { Game, GameElement, Player, FlowEngine, FlowNode, Action, ActionContext } from '@boardsmith/engine';
 
 /**
- * Options for toDebugString
+ * Options for {@link toDebugString}.
  */
 export interface DebugStringOptions {
   /** Include element IDs (default: true) */
@@ -21,6 +25,12 @@ export interface DebugStringOptions {
 
 /**
  * Generate a human-readable debug string of the game state.
+ *
+ * Shows game info, player summaries with attributes, and element tree.
+ *
+ * @param game - The game instance to debug
+ * @param options - Display options for the debug output
+ * @returns A multi-line string with game state information
  *
  * @example
  * ```typescript
@@ -123,7 +133,7 @@ function printElementTree(
 }
 
 /**
- * Result from tracing an action's availability
+ * Result from tracing an action's availability.
  */
 export interface ActionTraceResult {
   actionName: string;
@@ -132,6 +142,9 @@ export interface ActionTraceResult {
   details: ActionTraceDetail[];
 }
 
+/**
+ * Detail of a single step in action tracing.
+ */
 export interface ActionTraceDetail {
   step: string;
   passed: boolean;
@@ -140,7 +153,14 @@ export interface ActionTraceDetail {
 
 /**
  * Trace why an action is or isn't available.
- * Returns detailed information about each check that was performed.
+ *
+ * Walks through each check (condition, selections) and reports whether it passed.
+ * Useful for debugging why a player can't perform an action.
+ *
+ * @param game - The game instance
+ * @param actionName - The name of the action to trace
+ * @param player - The player to check (defaults to current player)
+ * @returns Trace result with availability, reason, and step-by-step details
  *
  * @example
  * ```typescript
@@ -309,6 +329,12 @@ export function traceAction(
 /**
  * Generate a visual representation of the flow structure.
  *
+ * Creates an ASCII tree showing the flow hierarchy with node types and names.
+ *
+ * @param flow - The flow node to visualize
+ * @param indent - Internal parameter for indentation (do not pass)
+ * @returns A multi-line string with the flow tree
+ *
  * @example
  * ```typescript
  * console.log(visualizeFlow(gameDefinition.flow));
@@ -374,11 +400,17 @@ export function visualizeFlow(flow: FlowNode, indent: string = ''): string {
 }
 
 /**
- * Log a summary of available actions for the current player.
+ * Generate a summary of available actions for a player.
+ *
+ * Shows each action with whether it's available and why.
+ *
+ * @param game - The game instance
+ * @param player - The player to check (defaults to current player)
+ * @returns A multi-line string summarizing action availability
  *
  * @example
  * ```typescript
- * logAvailableActions(game);
+ * console.log(logAvailableActions(game));
  * // Available actions for Player 1:
  * //   ✓ move - 3 valid moves
  * //   ✓ attack - 2 valid targets
@@ -401,7 +433,7 @@ export function logAvailableActions(game: Game, player?: Player): string {
 }
 
 /**
- * Result from debugging flow state
+ * Result from debugging flow state.
  */
 export interface FlowStateDebug {
   /** Current phase/step name */
@@ -420,7 +452,11 @@ export interface FlowStateDebug {
 
 /**
  * Get a debug view of the current flow state.
+ *
  * Shows where in the flow the game currently is and what's happening.
+ *
+ * @param testGame - The test game instance
+ * @returns Debug info including phase, node stack, and human-readable description
  *
  * @example
  * ```typescript
@@ -484,7 +520,8 @@ export function debugFlowState(testGame: any): FlowStateDebug {
 }
 
 /**
- * Extract the stack of flow nodes from the flow engine
+ * Extract the stack of flow nodes from the flow engine.
+ * @internal
  */
 function extractNodeStack(flowEngine: any): string[] {
   const stack: string[] = [];
@@ -510,7 +547,12 @@ function extractNodeStack(flowEngine: any): string[] {
 
 /**
  * Visualize the flow with the current position highlighted.
- * Similar to visualizeFlow but marks where execution currently is.
+ *
+ * Like {@link visualizeFlow} but marks where execution currently is.
+ *
+ * @param flow - The flow node to visualize
+ * @param testGame - Optional test game to highlight current position
+ * @returns A multi-line string with the flow tree and position marker
  *
  * @example
  * ```typescript
@@ -603,14 +645,23 @@ function visualizeFlowWithHighlight(
 
 /**
  * Print game state diff between two snapshots.
+ *
+ * Compares two JSON-serialized game snapshots and shows what changed.
  * Useful for debugging what changed after an action.
+ *
+ * @param before - JSON string of state before the change
+ * @param after - JSON string of state after the change
+ * @returns A string describing the differences, or "No changes detected"
  *
  * @example
  * ```typescript
- * const before = JSON.stringify(getSnapshot(game));
- * await simulateAction(game, 'move', { piece: p1, destination: cell });
- * const after = JSON.stringify(getSnapshot(game));
+ * const before = JSON.stringify(testGame.getSnapshot());
+ * testGame.doAction(0, 'move', { destination: cell });
+ * const after = JSON.stringify(testGame.getSnapshot());
  * console.log(diffSnapshots(before, after));
+ * // Changes:
+ * //   piece.position: "A1" → "B2"
+ * //   player.actionsRemaining: 2 → 1
  * ```
  */
 export function diffSnapshots(before: string, after: string): string {
