@@ -36,7 +36,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 **Plans**: 3
 
 Plans:
-- [ ] 05-01: Fix choice validation type in useActionController
+- [x] 05-01: Fix choice validation type in useActionController
 - [ ] 05-02: Replace DOM property storage with WeakMap in useZoomPreview
 - [ ] 05-03: Document introspector assertions (rule out as legitimate)
 
@@ -79,7 +79,7 @@ Plans:
 | 2. useActionController refactoring | v0.1 | 4/4 | Complete | 2026-01-08 |
 | 3. action refactoring | v0.1 | 3/3 | Complete | 2026-01-08 |
 | 4. test file refactoring | v0.1 | 3/3 | Complete | 2026-01-08 |
-| 5. type-safety | v0.2 | 0/3 | Not started | - |
+| 5. type-safety | v0.2 | 1/3 | In progress | - |
 | 6. error-handling | v0.2 | 0/3 | Not started | - |
 | 7. documentation | v0.2 | 0/3 | Not started | - |
 | 8. concerns-cleanup | v0.2 | 0/1 | Not started | - |
