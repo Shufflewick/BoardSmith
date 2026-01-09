@@ -331,6 +331,11 @@ function generateCheckerFunction(
   }
 
   // Default fallback with description as comment
+  console.warn(
+    `[AI Code Generator] Unknown feature pattern: "${id}". ` +
+    `Generated fallback checker that always returns true. ` +
+    `Consider implementing custom logic for: ${obj.description}`
+  );
   return `() => {
         // ${obj.description}
         // TODO: Implement this checker based on game-specific logic
