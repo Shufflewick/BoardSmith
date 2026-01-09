@@ -15,7 +15,38 @@ import { DEFAULT_VISIBILITY, canPlayerSee, resolveVisibility } from '../command/
 
 /**
  * Base class for all game elements. Elements form a tree structure representing
- * the game state. Do not instantiate directly - use Space or Piece as base classes.
+ * the game state.
+ *
+ * **Do not extend directly** - use {@link Space} for containers (boards, hands, decks)
+ * or {@link Piece} for movable items (tokens, cards, dice).
+ *
+ * GameElement provides:
+ * - **Tree structure**: Parent/child relationships via `parent`, `children`
+ * - **Queries**: Find descendants via `all()`, `first()`, `last()`, `has()`
+ * - **Creation**: Create children via `create()`, `createMany()`
+ * - **Movement**: Move between containers via `putInto()`, `remove()`
+ * - **Visibility**: Control who sees what via visibility system
+ *
+ * @example
+ * ```typescript
+ * // Querying elements
+ * const allCards = game.all(Card);
+ * const redCards = game.all(Card, { color: 'red' });
+ * const topCard = deck.first(Card);
+ *
+ * // Finding with functions
+ * const playableCards = hand.all(Card, c => c.cost <= player.mana);
+ *
+ * // Creating elements
+ * const card = deck.create(Card, 'Fireball', { damage: 5 });
+ *
+ * // Moving elements
+ * card.putInto(hand);
+ * card.remove(); // Goes to game.pile
+ * ```
+ *
+ * @typeParam G - The Game subclass type
+ * @typeParam P - The Player subclass type
  */
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
@@ -182,7 +213,31 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   // ============================================
 
   /**
-   * Create a single child element
+   * Create a child element within this container.
+   *
+   * The new element becomes a child of this element in the tree structure.
+   * Use this to build your game's element hierarchy during setup.
+   *
+   * @param elementClass - The element class to instantiate (e.g., `Card`, `Piece`)
+   * @param name - Name for the element (used in queries and display)
+   * @param attributes - Optional initial attribute values
+   * @returns The created element
+   *
+   * @example
+   * ```typescript
+   * // Create a simple element
+   * const piece = board.create(Piece, 'pawn');
+   *
+   * // Create with attributes
+   * const card = deck.create(Card, 'Fireball', {
+   *   damage: 5,
+   *   cost: 3,
+   *   $image: 'cards/fireball.png'
+   * });
+   *
+   * // Create player-owned element
+   * const hand = game.create(Hand, 'hand', { player: currentPlayer });
+   * ```
    */
   create<T extends GameElement>(
     elementClass: ElementClass<T>,
@@ -322,7 +377,29 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   // ============================================
 
   /**
-   * Find all matching descendant elements
+   * Find all matching descendant elements.
+   *
+   * Searches this element's entire subtree (children, grandchildren, etc.)
+   * for elements matching the given class and/or filter conditions.
+   *
+   * @param className - Element class to filter by (e.g., `Card`, `Piece`)
+   * @param finders - Additional filters: attribute objects or predicate functions
+   * @returns ElementCollection of matching elements
+   *
+   * @example
+   * ```typescript
+   * // Find all Cards anywhere in the game
+   * const allCards = game.all(Card);
+   *
+   * // Find Cards with specific attributes
+   * const redCards = game.all(Card, { color: 'red' });
+   *
+   * // Find Cards matching a condition
+   * const playableCards = hand.all(Card, c => c.cost <= player.mana);
+   *
+   * // Combine class and condition
+   * const cheapRedCards = game.all(Card, { color: 'red' }, c => c.cost < 3);
+   * ```
    */
   all<F extends GameElement>(
     className: ElementClass<F>,
@@ -338,7 +415,26 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Find the first matching descendant element
+   * Find the first matching descendant element.
+   *
+   * Returns the first element found in depth-first order that matches
+   * the given class and/or filter conditions.
+   *
+   * @param className - Element class to filter by
+   * @param finders - Additional filters
+   * @returns First matching element, or `undefined` if none found
+   *
+   * @example
+   * ```typescript
+   * // Get top card from deck (first child)
+   * const topCard = deck.first(Card);
+   *
+   * // Find first unoccupied space
+   * const emptySpace = board.first(Space, s => s.isEmpty());
+   *
+   * // Find player's first piece
+   * const myPiece = game.first(Piece, { player: currentPlayer });
+   * ```
    */
   first<F extends GameElement>(
     className: ElementClass<F>,
@@ -354,7 +450,21 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Find the first N matching descendant elements
+   * Find the first N matching descendant elements.
+   *
+   * @param n - Maximum number of elements to return
+   * @param className - Element class to filter by
+   * @param finders - Additional filters
+   * @returns ElementCollection with up to N matching elements
+   *
+   * @example
+   * ```typescript
+   * // Draw 3 cards from deck
+   * const drawnCards = deck.firstN(3, Card);
+   *
+   * // Get first 5 pieces in play area
+   * const pieces = playArea.firstN(5, Piece);
+   * ```
    */
   firstN<F extends GameElement>(
     n: number,
@@ -372,7 +482,23 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Find the last matching descendant element
+   * Find the last matching descendant element.
+   *
+   * Returns the last element found that matches the given conditions.
+   * Useful for "bottom of deck" or most recently added elements.
+   *
+   * @param className - Element class to filter by
+   * @param finders - Additional filters
+   * @returns Last matching element, or `undefined` if none found
+   *
+   * @example
+   * ```typescript
+   * // Get bottom card from deck
+   * const bottomCard = deck.last(Card);
+   *
+   * // Get most recently played card
+   * const lastPlayed = discardPile.last(Card);
+   * ```
    */
   last<F extends GameElement>(
     className: ElementClass<F>,
@@ -388,7 +514,18 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Find the last N matching descendant elements
+   * Find the last N matching descendant elements.
+   *
+   * @param n - Maximum number of elements to return
+   * @param className - Element class to filter by
+   * @param finders - Additional filters
+   * @returns ElementCollection with up to N matching elements
+   *
+   * @example
+   * ```typescript
+   * // Get bottom 3 cards from deck
+   * const bottomCards = deck.lastN(3, Card);
+   * ```
    */
   lastN<F extends GameElement>(
     n: number,
@@ -406,7 +543,25 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Check if any matching descendant elements exist
+   * Check if any matching descendant elements exist.
+   *
+   * More efficient than `all().length > 0` because it stops at first match.
+   *
+   * @param className - Element class to filter by
+   * @param finders - Additional filters
+   * @returns `true` if at least one matching element exists
+   *
+   * @example
+   * ```typescript
+   * // Check if player has any cards
+   * if (hand.has(Card)) { ... }
+   *
+   * // Check if player can afford any card
+   * if (shop.has(Card, c => c.cost <= player.gold)) { ... }
+   *
+   * // Check for specific card type
+   * if (hand.has(Card, { type: 'attack' })) { ... }
+   * ```
    */
   has<F extends GameElement>(
     className: ElementClass<F>,
@@ -422,7 +577,20 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Count matching descendant elements
+   * Count matching descendant elements.
+   *
+   * @param className - Element class to filter by
+   * @param finders - Additional filters
+   * @returns Number of matching elements
+   *
+   * @example
+   * ```typescript
+   * // Count cards in hand
+   * const handSize = hand.count(Card);
+   *
+   * // Count damage tokens on a unit
+   * const damage = unit.count(DamageToken);
+   * ```
    */
   count<F extends GameElement>(
     className: ElementClass<F>,
