@@ -93,6 +93,10 @@ export interface ZoomPreviewReturn {
 // Global alt key state (shared across all instances)
 const isAltPressed = ref(false);
 
+// WeakMaps for storing cleanup functions without polluting DOM objects
+const keyboardCleanupMap = new WeakMap<Window, () => void>();
+const containerCleanupMap = new WeakMap<Element, () => void>();
+
 // Track if global keyboard listeners are already attached
 let keyboardListenersAttached = false;
 let keyboardInstanceCount = 0;
@@ -124,18 +128,19 @@ function attachKeyboardListeners() {
   keyboardListenersAttached = true;
 
   // Store cleanup function
-  (window as any).__zoomPreviewKeyboardCleanup = () => {
+  keyboardCleanupMap.set(window, () => {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
     window.removeEventListener('blur', handleBlur);
     keyboardListenersAttached = false;
-  };
+  });
 }
 
 function detachKeyboardListeners() {
-  if ((window as any).__zoomPreviewKeyboardCleanup) {
-    (window as any).__zoomPreviewKeyboardCleanup();
-    delete (window as any).__zoomPreviewKeyboardCleanup;
+  const cleanup = keyboardCleanupMap.get(window);
+  if (cleanup) {
+    cleanup();
+    keyboardCleanupMap.delete(window);
   }
 }
 
@@ -586,7 +591,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     window.addEventListener('keyup', checkAlt);
 
     // Store cleanup for this instance
-    (container as any).__zoomPreviewCleanup = () => {
+    containerCleanupMap.set(container, () => {
       container.removeEventListener('mouseover', handleMouseOver);
       container.removeEventListener('mouseout', handleMouseOut);
       container.removeEventListener('mousemove', handleMouseMove);
@@ -597,7 +602,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
       window.removeEventListener('keydown', checkAlt);
       window.removeEventListener('keyup', checkAlt);
       cancelLongPress();
-    };
+    });
   });
 
   onUnmounted(() => {
@@ -608,9 +613,10 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
 
     // Cleanup event delegation listeners
     const container = options.containerRef?.value || document.body;
-    if ((container as any).__zoomPreviewCleanup) {
-      (container as any).__zoomPreviewCleanup();
-      delete (container as any).__zoomPreviewCleanup;
+    const containerCleanup = containerCleanupMap.get(container);
+    if (containerCleanup) {
+      containerCleanup();
+      containerCleanupMap.delete(container);
     }
 
     // Hide preview when component unmounts
