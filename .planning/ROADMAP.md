@@ -48,7 +48,7 @@ Plans:
 
 Plans:
 - [x] 06-01: Add boardRefs error logging in selection-handler
-- [ ] 06-02: Add JSON.parse error handling in sqlite-storage (CRITICAL)
+- [x] 06-02: Add JSON.parse error handling in sqlite-storage (CRITICAL)
 - [ ] 06-03: Document acceptable silent errors (rule out)
 
 #### Phase 7: documentation
@@ -80,6 +80,6 @@ Plans:
 | 3. action refactoring | v0.1 | 3/3 | Complete | 2026-01-08 |
 | 4. test file refactoring | v0.1 | 3/3 | Complete | 2026-01-08 |
 | 5. type-safety | v0.2 | 3/3 | Complete | 2026-01-08 |
-| 6. error-handling | v0.2 | 1/3 | In progress | - |
+| 6. error-handling | v0.2 | 2/3 | In progress | - |
 | 7. documentation | v0.2 | 0/3 | Not started | - |
 | 8. concerns-cleanup | v0.2 | 0/1 | Not started | - |
