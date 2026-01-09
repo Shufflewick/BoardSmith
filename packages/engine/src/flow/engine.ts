@@ -58,8 +58,40 @@ interface ExecutionFrame {
 }
 
 /**
- * FlowEngine executes flow definitions and manages game state progression.
- * It handles pausing for player input and resuming from serialized positions.
+ * Executes flow definitions and manages game state progression.
+ *
+ * FlowEngine is the runtime interpreter for flow definitions created with
+ * {@link defineFlow} and flow builder functions. It handles:
+ * - Executing flow nodes (sequences, loops, conditionals, action steps)
+ * - Pausing at action steps to wait for player input
+ * - Resuming after player actions
+ * - Tracking game completion and determining winners
+ * - Serializing/restoring state for persistence
+ *
+ * Most game developers don't interact with FlowEngine directly - instead use
+ * the flow builder functions to define game flow, and the game session handles
+ * engine operations automatically.
+ *
+ * @example
+ * ```typescript
+ * // Define the flow
+ * const flow = defineFlow({
+ *   setup: (ctx) => { ... },
+ *   root: loop({
+ *     while: (ctx) => !ctx.game.isFinished(),
+ *     do: eachPlayer({ do: playerTurn })
+ *   }),
+ *   isComplete: (ctx) => someoneWon(ctx),
+ *   getWinners: (ctx) => [getWinner(ctx)]
+ * });
+ *
+ * // Engine is created internally by GameSession
+ * const engine = new FlowEngine(game, flow);
+ * const state = engine.start();
+ *
+ * // When player acts
+ * const newState = engine.resume('playCard', { card: 42 });
+ * ```
  */
 export class FlowEngine<G extends Game = Game> {
   private game: G;
