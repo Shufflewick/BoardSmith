@@ -87,7 +87,46 @@ export class Action {
   }
 
   /**
-   * Add a choice selection
+   * Add a choice selection from a list of values.
+   *
+   * Use this for string/number choices (e.g., ranks, colors, amounts).
+   * For selecting game elements, prefer {@link fromElements} instead.
+   *
+   * @param name - Argument name that will be passed to the execute handler
+   * @param options - Configuration for the choice selection
+   * @param options.prompt - User-facing prompt text
+   * @param options.choices - Static array or function returning available choices
+   * @param options.display - Custom display function for each choice
+   * @param options.optional - If true, player can skip this selection
+   * @param options.validate - Custom validation function
+   * @param options.boardRefs - Get board element references for highlighting
+   * @param options.filterBy - Filter choices based on a previous selection value
+   * @param options.dependsOn - Name of previous selection this depends on
+   * @param options.repeat - Configuration for repeating this selection
+   * @param options.repeatUntil - Value that terminates a repeat loop
+   * @param options.multiSelect - Enable multi-select with checkboxes
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```typescript
+   * // Simple choice selection
+   * action('bid')
+   *   .chooseFrom('amount', {
+   *     prompt: 'How much do you bid?',
+   *     choices: [1, 2, 3, 4, 5],
+   *   })
+   *   .execute(({ amount }) => {
+   *     ctx.player.bid = amount;
+   *   });
+   *
+   * // Choice with dynamic options and display
+   * action('selectRank')
+   *   .chooseFrom('rank', {
+   *     prompt: 'Choose a rank',
+   *     choices: (ctx) => getAvailableRanks(ctx.player),
+   *     display: (rank) => `${rank} (${rankDescriptions[rank]})`,
+   *   });
+   * ```
    */
   chooseFrom<T>(
     name: string,
@@ -144,7 +183,42 @@ export class Action {
   }
 
   /**
-   * Add an element selection (choose from board)
+   * Add a selection for a single element from the game board.
+   *
+   * Uses the board for selection - player clicks on elements directly.
+   * For choices shown as buttons/dropdowns, prefer {@link fromElements} instead.
+   *
+   * @param name - Argument name that will be passed to the execute handler
+   * @param options - Configuration for the element selection
+   * @param options.prompt - User-facing prompt text
+   * @param options.elementClass - Filter to specific element types (e.g., Card, Piece)
+   * @param options.from - Container element to select from (defaults to game board)
+   * @param options.filter - Additional filter function for elements
+   * @param options.optional - If true, player can skip this selection
+   * @param options.validate - Custom validation function
+   * @param options.display - Display function for elements (for UI buttons)
+   * @param options.boardRef - Get board element reference for highlighting
+   * @param options.dependsOn - Name of previous selection this depends on
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```typescript
+   * // Select a piece from the board
+   * action('move')
+   *   .chooseElement('piece', {
+   *     prompt: 'Select a piece to move',
+   *     elementClass: Piece,
+   *     filter: (el, ctx) => el.owner === ctx.player,
+   *   })
+   *   .chooseElement('destination', {
+   *     prompt: 'Select destination',
+   *     elementClass: Space,
+   *     filter: (space, ctx) => space.isEmpty(),
+   *   })
+   *   .execute(({ piece, destination }) => {
+   *     piece.moveTo(destination);
+   *   });
+   * ```
    */
   chooseElement<T extends GameElement>(
     name: string,
@@ -286,7 +360,31 @@ export class Action {
   }
 
   /**
-   * Add a text input selection
+   * Add a text input selection for free-form string input.
+   *
+   * @param name - Argument name that will be passed to the execute handler
+   * @param options - Configuration for the text input
+   * @param options.prompt - User-facing prompt text
+   * @param options.pattern - Regex pattern the input must match
+   * @param options.minLength - Minimum required string length
+   * @param options.maxLength - Maximum allowed string length
+   * @param options.optional - If true, player can skip this selection
+   * @param options.validate - Custom validation function
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```typescript
+   * action('setNickname')
+   *   .enterText('nickname', {
+   *     prompt: 'Enter your nickname',
+   *     minLength: 1,
+   *     maxLength: 20,
+   *     pattern: /^[a-zA-Z0-9_]+$/,
+   *   })
+   *   .execute(({ nickname }) => {
+   *     ctx.player.nickname = nickname;
+   *   });
+   * ```
    */
   enterText(
     name: string,
@@ -314,7 +412,32 @@ export class Action {
   }
 
   /**
-   * Add a number input selection
+   * Add a number input selection for numeric values.
+   *
+   * @param name - Argument name that will be passed to the execute handler
+   * @param options - Configuration for the number input
+   * @param options.prompt - User-facing prompt text
+   * @param options.min - Minimum allowed value
+   * @param options.max - Maximum allowed value
+   * @param options.integer - If true, only whole numbers are allowed
+   * @param options.optional - If true, player can skip this selection
+   * @param options.validate - Custom validation function
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```typescript
+   * action('buyResources')
+   *   .enterNumber('amount', {
+   *     prompt: 'How many resources to buy?',
+   *     min: 1,
+   *     max: (ctx) => ctx.player.gold,
+   *     integer: true,
+   *   })
+   *   .execute(({ amount }) => {
+   *     ctx.player.gold -= amount;
+   *     ctx.player.resources += amount;
+   *   });
+   * ```
    */
   enterNumber(
     name: string,
@@ -342,7 +465,27 @@ export class Action {
   }
 
   /**
-   * Set the execution handler for this action
+   * Set the execution handler and finalize the action definition.
+   *
+   * This is the terminal method in the builder chain. The handler receives
+   * all selection values as resolved args (elements are actual Element objects,
+   * not IDs) and the action context.
+   *
+   * @param fn - Handler function that executes the action logic
+   * @returns The completed action definition (not the builder)
+   *
+   * @example
+   * ```typescript
+   * action('attack')
+   *   .fromElements('target', { ... })
+   *   .execute(({ target }, ctx) => {
+   *     // target is the resolved Element object
+   *     target.hp -= ctx.player.attackPower;
+   *
+   *     // Return data to client if needed
+   *     return { damage: ctx.player.attackPower };
+   *   });
+   * ```
    */
   execute(
     fn: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void
