@@ -124,10 +124,12 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 **Goal**: Make Player extend GameElement, remove PlayerCollection, migrate to `game.all(Player)`
 **Depends on**: v0.5 complete
 **Research**: Unlikely (internal refactoring)
-**Plans**: TBD
+**Plans**: 3
 
 Plans:
-- [ ] 12-01: TBD (run /gsd:plan-phase 12 to break down)
+- [ ] 12-01: Make Player extend GameElement, remove PlayerCollection from engine
+- [ ] 12-02: Update all game implementations and custom Player classes
+- [ ] 12-03: Update tests and supporting packages, verify all pass
 
 #### Phase 13: player-access-docs
 **Goal**: Document the new player access pattern (players as GameElements, anti-patterns to avoid)
@@ -153,5 +155,5 @@ Plans:
 | 9. flow-engine-docs | v0.3 | 1/1 | Complete | 2026-01-09 |
 | 10. public-api-jsdoc | v0.4 | 3/3 | Complete | 2026-01-09 |
 | 11. eslint-no-shadow | v0.5 | 1/1 | Complete | 2026-01-09 |
-| 12. player-in-tree | v0.6 | 0/? | Not started | - |
+| 12. player-in-tree | v0.6 | 0/3 | Planned | - |
 | 13. player-access-docs | v0.6 | 0/? | Not started | - |

@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-09)
 ## Current Position
 
 Phase: 12 of 13 (player-in-tree)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-09 — Milestone v0.6 created
+Plan: 12-01 ready to execute
+Status: Planned
+Last activity: 2026-01-09 — Phase 12 planned (3 plans, 9 tasks)
 
 Progress: ░░░░░░░░░░ 0%
 
