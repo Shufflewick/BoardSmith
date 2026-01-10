@@ -52,7 +52,9 @@ class TestGame extends Game<TestGame, Player> {
     // Register draw action
     const drawAction = Action.create('draw')
       .prompt('Draw a card')
-      .condition((ctx) => this.deck.count(Card) > 0)
+      .condition({
+        'deck has cards': () => this.deck.count(Card) > 0,
+      })
       .execute((args, ctx) => {
         const card = this.deck.first(Card);
         if (card) {

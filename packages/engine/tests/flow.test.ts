@@ -605,9 +605,12 @@ describe('Game Flow Integration', () => {
 
     // Register actions
     const drawAction = Action.create('draw')
-      .condition((ctx) => {
-        const deck = ctx.game.first(Deck);
-        return deck !== undefined && deck.count(Card) > 0;
+      .condition({
+        'deck exists': (ctx) => ctx.game.first(Deck) !== undefined,
+        'deck has cards': (ctx) => {
+          const deck = ctx.game.first(Deck);
+          return deck !== undefined && deck.count(Card) > 0;
+        },
       })
       .execute((args, ctx) => {
         const deck = ctx.game.first(Deck)!;
