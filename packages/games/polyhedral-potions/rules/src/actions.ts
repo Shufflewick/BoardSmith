@@ -93,6 +93,7 @@ export function createDraftAction(game: PolyPotionsGame): ActionDefinition {
 export function createCraftAction(game: PolyPotionsGame): ActionDefinition {
   return Action.create('craft')
     .prompt('Craft a potion from your drafted dice')
+    .condition(() => game.draftedValues.length === 2)
     .chooseFrom<string>('operation', {
       prompt: 'Choose how to combine your dice',
       choices: (ctx) => {
@@ -248,10 +249,11 @@ export function createRecordAction(game: PolyPotionsGame): ActionDefinition {
 export function createUseRerollAction(game: PolyPotionsGame): ActionDefinition {
   // Helper to check if a die is rerollable (on shelf or drafted this turn)
   // Uses ctx.game to avoid stale closure references
+  // Note: Use .contains() for ElementCollection, .some() for arrays to compare by ID
   const isRerollableDie = (die: IngredientDie, currentGame: PolyPotionsGame) => {
-    const shelfDice = currentGame.shelf.getDice() as IngredientDie[];
+    const shelfDice = currentGame.shelf.getDice();
     const draftedDice = currentGame.draftedDice;
-    return shelfDice.includes(die) || draftedDice.includes(die);
+    return shelfDice.contains(die) || draftedDice.some(d => d.id === die.id);
   };
 
   return Action.create('useReroll')
@@ -352,10 +354,11 @@ export function createUseRerollAction(game: PolyPotionsGame): ActionDefinition {
 export function createUseFlipAction(game: PolyPotionsGame): ActionDefinition {
   // Helper to check if a die is flippable (on shelf or drafted this turn)
   // Uses ctx.game to avoid stale closure references
+  // Note: Use .contains() for ElementCollection, .some() for arrays to compare by ID
   const isFlippableDie = (die: IngredientDie, currentGame: PolyPotionsGame) => {
-    const shelfDice = currentGame.shelf.getDice() as IngredientDie[];
+    const shelfDice = currentGame.shelf.getDice();
     const draftedDice = currentGame.draftedDice;
-    return shelfDice.includes(die) || draftedDice.includes(die);
+    return shelfDice.contains(die) || draftedDice.some(d => d.id === die.id);
   };
 
   return Action.create('useFlip')

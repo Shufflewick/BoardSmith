@@ -79,7 +79,8 @@ export function createPolyPotionsFlow(): FlowDefinition {
           const diceToReroll: IngredientDie[] = [];
           for (const die of game.shelf.getDice()) {
             const ingredientDie = die as IngredientDie;
-            if (!game.draftedDice.includes(ingredientDie)) {
+            // Use ID comparison - reference equality fails after serialization
+            if (!game.draftedDice.some(d => d.id === ingredientDie.id)) {
               ingredientDie.drafted = false;
               diceToReroll.push(ingredientDie);
             }

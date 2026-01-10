@@ -243,22 +243,65 @@ const starterCard = computed(() => getFirstCard(starterElement.value) || null);
 const deckElement = computed(() => findElement(props.gameView, { type: 'deck', name: 'deck' }));
 const deckCardCount = computed(() => getElementCount(deckElement.value));
 
+// Get card back image info from any card with $images (for deck/crib display)
+// Check multiple sources since hands can be empty at end of round
+// Moved before useAutoAnimations since countBasedRoutes needs it
+const cardBackImageInfo = computed((): ImageInfo | null => {
+  // Try myHand first
+  if (myHand.value.length > 0) {
+    const info = getCardImageInfo(myHand.value[0], 'back');
+    if (info) return info;
+  }
+  // Try starter card
+  if (starterCard.value) {
+    const info = getCardImageInfo(starterCard.value as Card, 'back');
+    if (info) return info;
+  }
+  // Try crib cards
+  if (crib.value.length > 0) {
+    const info = getCardImageInfo(crib.value[0] as Card, 'back');
+    if (info) return info;
+  }
+  // Try play area
+  if (playArea.value.length > 0) {
+    const info = getCardImageInfo(playArea.value[0] as Card, 'back');
+    if (info) return info;
+  }
+  // Try played cards
+  if (playedCards.value.length > 0) {
+    const info = getCardImageInfo(playedCards.value[0] as Card, 'back');
+    if (info) return info;
+  }
+  return null;
+});
+
 // Auto-animations: FLIP within containers + flying between containers
 const { flyingElements: autoFlyingCards } = useAutoAnimations({
   gameView: () => props.gameView,
   containers: [
     // Hand cards reorder with FLIP animation
-    { element: myHandElement, ref: myHandRef, flipWithin: '[data-card-id]' },
+    { element: myHandElement, ref: myHandRef, flipWithin: '[data-card-id]', name: 'hand' },
     // Play area cards reorder with FLIP animation
     { element: playAreaElement, ref: playAreaRef, flipWithin: '[data-card-id]' },
     // Played cards stack with FLIP animation
     { element: playedCardsElement, ref: playedCardsRef, flipWithin: '[data-card-id]' },
     // Crib for flying cards
-    { element: cribElement, ref: cribStackRef },
+    { element: cribElement, ref: cribStackRef, name: 'crib' },
     // Deck for flying cards
     { element: deckElement, ref: deckStackRef },
     // Starter area for flying cards
     { element: starterElement, ref: starterAreaRef },
+  ],
+  // Count-based routes for when element IDs change (cards moving to hidden crib)
+  countBasedRoutes: [
+    {
+      from: 'hand',
+      to: 'crib',
+      // Provide card back image since we can't get data from the moved elements
+      cardData: () => ({
+        backImage: cardBackImageInfo.value ?? undefined,
+      }),
+    },
   ],
   getElementData: (element) => ({
     rank: element.attributes?.rank,
@@ -299,37 +342,6 @@ const myScore = computed(() => (myHandElement.value?.attributes as any)?.player?
 const opponentScore = computed(() => (opponentHandElement.value?.attributes as any)?.player?.score ?? 0);
 
 const isDealer = computed(() => dealerPosition.value === props.playerPosition);
-
-// Get card back image info from any card with $images (for deck/crib display)
-// Check multiple sources since hands can be empty at end of round
-const cardBackImageInfo = computed((): ImageInfo | null => {
-  // Try myHand first
-  if (myHand.value.length > 0) {
-    const info = getCardImageInfo(myHand.value[0], 'back');
-    if (info) return info;
-  }
-  // Try starter card
-  if (starterCard.value) {
-    const info = getCardImageInfo(starterCard.value as Card, 'back');
-    if (info) return info;
-  }
-  // Try crib cards
-  if (crib.value.length > 0) {
-    const info = getCardImageInfo(crib.value[0] as Card, 'back');
-    if (info) return info;
-  }
-  // Try play area
-  if (playArea.value.length > 0) {
-    const info = getCardImageInfo(playArea.value[0] as Card, 'back');
-    if (info) return info;
-  }
-  // Try played cards
-  if (playedCards.value.length > 0) {
-    const info = getCardImageInfo(playedCards.value[0] as Card, 'back');
-    if (info) return info;
-  }
-  return null;
-});
 
 const needsToDiscard = computed(() => {
   if (cribbagePhase.value !== 'discarding') return false;
@@ -543,7 +555,9 @@ function toggleCardSelection(cardName: string) {
 
 // Actions - call actionController.execute() with proper parameters
 async function performDiscard() {
+  console.log('[DiscardDebug] performDiscard called, selectedCards:', selectedCards.value);
   if (selectedCards.value.length !== 2 || isPerformingAction.value) {
+    console.log('[DiscardDebug] Early return - length:', selectedCards.value.length, 'isPerforming:', isPerformingAction.value);
     return;
   }
 
@@ -556,16 +570,23 @@ async function performDiscard() {
     cardData: { rank: string; suit: string; faceImage?: unknown; backImage?: unknown };
   }> = [];
 
+  console.log('[DiscardDebug] myHand.value:', myHand.value.map((c: Card) => ({ id: c.id, name: c.name })));
+  console.log('[DiscardDebug] boardRef.value:', !!boardRef.value);
+
   for (const cardId of selectedCards.value) {
     // Find card by element ID
     const card = myHand.value.find((c: Card) => c.id === cardId);
+    console.log('[DiscardDebug] Looking for cardId:', cardId, 'found:', !!card, 'card.name:', card?.name);
     if (!card) continue;
     // Use card.name for DOM selector (data-card-id uses name)
     const cardEl = boardRef.value?.querySelector(`[data-card-id="${card.name}"]`);
+    console.log('[DiscardDebug] DOM selector:', `[data-card-id="${card.name}"]`, 'found:', !!cardEl);
     if (cardEl && card?.attributes?.rank && card?.attributes?.suit) {
+      const rect = cardEl.getBoundingClientRect();
+      console.log('[DiscardDebug] Card rect:', { x: rect.x, y: rect.y, width: rect.width, height: rect.height });
       cardsToFly.push({
         id: card.name,
-        startRect: cardEl.getBoundingClientRect(),
+        startRect: rect,
         cardData: {
           rank: card.attributes.rank,
           suit: card.attributes.suit,
@@ -577,6 +598,8 @@ async function performDiscard() {
     }
   }
 
+  console.log('[DiscardDebug] cardsToFly count:', cardsToFly.length);
+
   try {
     // Discard action expects cards array of element IDs (fromElements with multiSelect)
     // selectedCards already contains element IDs
@@ -584,12 +607,18 @@ async function performDiscard() {
       cards: selectedCards.value,
     });
 
+    console.log('[DiscardDebug] Action result:', result.success);
+
     if (result.success) {
       selectedCards.value = [];
 
       // Start flying animations from old card positions to crib
       // Pass a function for endRect so it tracks the crib position as it moves
+      const cribEl = boardRef.value?.querySelector('[data-zone="crib"]');
+      console.log('[DiscardDebug] Crib element found:', !!cribEl);
+
       if (cardsToFly.length > 0) {
+        console.log('[DiscardDebug] Calling flyCards with', cardsToFly.length, 'cards');
         flyCards(
           cardsToFly.map((card) => ({
             id: `discard-${card.id}-${Date.now()}`,
@@ -607,6 +636,8 @@ async function performDiscard() {
           })),
           100 // stagger by 100ms
         );
+      } else {
+        console.log('[DiscardDebug] No cards to fly!');
       }
     }
   } finally {
@@ -901,7 +932,7 @@ defineExpose({
         <template v-if="cribbagePhase === 'discarding' && availableActions.includes('discard')">
           <span class="action-hint">Select 2 cards to discard ({{ selectedCards.length }}/2)</span>
           <button
-            @click="performDiscard"
+            @click="() => { console.log('[ButtonClick] Discard button clicked!'); performDiscard(); }"
             :disabled="selectedCards.length !== 2 || isPerformingAction"
             class="btn primary"
           >

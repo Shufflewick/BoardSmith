@@ -70,6 +70,8 @@ export interface FlyToStatOptions {
   cardSize?: { width: number; height: number };
   /** Whether to flip cards during animation (default: false) */
   flip?: boolean;
+  /** Whether to warn if target element not found (default: true) */
+  warnIfMissing?: boolean;
 }
 
 /**
@@ -104,16 +106,19 @@ export function flyToPlayerStat(
     stagger = 50,
     cardSize = { width: 70, height: 100 },
     flip = false,
+    warnIfMissing = true,
   } = options;
 
   if (cards.length === 0) return false;
 
   const targetEl = getPlayerStatElement(playerPosition, statName);
   if (!targetEl) {
-    console.warn(
-      `[usePlayerStatAnimation] Target element not found for player ${playerPosition}, stat "${statName}". ` +
-      `Make sure the element has data-player-stat="${statName}" and data-player-position="${playerPosition}".`
-    );
+    if (warnIfMissing) {
+      console.warn(
+        `[usePlayerStatAnimation] Target element not found for player ${playerPosition}, stat "${statName}". ` +
+        `Make sure the element has data-player-stat="${statName}" and data-player-position="${playerPosition}".`
+      );
+    }
     return false;
   }
 

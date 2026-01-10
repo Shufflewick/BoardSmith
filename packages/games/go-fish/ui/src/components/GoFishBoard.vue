@@ -420,6 +420,7 @@ watch(
         statName: 'books',
         duration: 500,
         cardSize: { width: 70, height: 100 },
+        warnIfMissing: false, // May race with initial render
       });
     }
 
@@ -444,6 +445,7 @@ watch(
             statName: 'books',
             duration: 500,
             cardSize: { width: 70, height: 100 },
+            warnIfMissing: false, // May race with initial render
           });
         }
       }

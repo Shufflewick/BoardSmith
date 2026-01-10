@@ -71,6 +71,7 @@ export {
 export {
   useAutoFlyingElements,
   type ElementContainerConfig,
+  type CountBasedRoute,
   type AutoFlyingElementsOptions,
   type AutoFlyingElementsReturn,
 } from './composables/useAutoFlyingElements.js';

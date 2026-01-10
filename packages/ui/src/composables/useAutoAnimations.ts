@@ -65,7 +65,7 @@
 
 import { computed, type Ref, type ComputedRef } from 'vue';
 import { useFlyingCards, type FlyingCardData } from './useFlyingCards.js';
-import { useAutoFlyingElements, type ElementContainerConfig } from './useAutoFlyingElements.js';
+import { useAutoFlyingElements, type ElementContainerConfig, type CountBasedRoute } from './useAutoFlyingElements.js';
 import { useAutoFLIP, type AutoFLIPContainer } from './useAutoFLIP.js';
 import { useAutoFlyToStat, type StatConfig as BaseStatConfig } from './useAutoFlyToStat.js';
 
@@ -143,6 +143,14 @@ export interface AutoAnimationsOptions {
 
   /** Whether to flip elements during flying animation (default: 'never') */
   flip?: 'toPrivate' | 'toPublic' | 'never' | ((from: ContainerConfig, to: ContainerConfig) => boolean);
+
+  /**
+   * Routes for count-based animation detection.
+   * Use this when elements moving between containers get new IDs (e.g., moving to hidden areas like a crib).
+   * When N elements disappear from 'from' and N elements appear in 'to', animate N cards flying.
+   * Containers must have 'name' set to use this feature.
+   */
+  countBasedRoutes?: CountBasedRoute[];
 }
 
 export interface AutoAnimationsReturn {
@@ -170,6 +178,7 @@ export function useAutoAnimations(options: AutoAnimationsOptions): AutoAnimation
     flipDuration = 300,
     elementSize = { width: 60, height: 84 },
     flip = 'never',
+    countBasedRoutes = [],
   } = options;
 
   // Get current containers (supports static array or dynamic function)
@@ -187,11 +196,13 @@ export function useAutoAnimations(options: AutoAnimationsOptions): AutoAnimation
       element: c.element,
       ref: c.ref,
       elementSize: c.elementSize,
+      name: c.name,
     })),
     getElementData,
     duration,
     elementSize,
     flip,
+    countBasedRoutes,
   });
 
   // Set up auto-FLIP for containers that have flipWithin

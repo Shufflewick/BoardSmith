@@ -56,6 +56,17 @@ export interface ElementContainerConfig {
   ref: Ref<HTMLElement | null>;
   /** Optional: custom element size for this container */
   elementSize?: { width: number; height: number };
+  /** Optional: unique name for this container (used for countBasedRoutes) */
+  name?: string;
+}
+
+export interface CountBasedRoute {
+  /** Name of the source container */
+  from: string;
+  /** Name of the destination container */
+  to: string;
+  /** Card data to use for the flying animation (since we can't get it from the moved element). Can be static or a function. */
+  cardData?: FlyingCardData | (() => FlyingCardData);
 }
 
 export interface AutoFlyingElementsOptions {
@@ -87,6 +98,14 @@ export interface AutoFlyingElementsOptions {
    * Default: 'never'
    */
   flip?: 'toPrivate' | 'toPublic' | 'never' | ((from: ElementContainerConfig, to: ElementContainerConfig) => boolean);
+
+  /**
+   * Routes for count-based animation detection.
+   * Use this when elements moving between containers get new IDs (e.g., moving to hidden areas).
+   * When N elements disappear from 'from' and N elements appear in 'to', animate N cards flying.
+   * Containers must have 'name' set to use this feature.
+   */
+  countBasedRoutes?: CountBasedRoute[];
 }
 
 export interface AutoFlyingElementsReturn {
@@ -136,6 +155,7 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
     duration = 400,
     elementSize = { width: 60, height: 84 },
     flip = 'never',
+    countBasedRoutes = [],
   } = options;
 
   // Get current containers (supports static array or dynamic function)
@@ -146,6 +166,30 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
   // Track which container each element was in (by element ID)
   // Map<elementId, containerIndex>
   const elementLocations = new Map<number, number>();
+
+  // Track container counts for count-based animation
+  // Map<containerName, count>
+  const containerCounts = new Map<string, number>();
+
+  // Build container counts by name
+  function buildContainerCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
+    const containers = getContainers();
+
+    for (const container of containers) {
+      if (container.name) {
+        const childCount = container.element.value?.children?.length ?? 0;
+        counts.set(container.name, childCount);
+      }
+    }
+
+    return counts;
+  }
+
+  // Find container by name
+  function findContainerByName(name: string): ElementContainerConfig | undefined {
+    return getContainers().find(c => c.name === name);
+  }
 
   // Build initial element locations
   function buildElementLocations(): Map<number, number> {
@@ -186,8 +230,12 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
     if (!initialized) {
       initialized = true;
       const initialLocations = buildElementLocations();
+      const initialCounts = buildContainerCounts();
       for (const [elemId, containerIndex] of initialLocations) {
         elementLocations.set(elemId, containerIndex);
+      }
+      for (const [name, count] of initialCounts) {
+        containerCounts.set(name, count);
       }
       return;
     }
@@ -210,7 +258,6 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
           // Get the element from the new container to extract display data
           const gameElement = findChildById(toContainer.element.value, elemId);
           const elemData = gameElement ? getElementData(gameElement) : {};
-
           const size = toContainer.elementSize || fromContainer.elementSize || elementSize;
 
           flyCard({
@@ -223,6 +270,58 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
             cardSize: size,
           });
         }
+      }
+    }
+
+    // Count-based animation for routes where IDs change (e.g., moving to hidden areas)
+    if (countBasedRoutes.length > 0) {
+      const newCounts = buildContainerCounts();
+
+      for (const route of countBasedRoutes) {
+        const fromContainer = findContainerByName(route.from);
+        const toContainer = findContainerByName(route.to);
+
+        if (!fromContainer || !toContainer) continue;
+
+        const oldFromCount = containerCounts.get(route.from) ?? 0;
+        const newFromCount = newCounts.get(route.from) ?? 0;
+        const oldToCount = containerCounts.get(route.to) ?? 0;
+        const newToCount = newCounts.get(route.to) ?? 0;
+
+        const lostFromSource = oldFromCount - newFromCount;
+        const gainedAtDest = newToCount - oldToCount;
+
+        // If source lost N elements and dest gained N elements, animate N cards
+        if (lostFromSource > 0 && gainedAtDest > 0) {
+          const cardsToAnimate = Math.min(lostFromSource, gainedAtDest);
+          const fromRef = fromContainer.ref.value;
+          const toRef = toContainer.ref.value;
+
+          if (fromRef && toRef) {
+            const size = toContainer.elementSize || fromContainer.elementSize || elementSize;
+
+            // Resolve cardData (can be static or function)
+            const cardData = typeof route.cardData === 'function' ? route.cardData() : (route.cardData || {});
+
+            for (let i = 0; i < cardsToAnimate; i++) {
+              flyCard({
+                id: `count-${route.from}-${route.to}-${Date.now()}-${i}`,
+                startRect: fromRef.getBoundingClientRect(),
+                endRect: () => toRef?.getBoundingClientRect() || fromRef.getBoundingClientRect(),
+                cardData,
+                flip: shouldFlip(fromContainer, toContainer),
+                duration,
+                cardSize: size,
+              });
+            }
+          }
+        }
+      }
+
+      // Update container counts
+      containerCounts.clear();
+      for (const [name, count] of newCounts) {
+        containerCounts.set(name, count);
       }
     }
 

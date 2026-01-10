@@ -150,11 +150,11 @@ function processRenderQueue() {
     queuedRender.fn();
   }
 
-  // Wait a bit for the render to complete and context to be disposed
+  // Wait for render to complete and context to be disposed by browser GC
   setTimeout(() => {
     setIsRenderingGlobally(false);
     processRenderQueue();
-  }, 150);
+  }, 300);
 }
 
 /**
@@ -583,6 +583,12 @@ function setFaceRotation(faceNumber: number): THREE.Euler {
 function initScene() {
   if (!containerRef.value) return;
 
+  // Dispose any existing renderer before creating new one
+  // This prevents WebGL context exhaustion
+  if (renderer) {
+    disposeWebGL();
+  }
+
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(30, 1, 0.1, 1000);
   camera.position.z = 5;
@@ -675,6 +681,7 @@ function animate() {
       mesh.rotation.copy(targetRotation);
       // Capture snapshot and dispose WebGL after animation completes
       scheduleSnapshotAndDispose();
+      return; // Don't try to render after disposing
     }
   }
 
@@ -729,19 +736,16 @@ function disposeWebGL() {
 }
 
 /**
- * Schedule snapshot capture and WebGL disposal after a brief delay.
- * The delay ensures the final rendered frame is visible.
+ * Capture snapshot and dispose WebGL synchronously.
+ * Synchronous disposal prevents WebGL context exhaustion.
  */
 function scheduleSnapshotAndDispose() {
-  // Small delay to ensure the final frame is fully rendered
-  setTimeout(() => {
-    const snapshot = captureSnapshot();
-    if (snapshot) {
-      snapshotDataUrl.value = snapshot;
-      isShowingSnapshot.value = true;
-      disposeWebGL();
-    }
-  }, 50);
+  const snapshot = captureSnapshot();
+  if (snapshot) {
+    snapshotDataUrl.value = snapshot;
+    isShowingSnapshot.value = true;
+    disposeWebGL();
+  }
 }
 
 /**
@@ -801,7 +805,7 @@ function startRollAnimation(newValue: number) {
 }
 
 async function updateTextures() {
-  if (!materials.length) return;
+  if (!materials.length || webglDisposed) return;
 
   const color = dieColor.value;
 
@@ -868,18 +872,34 @@ watch(() => props.rollCount, (newRollCount) => {
 
 // Watch for color/texture changes
 watch([() => props.color, () => props.faceLabels, () => props.faceImages, () => props.zeroIndexed], () => {
-  updateTextures();
+  if (materials.length && !webglDisposed) {
+    // WebGL active - update textures directly
+    updateTextures();
+  } else if (isShowingSnapshot.value) {
+    // In snapshot mode - regenerate snapshot with new colors/textures
+    regenerateSnapshot(props.value);
+  }
 }, { deep: true });
 
 // Watch for sides changes (recreate geometry)
 watch(() => props.sides, () => {
-  createDieMesh();
+  if (scene && mesh && !webglDisposed) {
+    // Scene exists - just recreate the mesh
+    createDieMesh();
+  } else if (isShowingSnapshot.value) {
+    // In snapshot mode - regenerate snapshot with new geometry
+    regenerateSnapshot(props.value);
+  }
+  // If neither, onMounted will handle it
 });
 
 // Watch for size changes
 watch(() => props.size, (newSize) => {
-  if (renderer) {
+  if (renderer && !webglDisposed) {
     renderer.setSize(newSize, newSize);
+  } else if (isShowingSnapshot.value) {
+    // In snapshot mode - regenerate snapshot at new size
+    regenerateSnapshot(props.value);
   }
 });
 

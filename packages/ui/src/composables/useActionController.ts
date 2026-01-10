@@ -376,17 +376,30 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Check if value is in valid choices
     const choices = getChoices(selection);
     if (choices.length > 0) {
-      const isValid = choices.some(c => {
-        // Handle both direct match and value property match
-        if (c.value === value) return true;
-        if (typeof c.value === 'object' && c.value !== null) {
-          return (hasValue(c.value) && c.value.value === value) ||
-                 (hasId(c.value) && c.value.id === value);
+      // Helper to check if a single value matches any choice
+      const valueMatchesChoice = (v: unknown): boolean => {
+        return choices.some(c => {
+          // Handle both direct match and value property match
+          if (c.value === v) return true;
+          if (typeof c.value === 'object' && c.value !== null) {
+            return (hasValue(c.value) && c.value.value === v) ||
+                   (hasId(c.value) && c.value.id === v);
+          }
+          return false;
+        });
+      };
+
+      // Handle arrays (multiSelect) - check each element is valid
+      if (Array.isArray(value)) {
+        const allValid = value.every(v => valueMatchesChoice(v));
+        if (!allValid) {
+          return { valid: false, error: `Invalid selection for "${selection.name}"` };
         }
-        return false;
-      });
-      if (!isValid) {
-        return { valid: false, error: `Invalid selection for "${selection.name}"` };
+      } else {
+        // Single value
+        if (!valueMatchesChoice(value)) {
+          return { valid: false, error: `Invalid selection for "${selection.name}"` };
+        }
       }
     }
     return { valid: true };

@@ -14,7 +14,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { UseActionControllerReturn } from '@boardsmith/ui';
-import { findPlayerHand, findElement, getElementCount, useAutoFlyingElements, FlyingCardsOverlay } from '@boardsmith/ui';
+import { findPlayerHand, findElement, getElementCount, useAutoFlyingElements, FlyingCardsOverlay, findAllHands } from '@boardsmith/ui';
 
 // Props from GameShell
 const props = defineProps<{
@@ -125,10 +125,23 @@ const deckCount = computed(() => getElementCount(deck.value));
 const discardPile = computed(() => findElement(props.gameView, { className: 'DiscardPile' }));
 const discardCount = computed(() => getElementCount(discardPile.value));
 
-// Get other players
+// Get other players - derive from hands in the element tree since gameView.players may be empty
 const otherPlayers = computed(() => {
-  if (!props.gameView?.players) return [];
-  return props.gameView.players.filter((p: any) => p.position !== props.playerPosition);
+  // First try gameView.players
+  if (props.gameView?.players?.length > 0) {
+    return props.gameView.players.filter((p: any) => p.position !== props.playerPosition);
+  }
+  // Fallback: derive from hands in element tree
+  const allHands = findAllHands(props.gameView);
+  const opponents = allHands
+    .filter((h: any) => h.attributes?.player?.position !== props.playerPosition)
+    .map((h: any) => ({
+      position: h.attributes?.player?.position,
+      name: h.attributes?.player?.name || `Player ${h.attributes?.player?.position}`,
+      // Include other player data if available
+      ...h.attributes?.player
+    }));
+  return opponents;
 });
 
 // Get opponent hand count
@@ -238,7 +251,9 @@ const { flyingElements: flyingCards } = useAutoFlyingElements({
     // Add opponent hand containers (only those with valid refs)
     for (const opponent of otherPlayers.value) {
       const pos = opponent.position;
-      if (opponentHandElements[pos] && opponentHandRefs[pos]?.value) {
+      const handElement = opponentHandElements[pos]?.value;
+      const handRef = opponentHandRefs[pos]?.value;
+      if (handElement && handRef) {
         containerList.push({
           element: opponentHandElements[pos],
           ref: opponentHandRefs[pos],
@@ -249,14 +264,13 @@ const { flyingElements: flyingCards } = useAutoFlyingElements({
     return containerList;
   },
   getElementData: (element) => ({
-    // Card properties are direct on element, not in attributes
     rank: element.rank || element.attributes?.rank,
     suit: element.suit || element.attributes?.suit,
-    faceUp: false, // Start showing back, flip to front
+    faceUp: false,
     backColor: 'linear-gradient(135deg, #c41e3a 0%, #8b0000 100%)',
   }),
-  flip: () => true, // Flip cards during animation
-  duration: 400,
+  flip: () => true,
+  duration: 500
 });
 
 // ============================================
@@ -466,7 +480,6 @@ function cancelAction() {
         <div
           v-for="opponent in otherPlayers"
           :key="opponent.position"
-          :ref="(el) => setOpponentRef(opponent.position, el as HTMLElement)"
           class="opponent"
           :class="{
             'selectable': isOpponentSelectable(opponent.position),
@@ -475,7 +488,10 @@ function cancelAction() {
           @click="handleOpponentClick(opponent.position)"
         >
           <div class="opponent-name">{{ opponent.name }}</div>
-          <div class="opponent-hand">
+          <div
+            class="opponent-hand"
+            :ref="(el) => setOpponentRef(opponent.position, el as HTMLElement)"
+          >
             <div v-for="i in getOpponentHandCount(opponent.position)" :key="i" class="card card-back small" />
             <div v-if="getOpponentHandCount(opponent.position) === 0" class="no-cards">No cards</div>
           </div>

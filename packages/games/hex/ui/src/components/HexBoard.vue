@@ -135,7 +135,7 @@ function isOpponentStone(stone: Stone | undefined): boolean {
   return isOpponentElement(stone as GameViewElement | undefined, props.playerPosition);
 }
 
-// Get player colors from game state (returns 0-indexed array)
+// Get player colors from game state (returns 0-indexed array with at least 2 colors)
 const getPlayerColors = computed(() => {
   const board = props.gameView?.children?.find((c: any) => c.className === 'Board');
   if (!board) return [...DEFAULT_PLAYER_COLORS];
@@ -143,7 +143,14 @@ const getPlayerColors = computed(() => {
   // Extract player colors from the game state
   // Players array is 0-indexed (players[0] = Player 1)
   const players = props.gameView?.players || [];
-  return players.map((p: any, i: number) => p.color || DEFAULT_PLAYER_COLORS[i] || DEFAULT_PLAYER_COLORS[0]);
+  if (players.length === 0) return [...DEFAULT_PLAYER_COLORS];
+
+  const colors = players.map((p: any, i: number) => p.color || DEFAULT_PLAYER_COLORS[i] || DEFAULT_PLAYER_COLORS[0]);
+  // Ensure we always have at least 2 colors
+  while (colors.length < 2) {
+    colors.push(DEFAULT_PLAYER_COLORS[colors.length] || DEFAULT_PLAYER_COLORS[0]);
+  }
+  return colors;
 });
 
 // playerPosition is 1-indexed, so use position - 1 for array access

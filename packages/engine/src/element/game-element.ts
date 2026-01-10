@@ -737,7 +737,19 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   protected serializeValue(value: unknown): unknown {
     if (value instanceof GameElement) {
-      // Serialize element references as branch paths
+      // Check if this is a Player (has position property unique to Player)
+      // Use duck typing to avoid circular import (Player extends GameElement)
+      if ('position' in value && typeof (value as Player).position === 'number') {
+        const player = value as Player;
+        // Include useful properties for UI while maintaining deserializability via __playerRef
+        return {
+          __playerRef: player.position,
+          position: player.position,
+          color: player.color,
+          name: player.name,
+        };
+      }
+      // Serialize regular element references as branch paths
       return { __elementRef: value.branch() };
     }
     if (Array.isArray(value)) {
