@@ -1077,11 +1077,11 @@ export class Game<
           reason = `Condition failed: ${conditionNote}`;
         } else {
           reason = 'Condition returned false';
-          conditionNote = 'Condition returned false (use ConditionTracer for details)';
+          conditionNote = 'Condition returned false (use object-based condition for details)';
         }
       } else {
         reason = 'Condition returned false';
-        conditionNote = 'Condition returned false (use ConditionTracer in your condition for detailed info)';
+        conditionNote = 'Condition returned false (use object-based condition for automatic tracing)';
       }
     } else if (!trace.available) {
       // Find the blocking selection

@@ -544,7 +544,7 @@ export interface ActionTrace {
   conditionResult?: boolean;
   /** Error message if condition threw */
   conditionError?: string;
-  /** Detailed condition trace (only if developer used ConditionTracer) */
+  /** Detailed condition trace (automatically populated for object-based conditions) */
   conditionDetails?: ConditionDetail[];
   /** Trace of each selection */
   selections: SelectionTrace[];

@@ -92,7 +92,7 @@ export type {
 } from './command/index.js';
 
 // Action system
-export { Action, ActionExecutor, ConditionTracer } from './action/index.js';
+export { Action, ActionExecutor } from './action/index.js';
 
 // Filter helpers for multi-step selections
 export {

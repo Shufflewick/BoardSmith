@@ -1,6 +1,5 @@
 export { Action } from './action-builder.js';
 export { ActionExecutor } from './action.js';
-export { ConditionTracer } from './condition-tracer.js';
 export type {
   SelectionType,
   Selection,
