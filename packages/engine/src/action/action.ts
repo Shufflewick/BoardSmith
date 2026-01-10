@@ -17,8 +17,9 @@ import type {
   RepeatConfig,
   PendingActionState,
   ConditionConfig,
+  ConditionDetail,
+  ObjectCondition,
 } from './types.js';
-import { ConditionTracer } from './condition-tracer.js';
 import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
 import { Action } from './action-builder.js';
 
@@ -26,28 +27,57 @@ import { Action } from './action-builder.js';
 export { Action };
 
 /**
+ * Check if a condition is an object-based condition (has labeled predicates).
+ * Object conditions enable automatic debug tracing.
+ */
+function isObjectCondition(condition: ConditionConfig): condition is ObjectCondition {
+  return typeof condition !== 'function';
+}
+
+/**
+ * Evaluate an object condition, returning result and trace details.
+ * All predicates are evaluated (AND semantics) and their results captured.
+ */
+function evaluateObjectCondition(
+  condition: ObjectCondition,
+  context: ActionContext
+): { passed: boolean; details: ConditionDetail[] } {
+  const details: ConditionDetail[] = [];
+  let allPassed = true;
+
+  for (const [label, predicate] of Object.entries(condition)) {
+    let passed = false;
+    let value: unknown = undefined;
+    try {
+      const result = predicate(context);
+      passed = Boolean(result);
+      value = result;
+    } catch (error) {
+      passed = false;
+      value = error instanceof Error ? error.message : String(error);
+    }
+    details.push({ label, value, passed });
+    if (!passed) allPassed = false;
+  }
+
+  return { passed: allPassed, details };
+}
+
+/**
  * Evaluate a condition config and return whether it passes.
  * Handles both legacy function format and new object format.
- *
- * @internal Will be expanded in Plan 02 to support auto-tracing
  */
 function evaluateCondition(
   condition: ConditionConfig,
-  context: ActionContext,
-  _tracer?: ConditionTracer
+  context: ActionContext
 ): boolean {
   // Legacy function format - call directly
-  if (typeof condition === 'function') {
+  if (!isObjectCondition(condition)) {
     return condition(context);
   }
 
-  // Object format - all predicates must pass
-  for (const predicate of Object.values(condition)) {
-    if (!predicate(context)) {
-      return false;
-    }
-  }
-  return true;
+  // Object format - use evaluateObjectCondition
+  return evaluateObjectCondition(condition, context).passed;
 }
 
 /**
@@ -787,15 +817,19 @@ export class ActionExecutor {
       args: {},
     };
 
-    // Check condition with optional tracer for detailed info
+    // Check condition with automatic tracing for object conditions
     if (action.condition) {
       try {
-        const tracer = new ConditionTracer();
-        // Evaluate condition - tracer support will be expanded in Plan 02
-        trace.conditionResult = evaluateCondition(action.condition, context, tracer);
-        const details = tracer.getDetails();
-        if (details.length > 0) {
-          trace.conditionDetails = details;
+        if (isObjectCondition(action.condition)) {
+          // Object condition - automatic tracing via evaluateObjectCondition
+          const { passed, details } = evaluateObjectCondition(action.condition, context);
+          trace.conditionResult = passed;
+          if (details.length > 0) {
+            trace.conditionDetails = details;
+          }
+        } else {
+          // Legacy function condition - no automatic tracing
+          trace.conditionResult = action.condition(context);
         }
 
         if (!trace.conditionResult) {
