@@ -162,10 +162,11 @@ Plans:
 **Goal**: Update all BoardSmith games to new condition format
 **Depends on**: Phase 14
 **Research**: Unlikely (mechanical migration)
-**Plans**: TBD
+**Plans**: 1/2 complete
 
 Plans:
-- [ ] 15-01: TBD
+- [x] 15-01: Migrate all game conditions to object format
+- [ ] 15-02: Migrate test file conditions to object format
 
 #### Phase 16: docs-migration-guide
 **Goal**: Update documentation and write migration guide for merc team
@@ -194,5 +195,5 @@ Plans:
 | 12. player-in-tree | v0.6 | 3/3 | Complete | 2026-01-09 |
 | 13. player-access-docs | v0.6 | 1/1 | Complete | 2026-01-09 |
 | 14. condition-api-refactor | v0.7 | 2/2 | Complete | 2026-01-10 |
-| 15. game-migrations | v0.7 | 0/? | Not started | - |
+| 15. game-migrations | v0.7 | 1/2 | In progress | - |
 | 16. docs-migration-guide | v0.7 | 0/? | Not started | - |

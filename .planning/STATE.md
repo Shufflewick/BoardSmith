@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-09)
 
 ## Current Position
 
-Phase: 14 of 16 (condition-api-refactor)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-01-10 — Completed 14-02-PLAN.md
+Phase: 15 of 16 (game-migrations)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-10 — Completed 15-01-PLAN.md
 
-Progress: ██░░░░░░░░ 10%
+Progress: ██░░░░░░░░ 15%
 
 ## Milestones
 
@@ -44,5 +44,5 @@ Progress: ██░░░░░░░░ 10%
 ## Session Continuity
 
 Last session: 2026-01-10
-Stopped at: Completed 14-02-PLAN.md (Phase 14 complete)
+Stopped at: Completed 15-01-PLAN.md (Phase 15 complete)
 Resume file: None
