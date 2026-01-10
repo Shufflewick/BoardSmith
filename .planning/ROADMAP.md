@@ -131,14 +131,14 @@ Plans:
 - [x] 12-02: Update all game implementations and custom Player classes
 - [x] 12-03: Update tests and supporting packages, verify all pass
 
-#### Phase 13: player-access-docs
+#### Phase 13: player-access-docs ✅
 **Goal**: Document the new player access pattern (players as GameElements, anti-patterns to avoid)
 **Depends on**: Phase 12
 **Research**: Unlikely (documentation only)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 13-01: TBD (run /gsd:plan-phase 13 to break down)
+- [x] 13-01: Add comprehensive JSDoc to Player class and Game player helpers
 
 ## Progress
 
@@ -156,4 +156,4 @@ Plans:
 | 10. public-api-jsdoc | v0.4 | 3/3 | Complete | 2026-01-09 |
 | 11. eslint-no-shadow | v0.5 | 1/1 | Complete | 2026-01-09 |
 | 12. player-in-tree | v0.6 | 3/3 | Complete | 2026-01-09 |
-| 13. player-access-docs | v0.6 | 0/? | Not started | - |
+| 13. player-access-docs | v0.6 | 1/1 | Complete | 2026-01-09 |
