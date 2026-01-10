@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '@boardsmith/engine';
+import { Player, evaluateCondition, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '@boardsmith/engine';
 import type { GameRunner } from '@boardsmith/runtime';
 import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
 
@@ -62,7 +62,7 @@ export function buildActionMetadata(
     if (actionDef.condition) {
       const ctx = { game, player, args: {} };
       try {
-        if (!actionDef.condition(ctx)) {
+        if (!evaluateCondition(actionDef.condition, ctx)) {
           continue; // Skip actions whose condition is now false
         }
       } catch (error) {

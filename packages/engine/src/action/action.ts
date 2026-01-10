@@ -67,7 +67,7 @@ function evaluateObjectCondition(
  * Evaluate a condition config and return whether it passes.
  * Handles both legacy function format and new object format.
  */
-function evaluateCondition(
+export function evaluateCondition(
   condition: ConditionConfig,
   context: ActionContext
 ): boolean {

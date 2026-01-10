@@ -1,5 +1,5 @@
 export { Action } from './action-builder.js';
-export { ActionExecutor } from './action.js';
+export { ActionExecutor, evaluateCondition } from './action.js';
 export type {
   SelectionType,
   Selection,

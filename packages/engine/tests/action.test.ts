@@ -116,7 +116,9 @@ describe('Action Builder', () => {
 
   it('should set condition', () => {
     const action = Action.create('test')
-      .condition((ctx) => ctx.player.position === 1)
+      .condition({
+        'player is first': (ctx) => ctx.player.position === 1,
+      })
       .execute(() => {});
 
     expect(action.condition).toBeDefined();
@@ -423,7 +425,9 @@ describe('Action Executor', () => {
 
     it('should fail if condition not met', () => {
       const action = Action.create('test')
-        .condition(() => false)
+        .condition({
+          'never available': () => false,
+        })
         .execute(() => {});
 
       const result = executor.validateAction(action, game.getPlayer(1)!, {});
@@ -559,7 +563,9 @@ describe('Action Executor', () => {
   describe('isActionAvailable', () => {
     it('should return true when condition passes', () => {
       const action = Action.create('test')
-        .condition(() => true)
+        .condition({
+          'always available': () => true,
+        })
         .execute(() => {});
 
       expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(true);
@@ -567,7 +573,9 @@ describe('Action Executor', () => {
 
     it('should return false when condition fails', () => {
       const action = Action.create('test')
-        .condition(() => false)
+        .condition({
+          'blocked': () => false,
+        })
         .execute(() => {});
 
       expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(false);
@@ -1073,11 +1081,15 @@ describe('Game Action Integration', () => {
 
   it('should get available actions for player', () => {
     const always = Action.create('always')
-      .condition(() => true)
+      .condition({
+        'enabled': () => true,
+      })
       .execute(() => {});
 
     const never = Action.create('never')
-      .condition(() => false)
+      .condition({
+        'disabled': () => false,
+      })
       .execute(() => {});
 
     game.registerActions(always, never);
