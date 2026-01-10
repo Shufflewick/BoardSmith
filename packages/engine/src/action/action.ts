@@ -16,6 +16,7 @@ import type {
   SelectionTrace,
   RepeatConfig,
   PendingActionState,
+  ConditionConfig,
 } from './types.js';
 import { ConditionTracer } from './condition-tracer.js';
 import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
@@ -23,6 +24,31 @@ import { Action } from './action-builder.js';
 
 // Re-export Action class from action-builder
 export { Action };
+
+/**
+ * Evaluate a condition config and return whether it passes.
+ * Handles both legacy function format and new object format.
+ *
+ * @internal Will be expanded in Plan 02 to support auto-tracing
+ */
+function evaluateCondition(
+  condition: ConditionConfig,
+  context: ActionContext,
+  _tracer?: ConditionTracer
+): boolean {
+  // Legacy function format - call directly
+  if (typeof condition === 'function') {
+    return condition(context);
+  }
+
+  // Object format - all predicates must pass
+  for (const predicate of Object.values(condition)) {
+    if (!predicate(context)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /**
  * Handles validation, argument resolution, and execution of player actions.
@@ -657,7 +683,7 @@ export class ActionExecutor {
     };
 
     // Check condition
-    if (action.condition && !action.condition(context)) {
+    if (action.condition && !evaluateCondition(action.condition, context)) {
       return {
         valid: false,
         errors: ['Action is not available'],
@@ -736,7 +762,7 @@ export class ActionExecutor {
       args: {},
     };
 
-    if (action.condition && !action.condition(context)) {
+    if (action.condition && !evaluateCondition(action.condition, context)) {
       return false;
     }
 
@@ -765,8 +791,8 @@ export class ActionExecutor {
     if (action.condition) {
       try {
         const tracer = new ConditionTracer();
-        // Pass tracer as second arg - condition can use it for detailed tracing
-        trace.conditionResult = action.condition(context, tracer);
+        // Evaluate condition - tracer support will be expanded in Plan 02
+        trace.conditionResult = evaluateCondition(action.condition, context, tracer);
         const details = tracer.getDetails();
         if (details.length > 0) {
           trace.conditionDetails = details;

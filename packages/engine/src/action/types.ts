@@ -326,8 +326,52 @@ export interface ActionContext {
   args: Record<string, unknown>;
 }
 
-// Import ConditionTracer from its dedicated module
-import type { ConditionTracer } from './condition-tracer.js';
+// ============================================
+// Condition Types
+// ============================================
+
+/**
+ * A condition predicate function that checks if an action is available.
+ */
+export type ConditionPredicate = (context: ActionContext) => boolean;
+
+/**
+ * Object-based condition where keys are human-readable labels and values are predicates.
+ * This format enables automatic debug tracing - each label appears in debug output
+ * when its condition fails.
+ *
+ * @example
+ * ```typescript
+ * {
+ *   'has cards in hand': (ctx) => ctx.player.hand.count() > 0,
+ *   'is current player': (ctx) => ctx.player === ctx.game.currentPlayer
+ * }
+ * ```
+ */
+export type ObjectCondition = Record<string, ConditionPredicate>;
+
+/**
+ * Condition configuration - supports both legacy function and new object format.
+ *
+ * **Object format (preferred):** Enables automatic debug tracing. Each key becomes
+ * a label shown in debug output when that condition fails.
+ *
+ * **Function format (legacy):** Still works but provides no debug labels. Use for
+ * backward compatibility or truly simple conditions.
+ *
+ * @example
+ * ```typescript
+ * // Object format (preferred - enables automatic tracing)
+ * .condition({
+ *   'has cards in hand': (ctx) => ctx.player.hand.count() > 0,
+ *   'is current player': (ctx) => ctx.player === ctx.game.currentPlayer
+ * })
+ *
+ * // Function format (legacy - no debug labels)
+ * .condition((ctx) => ctx.player.hand.count() > 0)
+ * ```
+ */
+export type ConditionConfig = ConditionPredicate | ObjectCondition;
 
 /**
  * Definition of an action
@@ -341,10 +385,14 @@ export interface ActionDefinition {
   selections: Selection[];
   /**
    * Condition for when this action is available.
-   * Optionally accepts a ConditionTracer for detailed debug tracing.
-   * The tracer is only provided when explicitly requested (debug mode).
+   *
+   * Supports two formats:
+   * - **Object (preferred):** `{ 'label': predicate }` - Enables automatic debug tracing
+   * - **Function (legacy):** `(ctx) => boolean` - No debug labels
+   *
+   * @see ConditionConfig for details and examples
    */
-  condition?: (context: ActionContext, tracer?: ConditionTracer) => boolean;
+  condition?: ConditionConfig;
   /** The effect to execute */
   execute: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void;
   /**
