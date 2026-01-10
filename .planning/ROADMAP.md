@@ -19,7 +19,8 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.3 Flow Engine Docs** — Phase 9 (shipped 2026-01-09)
 - ✅ **v0.4 Public API Docs** — Phase 10 (shipped 2026-01-09)
 - ✅ **v0.5 ESLint No-Shadow** — Phase 11 (shipped 2026-01-09)
-- 🚧 **v0.6 Players in Element Tree** — Phases 12-13 (in progress)
+- ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
+- 🚧 **v0.7 Condition Tracing Refactor** — Phases 14-16 (in progress)
 
 ## Phases
 
@@ -116,7 +117,8 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 
 </details>
 
-### 🚧 v0.6 Players in Element Tree (In Progress)
+<details>
+<summary>✅ v0.6 Players in Element Tree (Phases 12-13) — SHIPPED 2026-01-09</summary>
 
 **Milestone Goal:** Make Player extend GameElement so players are in the searchable tree, fixing the "player data in two worlds" problem from MERC post-mortem.
 
@@ -140,6 +142,39 @@ Plans:
 Plans:
 - [x] 13-01: Add comprehensive JSDoc to Player class and Game player helpers
 
+</details>
+
+### 🚧 v0.7 Condition Tracing Refactor (In Progress)
+
+**Milestone Goal:** Redesign action conditions to use object-based API where labels are structurally required, making detailed debugging automatic and mandatory.
+
+#### Phase 14: condition-api-refactor
+**Goal**: Implement object-based condition API, remove ConditionTracer
+**Depends on**: v0.6 complete
+**Research**: Unlikely (internal refactoring)
+**Plans**: TBD
+
+Plans:
+- [ ] 14-01: TBD (run /gsd:plan-phase 14 to break down)
+
+#### Phase 15: game-migrations
+**Goal**: Update all BoardSmith games to new condition format
+**Depends on**: Phase 14
+**Research**: Unlikely (mechanical migration)
+**Plans**: TBD
+
+Plans:
+- [ ] 15-01: TBD
+
+#### Phase 16: docs-migration-guide
+**Goal**: Update documentation and write migration guide for merc team
+**Depends on**: Phase 15
+**Research**: Unlikely (documentation)
+**Plans**: TBD
+
+Plans:
+- [ ] 16-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -157,3 +192,6 @@ Plans:
 | 11. eslint-no-shadow | v0.5 | 1/1 | Complete | 2026-01-09 |
 | 12. player-in-tree | v0.6 | 3/3 | Complete | 2026-01-09 |
 | 13. player-access-docs | v0.6 | 1/1 | Complete | 2026-01-09 |
+| 14. condition-api-refactor | v0.7 | 0/? | Not started | - |
+| 15. game-migrations | v0.7 | 0/? | Not started | - |
+| 16. docs-migration-guide | v0.7 | 0/? | Not started | - |

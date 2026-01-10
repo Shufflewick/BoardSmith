@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-01-09)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** v0.6 Players in Element Tree
+**Current focus:** v0.7 Condition Tracing Refactor
 
 ## Current Position
 
-Phase: 13 of 13 (player-access-docs)
-Plan: 01 of 01
-Status: Complete
-Last activity: 2026-01-09 — Phase 13 complete (1 plan, 3 tasks)
+Phase: 14 of 16 (condition-api-refactor)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-10 — Milestone v0.7 created
 
-Progress: ██████████ 100%
+Progress: ░░░░░░░░░░ 0%
 
 ## Milestones
 
 **In Progress:**
-- v0.6 Players in Element Tree (Phases 12-13) — in progress
+- v0.7 Condition Tracing Refactor (Phases 14-16) — in progress
 
 **Completed:**
 - v0.1 Large File Refactoring (Phases 1-4) — shipped 2026-01-08
@@ -27,6 +27,7 @@ Progress: ██████████ 100%
 - v0.3 Flow Engine Docs (Phase 9) — shipped 2026-01-09
 - v0.4 Public API Docs (Phase 10) — shipped 2026-01-09
 - v0.5 ESLint No-Shadow (Phase 11) — shipped 2026-01-09
+- v0.6 Players in Element Tree (Phases 12-13) — shipped 2026-01-09
 
 ## Roadmap Evolution
 
@@ -37,9 +38,11 @@ Progress: ██████████ 100%
 - Milestone v0.5 created: ESLint no-shadow rule, 1 phase (Phase 11)
 - Milestone v0.5 complete: Variable shadowing caught at build time
 - Milestone v0.6 created: Players in element tree, 2 phases (Phases 12-13)
+- Milestone v0.6 complete: Players now extend GameElement, in searchable tree
+- Milestone v0.7 created: Condition tracing refactor, 3 phases (Phases 14-16)
 
 ## Session Continuity
 
-Last session: 2026-01-09
-Stopped at: Phase 12 complete, ready for Phase 13 planning
+Last session: 2026-01-10
+Stopped at: Milestone v0.7 initialization
 Resume file: None
