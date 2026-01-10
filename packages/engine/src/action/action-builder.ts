@@ -14,6 +14,7 @@ import type {
   BoardElementRef,
   RepeatConfig,
   MultiSelectConfig,
+  ConditionConfig,
 } from './types.js';
 
 /**
@@ -69,10 +70,38 @@ export class Action {
   }
 
   /**
-   * Add a condition for when this action is available
+   * Add a condition for when this action is available.
+   *
+   * Supports two formats:
+   * - **Function (legacy):** `condition((ctx) => boolean)` - No debug labels
+   * - **Object (preferred):** `condition({ 'label': (ctx) => boolean })` - Auto-traced labels
+   *
+   * Object format provides automatic detailed debugging. Each key becomes a label
+   * shown in debug output when the condition fails. All conditions must pass for
+   * the action to be available.
+   *
+   * @param config - A predicate function or object with labeled predicates
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```typescript
+   * // Legacy format (still works, but no debug labels)
+   * Action.create('draw')
+   *   .condition((ctx) => ctx.player.hand.count() < 7)
+   *   .execute(() => { ... });
+   *
+   * // Object format (preferred - enables automatic tracing)
+   * Action.create('playCard')
+   *   .condition({
+   *     'has cards in hand': (ctx) => ctx.player.hand.count() > 0,
+   *     'is active player': (ctx) => ctx.player === ctx.game.activePlayer,
+   *     'not at action limit': (ctx) => ctx.player.actionsUsed < 3
+   *   })
+   *   .execute(() => { ... });
+   * ```
    */
-  condition(fn: (context: ActionContext) => boolean): this {
-    this.definition.condition = fn;
+  condition(config: ConditionConfig): this {
+    this.definition.condition = config;
     return this;
   }
 
