@@ -23,7 +23,9 @@ import { Card } from './elements.js';
 export function createCollectAction(game: DemoGame): ActionDefinition {
   return Action.create('collect')
     .prompt('Draw a card from the deck')
-    .condition(() => game.deck.count(Card) > 0)
+    .condition({
+      'deck has cards': () => game.deck.count(Card) > 0,
+    })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
       const card = game.deck.first(Card);
@@ -58,9 +60,11 @@ export function createDiscardAction(game: DemoGame): ActionDefinition {
       display: (card) => `${card.rank}${card.suit}`,
       boardRef: (card) => ({ id: card.id }),
     })
-    .condition((ctx) => {
-      const player = ctx.player as DemoPlayer;
-      return game.getPlayerHand(player).count(Card) > 0;
+    .condition({
+      'has cards in hand': (ctx) => {
+        const player = ctx.player as DemoPlayer;
+        return game.getPlayerHand(player).count(Card) > 0;
+      },
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
@@ -103,9 +107,12 @@ export function createTradeAction(game: DemoGame): ActionDefinition {
         return { targetRef: { id: hand.id } };
       },
     })
-    .condition((ctx) => {
-      const player = ctx.player as DemoPlayer;
-      return game.getPlayerHand(player).count(Card) > 0 && game.all(Player).length > 1;
+    .condition({
+      'has cards in hand': (ctx) => {
+        const player = ctx.player as DemoPlayer;
+        return game.getPlayerHand(player).count(Card) > 0;
+      },
+      'multiple players in game': () => game.all(Player).length > 1,
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
@@ -163,9 +170,12 @@ export function createGiftAction(game: DemoGame): ActionDefinition {
         return { targetRef: { id: hand.id } };
       },
     })
-    .condition((ctx) => {
-      const player = ctx.player as DemoPlayer;
-      return game.getPlayerHand(player).count(Card) > 0 && game.all(Player).length > 1;
+    .condition({
+      'has cards in hand': (ctx) => {
+        const player = ctx.player as DemoPlayer;
+        return game.getPlayerHand(player).count(Card) > 0;
+      },
+      'multiple players in game': () => game.all(Player).length > 1,
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;
@@ -212,9 +222,11 @@ export function createScoreAction(game: DemoGame): ActionDefinition {
         return names[suit] || suit;
       },
     })
-    .condition((ctx) => {
-      const player = ctx.player as DemoPlayer;
-      return game.getPlayerHand(player).count(Card) > 0;
+    .condition({
+      'has cards in hand': (ctx) => {
+        const player = ctx.player as DemoPlayer;
+        return game.getPlayerHand(player).count(Card) > 0;
+      },
     })
     .execute((args, ctx) => {
       const player = ctx.player as DemoPlayer;

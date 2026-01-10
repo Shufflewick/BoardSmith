@@ -11,18 +11,12 @@ import { CheckerPiece, Square, CheckersPlayer, type CheckersMove } from './eleme
 export function createEndTurnAction(game: CheckersGame): ActionDefinition {
   return Action.create('endTurn')
     .prompt('End Turn')
-    .condition((ctx) => {
-      // Only available if player has made a move this turn
-      // and is not in a multi-jump continuation
-      const player = ctx.player as CheckersPlayer;
-
-      // Can't end turn during a multi-jump
-      if (game.continuingPlayer === player && game.continuingPiece) {
-        return false;
-      }
-
-      // Check if hasMovedThisTurn is set
-      return game.hasMovedThisTurn === true;
+    .condition({
+      'not in multi-jump': (ctx) => {
+        const player = ctx.player as CheckersPlayer;
+        return !(game.continuingPlayer === player && game.continuingPiece);
+      },
+      'has moved this turn': () => game.hasMovedThisTurn === true,
     })
     .execute((args, ctx) => {
       const player = ctx.player as CheckersPlayer;
@@ -157,26 +151,21 @@ export function createMoveAction(game: CheckersGame): ActionDefinition {
         selectionName: 'piece',
       },
     })
-    .condition((ctx) => {
-      const player = ctx.player as CheckersPlayer;
-
-      // If continuing multi-jump, only this player can act
-      if (game.continuingPlayer && game.continuingPlayer !== player) {
-        return false;
-      }
-
-      // If player already moved this turn (and not in multi-jump), they can't move again
-      // They must click "End Turn" to pass to opponent
-      if (game.hasMovedThisTurn && !game.continuingPiece) {
-        return false;
-      }
-
-      // Check if player has any valid moves
-      if (game.continuingPiece) {
-        return game.getValidMovesForPiece(game.continuingPiece).length > 0;
-      }
-
-      return game.getValidMoves(player).length > 0;
+    .condition({
+      'is correct player for multi-jump': (ctx) => {
+        const player = ctx.player as CheckersPlayer;
+        return !(game.continuingPlayer && game.continuingPlayer !== player);
+      },
+      'has not already moved (unless continuing jump)': () => {
+        return !(game.hasMovedThisTurn && !game.continuingPiece);
+      },
+      'has valid moves available': (ctx) => {
+        const player = ctx.player as CheckersPlayer;
+        if (game.continuingPiece) {
+          return game.getValidMovesForPiece(game.continuingPiece).length > 0;
+        }
+        return game.getValidMoves(player).length > 0;
+      },
     })
     .execute((args, ctx) => {
       const player = ctx.player as CheckersPlayer;
