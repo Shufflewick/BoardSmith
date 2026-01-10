@@ -72,7 +72,9 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
         return {};
       },
     })
-    .condition((ctx) => game.canPlayerTakeAction(ctx.player as GoFishPlayer))
+    .condition({
+      'player can take action': (ctx) => game.canPlayerTakeAction(ctx.player as GoFishPlayer),
+    })
     .execute((args, ctx) => {
       const player = ctx.player as GoFishPlayer;
       // After extractChoiceValue, args.target is just the position number

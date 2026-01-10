@@ -93,7 +93,9 @@ export function createDraftAction(game: PolyPotionsGame): ActionDefinition {
 export function createCraftAction(game: PolyPotionsGame): ActionDefinition {
   return Action.create('craft')
     .prompt('Craft a potion from your drafted dice')
-    .condition(() => game.draftedValues.length === 2)
+    .condition({
+      'two dice drafted': () => game.draftedValues.length === 2,
+    })
     .chooseFrom<string>('operation', {
       prompt: 'Choose how to combine your dice',
       choices: (ctx) => {

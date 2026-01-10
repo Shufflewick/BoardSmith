@@ -13,10 +13,9 @@ import { Unit, Enemy, TestPlayer } from './elements.js';
 export function createAttackAction(game: TestActionPanelGame): ActionDefinition {
   return Action.create('chooseFromDemo')
     .prompt('chooseFrom')
-    .condition((ctx) => {
-      const units = game.getAvailableUnits();
-      const enemies = game.getAliveEnemies();
-      return units.length > 0 && enemies.length > 0;
+    .condition({
+      'has available units': () => game.getAvailableUnits().length > 0,
+      'has alive enemies': () => game.getAliveEnemies().length > 0,
     })
     // chooseElement: select an element from the game
     .chooseElement<Unit>('chooseElement', {
@@ -188,7 +187,9 @@ export function createRepeatUntilDemo(game: TestActionPanelGame): ActionDefiniti
 export function createChoosePlayerDemo(game: TestActionPanelGame): ActionDefinition {
   return Action.create('playerChoicesDemo')
     .prompt('playerChoices')
-    .condition(() => game.all(Player).length > 1)
+    .condition({
+      'multiple players in game': () => game.all(Player).length > 1,
+    })
     .chooseFrom('player', {
       prompt: 'playerChoices (excludeSelf)',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
