@@ -27,11 +27,13 @@ export function createDiscardAction(game: CribbageGame): ActionDefinition {
       // Exactly 2 cards required - auto-confirms when 2 are selected (no Done button)
       multiSelect: { min: 2, max: 2 },
     })
-    .condition((ctx) => {
-      const game = ctx.game as CribbageGame;
-      const player = ctx.player as CribbagePlayer;
-      const hand = game.getPlayerHand(player);
-      return game.cribbagePhase === 'discarding' && hand.count(Card) === 6;
+    .condition({
+      'in discarding phase': (ctx) => (ctx.game as CribbageGame).cribbagePhase === 'discarding',
+      'hand has 6 cards': (ctx) => {
+        const game = ctx.game as CribbageGame;
+        const player = ctx.player as CribbagePlayer;
+        return game.getPlayerHand(player).count(Card) === 6;
+      },
     })
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;
@@ -81,11 +83,13 @@ export function createPlayCardAction(game: CribbageGame): ActionDefinition {
         return `${card.rank}${card.suit} (${card.pointValue})`;
       },
     })
-    .condition((ctx) => {
-      const game = ctx.game as CribbageGame;
-      const player = ctx.player as CribbagePlayer;
-      // Can play if in play phase and has playable cards
-      return game.cribbagePhase === 'play' && game.getPlayableCards(player).length > 0;
+    .condition({
+      'in play phase': (ctx) => (ctx.game as CribbageGame).cribbagePhase === 'play',
+      'has playable cards': (ctx) => {
+        const game = ctx.game as CribbageGame;
+        const player = ctx.player as CribbagePlayer;
+        return game.getPlayableCards(player).length > 0;
+      },
     })
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;
@@ -130,13 +134,18 @@ export function createPlayCardAction(game: CribbageGame): ActionDefinition {
 export function createSayGoAction(game: CribbageGame): ActionDefinition {
   return Action.create('sayGo')
     .prompt('Say "Go" (cannot play)')
-    .condition((ctx) => {
-      const game = ctx.game as CribbageGame;
-      const player = ctx.player as CribbagePlayer;
-      // Must say Go if in play phase, has cards in hand, but none are playable
-      return game.cribbagePhase === 'play' &&
-             game.mustSayGo(player) &&
-             !game.playerSaidGo[player.position - 1];
+    .condition({
+      'in play phase': (ctx) => (ctx.game as CribbageGame).cribbagePhase === 'play',
+      'must say go (has cards but none playable)': (ctx) => {
+        const game = ctx.game as CribbageGame;
+        const player = ctx.player as CribbagePlayer;
+        return game.mustSayGo(player);
+      },
+      'has not already said go': (ctx) => {
+        const game = ctx.game as CribbageGame;
+        const player = ctx.player as CribbagePlayer;
+        return !game.playerSaidGo[player.position - 1];
+      },
     })
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;
@@ -177,10 +186,12 @@ export function createSayGoAction(game: CribbageGame): ActionDefinition {
 export function createAcknowledgeScoreAction(game: CribbageGame): ActionDefinition {
   return Action.create('acknowledgeScore')
     .prompt('Continue')
-    .condition((ctx) => {
-      const game = ctx.game as CribbageGame;
-      // Can acknowledge if there's an active scoring animation or round summary
-      return game.cribbagePhase === 'scoring' && (game.scoringAnimation.active || game.roundSummary.active);
+    .condition({
+      'in scoring phase': (ctx) => (ctx.game as CribbageGame).cribbagePhase === 'scoring',
+      'scoring animation or summary active': (ctx) => {
+        const game = ctx.game as CribbageGame;
+        return game.scoringAnimation.active || game.roundSummary.active;
+      },
     })
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;

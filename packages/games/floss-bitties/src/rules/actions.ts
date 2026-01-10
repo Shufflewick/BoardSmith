@@ -19,9 +19,11 @@ export function createPlayToAreaAction(game: FlossBittiesGame): ActionDefinition
         targetRef: { id: card.id },
       }),
     })
-    .condition((ctx) => {
-      const player = ctx.player as FlossBittiesPlayer;
-      return game.getPlayableCards(player).length > 0;
+    .condition({
+      'has playable cards': (ctx) => {
+        const player = ctx.player as FlossBittiesPlayer;
+        return game.getPlayableCards(player).length > 0;
+      },
     })
     .execute((args, ctx) => {
       const player = ctx.player as FlossBittiesPlayer;
@@ -83,7 +85,9 @@ export function createDiscardAction(game: FlossBittiesGame): ActionDefinition {
 export function createDrawFromDeckAction(game: FlossBittiesGame): ActionDefinition {
   return Action.create('drawFromDeck')
     .prompt('Draw from deck')
-    .condition(() => game.deck.count(Card) > 0)
+    .condition({
+      'deck has cards': () => game.deck.count(Card) > 0,
+    })
     .execute((args, ctx) => {
       const player = ctx.player as FlossBittiesPlayer;
       const hand = game.getPlayerHand(player);
@@ -128,9 +132,11 @@ export function createDrawFromDiscardAction(game: FlossBittiesGame): ActionDefin
         return topCard ? { targetRef: { id: topCard.id } } : {};
       },
     })
-    .condition((ctx) => {
-      const player = ctx.player as FlossBittiesPlayer;
-      return game.getDrawableDiscardPiles(player).length > 0;
+    .condition({
+      'has drawable discard piles': (ctx) => {
+        const player = ctx.player as FlossBittiesPlayer;
+        return game.getDrawableDiscardPiles(player).length > 0;
+      },
     })
     .execute((args, ctx) => {
       const player = ctx.player as FlossBittiesPlayer;
