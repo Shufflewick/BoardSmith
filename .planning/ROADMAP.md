@@ -152,10 +152,11 @@ Plans:
 **Goal**: Implement object-based condition API, remove ConditionTracer
 **Depends on**: v0.6 complete
 **Research**: Unlikely (internal refactoring)
-**Plans**: TBD
+**Plans**: 2
 
 Plans:
-- [ ] 14-01: TBD (run /gsd:plan-phase 14 to break down)
+- [ ] 14-01: Add condition API types and update Action builder
+- [ ] 14-02: Implement auto-tracing in ActionExecutor, remove ConditionTracer
 
 #### Phase 15: game-migrations
 **Goal**: Update all BoardSmith games to new condition format
@@ -192,6 +193,6 @@ Plans:
 | 11. eslint-no-shadow | v0.5 | 1/1 | Complete | 2026-01-09 |
 | 12. player-in-tree | v0.6 | 3/3 | Complete | 2026-01-09 |
 | 13. player-access-docs | v0.6 | 1/1 | Complete | 2026-01-09 |
-| 14. condition-api-refactor | v0.7 | 0/? | Not started | - |
+| 14. condition-api-refactor | v0.7 | 0/2 | Ready | - |
 | 15. game-migrations | v0.7 | 0/? | Not started | - |
 | 16. docs-migration-guide | v0.7 | 0/? | Not started | - |

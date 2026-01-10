@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-09)
 ## Current Position
 
 Phase: 14 of 16 (condition-api-refactor)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-10 — Milestone v0.7 created
+Plan: 14-01 ready to execute
+Status: Planned (2 plans)
+Last activity: 2026-01-10 — Phase 14 planned
 
 Progress: ░░░░░░░░░░ 0%
 
