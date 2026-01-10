@@ -1304,7 +1304,13 @@ export class Game<
   //
   // Players are direct children of the Game in the element tree. These helper
   // methods provide convenient access to players without requiring manual tree
-  // queries. For complex player queries, use `game.all(Player, ...)` directly.
+  // queries. For complex player queries, use `game.all(Player, ...)` directly:
+  //
+  //   // Find players with more than 10 gold
+  //   const richPlayers = game.all(Player, p => p.gold > 10);
+  //
+  //   // Find the player with the most cards
+  //   const leader = game.all(Player).maxBy(p => p.allMy(Card).length);
   //
   // **Custom Player types**: If you use a custom Player subclass, set
   // `static PlayerClass = MyPlayer` on your Game class:
@@ -1314,6 +1320,20 @@ export class Game<
   //   }
   //
   // This ensures these helpers return your custom type with full type safety.
+  //
+  // **Anti-patterns to avoid:**
+  //
+  // 1. **Don't cache player references** - Player objects may be recreated during
+  //    state restoration (undo, redo, AI simulation). Always query fresh:
+  //      // WRONG: const player = game.getPlayer(1); ... later use player
+  //      // RIGHT: always call game.getPlayer(1) when you need it
+  //
+  // 2. **Don't use fallbacks when player not found** - If getPlayer() returns
+  //    undefined, that's a bug. Use getPlayerOrThrow() in actions where the
+  //    player must exist, and fix the root cause rather than masking it.
+  //
+  // 3. **Don't duplicate player data** - Store data on the Player instance,
+  //    not redundantly on owned elements. Query the player when you need data.
   //
   // @see {@link Player} for player-side methods like `allMy()`, `my()`
   // ============================================
