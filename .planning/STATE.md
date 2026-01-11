@@ -5,21 +5,18 @@
 See: .planning/PROJECT.md (updated 2026-01-09)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** v0.7 Condition Tracing Refactor
+**Current focus:** v0.7 Condition Tracing Refactor — COMPLETE
 
 ## Current Position
 
-Phase: 15 of 16 (game-migrations)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-01-10 — Completed 15-02-PLAN.md
+Phase: 16 of 16 (docs-migration-guide)
+Plan: 1 of 1 in current phase
+Status: Milestone complete
+Last activity: 2026-01-10 — Completed 16-01-PLAN.md
 
-Progress: ███░░░░░░░ 30%
+Progress: ██████████ 100%
 
 ## Milestones
-
-**In Progress:**
-- v0.7 Condition Tracing Refactor (Phases 14-16) — in progress
 
 **Completed:**
 - v0.1 Large File Refactoring (Phases 1-4) — shipped 2026-01-08
@@ -28,6 +25,7 @@ Progress: ███░░░░░░░ 30%
 - v0.4 Public API Docs (Phase 10) — shipped 2026-01-09
 - v0.5 ESLint No-Shadow (Phase 11) — shipped 2026-01-09
 - v0.6 Players in Element Tree (Phases 12-13) — shipped 2026-01-09
+- v0.7 Condition Tracing Refactor (Phases 14-16) — shipped 2026-01-10
 
 ## Roadmap Evolution
 
@@ -40,9 +38,10 @@ Progress: ███░░░░░░░ 30%
 - Milestone v0.6 created: Players in element tree, 2 phases (Phases 12-13)
 - Milestone v0.6 complete: Players now extend GameElement, in searchable tree
 - Milestone v0.7 created: Condition tracing refactor, 3 phases (Phases 14-16)
+- Milestone v0.7 complete: Object-based conditions with auto-tracing, all games migrated, docs updated
 
 ## Session Continuity
 
 Last session: 2026-01-10
-Stopped at: Completed 15-02-PLAN.md (Phase 15 complete)
+Stopped at: Completed 16-01-PLAN.md (v0.7 milestone complete)
 Resume file: None

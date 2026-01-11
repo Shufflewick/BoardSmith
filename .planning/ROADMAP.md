@@ -7,6 +7,8 @@
 - ✅ [v0.3 Flow Engine Docs](milestones/v0.3-ROADMAP.md) (Phase 9) — SHIPPED 2026-01-09
 - ✅ [v0.4 Public API Docs](milestones/v0.4-ROADMAP.md) (Phase 10) — SHIPPED 2026-01-09
 - ✅ [v0.5 ESLint No-Shadow](milestones/v0.5-ROADMAP.md) (Phase 11) — SHIPPED 2026-01-09
+- ✅ [v0.6 Players in Element Tree](milestones/v0.6-ROADMAP.md) (Phases 12-13) — SHIPPED 2026-01-09
+- ✅ [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-01-10
 
 ## Overview
 
@@ -20,7 +22,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.4 Public API Docs** — Phase 10 (shipped 2026-01-09)
 - ✅ **v0.5 ESLint No-Shadow** — Phase 11 (shipped 2026-01-09)
 - ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
-- 🚧 **v0.7 Condition Tracing Refactor** — Phases 14-16 (in progress)
+- ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 
 ## Phases
 
@@ -144,15 +146,15 @@ Plans:
 
 </details>
 
-### 🚧 v0.7 Condition Tracing Refactor (In Progress)
+<details>
+<summary>✅ v0.7 Condition Tracing Refactor (Phases 14-16) — SHIPPED 2026-01-10</summary>
 
 **Milestone Goal:** Redesign action conditions to use object-based API where labels are structurally required, making detailed debugging automatic and mandatory.
 
-#### Phase 14: condition-api-refactor
+#### Phase 14: condition-api-refactor ✅
 **Goal**: Implement object-based condition API, remove ConditionTracer
 **Depends on**: v0.6 complete
-**Research**: Unlikely (internal refactoring)
-**Plans**: 2
+**Plans**: 2/2 complete
 
 Plans:
 - [x] 14-01: Add condition API types and update Action builder
@@ -161,21 +163,21 @@ Plans:
 #### Phase 15: game-migrations ✅
 **Goal**: Update all BoardSmith games to new condition format
 **Depends on**: Phase 14
-**Research**: Unlikely (mechanical migration)
 **Plans**: 2/2 complete
 
 Plans:
 - [x] 15-01: Migrate all game conditions to object format
 - [x] 15-02: Migrate test file conditions to object format
 
-#### Phase 16: docs-migration-guide
+#### Phase 16: docs-migration-guide ✅
 **Goal**: Update documentation and write migration guide for merc team
 **Depends on**: Phase 15
-**Research**: Unlikely (documentation)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 16-01: TBD
+- [x] 16-01: Update docs, create condition-migration-guide.md
+
+</details>
 
 ## Progress
 
@@ -196,4 +198,4 @@ Plans:
 | 13. player-access-docs | v0.6 | 1/1 | Complete | 2026-01-09 |
 | 14. condition-api-refactor | v0.7 | 2/2 | Complete | 2026-01-10 |
 | 15. game-migrations | v0.7 | 2/2 | Complete | 2026-01-10 |
-| 16. docs-migration-guide | v0.7 | 0/? | Not started | - |
+| 16. docs-migration-guide | v0.7 | 1/1 | Complete | 2026-01-10 |
