@@ -108,3 +108,8 @@ export {
 } from './game-session.js';
 
 export { AIController } from './ai-controller.js';
+
+export {
+  CheckpointManager,
+  type CheckpointManagerOptions,
+} from './checkpoint-manager.js';
