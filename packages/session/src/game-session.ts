@@ -16,7 +16,7 @@
  * - AI scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult } from '@boardsmith/engine';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint } from '@boardsmith/engine';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '@boardsmith/engine';
 import { GameRunner } from '@boardsmith/runtime';
 import {
@@ -46,6 +46,7 @@ import { SelectionHandler } from './selection-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
 import { DebugController } from './debug-controller.js';
+import { CheckpointManager } from './checkpoint-manager.js';
 
 // ============================================
 // Types
@@ -155,6 +156,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #stateHistory: StateHistory<G>;
   /** Debug controller for deck manipulation */
   #debugController: DebugController<G>;
+  /** Checkpoint manager for fast HMR recovery (dev only) */
+  #checkpointManager?: CheckpointManager<G>;
 
   private constructor(
     runner: GameRunner<G>,
@@ -219,6 +222,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         broadcast: () => this.broadcast(),
       }
     );
+
+    // Initialize checkpoint manager in dev mode only
+    if (process.env.NODE_ENV !== 'production') {
+      this.#checkpointManager = new CheckpointManager<G>();
+    }
   }
 
   // ============================================
@@ -625,6 +633,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Update stored action history
     this.#storedState.actionHistory = this.#runner.actionHistory;
 
+    // Create checkpoint if at interval (dev mode only)
+    const actionIndex = this.#storedState.actionHistory.length;
+    if (this.#checkpointManager?.shouldCheckpoint(actionIndex)) {
+      this.#checkpointManager.capture(this.#runner.game, actionIndex);
+    }
+
     // Persist if storage adapter is provided
     if (this.#storage) {
       await this.#storage.save(this.#storedState);
@@ -750,10 +764,21 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const validation = validateDevSnapshot(snapshot, classRegistry);
 
     if (!validation.valid) {
-      // Log detailed errors and fall back to replay
+      // Log detailed errors
       const errorSummary = this.#formatValidationSummary(validation);
       console.warn(errorSummary);
-      console.log('[HMR] Falling back to replay...');
+
+      // Try checkpoint recovery before falling back to full replay
+      if (this.#checkpointManager) {
+        const checkpoint = this.#checkpointManager.findNearest(this.#storedState.actionHistory.length);
+        if (checkpoint) {
+          console.log(`[HMR] Found checkpoint at action ${checkpoint.actionIndex}, attempting partial replay...`);
+          const newRunner = this.#reloadFromCheckpoint(checkpoint, definition);
+          if (newRunner) return newRunner;
+        }
+      }
+
+      console.log('[HMR] Falling back to full replay...');
       return null;
     }
 
@@ -887,6 +912,85 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     return newRunner;
   }
 
+  /**
+   * Reload from a checkpoint when dev state transfer fails.
+   * Restores the checkpoint state and replays only the actions after the checkpoint.
+   * Returns null if checkpoint restore fails, triggering full replay fallback.
+   */
+  #reloadFromCheckpoint(checkpoint: DevCheckpoint, definition: GameDefinition): GameRunner<G> | null {
+    try {
+      // Build class registry
+      const classRegistry = new Map<string, any>();
+      classRegistry.set(definition.gameClass.name, definition.gameClass);
+      for (const [name, cls] of this.#runner.game._ctx.classRegistry) {
+        if (!classRegistry.has(name)) {
+          classRegistry.set(name, cls);
+        }
+      }
+
+      // Validate checkpoint snapshot with new classes
+      const validation = validateDevSnapshot(checkpoint, classRegistry);
+      if (!validation.valid) {
+        console.warn('[HMR] Checkpoint validation failed, falling back to full replay');
+        return null;
+      }
+
+      // Restore from checkpoint
+      const restoredGame = restoreDevState(
+        checkpoint,
+        definition.gameClass as GameClass<G>,
+        {
+          gameOptions: {
+            playerCount: this.#storedState.playerCount,
+            playerNames: this.#storedState.playerNames,
+            seed: this.#storedState.seed,
+            ...this.#storedState.gameOptions,
+          },
+          classRegistry,
+        }
+      );
+
+      // Create runner with restored game
+      const newRunner = new GameRunner<G>({
+        GameClass: definition.gameClass as GameClass<G>,
+        gameType: this.#storedState.gameType,
+        gameOptions: {
+          playerCount: this.#storedState.playerCount,
+          playerNames: this.#storedState.playerNames,
+          seed: this.#storedState.seed,
+          ...this.#storedState.gameOptions,
+        },
+      });
+
+      // @ts-expect-error - Accessing readonly for HMR
+      newRunner.game = restoredGame;
+
+      // Copy action history up to checkpoint
+      newRunner.actionHistory.push(...this.#storedState.actionHistory.slice(0, checkpoint.actionIndex));
+
+      // Replay remaining actions
+      const remainingActions = this.#storedState.actionHistory.slice(checkpoint.actionIndex);
+      for (const action of remainingActions) {
+        const result = newRunner.performAction(action.name, action.player, action.args);
+        if (!result.success) {
+          console.warn(`[HMR] Action replay failed at ${action.name}, falling back to full replay`);
+          return null;
+        }
+      }
+
+      console.log(
+        `[HMR] ✓ Restored from checkpoint (action ${checkpoint.actionIndex})\n` +
+        `[HMR] ✓ Replayed ${remainingActions.length} actions\n` +
+        `[HMR] Reload complete`
+      );
+
+      return newRunner;
+    } catch (error) {
+      console.warn('[HMR] Checkpoint restore failed:', error);
+      return null;
+    }
+  }
+
   // ============================================
   // Undo Methods
   // ============================================
@@ -896,7 +1000,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Only works if it's the player's turn and they've made at least one action.
    */
   async undoToTurnStart(playerPosition: number): Promise<UndoResult> {
-    return this.#stateHistory.undoToTurnStart(playerPosition);
+    const result = await this.#stateHistory.undoToTurnStart(playerPosition);
+    // Clear checkpoints after undo
+    if (result.success && result.actionsUndone && result.actionsUndone > 0) {
+      this.#checkpointManager?.clearAfter(this.#storedState.actionHistory.length);
+    }
+    return result;
   }
 
   /**
@@ -910,7 +1019,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     actionsDiscarded?: number;
     state?: PlayerGameState;
   }> {
-    return this.#stateHistory.rewindToAction(targetActionIndex);
+    const result = await this.#stateHistory.rewindToAction(targetActionIndex);
+    // Clear checkpoints after rewind
+    if (result.success) {
+      this.#checkpointManager?.clearAfter(targetActionIndex);
+    }
+    return result;
   }
 
   // ============================================
