@@ -46,6 +46,7 @@ export {
   captureDevState,
   restoreDevState,
   validateDevSnapshot,
+  formatValidationErrors,
   getSnapshotElementCount,
   createTrackedRandom,
   getRandomCallCount,
@@ -55,4 +56,9 @@ export {
 export type {
   DevSnapshot,
   RestoreDevStateOptions,
+  ValidationResult,
+  ValidationError,
+  ValidationWarning,
+  ValidationErrorType,
+  ValidationWarningType,
 } from './dev-state.js';

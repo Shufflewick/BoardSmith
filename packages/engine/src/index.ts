@@ -204,6 +204,7 @@ export {
   captureDevState,
   restoreDevState,
   validateDevSnapshot,
+  formatValidationErrors,
   getSnapshotElementCount,
   createTrackedRandom,
   getRandomCallCount,
@@ -219,6 +220,9 @@ export type {
   // Dev state types
   DevSnapshot,
   RestoreDevStateOptions,
+  ValidationResult as DevValidationResult,
+  ValidationError as DevValidationError,
+  ValidationWarning as DevValidationWarning,
 } from './utils/index.js';
 
 // Sandbox (execution limits and security)
