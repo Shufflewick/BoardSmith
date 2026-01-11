@@ -185,7 +185,7 @@ export type {
   TurnOrderConfig,
 } from './flow/index.js';
 
-// Utilities (serialization, snapshots, replays, action helpers)
+// Utilities (serialization, snapshots, replays, action helpers, dev state)
 export {
   serializeValue,
   deserializeValue,
@@ -200,6 +200,14 @@ export {
   parseReplayFile,
   resolveElementArg,
   isResolvedElement,
+  // Dev state transfer (for HMR)
+  captureDevState,
+  restoreDevState,
+  validateDevSnapshot,
+  getSnapshotElementCount,
+  createTrackedRandom,
+  getRandomCallCount,
+  resetRandomCallCounter,
 } from './utils/index.js';
 
 export type {
@@ -208,6 +216,9 @@ export type {
   GameStateSnapshot,
   PlayerStateView,
   ReplayFile,
+  // Dev state types
+  DevSnapshot,
+  RestoreDevStateOptions,
 } from './utils/index.js';
 
 // Sandbox (execution limits and security)

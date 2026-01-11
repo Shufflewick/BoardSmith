@@ -40,3 +40,19 @@ export {
   resolveElementArg,
   isResolvedElement,
 } from './action-helpers.js';
+
+// Dev state transfer (for HMR)
+export {
+  captureDevState,
+  restoreDevState,
+  validateDevSnapshot,
+  getSnapshotElementCount,
+  createTrackedRandom,
+  getRandomCallCount,
+  resetRandomCallCounter,
+} from './dev-state.js';
+
+export type {
+  DevSnapshot,
+  RestoreDevStateOptions,
+} from './dev-state.js';
