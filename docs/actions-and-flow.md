@@ -14,7 +14,9 @@ import { Action, type ActionDefinition } from '@boardsmith/engine';
 export function createMyAction(game: MyGame): ActionDefinition {
   return Action.create('actionName')
     .prompt('Description shown to player')
-    .condition((ctx) => /* when this action is available */)
+    .condition({
+      'player has enough resources': (ctx) => ctx.player.gold >= 5,
+    })
     .chooseFrom('selection', { /* selection options */ })
     .execute((args, ctx) => {
       // Game logic here
@@ -109,7 +111,9 @@ The helper automatically namespaces by action name and player, so multiple playe
 ```typescript
 Action.create('hireFirstMerc')
   .prompt('Choose a MERC to hire')
-  .condition((ctx) => ctx.player.team.length === 0)
+  .condition({
+    'player has no team yet': (ctx) => ctx.player.team.length === 0,
+  })
   .chooseFrom('merc', {
     choices: (ctx) => {
       const temp = actionTempState(ctx, 'hireFirstMerc');
@@ -369,16 +373,40 @@ Action.create('selectItem')
 
 ### Conditions
 
-Control when actions are available:
+Control when actions are available. Use **object-based conditions** (preferred) for automatic debug tracing:
 
 ```typescript
+// Object format (preferred) - each predicate gets a descriptive label
+// These labels appear in debug output when conditions fail
 Action.create('draw')
-  .condition((ctx) => {
-    // Only available when deck has cards
-    return game.deck.count(Card) > 0;
+  .condition({
+    'deck has cards': (ctx) => game.deck.count(Card) > 0,
+  })
+  .execute(...)
+
+// Multiple conditions are AND'd together
+Action.create('purchase')
+  .condition({
+    'player can afford cost': (ctx) => ctx.player.gold >= 10,
+    'item is available': (ctx) => game.shop.count(Item) > 0,
   })
   .execute(...)
 ```
+
+**Labels should describe WHY** the condition exists, not just what it checks:
+- Good: `'player can afford cost'`, `'in play phase'`, `'has cards to discard'`
+- Bad: `'gold >= 10'`, `'phase === play'`, `'hand.count > 0'`
+
+**Legacy function format** (still supported, no auto-tracing):
+
+```typescript
+// Function format - works but produces no automatic debug trace
+Action.create('draw')
+  .condition((ctx) => game.deck.count(Card) > 0)
+  .execute(...)
+```
+
+The object format provides automatic debugging: when an action isn't available, the debug panel shows exactly which condition(s) failed with their labels.
 
 ### Validation
 
