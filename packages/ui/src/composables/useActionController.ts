@@ -398,6 +398,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       } else {
         // Single value
         if (!valueMatchesChoice(value)) {
+          // PIT OF SUCCESS: Check if they passed an object with a .value that would have matched
+          // This helps catch cases where auto-unwrap didn't trigger (e.g., object has value but not display)
+          if (hasValue(value) && valueMatchesChoice((value as { value: unknown }).value)) {
+            return {
+              valid: false,
+              error: `Invalid selection for "${selection.name}". Did you mean to pass choice.value (${JSON.stringify((value as { value: unknown }).value)}) instead of the choice object?`
+            };
+          }
           return { valid: false, error: `Invalid selection for "${selection.name}"` };
         }
       }
@@ -1083,7 +1091,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  async function fill(selectionName: string, value: unknown): Promise<ValidationResult> {
+  async function fill(selectionName: string, rawValue: unknown): Promise<ValidationResult> {
     if (!currentActionMeta.value) {
       return { valid: false, error: 'No action in progress' };
     }
@@ -1091,6 +1099,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (!selection) {
       return { valid: false, error: `Unknown selection: "${selectionName}"` };
+    }
+
+    // PIT OF SUCCESS: Auto-unwrap choice objects from getChoices()
+    // Developers often pass the whole { value, display } object instead of just the value
+    let value = rawValue;
+    if (typeof rawValue === 'object' && rawValue !== null && 'value' in rawValue && 'display' in rawValue) {
+      devWarn(
+        `fill-choice-object-${selectionName}`,
+        `fill('${selectionName}', ...) received a choice object { value, display }. ` +
+        `Automatically unwrapping to use choice.value. ` +
+        `Consider passing choice.value directly for clarity.`
+      );
+      value = (rawValue as { value: unknown }).value;
     }
 
     // Handle repeating selections

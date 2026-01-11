@@ -1336,6 +1336,44 @@ loop({
 
 ---
 
+## 18. Passing Choice Objects to fill() Instead of Values
+
+### The Problem
+
+You get choices from `getChoices()` and pass the entire choice object to `fill()`, but the action behaves unexpectedly or fails:
+
+```typescript
+// WRONG - passing the choice object
+const choices = actionController.getChoices(currentSelection);
+const selectedChoice = choices.find(c => c.value === sectorId);
+await actionController.fill(selection.name, selectedChoice);  // ❌
+// selectedChoice = { value: 142, display: "Wilderness" }
+```
+
+### The Solution
+
+Pass `choice.value`, not the choice object:
+
+```typescript
+// CORRECT - pass just the value
+await actionController.fill(selection.name, selectedChoice.value);  // ✓
+// passes 142
+```
+
+### Why This Matters
+
+`getChoices()` returns `{ value, display }` objects for UI rendering:
+- `value`: What the server expects (element ID, choice value, etc.)
+- `display`: Human-readable label for buttons/lists
+
+The `fill()` function expects the raw value, not the wrapper object.
+
+### Pit of Success
+
+As of v0.8, BoardSmith automatically unwraps choice objects passed to `fill()` and shows a dev warning. However, passing `choice.value` directly is clearer and recommended.
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -1358,6 +1396,7 @@ loop({
 | **Element count explosion** | Elements mysteriously multiply | `game.debugElementTree()` to diagnose |
 | **Loop exit with pending state** | Loop checks only actions remaining | Use `stateAwareLoop()` with `pendingStates` |
 | **execute() vs start()** | `execute('retreat', {})` without params | `start('retreat')` for wizard mode |
+| **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
 
 ---
 

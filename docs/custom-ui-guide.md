@@ -308,14 +308,42 @@ function isSelected(cardId: number): boolean {
   return currentArgs.card === cardId;
 }
 
-function onCardClick(card: { id: number }) {
+async function onCardClick(card: { id: number }) {
   if (!isSelectable(card.id)) return;
 
-  // Fill the selection
-  props.actionController.fill('card', card.id);
+  // Fill the selection (always await - it returns a Promise)
+  await props.actionController.fill('card', card.id);
 }
 </script>
 ```
+
+### Understanding getChoices() Return Values
+
+When building custom UIs, you'll often need to get the available choices for a selection. The `getChoices()` method returns choices in a consistent format:
+
+```typescript
+Array<{ value: unknown; display: string }>
+```
+
+**Important:** The `value` property contains what you should pass to `fill()`:
+- For element selections: `value` is the numeric element ID
+- For choice selections: `value` is the choice value (string, object, etc.)
+
+```typescript
+// Getting choices for the current selection
+const choices = actionController.getChoices(currentSelection);
+
+// CORRECT - pass choice.value to fill()
+const selectedChoice = choices.find(c => c.value === userSelectedId);
+await actionController.fill(currentSelection.name, selectedChoice.value);
+
+// WRONG - don't pass the whole choice object
+await actionController.fill(currentSelection.name, selectedChoice); // ❌
+```
+
+The `display` property is the human-readable label for rendering in your UI (buttons, lists, etc.).
+
+**Note:** If you do accidentally pass a choice object to `fill()`, BoardSmith will auto-unwrap it in development mode and show a warning. However, passing `choice.value` directly is clearer and recommended.
 
 ## Step 5: Using boardInteraction
 
