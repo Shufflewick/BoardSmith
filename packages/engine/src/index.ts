@@ -211,6 +211,9 @@ export {
   createTrackedRandom,
   getRandomCallCount,
   resetRandomCallCounter,
+  // Checkpoints for fast HMR recovery
+  createCheckpoint,
+  restoreFromCheckpoint,
 } from './utils/index.js';
 
 export type {
@@ -226,6 +229,10 @@ export type {
   ValidationError as DevValidationError,
   ValidationWarning as DevValidationWarning,
   FlowPositionValidation,
+  // Checkpoint types
+  DevCheckpoint,
+  RestoreFromCheckpointOptions,
+  CheckpointRestoreResult,
 } from './utils/index.js';
 
 // Sandbox (execution limits and security)

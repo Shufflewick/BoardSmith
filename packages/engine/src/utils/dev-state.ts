@@ -600,3 +600,105 @@ export function getSnapshotElementCount(snapshot: DevSnapshot): number {
   countElements(snapshot.elements);
   return count;
 }
+
+// ============================================================================
+// SECTION: Checkpoints for Fast HMR Recovery
+// ============================================================================
+
+/**
+ * A checkpoint is a snapshot of game state at a specific action index.
+ * When HMR fails and replay is needed, checkpoints provide intermediate
+ * restore points so only a subset of actions need replay instead of
+ * replaying all actions from the beginning.
+ */
+export interface DevCheckpoint extends DevSnapshot {
+  /** Action index at which this checkpoint was taken */
+  actionIndex: number;
+
+  /** Actions from 0 to actionIndex (for validation) */
+  actionCount: number;
+}
+
+/**
+ * Create a checkpoint capturing the current game state at a specific action index.
+ *
+ * @param game - The game instance to capture
+ * @param actionIndex - The action index at which this checkpoint is taken
+ * @returns DevCheckpoint containing snapshot plus action index
+ */
+export function createCheckpoint<G extends Game>(
+  game: G,
+  actionIndex: number
+): DevCheckpoint {
+  const snapshot = captureDevState(game);
+  return {
+    ...snapshot,
+    actionIndex,
+    actionCount: actionIndex,
+  };
+}
+
+/**
+ * Options for restoring from a checkpoint.
+ */
+export interface RestoreFromCheckpointOptions<G extends Game> extends RestoreDevStateOptions {
+  /** The game class to instantiate */
+  GameClass: new (options: GameOptions) => G;
+}
+
+/**
+ * Result of restoring from a checkpoint.
+ */
+export interface CheckpointRestoreResult<G extends Game> {
+  /** The restored game instance */
+  game: G;
+
+  /** Number of actions replayed after checkpoint restoration */
+  actionsReplayed: number;
+}
+
+/**
+ * Restore game state from a checkpoint and replay remaining actions.
+ *
+ * This provides fast HMR recovery by:
+ * 1. Restoring the game state from the checkpoint snapshot
+ * 2. Replaying only the actions that occurred after the checkpoint
+ *
+ * @param checkpoint - The checkpoint to restore from
+ * @param remainingActions - Actions to replay after checkpoint restoration
+ * @param options - Restore options including GameClass and gameOptions
+ * @returns The restored game and count of replayed actions
+ */
+export function restoreFromCheckpoint<G extends Game>(
+  checkpoint: DevCheckpoint,
+  remainingActions: Array<{ name: string; player: number; args: Record<string, unknown> }>,
+  options: RestoreFromCheckpointOptions<G>
+): CheckpointRestoreResult<G> {
+  // Restore game from checkpoint snapshot
+  const game = restoreDevState(checkpoint, options.GameClass, options);
+
+  // Replay remaining actions through the game's action executor
+  let replayed = 0;
+  for (const action of remainingActions) {
+    // Execute action through the flow system
+    const flowState = game.getFlowState();
+    if (!flowState?.awaitingInput) {
+      throw new Error(
+        `[Checkpoint] Cannot replay action "${action.name}" at index ${checkpoint.actionIndex + replayed}: ` +
+        `game is not awaiting input. Flow may be out of sync.`
+      );
+    }
+
+    try {
+      game.continueFlow(action.name, action.args, action.player);
+      replayed++;
+    } catch (error) {
+      throw new Error(
+        `[Checkpoint] Failed to replay action "${action.name}" at index ${checkpoint.actionIndex + replayed}: ` +
+        `${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  return { game, actionsReplayed: replayed };
+}
