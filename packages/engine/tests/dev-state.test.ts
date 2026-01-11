@@ -375,12 +375,11 @@ describe('Dev State Transfer', () => {
       classRegistry.set('TestPiece', TestPiece);
       classRegistry.set('Player', Player);
       classRegistry.set('Space', Space);
-      classRegistry.set('GameElement', Object); // Placeholder
 
       const result = validateDevSnapshot(snapshot, classRegistry);
 
       expect(result.valid).toBe(true);
-      expect(result.missingClasses).toHaveLength(0);
+      expect(result.errors).toHaveLength(0);
     });
 
     it('should report missing classes', () => {
@@ -399,7 +398,10 @@ describe('Dev State Transfer', () => {
       const result = validateDevSnapshot(snapshot, classRegistry);
 
       expect(result.valid).toBe(false);
-      expect(result.missingClasses).toContain('TestCard');
+      // Find missing-class errors
+      const missingClassErrors = result.errors.filter(e => e.type === 'missing-class');
+      expect(missingClassErrors.length).toBeGreaterThan(0);
+      expect(missingClassErrors.some(e => e.message.includes('TestCard'))).toBe(true);
     });
   });
 
