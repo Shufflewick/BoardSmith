@@ -8,6 +8,7 @@ import {
   restoreDevState,
   validateDevSnapshot,
   getSnapshotElementCount,
+  createCheckpoint,
   defineFlow,
   loop,
   eachPlayer,
@@ -492,6 +493,42 @@ describe('Dev State Transfer', () => {
 
       expect(restoredCard.suit).toBe('hearts');
       expect(restoredCard.rank).toBe(1);
+    });
+  });
+
+  describe('Checkpoints', () => {
+    it('should create checkpoint with action index', () => {
+      const game = new TestGame({ playerCount: 2, playerNames: ['Alice', 'Bob'] });
+      game.setup();
+      game.board.createMany(3, TestCard, 'card', (i) => ({
+        suit: 'hearts',
+        rank: i + 1,
+      }));
+
+      const checkpoint = createCheckpoint(game, 5);
+
+      expect(checkpoint.actionIndex).toBe(5);
+      expect(checkpoint.actionCount).toBe(5);
+      expect(checkpoint.elements).toBeDefined();
+      expect(checkpoint.elements.className).toBe('TestGame');
+    });
+
+    it('should create checkpoint that extends DevSnapshot', () => {
+      const game = new TestGame({ playerCount: 2 });
+      game.setup();
+      game.settings.testValue = 42;
+
+      const checkpoint = createCheckpoint(game, 10);
+
+      // Checkpoint should have all DevSnapshot properties
+      expect(checkpoint.timestamp).toBeLessThanOrEqual(Date.now());
+      expect(checkpoint.registeredClasses).toContain('TestBoard');
+      expect(checkpoint.sequence).toBeGreaterThan(0);
+      expect(checkpoint.elements.settings.testValue).toBe(42);
+
+      // Plus checkpoint-specific properties
+      expect(checkpoint.actionIndex).toBe(10);
+      expect(checkpoint.actionCount).toBe(10);
     });
   });
 });
