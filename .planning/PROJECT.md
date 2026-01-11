@@ -34,10 +34,14 @@ Improve code maintainability, testability, and navigability equally—making it 
 - ✓ Element system JSDoc — v0.4 (Game, GameElement, Space, Piece, Card, etc.)
 - ✓ Action/Flow system JSDoc — v0.4 (Action builder, ActionExecutor, FlowEngine)
 - ✓ Testing package JSDoc — v0.4 (TestGame, assertions, fixtures, debug)
+- ✓ Object-based conditions with labeled predicates — v0.7 (automatic debug tracing)
+- ✓ Pit of success condition API — v0.7 (TypeScript enforces object format)
+- ✓ ConditionTracer removed — v0.7 (auto-tracing replaces manual tracing)
+- ✓ All games migrated to object conditions — v0.7 (18+ conditions converted)
 
 ### Active
 
-(None — all documentation milestones complete)
+(None — all milestones complete)
 
 ### Out of Scope
 
@@ -65,10 +69,10 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ## Context
 
-Shipped v0.4 with ~99k LOC TypeScript/Vue.
+Shipped v0.7 with ~99k LOC TypeScript/Vue.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 442 unit tests passing.
-All milestones complete: v0.1 (file refactoring), v0.2 (concerns cleanup), v0.3 (FlowEngine docs), v0.4 (public API docs).
+All milestones complete: v0.1-v0.7 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing).
 
 ---
-*Last updated: 2026-01-09 after v0.4 milestone*
+*Last updated: 2026-01-10 after v0.7 milestone*
