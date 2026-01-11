@@ -463,6 +463,105 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
+   * Try to restore flow from a serialized position with bounds checking.
+   * Unlike restore(), this method validates the path and returns failure info
+   * instead of throwing or accessing invalid indices.
+   *
+   * @param position - The flow position to restore
+   * @returns Success or failure with the last valid path
+   */
+  tryRestore(position: FlowPosition): { success: true } | { success: false; error: string; validPath: number[] } {
+    // Validate path before attempting restore
+    const validationResult = this.validatePath(position.path);
+
+    if (!validationResult.valid) {
+      return {
+        success: false,
+        error: validationResult.error,
+        validPath: validationResult.validPath,
+      };
+    }
+
+    // Path is valid, perform the restore
+    this.restore(position);
+    return { success: true };
+  }
+
+  /**
+   * Validate that a flow path is still valid with the current flow definition.
+   * Returns the longest valid prefix if the path is invalid.
+   */
+  private validatePath(path: number[]): { valid: true } | { valid: false; error: string; validPath: number[] } {
+    if (path.length === 0) {
+      return { valid: true };
+    }
+
+    let currentNode = this.definition.root;
+    const validPath: number[] = [];
+
+    for (let i = 0; i < path.length; i++) {
+      const index = path[i];
+
+      // Check if the index is valid for the current node
+      const childCount = this.getChildCount(currentNode);
+
+      if (index >= childCount) {
+        const nodeName = currentNode.config?.name ?? currentNode.type;
+        return {
+          valid: false,
+          error: `Path index ${index} out of bounds at depth ${i} (node "${nodeName}" has ${childCount} children)`,
+          validPath,
+        };
+      }
+
+      validPath.push(index);
+
+      // Navigate to child for next iteration
+      try {
+        currentNode = this.getChildNode(currentNode, index);
+      } catch {
+        return {
+          valid: false,
+          error: `Failed to navigate to child ${index} at depth ${i}`,
+          validPath: validPath.slice(0, -1), // Remove the last index since navigation failed
+        };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Get the number of valid child indices for a flow node.
+   */
+  private getChildCount(node: FlowNode): number {
+    switch (node.type) {
+      case 'sequence':
+        return node.config.steps.length;
+      case 'loop':
+      case 'each-player':
+      case 'for-each':
+      case 'phase':
+        // These nodes only have a single 'do' child
+        return 1;
+      case 'if':
+        // 0 = then, 1 = else
+        return node.config.else ? 2 : 1;
+      case 'switch': {
+        const cases = Object.values(node.config.cases);
+        return cases.length + (node.config.default ? 1 : 0);
+      }
+      case 'action-step':
+      case 'simultaneous-action-step':
+      case 'execute':
+        // Leaf nodes - no children
+        return 0;
+      default:
+        return 0;
+    }
+  }
+
+  /**
    * Check if the game is complete
    */
   isComplete(): boolean {

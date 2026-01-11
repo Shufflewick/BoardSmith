@@ -205,6 +205,8 @@ export {
   restoreDevState,
   validateDevSnapshot,
   formatValidationErrors,
+  validateFlowPosition,
+  formatFlowRecovery,
   getSnapshotElementCount,
   createTrackedRandom,
   getRandomCallCount,
@@ -223,6 +225,7 @@ export type {
   ValidationResult as DevValidationResult,
   ValidationError as DevValidationError,
   ValidationWarning as DevValidationWarning,
+  FlowPositionValidation,
 } from './utils/index.js';
 
 // Sandbox (execution limits and security)

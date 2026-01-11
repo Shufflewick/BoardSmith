@@ -47,6 +47,8 @@ export {
   restoreDevState,
   validateDevSnapshot,
   formatValidationErrors,
+  validateFlowPosition,
+  formatFlowRecovery,
   getSnapshotElementCount,
   createTrackedRandom,
   getRandomCallCount,
@@ -61,4 +63,5 @@ export type {
   ValidationWarning,
   ValidationErrorType,
   ValidationWarningType,
+  FlowPositionValidation,
 } from './dev-state.js';
