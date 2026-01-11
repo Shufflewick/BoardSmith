@@ -195,14 +195,14 @@ Plans:
 Plans:
 - [x] 17-01: Create dev-state.ts, integrate into reloadWithCurrentRules, add tests
 
-#### Phase 18: validation-layer
+#### Phase 18: validation-layer ✅
 **Goal**: Clear error messages when state transfer fails, graceful flow position recovery
 **Depends on**: Phase 17
 **Research**: Unlikely (internal)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 18-01: TBD
+- [x] 18-01: Add validation layer with structured errors and flow recovery
 
 #### Phase 19: dev-checkpoints
 **Goal**: Fast recovery via auto-checkpoints when HMR fails
@@ -234,5 +234,5 @@ Plans:
 | 15. game-migrations | v0.7 | 2/2 | Complete | 2026-01-10 |
 | 16. docs-migration-guide | v0.7 | 1/1 | Complete | 2026-01-10 |
 | 17. dev-state-transfer | v0.8 | 1/1 | Complete | 2026-01-11 |
-| 18. validation-layer | v0.8 | 0/? | Not started | - |
+| 18. validation-layer | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 19. dev-checkpoints | v0.8 | 0/? | Not started | - |
