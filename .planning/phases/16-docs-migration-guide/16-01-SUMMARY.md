@@ -29,13 +29,12 @@ key-files:
     - packages/engine/src/action/action-builder.ts
     - docs/actions-and-flow.md
     - docs/common-patterns.md
-  deleted:
     - docs/condition-migration-guide.md
 
 key-decisions:
   - "Removed backward compatibility entirely - pit of success design"
   - "TypeScript now enforces object conditions at compile time"
-  - "No migration guide needed - function format no longer exists"
+  - "Migration guide updated to help existing codebases upgrade"
 
 patterns-established:
   - "Pit of success: right way is the only way, wrong way is impossible"
@@ -85,8 +84,8 @@ Each task was committed atomically:
 - `packages/engine/src/action/action.ts` - Removed isObjectCondition, simplified evaluateCondition
 - `packages/engine/src/action/action-builder.ts` - Updated JSDoc, removed legacy examples
 - `docs/actions-and-flow.md` - Removed "legacy" section, object format is THE format
-- `docs/conditions.md` - New API reference (replaces migration guide)
-- `docs/condition-migration-guide.md` - **DELETED** (no longer applicable)
+- `docs/conditions.md` - New API reference
+- `docs/condition-migration-guide.md` - Updated for breaking change (function format no longer compiles)
 
 ## Decisions Made
 
