@@ -228,6 +228,12 @@ export {
   type ElementRef as SelectionElementRef,
 } from './composables/useActionController.js';
 
+// Action controller helpers (for custom UI developers)
+export {
+  actionNeedsWizardMode,
+  type WizardModeCheck,
+} from './composables/actionControllerHelpers.js';
+
 // Theming
 export {
   applyTheme,

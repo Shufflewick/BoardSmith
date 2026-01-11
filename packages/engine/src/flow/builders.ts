@@ -545,3 +545,85 @@ export function turnLoop(config: {
     }),
   });
 }
+
+/**
+ * A state-aware loop that checks for pending async game state before exiting.
+ *
+ * Use this instead of loop() or turnLoop() when your game has async state
+ * (like combat resolution) that must complete before the loop can exit.
+ *
+ * The key insight: A regular loop's `while` condition might become false
+ * (e.g., player has no actions left), but there could be pending game state
+ * (e.g., active combat) that needs resolution first. This helper ensures
+ * the loop continues until all pending states are resolved.
+ *
+ * @example
+ * ```typescript
+ * // Combat game - keep looping while combat is pending, even if no actions left
+ * stateAwareLoop({
+ *   name: 'merc-action-loop',
+ *   actions: ['move', 'attack', 'endTurn'],
+ *   while: (ctx) => {
+ *     const player = ctx.player as MercPlayer;
+ *     return player.team.some(m => m.actionsRemaining > 0);
+ *   },
+ *   pendingStates: (ctx) => [
+ *     (ctx.game as MercGame).activeCombat,    // Combat waiting for resolution
+ *     (ctx.game as MercGame).pendingCombat,   // Combat about to start
+ *   ],
+ * })
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Simple case - just check one pending state
+ * stateAwareLoop({
+ *   actions: ['playCard', 'endTurn'],
+ *   pendingStates: (ctx) => [ctx.game.pendingAnimation],
+ * })
+ * ```
+ */
+export function stateAwareLoop(config: {
+  /** Optional name for debugging */
+  name?: string;
+  /** Actions available during the loop */
+  actions: string[] | ((context: FlowContext) => string[]);
+  /** Continue looping while this returns true. Game.isFinished() is checked automatically. */
+  while?: (context: FlowContext) => boolean;
+  /**
+   * Return an array of pending state values to check.
+   * If ANY of these are truthy, the loop continues even if `while` returns false.
+   * This ensures async game state (like combat) is resolved before the loop exits.
+   */
+  pendingStates?: (context: FlowContext) => unknown[];
+  /** Safety limit to prevent infinite loops (default: 100) */
+  maxIterations?: number;
+}): FlowNode {
+  return loop({
+    name: config.name,
+    while: (ctx) => {
+      // Always stop if game is finished
+      if (ctx.game.isFinished()) return false;
+
+      // Keep looping if any pending state exists (even if while() would return false)
+      if (config.pendingStates) {
+        const pending = config.pendingStates(ctx);
+        if (pending.some(state => !!state)) {
+          return true; // Must resolve pending state before exiting
+        }
+      }
+
+      // Check custom condition
+      if (config.while) {
+        return config.while(ctx);
+      }
+
+      // Default: continue forever (until endTurn action or game ends)
+      return true;
+    },
+    maxIterations: config.maxIterations ?? 100,
+    do: actionStep({
+      actions: config.actions,
+    }),
+  });
+}

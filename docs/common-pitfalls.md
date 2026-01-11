@@ -1239,6 +1239,103 @@ this.registerDebug('Element Tree', () => this.debugElementTree());
 
 ---
 
+## 17. Loop Exit with Pending Async State
+
+### The Problem
+
+Your flow loop's `while` condition only checks action availability, but doesn't account for async game state (like combat) that needs resolution:
+
+```typescript
+// WRONG - Exits when actions are depleted, even if combat is pending
+loop({
+  while: (ctx) => {
+    const player = ctx.player as MercPlayer;
+    return player.team.some(m => m.actionsRemaining > 0);
+  },
+  do: actionStep({ actions: ['move', 'attack', 'endTurn'] })
+})
+```
+
+**What happens:**
+1. Player uses their last action to attack
+2. Attack triggers combat that requires target selection
+3. Loop's `while` returns `false` (no actions left)
+4. Loop exits before combat is resolved
+5. Combat state is orphaned or cleared by the next game phase
+
+### The Solution
+
+Use `stateAwareLoop()` to automatically check for pending state before exiting:
+
+```typescript
+import { stateAwareLoop } from '@boardsmith/engine';
+
+stateAwareLoop({
+  name: 'combat-action-loop',
+  actions: ['move', 'attack', 'endTurn'],
+  while: (ctx) => {
+    const player = ctx.player as MercPlayer;
+    return player.team.some(m => m.actionsRemaining > 0);
+  },
+  pendingStates: (ctx) => [
+    (ctx.game as MercGame).activeCombat,    // Keep looping while combat pending
+    (ctx.game as MercGame).pendingCombat,   // Keep looping while combat about to start
+  ],
+})
+```
+
+**How it works:**
+- `pendingStates` returns an array of values to check
+- If ANY are truthy, the loop continues even if `while` returns false
+- This ensures async state (combat, animations, etc.) resolves before the loop exits
+
+### Alternative: Manual Check
+
+You can also add checks directly in a regular `loop`:
+
+```typescript
+loop({
+  while: (ctx) => {
+    const game = ctx.game as MercGame;
+
+    // Always stop if game is finished
+    if (game.isFinished()) return false;
+
+    // Keep looping while combat needs resolution
+    if (game.activeCombat) return true;
+    if (game.pendingCombat) return true;
+
+    // Then check normal action availability
+    const player = ctx.player as MercPlayer;
+    return player.team.some(m => m.actionsRemaining > 0);
+  },
+  do: actionStep({ actions: ['move', 'attack', 'endTurn'] })
+})
+```
+
+### The Pattern
+
+Any loop that can trigger async state changes should check for that state:
+
+```typescript
+// Template for async-state-aware loops
+loop({
+  while: (ctx) => {
+    // 1. Check game completion
+    if (ctx.game.isFinished()) return false;
+
+    // 2. Check for pending async state (combat, animations, etc.)
+    if (hasPendingAsyncState(ctx)) return true;
+
+    // 3. Check normal loop condition (action availability, etc.)
+    return normalLoopCondition(ctx);
+  },
+  do: ...
+})
+```
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -1259,6 +1356,8 @@ this.registerDebug('Element Tree', () => this.debugElementTree());
 | **Flow restrictions** | Action passes conditions but not in UI | Check flow's `actionStep({ actions: [...] })` |
 | **followUp args in filter** | `ctx.args.sectorId` undefined in filter/prompt | Args are resolved - use `ctx.args.sectorId` |
 | **Element count explosion** | Elements mysteriously multiply | `game.debugElementTree()` to diagnose |
+| **Loop exit with pending state** | Loop checks only actions remaining | Use `stateAwareLoop()` with `pendingStates` |
+| **execute() vs start()** | `execute('retreat', {})` without params | `start('retreat')` for wizard mode |
 
 ---
 

@@ -169,6 +169,84 @@ actionController.start('dropEquipment', {
 
 Use `prefill` for dependent selections where the choice isn't available until a prior selection is made.
 
+### Common Pattern: Button → Board Selection
+
+A common pattern in custom UIs is a button that triggers an action requiring the user to select an element on the game board. For example, a "Retreat" button that requires selecting a destination sector.
+
+**The Wrong Way (easy mistake):**
+```typescript
+// CombatPanel.vue
+function handleRetreat() {
+  // WRONG: execute() without the required 'retreatSector' parameter
+  // The action needs wizard mode to let the user select a sector!
+  await actionController.execute('retreat', {});  // ❌ Fails silently
+}
+```
+
+**The Right Way:**
+```typescript
+// CombatPanel.vue
+function handleRetreat() {
+  // Start wizard mode - BoardSmith will enable sector selection
+  actionController.start('retreat');  // ✓
+}
+```
+
+After calling `start()`, BoardSmith:
+1. Enters "wizard mode" for the action
+2. Fetches valid choices from the server
+3. Populates `validElements` with selectable elements
+4. Enables `isSelectableElement()` for those elements on the board
+5. Waits for user to click a valid element
+6. Auto-completes the action when selection is made
+
+**In your board component**, highlight selectable elements:
+```vue
+<template>
+  <div
+    v-for="sector in sectors"
+    :key="sector.id"
+    :class="{ selectable: boardInteraction?.isSelectableElement(sector) }"
+    @click="onSectorClick(sector)"
+  >
+    {{ sector.name }}
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useBoardInteraction } from '@boardsmith/ui';
+
+const boardInteraction = useBoardInteraction();
+
+function onSectorClick(sector: { id: number }) {
+  if (boardInteraction?.isSelectableElement(sector)) {
+    boardInteraction.triggerElementSelect(sector);
+  }
+}
+</script>
+```
+
+### Detecting When to Use Wizard Mode
+
+Use the `actionNeedsWizardMode()` helper to check programmatically:
+
+```typescript
+import { actionNeedsWizardMode } from '@boardsmith/ui';
+
+const meta = actionController.getActionMetadata('retreat');
+const check = actionNeedsWizardMode(meta, {});
+
+if (check.needed) {
+  console.log(check.reason);
+  // "Selection 'retreatSector' requires element selection from the game board"
+  actionController.start('retreat');
+} else {
+  actionController.execute('retreat', {});
+}
+```
+
+> **Dev Mode Warning**: In development mode, BoardSmith automatically warns when you call `execute()` on an action that likely needs wizard mode. Check your browser console for helpful messages.
+
 ## Step 4: Handling Element Selections
 
 When an action uses `fromElements()` or `chooseElement()`, the `actionController` provides `validElements` - a reactive computed of which elements can be selected:

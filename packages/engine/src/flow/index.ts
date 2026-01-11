@@ -20,6 +20,7 @@ export {
   execute,
   setVar,
   turnLoop,
+  stateAwareLoop,
 } from './builders.js';
 
 // Turn order presets

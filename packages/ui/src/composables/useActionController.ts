@@ -94,7 +94,7 @@
  */
 
 import { ref, computed, watch, inject } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue } from './actionControllerHelpers.js';
+import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 
 // Re-export all types from the types module for consumers
@@ -733,6 +733,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const meta = getActionMetadata(actionName);
+
+    // Check if action needs wizard mode but execute() was called without required args
+    if (meta) {
+      const wizardCheck = actionNeedsWizardMode(meta, args);
+      if (wizardCheck.needed) {
+        devWarn(
+          `execute-needs-wizard:${actionName}`,
+          `Action "${actionName}" called with execute() but may need wizard mode.\n` +
+            `  Reason: ${wizardCheck.reason}\n` +
+            `  Consider using actionController.start('${actionName}') instead, which:\n` +
+            `  - Fetches valid choices from the server\n` +
+            `  - Enables element selection on the game board\n` +
+            `  - Handles dependent selections automatically\n` +
+            `  If you have all values, pass them: execute('${actionName}', { ${wizardCheck.selectionName}: value })`
+        );
+      }
+    }
+
     if (!meta) {
       // No metadata means no selections, execute directly
       isExecuting.value = true;
