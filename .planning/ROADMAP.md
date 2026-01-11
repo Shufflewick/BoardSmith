@@ -23,6 +23,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.5 ESLint No-Shadow** — Phase 11 (shipped 2026-01-09)
 - ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
+- 🚧 **v0.8 HMR Reliability** — Phases 17-19 (in progress)
 
 ## Phases
 
@@ -179,6 +180,39 @@ Plans:
 
 </details>
 
+### 🚧 v0.8 HMR Reliability (In Progress)
+
+**Milestone Goal:** Make HMR work reliably during development by bypassing replay and directly transferring game state to new code. Target: 90% of changes work seamlessly, with clear feedback and fast recovery when they don't.
+
+**Design Principle:** Pit of success — the easy/natural path is the correct path. No special hooks or annotations required. Use TypeScript idioms (getters for derived values).
+
+#### Phase 17: dev-state-transfer
+**Goal**: Bypass replay, directly transfer game state to new class definitions
+**Depends on**: v0.7 complete
+**Research**: Unlikely (internal refactoring)
+**Plans**: TBD
+
+Plans:
+- [ ] 17-01: TBD (run /gsd:plan-phase 17 to break down)
+
+#### Phase 18: validation-layer
+**Goal**: Clear error messages when state transfer fails, graceful flow position recovery
+**Depends on**: Phase 17
+**Research**: Unlikely (internal)
+**Plans**: TBD
+
+Plans:
+- [ ] 18-01: TBD
+
+#### Phase 19: dev-checkpoints
+**Goal**: Fast recovery via auto-checkpoints when HMR fails
+**Depends on**: Phase 18
+**Research**: Unlikely (internal)
+**Plans**: TBD
+
+Plans:
+- [ ] 19-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -199,3 +233,6 @@ Plans:
 | 14. condition-api-refactor | v0.7 | 2/2 | Complete | 2026-01-10 |
 | 15. game-migrations | v0.7 | 2/2 | Complete | 2026-01-10 |
 | 16. docs-migration-guide | v0.7 | 1/1 | Complete | 2026-01-10 |
+| 17. dev-state-transfer | v0.8 | 0/? | Not started | - |
+| 18. validation-layer | v0.8 | 0/? | Not started | - |
+| 19. dev-checkpoints | v0.8 | 0/? | Not started | - |

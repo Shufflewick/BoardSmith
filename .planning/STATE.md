@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-09)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** All milestones complete — ready for new milestone
+**Current focus:** HMR reliability improvements (v0.8)
 
 ## Current Position
 
-Phase: All 16 phases complete
-Plan: N/A
-Status: Ready for new milestone
-Last activity: 2026-01-10 — Archived v0.7 milestone
+Phase: 17 of 19 (dev-state-transfer)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-10 — Milestone v0.8 created
 
-Progress: ██████████ 100% (all milestones shipped)
+Progress: ░░░░░░░░░░ 0%
 
 ## Milestones
 
@@ -39,9 +39,10 @@ Progress: ██████████ 100% (all milestones shipped)
 - Milestone v0.6 complete: Players now extend GameElement, in searchable tree
 - Milestone v0.7 created: Condition tracing refactor, 3 phases (Phases 14-16)
 - Milestone v0.7 complete: Object-based conditions with auto-tracing, all games migrated, docs updated
+- Milestone v0.8 created: HMR reliability improvements, 3 phases (Phases 17-19)
 
 ## Session Continuity
 
 Last session: 2026-01-10
-Stopped at: Archived v0.7 milestone
+Stopped at: Milestone v0.8 initialization
 Resume file: None
