@@ -480,26 +480,30 @@ async function fetchActionTraces() {
 const flowRestrictedActions = computed(() => {
   if (!flowContext.value) return [];
   const flowAllowed = new Set(flowContext.value.flowAllowedActions);
-  return actionTraces.value.filter(t =>
-    t.available && !flowAllowed.has(t.actionName)
-  );
+  return actionTraces.value
+    .filter(t => t.available && !flowAllowed.has(t.actionName))
+    .sort((a, b) => a.actionName.localeCompare(b.actionName));
 });
 
 // Computed: actions that are truly available (pass conditions AND in flow)
 const trulyAvailableActions = computed(() => {
   if (!flowContext.value) {
     // No flow context - show all available as truly available
-    return actionTraces.value.filter(t => t.available);
+    return actionTraces.value
+      .filter(t => t.available)
+      .sort((a, b) => a.actionName.localeCompare(b.actionName));
   }
   const flowAllowed = new Set(flowContext.value.flowAllowedActions);
-  return actionTraces.value.filter(t =>
-    t.available && flowAllowed.has(t.actionName)
-  );
+  return actionTraces.value
+    .filter(t => t.available && flowAllowed.has(t.actionName))
+    .sort((a, b) => a.actionName.localeCompare(b.actionName));
 });
 
 // Computed: actions that fail their conditions
 const conditionFailedActions = computed(() => {
-  return actionTraces.value.filter(t => !t.available);
+  return actionTraces.value
+    .filter(t => !t.available)
+    .sort((a, b) => a.actionName.localeCompare(b.actionName));
 });
 
 // Copy available actions to clipboard
@@ -1821,15 +1825,10 @@ const displayedState = computed(() => {
                       <template v-if="trace.conditionError">
                         error: {{ trace.conditionError }}
                       </template>
-                      <template v-else-if="trace.conditionResult === false">
-                        condition failed
-                      </template>
                       <template v-else-if="trace.selections.some(s => s.choiceCount === 0)">
                         no choices for: {{ trace.selections.filter(s => s.choiceCount === 0).map(s => s.name).join(', ') }}
                       </template>
-                      <template v-else>
-                        unknown
-                      </template>
+                      <!-- Don't show "condition failed" - it's noise. Details below will explain if available. -->
                     </span>
                   </div>
                   <!-- Show condition details if available -->
