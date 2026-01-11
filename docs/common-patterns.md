@@ -476,9 +476,11 @@ class MyPlayer extends Player {
 
 ```typescript
 Action.create('build')
-  .condition((ctx) => {
-    const player = ctx.player as MyPlayer;
-    return player.canAfford({ wood: 5, gold: 2 });
+  .condition({
+    'can afford building cost': (ctx) => {
+      const player = ctx.player as MyPlayer;
+      return player.canAfford({ wood: 5, gold: 2 });
+    },
   })
   .execute((args, ctx) => {
     const player = ctx.player as MyPlayer;
