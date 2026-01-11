@@ -373,11 +373,9 @@ Action.create('selectItem')
 
 ### Conditions
 
-Control when actions are available. Use **object-based conditions** (preferred) for automatic debug tracing:
+Control when actions are available using labeled conditions:
 
 ```typescript
-// Object format (preferred) - each predicate gets a descriptive label
-// These labels appear in debug output when conditions fail
 Action.create('draw')
   .condition({
     'deck has cards': (ctx) => game.deck.count(Card) > 0,
@@ -393,20 +391,11 @@ Action.create('purchase')
   .execute(...)
 ```
 
+Each key is a human-readable label that appears in debug output when the condition fails. This makes it easy to understand why an action isn't available.
+
 **Labels should describe WHY** the condition exists, not just what it checks:
 - Good: `'player can afford cost'`, `'in play phase'`, `'has cards to discard'`
 - Bad: `'gold >= 10'`, `'phase === play'`, `'hand.count > 0'`
-
-**Legacy function format** (still supported, no auto-tracing):
-
-```typescript
-// Function format - works but produces no automatic debug trace
-Action.create('draw')
-  .condition((ctx) => game.deck.count(Card) > 0)
-  .execute(...)
-```
-
-The object format provides automatic debugging: when an action isn't available, the debug panel shows exactly which condition(s) failed with their labels.
 
 ### Validation
 
