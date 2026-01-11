@@ -186,14 +186,14 @@ Plans:
 
 **Design Principle:** Pit of success — the easy/natural path is the correct path. No special hooks or annotations required. Use TypeScript idioms (getters for derived values).
 
-#### Phase 17: dev-state-transfer
+#### Phase 17: dev-state-transfer ✅
 **Goal**: Bypass replay, directly transfer game state to new class definitions
 **Depends on**: v0.7 complete
 **Research**: Unlikely (internal refactoring)
-**Plans**: 1 plan
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 17-01: Create dev-state.ts, integrate into reloadWithCurrentRules, add tests
+- [x] 17-01: Create dev-state.ts, integrate into reloadWithCurrentRules, add tests
 
 #### Phase 18: validation-layer
 **Goal**: Clear error messages when state transfer fails, graceful flow position recovery
@@ -233,6 +233,6 @@ Plans:
 | 14. condition-api-refactor | v0.7 | 2/2 | Complete | 2026-01-10 |
 | 15. game-migrations | v0.7 | 2/2 | Complete | 2026-01-10 |
 | 16. docs-migration-guide | v0.7 | 1/1 | Complete | 2026-01-10 |
-| 17. dev-state-transfer | v0.8 | 0/1 | Not started | - |
+| 17. dev-state-transfer | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 18. validation-layer | v0.8 | 0/? | Not started | - |
 | 19. dev-checkpoints | v0.8 | 0/? | Not started | - |
