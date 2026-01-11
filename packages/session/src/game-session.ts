@@ -16,8 +16,8 @@
  * - AI scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot } from '@boardsmith/engine';
-import { captureDevState, restoreDevState, getSnapshotElementCount } from '@boardsmith/engine';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult } from '@boardsmith/engine';
+import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '@boardsmith/engine';
 import { GameRunner } from '@boardsmith/runtime';
 import {
   ErrorCode,
@@ -720,6 +720,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /**
    * Reload using dev state transfer (fast path for HMR).
    * Returns the new runner if successful, null if transfer not possible.
+   *
+   * Pre-validates snapshot before attempting restore:
+   * - Missing classes → detailed error with registration instructions
+   * - Schema errors → corrupted snapshot warning
+   * - Property mismatches → path and suggestions
+   *
+   * Returns null on validation failure, triggering replay fallback.
    */
   #reloadWithDevTransfer(definition: GameDefinition): GameRunner<G> | null {
     // Capture current state
@@ -736,6 +743,28 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     for (const [name, cls] of this.#runner.game._ctx.classRegistry) {
       if (!classRegistry.has(name)) {
         classRegistry.set(name, cls);
+      }
+    }
+
+    // Pre-transfer validation
+    const validation = validateDevSnapshot(snapshot, classRegistry);
+
+    if (!validation.valid) {
+      // Log detailed errors and fall back to replay
+      const errorSummary = this.#formatValidationSummary(validation);
+      console.warn(errorSummary);
+      console.log('[HMR] Falling back to replay...');
+      return null;
+    }
+
+    // Log warnings if any (but continue with transfer)
+    if (validation.warnings.length > 0) {
+      console.warn(`[HMR] Validation warnings (${validation.warnings.length}):`);
+      for (const warning of validation.warnings) {
+        console.warn(`  ⚠️ ${warning.message}`);
+        if (warning.path.length > 0) {
+          console.warn(`     Path: ${warning.path.join(' > ')}`);
+        }
       }
     }
 
@@ -780,6 +809,39 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     );
 
     return newRunner;
+  }
+
+  /**
+   * Format validation result for console output.
+   * Groups errors by type and provides actionable summary.
+   */
+  #formatValidationSummary(validation: DevValidationResult): string {
+    const lines: string[] = [];
+
+    // Count by type
+    const classMissing = validation.errors.filter(e => e.type === 'missing-class').length;
+    const schemaErrors = validation.errors.filter(e => e.type === 'schema-error').length;
+    const propMismatch = validation.errors.filter(e => e.type === 'property-mismatch').length;
+
+    const parts: string[] = [];
+    if (classMissing > 0) parts.push(`${classMissing} missing class${classMissing > 1 ? 'es' : ''}`);
+    if (schemaErrors > 0) parts.push(`${schemaErrors} schema error${schemaErrors > 1 ? 's' : ''}`);
+    if (propMismatch > 0) parts.push(`${propMismatch} property mismatch${propMismatch > 1 ? 'es' : ''}`);
+
+    lines.push(`[HMR] Validation failed (${validation.errors.length} error${validation.errors.length > 1 ? 's' : ''}: ${parts.join(', ')}):`);
+    lines.push('');
+
+    for (let i = 0; i < validation.errors.length; i++) {
+      const error = validation.errors[i];
+      lines.push(`  ${i + 1}. ${error.message}`);
+      if (error.path.length > 0) {
+        lines.push(`     Path: ${error.path.join(' > ')}`);
+      }
+      lines.push(`     Fix: ${error.suggestion}`);
+      lines.push('');
+    }
+
+    return lines.join('\n');
   }
 
   /**
