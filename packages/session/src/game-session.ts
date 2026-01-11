@@ -16,7 +16,8 @@
  * - AI scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand } from '@boardsmith/engine';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot } from '@boardsmith/engine';
+import { captureDevState, restoreDevState, getSnapshotElementCount } from '@boardsmith/engine';
 import { GameRunner } from '@boardsmith/runtime';
 import {
   ErrorCode,
@@ -664,7 +665,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
   /**
    * Reload the game with a new game definition (for hot reloading rules).
-   * Replays the entire action history with the new game class.
+   *
+   * In development mode, uses dev state transfer (fast, bypasses replay):
+   * - Captures current game state directly
+   * - Creates new game with new class definitions
+   * - Transfers state to new game (stored properties transfer, getters recompute)
+   *
+   * Falls back to replay if dev transfer fails or in production.
    */
   reloadWithCurrentRules(definition: GameDefinition): void {
     // Validate game type matches
@@ -672,7 +679,114 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       throw new Error(`Cannot reload: game type mismatch (expected ${this.#storedState.gameType}, got ${definition.gameType})`);
     }
 
-    // Replay all actions with the new game class
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    // In dev mode, try dev state transfer first
+    if (isDev) {
+      try {
+        const newRunner = this.#reloadWithDevTransfer(definition);
+        if (newRunner) {
+          this.#runner = newRunner;
+          this.#GameClass = definition.gameClass as GameClass<G>;
+          this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+          this.#pendingActionManager.updateRunner(newRunner);
+          this.broadcast();
+          return;
+        }
+      } catch (error) {
+        // Log warning and fall back to replay
+        console.warn(
+          `[HMR] ⚠️ Dev state transfer failed, falling back to replay:\n` +
+          `  Error: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+
+    // Fallback: Replay all actions with the new game class
+    const newRunner = this.#reloadWithReplay(definition);
+
+    // Replace the current runner and game class
+    this.#runner = newRunner;
+    this.#GameClass = definition.gameClass as GameClass<G>;
+
+    // Update handlers with new runner reference
+    this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+    this.#pendingActionManager.updateRunner(newRunner);
+
+    // Broadcast updated state to all clients
+    this.broadcast();
+  }
+
+  /**
+   * Reload using dev state transfer (fast path for HMR).
+   * Returns the new runner if successful, null if transfer not possible.
+   */
+  #reloadWithDevTransfer(definition: GameDefinition): GameRunner<G> | null {
+    // Capture current state
+    const snapshot = captureDevState(this.#runner.game);
+    const elementCount = getSnapshotElementCount(snapshot);
+
+    console.log(`[HMR] Capturing state: ${elementCount} elements`);
+
+    // Build class registry from definition
+    const classRegistry = new Map<string, any>();
+    classRegistry.set(definition.gameClass.name, definition.gameClass);
+
+    // Copy existing class registry from current game
+    for (const [name, cls] of this.#runner.game._ctx.classRegistry) {
+      if (!classRegistry.has(name)) {
+        classRegistry.set(name, cls);
+      }
+    }
+
+    // Restore game with new classes
+    const newGame = restoreDevState(
+      snapshot,
+      definition.gameClass as GameClass<G>,
+      {
+        gameOptions: {
+          playerCount: this.#storedState.playerCount,
+          playerNames: this.#storedState.playerNames,
+          seed: this.#storedState.seed,
+          ...this.#storedState.gameOptions,
+        },
+        classRegistry,
+      }
+    );
+
+    // Create new runner with restored game
+    const newRunner = new GameRunner<G>({
+      GameClass: definition.gameClass as GameClass<G>,
+      gameType: this.#storedState.gameType,
+      gameOptions: {
+        playerCount: this.#storedState.playerCount,
+        playerNames: this.#storedState.playerNames,
+        seed: this.#storedState.seed,
+        ...this.#storedState.gameOptions,
+      },
+    });
+
+    // Replace the runner's game with our restored game
+    // @ts-expect-error - Accessing readonly property for HMR
+    newRunner.game = newGame;
+
+    // Copy action history to the new runner
+    newRunner.actionHistory.push(...this.#storedState.actionHistory);
+
+    console.log(
+      `[HMR] ✓ State transferred (${elementCount} elements)\n` +
+      `[HMR] ✓ Getters will use new logic\n` +
+      `[HMR] Reload complete`
+    );
+
+    return newRunner;
+  }
+
+  /**
+   * Reload using action replay (fallback path).
+   * Slower but more reliable for complex state changes.
+   */
+  #reloadWithReplay(definition: GameDefinition): GameRunner<G> {
     const newRunner = GameRunner.replay<G>(
       {
         GameClass: definition.gameClass as GameClass<G>,
@@ -696,28 +810,19 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
       if (newSequence !== oldSequence || newElementCount !== oldElementCount) {
         console.warn(
-          `[BoardSmith HMR] ⚠️ STATE MISMATCH after reload!\n` +
+          `[HMR] ⚠️ STATE MISMATCH after replay!\n` +
           `  Before: seq=${oldSequence}, elements=${oldElementCount}\n` +
           `  After:  seq=${newSequence}, elements=${newElementCount}\n` +
           `  This may cause game corruption. Check if your game has randomness outside seed control.`
         );
       } else {
         console.log(
-          `[BoardSmith HMR] ✓ State matches: seq=${newSequence}, elements=${newElementCount}`
+          `[HMR] ✓ Replay complete: seq=${newSequence}, elements=${newElementCount}`
         );
       }
     }
 
-    // Replace the current runner and game class
-    this.#runner = newRunner;
-    this.#GameClass = definition.gameClass as GameClass<G>;
-
-    // Update handlers with new runner reference
-    this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
-    this.#pendingActionManager.updateRunner(newRunner);
-
-    // Broadcast updated state to all clients
-    this.broadcast();
+    return newRunner;
   }
 
   // ============================================
