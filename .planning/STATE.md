@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-09)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** HMR reliability improvements (v0.8)
+**Current focus:** HMR reliability complete (v0.8)
 
 ## Current Position
 
-Phase: 18 of 19 (validation-layer)
+Phase: 19 of 19 (dev-checkpoints)
 Plan: 1 of 1 complete
-Status: Phase complete
-Last activity: 2026-01-11 — Completed 18-01-PLAN.md
+Status: Milestone complete
+Last activity: 2026-01-11 — Completed 19-01-PLAN.md
 
-Progress: ██░░░░░░░░ 20%
+Progress: ██████████ 100%
 
 ## Milestones
 
@@ -26,6 +26,7 @@ Progress: ██░░░░░░░░ 20%
 - v0.5 ESLint No-Shadow (Phase 11) — shipped 2026-01-09
 - v0.6 Players in Element Tree (Phases 12-13) — shipped 2026-01-09
 - v0.7 Condition Tracing Refactor (Phases 14-16) — shipped 2026-01-10
+- v0.8 HMR Reliability (Phases 17-19) — shipped 2026-01-11
 
 ## Roadmap Evolution
 
@@ -40,9 +41,10 @@ Progress: ██░░░░░░░░ 20%
 - Milestone v0.7 created: Condition tracing refactor, 3 phases (Phases 14-16)
 - Milestone v0.7 complete: Object-based conditions with auto-tracing, all games migrated, docs updated
 - Milestone v0.8 created: HMR reliability improvements, 3 phases (Phases 17-19)
+- Milestone v0.8 complete: Dev state transfer, validation layer, and auto-checkpoints for reliable HMR
 
 ## Session Continuity
 
 Last session: 2026-01-11
-Stopped at: Completed Phase 18 (validation-layer)
+Stopped at: Completed Phase 19 (dev-checkpoints) - Milestone v0.8 complete
 Resume file: None

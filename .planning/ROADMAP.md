@@ -9,6 +9,7 @@
 - ✅ [v0.5 ESLint No-Shadow](milestones/v0.5-ROADMAP.md) (Phase 11) — SHIPPED 2026-01-09
 - ✅ [v0.6 Players in Element Tree](milestones/v0.6-ROADMAP.md) (Phases 12-13) — SHIPPED 2026-01-09
 - ✅ [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-01-10
+- ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
 
 ## Overview
 
@@ -23,7 +24,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.5 ESLint No-Shadow** — Phase 11 (shipped 2026-01-09)
 - ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
-- 🚧 **v0.8 HMR Reliability** — Phases 17-19 (in progress)
+- ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
 
 ## Phases
 
@@ -180,7 +181,7 @@ Plans:
 
 </details>
 
-### 🚧 v0.8 HMR Reliability (In Progress)
+### ✅ v0.8 HMR Reliability (Complete)
 
 **Milestone Goal:** Make HMR work reliably during development by bypassing replay and directly transferring game state to new code. Target: 90% of changes work seamlessly, with clear feedback and fast recovery when they don't.
 
@@ -204,14 +205,14 @@ Plans:
 Plans:
 - [x] 18-01: Add validation layer with structured errors and flow recovery
 
-#### Phase 19: dev-checkpoints
+#### Phase 19: dev-checkpoints ✅
 **Goal**: Fast recovery via auto-checkpoints when HMR fails
 **Depends on**: Phase 18
 **Research**: Unlikely (internal)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 19-01: TBD
+- [x] 19-01: Add checkpoint types, CheckpointManager, GameSession integration, tests
 
 ## Progress
 
@@ -235,4 +236,4 @@ Plans:
 | 16. docs-migration-guide | v0.7 | 1/1 | Complete | 2026-01-10 |
 | 17. dev-state-transfer | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 18. validation-layer | v0.8 | 1/1 | Complete | 2026-01-11 |
-| 19. dev-checkpoints | v0.8 | 0/? | Not started | - |
+| 19. dev-checkpoints | v0.8 | 1/1 | Complete | 2026-01-11 |
