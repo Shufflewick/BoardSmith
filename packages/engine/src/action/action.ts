@@ -18,7 +18,6 @@ import type {
   PendingActionState,
   ConditionConfig,
   ConditionDetail,
-  ObjectCondition,
 } from './types.js';
 import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
 import { Action } from './action-builder.js';
@@ -27,19 +26,11 @@ import { Action } from './action-builder.js';
 export { Action };
 
 /**
- * Check if a condition is an object-based condition (has labeled predicates).
- * Object conditions enable automatic debug tracing.
- */
-function isObjectCondition(condition: ConditionConfig): condition is ObjectCondition {
-  return typeof condition !== 'function';
-}
-
-/**
- * Evaluate an object condition, returning result and trace details.
+ * Evaluate a condition, returning result and trace details.
  * All predicates are evaluated (AND semantics) and their results captured.
  */
-function evaluateObjectCondition(
-  condition: ObjectCondition,
+function evaluateConditionWithTrace(
+  condition: ConditionConfig,
   context: ActionContext
 ): { passed: boolean; details: ConditionDetail[] } {
   const details: ConditionDetail[] = [];
@@ -65,19 +56,12 @@ function evaluateObjectCondition(
 
 /**
  * Evaluate a condition config and return whether it passes.
- * Handles both legacy function format and new object format.
  */
 export function evaluateCondition(
   condition: ConditionConfig,
   context: ActionContext
 ): boolean {
-  // Legacy function format - call directly
-  if (!isObjectCondition(condition)) {
-    return condition(context);
-  }
-
-  // Object format - use evaluateObjectCondition
-  return evaluateObjectCondition(condition, context).passed;
+  return evaluateConditionWithTrace(condition, context).passed;
 }
 
 /**
@@ -817,19 +801,13 @@ export class ActionExecutor {
       args: {},
     };
 
-    // Check condition with automatic tracing for object conditions
+    // Check condition with automatic tracing
     if (action.condition) {
       try {
-        if (isObjectCondition(action.condition)) {
-          // Object condition - automatic tracing via evaluateObjectCondition
-          const { passed, details } = evaluateObjectCondition(action.condition, context);
-          trace.conditionResult = passed;
-          if (details.length > 0) {
-            trace.conditionDetails = details;
-          }
-        } else {
-          // Legacy function condition - no automatic tracing
-          trace.conditionResult = action.condition(context);
+        const { passed, details } = evaluateConditionWithTrace(action.condition, context);
+        trace.conditionResult = passed;
+        if (details.length > 0) {
+          trace.conditionDetails = details;
         }
 
         if (!trace.conditionResult) {

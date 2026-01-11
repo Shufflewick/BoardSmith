@@ -351,27 +351,20 @@ export type ConditionPredicate = (context: ActionContext) => boolean;
 export type ObjectCondition = Record<string, ConditionPredicate>;
 
 /**
- * Condition configuration - supports both legacy function and new object format.
+ * Condition configuration using object format with labeled predicates.
  *
- * **Object format (preferred):** Enables automatic debug tracing. Each key becomes
- * a label shown in debug output when that condition fails.
- *
- * **Function format (legacy):** Still works but provides no debug labels. Use for
- * backward compatibility or truly simple conditions.
+ * Each key is a human-readable label that appears in debug output when
+ * the condition fails. All predicates must pass for the action to be available.
  *
  * @example
  * ```typescript
- * // Object format (preferred - enables automatic tracing)
  * .condition({
  *   'has cards in hand': (ctx) => ctx.player.hand.count() > 0,
  *   'is current player': (ctx) => ctx.player === ctx.game.currentPlayer
  * })
- *
- * // Function format (legacy - no debug labels)
- * .condition((ctx) => ctx.player.hand.count() > 0)
  * ```
  */
-export type ConditionConfig = ConditionPredicate | ObjectCondition;
+export type ConditionConfig = ObjectCondition;
 
 /**
  * Definition of an action

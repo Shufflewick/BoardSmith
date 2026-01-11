@@ -72,25 +72,17 @@ export class Action {
   /**
    * Add a condition for when this action is available.
    *
-   * Supports two formats:
-   * - **Function (legacy):** `condition((ctx) => boolean)` - No debug labels
-   * - **Object (preferred):** `condition({ 'label': (ctx) => boolean })` - Auto-traced labels
+   * Conditions use an object format where keys are human-readable labels and
+   * values are predicates. Labels appear in debug output when conditions fail,
+   * making it easy to understand why an action isn't available.
    *
-   * Object format provides automatic detailed debugging. Each key becomes a label
-   * shown in debug output when the condition fails. All conditions must pass for
-   * the action to be available.
+   * All predicates must return true for the action to be available.
    *
-   * @param config - A predicate function or object with labeled predicates
+   * @param config - Object with labeled predicates
    * @returns The builder for chaining
    *
    * @example
    * ```typescript
-   * // Legacy format (still works, but no debug labels)
-   * Action.create('draw')
-   *   .condition((ctx) => ctx.player.hand.count() < 7)
-   *   .execute(() => { ... });
-   *
-   * // Object format (preferred - enables automatic tracing)
    * Action.create('playCard')
    *   .condition({
    *     'has cards in hand': (ctx) => ctx.player.hand.count() > 0,
