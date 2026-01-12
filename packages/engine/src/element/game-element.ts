@@ -733,9 +733,23 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Serialize a value for JSON
+   * Serialize a value for JSON.
+   * @param visited - Set of already-visited objects to detect circular references
+   * @param depth - Current recursion depth (safety limit)
    */
-  protected serializeValue(value: unknown): unknown {
+  protected serializeValue(value: unknown, visited: Set<object> = new Set(), depth = 0): unknown {
+    // Safety limit to prevent stack overflow from deep/circular structures
+    if (depth > 100) {
+      console.warn('[BoardSmith] Serialization depth exceeded 100, truncating. This may indicate circular references.');
+      return undefined;
+    }
+
+    // Handle primitives and null/undefined first
+    if (value === null || value === undefined || typeof value !== 'object') {
+      return value;
+    }
+
+    // GameElement references get special handling (no cycle risk - they become refs)
     if (value instanceof GameElement) {
       // Check if this is a Player (has position property unique to Player)
       // Use duck typing to avoid circular import (Player extends GameElement)
@@ -752,17 +766,23 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       // Serialize regular element references as branch paths
       return { __elementRef: value.branch() };
     }
+
+    // Detect circular references for all objects (including arrays)
+    if (visited.has(value)) {
+      return undefined;
+    }
+    visited.add(value);
+
     if (Array.isArray(value)) {
-      return value.map((v) => this.serializeValue(v));
+      return value.map((v) => this.serializeValue(v, visited, depth + 1));
     }
-    if (value && typeof value === 'object') {
-      const result: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(value)) {
-        result[k] = this.serializeValue(v);
-      }
-      return result;
+
+    // Plain object
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = this.serializeValue(v, visited, depth + 1);
     }
-    return value;
+    return result;
   }
 
   /**
@@ -793,8 +813,16 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
   /**
    * Deserialize a value that may contain element references
+   * @param depth - Current recursion depth (safety limit)
+   * @param path - Property path for debugging
    */
-  protected deserializeValue(value: unknown, game: Game): unknown {
+  protected deserializeValue(value: unknown, game: Game, depth = 0, path = ''): unknown {
+    // Safety limit to prevent stack overflow
+    if (depth > 100) {
+      console.warn(`[BoardSmith] Deserialization depth exceeded at: ${path || 'root'}`);
+      return undefined;
+    }
+
     if (value === null || value === undefined) {
       return value;
     }
@@ -819,14 +847,14 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     // Handle arrays
     if (Array.isArray(value)) {
-      return value.map(item => this.deserializeValue(item, game));
+      return value.map((item, i) => this.deserializeValue(item, game, depth + 1, `${path}[${i}]`));
     }
 
     // Handle plain objects (but not element references)
     if (typeof value === 'object' && value !== null) {
       const result: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
-        result[k] = this.deserializeValue(v, game);
+        result[k] = this.deserializeValue(v, game, depth + 1, path ? `${path}.${k}` : k);
       }
       return result;
     }
