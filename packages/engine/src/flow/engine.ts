@@ -452,12 +452,25 @@ export class FlowEngine<G extends Game = Game> {
         data: { iteration },
       });
 
-      // Navigate to child node for next level (unless at completion point)
-      const childCount = this.getChildCount(currentNode);
-      if (index < childCount) {
-        currentNode = this.getChildNode(currentNode, index);
+      // Navigate to child node for next level
+      // For iterating nodes (loop, each-player, etc.), always navigate to child 0 (the 'do' body)
+      // For sequences, navigate based on index (with adjustment for completion state)
+      const nodeType = currentNode.type;
+      const isIteratingNode = nodeType === 'loop' || nodeType === 'each-player' ||
+                              nodeType === 'for-each' || nodeType === 'phase';
+
+      let navIndex: number;
+      if (isIteratingNode) {
+        navIndex = 0; // Always the 'do' body
+      } else {
+        const childCount = this.getChildCount(currentNode);
+        navIndex = index === childCount ? index - 1 : index;
       }
-      // If index === childCount, we're at a completion point - don't navigate
+
+      const childCount = this.getChildCount(currentNode);
+      if (navIndex >= 0 && navIndex < childCount) {
+        currentNode = this.getChildNode(currentNode, navIndex);
+      }
     }
 
     // Set player from position (playerIndex is 1-indexed)
@@ -505,37 +518,55 @@ export class FlowEngine<G extends Game = Game> {
 
     for (let i = 0; i < path.length; i++) {
       const index = path[i];
-      const childCount = this.getChildCount(currentNode);
-      const isLastIndex = i === path.length - 1;
+      const nodeType = currentNode.type;
 
-      // Last index can equal childCount (completed state for sequences)
-      // Other indices must be strictly less than childCount
-      const maxValidIndex = isLastIndex ? childCount : childCount - 1;
+      // For loop/each-player/for-each/phase nodes, index represents iteration count,
+      // not child position. These can have any non-negative index value.
+      // For leaf nodes (action-step, execute, etc.), they have no children so skip bounds check.
+      // For sequences, index represents child position and must be validated.
+      const isIteratingNode = nodeType === 'loop' || nodeType === 'each-player' ||
+                              nodeType === 'for-each' || nodeType === 'phase';
+      const isLeafNode = nodeType === 'action-step' || nodeType === 'simultaneous-action-step' ||
+                         nodeType === 'execute';
 
-      if (index > maxValidIndex) {
-        const nodeName = currentNode.config?.name ?? currentNode.type;
-        return {
-          valid: false,
-          error: `Path index ${index} out of bounds at depth ${i} (node "${nodeName}" has ${childCount} children)`,
-          validPath,
-        };
+      if (!isIteratingNode && !isLeafNode) {
+        const childCount = this.getChildCount(currentNode);
+        // For sequences: index can equal childCount (next step position after pushing child)
+        if (index > childCount) {
+          const nodeName = currentNode.config?.name ?? currentNode.type;
+          return {
+            valid: false,
+            error: `Path index ${index} out of bounds at depth ${i} (node "${nodeName}" has ${childCount} children)`,
+            validPath,
+          };
+        }
       }
 
       validPath.push(index);
 
-      // Only navigate to child if not at completed state (index < childCount)
-      if (index < childCount) {
+      // Navigate to the child node for next iteration
+      // For iterating nodes (loop, etc.), always navigate to child 0 (the 'do' body)
+      // For sequences, navigate based on index (with adjustment for completion state)
+      let navIndex: number;
+      if (isIteratingNode) {
+        navIndex = 0; // Always the 'do' body
+      } else {
+        const childCount = this.getChildCount(currentNode);
+        navIndex = index === childCount ? index - 1 : index;
+      }
+
+      const childCount = this.getChildCount(currentNode);
+      if (navIndex >= 0 && navIndex < childCount) {
         try {
-          currentNode = this.getChildNode(currentNode, index);
+          currentNode = this.getChildNode(currentNode, navIndex);
         } catch {
           return {
             valid: false,
-            error: `Failed to navigate to child ${index} at depth ${i}`,
+            error: `Failed to navigate to child ${navIndex} at depth ${i}`,
             validPath: validPath.slice(0, -1),
           };
         }
       }
-      // If index === childCount, we're at a completion point - don't navigate
     }
 
     return { valid: true };
