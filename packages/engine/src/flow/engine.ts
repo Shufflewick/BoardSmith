@@ -452,8 +452,12 @@ export class FlowEngine<G extends Game = Game> {
         data: { iteration },
       });
 
-      // Navigate to child node for next level
-      currentNode = this.getChildNode(currentNode, index);
+      // Navigate to child node for next level (unless at completion point)
+      const childCount = this.getChildCount(currentNode);
+      if (index < childCount) {
+        currentNode = this.getChildNode(currentNode, index);
+      }
+      // If index === childCount, we're at a completion point - don't navigate
     }
 
     // Set player from position (playerIndex is 1-indexed)
@@ -501,11 +505,14 @@ export class FlowEngine<G extends Game = Game> {
 
     for (let i = 0; i < path.length; i++) {
       const index = path[i];
-
-      // Check if the index is valid for the current node
       const childCount = this.getChildCount(currentNode);
+      const isLastIndex = i === path.length - 1;
 
-      if (index >= childCount) {
+      // Last index can equal childCount (completed state for sequences)
+      // Other indices must be strictly less than childCount
+      const maxValidIndex = isLastIndex ? childCount : childCount - 1;
+
+      if (index > maxValidIndex) {
         const nodeName = currentNode.config?.name ?? currentNode.type;
         return {
           valid: false,
@@ -516,16 +523,19 @@ export class FlowEngine<G extends Game = Game> {
 
       validPath.push(index);
 
-      // Navigate to child for next iteration
-      try {
-        currentNode = this.getChildNode(currentNode, index);
-      } catch {
-        return {
-          valid: false,
-          error: `Failed to navigate to child ${index} at depth ${i}`,
-          validPath: validPath.slice(0, -1), // Remove the last index since navigation failed
-        };
+      // Only navigate to child if not at completed state (index < childCount)
+      if (index < childCount) {
+        try {
+          currentNode = this.getChildNode(currentNode, index);
+        } catch {
+          return {
+            valid: false,
+            error: `Failed to navigate to child ${index} at depth ${i}`,
+            validPath: validPath.slice(0, -1),
+          };
+        }
       }
+      // If index === childCount, we're at a completion point - don't navigate
     }
 
     return { valid: true };

@@ -1236,7 +1236,8 @@ export class Game<
   }
 
   /**
-   * Restore flow from serialized position
+   * Restore flow from serialized position.
+   * Throws if the position is invalid (e.g., flow structure changed).
    */
   restoreFlow(position: FlowPosition): void {
     if (!this._flowDefinition) {
@@ -1244,7 +1245,14 @@ export class Game<
     }
 
     this._flowEngine = new FlowEngine(this, this._flowDefinition);
-    this._flowEngine.restore(position);
+    const result = this._flowEngine.tryRestore(position);
+
+    if (!result.success) {
+      throw new Error(
+        `Flow position invalid: ${result.error}. ` +
+        `Valid path prefix: [${result.validPath.join(', ')}]`
+      );
+    }
   }
 
   /**

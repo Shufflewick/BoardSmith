@@ -812,17 +812,10 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Deserialize a value that may contain element references
-   * @param depth - Current recursion depth (safety limit)
-   * @param path - Property path for debugging
+   * Deserialize a value that may contain element references.
+   * Converts { __elementRef: path } back to GameElement references.
    */
-  protected deserializeValue(value: unknown, game: Game, depth = 0, path = ''): unknown {
-    // Safety limit to prevent stack overflow
-    if (depth > 100) {
-      console.warn(`[BoardSmith] Deserialization depth exceeded at: ${path || 'root'}`);
-      return undefined;
-    }
-
+  protected deserializeValue(value: unknown, game: Game): unknown {
     if (value === null || value === undefined) {
       return value;
     }
@@ -845,16 +838,21 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       return game.getPlayer(ref.__playerRef);
     }
 
+    // Handle already-resolved GameElements (return as-is, don't walk their properties)
+    if (value instanceof GameElement) {
+      return value;
+    }
+
     // Handle arrays
     if (Array.isArray(value)) {
-      return value.map((item, i) => this.deserializeValue(item, game, depth + 1, `${path}[${i}]`));
+      return value.map((item) => this.deserializeValue(item, game));
     }
 
     // Handle plain objects (but not element references)
     if (typeof value === 'object' && value !== null) {
       const result: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
-        result[k] = this.deserializeValue(v, game, depth + 1, path ? `${path}.${k}` : k);
+        result[k] = this.deserializeValue(v, game);
       }
       return result;
     }
