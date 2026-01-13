@@ -84,9 +84,11 @@ program
   .option('-g, --games <count>', 'Games per iteration', '200')
   .option('-i, --iterations <count>', 'Training iterations', '5')
   .option('-o, --output <path>', 'Output path for ai.ts')
-  .option('-m, --mcts <iterations>', 'MCTS iterations per move (higher = smarter but slower)', '3')
+  .option('-m, --mcts <iterations>', 'MCTS iterations per move (higher = smarter but slower)', '15')
   .option('--fresh', 'Ignore existing ai.ts and start fresh')
   .option('-v, --verbose', 'Show detailed progress')
+  .option('--parallel', 'Enable parallel simulation using worker threads')
+  .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
   .action(trainAICommand);
 
 // Publishing
