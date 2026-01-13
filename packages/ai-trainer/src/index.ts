@@ -31,6 +31,12 @@ export {
   type SimulationResults,
 } from './simulator.js';
 
+// Parallel simulation
+export {
+  runParallelSimulations,
+  type ParallelSimulatorOptions,
+} from './parallel-simulator.js';
+
 // Analysis
 export {
   analyzeFeatures,
