@@ -27,6 +27,7 @@ key-files:
     - packages/ai-trainer/tests/parallel-simulator.test.ts
   modified:
     - packages/ai-trainer/README.md
+    - packages/cli/src/commands/train-ai.ts
 
 key-decisions:
   - "Test against compiled dist to enable worker thread loading"
@@ -51,8 +52,8 @@ completed: 2026-01-13
 - **Duration:** 12 min
 - **Started:** 2026-01-13T21:06:47Z
 - **Completed:** 2026-01-13T21:18:16Z
-- **Tasks:** 2
-- **Files modified:** 2
+- **Tasks:** 2 + 1 bug fix
+- **Files modified:** 3
 
 ## Accomplishments
 
@@ -64,11 +65,13 @@ completed: 2026-01-13
 
 1. **Task 1: Add parallel simulator unit tests** - `2437689` (test)
 2. **Task 2: Run benchmark and document results** - `0155cff` (docs)
+3. **Bug fix: train-ai output path** - `00f4cf2` (fix)
 
 ## Files Created/Modified
 
 - `packages/ai-trainer/tests/parallel-simulator.test.ts` - 5 unit tests for determinism, aggregation, edge cases, and progress
 - `packages/ai-trainer/README.md` - Parallel Training section with benchmarks and usage
+- `packages/cli/src/commands/train-ai.ts` - Fixed output path to use paths.rules from config
 
 ## Decisions Made
 
@@ -77,7 +80,20 @@ completed: 2026-01-13
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Fixed train-ai output path to use paths.rules from config**
+- **Found during:** Post-plan testing with hex game
+- **Issue:** train-ai hardcoded `src/rules/ai.ts` but games specify rules location in `boardsmith.json` paths.rules
+- **Fix:** Read `config.paths.rules` with fallback to `src/rules` for backwards compatibility
+- **Files modified:** packages/cli/src/commands/train-ai.ts
+- **Verification:** Running train-ai on hex now outputs to `rules/src/ai.ts` correctly
+- **Commit:** 00f4cf2
+
+---
+
+**Total deviations:** 1 auto-fixed (bug)
+**Impact on plan:** Essential fix for correct CLI behavior across game structures.
 
 ## Issues Encountered
 
