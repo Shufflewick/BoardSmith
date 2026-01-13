@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-09)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** Parallel AI training (v0.9)
+**Current focus:** v0.9 Parallel AI Training complete, ready for milestone shipping
 
 ## Current Position
 
-Phase: 22 of 23 (cli-integration)
+Phase: 23 of 23 (verification)
 Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-01-13 — Completed 22-01-PLAN.md
+Status: Phase complete, milestone complete
+Last activity: 2026-01-13 — Completed 23-01-PLAN.md
 
-Progress: ████░░░░░░ 40%
+Progress: ██████████ 100%
 
 ## Milestones
 
@@ -28,8 +28,8 @@ Progress: ████░░░░░░ 40%
 - v0.7 Condition Tracing Refactor (Phases 14-16) — shipped 2026-01-10
 - v0.8 HMR Reliability (Phases 17-19) — shipped 2026-01-11
 
-**In Progress:**
-- v0.9 Parallel AI Training (Phases 20-23)
+**Ready to Ship:**
+- v0.9 Parallel AI Training (Phases 20-23) — all phases complete
 
 ## Roadmap Evolution
 
@@ -46,9 +46,10 @@ Progress: ████░░░░░░ 40%
 - Milestone v0.8 created: HMR reliability improvements, 3 phases (Phases 17-19)
 - Milestone v0.8 complete: Dev state transfer, validation layer, and auto-checkpoints for reliable HMR
 - Milestone v0.9 created: Parallel AI training, 4 phases (Phases 20-23)
+- Milestone v0.9 complete: 8.3x speedup with worker thread parallelization, verified determinism
 
 ## Session Continuity
 
 Last session: 2026-01-13
-Stopped at: Completed 22-01-PLAN.md, Phase 23 ready
+Stopped at: Completed 23-01-PLAN.md, v0.9 milestone ready for shipping
 Resume file: None

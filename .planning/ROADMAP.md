@@ -25,7 +25,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
-- 🚧 **v0.9 Parallel AI Training** — Phases 20-23 (in progress)
+- ✅ **v0.9 Parallel AI Training** — Phases 20-23 (complete)
 
 ## Phases
 
@@ -218,7 +218,7 @@ Plans:
 
 </details>
 
-### 🚧 v0.9 Parallel AI Training (In Progress)
+### ✅ v0.9 Parallel AI Training (Complete)
 
 **Milestone Goal:** Add worker thread parallelization to `train-ai` to utilize multiple CPU cores, achieving near-linear speedup on modern machines.
 
@@ -249,14 +249,14 @@ Plans:
 Plans:
 - [x] 22-01: Add CLI flags and parallel simulation integration
 
-#### Phase 23: verification
+#### Phase 23: verification ✅
 **Goal**: Verify correctness (same seed = same results), benchmark speedup
 **Depends on**: Phase 22
 **Research**: Unlikely (testing)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 23-01: TBD (run /gsd:plan-phase 23 to break down)
+- [x] 23-01: Add parallel simulator tests and document benchmark results
 
 ## Progress
 
@@ -284,4 +284,4 @@ Plans:
 | 20. simulator-exports | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 21. worker-infrastructure | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 22. cli-integration | v0.9 | 1/1 | Complete | 2026-01-13 |
-| 23. verification | v0.9 | 0/? | Not started | - |
+| 23. verification | v0.9 | 1/1 | Complete | 2026-01-13 |
