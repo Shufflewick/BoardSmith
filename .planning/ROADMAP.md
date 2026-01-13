@@ -25,6 +25,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
+- 🚧 **v0.9 Parallel AI Training** — Phases 20-23 (in progress)
 
 ## Phases
 
@@ -181,7 +182,8 @@ Plans:
 
 </details>
 
-### ✅ v0.8 HMR Reliability (Complete)
+<details>
+<summary>✅ v0.8 HMR Reliability (Phases 17-19) — SHIPPED 2026-01-11</summary>
 
 **Milestone Goal:** Make HMR work reliably during development by bypassing replay and directly transferring game state to new code. Target: 90% of changes work seamlessly, with clear feedback and fast recovery when they don't.
 
@@ -214,6 +216,48 @@ Plans:
 Plans:
 - [x] 19-01: Add checkpoint types, CheckpointManager, GameSession integration, tests
 
+</details>
+
+### 🚧 v0.9 Parallel AI Training (In Progress)
+
+**Milestone Goal:** Add worker thread parallelization to `train-ai` to utilize multiple CPU cores, achieving near-linear speedup on modern machines.
+
+#### Phase 20: simulator-exports
+**Goal**: Export `simulateSingleGame` and prepare serializable simulation options
+**Depends on**: v0.8 complete
+**Research**: Unlikely (internal refactoring)
+**Plans**: TBD
+
+Plans:
+- [ ] 20-01: TBD (run /gsd:plan-phase 20 to break down)
+
+#### Phase 21: worker-infrastructure
+**Goal**: Create simulation-worker.ts and parallel-simulator.ts for multi-core execution
+**Depends on**: Phase 20
+**Research**: Unlikely (Node.js worker_threads API)
+**Plans**: TBD
+
+Plans:
+- [ ] 21-01: TBD (run /gsd:plan-phase 21 to break down)
+
+#### Phase 22: cli-integration
+**Goal**: Add --parallel and --workers CLI flags, integrate with trainer
+**Depends on**: Phase 21
+**Research**: Unlikely (internal)
+**Plans**: TBD
+
+Plans:
+- [ ] 22-01: TBD (run /gsd:plan-phase 22 to break down)
+
+#### Phase 23: verification
+**Goal**: Verify correctness (same seed = same results), benchmark speedup
+**Depends on**: Phase 22
+**Research**: Unlikely (testing)
+**Plans**: TBD
+
+Plans:
+- [ ] 23-01: TBD (run /gsd:plan-phase 23 to break down)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -237,3 +281,7 @@ Plans:
 | 17. dev-state-transfer | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 18. validation-layer | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 19. dev-checkpoints | v0.8 | 1/1 | Complete | 2026-01-11 |
+| 20. simulator-exports | v0.9 | 0/? | Not started | - |
+| 21. worker-infrastructure | v0.9 | 0/? | Not started | - |
+| 22. cli-integration | v0.9 | 0/? | Not started | - |
+| 23. verification | v0.9 | 0/? | Not started | - |
