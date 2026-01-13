@@ -107,13 +107,13 @@ npx boardsmith analyze --verbose --json
 - `--json` - Output as JSON
 - `-v, --verbose` - Show detailed information
 
-### build-ai
+### train-ai
 
 Train AI through self-play and generate ai.ts:
 
 ```bash
-npx boardsmith build-ai
-npx boardsmith build-ai --games 500 --iterations 10
+npx boardsmith train-ai
+npx boardsmith train-ai --games 500 --iterations 10
 ```
 
 **Options:**
@@ -194,7 +194,7 @@ npx boardsmith validate
 ### 6. Train AI (optional)
 
 ```bash
-npx boardsmith build-ai --verbose
+npx boardsmith train-ai --verbose
 ```
 
 ### 7. Publish

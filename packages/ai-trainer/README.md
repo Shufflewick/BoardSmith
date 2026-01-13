@@ -13,7 +13,7 @@ npm install @boardsmith/ai-trainer
 The easiest way to train AI is via the CLI:
 
 ```bash
-npx boardsmith build-ai
+npx boardsmith train-ai
 ```
 
 This will:
@@ -210,7 +210,7 @@ interface GameStructure {
 ## CLI Options
 
 ```bash
-npx boardsmith build-ai [options]
+npx boardsmith train-ai [options]
 
 Options:
   -g, --games <count>     Games per iteration (default: 200)

@@ -5,7 +5,7 @@ import ora from 'ora';
 import type { Game, GameOptions } from '@boardsmith/engine';
 import type { TrainingProgress } from '@boardsmith/ai-trainer';
 
-interface BuildAIOptions {
+interface TrainAIOptions {
   games?: string;
   iterations?: string;
   output?: string;
@@ -14,7 +14,7 @@ interface BuildAIOptions {
   fresh?: boolean;
 }
 
-export async function buildAICommand(options: BuildAIOptions): Promise<void> {
+export async function trainAICommand(options: TrainAIOptions): Promise<void> {
   const cwd = process.cwd();
 
   // Validate project

@@ -9,7 +9,7 @@ import { publishCommand } from './commands/publish.js';
 import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
-import { buildAICommand } from './commands/build-ai.js';
+import { trainAICommand } from './commands/train-ai.js';
 
 const program = new Command();
 
@@ -79,7 +79,7 @@ program
 
 // AI Training
 program
-  .command('build-ai')
+  .command('train-ai')
   .description('Train AI through self-play simulation and generate ai.ts')
   .option('-g, --games <count>', 'Games per iteration', '200')
   .option('-i, --iterations <count>', 'Training iterations', '5')
@@ -87,7 +87,7 @@ program
   .option('-m, --mcts <iterations>', 'MCTS iterations per move (higher = smarter but slower)', '3')
   .option('--fresh', 'Ignore existing ai.ts and start fresh')
   .option('-v, --verbose', 'Show detailed progress')
-  .action(buildAICommand);
+  .action(trainAICommand);
 
 // Publishing
 program
