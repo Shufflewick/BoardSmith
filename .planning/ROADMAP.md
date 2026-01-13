@@ -240,14 +240,14 @@ Plans:
 Plans:
 - [x] 21-01: Create simulation-worker.ts and parallel-simulator.ts
 
-#### Phase 22: cli-integration
+#### Phase 22: cli-integration ✅
 **Goal**: Add --parallel and --workers CLI flags, integrate with trainer
 **Depends on**: Phase 21
 **Research**: Unlikely (internal)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 22-01: TBD (run /gsd:plan-phase 22 to break down)
+- [x] 22-01: Add CLI flags and parallel simulation integration
 
 #### Phase 23: verification
 **Goal**: Verify correctness (same seed = same results), benchmark speedup
@@ -283,5 +283,5 @@ Plans:
 | 19. dev-checkpoints | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 20. simulator-exports | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 21. worker-infrastructure | v0.9 | 1/1 | Complete | 2026-01-13 |
-| 22. cli-integration | v0.9 | 0/? | Not started | - |
+| 22. cli-integration | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 23. verification | v0.9 | 0/? | Not started | - |

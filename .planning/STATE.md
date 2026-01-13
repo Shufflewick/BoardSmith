@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-09)
 
 ## Current Position
 
-Phase: 21 of 23 (worker-infrastructure)
+Phase: 22 of 23 (cli-integration)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-01-13 — Completed 21-01-PLAN.md
+Last activity: 2026-01-13 — Completed 22-01-PLAN.md
 
-Progress: ███░░░░░░░ 30%
+Progress: ████░░░░░░ 40%
 
 ## Milestones
 
@@ -50,5 +50,5 @@ Progress: ███░░░░░░░ 30%
 ## Session Continuity
 
 Last session: 2026-01-13
-Stopped at: Completed 21-01-PLAN.md, Phase 22 ready
+Stopped at: Completed 22-01-PLAN.md, Phase 23 ready
 Resume file: None
