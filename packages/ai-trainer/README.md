@@ -207,6 +207,47 @@ interface GameStructure {
 }
 ```
 
+## Parallel Training
+
+For faster training on multi-core machines, enable parallel mode:
+
+```bash
+npx boardsmith train-ai --parallel
+```
+
+This distributes game simulations across multiple CPU cores using worker threads.
+
+### Performance
+
+Parallel training achieves significant speedup on multi-core systems:
+
+| Mode     | Time (50 games) | CPU Usage | Speedup |
+|----------|-----------------|-----------|---------|
+| Serial   | 171s            | ~100%     | 1x      |
+| Parallel | 21s (11 workers)| ~970%     | 8.3x    |
+
+*Benchmark: Go Fish game on Apple M3 Pro (12 cores)*
+
+### Options
+
+```bash
+--parallel           Enable parallel training
+--workers <count>    Number of worker threads (default: CPU cores - 1)
+```
+
+### How It Works
+
+1. The main process generates game seeds and distributes work to workers
+2. Each worker runs simulations independently with its own game instance
+3. Results are aggregated for feature analysis
+4. Same seed produces identical aggregate results regardless of worker count (deterministic)
+
+### When to Use
+
+- Training with many games (100+): Significant speedup
+- Few games (<10): Overhead may not be worth it
+- CI/automated training: Faster feedback loops
+
 ## CLI Options
 
 ```bash
@@ -216,8 +257,10 @@ Options:
   -g, --games <count>     Games per iteration (default: 200)
   -i, --iterations <count> Training iterations (default: 5)
   -o, --output <path>     Output path for ai.ts
-  -m, --mcts <iterations> MCTS iterations per move (default: 3)
+  -m, --mcts <iterations> MCTS iterations per move (default: 15)
   --fresh                 Ignore existing ai.ts and start fresh
+  --parallel              Enable parallel training across CPU cores
+  --workers <count>       Number of worker threads (default: CPU cores - 1)
   -v, --verbose           Show detailed progress
 ```
 
