@@ -231,14 +231,14 @@ Plans:
 Plans:
 - [x] 20-01: Export simulateSingleGame, add serializable types and helpers
 
-#### Phase 21: worker-infrastructure
+#### Phase 21: worker-infrastructure ✅
 **Goal**: Create simulation-worker.ts and parallel-simulator.ts for multi-core execution
 **Depends on**: Phase 20
 **Research**: Unlikely (Node.js worker_threads API)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 21-01: TBD (run /gsd:plan-phase 21 to break down)
+- [x] 21-01: Create simulation-worker.ts and parallel-simulator.ts
 
 #### Phase 22: cli-integration
 **Goal**: Add --parallel and --workers CLI flags, integrate with trainer
@@ -282,6 +282,6 @@ Plans:
 | 18. validation-layer | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 19. dev-checkpoints | v0.8 | 1/1 | Complete | 2026-01-11 |
 | 20. simulator-exports | v0.9 | 1/1 | Complete | 2026-01-13 |
-| 21. worker-infrastructure | v0.9 | 0/? | Not started | - |
+| 21. worker-infrastructure | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 22. cli-integration | v0.9 | 0/? | Not started | - |
 | 23. verification | v0.9 | 0/? | Not started | - |
