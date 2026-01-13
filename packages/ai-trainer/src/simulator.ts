@@ -7,6 +7,11 @@ import type {
   GameData,
   StateSnapshot,
   LearnedObjective,
+  SingleGameOptions,
+  GameStructure,
+  ElementTypeInfo,
+  SerializableGameStructure,
+  SerializableElementTypeInfo,
 } from './types.js';
 
 /**
@@ -123,12 +128,13 @@ export async function runSimulations<G extends Game>(
 }
 
 /**
- * Simulate a single game and collect data
+ * Simulate a single game and collect data.
+ * Exported for use by worker threads in parallel simulation.
  */
-async function simulateSingleGame<G extends Game>(
+export async function simulateSingleGame<G extends Game>(
   GameClass: GameClass<G>,
   gameType: string,
-  options: SimulationOptions
+  options: SingleGameOptions
 ): Promise<GameData> {
   const rng = new SeededRandom(options.seed);
   const startTime = Date.now();
@@ -336,4 +342,68 @@ export async function runSimulationsWithProgress<G extends Game>(
     ...options,
     features,
   });
+}
+
+/**
+ * Serialize a GameStructure for worker thread communication.
+ * Converts Map and Set to plain objects/arrays for structured cloning.
+ */
+export function serializeGameStructure(structure: GameStructure): SerializableGameStructure {
+  const elementTypes: SerializableGameStructure['elementTypes'] = {};
+
+  for (const [key, info] of structure.elementTypes) {
+    const stringEnums: Record<string, string[]> = {};
+    for (const [enumKey, enumValues] of Object.entries(info.stringEnums)) {
+      stringEnums[enumKey] = Array.from(enumValues);
+    }
+
+    elementTypes[key] = {
+      className: info.className,
+      numericProperties: info.numericProperties,
+      booleanProperties: info.booleanProperties,
+      stringProperties: info.stringProperties,
+      hasOwnership: info.hasOwnership,
+      isSpatial: info.isSpatial,
+      stringEnums,
+    };
+  }
+
+  return {
+    elementTypes,
+    playerInfo: structure.playerInfo,
+    spatialInfo: structure.spatialInfo,
+    playerCount: structure.playerCount,
+  };
+}
+
+/**
+ * Deserialize a SerializableGameStructure back to a GameStructure.
+ * Converts plain objects/arrays back to Map and Set.
+ */
+export function deserializeGameStructure(serialized: SerializableGameStructure): GameStructure {
+  const elementTypes = new Map<string, ElementTypeInfo>();
+
+  for (const [key, info] of Object.entries(serialized.elementTypes)) {
+    const stringEnums: Record<string, Set<string>> = {};
+    for (const [enumKey, enumValues] of Object.entries(info.stringEnums)) {
+      stringEnums[enumKey] = new Set(enumValues);
+    }
+
+    elementTypes.set(key, {
+      className: info.className,
+      numericProperties: info.numericProperties,
+      booleanProperties: info.booleanProperties,
+      stringProperties: info.stringProperties,
+      hasOwnership: info.hasOwnership,
+      isSpatial: info.isSpatial,
+      stringEnums,
+    });
+  }
+
+  return {
+    elementTypes,
+    playerInfo: serialized.playerInfo,
+    spatialInfo: serialized.spatialInfo,
+    playerCount: serialized.playerCount,
+  };
 }

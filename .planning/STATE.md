@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-09)
 
 ## Current Position
 
-Phase: 20 of 23 (simulator-exports)
+Phase: 21 of 23 (worker-infrastructure)
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-01-13 — Milestone v0.9 created
+Last activity: 2026-01-13 — Phase 20 complete
 
-Progress: ░░░░░░░░░░ 0%
+Progress: ██░░░░░░░░ 25%
 
 ## Milestones
 
@@ -50,5 +50,5 @@ Progress: ░░░░░░░░░░ 0%
 ## Session Continuity
 
 Last session: 2026-01-13
-Stopped at: Milestone v0.9 initialization
+Stopped at: Phase 20 complete, Phase 21 ready
 Resume file: None

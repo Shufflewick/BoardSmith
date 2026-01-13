@@ -64,6 +64,42 @@ export interface GameStructure {
 }
 
 /**
+ * Serializable element type info (for worker thread communication).
+ * Converts Set to array for structured cloning.
+ */
+export interface SerializableElementTypeInfo {
+  /** Class name (e.g., 'Piece', 'Card') */
+  className: string;
+  /** Numeric properties found (e.g., 'value', 'rank') */
+  numericProperties: string[];
+  /** Boolean properties found (e.g., 'isKing', 'isRevealed') */
+  booleanProperties: string[];
+  /** String properties found (e.g., 'suit', 'color') */
+  stringProperties: string[];
+  /** Whether elements of this type have player ownership */
+  hasOwnership: boolean;
+  /** Whether elements exist in a spatial grid (have row/column) */
+  isSpatial: boolean;
+  /** Sample values for string properties (arrays instead of Sets for serialization) */
+  stringEnums: Record<string, string[]>;
+}
+
+/**
+ * Serializable game structure for worker thread communication.
+ * All fields are structured-cloneable (no Map/Set).
+ */
+export interface SerializableGameStructure {
+  /** All discovered element types (Record instead of Map) */
+  elementTypes: Record<string, SerializableElementTypeInfo>;
+  /** Player type information */
+  playerInfo: PlayerTypeInfo;
+  /** Spatial/board information */
+  spatialInfo: SpatialInfo;
+  /** Number of players */
+  playerCount: number;
+}
+
+/**
  * A candidate feature to evaluate
  */
 export interface CandidateFeature {
@@ -272,3 +308,60 @@ export const DEFAULT_TRAINING_CONFIG: TrainingConfig = {
   maxActionsPerGame: 300,
   mctsIterations: 3, // Balance between speed and game completion
 };
+
+/**
+ * Options for simulating a single game.
+ * Used by simulateSingleGame function.
+ */
+export interface SingleGameOptions {
+  /** Player count for the game */
+  playerCount: number;
+  /** Features to evaluate during simulation */
+  features: CandidateFeature[];
+  /** Timeout per game in ms */
+  timeout: number;
+  /** Maximum actions per game */
+  maxActions: number;
+  /** Seed for reproducibility */
+  seed: string;
+  /** AI configuration for players */
+  aiConfig?: {
+    useAI: boolean;
+    iterations?: number;
+    objectives?: LearnedObjective[];
+  };
+}
+
+/**
+ * Serializable simulation options for worker thread communication.
+ * All fields are structured-cloneable (no functions).
+ * Workers regenerate features from structure using generateCandidateFeatures().
+ */
+export interface SerializableSimulationOptions {
+  /** Path to compiled game module (for dynamic import in worker) */
+  gameModulePath: string;
+  /** Game type identifier */
+  gameType: string;
+  /** Player count for the game */
+  playerCount: number;
+  /** Timeout per game in ms */
+  timeout: number;
+  /** Maximum actions per game */
+  maxActions: number;
+  /** Seed for reproducibility */
+  seed: string;
+  /** Game structure for feature regeneration */
+  structure: SerializableGameStructure;
+  /** AI configuration (objectives are serializable since checkerCode is a string) */
+  aiConfig?: {
+    useAI: boolean;
+    iterations?: number;
+    objectives?: Array<{
+      featureId: string;
+      description: string;
+      weight: number;
+      checkerCode: string;
+      correlation: number;
+    }>;
+  };
+}
