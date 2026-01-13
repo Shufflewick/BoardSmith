@@ -80,7 +80,8 @@ interface GameShellProps {
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
-  apiUrl: 'http://localhost:8787',
+  // Use injected API URL from boardsmith dev (set via window global), fall back to default
+  apiUrl: (typeof window !== 'undefined' && (window as any).__BOARDSMITH_API_URL__) || 'http://localhost:8787',
   playerCount: 2,
   debugMode: true,
   showHistory: true,

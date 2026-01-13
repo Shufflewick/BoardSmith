@@ -100,11 +100,28 @@ async function loadGameDefinition(rulesPath: string, tempDir: string): Promise<G
   return module.gameDefinition;
 }
 
+// Ports blocked by browsers for security (Chrome's restricted port list)
+const UNSAFE_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
+  87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
+  139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532,
+  540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723,
+  2049, 3659, 4045, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697,
+  10080,
+]);
+
 export async function devCommand(options: DevOptions): Promise<void> {
   const port = parseInt(options.port, 10);
   const playerCount = parseInt(options.players, 10);
   const workerPort = parseInt(options.workerPort, 10);
   const cwd = process.cwd();
+
+  // Warn about browser-restricted ports
+  if (UNSAFE_PORTS.has(port)) {
+    console.error(chalk.red(`Error: Port ${port} is blocked by browsers for security reasons.`));
+    console.error(chalk.dim('Try a different port like 5173, 3000, 8080, or any port above 1024 that isn\'t restricted.'));
+    process.exit(1);
+  }
 
   // Parse AI options (player positions are 1-indexed)
   const aiPlayers = options.ai
@@ -225,10 +242,25 @@ export async function devCommand(options: DevOptions): Promise<void> {
   try {
     const vite = await createViteServer({
       root: uiPath,
+      appType: 'spa', // Enable SPA fallback so /game/:id/:position routes serve index.html
       server: {
         port,
+        strictPort: true, // Fail if port unavailable instead of silently using another
         open: false,
       },
+      plugins: [
+        {
+          name: 'inject-api-url',
+          transformIndexHtml(html) {
+            // Inject API URL as global variable before any scripts run
+            // This works for external packages (unlike Vite's define option)
+            return html.replace(
+              '<head>',
+              `<head>\n    <script>window.__BOARDSMITH_API_URL__ = "http://localhost:${workerPort}";</script>`
+            );
+          },
+        },
+      ],
       // Don't pre-bundle @boardsmith packages so changes are picked up immediately during development
       optimizeDeps: {
         exclude: ['@boardsmith/ui', '@boardsmith/client', '@boardsmith/session', '@boardsmith/engine'],
@@ -236,7 +268,17 @@ export async function devCommand(options: DevOptions): Promise<void> {
     });
 
     await vite.listen();
-    console.log(chalk.green(`  UI server running on http://localhost:${port}`));
+
+    // Get the actual port Vite is using (in case config file overrode our setting)
+    const resolvedUrl = vite.resolvedUrls?.local[0];
+    const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;
+
+    if (uiPort !== port) {
+      console.log(chalk.yellow(`  Warning: Vite is using port ${uiPort} instead of requested port ${port}`));
+      console.log(chalk.dim(`  (Check if the game's vite.config.ts has a hardcoded port)`));
+    }
+
+    console.log(chalk.green(`  UI server running on http://localhost:${uiPort}`));
 
     if (options.lobby) {
       // Show any persisted games that can be resumed
@@ -245,14 +287,14 @@ export async function devCommand(options: DevOptions): Promise<void> {
         if (persistedGames.length > 0) {
           console.log(chalk.cyan(`\n  Found ${persistedGames.length} persisted game(s):`));
           for (const gameId of persistedGames) {
-            console.log(chalk.dim(`    Resume: http://localhost:${port}/game/${gameId}/0`));
+            console.log(chalk.dim(`    Resume: http://localhost:${uiPort}/game/${gameId}/0`));
           }
         }
       }
 
       // Open the lobby for manual game configuration
       console.log(chalk.cyan('\n  Opening game lobby...'));
-      const lobbyUrl = `http://localhost:${port}`;
+      const lobbyUrl = `http://localhost:${uiPort}`;
       await open(lobbyUrl);
       console.log(chalk.dim(`  Lobby: ${lobbyUrl}`));
     } else if (options.persist && server) {
@@ -265,7 +307,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
         // Open browser tabs for players (1-indexed positions)
         console.log(chalk.cyan(`  Opening ${playerCount} player tab(s)...`));
         for (let position = 1; position <= playerCount; position++) {
-          const url = `http://localhost:${port}/game/${gameId}/${position}`;
+          const url = `http://localhost:${uiPort}/game/${gameId}/${position}`;
           await open(url);
           console.log(chalk.dim(`  Player ${position}: ${url}`));
         }
@@ -287,7 +329,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
           if (humanPlayers.length > 0) {
             console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
             for (const position of humanPlayers) {
-              const url = `http://localhost:${port}/game/${gameId}/${position}`;
+              const url = `http://localhost:${uiPort}/game/${gameId}/${position}`;
               await open(url);
               console.log(chalk.dim(`  Player ${position}: ${url}`));
             }
@@ -300,7 +342,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
           }
         } else {
           console.log(chalk.yellow('\n  Could not auto-create game. Open the UI manually.'));
-          await open(`http://localhost:${port}`);
+          await open(`http://localhost:${uiPort}`);
         }
       }
     } else {
@@ -321,7 +363,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
         if (humanPlayers.length > 0) {
           console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
           for (const position of humanPlayers) {
-            const url = `http://localhost:${port}/game/${gameId}/${position}`;
+            const url = `http://localhost:${uiPort}/game/${gameId}/${position}`;
             await open(url);
             console.log(chalk.dim(`  Player ${position}: ${url}`));
           }
@@ -335,7 +377,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
         }
       } else {
         console.log(chalk.yellow('\n  Could not auto-create game. Open the UI manually.'));
-        await open(`http://localhost:${port}`);
+        await open(`http://localhost:${uiPort}`);
       }
     }
 

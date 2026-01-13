@@ -54,8 +54,9 @@ const persistedGames = ref<string[]>([]);
 
 // Fetch game definition and persisted games on mount
 onMounted(async () => {
+  // Use injected API URL from boardsmith dev (set via window global), fall back to default
   const baseUrl =
-    props.apiUrl || window.location.origin.replace(/:\d+$/, ':8787');
+    props.apiUrl || (window as any).__BOARDSMITH_API_URL__ || window.location.origin.replace(/:\d+$/, ':8787');
 
   // Fetch definitions
   try {
