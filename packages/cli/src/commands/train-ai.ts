@@ -37,7 +37,9 @@ export async function trainAICommand(options: TrainAIOptions): Promise<void> {
   const gamesPerIteration = parseInt(options.games || '200', 10);
   const iterations = parseInt(options.iterations || '5', 10);
   const mctsIterations = parseInt(options.mcts || '15', 10);
-  const outputPath = options.output || join(cwd, 'src', 'rules', 'ai.ts');
+  // Use paths.rules from config, fallback to src/rules for backwards compatibility
+  const rulesPath = config.paths?.rules || 'src/rules';
+  const outputPath = options.output || join(cwd, rulesPath, 'ai.ts');
   const parallelMode = options.parallel ?? false;
   const workerCount = options.workers ? parseInt(options.workers, 10) : Math.max(1, cpus().length - 1);
 
