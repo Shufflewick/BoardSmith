@@ -277,15 +277,16 @@ Plans:
 - [x] 24-01: Add GameType enum, WinConditionInfo, and analyzeWinConditions to introspector
 - [x] 24-02: Add type-specific zero-config heuristic features with generateCandidateFeatures
 
-#### Phase 25: structural-features
+#### Phase 25: structural-features ✅
 **Goal**: Enhance introspector to detect connectivity patterns, graph-based features (paths, bridges, reachability), influence maps, and threat detection
 **Depends on**: Phase 24
 **Research**: Likely (graph algorithms, influence mapping patterns)
 **Research topics**: Graph algorithms for connectivity, influence map implementations, threat detection patterns
-**Plans**: 1/2 complete
+**Plans**: 2/2 complete
 
 Plans:
 - [x] 25-01: Add shortest path analysis utility and path-distance feature templates for connection games
+- [x] 25-02: Add threat detection features for capture games (diagonal threat analysis, piece safety)
 
 #### Phase 26: training-improvements
 **Goal**: Add mutation/evolution of feature weights, use stronger MCTS as training oracle, ensure training produces measurable improvement (Tier 2)
@@ -344,7 +345,7 @@ Plans:
 | 22. cli-integration | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 23. verification | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 24. game-type-detection | v1.0 | 2/2 | Complete | 2026-01-14 |
-| 25. structural-features | v1.0 | 1/2 | In progress | - |
+| 25. structural-features | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 26. training-improvements | v1.0 | 0/? | Not started | - |
 | 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
 | 28. integration-verification | v1.0 | 0/? | Not started | - |
