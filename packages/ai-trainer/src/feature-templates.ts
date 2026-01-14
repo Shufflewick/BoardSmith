@@ -997,6 +997,155 @@ const HEX_DIRECTIONS = [
 ];
 
 /**
+ * Compute the shortest path length from a player's start edge to goal edge on a hex grid.
+ * Uses Dijkstra's algorithm with costs: friendly cell = 0, empty cell = 1, enemy cell = Infinity.
+ *
+ * @param game - The game instance
+ * @param className - The element class name (e.g., 'Cell')
+ * @param playerIndex - 0-based player index (0 = position 1, 1 = position 2)
+ * @param boardSize - Size of the hex board
+ * @returns The minimum number of empty cells needed to complete a winning path,
+ *          or 0 if already connected, or boardSize * 2 if completely blocked
+ */
+export function computeShortestPathLength(
+  game: Game,
+  className: string,
+  playerIndex: number,
+  boardSize: number
+): number {
+  // In Hex:
+  // - Player 0 (position 1, Red) connects r=0 to r=boardSize-1
+  // - Player 1 (position 2, Blue) connects q=0 to q=boardSize-1
+
+  const myPlayer = getPlayerByIndex(game, playerIndex);
+  const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+  // Get all cells and build a lookup map
+  const cells = new Map<string, { q: number; r: number; element: GameElement }>();
+  const cellKey = (q: number, r: number) => `${q},${r}`;
+
+  const scan = (element: GameElement) => {
+    if (element.constructor.name === className) {
+      const q = (element as any).q;
+      const r = (element as any).r;
+      if (q !== undefined && r !== undefined) {
+        cells.set(cellKey(q, r), { q, r, element });
+      }
+    }
+    for (const child of element.children) {
+      scan(child);
+    }
+  };
+  scan(game);
+
+  if (cells.size === 0) return boardSize * 2;
+
+  // Determine which cells are start/goal based on player axis
+  const isStartCell = (q: number, r: number): boolean => {
+    return playerIndex === 0 ? r === 0 : q === 0;
+  };
+
+  const isGoalCell = (q: number, r: number): boolean => {
+    return playerIndex === 0 ? r === boardSize - 1 : q === boardSize - 1;
+  };
+
+  // Get the cost to move through a cell
+  // Friendly = 0 (already ours), Empty = 1 (need to place), Enemy = Infinity (blocked)
+  const getCellCost = (cellData: { element: GameElement }): number => {
+    // Check if cell has a stone - look for Stone class child
+    const element = cellData.element;
+    let stone: GameElement | undefined;
+    for (const child of element.children) {
+      if (child.constructor.name === 'Stone') {
+        stone = child;
+        break;
+      }
+    }
+
+    if (!stone) {
+      return 1; // Empty cell - costs 1 move to claim
+    }
+
+    const stonePlayer = (stone as any).player;
+    if (stonePlayer === myPlayer) {
+      return 0; // Our stone - free passage
+    }
+
+    return Infinity; // Enemy stone - impassable
+  };
+
+  // Initialize distances - use array sorted by distance as simple priority queue
+  const distances = new Map<string, number>();
+  const queue: Array<{ key: string; dist: number }> = [];
+
+  // Start from all cells on start edge
+  for (const [key, cellData] of cells) {
+    if (isStartCell(cellData.q, cellData.r)) {
+      const cost = getCellCost(cellData);
+      if (cost !== Infinity) {
+        distances.set(key, cost);
+        queue.push({ key, dist: cost });
+      }
+    }
+  }
+
+  if (queue.length === 0) return boardSize * 2; // No accessible start cells
+
+  // Sort queue by distance (ascending)
+  queue.sort((a, b) => a.dist - b.dist);
+
+  const visited = new Set<string>();
+
+  // Dijkstra's algorithm
+  while (queue.length > 0) {
+    // Pop the cell with smallest distance
+    const current = queue.shift()!;
+    const { key, dist } = current;
+
+    if (visited.has(key)) continue;
+    visited.add(key);
+
+    const [qStr, rStr] = key.split(',');
+    const q = parseInt(qStr, 10);
+    const r = parseInt(rStr, 10);
+
+    // Check if we reached the goal
+    if (isGoalCell(q, r)) {
+      return dist;
+    }
+
+    // Explore neighbors
+    for (const dir of HEX_DIRECTIONS) {
+      const nq = q + dir.dq;
+      const nr = r + dir.dr;
+      const neighborKey = cellKey(nq, nr);
+
+      if (visited.has(neighborKey)) continue;
+
+      const neighborData = cells.get(neighborKey);
+      if (!neighborData) continue;
+
+      const moveCost = getCellCost(neighborData);
+      if (moveCost === Infinity) continue;
+
+      const newDist = dist + moveCost;
+      const currentDist = distances.get(neighborKey) ?? Infinity;
+
+      if (newDist < currentDist) {
+        distances.set(neighborKey, newDist);
+        // Add to queue (may have duplicates, but visited set handles it)
+        queue.push({ key: neighborKey, dist: newDist });
+        // Re-sort queue
+        queue.sort((a, b) => a.dist - b.dist);
+      }
+    }
+  }
+
+  // No path found - completely blocked
+  return boardSize * 2;
+}
+
+/**
  * Count connected groups of pieces on a hex grid using flood fill.
  */
 function countConnectedGroups(game: Game, className: string, player: Player): number {
