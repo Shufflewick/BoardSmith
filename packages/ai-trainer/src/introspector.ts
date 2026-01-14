@@ -5,6 +5,8 @@ import type {
   PlayerTypeInfo,
   SpatialInfo,
   GameClass,
+  WinConditionInfo,
+  GameType,
 } from './types.js';
 
 /**
@@ -51,11 +53,20 @@ export function introspectGame(game: Game): GameStructure {
   // Discover spatial structure
   const spatialInfo = discoverSpatialInfo(game, elementTypes);
 
-  return {
+  // Build partial structure for win condition analysis
+  const partialStructure = {
     elementTypes,
     playerInfo,
     spatialInfo,
     playerCount: game.all(Player).length,
+  };
+
+  // Analyze win conditions
+  const winConditionInfo = analyzeWinConditions(game, partialStructure);
+
+  return {
+    ...partialStructure,
+    winConditionInfo,
   };
 }
 
@@ -310,6 +321,216 @@ function discoverSpatialInfo(
   return info;
 }
 
+// ============================================================================
+// WIN CONDITION ANALYSIS
+// ============================================================================
+
+/**
+ * Player properties that indicate score-based (racing) win conditions
+ */
+const SCORE_PROPERTY_NAMES = new Set([
+  'score', 'points', 'total', 'money', 'gold', 'coins',
+  'victory', 'vp', 'victorypoints',
+]);
+
+/**
+ * Player properties that indicate collection-based win conditions
+ */
+const COLLECTION_PROPERTY_NAMES = new Set([
+  'bookcount', 'books', 'sets', 'collections', 'pairs',
+  'completed', 'achievements', 'trophies',
+]);
+
+/**
+ * Player properties that indicate capture/elimination-based win conditions
+ */
+const CAPTURE_PROPERTY_NAMES = new Set([
+  'capturedcount', 'captures', 'kills', 'eliminated',
+  'pieces', 'units', 'armies',
+]);
+
+/**
+ * Analyze win condition patterns to determine game type.
+ *
+ * Detection examines:
+ * 1. Player properties (score, bookCount, capturedCount, etc.)
+ * 2. Game properties (winner, targetScore, etc.)
+ * 3. Spatial structure (hex grid → connection game)
+ * 4. Element ownership patterns
+ */
+export function analyzeWinConditions(
+  game: Game,
+  structure: Omit<GameStructure, 'winConditionInfo'>
+): WinConditionInfo {
+  const indicators: string[] = [];
+
+  // Track detection signals for each type
+  let scoreSignals = 0;
+  let collectionSignals = 0;
+  let captureSignals = 0;
+  let connectionSignals = 0;
+  let territorySignals = 0;
+
+  // ============================================================================
+  // 1. SCORE-BASED DETECTION (Racing games like Cribbage)
+  // ============================================================================
+
+  // Check player numeric properties for score-like names
+  for (const prop of structure.playerInfo.numericProperties) {
+    if (SCORE_PROPERTY_NAMES.has(prop.toLowerCase())) {
+      indicators.push(`Player has '${prop}' property`);
+      scoreSignals += 2;
+    }
+  }
+
+  // Check game for targetScore property (strong signal for racing games)
+  // Dynamic property access is intentional - we're detecting game-specific properties
+  const gameAny = game as any;
+  if (typeof gameAny.targetScore === 'number') {
+    indicators.push('Game has targetScore property');
+    scoreSignals += 3;
+  }
+
+  // ============================================================================
+  // 2. COLLECTION-BASED DETECTION (Games like Go Fish)
+  // ============================================================================
+
+  // Check player numeric properties for collection-like names
+  for (const prop of structure.playerInfo.numericProperties) {
+    if (COLLECTION_PROPERTY_NAMES.has(prop.toLowerCase())) {
+      indicators.push(`Player has '${prop}' property`);
+      collectionSignals += 3;
+    }
+  }
+
+  // Check for Books or Sets element types
+  for (const [className] of structure.elementTypes) {
+    const lowerName = className.toLowerCase();
+    if (lowerName.includes('book') || lowerName.includes('set') || lowerName.includes('collection')) {
+      indicators.push(`Has '${className}' element type`);
+      collectionSignals += 2;
+    }
+  }
+
+  // ============================================================================
+  // 3. CAPTURE/ELIMINATION-BASED DETECTION (Games like Checkers)
+  // ============================================================================
+
+  // Check player numeric properties for capture-like names
+  for (const prop of structure.playerInfo.numericProperties) {
+    if (CAPTURE_PROPERTY_NAMES.has(prop.toLowerCase())) {
+      indicators.push(`Player has '${prop}' property`);
+      captureSignals += 2;
+    }
+  }
+
+  // Check for owned spatial pieces (can be captured)
+  let hasOwnedSpatialPieces = false;
+  for (const [className, typeInfo] of structure.elementTypes) {
+    if (typeInfo.hasOwnership && typeInfo.isSpatial) {
+      hasOwnedSpatialPieces = true;
+      // Piece-like class names are strong signals
+      const lowerName = className.toLowerCase();
+      if (lowerName.includes('piece') || lowerName.includes('checker') ||
+          lowerName.includes('stone') || lowerName.includes('unit')) {
+        indicators.push(`Has owned spatial '${className}' type`);
+        captureSignals += 1;
+      }
+    }
+  }
+
+  // Board game without score → likely capture-based
+  if (structure.spatialInfo.hasBoard && hasOwnedSpatialPieces && scoreSignals === 0) {
+    indicators.push('Board game with owned pieces, no score');
+    captureSignals += 1;
+  }
+
+  // ============================================================================
+  // 4. CONNECTION-BASED DETECTION (Games like Hex)
+  // ============================================================================
+
+  // Hex grid is a strong signal for connection games
+  if (structure.spatialInfo.isHex) {
+    indicators.push('Hex grid detected');
+    connectionSignals += 3;
+  }
+
+  // Check game for winner property (connection games often track winner directly)
+  if (gameAny.winner !== undefined) {
+    indicators.push('Game has winner property');
+    // Winner property alone is weak signal; combined with hex it's strong
+    if (structure.spatialInfo.isHex) {
+      connectionSignals += 2;
+    } else {
+      connectionSignals += 1;
+    }
+  }
+
+  // Check for Cell/Hex element types with ownership
+  for (const [className, typeInfo] of structure.elementTypes) {
+    const lowerName = className.toLowerCase();
+    if ((lowerName.includes('cell') || lowerName.includes('hex')) && typeInfo.isSpatial) {
+      if (structure.spatialInfo.isHex) {
+        indicators.push(`Has '${className}' hex cells`);
+        connectionSignals += 1;
+      }
+    }
+  }
+
+  // ============================================================================
+  // 5. TERRITORY-BASED DETECTION (Future: Go)
+  // ============================================================================
+
+  // Currently just placeholder detection
+  // Territory games typically have area control, influence, or territory tracking
+  for (const prop of structure.playerInfo.numericProperties) {
+    const lowerProp = prop.toLowerCase();
+    if (lowerProp.includes('territory') || lowerProp.includes('area') ||
+        lowerProp.includes('influence') || lowerProp.includes('control')) {
+      indicators.push(`Player has '${prop}' property`);
+      territorySignals += 2;
+    }
+  }
+
+  // ============================================================================
+  // DETERMINE GAME TYPE
+  // ============================================================================
+
+  // Score each type and pick highest confidence
+  const scores: Array<{ type: GameType; signals: number; maxSignals: number }> = [
+    { type: 'racing', signals: scoreSignals, maxSignals: 5 },
+    { type: 'collection', signals: collectionSignals, maxSignals: 5 },
+    { type: 'capture', signals: captureSignals, maxSignals: 4 },
+    { type: 'connection', signals: connectionSignals, maxSignals: 6 },
+    { type: 'territory', signals: territorySignals, maxSignals: 4 },
+  ];
+
+  // Sort by signals (descending)
+  scores.sort((a, b) => b.signals - a.signals);
+
+  const best = scores[0];
+
+  // Need at least some signals to classify
+  let gameType: GameType = 'unknown';
+  let confidence = 0;
+
+  if (best.signals > 0) {
+    gameType = best.type;
+    confidence = Math.min(1, best.signals / best.maxSignals);
+  }
+
+  // Build result
+  return {
+    gameType,
+    confidence,
+    indicators,
+    scoreBased: scoreSignals > 0,
+    eliminationBased: captureSignals > 0,
+    connectionBased: connectionSignals > 0,
+    collectionBased: collectionSignals > 0,
+  };
+}
+
 /**
  * Create a game instance for introspection
  */
@@ -424,10 +645,10 @@ export function estimateComplexity(structure: GameStructure): GameComplexity {
 
   if (score < 30) {
     category = 'simple';
-    recommendedMCTS = 3;
+    recommendedMCTS = 15;
   } else if (score < 50) {
     category = 'moderate';
-    recommendedMCTS = 15;
+    recommendedMCTS = 25;
   } else if (score < 70) {
     category = 'complex';
     recommendedMCTS = 50;

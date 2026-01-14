@@ -373,6 +373,7 @@ export function serializeGameStructure(structure: GameStructure): SerializableGa
     playerInfo: structure.playerInfo,
     spatialInfo: structure.spatialInfo,
     playerCount: structure.playerCount,
+    winConditionInfo: structure.winConditionInfo,
   };
 }
 
@@ -405,5 +406,6 @@ export function deserializeGameStructure(serialized: SerializableGameStructure):
     playerInfo: serialized.playerInfo,
     spatialInfo: serialized.spatialInfo,
     playerCount: serialized.playerCount,
+    winConditionInfo: serialized.winConditionInfo,
   };
 }
