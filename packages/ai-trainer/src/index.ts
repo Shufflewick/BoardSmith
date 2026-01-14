@@ -70,6 +70,15 @@ export {
   type PlayerConfig,
 } from './benchmark.js';
 
+// Evolution (weight optimization)
+export {
+  createSeededRandom,
+  mutateWeights,
+  crossoverWeights,
+  selectBest,
+  generateOffspring,
+} from './evolution.js';
+
 // Types
 export type {
   GameClass,

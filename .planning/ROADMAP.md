@@ -293,10 +293,11 @@ Plans:
 **Depends on**: Phase 25
 **Research**: Likely (evolutionary algorithms, mutation strategies)
 **Research topics**: Evolutionary algorithm patterns, genetic programming for weights, fitness function design
-**Plans**: 1/? complete
+**Plans**: 2/? complete
 
 Plans:
 - [x] 26-01: Add benchmark infrastructure and separated oracle/trained MCTS configs
+- [x] 26-02: Implement µ+λ evolution strategy for weight optimization
 
 #### Phase 27: llm-strategy-generation
 **Goal**: `boardsmith generate-ai --model claude` command that analyzes game rules and generates custom evaluation functions (Tier 3)
@@ -346,6 +347,6 @@ Plans:
 | 23. verification | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 24. game-type-detection | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 25. structural-features | v1.0 | 2/2 | Complete | 2026-01-14 |
-| 26. training-improvements | v1.0 | 1/? | In progress | - |
+| 26. training-improvements | v1.0 | 2/? | In progress | - |
 | 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
 | 28. integration-verification | v1.0 | 0/? | Not started | - |
