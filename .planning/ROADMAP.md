@@ -271,10 +271,11 @@ Plans:
 **Goal**: Analyze win conditions to auto-categorize games (connection, territory, capture, racing) and apply appropriate Tier 1 zero-config heuristics
 **Depends on**: v0.9 complete
 **Research**: Unlikely (internal patterns, analyzing existing game definitions)
-**Plans**: 1/1 complete
+**Plans**: 2/2 complete
 
 Plans:
 - [x] 24-01: Add GameType enum, WinConditionInfo, and analyzeWinConditions to introspector
+- [x] 24-02: Add type-specific zero-config heuristic features with generateCandidateFeatures
 
 #### Phase 25: structural-features
 **Goal**: Enhance introspector to detect connectivity patterns, graph-based features (paths, bridges, reachability), influence maps, and threat detection
@@ -342,7 +343,7 @@ Plans:
 | 21. worker-infrastructure | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 22. cli-integration | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 23. verification | v0.9 | 1/1 | Complete | 2026-01-13 |
-| 24. game-type-detection | v1.0 | 1/1 | Complete | 2026-01-14 |
+| 24. game-type-detection | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 25. structural-features | v1.0 | 0/? | Not started | - |
 | 26. training-improvements | v1.0 | 0/? | Not started | - |
 | 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
