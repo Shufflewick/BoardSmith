@@ -300,24 +300,20 @@ Plans:
 - [x] 26-02: Implement µ+λ evolution strategy for weight optimization
 - [x] 26-03: Integrate evolution into training loop with CLI options (partially verified)
 
-#### Phase 26.1: parallel-only-training (INSERTED)
+#### Phase 26.1: parallel-only-training (INSERTED) ✅
 **Goal**: Consolidate training harnesses - make parallel the only execution path, eliminating duplicate AITrainer vs parallel-path code
 **Depends on**: Phase 26
 **Research**: Unlikely (internal refactoring)
-**Plans**: 0 plans
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 26.1 to break down)
+- [x] 26.1-01: Create ParallelTrainer, update train-ai.ts, remove --parallel flag
 
 **Details:**
-Currently train-ai has two separate code paths:
-1. Non-parallel: Uses AITrainer class (has evolution support)
-2. Parallel: Reimplements training logic directly (no evolution)
-
-This phase consolidates to a single parallel-based implementation:
-- Move evolution logic to work with parallel infrastructure
-- Remove duplicate non-parallel code path
-- Parallelize evolution benchmarks for performance
+Consolidated dual-path training to single ParallelTrainer:
+- Created ParallelTrainer class wrapping parallel simulation with iteration logic
+- Removed 147 lines of duplicate code from train-ai.ts
+- Evolution now works in parallel mode
 
 #### Phase 27: llm-strategy-generation
 **Goal**: `boardsmith generate-ai --model claude` command that analyzes game rules and generates custom evaluation functions (Tier 3)
@@ -368,6 +364,6 @@ Plans:
 | 24. game-type-detection | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 25. structural-features | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 26. training-improvements | v1.0 | 3/3 | Complete | 2026-01-14 |
-| 26.1 parallel-only-training | v1.0 | 0/? | Not started | - |
+| 26.1 parallel-only-training | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
 | 28. integration-verification | v1.0 | 0/? | Not started | - |
