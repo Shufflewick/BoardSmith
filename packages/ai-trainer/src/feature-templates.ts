@@ -491,6 +491,92 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
   },
 
   // ============================================
+  // PATH-DISTANCE FEATURES (Connection games)
+  // ============================================
+  {
+    id: 'path-distance-advantage',
+    category: 'comparison',
+    descriptionTemplate: 'Player needs fewer stones to win than opponent',
+    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
+        return features;
+      }
+      if (!structure.spatialInfo.dimensions) return features;
+
+      const boardSize = structure.spatialInfo.dimensions.rows;
+
+      // This is THE key feature for connection game AI
+      features.push({
+        id: 'path-distance-advantage',
+        description: 'Player needs fewer stones to complete winning path than opponent - KEY FEATURE',
+        category: 'comparison',
+        templateId: 'path-distance-advantage',
+        evaluate: createPathDistanceAdvantageEvaluator('Cell', boardSize),
+      });
+
+      return features;
+    },
+  },
+
+  {
+    id: 'near-win-connection',
+    category: 'boolean',
+    descriptionTemplate: 'Player is within N stones of winning',
+    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
+        return features;
+      }
+      if (!structure.spatialInfo.dimensions) return features;
+
+      const boardSize = structure.spatialInfo.dimensions.rows;
+
+      // Critical for late-game evaluation - detect near-wins at different thresholds
+      for (const threshold of [1, 2, 3]) {
+        features.push({
+          id: `near-win-within-${threshold}`,
+          description: `Player is within ${threshold} stone${threshold === 1 ? '' : 's'} of winning (path length <= ${threshold})`,
+          category: 'boolean',
+          templateId: 'near-win-connection',
+          evaluate: createNearWinEvaluator('Cell', boardSize, threshold),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  {
+    id: 'path-blocked',
+    category: 'boolean',
+    descriptionTemplate: "Opponent's path is completely blocked",
+    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
+        return features;
+      }
+      if (!structure.spatialInfo.dimensions) return features;
+
+      const boardSize = structure.spatialInfo.dimensions.rows;
+
+      // Nearly a win condition - opponent has no path to victory
+      features.push({
+        id: 'opponent-path-blocked',
+        description: "Opponent's path is completely blocked (no route to goal) - nearly a win",
+        category: 'boolean',
+        templateId: 'path-blocked',
+        evaluate: createOpponentPathBlockedEvaluator('Cell', boardSize),
+      });
+
+      return features;
+    },
+  },
+
+  // ============================================
   // CAPTURE GAME FEATURES (Checkers, etc.)
   // ============================================
   {
@@ -1264,6 +1350,58 @@ function createSingleGroupEvaluator(className: string): CandidateFeature['evalua
 
     const groups = countConnectedGroups(game, className, player);
     return groups === 1;
+  };
+}
+
+// ============================================
+// PATH-DISTANCE EVALUATORS (Connection games)
+// ============================================
+
+/**
+ * Evaluator: Player has shorter path to victory than opponent.
+ * This is THE key feature for connection game AI.
+ */
+function createPathDistanceAdvantageEvaluator(
+  className: string,
+  boardSize: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPathLength = computeShortestPathLength(game, className, playerIndex, boardSize);
+    const opponentPathLength = computeShortestPathLength(game, className, 1 - playerIndex, boardSize);
+
+    // Shorter path = better position
+    // If both are blocked (boardSize * 2), neither has advantage
+    return myPathLength < opponentPathLength;
+  };
+}
+
+/**
+ * Evaluator: Player is within N stones of winning.
+ * Critical for late-game detection.
+ */
+function createNearWinEvaluator(
+  className: string,
+  boardSize: number,
+  threshold: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const pathLength = computeShortestPathLength(game, className, playerIndex, boardSize);
+    return pathLength <= threshold;
+  };
+}
+
+/**
+ * Evaluator: Opponent's path is completely blocked.
+ * This is nearly a win condition.
+ */
+function createOpponentPathBlockedEvaluator(
+  className: string,
+  boardSize: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const opponentPathLength = computeShortestPathLength(game, className, 1 - playerIndex, boardSize);
+    // boardSize * 2 is the "blocked" return value from computeShortestPathLength
+    return opponentPathLength >= boardSize * 2;
   };
 }
 
