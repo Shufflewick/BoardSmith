@@ -38,6 +38,11 @@ Improve code maintainability, testability, and navigability equally—making it 
 - ✓ Pit of success condition API — v0.7 (TypeScript enforces object format)
 - ✓ ConditionTracer removed — v0.7 (auto-tracing replaces manual tracing)
 - ✓ All games migrated to object conditions — v0.7 (18+ conditions converted)
+- ✓ Parallel AI training with worker threads — v0.9 (8.3x speedup)
+- ✓ `--parallel` and `--workers` CLI flags — v0.9
+- ✓ Work-stealing pattern for load balancing — v0.9
+- ✓ Deterministic parallel simulation — v0.9 (same seed = same results)
+- ✓ train-ai respects paths.rules from boardsmith.json — v0.9
 
 ### Active
 
@@ -69,10 +74,10 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ## Context
 
-Shipped v0.7 with ~99k LOC TypeScript/Vue.
+Shipped v0.9 with ~99k LOC TypeScript/Vue.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
-All 442 unit tests passing.
-All milestones complete: v0.1-v0.7 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing).
+All 493 unit tests passing.
+All milestones complete: v0.1-v0.9 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing, HMR reliability, parallel AI training).
 
 ---
-*Last updated: 2026-01-10 after v0.7 milestone*
+*Last updated: 2026-01-13 after v0.9 milestone*

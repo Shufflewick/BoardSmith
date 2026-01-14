@@ -10,6 +10,7 @@
 - ✅ [v0.6 Players in Element Tree](milestones/v0.6-ROADMAP.md) (Phases 12-13) — SHIPPED 2026-01-09
 - ✅ [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-01-10
 - ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
+- ✅ [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) — SHIPPED 2026-01-13
 
 ## Overview
 
@@ -25,7 +26,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
-- ✅ **v0.9 Parallel AI Training** — Phases 20-23 (complete)
+- ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
 
 ## Phases
 
@@ -218,7 +219,7 @@ Plans:
 
 </details>
 
-### ✅ v0.9 Parallel AI Training (Complete)
+### ✅ v0.9 Parallel AI Training — SHIPPED 2026-01-13
 
 **Milestone Goal:** Add worker thread parallelization to `train-ai` to utilize multiple CPU cores, achieving near-linear speedup on modern machines.
 
