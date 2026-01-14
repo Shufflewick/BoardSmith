@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-13)
 
 ## Current Position
 
-Phase: 26 of 28 (training-improvements)
-Plan: 2 of ? in current phase
-Status: In progress
-Last activity: 2026-01-14 — Completed 26-02-PLAN.md
+Phase: 26.1 of 28 (parallel-only-training - INSERTED)
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-01-14 — Completed 26-03-PLAN.md (partially verified)
 
-Progress: ███░░░░░░░ 24%
+Progress: ███░░░░░░░ 25%
 
 ## Milestones
 
@@ -46,9 +46,10 @@ Progress: ███░░░░░░░ 24%
 - Milestone v0.9 created: Parallel AI training, 4 phases (Phases 20-23)
 - Milestone v0.9 complete: 8.3x speedup with worker thread parallelization, verified determinism
 - Milestone v1.0 created: AI system overhaul, 5 phases (Phase 24-28)
+- Phase 26.1 inserted after Phase 26: parallel-only-training (URGENT) - consolidate duplicate training harnesses
 
 ## Session Continuity
 
 Last session: 2026-01-14
-Stopped at: Completed 26-02-PLAN.md (weight evolution system)
+Stopped at: Completed 26-03-PLAN.md, Phase 26.1 inserted and ready for planning
 Resume file: None

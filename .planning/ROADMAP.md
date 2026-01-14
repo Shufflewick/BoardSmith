@@ -293,15 +293,35 @@ Plans:
 **Depends on**: Phase 25
 **Research**: Likely (evolutionary algorithms, mutation strategies)
 **Research topics**: Evolutionary algorithm patterns, genetic programming for weights, fitness function design
-**Plans**: 2/? complete
+**Plans**: 3/3 complete
 
 Plans:
 - [x] 26-01: Add benchmark infrastructure and separated oracle/trained MCTS configs
 - [x] 26-02: Implement µ+λ evolution strategy for weight optimization
+- [x] 26-03: Integrate evolution into training loop with CLI options (partially verified)
+
+#### Phase 26.1: parallel-only-training (INSERTED)
+**Goal**: Consolidate training harnesses - make parallel the only execution path, eliminating duplicate AITrainer vs parallel-path code
+**Depends on**: Phase 26
+**Research**: Unlikely (internal refactoring)
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 26.1 to break down)
+
+**Details:**
+Currently train-ai has two separate code paths:
+1. Non-parallel: Uses AITrainer class (has evolution support)
+2. Parallel: Reimplements training logic directly (no evolution)
+
+This phase consolidates to a single parallel-based implementation:
+- Move evolution logic to work with parallel infrastructure
+- Remove duplicate non-parallel code path
+- Parallelize evolution benchmarks for performance
 
 #### Phase 27: llm-strategy-generation
 **Goal**: `boardsmith generate-ai --model claude` command that analyzes game rules and generates custom evaluation functions (Tier 3)
-**Depends on**: Phase 26
+**Depends on**: Phase 26.1
 **Research**: Likely (Claude API, prompt engineering for game rules → heuristics)
 **Research topics**: Claude API usage, prompt engineering for code generation, game rule analysis
 **Plans**: TBD
@@ -347,6 +367,7 @@ Plans:
 | 23. verification | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 24. game-type-detection | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 25. structural-features | v1.0 | 2/2 | Complete | 2026-01-14 |
-| 26. training-improvements | v1.0 | 2/? | In progress | - |
+| 26. training-improvements | v1.0 | 3/3 | Complete | 2026-01-14 |
+| 26.1 parallel-only-training | v1.0 | 0/? | Not started | - |
 | 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
 | 28. integration-verification | v1.0 | 0/? | Not started | - |
