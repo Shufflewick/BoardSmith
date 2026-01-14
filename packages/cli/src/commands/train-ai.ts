@@ -15,6 +15,9 @@ interface TrainAIOptions {
   fresh?: boolean;
   parallel?: boolean;
   workers?: string;
+  evolve?: boolean;
+  generations?: string;
+  population?: string;
 }
 
 export async function trainAICommand(options: TrainAIOptions): Promise<void> {
@@ -42,6 +45,9 @@ export async function trainAICommand(options: TrainAIOptions): Promise<void> {
   const outputPath = options.output || join(cwd, rulesPath, 'ai.ts');
   const parallelMode = options.parallel ?? false;
   const workerCount = options.workers ? parseInt(options.workers, 10) : Math.max(1, cpus().length - 1);
+  const evolveMode = options.evolve ?? false;
+  const evolutionGenerations = options.generations ? parseInt(options.generations, 10) : 5;
+  const evolutionLambda = options.population ? parseInt(options.population, 10) : 20;
 
   // Check for existing ai.ts to build upon
   const existingAIPath = (!options.fresh && existsSync(outputPath)) ? outputPath : undefined;
@@ -54,6 +60,15 @@ export async function trainAICommand(options: TrainAIOptions): Promise<void> {
     console.log(chalk.cyan(`  Parallel mode: enabled (${workerCount} workers)`));
   } else {
     console.log(chalk.dim(`  Parallel mode: disabled`));
+  }
+  if (evolveMode) {
+    if (parallelMode) {
+      console.log(chalk.yellow(`  Evolution: skipped (not compatible with --parallel)`));
+    } else {
+      console.log(chalk.cyan(`  Evolution: enabled (${evolutionGenerations} generations, ${evolutionLambda} population)`));
+    }
+  } else {
+    console.log(chalk.dim(`  Evolution: disabled`));
   }
   if (existingAIPath) {
     console.log(chalk.yellow(`  Building on existing: ${outputPath}`));
@@ -296,8 +311,18 @@ export async function trainAICommand(options: TrainAIOptions): Promise<void> {
         mctsIterations: effectiveMCTS,
         existingAIPath,
         seed: `train-${Date.now()}`,
+        // Evolution settings
+        evolve: evolveMode,
+        evolutionGenerations,
+        evolutionLambda,
         onProgress: (progress: TrainingProgress) => {
-          if (progress.gamesCompleted > 0 && progress.gamesCompleted % 20 === 0) {
+          // Detect evolution messages
+          const isEvolution = progress.message.includes('Evolution');
+
+          if (isEvolution) {
+            // Always show evolution progress
+            spinner.text = chalk.cyan(progress.message);
+          } else if (progress.gamesCompleted > 0 && progress.gamesCompleted % 20 === 0) {
             spinner.text = chalk.dim(
               `Iteration ${progress.iteration}/${progress.totalIterations}: ` +
               `${progress.gamesCompleted}/${progress.totalGames} games ` +

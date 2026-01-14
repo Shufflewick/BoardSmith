@@ -89,6 +89,9 @@ program
   .option('-v, --verbose', 'Show detailed progress')
   .option('--parallel', 'Enable parallel simulation using worker threads')
   .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
+  .option('--evolve', 'Enable evolutionary weight optimization after correlation training')
+  .option('--generations <count>', 'Evolution generations (default: 5)')
+  .option('--population <count>', 'Evolution population size (default: 20)')
   .action(trainAICommand);
 
 // Publishing
