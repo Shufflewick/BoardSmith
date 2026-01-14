@@ -309,7 +309,27 @@ export interface TrainingConfig {
   seed?: string;
   /** Path to existing ai.ts to build upon */
   existingAIPath?: string;
-  /** MCTS iterations for simulations (higher = slower but better play) */
+  /**
+   * MCTS iterations for oracle (training games).
+   * Higher = better quality training data but slower.
+   * @default 50
+   */
+  oracleMCTSIterations?: number;
+  /**
+   * MCTS iterations when using learned objectives.
+   * Can be lower since heuristics help guide search.
+   * @default 10
+   */
+  trainedMCTSIterations?: number;
+  /**
+   * MCTS iterations for benchmark evaluation.
+   * Should be high for accurate measurement.
+   * @default 100
+   */
+  benchmarkMCTSIterations?: number;
+  /**
+   * @deprecated Use oracleMCTSIterations instead. Kept for backwards compatibility.
+   */
   mctsIterations?: number;
 }
 
@@ -344,7 +364,9 @@ export const DEFAULT_TRAINING_CONFIG: TrainingConfig = {
   learnActions: true,
   gameTimeout: 60000, // 60s per game
   maxActionsPerGame: 300,
-  mctsIterations: 3, // Balance between speed and game completion
+  oracleMCTSIterations: 50, // Strong oracle for quality training games
+  trainedMCTSIterations: 10, // Lower when objectives guide search
+  benchmarkMCTSIterations: 100, // Strong for accurate evaluation
 };
 
 /**

@@ -28,6 +28,7 @@ import {
   getCumulativeStats,
   type ParsedAIFile,
 } from './ai-parser.js';
+import { benchmarkAI } from './benchmark.js';
 
 /**
  * Main trainer class that orchestrates the entire AI training process
@@ -125,6 +126,15 @@ export class AITrainer<G extends Game = Game> {
         message: `Iteration ${iteration}: Running simulations...`,
       });
 
+      // Determine MCTS iterations:
+      // - Oracle games (no objectives): use oracleMCTSIterations for quality training data
+      // - Trained games (with objectives): use trainedMCTSIterations since heuristics help
+      // - Backwards compat: fall back to mctsIterations if new fields not set
+      const hasObjectives = learnedObjectives.length > 0;
+      const mctsIters = hasObjectives
+        ? (this.config.trainedMCTSIterations ?? this.config.mctsIterations ?? 10)
+        : (this.config.oracleMCTSIterations ?? this.config.mctsIterations ?? 50);
+
       // Run simulations
       const simOptions: SimulationOptions = {
         gameCount: this.config.gamesPerIteration,
@@ -137,8 +147,8 @@ export class AITrainer<G extends Game = Game> {
         // Use existing or learned objectives to guide the search
         aiConfig: {
           useAI: true,
-          iterations: this.config.mctsIterations ?? 3,
-          objectives: learnedObjectives.length > 0 ? learnedObjectives : undefined,
+          iterations: mctsIters,
+          objectives: hasObjectives ? learnedObjectives : undefined,
         },
         onProgress: (completed, total) => {
           this.reportProgress({
@@ -195,12 +205,6 @@ export class AITrainer<G extends Game = Game> {
         learnedObjectives = newObjectives;
       }
 
-      // Calculate win rate (for trained AI vs random, estimate from correlation strength)
-      const avgCorrelation = selectedFeatures.reduce(
-        (sum, f) => sum + Math.abs(f.correlation), 0
-      ) / Math.max(1, selectedFeatures.length);
-      bestWinRate = 0.5 + avgCorrelation * 0.3; // Rough estimate
-
       this.reportProgress({
         iteration,
         totalIterations: this.config.iterations,
@@ -209,6 +213,42 @@ export class AITrainer<G extends Game = Game> {
         bestWinRate,
         featuresSelected: selectedFeatures.length,
         message: `Iteration ${iteration}: Selected ${selectedFeatures.length} features`,
+      });
+
+      // Run benchmark to measure actual win rate
+      this.reportProgress({
+        iteration,
+        totalIterations: this.config.iterations,
+        gamesCompleted: results.completedGames,
+        totalGames: this.config.gamesPerIteration,
+        bestWinRate,
+        featuresSelected: selectedFeatures.length,
+        message: `Iteration ${iteration}: Benchmarking...`,
+      });
+
+      const benchmarkResult = await benchmarkAI(
+        this.GameClass,
+        this.gameType,
+        learnedObjectives,
+        {
+          gameCount: 20, // Quick benchmark between iterations
+          mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
+          timeout: this.config.gameTimeout,
+          maxActions: this.config.maxActionsPerGame,
+          seed: `${this.config.seed ?? 'train'}-bench-${iteration}`,
+        }
+      );
+
+      bestWinRate = benchmarkResult.winRate;
+
+      this.reportProgress({
+        iteration,
+        totalIterations: this.config.iterations,
+        gamesCompleted: results.completedGames,
+        totalGames: this.config.gamesPerIteration,
+        bestWinRate,
+        featuresSelected: selectedFeatures.length,
+        message: `Iteration ${iteration}: Win rate ${(bestWinRate * 100).toFixed(1)}% (${benchmarkResult.wins}W/${benchmarkResult.losses}L/${benchmarkResult.draws}D)`,
       });
     }
 
