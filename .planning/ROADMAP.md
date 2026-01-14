@@ -267,14 +267,14 @@ Plans:
 
 **Milestone Goal:** Transform AI training from broken/useless to a tiered system that produces quality opponents with minimal designer effort.
 
-#### Phase 24: game-type-detection
+#### Phase 24: game-type-detection ✅
 **Goal**: Analyze win conditions to auto-categorize games (connection, territory, capture, racing) and apply appropriate Tier 1 zero-config heuristics
 **Depends on**: v0.9 complete
 **Research**: Unlikely (internal patterns, analyzing existing game definitions)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 24-01: TBD (run /gsd:plan-phase 24 to break down)
+- [x] 24-01: Add GameType enum, WinConditionInfo, and analyzeWinConditions to introspector
 
 #### Phase 25: structural-features
 **Goal**: Enhance introspector to detect connectivity patterns, graph-based features (paths, bridges, reachability), influence maps, and threat detection
@@ -342,7 +342,7 @@ Plans:
 | 21. worker-infrastructure | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 22. cli-integration | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 23. verification | v0.9 | 1/1 | Complete | 2026-01-13 |
-| 24. game-type-detection | v1.0 | 0/? | Not started | - |
+| 24. game-type-detection | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 25. structural-features | v1.0 | 0/? | Not started | - |
 | 26. training-improvements | v1.0 | 0/? | Not started | - |
 | 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
