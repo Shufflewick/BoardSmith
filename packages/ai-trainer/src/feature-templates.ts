@@ -1409,6 +1409,155 @@ function createOpponentPathBlockedEvaluator(
 // CAPTURE GAME EVALUATORS
 // ============================================
 
+/**
+ * Get the 4 diagonal neighbors of a position that are within board bounds.
+ * Diagonals: NE (+1, -1), NW (-1, -1), SE (+1, +1), SW (-1, +1)
+ */
+function getAdjacentDiagonals(
+  row: number,
+  col: number,
+  totalRows: number,
+  totalCols: number
+): Array<{ row: number; col: number }> {
+  const diagonals: Array<{ row: number; col: number }> = [];
+  const offsets = [
+    { dr: -1, dc: 1 },   // NE
+    { dr: -1, dc: -1 },  // NW
+    { dr: 1, dc: 1 },    // SE
+    { dr: 1, dc: -1 },   // SW
+  ];
+
+  for (const { dr, dc } of offsets) {
+    const newRow = row + dr;
+    const newCol = col + dc;
+    if (newRow >= 0 && newRow < totalRows && newCol >= 0 && newCol < totalCols) {
+      diagonals.push({ row: newRow, col: newCol });
+    }
+  }
+
+  return diagonals;
+}
+
+/**
+ * Count how many of a player's pieces are threatened (can be captured next turn).
+ * A piece is threatened if: an enemy piece is diagonal-adjacent AND the opposite diagonal is empty.
+ */
+function countThreatenedPieces(
+  game: Game,
+  className: string,
+  player: Player,
+  opponent: Player,
+  totalRows: number,
+  totalCols: number
+): number {
+  const playerPieces = getElementsForPlayer(game, className, player);
+  const opponentPieces = getElementsForPlayer(game, className, opponent);
+
+  // Build a map of opponent piece positions for fast lookup
+  const opponentPositions = new Set<string>();
+  for (const piece of opponentPieces) {
+    const row = (piece as any).row;
+    const col = (piece as any).column ?? (piece as any).col;
+    if (row !== undefined && col !== undefined) {
+      opponentPositions.add(`${row},${col}`);
+    }
+  }
+
+  // Build a map of all piece positions (to check if landing spot is empty)
+  const allPiecePositions = new Set<string>();
+  for (const piece of playerPieces) {
+    const row = (piece as any).row;
+    const col = (piece as any).column ?? (piece as any).col;
+    if (row !== undefined && col !== undefined) {
+      allPiecePositions.add(`${row},${col}`);
+    }
+  }
+  for (const pos of opponentPositions) {
+    allPiecePositions.add(pos);
+  }
+
+  let threatenedCount = 0;
+
+  for (const piece of playerPieces) {
+    const row = (piece as any).row;
+    const col = (piece as any).column ?? (piece as any).col;
+    if (row === undefined || col === undefined) continue;
+
+    // Check each diagonal direction for threat
+    const diagonalOffsets = [
+      { dr: -1, dc: 1 },   // NE
+      { dr: -1, dc: -1 },  // NW
+      { dr: 1, dc: 1 },    // SE
+      { dr: 1, dc: -1 },   // SW
+    ];
+
+    for (const { dr, dc } of diagonalOffsets) {
+      const adjacentRow = row + dr;
+      const adjacentCol = col + dc;
+
+      // Check if there's an opponent piece adjacent
+      if (opponentPositions.has(`${adjacentRow},${adjacentCol}`)) {
+        // Check if the landing spot (opposite diagonal) is empty and in bounds
+        const landingRow = row - dr;
+        const landingCol = col - dc;
+
+        if (landingRow >= 0 && landingRow < totalRows &&
+            landingCol >= 0 && landingCol < totalCols &&
+            !allPiecePositions.has(`${landingRow},${landingCol}`)) {
+          // This piece is threatened
+          threatenedCount++;
+          break; // Count each piece only once even if threatened from multiple directions
+        }
+      }
+    }
+  }
+
+  return threatenedCount;
+}
+
+/**
+ * Count how many of a player's pieces are defended (have a friendly piece diagonal-adjacent).
+ * Defended pieces are harder to capture since the opponent would lose their piece.
+ */
+function countDefendedPieces(
+  game: Game,
+  className: string,
+  player: Player,
+  totalRows: number,
+  totalCols: number
+): number {
+  const playerPieces = getElementsForPlayer(game, className, player);
+
+  // Build a map of player piece positions for fast lookup
+  const playerPositions = new Set<string>();
+  for (const piece of playerPieces) {
+    const row = (piece as any).row;
+    const col = (piece as any).column ?? (piece as any).col;
+    if (row !== undefined && col !== undefined) {
+      playerPositions.add(`${row},${col}`);
+    }
+  }
+
+  let defendedCount = 0;
+
+  for (const piece of playerPieces) {
+    const row = (piece as any).row;
+    const col = (piece as any).column ?? (piece as any).col;
+    if (row === undefined || col === undefined) continue;
+
+    // Check if any diagonal has a friendly piece
+    const diagonals = getAdjacentDiagonals(row, col, totalRows, totalCols);
+    for (const diag of diagonals) {
+      if (playerPositions.has(`${diag.row},${diag.col}`)) {
+        defendedCount++;
+        break; // Count each piece only once
+      }
+    }
+  }
+
+  return defendedCount;
+}
+
 function createMobilityAdvantageEvaluator(className: string): CandidateFeature['evaluate'] {
   return (game: Game, playerIndex: number): boolean => {
     const myPlayer = getPlayerByIndex(game, playerIndex);
