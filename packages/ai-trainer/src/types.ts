@@ -4,6 +4,40 @@ import type { Game, GameOptions, FlowState, SerializedAction } from '@boardsmith
 export type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
 
 /**
+ * Game type classification based on win condition patterns.
+ * Used for selecting appropriate zero-config heuristics.
+ */
+export type GameType =
+  | 'connection'   // Win by forming path between edges (Hex)
+  | 'capture'      // Win by capturing/blocking all opponent pieces (Checkers)
+  | 'racing'       // Win by reaching target score first (Cribbage)
+  | 'collection'   // Win by collecting most of something (Go Fish)
+  | 'territory'    // Win by controlling most area (Go) - future
+  | 'elimination'  // Win when opponents eliminated - future
+  | 'unknown';     // Fallback when pattern not detected
+
+/**
+ * Win condition analysis result.
+ * Describes how a game determines victory.
+ */
+export interface WinConditionInfo {
+  /** Detected game type */
+  gameType: GameType;
+  /** Confidence level (0-1) of the detection */
+  confidence: number;
+  /** Patterns that led to this classification */
+  indicators: string[];
+  /** Win condition involves reaching a score threshold */
+  scoreBased: boolean;
+  /** Win condition involves removing opponent pieces/options */
+  eliminationBased: boolean;
+  /** Win condition involves forming paths or connections */
+  connectionBased: boolean;
+  /** Win condition involves collecting sets or items */
+  collectionBased: boolean;
+}
+
+/**
  * Discovered element type information
  */
 export interface ElementTypeInfo {
@@ -61,6 +95,8 @@ export interface GameStructure {
   spatialInfo: SpatialInfo;
   /** Number of players */
   playerCount: number;
+  /** Win condition analysis */
+  winConditionInfo: WinConditionInfo;
 }
 
 /**
@@ -97,6 +133,8 @@ export interface SerializableGameStructure {
   spatialInfo: SpatialInfo;
   /** Number of players */
   playerCount: number;
+  /** Win condition analysis */
+  winConditionInfo: WinConditionInfo;
 }
 
 /**
