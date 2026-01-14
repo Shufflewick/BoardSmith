@@ -5,15 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-13)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** All milestones complete
+**Current focus:** v1.0 AI System Overhaul
 
 ## Current Position
 
-Milestone: v0.9 shipped
-Status: All milestones complete
-Last activity: 2026-01-13 — Shipped v0.9 Parallel AI Training
+Phase: 24 of 28 (game-type-detection)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-14 — Milestone v1.0 created
 
-Progress: ██████████ 100%
+Progress: ░░░░░░░░░░ 0%
 
 ## Milestones
 
@@ -44,9 +45,10 @@ Progress: ██████████ 100%
 - Milestone v0.8 complete: Dev state transfer, validation layer, and auto-checkpoints for reliable HMR
 - Milestone v0.9 created: Parallel AI training, 4 phases (Phases 20-23)
 - Milestone v0.9 complete: 8.3x speedup with worker thread parallelization, verified determinism
+- Milestone v1.0 created: AI system overhaul, 5 phases (Phase 24-28)
 
 ## Session Continuity
 
-Last session: 2026-01-13
-Status: v0.9 milestone shipped
+Last session: 2026-01-14
+Stopped at: Milestone v1.0 initialization
 Resume file: None

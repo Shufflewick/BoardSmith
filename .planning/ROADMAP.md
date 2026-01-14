@@ -27,6 +27,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
 - ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
+- 🚧 **v1.0 AI System Overhaul** — Phases 24-28 (in progress)
 
 ## Phases
 
@@ -219,7 +220,8 @@ Plans:
 
 </details>
 
-### ✅ v0.9 Parallel AI Training — SHIPPED 2026-01-13
+<details>
+<summary>✅ v0.9 Parallel AI Training — SHIPPED 2026-01-13</summary>
 
 **Milestone Goal:** Add worker thread parallelization to `train-ai` to utilize multiple CPU cores, achieving near-linear speedup on modern machines.
 
@@ -259,6 +261,60 @@ Plans:
 Plans:
 - [x] 23-01: Add parallel simulator tests and document benchmark results
 
+</details>
+
+### 🚧 v1.0 AI System Overhaul (In Progress)
+
+**Milestone Goal:** Transform AI training from broken/useless to a tiered system that produces quality opponents with minimal designer effort.
+
+#### Phase 24: game-type-detection
+**Goal**: Analyze win conditions to auto-categorize games (connection, territory, capture, racing) and apply appropriate Tier 1 zero-config heuristics
+**Depends on**: v0.9 complete
+**Research**: Unlikely (internal patterns, analyzing existing game definitions)
+**Plans**: TBD
+
+Plans:
+- [ ] 24-01: TBD (run /gsd:plan-phase 24 to break down)
+
+#### Phase 25: structural-features
+**Goal**: Enhance introspector to detect connectivity patterns, graph-based features (paths, bridges, reachability), influence maps, and threat detection
+**Depends on**: Phase 24
+**Research**: Likely (graph algorithms, influence mapping patterns)
+**Research topics**: Graph algorithms for connectivity, influence map implementations, threat detection patterns
+**Plans**: TBD
+
+Plans:
+- [ ] 25-01: TBD
+
+#### Phase 26: training-improvements
+**Goal**: Add mutation/evolution of feature weights, use stronger MCTS as training oracle, ensure training produces measurable improvement (Tier 2)
+**Depends on**: Phase 25
+**Research**: Likely (evolutionary algorithms, mutation strategies)
+**Research topics**: Evolutionary algorithm patterns, genetic programming for weights, fitness function design
+**Plans**: TBD
+
+Plans:
+- [ ] 26-01: TBD
+
+#### Phase 27: llm-strategy-generation
+**Goal**: `boardsmith generate-ai --model claude` command that analyzes game rules and generates custom evaluation functions (Tier 3)
+**Depends on**: Phase 26
+**Research**: Likely (Claude API, prompt engineering for game rules → heuristics)
+**Research topics**: Claude API usage, prompt engineering for code generation, game rule analysis
+**Plans**: TBD
+
+Plans:
+- [ ] 27-01: TBD
+
+#### Phase 28: integration-verification
+**Goal**: Unified CLI with tiered AI system, documentation, multi-game validation (test with Hex + at least one other game type)
+**Depends on**: Phase 27
+**Research**: Unlikely (internal wiring, docs, testing)
+**Plans**: TBD
+
+Plans:
+- [ ] 28-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -286,3 +342,8 @@ Plans:
 | 21. worker-infrastructure | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 22. cli-integration | v0.9 | 1/1 | Complete | 2026-01-13 |
 | 23. verification | v0.9 | 1/1 | Complete | 2026-01-13 |
+| 24. game-type-detection | v1.0 | 0/? | Not started | - |
+| 25. structural-features | v1.0 | 0/? | Not started | - |
+| 26. training-improvements | v1.0 | 0/? | Not started | - |
+| 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
+| 28. integration-verification | v1.0 | 0/? | Not started | - |
