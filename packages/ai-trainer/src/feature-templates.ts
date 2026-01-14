@@ -663,6 +663,122 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     },
   },
 
+  {
+    id: 'threat-advantage',
+    category: 'comparison',
+    descriptionTemplate: 'Opponent has more threatened pieces than player',
+    requires: { spatial: true, ownership: true, gameType: 'capture' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.dimensions) {
+        return features;
+      }
+
+      const { rows, columns } = structure.spatialInfo.dimensions;
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-threat-advantage`,
+          description: `Opponent has more threatened ${className} than player (safer position)`,
+          category: 'comparison',
+          templateId: 'threat-advantage',
+          evaluate: createThreatAdvantageEvaluator(className, rows, columns),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  {
+    id: 'defense-advantage',
+    category: 'comparison',
+    descriptionTemplate: 'Player has more defended pieces than opponent',
+    requires: { spatial: true, ownership: true, gameType: 'capture' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.dimensions) {
+        return features;
+      }
+
+      const { rows, columns } = structure.spatialInfo.dimensions;
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-defense-advantage`,
+          description: `Player has more defended ${className} than opponent`,
+          category: 'comparison',
+          templateId: 'defense-advantage',
+          evaluate: createDefenseAdvantageEvaluator(className, rows, columns),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  {
+    id: 'no-threats',
+    category: 'boolean',
+    descriptionTemplate: 'Player has no threatened pieces',
+    requires: { spatial: true, ownership: true, gameType: 'capture' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.dimensions) {
+        return features;
+      }
+
+      const { rows, columns } = structure.spatialInfo.dimensions;
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-no-threats`,
+          description: `Player has no threatened ${className} (safe position)`,
+          category: 'boolean',
+          templateId: 'no-threats',
+          evaluate: createNoThreatsEvaluator(className, rows, columns),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  {
+    id: 'threat-ratio',
+    category: 'ratio',
+    descriptionTemplate: 'Player pieces are mostly defended (>50%)',
+    requires: { spatial: true, ownership: true, gameType: 'capture' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.dimensions) {
+        return features;
+      }
+
+      const { rows, columns } = structure.spatialInfo.dimensions;
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-mostly-defended`,
+          description: `Player ${className} are mostly defended (>50% have friendly support)`,
+          category: 'ratio',
+          templateId: 'threat-ratio',
+          evaluate: createMostlyDefendedEvaluator(className, rows, columns),
+        });
+      }
+
+      return features;
+    },
+  },
+
   // ============================================
   // RACING GAME FEATURES (Cribbage, etc.)
   // ============================================
@@ -1647,6 +1763,85 @@ function createPromotionProgressEvaluator(
 
     // Lower average distance = closer to promotion = better
     return myAvg < theirAvg;
+  };
+}
+
+/**
+ * Evaluator: Opponent has more threatened pieces than player.
+ * Having fewer threatened pieces means a safer position.
+ */
+function createThreatAdvantageEvaluator(
+  className: string,
+  totalRows: number,
+  totalCols: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+    const myThreatened = countThreatenedPieces(game, className, myPlayer, opponent, totalRows, totalCols);
+    const opponentThreatened = countThreatenedPieces(game, className, opponent, myPlayer, totalRows, totalCols);
+
+    // Better if opponent has more threatened pieces
+    return opponentThreatened > myThreatened;
+  };
+}
+
+/**
+ * Evaluator: Player has more defended pieces than opponent.
+ * Better defensive positioning.
+ */
+function createDefenseAdvantageEvaluator(
+  className: string,
+  totalRows: number,
+  totalCols: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+    const myDefended = countDefendedPieces(game, className, myPlayer, totalRows, totalCols);
+    const opponentDefended = countDefendedPieces(game, className, opponent, totalRows, totalCols);
+
+    return myDefended > opponentDefended;
+  };
+}
+
+/**
+ * Evaluator: Player has no threatened pieces.
+ * A completely safe position.
+ */
+function createNoThreatsEvaluator(
+  className: string,
+  totalRows: number,
+  totalCols: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+    const myThreatened = countThreatenedPieces(game, className, myPlayer, opponent, totalRows, totalCols);
+    return myThreatened === 0;
+  };
+}
+
+/**
+ * Evaluator: More than half of player's pieces are defended.
+ * Good defensive structure.
+ */
+function createMostlyDefendedEvaluator(
+  className: string,
+  totalRows: number,
+  totalCols: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const myPieces = getElementsForPlayer(game, className, myPlayer);
+
+    if (myPieces.length === 0) return false;
+
+    const defended = countDefendedPieces(game, className, myPlayer, totalRows, totalCols);
+    return defended > myPieces.length / 2;
   };
 }
 
