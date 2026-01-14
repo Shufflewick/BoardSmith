@@ -1,5 +1,6 @@
-// Main trainer
+// Main trainers
 export { AITrainer, trainAI } from './trainer.js';
+export { ParallelTrainer, type ParallelTrainingConfig } from './parallel-trainer.js';
 
 // Introspection
 export {
