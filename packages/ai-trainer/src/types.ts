@@ -331,6 +331,23 @@ export interface TrainingConfig {
    * @deprecated Use oracleMCTSIterations instead. Kept for backwards compatibility.
    */
   mctsIterations?: number;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Evolution Settings (µ+λ evolutionary strategy for weight optimization)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /** Enable evolutionary weight optimization after correlation-based training */
+  evolve?: boolean;
+  /** Evolution generations (default 5) */
+  evolutionGenerations?: number;
+  /** Parent population size µ (default 5) */
+  evolutionMu?: number;
+  /** Offspring population size λ (default 20) */
+  evolutionLambda?: number;
+  /** Initial mutation sigma (default 1.0) */
+  evolutionSigma?: number;
+  /** Benchmark games per fitness evaluation (default 50) */
+  evolutionBenchmarkGames?: number;
 }
 
 /**
@@ -367,6 +384,13 @@ export const DEFAULT_TRAINING_CONFIG: TrainingConfig = {
   oracleMCTSIterations: 50, // Strong oracle for quality training games
   trainedMCTSIterations: 10, // Lower when objectives guide search
   benchmarkMCTSIterations: 100, // Strong for accurate evaluation
+  // Evolution defaults
+  evolve: false,
+  evolutionGenerations: 5,
+  evolutionMu: 5,
+  evolutionLambda: 20,
+  evolutionSigma: 1.0,
+  evolutionBenchmarkGames: 50,
 };
 
 /**

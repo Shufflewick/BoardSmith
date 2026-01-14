@@ -10,7 +10,7 @@
  * 3. Select top µ from combined population (µ+λ) as next parents
  */
 
-import type { LearnedObjective } from './types';
+import type { LearnedObjective } from './types.js';
 
 /**
  * Create a seeded random number generator.

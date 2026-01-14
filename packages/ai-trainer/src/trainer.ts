@@ -29,6 +29,11 @@ import {
   type ParsedAIFile,
 } from './ai-parser.js';
 import { benchmarkAI } from './benchmark.js';
+import {
+  createSeededRandom,
+  generateOffspring,
+  selectBest,
+} from './evolution.js';
 
 /**
  * Main trainer class that orchestrates the entire AI training process
@@ -252,6 +257,23 @@ export class AITrainer<G extends Game = Game> {
       });
     }
 
+    // Phase 5.5: Evolutionary optimization (if enabled)
+    if (this.config.evolve && learnedObjectives.length > 0) {
+      this.reportProgress({
+        iteration: this.config.iterations,
+        totalIterations: this.config.iterations,
+        gamesCompleted: 0,
+        totalGames: 0,
+        bestWinRate,
+        featuresSelected: learnedObjectives.length,
+        message: 'Starting evolutionary optimization...',
+      });
+
+      const evolutionResult = await this.runEvolution(learnedObjectives, bestWinRate);
+      learnedObjectives = evolutionResult.objectives;
+      bestWinRate = evolutionResult.bestFitness;
+    }
+
     // Phase 6: Create action preferences
     const actionPreferences = this.createActionPreferences(allActionStats);
 
@@ -389,6 +411,135 @@ export class AITrainer<G extends Game = Game> {
     if (this.config.onProgress) {
       this.config.onProgress(progress);
     }
+  }
+
+  /**
+   * Run evolutionary weight optimization.
+   *
+   * Uses µ+λ evolution strategy:
+   * - µ (mu) parents survive to next generation
+   * - λ (lambda) offspring generated each generation
+   * - Selection from combined µ+λ population
+   *
+   * @param initialObjectives - Starting objectives from correlation-based training
+   * @param initialFitness - Starting win rate from correlation-based training
+   * @returns Evolved objectives and best fitness achieved
+   */
+  private async runEvolution(
+    initialObjectives: LearnedObjective[],
+    initialFitness: number
+  ): Promise<{ objectives: LearnedObjective[]; bestFitness: number }> {
+    const generations = this.config.evolutionGenerations ?? 5;
+    const mu = this.config.evolutionMu ?? 5;
+    const lambda = this.config.evolutionLambda ?? 20;
+    let sigma = this.config.evolutionSigma ?? 1.0;
+    const benchmarkGames = this.config.evolutionBenchmarkGames ?? 50;
+
+    // Initialize parent population with slight variations of the initial objectives
+    const rng = createSeededRandom(`${this.config.seed ?? 'evolution'}-init`);
+    let parents: LearnedObjective[][] = [initialObjectives];
+
+    // Fill initial parent population with mutations
+    const initialOffspring = generateOffspring([initialObjectives], mu - 1, sigma * 0.5, rng);
+    parents = [...parents, ...initialOffspring];
+
+    // Track best solution
+    let bestObjectives = initialObjectives;
+    let bestFitness = initialFitness;
+
+    for (let gen = 1; gen <= generations; gen++) {
+      this.reportProgress({
+        iteration: this.config.iterations,
+        totalIterations: this.config.iterations,
+        gamesCompleted: 0,
+        totalGames: lambda,
+        bestWinRate: bestFitness,
+        featuresSelected: bestObjectives.length,
+        message: `Evolution ${gen}/${generations}: Generating ${lambda} offspring...`,
+      });
+
+      // Generate offspring
+      const genRng = createSeededRandom(`${this.config.seed ?? 'evolution'}-gen-${gen}`);
+      const offspring = generateOffspring(parents, lambda, sigma, genRng);
+
+      // Combine parents + offspring for evaluation
+      const population = [...parents, ...offspring];
+
+      this.reportProgress({
+        iteration: this.config.iterations,
+        totalIterations: this.config.iterations,
+        gamesCompleted: 0,
+        totalGames: population.length,
+        bestWinRate: bestFitness,
+        featuresSelected: bestObjectives.length,
+        message: `Evolution ${gen}/${generations}: Evaluating ${population.length} candidates...`,
+      });
+
+      // Evaluate fitness for each individual
+      const fitnesses: number[] = [];
+      for (let i = 0; i < population.length; i++) {
+        const individual = population[i];
+
+        // Skip empty objective sets
+        if (individual.length === 0) {
+          fitnesses.push(0);
+          continue;
+        }
+
+        // Benchmark this individual
+        const benchResult = await benchmarkAI(
+          this.GameClass,
+          this.gameType,
+          individual,
+          {
+            gameCount: benchmarkGames,
+            mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
+            timeout: this.config.gameTimeout,
+            maxActions: this.config.maxActionsPerGame,
+            seed: `${this.config.seed ?? 'evolution'}-gen-${gen}-ind-${i}`,
+          }
+        );
+
+        fitnesses.push(benchResult.winRate);
+
+        // Update best if improved
+        if (benchResult.winRate > bestFitness) {
+          bestFitness = benchResult.winRate;
+          bestObjectives = individual;
+        }
+
+        // Progress update every few evaluations
+        if ((i + 1) % 5 === 0 || i === population.length - 1) {
+          this.reportProgress({
+            iteration: this.config.iterations,
+            totalIterations: this.config.iterations,
+            gamesCompleted: i + 1,
+            totalGames: population.length,
+            bestWinRate: bestFitness,
+            featuresSelected: bestObjectives.length,
+            message: `Evolution ${gen}/${generations}: Evaluated ${i + 1}/${population.length} (best: ${(bestFitness * 100).toFixed(1)}%)`,
+          });
+        }
+      }
+
+      // Select best µ individuals as new parents
+      parents = selectBest(population, fitnesses, mu);
+
+      // Decay sigma for finer search as we progress
+      sigma *= 0.9;
+
+      this.reportProgress({
+        iteration: this.config.iterations,
+        totalIterations: this.config.iterations,
+        gamesCompleted: population.length,
+        totalGames: population.length,
+        bestWinRate: bestFitness,
+        featuresSelected: bestObjectives.length,
+        message: `Evolution ${gen}/${generations}: Best fitness ${(bestFitness * 100).toFixed(1)}%`,
+      });
+    }
+
+    return { objectives: bestObjectives, bestFitness };
   }
 
   /**
