@@ -62,6 +62,14 @@ export {
   type ParsedObjective,
 } from './ai-parser.js';
 
+// Benchmark evaluation
+export {
+  benchmarkAI,
+  type BenchmarkConfig,
+  type BenchmarkResult,
+  type PlayerConfig,
+} from './benchmark.js';
+
 // Types
 export type {
   GameClass,
