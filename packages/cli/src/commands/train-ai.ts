@@ -316,8 +316,8 @@ export async function trainAICommand(options: TrainAIOptions): Promise<void> {
         evolutionGenerations,
         evolutionLambda,
         onProgress: (progress: TrainingProgress) => {
-          // Detect evolution messages
-          const isEvolution = progress.message.includes('Evolution');
+          // Detect evolution messages (any message starting with "Evolution:")
+          const isEvolution = progress.message.startsWith('Evolution');
 
           if (isEvolution) {
             // Always show evolution progress

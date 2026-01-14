@@ -266,7 +266,7 @@ export class AITrainer<G extends Game = Game> {
         totalGames: 0,
         bestWinRate,
         featuresSelected: learnedObjectives.length,
-        message: 'Starting evolutionary optimization...',
+        message: 'Evolution: Starting optimization...',
       });
 
       const evolutionResult = await this.runEvolution(learnedObjectives, bestWinRate);
@@ -324,8 +324,9 @@ export class AITrainer<G extends Game = Game> {
       // Calculate weight from correlation
       const weight = correlationToWeight(stat.correlation, 10);
 
-      // Skip features with negligible weight
-      if (Math.abs(weight) < 0.5) continue;
+      // Skip features with negligible weight (but keep more for evolution to work with)
+      // Use lower threshold if evolution is enabled since evolution can improve weak signals
+      if (Math.abs(weight) < 0.1) continue;
 
       objectives.push({
         featureId: stat.featureId,
