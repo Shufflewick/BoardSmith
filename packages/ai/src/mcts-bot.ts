@@ -24,6 +24,10 @@ type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
  * 2. EXPAND: Try one unexplored action from that leaf
  * 3. PLAYOUT: Random moves until game ends (up to playoutDepth)
  * 4. BACKPROPAGATE: Update win counts up the tree
+ *
+ * Uses incremental state management: maintains a single game instance
+ * and applies/undoes moves as it traverses the tree, rather than
+ * reconstructing game state from snapshots at each node.
  */
 export class MCTSBot<G extends Game = Game> {
   private game: G;
@@ -35,6 +39,13 @@ export class MCTSBot<G extends Game = Game> {
   private rng: () => number;
   private actionHistory: SerializedAction[];
   private seed?: string;
+
+  /** Live game instance used during search (cloned from original) */
+  private searchGame: G | null = null;
+  /** Command history length at root node (for undo calculations) */
+  private rootCommandCount: number = 0;
+  /** Root snapshot for fallback recovery */
+  private rootSnapshot: GameStateSnapshot | null = null;
 
   constructor(
     game: G,
@@ -52,6 +63,8 @@ export class MCTSBot<G extends Game = Game> {
     this.actionHistory = actionHistory;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.objectives = aiConfig?.objectives;
+    // DEBUG: Log if objectives are set (remove after debugging)
+    console.log(`[MCTS] Bot created for player ${playerIndex}, objectives=${this.objectives ? 'SET' : 'NOT SET'}`);
     this.seed = this.config.seed;
     this.rng = createSeededRandom(this.config.seed);
   }
@@ -86,13 +99,23 @@ export class MCTSBot<G extends Game = Game> {
       return moves[0];
     }
 
-    // Create root node
+    // Initialize incremental state management:
+    // Clone game once and track root command count for undo
+    this.rootSnapshot = this.captureSnapshot();
+    const clonedGame = this.restoreGame(this.rootSnapshot);
+    if (!clonedGame) {
+      throw new Error('Failed to clone game for MCTS search');
+    }
+    this.searchGame = clonedGame as G;
+    this.rootCommandCount = this.searchGame.commandHistory.length;
+
+    // Create root node (no snapshot needed per-node anymore)
     const root = this.createNode(
-      this.captureSnapshot(),
       flowState,
       null,
       null,
-      moves
+      moves,
+      0 // root has 0 commands from parent
     );
 
     // Run MCTS iterations with timeout failsafe
@@ -105,16 +128,27 @@ export class MCTSBot<G extends Game = Game> {
         break;
       }
 
-      const leaf = this.select(root);
-      const { child, game } = this.expand(leaf);
-      const result = this.playout(child, game);
-      this.backpropagate(child, result);
+      // SELECT: Walk down tree, applying moves to searchGame
+      const leaf = this.selectWithPath(root);
+
+      // EXPAND: Try one unexplored move, creating child
+      const child = this.expandIncremental(leaf);
+
+      // PLAYOUT: Random simulation from current state
+      const result = this.playoutIncremental(child);
+
+      // BACKPROPAGATE: Update stats and undo back to root
+      this.backpropagateWithUndo(child, result);
 
       // Yield to event loop in async mode (every iteration for responsiveness)
       if (this.config.async) {
         await new Promise(resolve => setImmediate(resolve));
       }
     }
+
+    // Cleanup search state
+    this.searchGame = null;
+    this.rootSnapshot = null;
 
     // Select best child (most visits for robustness)
     if (root.children.length === 0) {
@@ -135,11 +169,15 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * SELECTION: Walk down tree using UCT until we find a node with untried moves
+   * SELECTION with path tracking: Walk down tree using UCT, applying moves to searchGame.
+   * After this completes, searchGame is positioned at the returned leaf node's state.
    */
-  private select(node: MCTSNode): MCTSNode {
+  private selectWithPath(node: MCTSNode): MCTSNode {
     while (node.untriedMoves.length === 0 && node.children.length > 0) {
-      node = this.selectChild(node);
+      const child = this.selectChild(node);
+      // Apply the child's move to searchGame to descend
+      this.applyMoveToSearchGame(child);
+      node = child;
     }
     return node;
   }
@@ -169,59 +207,65 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Grow the search tree by adding a child node for one unexplored move.
-   * Picks a random untried move from the leaf node, applies it to a restored game,
-   * and creates a new node representing the resulting state.
-   * Returns both the child and the game instance for efficient playout reuse.
+   * Apply a node's parent move to searchGame.
+   * Used during selection to descend the tree.
    */
-  private expand(node: MCTSNode): { child: MCTSNode; game: Game | null } {
+  private applyMoveToSearchGame(node: MCTSNode): void {
+    if (!node.parentMove || !this.searchGame || !node.parent) return;
+
+    const currentPlayer = this.getCurrentPlayerFromFlowState(node.parent.flowState);
+    try {
+      this.searchGame.continueFlow(node.parentMove.action, node.parentMove.args, currentPlayer);
+    } catch (error) {
+      // Move failed - this shouldn't happen for already-explored nodes
+      // but handle gracefully
+    }
+  }
+
+  /**
+   * EXPAND with incremental state: Apply one unexplored move to searchGame.
+   * The searchGame is already positioned at the node's state from selection.
+   * Returns the new child node (or current node if expansion fails).
+   */
+  private expandIncremental(node: MCTSNode): MCTSNode {
     if (node.untriedMoves.length === 0 || node.flowState.complete) {
-      return { child: node, game: null };
+      return node;
+    }
+
+    if (!this.searchGame) {
+      return node;
     }
 
     // Pick random untried move
     const idx = Math.floor(this.rng() * node.untriedMoves.length);
     const move = node.untriedMoves.splice(idx, 1)[0];
 
-    // Restore game once and reuse it
-    const game = this.restoreGame(node.snapshot);
-    if (!game) {
-      // Restoration failed - return current node without expanding
-      return { child: node, game: null };
-    }
+    // Record command count before applying move
+    const commandCountBefore = this.searchGame.commandHistory.length;
 
     // Use the current player from flow state (handles simultaneous actions)
     const currentPlayer = this.getCurrentPlayerFromFlowState(node.flowState);
 
-    // Try to apply the move - if it fails, return the current node without expanding
+    // Try to apply the move
     let flowState: FlowState;
     try {
-      flowState = game.continueFlow(move.action, move.args, currentPlayer);
+      flowState = this.searchGame.continueFlow(move.action, move.args, currentPlayer);
     } catch (error) {
-      // Move failed during simulation - this can happen with complex game state transitions
-      // Return the current node and let playout evaluate it
-      return { child: node, game: null };
+      // Move failed during simulation - return current node
+      return node;
     }
 
+    // Calculate how many commands this move generated
+    const commandCount = this.searchGame.commandHistory.length - commandCountBefore;
+
     // Get available moves for the NEXT player (whoever's turn it is now)
-    const newMoves = flowState.complete ? [] : this.enumerateMovesForSimulation(game as G, flowState);
+    const newMoves = flowState.complete ? [] : this.enumerateMovesForSimulation(this.searchGame, flowState);
 
-    // Create snapshot for storing in tree (needed for future expansions)
-    const newActionHistory = [
-      ...node.snapshot.actionHistory,
-      {
-        name: move.action,
-        player: currentPlayer,
-        args: move.args,
-        timestamp: Date.now(),
-      },
-    ];
-    const snapshot = createSnapshot(game, this.gameType, newActionHistory, node.snapshot.seed);
-
-    const child = this.createNode(snapshot, flowState, node, move, newMoves);
+    // Create child node with command count (no snapshot needed!)
+    const child = this.createNode(flowState, node, move, newMoves, commandCount);
     node.children.push(child);
 
-    return { child, game };
+    return child;
   }
 
   // ============================================================================
@@ -230,16 +274,13 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Simulate a game from the given node to estimate position value.
+   * PLAYOUT with incremental state: Simulate from searchGame's current position.
+   * The searchGame is already positioned at the node's state.
    * Plays random moves until the game ends or playoutDepth is reached.
    * Returns a score in [0,1]: 1=win for bot, 0=loss, 0.5=draw/unknown.
-   * Can reuse a game instance from expand() to avoid redundant restoration.
    */
-  private playout(node: MCTSNode, existingGame: Game | null): number {
-    // Reuse existing game if provided, otherwise restore
-    const game = existingGame ?? this.restoreGame(node.snapshot);
-    if (!game) {
-      // Restoration failed - return neutral result
+  private playoutIncremental(node: MCTSNode): number {
+    if (!this.searchGame) {
       return 0.5;
     }
 
@@ -248,7 +289,7 @@ export class MCTSBot<G extends Game = Game> {
 
     while (!flowState.complete && depth < this.config.playoutDepth) {
       // Get available moves for the current player (whoever's turn it is)
-      const moves = this.enumerateMovesForSimulation(game as G, flowState);
+      const moves = this.enumerateMovesForSimulation(this.searchGame, flowState);
       if (moves.length === 0) {
         break;
       }
@@ -261,7 +302,7 @@ export class MCTSBot<G extends Game = Game> {
 
       // Try to apply the move - if it fails, stop the playout
       try {
-        flowState = game.continueFlow(move.action, move.args, currentPlayer);
+        flowState = this.searchGame.continueFlow(move.action, move.args, currentPlayer);
       } catch (error) {
         // Move failed during simulation - stop playout and evaluate current state
         break;
@@ -270,7 +311,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Evaluate using the final game state
-    return this.evaluateTerminalFromGame(game, flowState);
+    return this.evaluateTerminalFromGame(this.searchGame, flowState);
   }
 
   // ============================================================================
@@ -279,16 +320,74 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Propagate simulation results from leaf to root, updating statistics.
-   * Increments visit count and accumulates value at each ancestor node.
-   * Adjusts perspective so each node's value reflects the player whose turn it is.
+   * BACKPROPAGATE with undo: Update statistics and roll back searchGame to root state.
+   * First undoes all playout moves to get back to node state, then undoes tree moves
+   * as we walk up to root.
    */
-  private backpropagate(node: MCTSNode | null, result: number): void {
+  private backpropagateWithUndo(node: MCTSNode | null, result: number): void {
+    if (!this.searchGame) return;
+
+    // First, undo playout moves to return to the node's state
+    // (playout commands are everything beyond the tree path)
+    const totalCommands = this.searchGame.commandHistory.length - this.rootCommandCount;
+    const nodeDepthCommands = this.getNodeCommandDepth(node);
+    const playoutCommands = totalCommands - nodeDepthCommands;
+
+    if (playoutCommands > 0) {
+      const success = this.searchGame.undoCommands(playoutCommands);
+      if (!success) {
+        // Undo failed (e.g., non-invertible command like SHUFFLE)
+        // Recover by restoring from root snapshot
+        this.recoverFromUndoFailure();
+        // Still update statistics
+        this.backpropagateStats(node, result);
+        return;
+      }
+    }
+
+    // Now backpropagate up the tree, undoing each node's commands
     while (node !== null) {
       node.visits++;
       // Value is from perspective of player who just moved to reach this node
       // If it's our player's turn at parent, result is good for us
       // If it's opponent's turn at parent, result is bad for them (good for us)
+      const isOurPerspective = node.parent === null ||
+        node.parent.currentPlayer === this.playerIndex;
+      node.value += isOurPerspective ? result : (1 - result);
+
+      // Undo this node's commands to return to parent state
+      if (node.commandCount > 0 && node.parent !== null) {
+        const success = this.searchGame.undoCommands(node.commandCount);
+        if (!success) {
+          // Undo failed - recover and continue stats update only
+          this.recoverFromUndoFailure();
+          this.backpropagateStats(node.parent, result);
+          return;
+        }
+      }
+
+      node = node.parent;
+    }
+  }
+
+  /**
+   * Get total command depth from root to a node (sum of all commandCounts in path)
+   */
+  private getNodeCommandDepth(node: MCTSNode | null): number {
+    let depth = 0;
+    while (node !== null) {
+      depth += node.commandCount;
+      node = node.parent;
+    }
+    return depth;
+  }
+
+  /**
+   * Update statistics only (no undo) - used after recovery
+   */
+  private backpropagateStats(node: MCTSNode | null, result: number): void {
+    while (node !== null) {
+      node.visits++;
       const isOurPerspective = node.parent === null ||
         node.parent.currentPlayer === this.playerIndex;
       node.value += isOurPerspective ? result : (1 - result);
@@ -435,15 +534,6 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
     return flowState.currentPlayer ?? this.playerIndex;
-  }
-
-  /**
-   * Enumerate moves from a snapshot (creates temporary game)
-   */
-  private enumerateMovesFromSnapshot(snapshot: GameStateSnapshot, flowState: FlowState): BotMove[] {
-    const game = this.restoreGame(snapshot);
-    if (!game) return [];
-    return this.enumerateMoves(game as G, flowState);
   }
 
   /**
@@ -649,7 +739,7 @@ export class MCTSBot<G extends Game = Game> {
 
   // ============================================================================
   // SECTION: State Management
-  // Purpose: Snapshot capture and game restoration for tree search
+  // Purpose: Incremental state management with snapshot fallback for recovery
   // ============================================================================
 
   /**
@@ -690,111 +780,40 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Apply a move to a snapshot, returning new snapshot and flow state
-   * Returns null if the game cannot be restored or move fails
+   * Recover from undo failure by restoring searchGame from root snapshot.
+   * Called when undoCommands returns false (e.g., non-invertible command like SHUFFLE).
    */
-  private applyMove(
-    snapshot: GameStateSnapshot,
-    move: BotMove
-  ): { snapshot: GameStateSnapshot; flowState: FlowState } | null {
-    const game = this.restoreGame(snapshot);
-    if (!game) return null;
+  private recoverFromUndoFailure(): void {
+    if (!this.rootSnapshot) return;
 
-    const currentPlayer = game.getFlowState()?.currentPlayer ?? this.playerIndex;
-
-    // Apply the move
-    let flowState: FlowState;
-    try {
-      flowState = game.continueFlow(move.action, move.args, currentPlayer);
-    } catch (error) {
-      return null;
+    const game = this.restoreGame(this.rootSnapshot);
+    if (game) {
+      this.searchGame = game as G;
+      this.rootCommandCount = this.searchGame.commandHistory.length;
     }
-
-    // Create new snapshot with updated action history
-    const newActionHistory = [
-      ...snapshot.actionHistory,
-      {
-        name: move.action,
-        player: currentPlayer,
-        args: move.args,
-        timestamp: Date.now(),
-      },
-    ];
-
-    const newSnapshot = createSnapshot(game, this.gameType, newActionHistory, snapshot.seed);
-
-    return { snapshot: newSnapshot, flowState };
   }
 
   /**
-   * Create an MCTS node
+   * Create an MCTS node (path-based, no snapshot)
    */
   private createNode(
-    snapshot: GameStateSnapshot,
     flowState: FlowState,
     parent: MCTSNode | null,
     parentMove: BotMove | null,
-    untriedMoves: BotMove[]
+    untriedMoves: BotMove[],
+    commandCount: number
   ): MCTSNode {
     return {
-      snapshot,
       flowState,
       parent,
       parentMove,
+      commandCount,
       children: [],
       untriedMoves: [...untriedMoves],
       visits: 0,
       value: 0,
       currentPlayer: flowState.currentPlayer ?? this.playerIndex,
     };
-  }
-
-  /**
-   * Evaluate objectives at a position
-   */
-  private evaluateObjectives(snapshot: GameStateSnapshot): number {
-    if (!this.objectives) return 0;
-
-    const game = this.restoreGame(snapshot);
-    if (!game) return 0;
-
-    const objectives = this.objectives(game, this.playerIndex);
-
-    let totalScore = 0;
-    for (const obj of Object.values(objectives)) {
-      if (obj.checker(game, this.playerIndex)) {
-        totalScore += obj.weight;
-      }
-    }
-
-    return totalScore;
-  }
-
-  /**
-   * Evaluate terminal position from snapshot
-   */
-  private evaluateTerminal(snapshot: GameStateSnapshot, flowState: FlowState): number {
-    if (!flowState.complete) {
-      // Game didn't complete - use objectives if available
-      if (this.objectives) {
-        const score = this.evaluateObjectives(snapshot);
-        // Normalize to [0, 1]
-        return score > 0 ? 0.6 : (score < 0 ? 0.4 : 0.5);
-      }
-      return 0.5; // Draw/unknown
-    }
-
-    // Check for winner
-    const winners = snapshot.state.settings.winners as number[] | undefined;
-    if (!winners || winners.length === 0) {
-      return 0.5; // Draw
-    }
-
-    if (winners.includes(this.playerIndex)) {
-      return 1; // Win
-    }
-
-    return 0; // Loss
   }
 
   /**
@@ -806,13 +825,37 @@ export class MCTSBot<G extends Game = Game> {
       if (this.objectives) {
         const objectives = this.objectives(game, this.playerIndex);
         let totalScore = 0;
-        for (const obj of Object.values(objectives)) {
+        let maxPossibleScore = 0;
+        let minPossibleScore = 0;
+
+        const matched: string[] = [];
+        for (const [name, obj] of Object.entries(objectives)) {
+          if (obj.weight > 0) {
+            maxPossibleScore += obj.weight;
+          } else {
+            minPossibleScore += obj.weight;
+          }
           if (obj.checker(game, this.playerIndex)) {
             totalScore += obj.weight;
+            matched.push(`${name}(${obj.weight})`);
           }
         }
-        // Normalize to [0, 1]
-        return totalScore > 0 ? 0.6 : (totalScore < 0 ? 0.4 : 0.5);
+
+        // Normalize to [0.1, 0.9] range based on possible score range
+        // This preserves discrimination between different objective achievements
+        const scoreRange = maxPossibleScore - minPossibleScore;
+        if (scoreRange === 0) return 0.5;
+
+        // Map totalScore from [minPossibleScore, maxPossibleScore] to [0.1, 0.9]
+        const normalized = (totalScore - minPossibleScore) / scoreRange;
+        const result = 0.1 + normalized * 0.8;
+
+        // DEBUG: Log objective evaluation (remove after debugging)
+        if (Math.random() < 0.01) { // Sample 1% to avoid spam
+          console.log(`[MCTS] Objectives: score=${totalScore}, range=[${minPossibleScore},${maxPossibleScore}], result=${result.toFixed(3)}, matched=[${matched.join(', ')}]`);
+        }
+
+        return result;
       }
       return 0.5; // Draw/unknown
     }
