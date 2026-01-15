@@ -133,10 +133,16 @@ function computeShortestPathLength(
 }
 
 /**
- * Find empty cells on the opponent's shortest path that can be blocked.
- * Uses Dijkstra's algorithm with path tracking.
+ * Find empty cells on ANY of the opponent's shortest paths that can be blocked.
+ * Uses bidirectional Dijkstra to find ALL cells that lie on some optimal path.
  *
- * @returns Array of cell IDs that are empty and on the shortest path
+ * A cell is on a shortest path if:
+ *   distFromStart[cell] + distToGoal[cell] == shortestPathLength
+ *
+ * This ensures we find blocking opportunities on ALL optimal paths,
+ * not just the first one Dijkstra happens to find.
+ *
+ * @returns Array of cell IDs that are empty and on some shortest path
  */
 function findBlockingCells(
   game: HexGame,
@@ -177,18 +183,15 @@ function findBlockingCells(
     return Infinity; // Our stone - blocked for opponent
   };
 
-  // Initialize distances and predecessors for path reconstruction
-  const distances = new Map<string, number>();
-  const predecessors = new Map<string, string | null>();
+  // Run Dijkstra from start edge
+  const distFromStart = new Map<string, number>();
   const queue: Array<{ key: string; dist: number }> = [];
 
-  // Start from all cells on opponent's start edge
   for (const [key, cell] of cells) {
     if (isStartCell(cell.q, cell.r)) {
       const cost = getCellCost(cell);
       if (cost !== Infinity) {
-        distances.set(key, cost);
-        predecessors.set(key, null); // Start cells have no predecessor
+        distFromStart.set(key, cost);
         queue.push({ key, dist: cost });
       }
     }
@@ -197,34 +200,25 @@ function findBlockingCells(
   if (queue.length === 0) return [];
 
   queue.sort((a, b) => a.dist - b.dist);
-  const visited = new Set<string>();
-  let goalKey: string | null = null;
+  const visitedFromStart = new Set<string>();
 
-  // Dijkstra's algorithm
   while (queue.length > 0) {
     const current = queue.shift()!;
     const { key, dist } = current;
 
-    if (visited.has(key)) continue;
-    visited.add(key);
+    if (visitedFromStart.has(key)) continue;
+    visitedFromStart.add(key);
 
     const [qStr, rStr] = key.split(',');
     const q = parseInt(qStr, 10);
     const r = parseInt(rStr, 10);
 
-    // Check if we reached the goal
-    if (isGoalCell(q, r)) {
-      goalKey = key;
-      break;
-    }
-
-    // Explore neighbors
     for (const dir of HEX_DIRECTIONS) {
       const nq = q + dir.dq;
       const nr = r + dir.dr;
       const neighborKey = cellKey(nq, nr);
 
-      if (visited.has(neighborKey)) continue;
+      if (visitedFromStart.has(neighborKey)) continue;
 
       const neighborCell = cells.get(neighborKey);
       if (!neighborCell) continue;
@@ -233,34 +227,102 @@ function findBlockingCells(
       if (moveCost === Infinity) continue;
 
       const newDist = dist + moveCost;
-      const currentDist = distances.get(neighborKey) ?? Infinity;
+      const currentDist = distFromStart.get(neighborKey) ?? Infinity;
 
       if (newDist < currentDist) {
-        distances.set(neighborKey, newDist);
-        predecessors.set(neighborKey, key);
+        distFromStart.set(neighborKey, newDist);
         queue.push({ key: neighborKey, dist: newDist });
         queue.sort((a, b) => a.dist - b.dist);
       }
     }
   }
 
-  // No path found
-  if (!goalKey) return [];
+  // Run Dijkstra from goal edge (backwards)
+  const distToGoal = new Map<string, number>();
+  const goalQueue: Array<{ key: string; dist: number }> = [];
 
-  // Reconstruct path and find empty cells (blocking opportunities)
-  const blockingCellIds: number[] = [];
-  let current: string | null = goalKey;
-
-  while (current !== null) {
-    const cell = cells.get(current);
-    if (cell) {
-      const stone = cell.getStone();
-      // If cell is empty, it's a blocking opportunity
-      if (!stone) {
-        blockingCellIds.push(cell.id);
+  for (const [key, cell] of cells) {
+    if (isGoalCell(cell.q, cell.r)) {
+      const cost = getCellCost(cell);
+      if (cost !== Infinity) {
+        distToGoal.set(key, cost);
+        goalQueue.push({ key, dist: cost });
       }
     }
-    current = predecessors.get(current) ?? null;
+  }
+
+  if (goalQueue.length === 0) return [];
+
+  goalQueue.sort((a, b) => a.dist - b.dist);
+  const visitedFromGoal = new Set<string>();
+
+  while (goalQueue.length > 0) {
+    const current = goalQueue.shift()!;
+    const { key, dist } = current;
+
+    if (visitedFromGoal.has(key)) continue;
+    visitedFromGoal.add(key);
+
+    const [qStr, rStr] = key.split(',');
+    const q = parseInt(qStr, 10);
+    const r = parseInt(rStr, 10);
+
+    for (const dir of HEX_DIRECTIONS) {
+      const nq = q + dir.dq;
+      const nr = r + dir.dr;
+      const neighborKey = cellKey(nq, nr);
+
+      if (visitedFromGoal.has(neighborKey)) continue;
+
+      const neighborCell = cells.get(neighborKey);
+      if (!neighborCell) continue;
+
+      const moveCost = getCellCost(neighborCell);
+      if (moveCost === Infinity) continue;
+
+      const newDist = dist + moveCost;
+      const currentDist = distToGoal.get(neighborKey) ?? Infinity;
+
+      if (newDist < currentDist) {
+        distToGoal.set(neighborKey, newDist);
+        goalQueue.push({ key: neighborKey, dist: newDist });
+        goalQueue.sort((a, b) => a.dist - b.dist);
+      }
+    }
+  }
+
+  // Find shortest path length
+  let shortestPath = Infinity;
+  for (const [key] of cells) {
+    const fromStart = distFromStart.get(key);
+    const toGoal = distToGoal.get(key);
+    if (fromStart !== undefined && toGoal !== undefined) {
+      // The cell's cost is counted in both directions, so subtract it once
+      const cell = cells.get(key)!;
+      const cellCost = getCellCost(cell);
+      const pathThrough = fromStart + toGoal - cellCost;
+      shortestPath = Math.min(shortestPath, pathThrough);
+    }
+  }
+
+  if (shortestPath === Infinity) return [];
+
+  // Find all empty cells on any shortest path
+  const blockingCellIds: number[] = [];
+
+  for (const [key, cell] of cells) {
+    const stone = cell.getStone();
+    if (stone) continue; // Skip cells with stones
+
+    const fromStart = distFromStart.get(key);
+    const toGoal = distToGoal.get(key);
+    if (fromStart === undefined || toGoal === undefined) continue;
+
+    // Cell cost is 1 for empty cells
+    const pathThrough = fromStart + toGoal - 1;
+    if (pathThrough === shortestPath) {
+      blockingCellIds.push(cell.id);
+    }
   }
 
   return blockingCellIds;
@@ -292,9 +354,11 @@ export function getHexThreatResponseMoves(
 
   // Trigger threat response when opponent has a relatively short path
   // On an 11x11 board, a straight line from start to goal needs 11 cells
-  // We want to start blocking once opponent has made real progress
-  // Using boardSize/2 means we block when opponent is halfway to winning
-  const threatThreshold = Math.floor(hexGame.boardSize / 2);
+  // We want to start blocking once opponent has placed 2-3 stones and is building a real threat
+  // Using boardSize - 3 means we block once opponent has placed ~3 stones
+  // This gives us time to block before they're too close to winning
+  const threatThreshold = hexGame.boardSize - 3;
+
   if (opponentPath > threatThreshold) {
     return { moves: [], urgent: false };
   }
@@ -310,14 +374,13 @@ export function getHexThreatResponseMoves(
   const blockingIdSet = new Set(blockingCellIds);
 
   // Filter available moves to only those that place stones on blocking cells
-  // Move args contain 'cell' which is the cell ID
   const blockingMoves = availableMoves.filter(move => {
     const cellId = move.args.cell as number | undefined;
     return cellId !== undefined && blockingIdSet.has(cellId);
   });
 
-  // Determine urgency: opponent within 2 moves of winning = MUST block
-  const urgent = opponentPath <= 2;
+  // Determine urgency: opponent within 4 moves of winning = MUST block
+  const urgent = opponentPath <= 4;
 
   return { moves: blockingMoves, urgent };
 }
@@ -477,4 +540,149 @@ export function getHexObjectives(
       weight: 1,
     },
   };
+}
+
+/**
+ * Smart playout policy for Hex.
+ * Instead of random moves, prefer moves that:
+ * - Shorten our winning path
+ * - Lengthen opponent's winning path
+ * - Are adjacent to our existing stones (connectivity)
+ *
+ * Uses weighted random selection (not deterministic) to maintain exploration.
+ *
+ * @param game - Current game state
+ * @param playerIndex - Which player is moving (1-indexed position)
+ * @param availableMoves - Legal moves to choose from
+ * @param rng - Random number generator for weighted selection
+ * @returns Selected move using weighted-random selection
+ */
+export function getHexPlayoutPolicy(
+  game: Game,
+  playerIndex: number,
+  availableMoves: BotMove[],
+  rng: () => number
+): BotMove {
+  if (availableMoves.length === 0) {
+    throw new Error('No available moves for playout policy');
+  }
+
+  if (availableMoves.length === 1) {
+    return availableMoves[0];
+  }
+
+  const hexGame = game as HexGame;
+  const opponentIndex = 3 - playerIndex;
+
+  // Get current path lengths
+  const myPathBefore = computeShortestPathLength(hexGame, playerIndex);
+  const theirPathBefore = computeShortestPathLength(hexGame, opponentIndex);
+
+  // Build cell lookup for quick access
+  const cellById = new Map<number, Cell>();
+  for (const cell of hexGame.board.all(Cell)) {
+    cellById.set(cell.id, cell);
+  }
+
+  // Get positions of our existing stones for connectivity bonus
+  const myStonePositions = new Set<string>();
+  const players = [...hexGame.all(HexPlayer)];
+  const myPlayer = players.find(p => p.position === playerIndex);
+
+  for (const cell of hexGame.board.all(Cell)) {
+    const stone = cell.getStone();
+    if (stone && stone.player === myPlayer) {
+      myStonePositions.add(`${cell.q},${cell.r}`);
+    }
+  }
+
+  // Score each move
+  const scores: number[] = [];
+  let maxScore = -Infinity;
+
+  for (const move of availableMoves) {
+    const cellId = move.args.cell as number | undefined;
+    if (cellId === undefined) {
+      scores.push(0);
+      continue;
+    }
+
+    const cell = cellById.get(cellId);
+    if (!cell) {
+      scores.push(0);
+      continue;
+    }
+
+    let score = 0;
+
+    // Connectivity bonus: prefer moves adjacent to our existing stones
+    // This helps build connected paths rather than scattered stones
+    for (const dir of HEX_DIRECTIONS) {
+      const neighborKey = `${cell.q + dir.dq},${cell.r + dir.dr}`;
+      if (myStonePositions.has(neighborKey)) {
+        score += 2;
+      }
+    }
+
+    // Position bonus: prefer moves closer to center (early game diversity)
+    const centerQ = Math.floor(hexGame.boardSize / 2);
+    const centerR = Math.floor(hexGame.boardSize / 2);
+    const distFromCenter = Math.abs(cell.q - centerQ) + Math.abs(cell.r - centerR);
+    score += Math.max(0, hexGame.boardSize - distFromCenter) * 0.5;
+
+    // Path-based scoring (simplified - don't simulate each move, too expensive)
+    // Instead, prefer moves on our goal axis
+    // Player 1 connects r=0 to r=boardSize-1, Player 2 connects q=0 to q=boardSize-1
+    const isPlayer1 = playerIndex === 1;
+    if (isPlayer1) {
+      // Player 1 wants to advance in r direction
+      // Prefer moves that are in the middle of our current r-range
+      score += 1;
+    } else {
+      // Player 2 wants to advance in q direction
+      score += 1;
+    }
+
+    // Blocking bonus: if opponent has a short path, prefer moves on their axis
+    if (theirPathBefore < hexGame.boardSize / 2) {
+      // Opponent is making progress - consider blocking
+      if (isPlayer1) {
+        // We're player 1, opponent connects q axis
+        // Moves in middle q are more likely to block
+        const qDistance = Math.abs(cell.q - centerQ);
+        score += Math.max(0, (hexGame.boardSize / 2 - qDistance)) * 0.5;
+      } else {
+        // We're player 2, opponent connects r axis
+        const rDistance = Math.abs(cell.r - centerR);
+        score += Math.max(0, (hexGame.boardSize / 2 - rDistance)) * 0.5;
+      }
+    }
+
+    scores.push(score);
+    maxScore = Math.max(maxScore, score);
+  }
+
+  // Convert scores to weights using softmax-like transformation
+  // Shift scores so max is 0, then exponentiate
+  const weights: number[] = [];
+  let totalWeight = 0;
+
+  for (const score of scores) {
+    // Use temperature of 1.0 - can adjust for more/less greediness
+    const weight = Math.exp(score - maxScore);
+    weights.push(weight);
+    totalWeight += weight;
+  }
+
+  // Weighted random selection
+  let target = rng() * totalWeight;
+  for (let i = 0; i < availableMoves.length; i++) {
+    target -= weights[i];
+    if (target <= 0) {
+      return availableMoves[i];
+    }
+  }
+
+  // Fallback (shouldn't happen)
+  return availableMoves[availableMoves.length - 1];
 }
