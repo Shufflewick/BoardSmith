@@ -661,6 +661,90 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
   },
 
   // ============================================
+  // POSITION QUALITY FEATURES
+  // ============================================
+  {
+    id: 'bridge-potential',
+    category: 'spatial',
+    descriptionTemplate: 'Player has more bridge cells (empty cells adjacent to 2+ groups)',
+    requires: { spatial: true, gameType: 'connection' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
+        return features;
+      }
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-bridge-potential`,
+          description: `Player has more bridge cells (empty cells that would connect 2+ ${className} groups)`,
+          category: 'spatial',
+          templateId: 'bridge-potential',
+          evaluate: createBridgePotentialEvaluator(className),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  {
+    id: 'expansion-room',
+    category: 'spatial',
+    descriptionTemplate: "Player's pieces have more adjacent empty cells (expansion potential)",
+    requires: { spatial: true, ownership: true },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard) return features;
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-expansion-room`,
+          description: `Player's ${className} have more adjacent empty cells (expansion potential)`,
+          category: 'spatial',
+          templateId: 'expansion-room',
+          evaluate: createExpansionRoomEvaluator(className, structure.spatialInfo.isHex),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  {
+    id: 'central-mass',
+    category: 'spatial',
+    descriptionTemplate: 'Player has more pieces closer to board center (strategic advantage)',
+    requires: { spatial: true, ownership: true },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.dimensions) {
+        return features;
+      }
+
+      const { rows, columns } = structure.spatialInfo.dimensions;
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-central-mass`,
+          description: `Player's ${className} are closer to board center on average (strategic advantage)`,
+          category: 'spatial',
+          templateId: 'central-mass',
+          evaluate: createCentralMassEvaluator(className, rows, columns, structure.spatialInfo.isHex),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  // ============================================
   // CAPTURE GAME FEATURES (Checkers, etc.)
   // ============================================
   {
@@ -1663,6 +1747,298 @@ function createForcingPositionEvaluator(
 
     // Player is within 2 moves AND opponent is further away
     return myPathLength <= 2 && opponentPathLength > 2;
+  };
+}
+
+// ============================================
+// POSITION QUALITY EVALUATORS
+// ============================================
+
+/**
+ * Count "bridge" cells for a player - empty cells that are adjacent to 2+ distinct groups.
+ * These cells represent high-value positions that could connect multiple groups.
+ */
+function countBridgeCells(game: Game, className: string, player: Player): number {
+  // Get all player pieces
+  const elements = getElementsForPlayer(game, className, player);
+  if (elements.length === 0) return 0;
+
+  // Build a map of player positions and assign group IDs using flood fill
+  const positionKey = (q: number, r: number) => `${q},${r}`;
+  const positions = new Map<string, number>(); // key -> group ID
+
+  // First pass: find all player piece positions
+  const playerPositions = new Set<string>();
+  for (const elem of elements) {
+    const q = (elem as any).q;
+    const r = (elem as any).r;
+    if (q !== undefined && r !== undefined) {
+      playerPositions.add(positionKey(q, r));
+    }
+  }
+
+  if (playerPositions.size === 0) return 0;
+
+  // Flood fill to assign group IDs
+  let groupId = 0;
+  const visited = new Set<string>();
+
+  for (const startKey of playerPositions) {
+    if (visited.has(startKey)) continue;
+
+    // BFS flood fill for this group
+    const queue = [startKey];
+    visited.add(startKey);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const [qStr, rStr] = current.split(',');
+      const q = parseInt(qStr, 10);
+      const r = parseInt(rStr, 10);
+      positions.set(current, groupId);
+
+      // Check hex neighbors
+      for (const dir of HEX_DIRECTIONS) {
+        const neighborKey = positionKey(q + dir.dq, r + dir.dr);
+        if (playerPositions.has(neighborKey) && !visited.has(neighborKey)) {
+          visited.add(neighborKey);
+          queue.push(neighborKey);
+        }
+      }
+    }
+
+    groupId++;
+  }
+
+  // Now find empty cells adjacent to 2+ different groups
+  // We need to scan all cells on the board, not just player positions
+  const allCells = new Map<string, { q: number; r: number; element: GameElement }>();
+
+  const scan = (element: GameElement) => {
+    if (element.constructor.name === className) {
+      const q = (element as any).q;
+      const r = (element as any).r;
+      if (q !== undefined && r !== undefined) {
+        allCells.set(positionKey(q, r), { q, r, element });
+      }
+    }
+    for (const child of element.children) {
+      scan(child);
+    }
+  };
+  scan(game);
+
+  let bridgeCount = 0;
+
+  // For each cell, check if it's empty and adjacent to 2+ groups
+  for (const [key, cellData] of allCells) {
+    // Check if cell is empty (no stone)
+    let hasStone = false;
+    for (const child of cellData.element.children) {
+      if (child.constructor.name === 'Stone') {
+        hasStone = true;
+        break;
+      }
+    }
+    if (hasStone) continue; // Not empty
+
+    // Count distinct adjacent groups
+    const adjacentGroups = new Set<number>();
+    for (const dir of HEX_DIRECTIONS) {
+      const neighborKey = positionKey(cellData.q + dir.dq, cellData.r + dir.dr);
+      const neighborGroupId = positions.get(neighborKey);
+      if (neighborGroupId !== undefined) {
+        adjacentGroups.add(neighborGroupId);
+      }
+    }
+
+    if (adjacentGroups.size >= 2) {
+      bridgeCount++;
+    }
+  }
+
+  return bridgeCount;
+}
+
+/**
+ * Evaluator: Player has more bridge cells than opponent.
+ * Bridge cells are empty cells that could connect 2+ player groups.
+ */
+function createBridgePotentialEvaluator(className: string): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+    const myBridgeCells = countBridgeCells(game, className, myPlayer);
+    const opponentBridgeCells = countBridgeCells(game, className, opponent);
+
+    return myBridgeCells > opponentBridgeCells;
+  };
+}
+
+/**
+ * Count total adjacent empty cells for all of a player's pieces.
+ * Higher count = more expansion potential.
+ */
+function countAdjacentEmpty(game: Game, className: string, player: Player, isHex: boolean): number {
+  const elements = getElementsForPlayer(game, className, player);
+  if (elements.length === 0) return 0;
+
+  // Build a set of all occupied positions
+  const occupiedPositions = new Set<string>();
+
+  const scan = (element: GameElement) => {
+    if (element.constructor.name === className) {
+      // Check if cell has a stone
+      for (const child of element.children) {
+        if (child.constructor.name === 'Stone') {
+          const q = (element as any).q;
+          const r = (element as any).r;
+          const row = (element as any).row;
+          const col = (element as any).column ?? (element as any).col;
+
+          if (isHex && q !== undefined && r !== undefined) {
+            occupiedPositions.add(`${q},${r}`);
+          } else if (row !== undefined && col !== undefined) {
+            occupiedPositions.add(`${row},${col}`);
+          }
+          break;
+        }
+      }
+    }
+    for (const child of element.children) {
+      scan(child);
+    }
+  };
+  scan(game);
+
+  // Count unique adjacent empty cells for player's pieces
+  const adjacentEmptyCells = new Set<string>();
+
+  for (const elem of elements) {
+    if (isHex) {
+      const q = (elem as any).q;
+      const r = (elem as any).r;
+      if (q === undefined || r === undefined) continue;
+
+      for (const dir of HEX_DIRECTIONS) {
+        const nq = q + dir.dq;
+        const nr = r + dir.dr;
+        const key = `${nq},${nr}`;
+        if (!occupiedPositions.has(key)) {
+          adjacentEmptyCells.add(key);
+        }
+      }
+    } else {
+      // Grid-based (4-directional)
+      const row = (elem as any).row;
+      const col = (elem as any).column ?? (elem as any).col;
+      if (row === undefined || col === undefined) continue;
+
+      const gridOffsets = [
+        { dr: -1, dc: 0 },
+        { dr: 1, dc: 0 },
+        { dr: 0, dc: -1 },
+        { dr: 0, dc: 1 },
+      ];
+
+      for (const { dr, dc } of gridOffsets) {
+        const nr = row + dr;
+        const nc = col + dc;
+        const key = `${nr},${nc}`;
+        if (!occupiedPositions.has(key)) {
+          adjacentEmptyCells.add(key);
+        }
+      }
+    }
+  }
+
+  return adjacentEmptyCells.size;
+}
+
+/**
+ * Evaluator: Player's pieces have more adjacent empty cells than opponent.
+ * More expansion room = more strategic options.
+ */
+function createExpansionRoomEvaluator(className: string, isHex: boolean): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+    const myExpansion = countAdjacentEmpty(game, className, myPlayer, isHex);
+    const opponentExpansion = countAdjacentEmpty(game, className, opponent, isHex);
+
+    return myExpansion > opponentExpansion;
+  };
+}
+
+/**
+ * Calculate the average distance from center for a player's pieces.
+ */
+function calculateAverageDistanceFromCenter(
+  game: Game,
+  className: string,
+  player: Player,
+  totalRows: number,
+  totalCols: number,
+  isHex: boolean
+): number {
+  const elements = getElementsForPlayer(game, className, player);
+  if (elements.length === 0) return Infinity;
+
+  const centerRow = (totalRows - 1) / 2;
+  const centerCol = (totalCols - 1) / 2;
+
+  let totalDistance = 0;
+  let validCount = 0;
+
+  for (const elem of elements) {
+    if (isHex) {
+      const q = (elem as any).q;
+      const r = (elem as any).r;
+      if (q === undefined || r === undefined) continue;
+
+      // For hex, calculate distance from center using axial coordinates
+      const centerQ = centerCol;
+      const centerR = centerRow;
+      // Hex distance formula (axial coordinates)
+      const dist = (Math.abs(q - centerQ) + Math.abs(r - centerR) + Math.abs((q - centerQ) + (r - centerR))) / 2;
+      totalDistance += dist;
+      validCount++;
+    } else {
+      const row = (elem as any).row;
+      const col = (elem as any).column ?? (elem as any).col;
+      if (row === undefined || col === undefined) continue;
+
+      // Euclidean distance for grid
+      const dist = Math.sqrt(Math.pow(row - centerRow, 2) + Math.pow(col - centerCol, 2));
+      totalDistance += dist;
+      validCount++;
+    }
+  }
+
+  return validCount > 0 ? totalDistance / validCount : Infinity;
+}
+
+/**
+ * Evaluator: Player's pieces are closer to board center on average.
+ * Central positions typically have more strategic value.
+ */
+function createCentralMassEvaluator(
+  className: string,
+  totalRows: number,
+  totalCols: number,
+  isHex: boolean
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+    const myAvgDistance = calculateAverageDistanceFromCenter(game, className, myPlayer, totalRows, totalCols, isHex);
+    const opponentAvgDistance = calculateAverageDistanceFromCenter(game, className, opponent, totalRows, totalCols, isHex);
+
+    // Lower average distance = closer to center = better
+    return myAvgDistance < opponentAvgDistance;
   };
 }
 
