@@ -11,7 +11,7 @@
 - ✅ [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-01-10
 - ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
 - ✅ [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) — SHIPPED 2026-01-13
-- ✅ [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28) — SHIPPED 2026-01-15
+- 🔄 [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) — REOPENED for MCTS performance
 
 ## Overview
 
@@ -28,7 +28,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
 - ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
-- ✅ **v1.0 AI System Overhaul** — Phases 24-28 (shipped 2026-01-15)
+- 🔄 **v1.0 AI System Overhaul** — Phases 24-28.1 (reopened for MCTS performance)
 
 ## Phases
 
@@ -334,6 +334,26 @@ Plans:
 Plans:
 - [x] 28-01: Validate tiered AI system with multi-game types, update PROJECT.md
 
+#### Phase 28.1: mcts-performance (INSERTED)
+**Goal**: Make MCTS bots dramatically faster and smarter through transparent optimizations that require zero game designer effort
+**Depends on**: Phase 28
+**Research**: Likely (game state cloning strategies, move pruning heuristics)
+**Plans**: 1/4 complete
+
+Plans:
+- [x] 28.1-01: Command undo infrastructure (inverse generation, undoCommand, Game.undoLastCommand)
+- [ ] 28.1-02: Smart move pruning
+- [ ] 28.1-03: Transposition tables
+- [ ] 28.1-04: Parallel MCTS
+
+**Improvement Areas:**
+1. **Transparent undo** - Fast state checkpoint/restore without full history replay (engine-level)
+2. **Smart move pruning** - Heuristically filter moves before enumeration (focus on promising areas)
+3. **Transposition tables** - Cache evaluated positions to avoid redundant computation
+4. **Parallel MCTS** - Web Workers for multi-core tree search
+
+**Success criteria:** MCTS can run 10x more iterations in the same time budget, producing noticeably better play.
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -367,3 +387,4 @@ Plans:
 | 26.1 parallel-only-training | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 27. llm-strategy-generation | v1.0 | 1/1 | Complete | 2026-01-15 |
 | 28. integration-verification | v1.0 | 1/1 | Complete | 2026-01-15 |
+| 28.1 mcts-performance | v1.0 | 1/4 | In progress | — |

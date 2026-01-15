@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-13)
 
 ## Current Position
 
-Phase: 28 of 28 (integration-verification)
-Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-01-15 — Completed 28-01-PLAN.md
+Phase: 28.1 of 28.1 (mcts-performance)
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-01-15 — Completed 28.1-01-PLAN.md (command undo infrastructure)
 
-Progress: ██████████ 100%
+Progress: ████████░░ 81%
 
 ## Milestones
 
@@ -48,9 +48,10 @@ Progress: ██████████ 100%
 - Milestone v1.0 created: AI system overhaul, 5 phases (Phase 24-28)
 - Phase 26.1 inserted after Phase 26: parallel-only-training (URGENT) - consolidate duplicate training harnesses
 - Milestone v1.0 complete: Integration verification passed all game types
+- Milestone v1.0 reopened: Phase 28.1 inserted for MCTS performance (URGENT) - transparent undo, move pruning, transposition tables, parallel MCTS
 
 ## Session Continuity
 
 Last session: 2026-01-15
-Stopped at: Completed 28-01-PLAN.md, v1.0 milestone complete
+Stopped at: Completed 28.1-01-PLAN.md (command undo infrastructure)
 Resume file: None
