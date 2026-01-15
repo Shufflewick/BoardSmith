@@ -14,6 +14,8 @@ export interface BotConfig {
   async?: boolean;
   /** Maximum time in milliseconds before returning best move found. Default: 2000 */
   timeout?: number;
+  /** Enable transposition table caching for position evaluations. Default: true */
+  useTranspositionTable?: boolean;
 }
 
 /**

@@ -46,6 +46,8 @@ export class MCTSBot<G extends Game = Game> {
   private rootCommandCount: number = 0;
   /** Root snapshot for fallback recovery */
   private rootSnapshot: GameStateSnapshot | null = null;
+  /** Transposition table for caching position evaluations */
+  private transpositionTable: Map<string, { value: number; visits: number }> = new Map();
 
   constructor(
     game: G,
@@ -98,6 +100,9 @@ export class MCTSBot<G extends Game = Game> {
     if (moves.length === 1) {
       return moves[0];
     }
+
+    // Clear transposition table for fresh search
+    this.transpositionTable.clear();
 
     // Initialize incremental state management:
     // Clone game once and track root command count for undo
@@ -310,8 +315,8 @@ export class MCTSBot<G extends Game = Game> {
       depth++;
     }
 
-    // Evaluate using the final game state
-    return this.evaluateTerminalFromGame(this.searchGame, flowState);
+    // Evaluate using the final game state (with transposition table caching)
+    return this.evaluateWithCache(this.searchGame, flowState);
   }
 
   // ============================================================================
@@ -816,6 +821,51 @@ export class MCTSBot<G extends Game = Game> {
       value: 0,
       currentPlayer: flowState.currentPlayer ?? this.playerIndex,
     };
+  }
+
+  /**
+   * Hash a position for transposition table lookup.
+   * Uses command history as unique identifier (same commands = same position).
+   */
+  private hashPosition(game: Game): string {
+    // Use command history length as part of hash for quick discrimination
+    const commands = game.commandHistory;
+    // JSON serialize commands - deterministic: same commands = same hash
+    return commands.map(c => JSON.stringify(c)).join('|');
+  }
+
+  /**
+   * Evaluate position with transposition table caching.
+   * Caches evaluation results to avoid redundant computation for positions
+   * reached via different move orders.
+   */
+  private evaluateWithCache(game: Game, flowState: FlowState): number {
+    // Skip caching if disabled
+    if (this.config.useTranspositionTable === false) {
+      return this.evaluateTerminalFromGame(game, flowState);
+    }
+
+    const hash = this.hashPosition(game);
+    const cached = this.transpositionTable.get(hash);
+
+    // Return cached value if we have enough confidence (3+ visits)
+    if (cached && cached.visits >= 3) {
+      return cached.value;
+    }
+
+    // Evaluate the position
+    const value = this.evaluateTerminalFromGame(game, flowState);
+
+    // Update cache with running average
+    if (cached) {
+      const newVisits = cached.visits + 1;
+      const newValue = (cached.value * cached.visits + value) / newVisits;
+      this.transpositionTable.set(hash, { value: newValue, visits: newVisits });
+    } else {
+      this.transpositionTable.set(hash, { value, visits: 1 });
+    }
+
+    return value;
   }
 
   /**
