@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-13)
 ## Current Position
 
 Phase: 28.1 of 28.1 (mcts-performance)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-01-15 — Completed 28.1-02-PLAN.md (incremental MCTS state)
+Last activity: 2026-01-15 — Completed 28.1-03-PLAN.md (move caching & transposition tables)
 
-Progress: ████████░░ 84%
+Progress: █████████░ 88%
 
 ## Milestones
 
@@ -53,5 +53,5 @@ Progress: ████████░░ 84%
 ## Session Continuity
 
 Last session: 2026-01-15
-Stopped at: Completed 28.1-02-PLAN.md (incremental MCTS state)
+Stopped at: Completed 28.1-03-PLAN.md (move caching & transposition tables)
 Resume file: None
