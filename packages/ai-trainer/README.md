@@ -2,6 +2,41 @@
 
 Automatic AI training for BoardSmith games through self-play simulation. Generates optimized `ai.ts` files with learned objectives.
 
+## AI Generation Tiers
+
+BoardSmith provides three tiers of AI generation, each suited for different needs:
+
+### Tier 1: Zero-Config Heuristics (Automatic)
+
+When no `ai.ts` file exists, the MCTS bot uses built-in heuristics based on game structure. This provides reasonable AI behavior out of the box with zero configuration.
+
+**Best for:** Rapid prototyping, simple games, getting started quickly.
+
+### Tier 2: Self-Play Training (`boardsmith train-ai`)
+
+Automated training through self-play simulation. The trainer introspects your game, generates candidate features, runs simulations, and learns which features correlate with winning.
+
+```bash
+npx boardsmith train-ai
+```
+
+**Best for:** Production-quality AI, games where patterns can be learned from outcomes.
+
+### Tier 3: LLM-Assisted Generation (`/generate-ai`)
+
+Interactive AI generation using Claude Code. The LLM analyzes your game rules, asks strategic questions, and generates custom evaluation functions based on game-specific understanding.
+
+```
+/generate-ai
+```
+
+**Best for:** Complex strategy games, games requiring domain knowledge, fine-tuned behavior.
+
+Install Claude Code slash commands with:
+```bash
+npx boardsmith claude install
+```
+
 ## Installation
 
 ```bash
@@ -26,14 +61,20 @@ This will:
 ## Programmatic Usage
 
 ```typescript
-import { trainAI } from '@boardsmith/ai-trainer';
+import { ParallelTrainer } from '@boardsmith/ai-trainer';
 import { gameDefinition } from './my-game';
 
-const result = await trainAI(gameDefinition, {
-  gamesPerIteration: 200,
-  iterations: 5,
-  verbose: true,
-});
+const trainer = new ParallelTrainer(
+  gameDefinition.gameClass,
+  'my-game',
+  '/path/to/compiled/game.js', // Required for worker threads
+  {
+    gamesPerIteration: 200,
+    iterations: 5,
+  }
+);
+
+const result = await trainer.train();
 
 console.log('Learned objectives:', result.objectives);
 console.log('Action preferences:', result.actionPreferences);
@@ -135,16 +176,20 @@ fs.writeFileSync('rules/ai.ts', code);
 Start from an existing `ai.ts` file and improve it:
 
 ```typescript
-import { parseExistingAI, trainAI } from '@boardsmith/ai-trainer';
+import { ParallelTrainer } from '@boardsmith/ai-trainer';
 
-// Parse existing AI
-const existing = parseExistingAI('rules/ai.ts');
+// Train with existing AI file as starting point
+const trainer = new ParallelTrainer(
+  gameDefinition.gameClass,
+  'my-game',
+  '/path/to/compiled/game.js',
+  {
+    existingAIPath: 'rules/ai.ts', // Will parse and build upon existing objectives
+    iterations: 3,
+  }
+);
 
-// Train with existing as starting point
-const result = await trainAI(gameDefinition, {
-  existingObjectives: existing.objectives,
-  iterations: 3,
-});
+const result = await trainer.train();
 ```
 
 ## Feature Templates
@@ -164,30 +209,39 @@ import { FEATURE_TEMPLATES } from '@boardsmith/ai-trainer';
 
 ## API Reference
 
-### trainAI()
+### ParallelTrainer
 
 ```typescript
-function trainAI(
-  gameDefinition: GameDefinition,
-  config?: TrainingConfig
-): Promise<TrainingResult>
+class ParallelTrainer {
+  constructor(
+    GameClass: GameClass,
+    gameType: string,
+    gameModulePath: string,  // Path to compiled .js file (required for workers)
+    config?: ParallelTrainingConfig
+  )
 
-interface TrainingConfig {
+  train(): Promise<TrainingResult>
+}
+
+interface ParallelTrainingConfig {
   gamesPerIteration?: number;  // Default: 200
   iterations?: number;         // Default: 5
-  mctsIterations?: number;     // Default: 3
-  verbose?: boolean;
-  existingObjectives?: LearnedObjective[];
+  mctsIterations?: number;     // Default: 15
+  workerCount?: number;        // Default: CPU cores - 1
+  existingAIPath?: string;     // Path to existing ai.ts to build upon
+  evolve?: boolean;            // Enable evolutionary weight optimization
+  evolutionGenerations?: number; // Default: 5
+  evolutionLambda?: number;    // Population size, default: 20
   onProgress?: (progress: TrainingProgress) => void;
 }
 
 interface TrainingResult {
   objectives: LearnedObjective[];
   actionPreferences: LearnedActionPreference[];
-  stats: {
+  metadata: {
     gamesPlayed: number;
-    averageTurns: number;
-    winRates: Record<number, number>;
+    totalStates: number;
+    finalWinRate: number;
   };
 }
 ```
@@ -209,44 +263,32 @@ interface GameStructure {
 
 ## Parallel Training
 
-For faster training on multi-core machines, enable parallel mode:
+Training always uses parallel mode with worker threads for maximum performance:
 
 ```bash
-npx boardsmith train-ai --parallel
+npx boardsmith train-ai --workers 8  # Use 8 workers (default: CPU cores - 1)
 ```
 
-This distributes game simulations across multiple CPU cores using worker threads.
+This distributes game simulations and evolution benchmarks across multiple CPU cores.
 
 ### Performance
 
 Parallel training achieves significant speedup on multi-core systems:
 
-| Mode     | Time (50 games) | CPU Usage | Speedup |
+| Workers  | Time (50 games) | CPU Usage | Speedup |
 |----------|-----------------|-----------|---------|
-| Serial   | 171s            | ~100%     | 1x      |
-| Parallel | 21s (11 workers)| ~970%     | 8.3x    |
+| 1        | 171s            | ~100%     | 1x      |
+| 11       | 21s             | ~970%     | 8.3x    |
 
 *Benchmark: Go Fish game on Apple M3 Pro (12 cores)*
-
-### Options
-
-```bash
---parallel           Enable parallel training
---workers <count>    Number of worker threads (default: CPU cores - 1)
-```
 
 ### How It Works
 
 1. The main process generates game seeds and distributes work to workers
 2. Each worker runs simulations independently with its own game instance
 3. Results are aggregated for feature analysis
-4. Same seed produces identical aggregate results regardless of worker count (deterministic)
-
-### When to Use
-
-- Training with many games (100+): Significant speedup
-- Few games (<10): Overhead may not be worth it
-- CI/automated training: Faster feedback loops
+4. Evolution benchmarks also run in parallel across workers
+5. Same seed produces identical aggregate results regardless of worker count (deterministic)
 
 ## CLI Options
 
@@ -254,14 +296,16 @@ Parallel training achieves significant speedup on multi-core systems:
 npx boardsmith train-ai [options]
 
 Options:
-  -g, --games <count>     Games per iteration (default: 200)
-  -i, --iterations <count> Training iterations (default: 5)
-  -o, --output <path>     Output path for ai.ts
-  -m, --mcts <iterations> MCTS iterations per move (default: 15)
-  --fresh                 Ignore existing ai.ts and start fresh
-  --parallel              Enable parallel training across CPU cores
-  --workers <count>       Number of worker threads (default: CPU cores - 1)
-  -v, --verbose           Show detailed progress
+  -g, --games <count>       Games per iteration (default: 200)
+  -i, --iterations <count>  Training iterations (default: 5)
+  -o, --output <path>       Output path for ai.ts
+  -m, --mcts <iterations>   MCTS iterations per move (default: 15)
+  --fresh                   Ignore existing ai.ts and start fresh
+  --workers <count>         Number of worker threads (default: CPU cores - 1)
+  --evolve                  Enable evolutionary weight optimization
+  --generations <count>     Evolution generations (default: 5)
+  --population <count>      Evolution population size (default: 20)
+  -v, --verbose             Show detailed progress
 ```
 
 ## See Also

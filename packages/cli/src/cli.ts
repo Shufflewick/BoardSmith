@@ -107,14 +107,14 @@ const claudeCmd = program
 
 claudeCmd
   .command('install')
-  .description('Install the /design-game slash command for Claude Code')
-  .option('--force', 'Overwrite existing slash command')
+  .description('Install /design-game and /generate-ai slash commands for Claude Code')
+  .option('--force', 'Overwrite existing slash commands')
   .option('--local', 'Install to current project instead of globally')
   .action(installClaudeCommand);
 
 claudeCmd
   .command('uninstall')
-  .description('Uninstall the /design-game slash command')
+  .description('Uninstall /design-game and /generate-ai slash commands')
   .option('--local', 'Uninstall from current project instead of globally')
   .action(uninstallClaudeCommand);
 
