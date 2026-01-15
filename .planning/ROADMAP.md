@@ -315,15 +315,14 @@ Consolidated dual-path training to single ParallelTrainer:
 - Removed 147 lines of duplicate code from train-ai.ts
 - Evolution now works in parallel mode
 
-#### Phase 27: llm-strategy-generation
-**Goal**: `boardsmith generate-ai --model claude` command that analyzes game rules and generates custom evaluation functions (Tier 3)
+#### Phase 27: llm-strategy-generation ✅
+**Goal**: `/generate-ai` Claude Code slash command that guides Claude through generating custom evaluation functions (Tier 3)
 **Depends on**: Phase 26.1
-**Research**: Likely (Claude API, prompt engineering for game rules → heuristics)
-**Research topics**: Claude API usage, prompt engineering for code generation, game rule analysis
-**Plans**: TBD
+**Research**: Not needed (leveraged existing slash command infrastructure)
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 27-01: TBD
+- [x] 27-01: Create /generate-ai slash command template, instructions, and tiered AI documentation
 
 #### Phase 28: integration-verification
 **Goal**: Unified CLI with tiered AI system, documentation, multi-game validation (test with Hex + at least one other game type)
@@ -365,5 +364,5 @@ Plans:
 | 25. structural-features | v1.0 | 2/2 | Complete | 2026-01-14 |
 | 26. training-improvements | v1.0 | 3/3 | Complete | 2026-01-14 |
 | 26.1 parallel-only-training | v1.0 | 1/1 | Complete | 2026-01-14 |
-| 27. llm-strategy-generation | v1.0 | 0/? | Not started | - |
+| 27. llm-strategy-generation | v1.0 | 1/1 | Complete | 2026-01-15 |
 | 28. integration-verification | v1.0 | 0/? | Not started | - |
