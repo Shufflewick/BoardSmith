@@ -43,6 +43,10 @@ Improve code maintainability, testability, and navigability equally—making it 
 - ✓ Work-stealing pattern for load balancing — v0.9
 - ✓ Deterministic parallel simulation — v0.9 (same seed = same results)
 - ✓ train-ai respects paths.rules from boardsmith.json — v0.9
+- ✓ Game type auto-detection (connection, capture, collection, racing) — v1.0
+- ✓ Type-specific feature generation via introspection — v1.0
+- ✓ Parallel training with evolution support — v1.0
+- ✓ /generate-ai slash command for LLM-assisted generation — v1.0
 
 ### Active
 
@@ -74,10 +78,10 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ## Context
 
-Shipped v0.9 with ~99k LOC TypeScript/Vue.
+Shipped v1.0 with ~99k LOC TypeScript/Vue.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 493 unit tests passing.
-All milestones complete: v0.1-v0.9 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing, HMR reliability, parallel AI training).
+All milestones complete: v0.1-v1.0 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing, HMR reliability, parallel AI training, AI system overhaul).
 
 ---
-*Last updated: 2026-01-13 after v0.9 milestone*
+*Last updated: 2026-01-15 after v1.0 milestone*
