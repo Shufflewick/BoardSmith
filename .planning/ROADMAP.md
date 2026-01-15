@@ -382,6 +382,29 @@ Plans:
 Plans:
 - [x] 30-01: Add threatResponseMoves hook, Hex blocking detection, session wiring
 
+#### Phase 30.1: improve-generate-ai (INSERTED) ✅
+**Goal**: Improve `/generate-ai` slash command based on lessons from Hex AI debugging
+**Depends on**: Phase 30
+**Research**: Unlikely (leveraging existing implementation learnings)
+**Plans**: 1/1 complete
+
+Plans:
+- [x] 30.1-01: Add threat response, playout policy, and human testing to /generate-ai
+
+**Details:**
+Key lessons from Hex AI that `/generate-ai` should incorporate:
+1. **Threat response is critical** - Games need blocking/defensive move detection, not just offensive evaluation
+2. **Playout policy matters** - Random playouts produce random-looking play; weighted playouts based on connectivity/position improve quality
+3. **Move sampling can hide critical moves** - If threat response happens AFTER sampling, blocking moves may be filtered out
+4. **Path-based analysis for connection games** - Dijkstra shortest-path provides concrete threat detection thresholds
+5. **Test against human strategies** - AI vs AI benchmarks don't catch simple human exploits (straight lines in Hex)
+
+The command should guide Claude to:
+- Analyze the game type and identify what "threats" look like
+- Generate threat detection functions that integrate properly with MCTS sampling
+- Create playout policies that bias toward strategically sound moves
+- Include human-style exploit testing, not just AI vs AI benchmarks
+
 #### Phase 31: trajectory-objectives
 **Goal**: Add feature templates that detect momentum/trajectory, not just static state
 **Depends on**: Phase 30
@@ -474,6 +497,7 @@ Plans:
 | 28.1 mcts-performance | v1.0 | 3/4 | In progress | — |
 | 29. playout-lookahead | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 30. threat-response | v1.1 | 1/1 | Complete | 2026-01-15 |
+| 30.1 improve-generate-ai | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 31. trajectory-objectives | v1.1 | 0/? | Not started | — |
 | 32. move-ordering | v1.1 | 0/? | Not started | — |
 | 33. rave | v1.1 | 0/? | Not started | — |

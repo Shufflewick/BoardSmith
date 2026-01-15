@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-13)
 
 ## Current Position
 
-Phase: 30 of 36 (threat-response)
+Phase: 30.1 of 36 (improve-generate-ai)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-01-15 — Completed 30-01-PLAN.md
+Last activity: 2026-01-15 — Completed 30.1-01-PLAN.md
 
-Progress: ██░░░░░░░░ 25% (2/8 phases)
+Progress: ███░░░░░░░ 30% (3/8+ phases)
 
 ## Milestones
 
@@ -50,9 +50,10 @@ Progress: ██░░░░░░░░ 25% (2/8 phases)
 - Milestone v1.0 complete: Integration verification passed all game types
 - Milestone v1.0 reopened: Phase 28.1 inserted for MCTS performance (URGENT) - transparent undo, move pruning, transposition tables, parallel MCTS
 - Milestone v1.1 created: MCTS Strategy Improvements, 8 phases (Phase 29-36) - playout lookahead, threat response, trajectory objectives, move ordering, RAVE, gradient objectives, dynamic UCT, proof number search
+- Phase 30.1 inserted after Phase 30: improve-generate-ai - improve /generate-ai command based on Hex AI debugging lessons (threat detection, playout policy, sampling order, human exploit testing)
 
 ## Session Continuity
 
 Last session: 2026-01-15
-Stopped at: Completed Phase 30 (threat-response)
+Stopped at: Completed Phase 30.1 (improve-generate-ai)
 Resume file: None
