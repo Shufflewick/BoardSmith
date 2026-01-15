@@ -162,6 +162,9 @@ export async function trainAICommand(options: TrainAIOptions): Promise<void> {
       gamesPerIteration,
       iterations,
       mctsIterations: effectiveMCTS,
+      oracleMCTSIterations: effectiveMCTS, // Use same MCTS for oracle (first iteration)
+      trainedMCTSIterations: Math.max(5, Math.round(effectiveMCTS / 2)), // Lighter when guided by objectives
+      benchmarkMCTSIterations: effectiveMCTS * 2, // Stronger for evaluation but not 10x slower
       existingAIPath,
       seed: `train-${Date.now()}`,
       workerCount,

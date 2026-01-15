@@ -24,8 +24,11 @@ parentPort.on('message', async (options: SerializableSimulationOptions) => {
   const { seed } = options;
 
   try {
-    // Dynamically import the game module
-    const gameModule = await import(options.gameModulePath);
+    // Dynamically import the game module (need file:// URL for local imports in workers)
+    const modulePath = options.gameModulePath.startsWith('file://')
+      ? options.gameModulePath
+      : `file://${options.gameModulePath}`;
+    const gameModule = await import(modulePath);
 
     // Extract the game class from the module's gameDefinition
     const gameDefinition = gameModule.gameDefinition;
