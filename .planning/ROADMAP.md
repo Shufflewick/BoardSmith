@@ -373,14 +373,14 @@ Plans:
 
 **Results:** P1 win rate improved from 40% to 57.5%, games 30% longer (more contested), response time improved.
 
-#### Phase 30: threat-response
+#### Phase 30: threat-response ✅
 **Goal**: Force AI to consider defensive moves when opponent has immediate threats
 **Depends on**: Phase 29
 **Research**: Unlikely (internal MCTS enhancement)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 30-01: TBD (run /gsd:plan-phase 30 to break down)
+- [x] 30-01: Add threatResponseMoves hook, Hex blocking detection, session wiring
 
 #### Phase 31: trajectory-objectives
 **Goal**: Add feature templates that detect momentum/trajectory, not just static state
@@ -473,7 +473,7 @@ Plans:
 | 28. integration-verification | v1.0 | 1/1 | Complete | 2026-01-15 |
 | 28.1 mcts-performance | v1.0 | 3/4 | In progress | — |
 | 29. playout-lookahead | v1.1 | 1/1 | Complete | 2026-01-15 |
-| 30. threat-response | v1.1 | 0/? | Not started | — |
+| 30. threat-response | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 31. trajectory-objectives | v1.1 | 0/? | Not started | — |
 | 32. move-ordering | v1.1 | 0/? | Not started | — |
 | 33. rave | v1.1 | 0/? | Not started | — |
