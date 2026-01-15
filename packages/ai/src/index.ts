@@ -10,6 +10,7 @@ export type {
   BotMove,
   AIConfig,
   Objective,
+  ThreatResponse,
   DifficultyLevel,
 } from './types.js';
 export { DIFFICULTY_PRESETS, DEFAULT_CONFIG } from './types.js';

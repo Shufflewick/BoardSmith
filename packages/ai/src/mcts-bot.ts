@@ -9,7 +9,7 @@ import type {
   GameStateSnapshot,
 } from '@boardsmith/engine';
 import { createSnapshot, deserializeAction } from '@boardsmith/engine';
-import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective } from './types.js';
+import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { createSeededRandom, randomChoice } from './utils.js';
 
@@ -36,7 +36,7 @@ export class MCTSBot<G extends Game = Game> {
   private playerIndex: number;
   private config: BotConfig;
   private objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
-  private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => BotMove[];
+  private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
   private rng: () => number;
   private actionHistory: SerializedAction[];
   private seed?: string;
@@ -202,24 +202,31 @@ export class MCTSBot<G extends Game = Game> {
       0 // root has 0 commands from parent
     );
 
-    // Apply threat response move ordering at root node
-    // This ensures blocking moves are explored early before budget exhausts
+    // Apply threat response at root node
     if (this.threatResponseMoves) {
-      const threatMoves = this.threatResponseMoves(this.game, this.playerIndex, moves);
-      if (threatMoves.length > 0) {
-        // Create a set of threat move keys for fast lookup
-        const threatKeys = new Set(threatMoves.map(m => JSON.stringify(m)));
-        // Partition untriedMoves: threat moves first, then rest
-        const threatFirst: BotMove[] = [];
-        const rest: BotMove[] = [];
-        for (const move of root.untriedMoves) {
-          if (threatKeys.has(JSON.stringify(move))) {
-            threatFirst.push(move);
-          } else {
-            rest.push(move);
+      const threatResponse = this.threatResponseMoves(this.game, this.playerIndex, moves);
+      if (threatResponse.moves.length > 0) {
+        const threatKeys = new Set(threatResponse.moves.map(m => JSON.stringify(m)));
+
+        if (threatResponse.urgent) {
+          // URGENT: Opponent is about to win - ONLY consider blocking moves
+          // Filter both allMoves and untriedMoves to just threat moves
+          root.allMoves = threatResponse.moves;
+          root.untriedMoves = [...threatResponse.moves];
+        } else {
+          // Not urgent: Prioritize threat moves but consider all options
+          // Partition untriedMoves: threat moves first, then rest
+          const threatFirst: BotMove[] = [];
+          const rest: BotMove[] = [];
+          for (const move of root.untriedMoves) {
+            if (threatKeys.has(JSON.stringify(move))) {
+              threatFirst.push(move);
+            } else {
+              rest.push(move);
+            }
           }
+          root.untriedMoves = [...threatFirst, ...rest];
         }
-        root.untriedMoves = [...threatFirst, ...rest];
       }
     }
 

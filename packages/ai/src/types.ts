@@ -71,6 +71,16 @@ export interface Objective {
 }
 
 /**
+ * Result from threat response analysis
+ */
+export interface ThreatResponse {
+  /** Moves that address the threat */
+  moves: BotMove[];
+  /** If true, one of these moves MUST be taken (opponent about to win) */
+  urgent: boolean;
+}
+
+/**
  * AI configuration that can be attached to a game definition
  */
 export interface AIConfig {
@@ -82,15 +92,21 @@ export interface AIConfig {
 
   /**
    * Optional function to identify threat response moves.
-   * When opponent has immediate threats, returns moves that MUST be considered first.
-   * This ensures blocking moves are explored early in MCTS before budget exhausts.
+   * When opponent has immediate threats, returns moves that address the threat.
+   *
+   * Returns { moves, urgent }:
+   * - moves: Array of moves that block/address the threat
+   * - urgent: If true, opponent is about to win and we MUST pick one of these moves
+   *
+   * When urgent=false, moves are prioritized for exploration but MCTS still evaluates all options.
+   * When urgent=true, MCTS only considers these moves (forces defensive play).
    *
    * @param game - Current game state
    * @param playerIndex - Which player the bot is (1-indexed position)
    * @param availableMoves - All legal moves at this position
-   * @returns Subset of availableMoves that block opponent threats (empty if no threats)
+   * @returns ThreatResponse with moves and urgency flag
    */
-  threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => BotMove[];
+  threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
 }
 
 /**
