@@ -1,8 +1,8 @@
 /**
- * Install BoardSmith slash command for Claude Code
+ * Install BoardSmith slash commands for Claude Code
  *
- * This installs the /design-game slash command globally so users can
- * design games directly within Claude Code conversations.
+ * This installs the /design-game and /generate-ai slash commands globally
+ * so users can design games and generate AI directly within Claude Code conversations.
  */
 
 import { promises as fs } from 'node:fs';
@@ -17,6 +17,47 @@ const __dirname = dirname(__filename);
 interface InstallOptions {
   force?: boolean;
   local?: boolean; // Install to ./.claude/commands instead of global
+}
+
+/**
+ * Install a single slash command
+ */
+async function installCommand(
+  commandName: string,
+  boardsmithRoot: string,
+  targetDir: string,
+  force: boolean
+): Promise<boolean> {
+  const targetPath = join(targetDir, `${commandName}.md`);
+
+  // Check if command already exists
+  try {
+    await fs.access(targetPath);
+    if (!force) {
+      return false; // Already exists, not overwriting
+    }
+  } catch {
+    // File doesn't exist, that's fine
+  }
+
+  // Read template - look in src directory (not dist) since .md files aren't compiled
+  const templatePath = join(boardsmithRoot, 'packages', 'cli', 'src', 'slash-command', `${commandName}.template.md`);
+  let template: string;
+
+  try {
+    template = await fs.readFile(templatePath, 'utf-8');
+  } catch {
+    console.error(chalk.red(`Error: Could not find ${commandName} template.`));
+    console.error(chalk.gray(`Looked in: ${templatePath}`));
+    return false;
+  }
+
+  // Replace placeholder with actual path
+  const content = template.replace(/\{\{BOARDSMITH_ROOT\}\}/g, boardsmithRoot);
+
+  // Write to target
+  await fs.writeFile(targetPath, content);
+  return true;
 }
 
 export async function installClaudeCommand(options: InstallOptions = {}): Promise<void> {
@@ -44,47 +85,54 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   // Create commands directory if it doesn't exist
   await fs.mkdir(targetDir, { recursive: true });
 
-  const targetPath = join(targetDir, 'design-game.md');
+  const force = options.force ?? false;
 
-  // Check if command already exists
-  try {
-    await fs.access(targetPath);
-    if (!options.force) {
-      console.log(chalk.yellow('Slash command already installed at:'));
-      console.log(chalk.gray(`  ${targetPath}`));
+  // Check if any commands already exist (without force)
+  if (!force) {
+    const designGamePath = join(targetDir, 'design-game.md');
+    const generateAiPath = join(targetDir, 'generate-ai.md');
+    let existingCommands = false;
+
+    try {
+      await fs.access(designGamePath);
+      existingCommands = true;
+    } catch {
+      // doesn't exist
+    }
+
+    try {
+      await fs.access(generateAiPath);
+      existingCommands = true;
+    } catch {
+      // doesn't exist
+    }
+
+    if (existingCommands) {
+      console.log(chalk.yellow('Slash commands already installed at:'));
+      console.log(chalk.gray(`  ${targetDir}`));
       console.log('');
       console.log('Use --force to overwrite.');
       return;
     }
-  } catch {
-    // File doesn't exist, that's fine
   }
 
-  // Read template - look in src directory (not dist) since .md files aren't compiled
-  const templatePath = join(boardsmithRoot, 'packages', 'cli', 'src', 'slash-command', 'design-game.template.md');
-  let template: string;
+  // Install both commands
+  const designGameInstalled = await installCommand('design-game', boardsmithRoot, targetDir, force);
+  const generateAiInstalled = await installCommand('generate-ai', boardsmithRoot, targetDir, force);
 
-  try {
-    template = await fs.readFile(templatePath, 'utf-8');
-  } catch {
-    console.error(chalk.red('Error: Could not find slash command template.'));
-    console.error(chalk.gray(`Looked in: ${templatePath}`));
+  if (!designGameInstalled && !generateAiInstalled) {
+    console.error(chalk.red('Error: Failed to install slash commands.'));
     process.exit(1);
   }
 
-  // Replace placeholder with actual path
-  const content = template.replace(/\{\{BOARDSMITH_ROOT\}\}/g, boardsmithRoot);
-
-  // Write to target
-  await fs.writeFile(targetPath, content);
-
-  console.log(chalk.green('✓ Installed BoardSmith slash command for Claude Code'));
+  console.log(chalk.green('✓ Installed BoardSmith slash commands for Claude Code'));
   console.log('');
-  console.log(chalk.gray(`  Location: ${targetPath}`));
+  console.log(chalk.gray(`  Location: ${targetDir}`));
   console.log(chalk.gray(`  BoardSmith: ${boardsmithRoot}`));
   console.log('');
-  console.log('Usage in Claude Code:');
-  console.log(chalk.cyan('  /design-game'));
+  console.log('Commands:');
+  console.log(chalk.cyan('  /design-game') + chalk.gray('  - Design and generate a new BoardSmith game'));
+  console.log(chalk.cyan('  /generate-ai') + chalk.gray('  - Generate AI evaluation functions for existing game'));
   console.log('');
 
   if (options.local) {
@@ -98,13 +146,32 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
     ? join(process.cwd(), '.claude', 'commands')
     : join(homedir(), '.claude', 'commands');
 
-  const targetPath = join(targetDir, 'design-game.md');
+  const designGamePath = join(targetDir, 'design-game.md');
+  const generateAiPath = join(targetDir, 'generate-ai.md');
 
+  let removedAny = false;
+
+  // Remove design-game command
   try {
-    await fs.unlink(targetPath);
-    console.log(chalk.green('✓ Uninstalled BoardSmith slash command'));
-    console.log(chalk.gray(`  Removed: ${targetPath}`));
+    await fs.unlink(designGamePath);
+    console.log(chalk.gray(`  Removed: ${designGamePath}`));
+    removedAny = true;
   } catch {
-    console.log(chalk.yellow('Slash command not found.'));
+    // File doesn't exist
+  }
+
+  // Remove generate-ai command
+  try {
+    await fs.unlink(generateAiPath);
+    console.log(chalk.gray(`  Removed: ${generateAiPath}`));
+    removedAny = true;
+  } catch {
+    // File doesn't exist
+  }
+
+  if (removedAny) {
+    console.log(chalk.green('✓ Uninstalled BoardSmith slash commands'));
+  } else {
+    console.log(chalk.yellow('No BoardSmith slash commands found.'));
   }
 }
