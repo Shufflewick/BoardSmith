@@ -75,7 +75,8 @@ export class SqliteGameStore<TSession extends SessionInfo = SessionInfo> impleme
       session = GameSession.restore(
         storedState,
         definition.gameClass,
-        storage
+        storage,
+        definition.ai
       );
     } catch (err) {
       // Game can't be restored (likely due to rule changes)
@@ -128,6 +129,8 @@ export class SqliteGameStore<TSession extends SessionInfo = SessionInfo> impleme
       gameOptionsDefinitions: definition.gameOptions,
       // SQLite storage for persistence
       storage,
+      // Pass AI config (objectives and threat response) from game definition
+      botAIConfig: definition.ai,
     });
 
     // Create and attach broadcaster
