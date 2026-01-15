@@ -405,14 +405,14 @@ The command should guide Claude to:
 - Create playout policies that bias toward strategically sound moves
 - Include human-style exploit testing, not just AI vs AI benchmarks
 
-#### Phase 31: trajectory-objectives
+#### Phase 31: trajectory-objectives ✅
 **Goal**: Add feature templates that detect momentum/trajectory, not just static state
 **Depends on**: Phase 30
 **Research**: Unlikely (feature template addition)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 31-01: TBD
+- [x] 31-01: Add 6 trajectory/momentum feature templates (tempo, initiative, position quality)
 
 #### Phase 32: move-ordering
 **Goal**: Prioritize exploring moves near opponent's pieces/recent activity
@@ -498,7 +498,7 @@ Plans:
 | 29. playout-lookahead | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 30. threat-response | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 30.1 improve-generate-ai | v1.1 | 1/1 | Complete | 2026-01-15 |
-| 31. trajectory-objectives | v1.1 | 0/? | Not started | — |
+| 31. trajectory-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 32. move-ordering | v1.1 | 0/? | Not started | — |
 | 33. rave | v1.1 | 0/? | Not started | — |
 | 34. gradient-objectives | v1.1 | 0/? | Not started | — |
