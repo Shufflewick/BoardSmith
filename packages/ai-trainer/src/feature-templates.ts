@@ -402,7 +402,7 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     id: 'edge-proximity',
     category: 'spatial',
     descriptionTemplate: 'Player pieces are closer to goal edge',
-    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    requires: { spatial: true, gameType: 'connection' },
     generate: (structure) => {
       const features: CandidateFeature[] = [];
       if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
@@ -429,7 +429,7 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     id: 'center-influence-connection',
     category: 'spatial',
     descriptionTemplate: 'Player controls center hexes (blocks opponent paths)',
-    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    requires: { spatial: true, gameType: 'connection' },
     generate: (structure) => {
       const features: CandidateFeature[] = [];
       if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
@@ -457,7 +457,7 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     id: 'connectivity-groups',
     category: 'spatial',
     descriptionTemplate: 'Player has fewer disconnected groups (more connected)',
-    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    requires: { spatial: true, gameType: 'connection' },
     generate: (structure) => {
       const features: CandidateFeature[] = [];
       if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
@@ -497,7 +497,7 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     id: 'path-distance-advantage',
     category: 'comparison',
     descriptionTemplate: 'Player needs fewer stones to win than opponent',
-    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    requires: { spatial: true, gameType: 'connection' },
     generate: (structure) => {
       const features: CandidateFeature[] = [];
       if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
@@ -524,7 +524,7 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     id: 'near-win-connection',
     category: 'boolean',
     descriptionTemplate: 'Player is within N stones of winning',
-    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    requires: { spatial: true, gameType: 'connection' },
     generate: (structure) => {
       const features: CandidateFeature[] = [];
       if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
@@ -553,7 +553,7 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
     id: 'path-blocked',
     category: 'boolean',
     descriptionTemplate: "Opponent's path is completely blocked",
-    requires: { spatial: true, ownership: true, gameType: 'connection' },
+    requires: { spatial: true, gameType: 'connection' },
     generate: (structure) => {
       const features: CandidateFeature[] = [];
       if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
@@ -570,6 +570,90 @@ export const FEATURE_TEMPLATES: FeatureTemplate[] = [
         category: 'boolean',
         templateId: 'path-blocked',
         evaluate: createOpponentPathBlockedEvaluator('Cell', boardSize),
+      });
+
+      return features;
+    },
+  },
+
+  // ============================================
+  // TEMPO/INITIATIVE FEATURES
+  // ============================================
+  {
+    id: 'path-differential',
+    category: 'comparison',
+    descriptionTemplate: 'Player has significantly shorter path than opponent (tempo advantage)',
+    requires: { spatial: true, gameType: 'connection' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
+        return features;
+      }
+      if (!structure.spatialInfo.dimensions) return features;
+
+      const boardSize = structure.spatialInfo.dimensions.rows;
+
+      features.push({
+        id: 'path-differential',
+        description: 'Player has significantly shorter path than opponent (at least 2 stones ahead)',
+        category: 'comparison',
+        templateId: 'path-differential',
+        evaluate: createPathDifferentialEvaluator('Cell', boardSize),
+      });
+
+      return features;
+    },
+  },
+
+  {
+    id: 'threat-differential',
+    category: 'comparison',
+    descriptionTemplate: 'Player creates more threats than facing (attacking position)',
+    requires: { spatial: true, ownership: true, gameType: 'capture' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.dimensions) {
+        return features;
+      }
+
+      const { rows, columns } = structure.spatialInfo.dimensions;
+
+      for (const [className, info] of structure.elementTypes) {
+        if (!info.hasOwnership || !info.isSpatial) continue;
+
+        features.push({
+          id: `${className.toLowerCase()}-threat-differential`,
+          description: `Player threatens more opponent ${className} than own ${className} are threatened (attacking position)`,
+          category: 'comparison',
+          templateId: 'threat-differential',
+          evaluate: createThreatDifferentialEvaluator(className, rows, columns),
+        });
+      }
+
+      return features;
+    },
+  },
+
+  {
+    id: 'forcing-position',
+    category: 'boolean',
+    descriptionTemplate: 'Player is within 2 moves while opponent is further (forcing a response)',
+    requires: { spatial: true, gameType: 'connection' },
+    generate: (structure) => {
+      const features: CandidateFeature[] = [];
+      if (!structure.spatialInfo.hasBoard || !structure.spatialInfo.isHex) {
+        return features;
+      }
+      if (!structure.spatialInfo.dimensions) return features;
+
+      const boardSize = structure.spatialInfo.dimensions.rows;
+
+      features.push({
+        id: 'forcing-position',
+        description: 'Player is within 2 moves of winning while opponent is further (forcing a response)',
+        category: 'boolean',
+        templateId: 'forcing-position',
+        evaluate: createForcingPositionEvaluator('Cell', boardSize),
       });
 
       return features;
@@ -1518,6 +1602,67 @@ function createOpponentPathBlockedEvaluator(
     const opponentPathLength = computeShortestPathLength(game, className, 1 - playerIndex, boardSize);
     // boardSize * 2 is the "blocked" return value from computeShortestPathLength
     return opponentPathLength >= boardSize * 2;
+  };
+}
+
+// ============================================
+// TEMPO/INITIATIVE EVALUATORS
+// ============================================
+
+/**
+ * Evaluator: Player has significantly shorter path than opponent (at least 2 stones ahead).
+ * This indicates tempo advantage - the opponent must respond to your threat.
+ */
+function createPathDifferentialEvaluator(
+  className: string,
+  boardSize: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPathLength = computeShortestPathLength(game, className, playerIndex, boardSize);
+    const opponentPathLength = computeShortestPathLength(game, className, 1 - playerIndex, boardSize);
+
+    // Returns true if player is at least 2 stones ahead (significant tempo advantage)
+    // myPath < opponentPath - 1 means myPath is at least 2 less than opponentPath
+    return myPathLength < opponentPathLength - 1;
+  };
+}
+
+/**
+ * Evaluator: Player threatens more opponent pieces than own pieces are threatened.
+ * This indicates an attacking position with initiative.
+ */
+function createThreatDifferentialEvaluator(
+  className: string,
+  totalRows: number,
+  totalCols: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPlayer = getPlayerByIndex(game, playerIndex);
+    const opponent = getPlayerByIndex(game, 1 - playerIndex);
+
+    // Count threats player creates against opponent
+    const threatsToOpponent = countThreatenedPieces(game, className, opponent, myPlayer, totalRows, totalCols);
+    // Count threats opponent creates against player
+    const threatsToMe = countThreatenedPieces(game, className, myPlayer, opponent, totalRows, totalCols);
+
+    return threatsToOpponent > threatsToMe;
+  };
+}
+
+/**
+ * Evaluator: Player is within 2 moves of winning while opponent is further.
+ * This is a forcing position where the opponent must respond immediately.
+ */
+function createForcingPositionEvaluator(
+  className: string,
+  boardSize: number
+): CandidateFeature['evaluate'] {
+  return (game: Game, playerIndex: number): boolean => {
+    const myPathLength = computeShortestPathLength(game, className, playerIndex, boardSize);
+    const opponentPathLength = computeShortestPathLength(game, className, 1 - playerIndex, boardSize);
+
+    // Player is within 2 moves AND opponent is further away
+    return myPathLength <= 2 && opponentPathLength > 2;
   };
 }
 
