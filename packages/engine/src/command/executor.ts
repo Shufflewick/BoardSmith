@@ -17,6 +17,7 @@ import type {
   ReorderChildCommand,
   VisibilityConfig,
 } from './types.js';
+import { createInverseCommand } from './inverse.js';
 import type { Game } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type { Space } from '../element/space.js';
@@ -245,4 +246,26 @@ function executeReorderChild(game: Game, command: ReorderChildCommand): CommandR
   children.splice(command.targetIndex, 0, element);
 
   return { success: true };
+}
+
+/**
+ * Undo a command by generating and executing its inverse.
+ *
+ * IMPORTANT: The inverse must be generated BEFORE the command was executed.
+ * This function is for undoing commands that have already been executed.
+ *
+ * @param game - The game instance (current state after command was executed)
+ * @param command - The command that was executed and needs to be undone
+ * @param inverse - The pre-computed inverse command (generated before execution)
+ * @returns Result indicating success or failure
+ *
+ * @internal Used by MCTS for efficient state rollback
+ */
+export function undoCommand(game: Game, command: GameCommand, inverse: GameCommand | null): CommandResult {
+  if (!inverse) {
+    return { success: false, error: `Command type '${command.type}' is not invertible` };
+  }
+
+  // Execute the inverse command (but don't add to history - caller controls that)
+  return executeCommand(game, inverse);
 }

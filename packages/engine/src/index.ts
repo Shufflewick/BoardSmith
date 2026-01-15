@@ -63,6 +63,8 @@ export type {
 // Command system (event sourcing)
 export {
   executeCommand,
+  undoCommand,
+  createInverseCommand,
   canPlayerSee,
   visibilityFromMode,
   resolveVisibility,

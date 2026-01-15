@@ -28,4 +28,5 @@ export {
   DEFAULT_VISIBILITY,
 } from './visibility.js';
 
-export { executeCommand } from './executor.js';
+export { executeCommand, undoCommand } from './executor.js';
+export { createInverseCommand } from './inverse.js';
