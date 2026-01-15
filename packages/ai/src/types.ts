@@ -44,7 +44,9 @@ export interface MCTSNode {
   commandCount: number;
   /** Child nodes that have been explored */
   children: MCTSNode[];
-  /** Moves that haven't been tried yet */
+  /** All legal moves at this position (cached, enumerated once per node) */
+  allMoves: BotMove[];
+  /** Moves that haven't been tried yet (subset of allMoves) */
   untriedMoves: BotMove[];
   /** Number of times this node has been visited */
   visits: number;

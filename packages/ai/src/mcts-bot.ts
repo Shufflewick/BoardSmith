@@ -795,12 +795,13 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Create an MCTS node (path-based, no snapshot)
+   * allMoves is cached at creation time - enumerated once per node
    */
   private createNode(
     flowState: FlowState,
     parent: MCTSNode | null,
     parentMove: BotMove | null,
-    untriedMoves: BotMove[],
+    allMoves: BotMove[],
     commandCount: number
   ): MCTSNode {
     return {
@@ -809,7 +810,8 @@ export class MCTSBot<G extends Game = Game> {
       parentMove,
       commandCount,
       children: [],
-      untriedMoves: [...untriedMoves],
+      allMoves: allMoves,
+      untriedMoves: [...allMoves],
       visits: 0,
       value: 0,
       currentPlayer: flowState.currentPlayer ?? this.playerIndex,
