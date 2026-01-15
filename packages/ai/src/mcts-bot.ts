@@ -825,13 +825,12 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Hash a position for transposition table lookup.
-   * Uses command history as unique identifier (same commands = same position).
+   * Uses flow state position as unique identifier (tracks game progression).
    */
-  private hashPosition(game: Game): string {
-    // Use command history length as part of hash for quick discrimination
-    const commands = game.commandHistory;
-    // JSON serialize commands - deterministic: same commands = same hash
-    return commands.map(c => JSON.stringify(c)).join('|');
+  private hashPosition(game: Game, flowState: FlowState): string {
+    // Flow state position changes as the game progresses through flow nodes
+    // It uniquely identifies where we are in the game flow
+    return JSON.stringify(flowState.position);
   }
 
   /**
@@ -845,7 +844,7 @@ export class MCTSBot<G extends Game = Game> {
       return this.evaluateTerminalFromGame(game, flowState);
     }
 
-    const hash = this.hashPosition(game);
+    const hash = this.hashPosition(game, flowState);
     const cached = this.transpositionTable.get(hash);
 
     // Return cached value if we have enough confidence (3+ visits)
