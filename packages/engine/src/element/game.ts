@@ -3,7 +3,8 @@ import { GameElement } from './game-element.js';
 import type { ElementContext, ElementClass, ElementJSON } from './types.js';
 import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
-import { executeCommand } from '../command/executor.js';
+import { executeCommand, undoCommand } from '../command/executor.js';
+import { createInverseCommand } from '../command/inverse.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, SelectionDebugInfo } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
@@ -267,6 +268,9 @@ export class Game<
 
   /** Command history for event sourcing */
   commandHistory: GameCommand[] = [];
+
+  /** Inverse command history for undo (parallel to commandHistory) */
+  private _inverseHistory: (GameCommand | null)[] = [];
 
   /** Registered actions */
   private _actions: Map<string, ActionDefinition> = new Map();
@@ -584,9 +588,13 @@ export class Game<
    * Execute a command and record it in history
    */
   execute(command: GameCommand): CommandResult {
+    // Capture inverse BEFORE executing (needed for proper undo)
+    const inverse = createInverseCommand(this, command);
+
     const result = executeCommand(this, command);
     if (result.success) {
       this.commandHistory.push(command);
+      this._inverseHistory.push(inverse);
     }
     return result;
   }
@@ -601,7 +609,48 @@ export class Game<
         throw new Error(`Failed to replay command: ${result.error}`);
       }
       this.commandHistory.push(command);
+      // Can't compute inverse during replay - set to null
+      this._inverseHistory.push(null);
     }
+  }
+
+  /**
+   * Undo the last command in history.
+   * Returns false if history is empty or last command is not invertible.
+   *
+   * @internal Used by MCTS for efficient state rollback
+   */
+  undoLastCommand(): boolean {
+    if (this.commandHistory.length === 0) return false;
+
+    const lastInverse = this._inverseHistory[this._inverseHistory.length - 1];
+    if (!lastInverse) {
+      // Command not invertible
+      return false;
+    }
+
+    const lastCommand = this.commandHistory[this.commandHistory.length - 1];
+    const result = undoCommand(this, lastCommand, lastInverse);
+
+    if (result.success) {
+      this.commandHistory.pop();
+      this._inverseHistory.pop();
+    }
+
+    return result.success;
+  }
+
+  /**
+   * Undo multiple commands from history.
+   * Stops and returns false if any command is not invertible.
+   *
+   * @internal Used by MCTS for efficient state rollback
+   */
+  undoCommands(count: number): boolean {
+    for (let i = 0; i < count; i++) {
+      if (!this.undoLastCommand()) return false;
+    }
+    return true;
   }
 
   // ============================================
