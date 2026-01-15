@@ -1,4 +1,4 @@
-import type { Game, Player, FlowState, GameStateSnapshot } from '@boardsmith/engine';
+import type { Game, FlowState } from '@boardsmith/engine';
 
 /**
  * Configuration options for the MCTS bot
@@ -28,16 +28,20 @@ export interface BotMove {
 
 /**
  * Internal node in the MCTS search tree
+ *
+ * Uses path-based state management: nodes track the number of commands
+ * executed to reach them from their parent, enabling efficient undo-based
+ * state rollback instead of full snapshot restoration.
  */
 export interface MCTSNode {
-  /** Serialized game state at this node */
-  snapshot: GameStateSnapshot;
-  /** Flow state at this node */
+  /** Flow state at this node (small, kept as snapshot) */
   flowState: FlowState;
   /** Parent node (null for root) */
   parent: MCTSNode | null;
-  /** Move that led to this node */
+  /** Move that led to this node from parent */
   parentMove: BotMove | null;
+  /** Number of commands executed to reach this state from parent */
+  commandCount: number;
   /** Child nodes that have been explored */
   children: MCTSNode[];
   /** Moves that haven't been tried yet */
@@ -75,21 +79,24 @@ export interface AIConfig {
  * Default bot configuration
  */
 export const DEFAULT_CONFIG: BotConfig = {
-  iterations: 100,
-  playoutDepth: 5,
+  iterations: 300,
+  playoutDepth: 0, // Immediate evaluation using objectives (no random moves)
   async: true,
   timeout: 2000,
 };
 
 /**
  * Preset difficulty levels
- * Note: iterations are kept very low because game operations are slow (~18ms per move).
- * The timeout ensures the bot always returns within a reasonable time.
+ *
+ * With objectives-based evaluation:
+ * - playoutDepth: 0 means immediate evaluation using objectives (no random moves)
+ * - Higher iterations explore more of the search space
+ * - Timeout acts as safety net for large branching factors
  */
 export const DIFFICULTY_PRESETS: Record<string, Partial<BotConfig>> = {
-  easy: { iterations: 3, playoutDepth: 3, timeout: 1000 },
-  medium: { iterations: 5, playoutDepth: 4, timeout: 1500 },
-  hard: { iterations: 8, playoutDepth: 5, timeout: 2000 },
+  easy: { iterations: 100, playoutDepth: 0, timeout: 1000 },
+  medium: { iterations: 300, playoutDepth: 0, timeout: 1500 },
+  hard: { iterations: 500, playoutDepth: 0, timeout: 2000 },
 };
 
 /**
