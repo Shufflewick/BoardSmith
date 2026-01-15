@@ -268,7 +268,7 @@ function findBlockingCells(
 
 /**
  * Get threat response moves for Hex.
- * When opponent is near winning (path <= 2), returns moves that block their shortest path.
+ * When opponent has a short path (path <= boardSize/2), returns moves that block their shortest path.
  * These moves should be explored first in MCTS to ensure defensive play.
  *
  * @param game - Current game state
@@ -287,8 +287,12 @@ export function getHexThreatResponseMoves(
   // Check if opponent is close to winning
   const opponentPath = computeShortestPathLength(hexGame, opponentPosition);
 
-  // Only trigger threat response when opponent is within 2 moves of winning
-  if (opponentPath > 2) {
+  // Trigger threat response when opponent has a relatively short path
+  // On an 11x11 board, a straight line from start to goal needs 11 cells
+  // We want to start blocking once opponent has made real progress
+  // Using boardSize/2 means we block when opponent is halfway to winning
+  const threatThreshold = Math.floor(hexGame.boardSize / 2);
+  if (opponentPath > threatThreshold) {
     return [];
   }
 
