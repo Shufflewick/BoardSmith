@@ -55,13 +55,18 @@ Engage the user to understand strategic concepts:
 3. **Ask about traps**:
    "Are there any common mistakes or traps the AI should avoid?"
 
-4. **Identify game type** (affects feature selection):
+4. **Identify game type** (affects feature selection and threat patterns):
    - **Connection games** (like Hex): Focus on path distance, blocking
+     - *Threats:* Opponent has short path to goal, near-complete connections
    - **Capture games** (like Chess): Focus on material, piece safety, threats
+     - *Threats:* Pieces under attack, checkmate patterns, tactical combinations
    - **Racing games**: Focus on score lead, proximity to goal
+     - *Threats:* Opponent about to reach finish/target score
    - **Collection games** (like Go Fish): Focus on set completion
+     - *Threats:* Opponent near completing winning sets
    - **Territory games** (like Go): Focus on area control, influence
-   - **Mixed**: Combine appropriate features
+     - *Threats:* Invasions, weak groups, cutting points
+   - **Mixed**: Combine appropriate features and threat patterns
 
 ## Phase 4: Feature Design
 
@@ -207,6 +212,183 @@ After generating the code:
    boardsmith dev --ai 1
    ```
    This will have player 1 controlled by your new AI.
+
+### Human Exploit Testing
+
+AI vs AI benchmarks can miss obvious human exploits. In Hex, the AI played well against itself but failed to block straight-line strategies a human would easily spot.
+
+**Manual testing is essential:**
+- Play 3-5 games manually against the AI
+- Try simple, obvious strategies first (straight lines, central control, aggressive attacks)
+- If the AI consistently fails to respond to an obvious threat, add threat detection
+
+**Checklist:**
+- [ ] AI blocks obvious winning threats
+- [ ] AI doesn't make random-looking moves late game
+- [ ] AI vs AI games are contested (not one-sided blowouts)
+- [ ] AI responds to central/key position control
+
+**If human testing reveals exploits, consider adding:**
+- `threatResponseMoves` (for blocking) - see Phase 7
+- `playoutPolicy` (for strategic move selection) - see Phase 8
+- Additional objectives (for position evaluation)
+
+## Phase 7: Threat Response
+
+**Purpose:** Some games require reactive defensive play when the opponent is close to winning. The `threatResponseMoves` hook identifies critical blocking moves.
+
+### When Threat Response is Needed
+
+Threat response is valuable when:
+- Opponent can win quickly if unchallenged (connection games, racing games)
+- There are specific "must block" positions (capture games)
+- The game has forcing sequences that require immediate response
+
+### ThreatResponse Interface
+
+```typescript
+import type { ThreatResponse, BotMove } from '@boardsmith/ai';
+
+export function get<GameName>ThreatResponseMoves(
+  game: Game,
+  playerPosition: number,
+  availableMoves: BotMove[]
+): ThreatResponse {
+  // Analyze opponent's position
+  // Find critical blocking moves
+  // Return { moves: [...], urgent: boolean }
+}
+```
+
+### Threat Patterns by Game Type
+
+**Connection games:**
+- Use shortest-path algorithms (Dijkstra) to find opponent's winning path
+- Return moves that block cells on that path
+- Example: In Hex, find empty cells on opponent's shortest connection
+
+**Capture games:**
+- Detect pieces under attack without defense
+- Find moves that protect threatened pieces or counterattack
+- Example: In Chess, respond to checks and hanging pieces
+
+**Racing games:**
+- Detect when opponent is close to goal/target score
+- Find moves that block opponent's progress or advance own position
+- Example: Block opponent when they're 1-2 moves from winning
+
+**Territory games:**
+- Detect invasions into own territory
+- Find moves that seal borders or kill invading groups
+- Example: In Go, respond to 3-3 invasions
+
+### The Urgent Flag
+
+The `urgent` field determines how MCTS uses threat response moves:
+
+- **`urgent: true`** - Opponent is about to win (1-2 moves away). MCTS will ONLY consider these blocking moves. This forces defensive play when necessary.
+
+- **`urgent: false`** - Threat exists but isn't immediate. These moves are prioritized for exploration, but MCTS still evaluates all options.
+
+Use `urgent: true` sparingly—only when failing to block guarantees a loss.
+
+### Reference Implementation
+
+See `packages/games/hex/rules/src/ai.ts` for `getHexThreatResponseMoves`:
+- Uses Dijkstra's algorithm with path reconstruction
+- Returns empty cells on opponent's shortest path
+- Sets `urgent: true` when opponent is within 4 moves of winning
+
+## Phase 8: Playout Policy (Optional)
+
+**Purpose:** Replace random move selection during MCTS playouts with weighted selection based on game-specific heuristics. This dramatically improves AI quality—random playouts produce random-looking play.
+
+### When to Use Playout Policy
+
+Playout policy is optional but recommended when:
+- Default AI makes random-looking moves late game
+- Game has clear "good move" heuristics (connectivity, center control, etc.)
+- AI vs AI games show poor strategic understanding
+
+### Playout Policy Template
+
+```typescript
+import type { BotMove } from '@boardsmith/ai';
+
+export function get<GameName>PlayoutPolicy(
+  game: Game,
+  playerIndex: number,
+  availableMoves: BotMove[],
+  rng: () => number
+): BotMove {
+  // Score each move based on heuristics
+  // Use weighted-random selection (not deterministic!)
+  // Return selected move
+}
+```
+
+### Weighted Selection Pattern
+
+**Critical: Playout policy MUST use weighted-random selection via the `rng` parameter. Deterministic selection breaks MCTS exploration and produces weak play.**
+
+The pattern (from Hex implementation):
+
+```typescript
+// 1. Score each move based on game-specific heuristics
+const scores: number[] = [];
+let maxScore = -Infinity;
+
+for (const move of availableMoves) {
+  let score = 0;
+  // Add game-specific scoring (connectivity, center control, etc.)
+  scores.push(score);
+  maxScore = Math.max(maxScore, score);
+}
+
+// 2. Convert scores to weights using softmax-like transformation
+const weights: number[] = [];
+let totalWeight = 0;
+
+for (const score of scores) {
+  const weight = Math.exp(score - maxScore);  // Shift to prevent overflow
+  weights.push(weight);
+  totalWeight += weight;
+}
+
+// 3. Select weighted-random using provided rng
+let target = rng() * totalWeight;
+for (let i = 0; i < availableMoves.length; i++) {
+  target -= weights[i];
+  if (target <= 0) {
+    return availableMoves[i];
+  }
+}
+return availableMoves[availableMoves.length - 1];  // Fallback
+```
+
+### Heuristics by Game Type
+
+**Connection games:**
+- Prefer moves adjacent to existing stones (connectivity)
+- Prefer moves closer to center (early game)
+- Prefer moves that shorten own path or lengthen opponent's
+
+**Capture games:**
+- Prefer safe moves (not hanging)
+- Prefer moves that create threats
+- Avoid moves that allow captures
+
+**Territory games:**
+- Prefer moves that expand influence coherently
+- Avoid scattered moves with no support
+- Prefer moves that secure territory boundaries
+
+### Reference Implementation
+
+See `packages/games/hex/rules/src/ai.ts` for `getHexPlayoutPolicy`:
+- Scores moves based on connectivity, center distance, and blocking potential
+- Uses softmax-weighted random selection
+- Dramatically improved AI quality (57.5% vs 40% P1 win rate in balanced play)
 
 ## Critical Rules
 
