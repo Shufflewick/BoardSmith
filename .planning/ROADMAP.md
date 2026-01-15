@@ -11,6 +11,7 @@
 - ✅ [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-01-10
 - ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
 - ✅ [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) — SHIPPED 2026-01-13
+- ✅ [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28) — SHIPPED 2026-01-15
 
 ## Overview
 
@@ -27,7 +28,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
 - ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
-- 🚧 **v1.0 AI System Overhaul** — Phases 24-28 (in progress)
+- ✅ **v1.0 AI System Overhaul** — Phases 24-28 (shipped 2026-01-15)
 
 ## Phases
 
@@ -263,7 +264,7 @@ Plans:
 
 </details>
 
-### 🚧 v1.0 AI System Overhaul (In Progress)
+### ✅ v1.0 AI System Overhaul — SHIPPED 2026-01-15
 
 **Milestone Goal:** Transform AI training from broken/useless to a tiered system that produces quality opponents with minimal designer effort.
 
@@ -324,14 +325,14 @@ Consolidated dual-path training to single ParallelTrainer:
 Plans:
 - [x] 27-01: Create /generate-ai slash command template, instructions, and tiered AI documentation
 
-#### Phase 28: integration-verification
+#### Phase 28: integration-verification ✅
 **Goal**: Unified CLI with tiered AI system, documentation, multi-game validation (test with Hex + at least one other game type)
 **Depends on**: Phase 27
 **Research**: Unlikely (internal wiring, docs, testing)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 28-01: TBD
+- [x] 28-01: Validate tiered AI system with multi-game types, update PROJECT.md
 
 ## Progress
 
@@ -365,4 +366,4 @@ Plans:
 | 26. training-improvements | v1.0 | 3/3 | Complete | 2026-01-14 |
 | 26.1 parallel-only-training | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 27. llm-strategy-generation | v1.0 | 1/1 | Complete | 2026-01-15 |
-| 28. integration-verification | v1.0 | 0/? | Not started | - |
+| 28. integration-verification | v1.0 | 1/1 | Complete | 2026-01-15 |
