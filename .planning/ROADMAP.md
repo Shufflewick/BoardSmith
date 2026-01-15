@@ -338,11 +338,11 @@ Plans:
 **Goal**: Make MCTS bots dramatically faster and smarter through transparent optimizations that require zero game designer effort
 **Depends on**: Phase 28
 **Research**: Likely (game state cloning strategies, move pruning heuristics)
-**Plans**: 1/4 complete
+**Plans**: 2/4 complete
 
 Plans:
 - [x] 28.1-01: Command undo infrastructure (inverse generation, undoCommand, Game.undoLastCommand)
-- [ ] 28.1-02: Smart move pruning
+- [x] 28.1-02: Incremental MCTS state management (apply/undo traversal)
 - [ ] 28.1-03: Transposition tables
 - [ ] 28.1-04: Parallel MCTS
 
@@ -387,4 +387,4 @@ Plans:
 | 26.1 parallel-only-training | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 27. llm-strategy-generation | v1.0 | 1/1 | Complete | 2026-01-15 |
 | 28. integration-verification | v1.0 | 1/1 | Complete | 2026-01-15 |
-| 28.1 mcts-performance | v1.0 | 1/4 | In progress | — |
+| 28.1 mcts-performance | v1.0 | 2/4 | In progress | — |
