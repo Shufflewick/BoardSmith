@@ -5,6 +5,7 @@
 import type { Game, SerializedAction } from '@boardsmith/engine';
 import type { GameRunner } from '@boardsmith/runtime';
 import { createBot, parseAILevel } from '@boardsmith/ai';
+import type { AIConfig as BotAIConfig } from '@boardsmith/ai';
 import type { GameClass, AIConfig } from './types.js';
 
 /**
@@ -18,13 +19,15 @@ export class AIController<G extends Game = Game> {
   readonly #aiLevel: string;
   readonly #GameClass: GameClass<G>;
   readonly #gameType: string;
+  readonly #botAIConfig?: BotAIConfig;
   #thinking = false;
 
   constructor(
     GameClass: GameClass<G>,
     gameType: string,
     playerCount: number,
-    config: AIConfig
+    config: AIConfig,
+    botAIConfig?: BotAIConfig
   ) {
     this.#GameClass = GameClass;
     this.#gameType = gameType;
@@ -32,6 +35,7 @@ export class AIController<G extends Game = Game> {
     this.#aiPlayers = new Set(
       config.players.filter(p => p >= 1 && p <= playerCount)  // 1-indexed positions
     );
+    this.#botAIConfig = botAIConfig;
   }
 
   /**
@@ -136,13 +140,16 @@ export class AIController<G extends Game = Game> {
 
       // Create bot for this player
       const difficulty = parseAILevel(this.#aiLevel);
+      // DEBUG: Log bot AI config status
+      console.log(`[AIController] Creating bot, botAIConfig=${this.#botAIConfig ? 'SET' : 'NOT SET'}`);
       const bot = createBot(
         runner.game,
         this.#GameClass,
         this.#gameType,
         aiPlayer,
         actionHistory,
-        difficulty
+        difficulty,
+        this.#botAIConfig
       );
 
       // Get the AI's move

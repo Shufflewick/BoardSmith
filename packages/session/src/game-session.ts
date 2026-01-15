@@ -41,6 +41,7 @@ import {
 } from './types.js';
 import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
+import type { AIConfig as BotAIConfig } from '@boardsmith/ai';
 import { LobbyManager } from './lobby-manager.js';
 import { SelectionHandler } from './selection-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
@@ -78,6 +79,8 @@ export interface GameSessionOptions<G extends Game = Game> {
   playerOptionsDefinitions?: Record<string, PlayerOptionDefinition>;
   /** Game options definitions (for host to modify in lobby) */
   gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
+  /** AI configuration (objectives and threat response hooks) from game definition */
+  botAIConfig?: BotAIConfig;
 }
 
 /**
@@ -253,6 +256,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       useLobby,
       playerOptionsDefinitions,
       gameOptionsDefinitions,
+      botAIConfig,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -328,7 +332,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     runner.start();
 
     const aiController = aiConfig
-      ? new AIController(GameClass, gameType, playerCount, aiConfig)
+      ? new AIController(GameClass, gameType, playerCount, aiConfig, botAIConfig)
       : undefined;
 
     // Create lobby manager if using lobby flow
@@ -357,7 +361,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               GameClass,
               gameType,
               playerCount,
-              storedState.aiConfig
+              storedState.aiConfig,
+              botAIConfig
             );
           }
         },
@@ -388,7 +393,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   static restore<G extends Game = Game>(
     storedState: StoredGameState,
     GameClass: GameClass<G>,
-    storage?: StorageAdapter
+    storage?: StorageAdapter,
+    botAIConfig?: BotAIConfig
   ): GameSession<G> {
     const runner = GameRunner.replay<G>(
       {
@@ -405,7 +411,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     );
 
     const aiController = storedState.aiConfig
-      ? new AIController(GameClass, storedState.gameType, storedState.playerCount, storedState.aiConfig)
+      ? new AIController(GameClass, storedState.gameType, storedState.playerCount, storedState.aiConfig, botAIConfig)
       : undefined;
 
     // Create lobby manager if stored state has lobby slots
@@ -434,7 +440,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               GameClass,
               storedState.gameType,
               storedState.playerCount,
-              storedState.aiConfig
+              storedState.aiConfig,
+              botAIConfig
             );
           }
         },

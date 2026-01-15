@@ -3,6 +3,7 @@
  */
 
 import type { FlowState, SerializedAction, Game } from '@boardsmith/engine';
+import type { AIConfig as BotAIConfig } from '@boardsmith/ai';
 
 // ============================================
 // Error Codes
@@ -91,10 +92,8 @@ export interface GameDefinition {
   minPlayers: number;
   maxPlayers: number;
   displayName?: string;
-  /** AI configuration */
-  ai?: {
-    objectives: (...args: unknown[]) => unknown;
-  };
+  /** AI configuration (objectives and threat response hooks) */
+  ai?: BotAIConfig;
   /** Game-level configurable options */
   gameOptions?: Record<string, GameOptionDefinition>;
   /** Per-player configurable options */
