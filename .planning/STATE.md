@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-13)
 
 **Core value:** Improve code maintainability, testability, and navigability equally
-**Current focus:** v1.0 AI System Overhaul
+**Current focus:** v1.1 MCTS Strategy Improvements
 
 ## Current Position
 
-Phase: 28.1 of 28.1 (mcts-performance)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-01-15 — Completed 28.1-03-PLAN.md (move caching & transposition tables)
+Phase: 30 of 36 (threat-response)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-15 — Created milestone v1.1, Phase 29 complete (playout-lookahead)
 
-Progress: █████████░ 88%
+Progress: █░░░░░░░░░ 12.5% (1/8 phases)
 
 ## Milestones
 
@@ -49,9 +49,10 @@ Progress: █████████░ 88%
 - Phase 26.1 inserted after Phase 26: parallel-only-training (URGENT) - consolidate duplicate training harnesses
 - Milestone v1.0 complete: Integration verification passed all game types
 - Milestone v1.0 reopened: Phase 28.1 inserted for MCTS performance (URGENT) - transparent undo, move pruning, transposition tables, parallel MCTS
+- Milestone v1.1 created: MCTS Strategy Improvements, 8 phases (Phase 29-36) - playout lookahead, threat response, trajectory objectives, move ordering, RAVE, gradient objectives, dynamic UCT, proof number search
 
 ## Session Continuity
 
 Last session: 2026-01-15
-Stopped at: Completed 28.1-03-PLAN.md (move caching & transposition tables)
+Stopped at: Created milestone v1.1, Phase 29 complete
 Resume file: None

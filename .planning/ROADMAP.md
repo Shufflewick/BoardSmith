@@ -12,6 +12,7 @@
 - ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
 - ✅ [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) — SHIPPED 2026-01-13
 - 🔄 [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) — REOPENED for MCTS performance
+- 🚧 **v1.1 MCTS Strategy Improvements** (Phases 29-36) — in progress
 
 ## Overview
 
@@ -29,6 +30,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
 - ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
 - 🔄 **v1.0 AI System Overhaul** — Phases 24-28.1 (reopened for MCTS performance)
+- 🚧 **v1.1 MCTS Strategy Improvements** — Phases 29-36 (in progress)
 
 ## Phases
 
@@ -354,6 +356,88 @@ Plans:
 
 **Success criteria:** MCTS can run 10x more iterations in the same time budget, producing noticeably better play.
 
+### 🚧 v1.1 MCTS Strategy Improvements (In Progress)
+
+**Milestone Goal:** Make MCTS AI play strategically better by adding lookahead, threat detection, and advanced search techniques. Each phase is tested against Hex AI - if no improvement, revert and skip.
+
+**Testing Protocol:** Each phase runs benchmark (40+ AI vs AI games), measures win rate distribution, game length, and response time. Success = measurable improvement or theoretical foundation for later phases.
+
+#### Phase 29: playout-lookahead ✅
+**Goal**: Enable simulation lookahead (playoutDepth > 0) so AI can discover forcing sequences
+**Depends on**: Phase 28.1
+**Research**: Unlikely (parameter change)
+**Plans**: 1/1 complete
+
+Plans:
+- [x] 29-01: Change playoutDepth from 0 to 3-5 in difficulty presets
+
+**Results:** P1 win rate improved from 40% to 57.5%, games 30% longer (more contested), response time improved.
+
+#### Phase 30: threat-response
+**Goal**: Force AI to consider defensive moves when opponent has immediate threats
+**Depends on**: Phase 29
+**Research**: Unlikely (internal MCTS enhancement)
+**Plans**: TBD
+
+Plans:
+- [ ] 30-01: TBD (run /gsd:plan-phase 30 to break down)
+
+#### Phase 31: trajectory-objectives
+**Goal**: Add feature templates that detect momentum/trajectory, not just static state
+**Depends on**: Phase 30
+**Research**: Unlikely (feature template addition)
+**Plans**: TBD
+
+Plans:
+- [ ] 31-01: TBD
+
+#### Phase 32: move-ordering
+**Goal**: Prioritize exploring moves near opponent's pieces/recent activity
+**Depends on**: Phase 31
+**Research**: Unlikely (move sorting heuristic)
+**Plans**: TBD
+
+Plans:
+- [ ] 32-01: TBD
+
+#### Phase 33: rave
+**Goal**: Implement RAVE (Rapid Action Value Estimation) to learn from all simulations
+**Depends on**: Phase 32
+**Research**: Unlikely (well-documented algorithm)
+**Plans**: TBD
+
+Plans:
+- [ ] 33-01: TBD
+
+#### Phase 34: gradient-objectives
+**Goal**: Change objectives from boolean to numeric for finer-grained evaluation
+**Depends on**: Phase 33
+**Research**: Unlikely (interface change)
+**Plans**: TBD
+
+Plans:
+- [ ] 34-01: TBD
+
+#### Phase 35: dynamic-uct
+**Goal**: Adjust UCT exploration constant based on game phase
+**Depends on**: Phase 34
+**Research**: Likely (needs parameter tuning research)
+**Research topics**: Optimal C values per game type, phase detection strategies
+**Plans**: TBD
+
+Plans:
+- [ ] 35-01: TBD
+
+#### Phase 36: proof-number-search
+**Goal**: Detect forced wins/losses that MCTS might miss using PN search
+**Depends on**: Phase 35
+**Research**: Likely (new algorithm integration)
+**Research topics**: PN search implementation, integration with MCTS evaluation
+**Plans**: TBD
+
+Plans:
+- [ ] 36-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -388,3 +472,11 @@ Plans:
 | 27. llm-strategy-generation | v1.0 | 1/1 | Complete | 2026-01-15 |
 | 28. integration-verification | v1.0 | 1/1 | Complete | 2026-01-15 |
 | 28.1 mcts-performance | v1.0 | 3/4 | In progress | — |
+| 29. playout-lookahead | v1.1 | 1/1 | Complete | 2026-01-15 |
+| 30. threat-response | v1.1 | 0/? | Not started | — |
+| 31. trajectory-objectives | v1.1 | 0/? | Not started | — |
+| 32. move-ordering | v1.1 | 0/? | Not started | — |
+| 33. rave | v1.1 | 0/? | Not started | — |
+| 34. gradient-objectives | v1.1 | 0/? | Not started | — |
+| 35. dynamic-uct | v1.1 | 0/? | Not started | — |
+| 36. proof-number-search | v1.1 | 0/? | Not started | — |

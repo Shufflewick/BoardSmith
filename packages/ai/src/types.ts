@@ -86,7 +86,7 @@ export interface AIConfig {
  */
 export const DEFAULT_CONFIG: BotConfig = {
   iterations: 300,
-  playoutDepth: 0, // Immediate evaluation using objectives (no random moves)
+  playoutDepth: 3, // Simulate 3 random moves ahead before evaluating
   async: true,
   timeout: 2000,
 };
@@ -95,14 +95,15 @@ export const DEFAULT_CONFIG: BotConfig = {
  * Preset difficulty levels
  *
  * With objectives-based evaluation:
- * - playoutDepth: 0 means immediate evaluation using objectives (no random moves)
+ * - playoutDepth controls how many random moves to simulate before evaluating
+ * - Higher playoutDepth helps discover forcing sequences but takes longer
  * - Higher iterations explore more of the search space
  * - Timeout acts as safety net for large branching factors
  */
 export const DIFFICULTY_PRESETS: Record<string, Partial<BotConfig>> = {
-  easy: { iterations: 100, playoutDepth: 0, timeout: 1000 },
-  medium: { iterations: 300, playoutDepth: 0, timeout: 1500 },
-  hard: { iterations: 500, playoutDepth: 0, timeout: 2000, parallel: 2 },
+  easy: { iterations: 100, playoutDepth: 2, timeout: 1000 },
+  medium: { iterations: 300, playoutDepth: 3, timeout: 1500 },
+  hard: { iterations: 500, playoutDepth: 4, timeout: 2000, parallel: 2 },
 };
 
 /**

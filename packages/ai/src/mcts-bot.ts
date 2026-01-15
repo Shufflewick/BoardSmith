@@ -65,8 +65,6 @@ export class MCTSBot<G extends Game = Game> {
     this.actionHistory = actionHistory;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.objectives = aiConfig?.objectives;
-    // DEBUG: Log if objectives are set (remove after debugging)
-    console.log(`[MCTS] Bot created for player ${playerIndex}, objectives=${this.objectives ? 'SET' : 'NOT SET'}`);
     this.seed = this.config.seed;
     this.rng = createSeededRandom(this.config.seed);
   }
@@ -976,11 +974,6 @@ export class MCTSBot<G extends Game = Game> {
         // Map totalScore from [minPossibleScore, maxPossibleScore] to [0.1, 0.9]
         const normalized = (totalScore - minPossibleScore) / scoreRange;
         const result = 0.1 + normalized * 0.8;
-
-        // DEBUG: Log objective evaluation (remove after debugging)
-        if (Math.random() < 0.01) { // Sample 1% to avoid spam
-          console.log(`[MCTS] Objectives: score=${totalScore}, range=[${minPossibleScore},${maxPossibleScore}], result=${result.toFixed(3)}, matched=[${matched.join(', ')}]`);
-        }
 
         return result;
       }
