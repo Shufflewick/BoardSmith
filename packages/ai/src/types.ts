@@ -79,6 +79,18 @@ export interface AIConfig {
    * Returns objectives that give partial credit during playouts.
    */
   objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
+
+  /**
+   * Optional function to identify threat response moves.
+   * When opponent has immediate threats, returns moves that MUST be considered first.
+   * This ensures blocking moves are explored early in MCTS before budget exhausts.
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player the bot is (1-indexed position)
+   * @param availableMoves - All legal moves at this position
+   * @returns Subset of availableMoves that block opponent threats (empty if no threats)
+   */
+  threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => BotMove[];
 }
 
 /**

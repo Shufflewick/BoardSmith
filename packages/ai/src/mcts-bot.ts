@@ -36,6 +36,7 @@ export class MCTSBot<G extends Game = Game> {
   private playerIndex: number;
   private config: BotConfig;
   private objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
+  private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => BotMove[];
   private rng: () => number;
   private actionHistory: SerializedAction[];
   private seed?: string;
@@ -65,6 +66,7 @@ export class MCTSBot<G extends Game = Game> {
     this.actionHistory = actionHistory;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.objectives = aiConfig?.objectives;
+    this.threatResponseMoves = aiConfig?.threatResponseMoves;
     this.seed = this.config.seed;
     this.rng = createSeededRandom(this.config.seed);
   }
@@ -116,7 +118,10 @@ export class MCTSBot<G extends Game = Game> {
         this.playerIndex,
         this.actionHistory,
         subConfig,
-        this.objectives ? { objectives: this.objectives } : undefined
+        {
+          objectives: this.objectives,
+          threatResponseMoves: this.threatResponseMoves,
+        }
       );
 
       // Run single search (playSingle is private, so use play with parallel: 1)
@@ -196,6 +201,27 @@ export class MCTSBot<G extends Game = Game> {
       moves,
       0 // root has 0 commands from parent
     );
+
+    // Apply threat response move ordering at root node
+    // This ensures blocking moves are explored early before budget exhausts
+    if (this.threatResponseMoves) {
+      const threatMoves = this.threatResponseMoves(this.game, this.playerIndex, moves);
+      if (threatMoves.length > 0) {
+        // Create a set of threat move keys for fast lookup
+        const threatKeys = new Set(threatMoves.map(m => JSON.stringify(m)));
+        // Partition untriedMoves: threat moves first, then rest
+        const threatFirst: BotMove[] = [];
+        const rest: BotMove[] = [];
+        for (const move of root.untriedMoves) {
+          if (threatKeys.has(JSON.stringify(move))) {
+            threatFirst.push(move);
+          } else {
+            rest.push(move);
+          }
+        }
+        root.untriedMoves = [...threatFirst, ...rest];
+      }
+    }
 
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
