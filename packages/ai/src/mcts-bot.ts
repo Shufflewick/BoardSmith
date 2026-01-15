@@ -77,9 +77,85 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Run MCTS and return the best move
+   * Run MCTS and return the best move.
+   * Routes to parallel or single mode based on config.
    */
   async play(): Promise<BotMove> {
+    if (this.config.parallel && this.config.parallel > 1) {
+      return this.playParallel();
+    }
+    return this.playSingle();
+  }
+
+  /**
+   * Run multiple independent MCTS searches with different seeds,
+   * then aggregate results by voting on the best move.
+   *
+   * This provides diversity benefit: each search explores different
+   * parts of the game tree due to randomization, reducing blind spots.
+   */
+  private async playParallel(): Promise<BotMove> {
+    const parallelCount = this.config.parallel!;
+    const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
+
+    // Track votes for each unique move
+    const moveVotes = new Map<string, { count: number; move: BotMove }>();
+
+    for (let i = 0; i < parallelCount; i++) {
+      // Create sub-bot with unique seed for diversity
+      const subConfig: Partial<BotConfig> = {
+        ...this.config,
+        seed: `${this.seed ?? 'default'}-parallel-${i}`,
+        iterations: iterationsPerSearch,
+        parallel: 1, // Prevent recursion
+      };
+
+      // Create sub-bot sharing same game instance (read-only root state is fine)
+      const subBot = new MCTSBot(
+        this.game,
+        this.GameClass,
+        this.gameType,
+        this.playerIndex,
+        this.actionHistory,
+        subConfig,
+        this.objectives ? { objectives: this.objectives } : undefined
+      );
+
+      // Run single search (playSingle is private, so use play with parallel: 1)
+      const move = await subBot.play();
+
+      // Tally vote for this move
+      const key = JSON.stringify(move);
+      const existing = moveVotes.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        moveVotes.set(key, { count: 1, move });
+      }
+    }
+
+    // Return move with most votes
+    let best: BotMove | null = null;
+    let bestCount = 0;
+    for (const { count, move } of moveVotes.values()) {
+      if (count > bestCount) {
+        bestCount = count;
+        best = move;
+      }
+    }
+
+    // Safety: if somehow no votes, fall back to single search
+    if (!best) {
+      return this.playSingle();
+    }
+
+    return best;
+  }
+
+  /**
+   * Run a single MCTS search and return the best move
+   */
+  private async playSingle(): Promise<BotMove> {
     const flowState = this.game.getFlowState();
     if (!flowState?.awaitingInput) {
       throw new Error('Game is not awaiting input');

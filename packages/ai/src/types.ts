@@ -16,6 +16,8 @@ export interface BotConfig {
   timeout?: number;
   /** Enable transposition table caching for position evaluations. Default: true */
   useTranspositionTable?: boolean;
+  /** Number of parallel ensemble searches. Default: 1 */
+  parallel?: number;
 }
 
 /**
@@ -100,7 +102,7 @@ export const DEFAULT_CONFIG: BotConfig = {
 export const DIFFICULTY_PRESETS: Record<string, Partial<BotConfig>> = {
   easy: { iterations: 100, playoutDepth: 0, timeout: 1000 },
   medium: { iterations: 300, playoutDepth: 0, timeout: 1500 },
-  hard: { iterations: 500, playoutDepth: 0, timeout: 2000 },
+  hard: { iterations: 500, playoutDepth: 0, timeout: 2000, parallel: 2 },
 };
 
 /**
