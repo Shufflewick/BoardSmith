@@ -349,17 +349,15 @@ export function getHexThreatResponseMoves(
   const hexGame = game as HexGame;
   const opponentPosition = 3 - playerPosition;
 
-  // Check if opponent is close to winning
+  // Check opponent's path length
   const opponentPath = computeShortestPathLength(hexGame, opponentPosition);
 
-  // Trigger threat response when opponent has a relatively short path
-  // On an 11x11 board, a straight line from start to goal needs 11 cells
-  // We want to start blocking once opponent has placed 2-3 stones and is building a real threat
-  // Using boardSize - 3 means we block once opponent has placed ~3 stones
-  // This gives us time to block before they're too close to winning
-  const threatThreshold = hexGame.boardSize - 3;
-
-  if (opponentPath > threatThreshold) {
+  // ALWAYS consider blocking in Hex - engagement is critical from move 1
+  // If opponent has placed any stones (path < boardSize), find blocking cells
+  // This ensures the bot contests the opponent immediately rather than
+  // building its own path on the opposite side of the board
+  if (opponentPath >= hexGame.boardSize) {
+    // Opponent hasn't placed any stones yet, no threat
     return { moves: [], urgent: false };
   }
 
