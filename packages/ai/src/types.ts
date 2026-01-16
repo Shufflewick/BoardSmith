@@ -68,8 +68,12 @@ export interface MCTSNode {
  * An objective that guides AI decision-making during playouts
  */
 export interface Objective {
-  /** Function to check if this objective is achieved */
-  checker: (game: Game, playerIndex: number) => boolean;
+  /**
+   * Evaluate how well this objective is achieved.
+   * Returns 0.0 to 1.0 where 0=not achieved, 1=fully achieved,
+   * values between for partial achievement.
+   */
+  checker: (game: Game, playerIndex: number) => number;
   /** Weight for this objective (positive = good for player, negative = bad) */
   weight: number;
 }
