@@ -283,6 +283,31 @@ export class MCTSBot<G extends Game = Game> {
       return randomChoice(moves, this.rng);
     }
 
+    // When PNS is enabled, use proof status in final move selection
+    if (this.config.usePNS !== false) {
+      // Look for proven win (guaranteed victory) - require visits >= 5 to trust proof status
+      const provenWin = root.children.find(c => c.isProven && c.visits >= 5);
+      if (provenWin) {
+        return provenWin.parentMove!;
+      }
+
+      // Check if all children are disproven (all moves lead to loss)
+      const allDisproven = root.children.every(c => c.isDisproven && c.visits >= 5);
+      if (allDisproven) {
+        // Select most-visited to delay loss (might find opponent mistake)
+        const best = root.children.reduce((a, b) => a.visits > b.visits ? a : b);
+        return best.parentMove!;
+      }
+
+      // Filter out disproven children (known losses) for final selection
+      const validChildren = root.children.filter(c => !c.isDisproven || c.visits < 5);
+      if (validChildren.length > 0) {
+        const best = validChildren.reduce((a, b) => a.visits > b.visits ? a : b);
+        return best.parentMove!;
+      }
+    }
+
+    // Fall back to most visits (standard MCTS selection)
     const best = root.children.reduce((a, b) =>
       a.visits > b.visits ? a : b
     );
