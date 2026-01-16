@@ -283,11 +283,22 @@ export class MCTSBot<G extends Game = Game> {
       return randomChoice(moves, this.rng);
     }
 
+    // Debug logging for proof number analysis
+    if (this.config.debug) {
+      const proven = root.children.filter(c => c.isProven).length;
+      const disproven = root.children.filter(c => c.isDisproven).length;
+      const unknown = root.children.length - proven - disproven;
+      console.log(`[MCTS] Move selection: ${proven} proven, ${disproven} disproven, ${unknown} unknown of ${root.children.length} children`);
+    }
+
     // When PNS is enabled, use proof status in final move selection
     if (this.config.usePNS !== false) {
       // Look for proven win (guaranteed victory) - require visits >= 5 to trust proof status
       const provenWin = root.children.find(c => c.isProven && c.visits >= 5);
       if (provenWin) {
+        if (this.config.debug) {
+          console.log(`[MCTS] Selecting proven win!`);
+        }
         return provenWin.parentMove!;
       }
 

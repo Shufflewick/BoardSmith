@@ -34,6 +34,8 @@ export interface BotConfig {
   usePNS?: boolean;
   /** Weight for proof number ranking in UCB formula (0-1). Default: 0.5 */
   pnWeight?: number;
+  /** Enable debug logging for proof number statistics. Default: false */
+  debug?: boolean;
 }
 
 /**
