@@ -30,6 +30,10 @@ export interface BotConfig {
    * Typical range: 0.5 (very exploitative) to 2.0 (very explorative).
    */
   uctC?: number;
+  /** Enable Proof Number Search for detecting forced wins/losses. Default: true */
+  usePNS?: boolean;
+  /** Weight for proof number ranking in UCB formula (0-1). Default: 0.5 */
+  pnWeight?: number;
 }
 
 /**
@@ -70,6 +74,14 @@ export interface MCTSNode {
   value: number;
   /** Which player is to move at this node */
   currentPlayer: number;
+  /** Leaves needed to prove this subtree is a win (lower = easier to prove win) */
+  proofNumber: number;
+  /** Leaves needed to disprove this subtree (lower = easier to prove loss) */
+  disproofNumber: number;
+  /** True if this subtree is solved as a win */
+  isProven: boolean;
+  /** True if this subtree is solved as a loss/draw */
+  isDisproven: boolean;
 }
 
 /**
