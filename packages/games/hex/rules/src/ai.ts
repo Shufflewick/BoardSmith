@@ -686,3 +686,136 @@ export function getHexPlayoutPolicy(
   // Fallback (shouldn't happen)
   return availableMoves[availableMoves.length - 1];
 }
+
+/**
+ * Order moves for MCTS exploration.
+ * Prioritizes:
+ * 1. Moves adjacent to opponent's most recent stone (contest recent activity)
+ * 2. Moves adjacent to own stones (build connectivity)
+ * 3. Moves in central region (strategic positioning)
+ * 4. Other moves (lower priority)
+ *
+ * This ordering helps MCTS find good moves faster by exploring promising
+ * positions first, rather than randomly sampling the move space.
+ *
+ * @param game - Current game state
+ * @param playerIndex - Which player the bot is (1-indexed position)
+ * @param moves - Available moves to order
+ * @returns Moves sorted by exploration priority (best first)
+ */
+export function getHexMoveOrdering(
+  game: Game,
+  playerIndex: number,
+  moves: BotMove[]
+): BotMove[] {
+  if (moves.length <= 1) return moves;
+
+  const hexGame = game as HexGame;
+  const opponentIndex = 3 - playerIndex;
+
+  // Build cell lookup
+  const cellById = new Map<number, Cell>();
+  for (const cell of hexGame.board.all(Cell)) {
+    cellById.set(cell.id, cell);
+  }
+
+  // Find all player stones and their positions
+  const players = [...hexGame.all(HexPlayer)];
+  const myPlayer = players.find(p => p.position === playerIndex);
+  const opponent = players.find(p => p.position === opponentIndex);
+
+  const myStonePositions = new Set<string>();
+  const opponentStonePositions = new Set<string>();
+  const posKey = (q: number, r: number) => `${q},${r}`;
+
+  // Track stones by placement order (highest id = most recent)
+  let mostRecentOpponentStone: { q: number; r: number } | null = null;
+  let maxOpponentStoneId = -1;
+
+  for (const cell of hexGame.board.all(Cell)) {
+    const stone = cell.getStone();
+    if (!stone) continue;
+
+    if (stone.player === myPlayer) {
+      myStonePositions.add(posKey(cell.q, cell.r));
+    } else if (stone.player === opponent) {
+      opponentStonePositions.add(posKey(cell.q, cell.r));
+      // Track most recent opponent stone by id (higher id = placed later)
+      if (stone.id > maxOpponentStoneId) {
+        maxOpponentStoneId = stone.id;
+        mostRecentOpponentStone = { q: cell.q, r: cell.r };
+      }
+    }
+  }
+
+  // Center of the board for positioning bonus
+  const centerQ = Math.floor(hexGame.boardSize / 2);
+  const centerR = Math.floor(hexGame.boardSize / 2);
+  const centerRadius = Math.floor(hexGame.boardSize / 4);
+
+  // Score each move
+  const scoredMoves: Array<{ move: BotMove; score: number }> = [];
+
+  for (const move of moves) {
+    const cellId = move.args.cell as number | undefined;
+    if (cellId === undefined) {
+      scoredMoves.push({ move, score: 0 });
+      continue;
+    }
+
+    const cell = cellById.get(cellId);
+    if (!cell) {
+      scoredMoves.push({ move, score: 0 });
+      continue;
+    }
+
+    let score = 1; // Base score
+
+    // Check adjacencies to stones
+    let adjacentToOpponentRecent = false;
+    let adjacentToOpponent = false;
+    let adjacentToOwn = false;
+
+    for (const dir of HEX_DIRECTIONS) {
+      const neighborKey = posKey(cell.q + dir.dq, cell.r + dir.dr);
+
+      if (opponentStonePositions.has(neighborKey)) {
+        adjacentToOpponent = true;
+        // Check if adjacent to most recent opponent stone
+        if (mostRecentOpponentStone &&
+            cell.q + dir.dq === mostRecentOpponentStone.q &&
+            cell.r + dir.dr === mostRecentOpponentStone.r) {
+          adjacentToOpponentRecent = true;
+        }
+      }
+
+      if (myStonePositions.has(neighborKey)) {
+        adjacentToOwn = true;
+      }
+    }
+
+    // Apply scoring bonuses
+    if (adjacentToOpponentRecent) {
+      score += 10; // Highest priority: contest opponent's most recent move
+    }
+    if (adjacentToOpponent) {
+      score += 5; // Block/contest opponent territory
+    }
+    if (adjacentToOwn) {
+      score += 3; // Build connectivity with own stones
+    }
+
+    // Center region bonus
+    const distFromCenter = Math.abs(cell.q - centerQ) + Math.abs(cell.r - centerR);
+    if (distFromCenter <= centerRadius) {
+      score += 2; // Strategic central positioning
+    }
+
+    scoredMoves.push({ move, score });
+  }
+
+  // Sort by score descending (highest priority first)
+  scoredMoves.sort((a, b) => b.score - a.score);
+
+  return scoredMoves.map(sm => sm.move);
+}

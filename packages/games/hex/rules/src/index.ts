@@ -3,10 +3,10 @@ export { HexGame, type HexOptions } from './game.js';
 export { Board, Cell, Stone, HexPlayer } from './elements.js';
 export { createPlaceStoneAction } from './actions.js';
 export { createHexFlow } from './flow.js';
-export { getHexObjectives, getHexThreatResponseMoves } from './ai.js';
+export { getHexObjectives, getHexThreatResponseMoves, getHexPlayoutPolicy, getHexMoveOrdering } from './ai.js';
 
 import { HexGame } from './game.js';
-import { getHexObjectives, getHexThreatResponseMoves } from './ai.js';
+import { getHexObjectives, getHexThreatResponseMoves, getHexPlayoutPolicy, getHexMoveOrdering } from './ai.js';
 import { createColorOption } from '@boardsmith/session';
 
 /**
@@ -22,6 +22,8 @@ export const gameDefinition = {
   ai: {
     objectives: getHexObjectives,
     threatResponseMoves: getHexThreatResponseMoves,
+    playoutPolicy: getHexPlayoutPolicy,
+    moveOrdering: getHexMoveOrdering,
   },
   gameOptions: {
     boardSize: {
