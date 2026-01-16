@@ -306,14 +306,19 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Select the most promising child node using the UCT (Upper Confidence Bound for Trees) formula.
-   * Balances exploitation (nodes with high win rates) vs exploration (less-visited nodes).
-   * Uses C=sqrt(2) as the exploration constant to ensure adequate tree coverage.
+   * Select the most promising child node using UCT-RAVE formula.
+   * Blends UCT (tree statistics) with RAVE (global move statistics):
+   *   score = (1 - beta) * UCT + beta * RAVE
+   *   beta = sqrt(k / (3*visits + k))  // decreases as visits increase
+   *
+   * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
+   * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
    */
   private selectChild(node: MCTSNode): MCTSNode {
     const C = Math.sqrt(2); // Exploration constant
+    const k = this.config.raveK ?? 500; // RAVE decay constant
     let best = node.children[0];
-    let bestUCT = -Infinity;
+    let bestScore = -Infinity;
 
     for (const child of node.children) {
       const visits = child.visits + 1e-6; // Avoid division by zero
@@ -321,8 +326,28 @@ export class MCTSBot<G extends Game = Game> {
       const exploration = C * Math.sqrt(Math.log(node.visits + 1) / visits);
       const uct = exploitation + exploration;
 
-      if (uct > bestUCT) {
-        bestUCT = uct;
+      // RAVE component (blend with UCT if enabled)
+      let score = uct;
+      if (this.config.useRAVE !== false && child.parentMove) {
+        const raveEntry = this.raveTable.get(this.getMoveKey(child.parentMove));
+        if (raveEntry && raveEntry.visits > 0) {
+          // RAVE value is already stored from correct perspective (move-maker's perspective)
+          // But here we need it from the parent's perspective (who made the move to this child)
+          // The move was made by node.currentPlayer, so:
+          // - If node.currentPlayer === this.playerIndex, RAVE value is from our perspective (use as-is)
+          // - If node.currentPlayer !== this.playerIndex, RAVE value is from opponent's perspective (flip it)
+          const raveValue = node.currentPlayer === this.playerIndex
+            ? raveEntry.value
+            : (1 - raveEntry.value);
+
+          // Beta decreases as node visits increase (trust UCT more with more data)
+          const beta = Math.sqrt(k / (3 * visits + k));
+          score = (1 - beta) * uct + beta * raveValue;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
         best = child;
       }
     }
