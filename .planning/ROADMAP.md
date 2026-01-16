@@ -414,14 +414,14 @@ The command should guide Claude to:
 Plans:
 - [x] 31-01: Add 6 trajectory/momentum feature templates (tempo, initiative, position quality)
 
-#### Phase 32: move-ordering
+#### Phase 32: move-ordering ✅
 **Goal**: Prioritize exploring moves near opponent's pieces/recent activity
 **Depends on**: Phase 31
 **Research**: Unlikely (move sorting heuristic)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 32-01: TBD
+- [x] 32-01: Add moveOrdering hook to AIConfig, implement for Hex
 
 #### Phase 33: rave
 **Goal**: Implement RAVE (Rapid Action Value Estimation) to learn from all simulations
