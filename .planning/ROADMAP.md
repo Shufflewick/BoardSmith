@@ -441,15 +441,15 @@ Plans:
 Plans:
 - [x] 34-01: Update Objective interface, MCTS evaluation, Hex objectives to [0,1] gradients
 
-#### Phase 35: dynamic-uct
+#### Phase 35: dynamic-uct ✅
 **Goal**: Adjust UCT exploration constant based on game phase
 **Depends on**: Phase 34
 **Research**: Likely (needs parameter tuning research)
 **Research topics**: Optimal C values per game type, phase detection strategies
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 35-01: TBD
+- [x] 35-01: Add configurable UCT constant with phase-based tuning for Hex
 
 #### Phase 36: proof-number-search
 **Goal**: Detect forced wins/losses that MCTS might miss using PN search
@@ -502,5 +502,5 @@ Plans:
 | 32. move-ordering | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 33. rave | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 34. gradient-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
-| 35. dynamic-uct | v1.1 | 0/? | Not started | — |
+| 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 36. proof-number-search | v1.1 | 0/? | Not started | — |
