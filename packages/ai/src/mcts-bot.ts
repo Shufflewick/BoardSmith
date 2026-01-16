@@ -558,6 +558,11 @@ export class MCTSBot<G extends Game = Game> {
         node.parent.currentPlayer === this.playerIndex;
       node.value += isOurPerspective ? result : (1 - result);
 
+      // Update proof numbers from children (if PNS enabled)
+      if (this.config.usePNS !== false) {
+        this.updateProofNumbers(node);
+      }
+
       // Undo this node's commands to return to parent state
       if (node.commandCount > 0 && node.parent !== null) {
         const success = this.searchGame.undoCommands(node.commandCount);
@@ -1098,6 +1103,28 @@ export class MCTSBot<G extends Game = Game> {
       untriedMoves = [...allMoves];
     }
 
+    // Initialize proof numbers based on terminal state
+    let proofNumber = 1;
+    let disproofNumber = 1;
+    let isProven = false;
+    let isDisproven = false;
+
+    if (flowState.complete && this.searchGame) {
+      // Terminal node - check winner to determine proof status
+      const winners = (this.searchGame as any).settings?.winners as number[] | undefined;
+      if (winners && winners.includes(this.playerIndex)) {
+        // Bot wins: proven
+        proofNumber = 0;
+        disproofNumber = Infinity;
+        isProven = true;
+      } else {
+        // Bot loses or draws: disproven
+        proofNumber = Infinity;
+        disproofNumber = 0;
+        isDisproven = true;
+      }
+    }
+
     return {
       flowState,
       parent,
@@ -1109,7 +1136,66 @@ export class MCTSBot<G extends Game = Game> {
       visits: 0,
       value: 0,
       currentPlayer: flowState.currentPlayer ?? this.playerIndex,
+      proofNumber,
+      disproofNumber,
+      isProven,
+      isDisproven,
     };
+  }
+
+  /**
+   * Update proof numbers for a node based on its children.
+   * Uses perspective-aware propagation:
+   * - OR nodes (bot's turn): pn = min(children), dpn = sum(children)
+   * - AND nodes (opponent's turn): pn = sum(children), dpn = min(children)
+   */
+  private updateProofNumbers(node: MCTSNode): void {
+    if (node.children.length === 0) {
+      // Leaf node - keep initialized values
+      return;
+    }
+
+    const isBotTurn = node.currentPlayer === this.playerIndex;
+
+    if (isBotTurn) {
+      // OR node: bot picks best move, so pn = min(child pn), dpn = sum(child dpn)
+      let minPn = Infinity;
+      let sumDpn = 0;
+
+      for (const child of node.children) {
+        minPn = Math.min(minPn, child.proofNumber);
+        // Handle Infinity: sum of any Infinity is Infinity
+        if (child.disproofNumber === Infinity) {
+          sumDpn = Infinity;
+        } else if (sumDpn !== Infinity) {
+          sumDpn += child.disproofNumber;
+        }
+      }
+
+      node.proofNumber = minPn;
+      node.disproofNumber = sumDpn;
+    } else {
+      // AND node: opponent picks best for them, so pn = sum(child pn), dpn = min(child dpn)
+      let sumPn = 0;
+      let minDpn = Infinity;
+
+      for (const child of node.children) {
+        minDpn = Math.min(minDpn, child.disproofNumber);
+        // Handle Infinity: sum of any Infinity is Infinity
+        if (child.proofNumber === Infinity) {
+          sumPn = Infinity;
+        } else if (sumPn !== Infinity) {
+          sumPn += child.proofNumber;
+        }
+      }
+
+      node.proofNumber = sumPn;
+      node.disproofNumber = minDpn;
+    }
+
+    // Update solved status
+    node.isProven = node.proofNumber === 0;
+    node.isDisproven = node.disproofNumber === 0;
   }
 
   /**
