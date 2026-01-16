@@ -423,14 +423,14 @@ Plans:
 Plans:
 - [x] 32-01: Add moveOrdering hook to AIConfig, implement for Hex
 
-#### Phase 33: rave
+#### Phase 33: rave ✅
 **Goal**: Implement RAVE (Rapid Action Value Estimation) to learn from all simulations
 **Depends on**: Phase 32
 **Research**: Unlikely (well-documented algorithm)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 33-01: TBD
+- [x] 33-01: Add RAVE data structures, move tracking, UCT-RAVE selection
 
 #### Phase 34: gradient-objectives
 **Goal**: Change objectives from boolean to numeric for finer-grained evaluation
@@ -499,8 +499,8 @@ Plans:
 | 30. threat-response | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 30.1 improve-generate-ai | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 31. trajectory-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
-| 32. move-ordering | v1.1 | 0/? | Not started | — |
-| 33. rave | v1.1 | 0/? | Not started | — |
+| 32. move-ordering | v1.1 | 1/1 | Complete | 2026-01-15 |
+| 33. rave | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 34. gradient-objectives | v1.1 | 0/? | Not started | — |
 | 35. dynamic-uct | v1.1 | 0/? | Not started | — |
 | 36. proof-number-search | v1.1 | 0/? | Not started | — |

@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-13)
 
 ## Current Position
 
-Phase: 32 of 36 (move-ordering)
+Phase: 33 of 36 (rave)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-01-15 — Completed 32-01-PLAN.md
+Last activity: 2026-01-15 — Completed 33-01-PLAN.md
 
-Progress: ████░░░░░░ 50% (5/8+ phases)
+Progress: █████░░░░░ 56% (6/8+ phases)
 
 ## Milestones
 
@@ -55,5 +55,5 @@ Progress: ████░░░░░░ 50% (5/8+ phases)
 ## Session Continuity
 
 Last session: 2026-01-15
-Stopped at: Completed Phase 32 (move-ordering)
+Stopped at: Completed Phase 33 (rave)
 Resume file: None
