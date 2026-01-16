@@ -457,85 +457,111 @@ export function getHexObjectives(
   return {
     // KEY FEATURE: Player has shorter path to victory than opponent
     // This is the most important evaluation for connection games
+    // Gradient: 0.5 = tied, 1.0 = max advantage, 0.0 = max disadvantage
     'path-distance-advantage': {
       checker: () => {
         const myPath = computeShortestPathLength(hexGame, playerPosition);
         const theirPath = computeShortestPathLength(hexGame, opponentPosition);
-        return myPath < theirPath;
+        // Handle infinity cases
+        if (myPath === Infinity && theirPath === Infinity) return 0.5;
+        if (myPath === Infinity) return 0.0;
+        if (theirPath === Infinity) return 1.0;
+        // Gradient based on relative path lengths
+        const advantage = theirPath - myPath;
+        const maxAdvantage = hexGame.boardSize;
+        return Math.max(0, Math.min(1, (advantage + maxAdvantage) / (2 * maxAdvantage)));
       },
       weight: 10,
     },
 
     // Near-win: Player is within 1 stone of winning
+    // Gradient: 1.0 = won, 0.0 = boardSize away, linear in between
     'near-win-within-1': {
       checker: () => {
         const pathLength = computeShortestPathLength(hexGame, playerPosition);
-        return pathLength <= 1;
+        if (pathLength === Infinity) return 0.0;
+        const maxPath = hexGame.boardSize;
+        return Math.max(0, 1 - pathLength / maxPath);
       },
       weight: 8,
     },
 
     // Near-win: Player is within 2 stones of winning
+    // Gradient: 1.0 = won, 0.0 = boardSize away, linear in between
     'near-win-within-2': {
       checker: () => {
         const pathLength = computeShortestPathLength(hexGame, playerPosition);
-        return pathLength <= 2;
+        if (pathLength === Infinity) return 0.0;
+        const maxPath = hexGame.boardSize;
+        return Math.max(0, 1 - pathLength / maxPath);
       },
       weight: 5,
     },
 
     // Near-win: Player is within 3 stones of winning
+    // Gradient: 1.0 = won, 0.0 = boardSize away, linear in between
     'near-win-within-3': {
       checker: () => {
         const pathLength = computeShortestPathLength(hexGame, playerPosition);
-        return pathLength <= 3;
+        if (pathLength === Infinity) return 0.0;
+        const maxPath = hexGame.boardSize;
+        return Math.max(0, 1 - pathLength / maxPath);
       },
       weight: 3,
     },
 
     // Opponent path blocked: Opponent has no viable path to win
     // This is nearly a win condition
+    // Gradient: 1.0 = blocked (Infinity), scales with how far opponent is from winning
     'opponent-path-blocked': {
       checker: () => {
         const opponentPath = computeShortestPathLength(hexGame, opponentPosition);
-        return opponentPath === Infinity;
+        if (opponentPath === Infinity) return 1.0;
+        const maxPath = hexGame.boardSize;
+        return Math.min(1, opponentPath / maxPath);
       },
       weight: 9,
     },
 
     // Opponent threat: Opponent is close to winning (negative weight - we want to avoid this)
     // This encourages blocking behavior
+    // Gradient: 1.0 = opponent won, 0.0 = opponent far from winning
+    // Negative weight makes high values bad for us
     'opponent-near-win': {
       checker: () => {
         const opponentPath = computeShortestPathLength(hexGame, opponentPosition);
-        return opponentPath <= 2;
+        if (opponentPath === Infinity) return 0.0;
+        const maxPath = hexGame.boardSize;
+        return Math.max(0, 1 - opponentPath / maxPath);
       },
       weight: -6,
     },
 
     // Connectivity: Player has fewer disconnected groups (more connected)
     // In connection games, consolidating stones into one connected path is key
+    // Gradient: 1.0 = opponent has many groups, 0.0 = we have many groups
     'fewer-groups': {
       checker: () => {
         const myGroups = countConnectedGroups(hexGame, playerPosition);
         const theirGroups = countConnectedGroups(hexGame, opponentPosition);
-        // Fewer groups is better, but only if we have stones
-        if (myGroups === 0) return false;
-        if (theirGroups === 0) return true;
-        return myGroups < theirGroups;
+        if (myGroups === 0 && theirGroups === 0) return 0.5;
+        if (myGroups === 0) return 0.0;
+        if (theirGroups === 0) return 1.0;
+        return theirGroups / (myGroups + theirGroups);
       },
       weight: 2,
     },
 
     // Single connected group: All player's stones are connected
+    // Gradient: 1.0 for single group, 0.5 for two groups, etc.
     'single-group': {
       checker: () => {
         const groups = countConnectedGroups(hexGame, playerPosition);
         const stoneCount = [...hexGame.board.all(Cell)]
           .filter(c => c.getStone()?.player === player)
           .length;
-        // Must have stones and they must all be in one group
-        return stoneCount > 0 && groups === 1;
+        if (stoneCount === 0) return 0.0;
+        return 1 / groups;
       },
       weight: 1,
     },
