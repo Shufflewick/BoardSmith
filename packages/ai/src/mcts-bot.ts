@@ -239,17 +239,22 @@ export class MCTSBot<G extends Game = Game> {
         break;
       }
 
-      // SELECT: Walk down tree, applying moves to searchGame
-      const leaf = this.selectWithPath(root);
+      // SELECT: Walk down tree, applying moves to searchGame, collecting tree moves for RAVE
+      const { leaf, treeMoves } = this.selectWithPath(root);
 
       // EXPAND: Try one unexplored move, creating child
       const child = this.expandIncremental(leaf);
 
-      // PLAYOUT: Random simulation from current state
-      const result = this.playoutIncremental(child);
+      // Add expanded move to treeMoves for RAVE if expansion created a new node
+      if (child !== leaf && child.parentMove) {
+        treeMoves.push({ move: child.parentMove, player: leaf.currentPlayer });
+      }
 
-      // BACKPROPAGATE: Update stats and undo back to root
-      this.backpropagateWithUndo(child, result);
+      // PLAYOUT: Random simulation from current state, collect playout moves for RAVE
+      const { score, playoutMoves } = this.playoutIncremental(child);
+
+      // BACKPROPAGATE: Update stats, RAVE table, and undo back to root
+      this.backpropagateWithUndo(child, score, playoutMoves, treeMoves);
 
       // Yield to event loop in async mode (every iteration for responsiveness)
       if (this.config.async) {
@@ -282,15 +287,22 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * SELECTION with path tracking: Walk down tree using UCT, applying moves to searchGame.
    * After this completes, searchGame is positioned at the returned leaf node's state.
+   * Returns the leaf node and the tree moves traversed (for RAVE).
    */
-  private selectWithPath(node: MCTSNode): MCTSNode {
+  private selectWithPath(node: MCTSNode): { leaf: MCTSNode; treeMoves: Array<{ move: BotMove; player: number }> } {
+    const treeMoves: Array<{ move: BotMove; player: number }> = [];
+
     while (node.untriedMoves.length === 0 && node.children.length > 0) {
       const child = this.selectChild(node);
+      // Track tree path move for RAVE (player is from parent node where move was made)
+      if (child.parentMove) {
+        treeMoves.push({ move: child.parentMove, player: node.currentPlayer });
+      }
       // Apply the child's move to searchGame to descend
       this.applyMoveToSearchGame(child);
       node = child;
     }
-    return node;
+    return { leaf: node, treeMoves };
   }
 
   /**
@@ -387,11 +399,13 @@ export class MCTSBot<G extends Game = Game> {
    * PLAYOUT with incremental state: Simulate from searchGame's current position.
    * The searchGame is already positioned at the node's state.
    * Plays random moves (or uses playoutPolicy if available) until the game ends or playoutDepth is reached.
-   * Returns a score in [0,1]: 1=win for bot, 0=loss, 0.5=draw/unknown.
+   * Returns a score in [0,1] and the moves played during playout with player info (for RAVE).
    */
-  private playoutIncremental(node: MCTSNode): number {
+  private playoutIncremental(node: MCTSNode): { score: number; playoutMoves: Array<{ move: BotMove; player: number }> } {
+    const playoutMoves: Array<{ move: BotMove; player: number }> = [];
+
     if (!this.searchGame) {
-      return 0.5;
+      return { score: 0.5, playoutMoves };
     }
 
     let flowState = node.flowState;
@@ -416,6 +430,9 @@ export class MCTSBot<G extends Game = Game> {
         move = randomChoice(moves, this.rng);
       }
 
+      // Track move for RAVE update
+      playoutMoves.push({ move, player: currentPlayer });
+
       // Try to apply the move - if it fails, stop the playout
       try {
         flowState = this.searchGame.continueFlow(move.action, move.args, currentPlayer);
@@ -427,7 +444,8 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Evaluate using the final game state (with transposition table caching)
-    return this.evaluateWithCache(this.searchGame, flowState);
+    const score = this.evaluateWithCache(this.searchGame, flowState);
+    return { score, playoutMoves };
   }
 
   // ============================================================================
@@ -436,12 +454,45 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * BACKPROPAGATE with undo: Update statistics and roll back searchGame to root state.
+   * BACKPROPAGATE with undo: Update statistics, RAVE table, and roll back searchGame to root state.
    * First undoes all playout moves to get back to node state, then undoes tree moves
    * as we walk up to root.
+   *
+   * @param node - The leaf node to start backpropagation from
+   * @param result - The playout score (0=loss, 0.5=draw, 1=win for bot)
+   * @param playoutMoves - Moves played during playout with player info (for RAVE)
+   * @param treeMoves - Moves from tree path with player info (for RAVE)
    */
-  private backpropagateWithUndo(node: MCTSNode | null, result: number): void {
+  private backpropagateWithUndo(
+    node: MCTSNode | null,
+    result: number,
+    playoutMoves: Array<{ move: BotMove; player: number }> = [],
+    treeMoves: Array<{ move: BotMove; player: number }> = []
+  ): void {
     if (!this.searchGame) return;
+
+    // Update RAVE table with all moves from this playout (if enabled)
+    if (this.config.useRAVE !== false) {
+      // Combine tree moves and playout moves for RAVE update
+      const allMoves = [...treeMoves, ...playoutMoves];
+      for (const { move, player } of allMoves) {
+        const key = this.getMoveKey(move);
+
+        // RAVE value is from perspective of the player who made the move
+        // If bot made the move: good result is good for RAVE
+        // If opponent made the move: good result for bot is bad for that move
+        const moveValue = player === this.playerIndex ? result : (1 - result);
+
+        const entry = this.raveTable.get(key);
+        if (entry) {
+          // Running average update
+          entry.visits++;
+          entry.value = entry.value + (moveValue - entry.value) / entry.visits;
+        } else {
+          this.raveTable.set(key, { visits: 1, value: moveValue });
+        }
+      }
+    }
 
     // First, undo playout moves to return to the node's state
     // (playout commands are everything beyond the tree path)
