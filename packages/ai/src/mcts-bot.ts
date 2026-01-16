@@ -37,6 +37,8 @@ export class MCTSBot<G extends Game = Game> {
   private config: BotConfig;
   private objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
   private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
+  private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
+  private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
   private rng: () => number;
   private actionHistory: SerializedAction[];
   private seed?: string;
@@ -67,6 +69,8 @@ export class MCTSBot<G extends Game = Game> {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.objectives = aiConfig?.objectives;
     this.threatResponseMoves = aiConfig?.threatResponseMoves;
+    this.playoutPolicy = aiConfig?.playoutPolicy;
+    this.moveOrdering = aiConfig?.moveOrdering;
     this.seed = this.config.seed;
     this.rng = createSeededRandom(this.config.seed);
   }
@@ -121,6 +125,7 @@ export class MCTSBot<G extends Game = Game> {
         {
           objectives: this.objectives,
           threatResponseMoves: this.threatResponseMoves,
+          playoutPolicy: this.playoutPolicy,
         }
       );
 
@@ -169,15 +174,34 @@ export class MCTSBot<G extends Game = Game> {
       throw new Error(`Not bot's turn (player ${this.playerIndex})`);
     }
 
-    // Get available moves at current state
-    const moves = this.enumerateMoves(this.game, flowState);
-    if (moves.length === 0) {
+    // Get ALL available moves first (without sampling) for threat response analysis
+    const allMoves = this.enumerateAllMoves(this.game, flowState);
+    if (allMoves.length === 0) {
       throw new Error('No available moves');
     }
 
     // If only one move, return it immediately
-    if (moves.length === 1) {
-      return moves[0];
+    if (allMoves.length === 1) {
+      return allMoves[0];
+    }
+
+    // Check for threats BEFORE sampling - this is critical!
+    // The threat response needs to see ALL possible moves to find blocking cells
+    let moves: BotMove[];
+
+    if (this.threatResponseMoves) {
+      const threatResponse = this.threatResponseMoves(this.game, this.playerIndex, allMoves);
+      if (threatResponse.moves.length > 0) {
+        // FORCE blocking when threat is detected - no half measures!
+        // If threat response finds blocking moves, the bot MUST use them
+        moves = threatResponse.moves;
+      } else {
+        // No threat - sample normally
+        moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
+      }
+    } else {
+      // No threat response configured - sample normally
+      moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
     }
 
     // Clear transposition table for fresh search
@@ -193,7 +217,7 @@ export class MCTSBot<G extends Game = Game> {
     this.searchGame = clonedGame as G;
     this.rootCommandCount = this.searchGame.commandHistory.length;
 
-    // Create root node (no snapshot needed per-node anymore)
+    // Create root node with moves (blocking-only when threatened, sampled otherwise)
     const root = this.createNode(
       flowState,
       null,
@@ -201,34 +225,6 @@ export class MCTSBot<G extends Game = Game> {
       moves,
       0 // root has 0 commands from parent
     );
-
-    // Apply threat response at root node
-    if (this.threatResponseMoves) {
-      const threatResponse = this.threatResponseMoves(this.game, this.playerIndex, moves);
-      if (threatResponse.moves.length > 0) {
-        const threatKeys = new Set(threatResponse.moves.map(m => JSON.stringify(m)));
-
-        if (threatResponse.urgent) {
-          // URGENT: Opponent is about to win - ONLY consider blocking moves
-          // Filter both allMoves and untriedMoves to just threat moves
-          root.allMoves = threatResponse.moves;
-          root.untriedMoves = [...threatResponse.moves];
-        } else {
-          // Not urgent: Prioritize threat moves but consider all options
-          // Partition untriedMoves: threat moves first, then rest
-          const threatFirst: BotMove[] = [];
-          const rest: BotMove[] = [];
-          for (const move of root.untriedMoves) {
-            if (threatKeys.has(JSON.stringify(move))) {
-              threatFirst.push(move);
-            } else {
-              rest.push(move);
-            }
-          }
-          root.untriedMoves = [...threatFirst, ...rest];
-        }
-      }
-    }
 
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
@@ -348,9 +344,8 @@ export class MCTSBot<G extends Game = Game> {
       return node;
     }
 
-    // Pick random untried move
-    const idx = Math.floor(this.rng() * node.untriedMoves.length);
-    const move = node.untriedMoves.splice(idx, 1)[0];
+    // Pick first untried move (ordering determined at node creation by moveOrdering hook)
+    const move = node.untriedMoves.shift()!;
 
     // Record command count before applying move
     const commandCountBefore = this.searchGame.commandHistory.length;
@@ -388,7 +383,7 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * PLAYOUT with incremental state: Simulate from searchGame's current position.
    * The searchGame is already positioned at the node's state.
-   * Plays random moves until the game ends or playoutDepth is reached.
+   * Plays random moves (or uses playoutPolicy if available) until the game ends or playoutDepth is reached.
    * Returns a score in [0,1]: 1=win for bot, 0=loss, 0.5=draw/unknown.
    */
   private playoutIncremental(node: MCTSNode): number {
@@ -406,11 +401,17 @@ export class MCTSBot<G extends Game = Game> {
         break;
       }
 
-      // Random move
-      const move = randomChoice(moves, this.rng);
-
-      // Apply move for the current player (handles simultaneous actions)
+      // Select move: use playoutPolicy if available, otherwise random
       const currentPlayer = this.getCurrentPlayerFromFlowState(flowState);
+      let move: BotMove;
+
+      if (this.playoutPolicy) {
+        // Use game-specific playout policy for smarter move selection
+        move = this.playoutPolicy(this.searchGame, currentPlayer, moves, this.rng);
+      } else {
+        // Default to random move selection
+        move = randomChoice(moves, this.rng);
+      }
 
       // Try to apply the move - if it fails, stop the playout
       try {
@@ -570,8 +571,26 @@ export class MCTSBot<G extends Game = Game> {
    * Queries available actions from flowState, then generates all valid argument
    * combinations for each action by examining selection definitions.
    * Returns an array of {action, args} pairs ready for tree expansion.
+   *
+   * NOTE: This method samples moves to limit branching factor (max 20 per selection).
+   * For threat response, use enumerateAllMoves() first to get the full list.
    */
   private enumerateMoves(game: G | null, flowState: FlowState): BotMove[] {
+    return this.enumerateMovesInternal(game, flowState, false);
+  }
+
+  /**
+   * Enumerate ALL legal moves without sampling.
+   * Used for threat response analysis where we need to check all possible blocking cells.
+   */
+  private enumerateAllMoves(game: G | null, flowState: FlowState): BotMove[] {
+    return this.enumerateMovesInternal(game, flowState, true);
+  }
+
+  /**
+   * Internal move enumeration with optional sampling control.
+   */
+  private enumerateMovesInternal(game: G | null, flowState: FlowState, noSampling: boolean): BotMove[] {
     const moves: BotMove[] = [];
     if (!game) return moves;
     const actions = this.getAvailableActionsForBot(flowState);
@@ -582,7 +601,7 @@ export class MCTSBot<G extends Game = Game> {
       if (!actionDef) continue;
 
       // Generate all valid argument combinations
-      const argCombos = this.enumerateSelections(game, actionDef, player);
+      const argCombos = this.enumerateSelectionsInternal(game, actionDef, player, noSampling);
       for (const args of argCombos) {
         moves.push({ action: actionName, args });
       }
@@ -649,29 +668,43 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Enumerate all valid argument combinations for an action
+   * Enumerate all valid argument combinations for an action (with sampling)
    */
   private enumerateSelections(
     game: Game,
     actionDef: ActionDefinition,
     player: Player
   ): Record<string, unknown>[] {
+    return this.enumerateSelectionsInternal(game, actionDef, player, false);
+  }
+
+  /**
+   * Internal method with sampling control
+   */
+  private enumerateSelectionsInternal(
+    game: Game,
+    actionDef: ActionDefinition,
+    player: Player,
+    noSampling: boolean
+  ): Record<string, unknown>[] {
     if (actionDef.selections.length === 0) {
       return [{}];
     }
 
-    return this.enumerateSelectionsRecursive(game, actionDef, player, 0, {});
+    return this.enumerateSelectionsRecursive(game, actionDef, player, 0, {}, noSampling);
   }
 
   /**
    * Recursively build all valid argument combinations
+   * @param noSampling - If true, don't limit choices (for threat response analysis)
    */
   private enumerateSelectionsRecursive(
     game: Game,
     actionDef: ActionDefinition,
     player: Player,
     index: number,
-    currentArgs: Record<string, unknown>
+    currentArgs: Record<string, unknown>,
+    noSampling: boolean = false
   ): Record<string, unknown>[] {
     if (index >= actionDef.selections.length) {
       return [{ ...currentArgs }];
@@ -683,7 +716,7 @@ export class MCTSBot<G extends Game = Game> {
     // Handle text and number inputs (skip for AI - can't enumerate)
     if (selection.type === 'text' || selection.type === 'number') {
       if (selection.optional) {
-        return this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, currentArgs);
+        return this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, currentArgs, noSampling);
       }
       // Required text/number input - AI can't handle this
       return [];
@@ -691,7 +724,7 @@ export class MCTSBot<G extends Game = Game> {
 
     if (choices.length === 0) {
       if (selection.optional) {
-        return this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, currentArgs);
+        return this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, currentArgs, noSampling);
       }
       return [];
     }
@@ -704,15 +737,15 @@ export class MCTSBot<G extends Game = Game> {
       const { min, max } = this.parseMultiSelect(multiSelect);
       const combinations = this.generateCombinations(choices, min, max, selection);
 
-      // Limit combinations to avoid explosion
+      // Limit combinations to avoid explosion (unless noSampling)
       const maxCombos = 50;
-      const sampledCombos = combinations.length > maxCombos
+      const sampledCombos = (!noSampling && combinations.length > maxCombos)
         ? this.sampleChoices(combinations, maxCombos)
         : combinations;
 
       for (const combo of sampledCombos) {
         const newArgs = { ...currentArgs, [selection.name]: combo };
-        const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs);
+        const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs, noSampling);
         results.push(...subResults);
       }
 
@@ -720,17 +753,17 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Single-select handling
-    // Limit branching factor to avoid combinatorial explosion
+    // Limit branching factor to avoid combinatorial explosion (unless noSampling)
     const maxChoices = 20;
-    const sampledChoices = choices.length > maxChoices
+    const finalChoices = (!noSampling && choices.length > maxChoices)
       ? this.sampleChoices(choices, maxChoices)
       : choices;
 
-    for (const choice of sampledChoices) {
+    for (const choice of finalChoices) {
       // Serialize the choice for args
       const serializedChoice = this.serializeChoice(choice, selection);
       const newArgs = { ...currentArgs, [selection.name]: serializedChoice };
-      const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs);
+      const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs, noSampling);
       results.push(...subResults);
     }
 
@@ -849,6 +882,48 @@ export class MCTSBot<G extends Game = Game> {
     return sampled;
   }
 
+  /**
+   * Sample moves while preserving specified critical moves.
+   * Used to ensure threat response blocking moves survive random sampling.
+   *
+   * @param moves - All available moves
+   * @param maxCount - Maximum total moves to return
+   * @param preserve - Moves that must be included (e.g., blocking moves)
+   * @returns Sampled moves with preserved moves guaranteed to be included
+   */
+  private sampleMovesWithPreserved(
+    moves: BotMove[],
+    maxCount: number,
+    preserve: BotMove[]
+  ): BotMove[] {
+    if (moves.length <= maxCount) return moves;
+
+    // Start with preserved moves
+    const preserveKeys = new Set(preserve.map(m => JSON.stringify(m)));
+    const result: BotMove[] = [...preserve];
+    const resultKeys = new Set(preserveKeys);
+
+    // If preserved moves already exceed limit, just return them
+    if (result.length >= maxCount) {
+      return result.slice(0, maxCount);
+    }
+
+    // Sample from remaining moves to fill up to maxCount
+    const remaining = moves.filter(m => !preserveKeys.has(JSON.stringify(m)));
+    const needed = maxCount - result.length;
+
+    if (remaining.length <= needed) {
+      // Add all remaining
+      result.push(...remaining);
+    } else {
+      // Random sample from remaining
+      const sampled = this.sampleChoices(remaining, needed);
+      result.push(...sampled);
+    }
+
+    return result;
+  }
+
   // ============================================================================
   // SECTION: State Management
   // Purpose: Incremental state management with snapshot fallback for recovery
@@ -908,6 +983,7 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Create an MCTS node (path-based, no snapshot)
    * allMoves is cached at creation time - enumerated once per node
+   * If moveOrdering is available, untriedMoves are sorted by priority (explore best first)
    */
   private createNode(
     flowState: FlowState,
@@ -916,6 +992,15 @@ export class MCTSBot<G extends Game = Game> {
     allMoves: BotMove[],
     commandCount: number
   ): MCTSNode {
+    // Order moves if moveOrdering hook is available
+    // This determines exploration order: first moves are tried first
+    let untriedMoves: BotMove[];
+    if (this.moveOrdering && this.searchGame) {
+      untriedMoves = this.moveOrdering(this.searchGame, this.playerIndex, [...allMoves]);
+    } else {
+      untriedMoves = [...allMoves];
+    }
+
     return {
       flowState,
       parent,
@@ -923,7 +1008,7 @@ export class MCTSBot<G extends Game = Game> {
       commandCount,
       children: [],
       allMoves: allMoves,
-      untriedMoves: [...allMoves],
+      untriedMoves,
       visits: 0,
       value: 0,
       currentPlayer: flowState.currentPlayer ?? this.playerIndex,

@@ -107,6 +107,41 @@ export interface AIConfig {
    * @returns ThreatResponse with moves and urgency flag
    */
   threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
+
+  /**
+   * Optional function for smart move selection during MCTS playouts.
+   * Instead of random move selection, use game-specific heuristics.
+   *
+   * For connection games like Hex, this enables path-based strategy:
+   * - Prefer moves that shorten own winning path
+   * - Prefer moves that lengthen opponent's path
+   * - Build coherent connected structures
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player is moving (1-indexed position)
+   * @param availableMoves - Legal moves to choose from
+   * @param rng - Random number generator (0-1) for weighted selection
+   * @returns Selected move (should use weighted-random, not deterministic)
+   */
+  playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
+
+  /**
+   * Optional function to order moves by heuristic value for exploration.
+   * Returns moves sorted by priority (highest first) to explore promising moves early.
+   * Unlike threatResponseMoves (which forces specific moves), this is soft ordering:
+   * MCTS still explores all moves, just in a better order.
+   *
+   * Typical ordering heuristics:
+   * - Moves near opponent's recent pieces (contest territory)
+   * - Moves adjacent to own stones (connectivity)
+   * - Moves in central regions (early game)
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player the bot is (1-indexed position)
+   * @param moves - Available moves to order
+   * @returns Moves sorted by priority (explore first → last)
+   */
+  moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
 }
 
 /**
