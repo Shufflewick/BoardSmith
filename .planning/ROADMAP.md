@@ -454,12 +454,12 @@ Plans:
 #### Phase 36: proof-number-search
 **Goal**: Detect forced wins/losses that MCTS might miss using PN search
 **Depends on**: Phase 35
-**Research**: Likely (new algorithm integration)
-**Research topics**: PN search implementation, integration with MCTS evaluation
-**Plans**: TBD
+**Research**: Completed (PN-MCTS algorithm from arXiv:2303.09449)
+**Plans**: 2
 
 Plans:
-- [ ] 36-01: TBD
+- [ ] 36-01: Add PN-MCTS core infrastructure (proof numbers, UCT-PN selection)
+- [ ] 36-02: Final move selection using proof status, benchmark validation
 
 ## Progress
 
@@ -503,4 +503,4 @@ Plans:
 | 33. rave | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 34. gradient-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
-| 36. proof-number-search | v1.1 | 0/? | Not started | — |
+| 36. proof-number-search | v1.1 | 0/2 | Planned | — |
