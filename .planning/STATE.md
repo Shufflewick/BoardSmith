@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-13)
 
 ## Current Position
 
-Phase: 35 of 36 (dynamic-uct)
-Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-01-15 — Completed 35-01-PLAN.md
+Phase: 36 of 36 (proof-number-search)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-01-16 — Completed 36-01-PLAN.md
 
-Progress: ███████░░░ 75% (7 of 8 phases in v1.1)
+Progress: ████████░░ 87% (7.5 of 8 phases in v1.1)
 
 ## Milestones
 
@@ -54,6 +54,6 @@ Progress: ███████░░░ 75% (7 of 8 phases in v1.1)
 
 ## Session Continuity
 
-Last session: 2026-01-15
-Stopped at: Completed Phase 35 (dynamic-uct)
+Last session: 2026-01-16
+Stopped at: Completed 36-01-PLAN.md (PN-MCTS infrastructure)
 Resume file: None

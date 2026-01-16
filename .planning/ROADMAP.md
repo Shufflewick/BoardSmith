@@ -458,7 +458,7 @@ Plans:
 **Plans**: 2
 
 Plans:
-- [ ] 36-01: Add PN-MCTS core infrastructure (proof numbers, UCT-PN selection)
+- [x] 36-01: Add PN-MCTS core infrastructure (proof numbers, UCT-PN selection)
 - [ ] 36-02: Final move selection using proof status, benchmark validation
 
 ## Progress
@@ -503,4 +503,4 @@ Plans:
 | 33. rave | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 34. gradient-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
-| 36. proof-number-search | v1.1 | 0/2 | Planned | — |
+| 36. proof-number-search | v1.1 | 1/2 | In progress | — |
