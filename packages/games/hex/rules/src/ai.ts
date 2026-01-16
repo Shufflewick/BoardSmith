@@ -371,11 +371,96 @@ export function getHexThreatResponseMoves(
   // Convert to set for fast lookup
   const blockingIdSet = new Set(blockingCellIds);
 
-  // Filter available moves to only those that place stones on blocking cells
-  const blockingMoves = availableMoves.filter(move => {
+  // Build set of opponent stone positions for adjacency check
+  const board = hexGame.board;
+  const cells = [...board.all(Cell)];
+  const cellById = new Map(cells.map(c => [c.id, c]));
+  const opponentStonePositions = new Set<string>();
+  for (const cell of cells) {
+    const stone = cell.getStone();
+    if (stone && stone.player && stone.player.position === opponentPosition) {
+      opponentStonePositions.add(`${cell.q},${cell.r}`);
+    }
+  }
+
+  // Filter to blocking cells that are IN FRONT OF an opponent stone
+  // (toward their goal - higher r for Player 1, higher q for Player 2)
+  const adjacentBlockingMoves = availableMoves.filter(move => {
     const cellId = move.args.cell as number | undefined;
-    return cellId !== undefined && blockingIdSet.has(cellId);
+    if (cellId === undefined || !blockingIdSet.has(cellId)) return false;
+
+    const cell = cellById.get(cellId);
+    if (!cell) return false;
+
+    // Check if this cell is directly in front of (toward goal) any opponent stone
+    for (const opponentCell of cells) {
+      const stone = opponentCell.getStone();
+      if (!stone || !stone.player || stone.player.position !== opponentPosition) continue;
+
+      // For Player 1 (top-to-bottom): blocking cell must have higher r
+      // For Player 2 (left-to-right): blocking cell must have higher q
+      const isTowardGoal = opponentPosition === 1
+        ? cell.r > opponentCell.r
+        : cell.q > opponentCell.q;
+
+      if (!isTowardGoal) continue;
+
+      // Check if adjacent (hex distance = 1)
+      const dq = Math.abs(cell.q - opponentCell.q);
+      const dr = Math.abs(cell.r - opponentCell.r);
+      const ds = Math.abs((cell.q + cell.r) - (opponentCell.q + opponentCell.r));
+      const hexDist = Math.max(dq, dr, ds);
+
+      if (hexDist === 1) {
+        return true;
+      }
+    }
+    return false;
   });
+
+  // Score blocking moves by how directly they block the immediate threat
+  // Lower score = higher priority
+  const scoredMoves = adjacentBlockingMoves.map(move => {
+    const cell = cellById.get(move.args.cell as number);
+    if (!cell) return { move, score: Infinity };
+
+    let bestScore = Infinity;
+
+    for (const opponentCell of cells) {
+      const stone = opponentCell.getStone();
+      if (!stone?.player || stone.player.position !== opponentPosition) continue;
+
+      // Hex distance to this opponent stone
+      const dq = Math.abs(cell.q - opponentCell.q);
+      const dr = Math.abs(cell.r - opponentCell.r);
+      const ds = Math.abs((cell.q + cell.r) - (opponentCell.q + opponentCell.r));
+      const hexDist = Math.max(dq, dr, ds);
+
+      // Is this cell directly in line (same column for P1, same row for P2)?
+      const directBlock = opponentPosition === 1
+        ? cell.q === opponentCell.q
+        : cell.r === opponentCell.r;
+
+      // Score: prioritize adjacent + direct blocks
+      // hexDist * 10 ensures closer cells win
+      // directBlock bonus ensures same-column cells beat diagonal
+      const score = hexDist * 10 + (directBlock ? 0 : 5);
+      bestScore = Math.min(bestScore, score);
+    }
+
+    return { move, score: bestScore };
+  });
+
+  scoredMoves.sort((a, b) => a.score - b.score);
+  const sortedAdjacentMoves = scoredMoves.map(sm => sm.move);
+
+  // Fall back to all blocking moves if none are adjacent
+  const blockingMoves = sortedAdjacentMoves.length > 0
+    ? sortedAdjacentMoves
+    : availableMoves.filter(move => {
+        const cellId = move.args.cell as number | undefined;
+        return cellId !== undefined && blockingIdSet.has(cellId);
+      });
 
   // Determine urgency: opponent within 4 moves of winning = MUST block
   const urgent = opponentPath <= 4;
