@@ -317,10 +317,13 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Select the most promising child node using UCT-RAVE formula.
+   * Select the most promising child node using UCT-RAVE-PN formula.
    * Blends UCT (tree statistics) with RAVE (global move statistics):
    *   score = (1 - beta) * UCT + beta * RAVE
    *   beta = sqrt(k / (3*visits + k))  // decreases as visits increase
+   *
+   * When PNS is enabled, also blends proof number ranking:
+   *   finalScore = (1 - pnWeight) * uctRaveScore + pnWeight * pnRank
    *
    * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
    * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
@@ -328,17 +331,45 @@ export class MCTSBot<G extends Game = Game> {
   private selectChild(node: MCTSNode): MCTSNode {
     const C = this.cachedUctC; // Exploration constant (cached per move)
     const k = this.config.raveK ?? 500; // RAVE decay constant
-    let best = node.children[0];
+    const usePNS = this.config.usePNS !== false;
+    const pnWeight = this.config.pnWeight ?? 0.5;
+    const isBotTurn = node.currentPlayer === this.playerIndex;
+
+    // Filter out proven/disproven children with sufficient visits (solver enhancement)
+    let eligibleChildren = node.children;
+    if (usePNS) {
+      eligibleChildren = node.children.filter(child => {
+        // Allow selection if visits < 5 to confirm solver result
+        if (child.visits < 5) return true;
+        // Don't select isProven children when it's opponent's turn (opponent won't help us)
+        if (!isBotTurn && child.isProven) return false;
+        // Don't select isDisproven children when it's our turn (avoid known losses)
+        if (isBotTurn && child.isDisproven) return false;
+        return true;
+      });
+      // Fallback if all children filtered out
+      if (eligibleChildren.length === 0) {
+        eligibleChildren = node.children;
+      }
+    }
+
+    // Pre-compute proof number ranks if PNS is enabled
+    let pnRanks: Map<MCTSNode, number> | null = null;
+    if (usePNS && pnWeight > 0) {
+      pnRanks = this.computeProofNumberRanks(eligibleChildren, isBotTurn);
+    }
+
+    let best = eligibleChildren[0];
     let bestScore = -Infinity;
 
-    for (const child of node.children) {
+    for (const child of eligibleChildren) {
       const visits = child.visits + 1e-6; // Avoid division by zero
       const exploitation = child.value / visits;
       const exploration = C * Math.sqrt(Math.log(node.visits + 1) / visits);
       const uct = exploitation + exploration;
 
       // RAVE component (blend with UCT if enabled)
-      let score = uct;
+      let uctRaveScore = uct;
       if (this.config.useRAVE !== false && child.parentMove) {
         const raveEntry = this.raveTable.get(this.getMoveKey(child.parentMove));
         if (raveEntry && raveEntry.visits > 0) {
@@ -353,8 +384,15 @@ export class MCTSBot<G extends Game = Game> {
 
           // Beta decreases as node visits increase (trust UCT more with more data)
           const beta = Math.sqrt(k / (3 * visits + k));
-          score = (1 - beta) * uct + beta * raveValue;
+          uctRaveScore = (1 - beta) * uct + beta * raveValue;
         }
+      }
+
+      // Blend with proof number ranking if PNS enabled
+      let score = uctRaveScore;
+      if (pnRanks && pnWeight > 0) {
+        const pnRank = pnRanks.get(child) ?? 0;
+        score = (1 - pnWeight) * uctRaveScore + pnWeight * pnRank;
       }
 
       if (score > bestScore) {
@@ -363,6 +401,39 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
     return best;
+  }
+
+  /**
+   * Compute proof number ranks for children, normalized to [0, 1].
+   * Higher rank = better for current player.
+   *
+   * Bot's turn: rank by proof number (lower pn = easier to prove win = higher rank)
+   * Opponent's turn: rank by disproof number (lower dpn = easier for opponent = higher rank for them)
+   */
+  private computeProofNumberRanks(children: MCTSNode[], isBotTurn: boolean): Map<MCTSNode, number> {
+    const ranks = new Map<MCTSNode, number>();
+
+    // Get the relevant proof numbers for ranking
+    const pnValues: Array<{ child: MCTSNode; value: number }> = children.map(child => ({
+      child,
+      // Bot's turn: want low proof number (close to proving win)
+      // Opponent's turn: want low disproof number (close to proving loss for bot)
+      value: isBotTurn ? child.proofNumber : child.disproofNumber,
+    }));
+
+    // Sort by value ascending (lower is better)
+    pnValues.sort((a, b) => a.value - b.value);
+
+    // Assign ranks: position 0 gets rank 1 (best), position n-1 gets rank 0 (worst)
+    const maxRank = children.length - 1;
+    pnValues.forEach((entry, index) => {
+      // Normalize rank to [0, 1] where higher is better
+      // Handle case where all children have same value (all get 0.5)
+      const rank = maxRank > 0 ? 1 - (index / maxRank) : 0.5;
+      ranks.set(entry.child, rank);
+    });
+
+    return ranks;
   }
 
   /**
