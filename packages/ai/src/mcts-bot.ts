@@ -39,9 +39,12 @@ export class MCTSBot<G extends Game = Game> {
   private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+  private uctConstant?: (game: Game, playerIndex: number) => number;
   private rng: () => number;
   private actionHistory: SerializedAction[];
   private seed?: string;
+  /** Cached UCT exploration constant (computed once per move in playSingle) */
+  private cachedUctC: number = Math.sqrt(2);
 
   /** Live game instance used during search (cloned from original) */
   private searchGame: G | null = null;
@@ -73,6 +76,7 @@ export class MCTSBot<G extends Game = Game> {
     this.threatResponseMoves = aiConfig?.threatResponseMoves;
     this.playoutPolicy = aiConfig?.playoutPolicy;
     this.moveOrdering = aiConfig?.moveOrdering;
+    this.uctConstant = aiConfig?.uctConstant;
     this.seed = this.config.seed;
     this.rng = createSeededRandom(this.config.seed);
   }
@@ -128,6 +132,8 @@ export class MCTSBot<G extends Game = Game> {
           objectives: this.objectives,
           threatResponseMoves: this.threatResponseMoves,
           playoutPolicy: this.playoutPolicy,
+          moveOrdering: this.moveOrdering,
+          uctConstant: this.uctConstant,
         }
       );
 
@@ -166,6 +172,11 @@ export class MCTSBot<G extends Game = Game> {
    * Run a single MCTS search and return the best move
    */
   private async playSingle(): Promise<BotMove> {
+    // Cache UCT constant once per move (not per selectChild call)
+    this.cachedUctC = this.uctConstant?.(this.game, this.playerIndex)
+      ?? this.config.uctC
+      ?? Math.sqrt(2);
+
     const flowState = this.game.getFlowState();
     if (!flowState?.awaitingInput) {
       throw new Error('Game is not awaiting input');
@@ -315,7 +326,7 @@ export class MCTSBot<G extends Game = Game> {
    * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
    */
   private selectChild(node: MCTSNode): MCTSNode {
-    const C = Math.sqrt(2); // Exploration constant
+    const C = this.cachedUctC; // Exploration constant (cached per move)
     const k = this.config.raveK ?? 500; // RAVE decay constant
     let best = node.children[0];
     let bestScore = -Infinity;
