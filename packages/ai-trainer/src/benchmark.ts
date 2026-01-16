@@ -1,7 +1,7 @@
 import type { Game } from '@boardsmith/engine';
 import { GameRunner, type GameRunnerOptions } from '@boardsmith/runtime';
 import { createBot, type AIConfig } from '@boardsmith/ai';
-import type { GameClass, LearnedObjective } from './types.js';
+import type { GameClass, LearnedObjective, CandidateFeature } from './types.js';
 
 /**
  * Seeded random number generator for reproducible random player
@@ -52,6 +52,8 @@ export interface BenchmarkConfig {
   seed?: string;
   /** MCTS iterations for the trained AI (default 100 for quality evaluation) */
   mctsIterations?: number;
+  /** Candidate features for evaluating objectives (required for objectives to work) */
+  features?: CandidateFeature[];
 }
 
 /**
@@ -101,6 +103,7 @@ export async function benchmarkAI<G extends Game>(
   const maxActions = config.maxActions ?? 300;
   const seed = config.seed ?? 'benchmark';
   const mctsIterations = config.mctsIterations ?? 100;
+  const features = config.features ?? [];
 
   let wins = 0;
   let losses = 0;
@@ -122,6 +125,7 @@ export async function benchmarkAI<G extends Game>(
       {
         trainedPlayerIndex: 0,
         objectives,
+        features,
         mctsIterations,
         timeout,
         maxActions,
@@ -148,6 +152,7 @@ export async function benchmarkAI<G extends Game>(
       {
         trainedPlayerIndex: 1,
         objectives,
+        features,
         mctsIterations,
         timeout,
         maxActions,
@@ -174,6 +179,7 @@ export async function benchmarkAI<G extends Game>(
       {
         trainedPlayerIndex: 0,
         objectives,
+        features,
         mctsIterations,
         timeout,
         maxActions,
@@ -210,6 +216,7 @@ export async function benchmarkAI<G extends Game>(
 interface BenchmarkGameOptions {
   trainedPlayerIndex: number;
   objectives: LearnedObjective[];
+  features: CandidateFeature[];
   mctsIterations: number;
   timeout: number;
   maxActions: number;
@@ -226,7 +233,7 @@ async function runBenchmarkGame<G extends Game>(
   gameType: string,
   options: BenchmarkGameOptions
 ): Promise<GameOutcome> {
-  const { trainedPlayerIndex, objectives, mctsIterations, timeout, maxActions, seed } = options;
+  const { trainedPlayerIndex, objectives, features, mctsIterations, timeout, maxActions, seed } = options;
   const randomPlayerIndex = trainedPlayerIndex === 0 ? 1 : 0;
   const rng = new SeededRandom(seed);
   const startTime = Date.now();
@@ -244,7 +251,7 @@ async function runBenchmarkGame<G extends Game>(
     let flowState = runner.start();
 
     // Create objectives function for MCTS
-    const aiObjectives = createObjectivesFunction(objectives);
+    const aiObjectives = createObjectivesFunction(objectives, features);
 
     let actionCount = 0;
 
@@ -252,6 +259,7 @@ async function runBenchmarkGame<G extends Game>(
       if (Date.now() - startTime > timeout) break;
       if (!flowState.awaitingInput) break;
 
+      // currentPlayer is a POSITION (1-indexed), trainedPlayerIndex is an INDEX (0-indexed)
       const currentPlayer = flowState.currentPlayer;
       if (currentPlayer === undefined) break;
 
@@ -261,7 +269,9 @@ async function runBenchmarkGame<G extends Game>(
       let action: string | undefined;
       let args: Record<string, unknown> = {};
 
-      if (currentPlayer === trainedPlayerIndex) {
+      // Convert index to position for comparison
+      const trainedPosition = trainedPlayerIndex + 1;
+      if (currentPlayer === trainedPosition) {
         // Trained AI plays with MCTS + objectives
         const bot = createBot(
           runner.game,
@@ -278,12 +288,38 @@ async function runBenchmarkGame<G extends Game>(
           action = move.action;
           args = move.args;
         } catch {
-          // Bot failed, fall back to random
-          action = rng.pick(availableActions);
+          // Bot failed, fall back to random (1 iteration = essentially random)
+          const fallbackBot = createBot(
+            runner.game,
+            GameClass,
+            gameType,
+            currentPlayer,
+            runner.actionHistory,
+            1
+          );
+          const fallbackMove = await fallbackBot.play();
+          action = fallbackMove.action;
+          args = fallbackMove.args;
         }
       } else {
-        // Random player
-        action = rng.pick(availableActions);
+        // Random player uses bot with 1 MCTS iteration (essentially random but with valid args)
+        const randomBot = createBot(
+          runner.game,
+          GameClass,
+          gameType,
+          currentPlayer,
+          runner.actionHistory,
+          1 // Minimal MCTS = nearly random
+        );
+
+        try {
+          const move = await randomBot.play();
+          action = move.action;
+          args = move.args;
+        } catch {
+          // If bot fails, pick random action (will likely fail if selections required)
+          action = rng.pick(availableActions);
+        }
       }
 
       if (!action) break;
@@ -300,15 +336,20 @@ async function runBenchmarkGame<G extends Game>(
       return 'draw'; // Game didn't complete - treat as draw
     }
 
+    // winners contains player POSITIONS (1-indexed), not indices (0-indexed)
     const winners = (runner.game.settings.winners as number[]) ?? [];
 
     if (winners.length === 0) {
       return 'draw';
     }
 
-    if (winners.includes(trainedPlayerIndex)) {
+    // Convert 0-indexed player index to 1-indexed position for comparison
+    const trainedPosition = trainedPlayerIndex + 1;
+    const randomPosition = randomPlayerIndex + 1;
+
+    if (winners.includes(trainedPosition)) {
       // Check if it's a shared win (draw)
-      if (winners.includes(randomPlayerIndex)) {
+      if (winners.includes(randomPosition)) {
         return 'draw';
       }
       return 'win';
@@ -324,17 +365,23 @@ async function runBenchmarkGame<G extends Game>(
  * Create an objectives function from learned objectives
  */
 function createObjectivesFunction(
-  learnedObjectives: LearnedObjective[]
+  learnedObjectives: LearnedObjective[],
+  features: CandidateFeature[]
 ): AIConfig['objectives'] {
+  // Build feature lookup map
+  const featureMap = new Map(features.map(f => [f.id, f]));
+
   return (game: Game, playerIndex: number) => {
-    const objectives: Record<string, { checker: () => boolean; weight: number }> = {};
+    const objectives: Record<string, { checker: () => number; weight: number }> = {};
 
     for (const obj of learnedObjectives) {
+      const feature = featureMap.get(obj.featureId);
+      if (!feature) continue;
+
       objectives[obj.featureId] = {
         checker: () => {
-          // Placeholder - objectives will be regenerated from features at runtime
-          // The actual evaluation happens through the feature system
-          return false;
+          // Evaluate the feature and convert boolean to number (0 or 1)
+          return feature.evaluate(game, playerIndex) ? 1 : 0;
         },
         weight: obj.weight,
       };

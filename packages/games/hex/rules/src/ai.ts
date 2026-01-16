@@ -475,37 +475,34 @@ export function getHexObjectives(
     },
 
     // Near-win: Player is within 1 stone of winning
-    // Gradient: 1.0 = won, 0.0 = boardSize away, linear in between
+    // Only activates when pathLength <= 1, peaks at 1.0 when pathLength = 0
     'near-win-within-1': {
       checker: () => {
         const pathLength = computeShortestPathLength(hexGame, playerPosition);
-        if (pathLength === Infinity) return 0.0;
-        const maxPath = hexGame.boardSize;
-        return Math.max(0, 1 - pathLength / maxPath);
+        if (pathLength === Infinity || pathLength > 1) return 0.0;
+        return 1 - pathLength; // 1.0 at 0 moves, 0.0 at 1 move
       },
       weight: 8,
     },
 
     // Near-win: Player is within 2 stones of winning
-    // Gradient: 1.0 = won, 0.0 = boardSize away, linear in between
+    // Only activates when pathLength <= 2, gradient within threshold
     'near-win-within-2': {
       checker: () => {
         const pathLength = computeShortestPathLength(hexGame, playerPosition);
-        if (pathLength === Infinity) return 0.0;
-        const maxPath = hexGame.boardSize;
-        return Math.max(0, 1 - pathLength / maxPath);
+        if (pathLength === Infinity || pathLength > 2) return 0.0;
+        return 1 - pathLength / 2; // 1.0 at 0, 0.5 at 1, 0.0 at 2
       },
       weight: 5,
     },
 
     // Near-win: Player is within 3 stones of winning
-    // Gradient: 1.0 = won, 0.0 = boardSize away, linear in between
+    // Only activates when pathLength <= 3, gradient within threshold
     'near-win-within-3': {
       checker: () => {
         const pathLength = computeShortestPathLength(hexGame, playerPosition);
-        if (pathLength === Infinity) return 0.0;
-        const maxPath = hexGame.boardSize;
-        return Math.max(0, 1 - pathLength / maxPath);
+        if (pathLength === Infinity || pathLength > 3) return 0.0;
+        return 1 - pathLength / 3; // 1.0 at 0, 0.67 at 1, 0.33 at 2, 0.0 at 3
       },
       weight: 3,
     },
@@ -524,17 +521,20 @@ export function getHexObjectives(
     },
 
     // Opponent threat: Opponent is close to winning (negative weight - we want to avoid this)
-    // This encourages blocking behavior
-    // Gradient: 1.0 = opponent won, 0.0 = opponent far from winning
-    // Negative weight makes high values bad for us
+    // This encourages blocking behavior with STRONG penalty when opponent is close
+    // Uses squared gradient for steeper penalty curve near winning
+    // At 2 moves: (1 - 2/11)² = 0.67 → -6.7 penalty
+    // At 4 moves: (1 - 4/11)² = 0.40 → -4.0 penalty
+    // At 6 moves: (1 - 6/11)² = 0.21 → -2.1 penalty
     'opponent-near-win': {
       checker: () => {
         const opponentPath = computeShortestPathLength(hexGame, opponentPosition);
         if (opponentPath === Infinity) return 0.0;
         const maxPath = hexGame.boardSize;
-        return Math.max(0, 1 - opponentPath / maxPath);
+        const linear = Math.max(0, 1 - opponentPath / maxPath);
+        return linear * linear; // Squared for steeper penalty when close
       },
-      weight: -6,
+      weight: -10, // Increased from -6 to make blocking more important
     },
 
     // Connectivity: Player has fewer disconnected groups (more connected)
@@ -716,9 +716,12 @@ export function getHexPlayoutPolicy(
 /**
  * Phase-based UCT exploration constant for Hex.
  * Adjusts exploration vs exploitation based on game progress:
- * - Early game (0-30% filled): C=1.8 for wide exploration of diverse strategies
- * - Mid game (30-70% filled): C=sqrt(2) ≈ 1.41 for balanced play
- * - Late game (70%+ filled): C=1.0 for focused exploitation of winning lines
+ * - Early game (0-30% filled): C=1.4 for moderate exploration while staying focused
+ * - Mid game (30-60% filled): C=sqrt(2) ≈ 1.41 for balanced play
+ * - Late game (60%+ filled): C=1.0 for focused exploitation of winning lines
+ *
+ * Note: Hex games rarely exceed 50% filled, so late game threshold is 60% not 70%.
+ * C=1.8 was too exploratory, causing scattered play instead of engagement.
  *
  * @param game - Current game state
  * @param playerIndex - Which player the bot is (1-indexed position)
@@ -737,10 +740,10 @@ export function getHexUctConstant(
 
   // Phase-based UCT constant
   if (progress < 0.3) {
-    // Early game: high exploration to discover diverse strategies
-    return 1.8;
+    // Early game: moderate exploration, not too scattered
+    return 1.4;
   }
-  if (progress < 0.7) {
+  if (progress < 0.6) {
     // Mid game: balanced exploration/exploitation
     return Math.sqrt(2);
   }

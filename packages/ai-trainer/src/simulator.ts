@@ -308,7 +308,7 @@ function createObjectivesFunction(
   learnedObjectives: LearnedObjective[]
 ): AIConfig['objectives'] {
   return (game: Game, playerIndex: number) => {
-    const objectives: Record<string, { checker: () => boolean; weight: number }> = {};
+    const objectives: Record<string, { checker: () => number; weight: number }> = {};
 
     for (const obj of learnedObjectives) {
       objectives[obj.featureId] = {
@@ -316,9 +316,9 @@ function createObjectivesFunction(
           try {
             // Re-create the evaluate function from the feature
             // This is a simplified version - in practice we'd need to serialize/deserialize
-            return false; // Placeholder
+            return 0; // Placeholder (numeric objective)
           } catch {
-            return false;
+            return 0;
           }
         },
         weight: obj.weight,
