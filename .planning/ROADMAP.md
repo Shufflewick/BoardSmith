@@ -432,14 +432,14 @@ Plans:
 Plans:
 - [x] 33-01: Add RAVE data structures, move tracking, UCT-RAVE selection
 
-#### Phase 34: gradient-objectives
+#### Phase 34: gradient-objectives ✅
 **Goal**: Change objectives from boolean to numeric for finer-grained evaluation
 **Depends on**: Phase 33
 **Research**: Unlikely (interface change)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 34-01: TBD
+- [x] 34-01: Update Objective interface, MCTS evaluation, Hex objectives to [0,1] gradients
 
 #### Phase 35: dynamic-uct
 **Goal**: Adjust UCT exploration constant based on game phase
@@ -501,6 +501,6 @@ Plans:
 | 31. trajectory-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 32. move-ordering | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 33. rave | v1.1 | 1/1 | Complete | 2026-01-15 |
-| 34. gradient-objectives | v1.1 | 0/? | Not started | — |
+| 34. gradient-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 35. dynamic-uct | v1.1 | 0/? | Not started | — |
 | 36. proof-number-search | v1.1 | 0/? | Not started | — |
