@@ -9,14 +9,17 @@ See: .planning/PROJECT.md (updated 2026-01-16)
 
 ## Current Position
 
-Phase: All 36 phases complete
-Plan: N/A
-Status: Milestone v1.1 shipped
-Last activity: 2026-01-16 — v1.1 milestone complete
+Phase: 36 (proof-number-search)
+Plan: All complete
+Status: v1.1 shipped
+Last activity: 2026-01-16 — v1.1 MCTS Strategy Improvements complete
 
 Progress: ██████████ 100%
 
 ## Milestones
+
+**Active:**
+(None — all milestones complete)
 
 **Completed:**
 - v0.1 Large File Refactoring (Phases 1-4) — shipped 2026-01-08
@@ -28,6 +31,8 @@ Progress: ██████████ 100%
 - v0.7 Condition Tracing Refactor (Phases 14-16) — shipped 2026-01-10
 - v0.8 HMR Reliability (Phases 17-19) — shipped 2026-01-11
 - v0.9 Parallel AI Training (Phases 20-23) — shipped 2026-01-13
+- v1.0 AI System Overhaul (Phases 24-28.1) — shipped 2026-01-15
+- v1.1 MCTS Strategy Improvements (Phases 29-36) — shipped 2026-01-16
 
 ## Roadmap Evolution
 
@@ -51,9 +56,10 @@ Progress: ██████████ 100%
 - Milestone v1.0 reopened: Phase 28.1 inserted for MCTS performance (URGENT) - transparent undo, move pruning, transposition tables, parallel MCTS
 - Milestone v1.1 created: MCTS Strategy Improvements, 8 phases (Phase 29-36) - playout lookahead, threat response, trajectory objectives, move ordering, RAVE, gradient objectives, dynamic UCT, proof number search
 - Phase 30.1 inserted after Phase 30: improve-generate-ai - improve /generate-ai command based on Hex AI debugging lessons (threat detection, playout policy, sampling order, human exploit testing)
+- Milestone v1.1 complete: MCTS improvements shipped, +7.5% P2 win rate improvement
 
 ## Session Continuity
 
 Last session: 2026-01-16
-Stopped at: v1.1 MCTS Strategy Improvements milestone complete
+Stopped at: All milestones complete
 Resume file: None

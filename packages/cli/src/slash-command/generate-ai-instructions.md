@@ -1,119 +1,107 @@
 # BoardSmith AI Generation Instructions
 
-You are helping the user generate custom AI evaluation functions for their BoardSmith game.
+You are helping the user generate custom AI evaluation functions for their BoardSmith game. Your goal is to create a complete AI implementation with all 5 hooks, modeled on production-quality patterns.
 
-Before generating code, read these files to understand the patterns:
-- `<BOARDSMITH_ROOT>/packages/ai-trainer/src/code-generator.ts` - AI code output format
-- `<BOARDSMITH_ROOT>/packages/ai-trainer/src/feature-templates.ts` - Feature patterns
+## The 5 AI Hooks
 
-(Replace `<BOARDSMITH_ROOT>` with the path provided in the slash command)
+A complete AI implementation provides these hooks (all optional, but recommended):
+
+1. **`objectives`** - Position evaluation (gradient scores 0.0-1.0)
+2. **`threatResponseMoves`** - Defensive/blocking moves with urgency flag
+3. **`playoutPolicy`** - Smart move selection during MCTS playouts
+4. **`moveOrdering`** - Prioritize promising moves for exploration
+5. **`uctConstant`** - Dynamic exploration tuning by game phase
+
+Reference implementation: `<BOARDSMITH_ROOT>/packages/games/hex/rules/src/ai.ts` (884 lines)
+
+---
 
 ## Phase 1: Project Validation
 
 Verify we're in a valid BoardSmith game project:
 
 1. **Check for boardsmith.json**:
-   - If it doesn't exist, stop and inform the user: "This doesn't appear to be a BoardSmith game project. Please run this command from a directory containing boardsmith.json."
+   - If missing: "This doesn't appear to be a BoardSmith game project. Run from a directory containing boardsmith.json."
 
 2. **Check for existing ai.ts**:
-   - Look in `src/rules/ai.ts`
-   - If it exists, ask: "An ai.ts file already exists. Should I overwrite it, or would you like to review and enhance the existing one?"
+   - Look in `src/rules/ai.ts` (or `rules/src/ai.ts` for workspace projects)
+   - If exists: "An ai.ts already exists. Should I enhance it, or start fresh?"
 
-## Phase 2: Game Analysis
+---
 
-Understand the game structure:
+## Phase 2: Game Introspection
 
-1. **Run introspection**:
-   ```bash
-   npx boardsmith analyze --json
-   ```
-   This provides game structure including element types, actions, and complexity.
+Run introspection to understand the game:
 
-2. **Read game rules files**:
-   - `src/rules/elements.ts` - Element classes, properties, and types
-   - `src/rules/game.ts` - Main game class, setup, win conditions
-   - `src/rules/actions.ts` - Available player actions
-   - `src/rules/flow.ts` - Turn structure and game phases
+```bash
+npx boardsmith analyze --json
+```
 
-3. **Identify key aspects**:
-   - What are the win conditions?
-   - How is scoring determined?
-   - What element types exist?
-   - What properties do elements have?
-   - What actions can players take?
+This provides:
+- Element types and their properties
+- Player properties and scoring
+- Board structure (hex vs grid, dimensions)
+- Win conditions and game type hints
 
-## Phase 3: Strategy Discussion
+**Read the game rules files:**
+- `src/rules/elements.ts` - Element classes, properties
+- `src/rules/game.ts` - Game class, setup, win conditions
+- `src/rules/actions.ts` - Available player actions
+- `src/rules/flow.ts` - Turn structure, game phases
 
-Engage the user to understand strategic concepts:
+---
 
-1. **Ask about strong positions**:
-   "What board positions or game states are generally advantageous in this game?"
+## Phase 3: Game Type Classification
 
-2. **Ask about priorities**:
-   "What should the AI prioritize? (e.g., controlling the center, gathering resources, blocking opponents)"
+**CRITICAL**: Identify the game type to determine which patterns apply.
 
-3. **Ask about traps**:
-   "Are there any common mistakes or traps the AI should avoid?"
+Ask the user: "What type of game is this?"
 
-4. **Identify game type** (affects feature selection and threat patterns):
-   - **Connection games** (like Hex): Focus on path distance, blocking
-     - *Threats:* Opponent has short path to goal, near-complete connections
-   - **Capture games** (like Chess): Focus on material, piece safety, threats
-     - *Threats:* Pieces under attack, checkmate patterns, tactical combinations
-   - **Racing games**: Focus on score lead, proximity to goal
-     - *Threats:* Opponent about to reach finish/target score
-   - **Collection games** (like Go Fish): Focus on set completion
-     - *Threats:* Opponent near completing winning sets
-   - **Territory games** (like Go): Focus on area control, influence
-     - *Threats:* Invasions, weak groups, cutting points
-   - **Mixed**: Combine appropriate features and threat patterns
+| Game Type | Examples | Key AI Pattern |
+|-----------|----------|----------------|
+| **Connection** | Hex, TwixT, Y | Shortest path to goal, blocking opponent's path |
+| **Capture** | Chess, Checkers, Go | Material advantage, piece safety, threats |
+| **Racing** | Backgammon, Parcheesi | Progress to goal, blocking opponent |
+| **Collection** | Go Fish, Rummy | Set completion, blocking opponent's sets |
+| **Territory** | Go, Othello | Area control, influence, borders |
+| **Mixed** | Many games | Combine relevant patterns |
 
-## Phase 4: Feature Design
+---
 
-Based on game structure and user input, design evaluation features:
+## Phase 4: Targeted Questions by Game Type
 
-### Feature Categories by Game Type
+Ask game-type-specific questions to design the AI:
 
-**For Connection Games:**
-- Path distance to goal
-- Number of connected groups
-- Blocking opponent's shortest path
-- Bridge/edge positions
+### Connection Games
+1. "What edges/cells must the player connect to win?"
+2. "How do you measure how close a player is to winning?" (usually shortest path)
+3. "What makes a move 'blocking'?" (cells on opponent's path)
 
-**For Capture Games:**
-- Material count (pieces owned)
-- Material advantage over opponent
-- Piece safety (threatened vs protected)
-- Central control
-- Mobility (available moves)
+### Capture Games
+1. "What pieces are most valuable?"
+2. "How is a piece considered 'safe' vs 'threatened'?"
+3. "What constitutes a 'forcing' move?"
 
-**For Racing/Scoring Games:**
-- Score lead over opponent
-- Progress toward target score
-- Resource accumulation rate
+### Racing Games
+1. "How do you measure progress toward winning?"
+2. "Can players block each other? How?"
+3. "Are there safe zones or capture mechanics?"
 
-**For Collection Games:**
-- Sets completed
-- Progress toward completing sets
-- Cards/items needed for completion
-- Blocking opponent's collections
+### Collection Games
+1. "What are players trying to collect?"
+2. "How close is a player to completing a set?"
+3. "Can players interfere with each other's collections?"
 
-**For Territory Games:**
-- Territory controlled
-- Influence over contested areas
-- Border strength
+### Territory Games
+1. "How is territory/influence measured?"
+2. "What makes a position strong vs weak?"
+3. "How do invasions/attacks work?"
 
-### Feature Structure
+---
 
-Each feature needs:
-- **id**: Unique identifier (kebab-case, e.g., `piece-count-advantage`)
-- **description**: Human-readable explanation
-- **weight**: Importance (-10 to +10, positive = maximize, negative = minimize)
-- **checker**: Function returning boolean (true = good for player)
+## Phase 5: Generate All 5 AI Hooks
 
-## Phase 5: Code Generation
-
-Generate `ai.ts` following the established format:
+Create `ai.ts` with all 5 hooks following these patterns:
 
 ### File Structure
 
@@ -122,72 +110,300 @@ Generate `ai.ts` following the established format:
 // Generated by /generate-ai slash command
 
 import type { Game } from '@boardsmith/engine';
-import type { Objective } from '@boardsmith/ai';
-import type { <GameClass>, <PlayerClass> } from './game.js';
+import type { Objective, BotMove, ThreatResponse } from '@boardsmith/ai';
+import type { <GameClass> } from './game.js';
 import { <ElementTypes> } from './elements.js';
 
-/**
- * AI objectives for <GameName>
- * These guide the MCTS bot to prefer better positions during playouts
- */
+// === HELPER FUNCTIONS ===
+// (pathfinding, connectivity analysis, threat detection, etc.)
+
+// === HOOK 1: OBJECTIVES ===
 export function get<GameName>Objectives(
   game: Game,
+  playerPosition: number
+): Record<string, Objective> { ... }
+
+// === HOOK 2: THREAT RESPONSE ===
+export function get<GameName>ThreatResponseMoves(
+  game: Game,
+  playerPosition: number,
+  availableMoves: BotMove[]
+): ThreatResponse { ... }
+
+// === HOOK 3: PLAYOUT POLICY ===
+export function get<GameName>PlayoutPolicy(
+  game: Game,
+  playerIndex: number,
+  availableMoves: BotMove[],
+  rng: () => number
+): BotMove { ... }
+
+// === HOOK 4: MOVE ORDERING ===
+export function get<GameName>MoveOrdering(
+  game: Game,
+  playerIndex: number,
+  moves: BotMove[]
+): BotMove[] { ... }
+
+// === HOOK 5: UCT CONSTANT ===
+export function get<GameName>UctConstant(
+  game: Game,
   playerIndex: number
-): Record<string, Objective> {
-  const <gameVar> = game as <GameClass>;
-  const player = <gameVar>.players[playerIndex] as <PlayerClass>;
-  // Add opponent if needed for comparative features
-  const opponent = <gameVar>.players[1 - playerIndex] as <PlayerClass>;
+): number { ... }
+```
 
-  return {
-    // Feature: <description>
-    '<feature-id>': {
-      checker: () => {
-        // Implementation
-        return true; // or false
-      },
-      weight: <number>,
-    },
-    // ... more features
-  };
+---
+
+## Pattern Reference: Gradient Objectives
+
+**CRITICAL**: Objectives return 0.0-1.0 gradients, NOT boolean true/false.
+
+```typescript
+// BAD - binary evaluation
+'has-advantage': {
+  checker: () => myScore > theirScore,  // Returns true/false
+  weight: 5,
+}
+
+// GOOD - gradient evaluation
+'score-advantage': {
+  checker: () => {
+    const diff = myScore - theirScore;
+    const maxDiff = 10;  // Reasonable max advantage
+    // Return 0.0 (max disadvantage) to 1.0 (max advantage)
+    return Math.max(0, Math.min(1, (diff + maxDiff) / (2 * maxDiff)));
+  },
+  weight: 5,
 }
 ```
 
-### Checker Function Patterns
-
-**Element count advantage:**
+**Handle infinity/edge cases:**
 ```typescript
-checker: () => {
-  const myCount = game.all(Piece, { player }).length;
-  const theirCount = game.all(Piece, { player: opponent }).length;
-  return myCount > theirCount;
+'path-distance-advantage': {
+  checker: () => {
+    const myPath = computeShortestPath(game, playerPosition);
+    const theirPath = computeShortestPath(game, opponentPosition);
+    // Handle blocked paths
+    if (myPath === Infinity && theirPath === Infinity) return 0.5;
+    if (myPath === Infinity) return 0.0;
+    if (theirPath === Infinity) return 1.0;
+    // Gradient based on relative paths
+    const advantage = theirPath - myPath;
+    const maxAdvantage = boardSize;
+    return Math.max(0, Math.min(1, (advantage + maxAdvantage) / (2 * maxAdvantage)));
+  },
+  weight: 10,
 }
 ```
 
-**Score lead:**
+**Near-win detection with threshold:**
 ```typescript
-checker: () => player.score > opponent.score
-```
-
-**Threshold check:**
-```typescript
-checker: () => player.score >= 10
-```
-
-**Property check on elements:**
-```typescript
-checker: () => game.all(Card, { player }).some(c => c.isWild)
-```
-
-**Spatial control:**
-```typescript
-checker: () => {
-  const centerPieces = game.all(Piece, { player }).filter(p =>
-    p.row >= 2 && p.row <= 5 && p.column >= 2 && p.column <= 5
-  ).length;
-  return centerPieces >= 2;
+'near-win-within-2': {
+  checker: () => {
+    const pathLength = computeShortestPath(game, playerPosition);
+    if (pathLength === Infinity || pathLength > 2) return 0.0;
+    return 1 - pathLength / 2;  // 1.0 at 0, 0.5 at 1, 0.0 at 2
+  },
+  weight: 8,
 }
 ```
+
+**Opponent threat with squared penalty:**
+```typescript
+'opponent-near-win': {
+  checker: () => {
+    const opponentPath = computeShortestPath(game, opponentPosition);
+    if (opponentPath === Infinity) return 0.0;
+    const linear = Math.max(0, 1 - opponentPath / maxPath);
+    return linear * linear;  // Squared for steeper penalty when close
+  },
+  weight: -10,  // Negative weight = avoid this state
+}
+```
+
+---
+
+## Pattern Reference: Threat Response
+
+**Returns** `{ moves: BotMove[], urgent: boolean }`
+
+- **urgent=true**: MCTS ONLY considers these moves (forced defense)
+- **urgent=false**: These moves are prioritized but not forced
+
+```typescript
+export function getThreatResponseMoves(
+  game: Game,
+  playerPosition: number,
+  availableMoves: BotMove[]
+): ThreatResponse {
+  const opponentPosition = 3 - playerPosition;  // 2-player game
+
+  // 1. Analyze opponent's threat level
+  const opponentPath = computeShortestPath(game, opponentPosition);
+
+  // 2. If no immediate threat, return empty
+  if (opponentPath >= safeThreshold) {
+    return { moves: [], urgent: false };
+  }
+
+  // 3. Find blocking moves
+  const blockingCellIds = findBlockingCells(game, opponentPosition);
+  const blockingIdSet = new Set(blockingCellIds);
+
+  const blockingMoves = availableMoves.filter(move => {
+    const cellId = move.args.cell as number | undefined;
+    return cellId !== undefined && blockingIdSet.has(cellId);
+  });
+
+  // 4. Set urgency based on how close opponent is to winning
+  const urgent = opponentPath <= 4;  // Adjust threshold per game
+
+  return { moves: blockingMoves, urgent };
+}
+```
+
+**For connection games, use bidirectional pathfinding to find ALL blocking cells:**
+
+```typescript
+// Find cells on ANY shortest path (not just the first one)
+function findBlockingCells(game: GameClass, opponentPosition: number): number[] {
+  // 1. Run Dijkstra from start edge → get distFromStart
+  // 2. Run Dijkstra from goal edge → get distToGoal
+  // 3. Find shortest path length
+  // 4. Cell is on shortest path if: distFromStart + distToGoal - cellCost == shortestPath
+  // 5. Return IDs of all empty cells on any shortest path
+}
+```
+
+---
+
+## Pattern Reference: Playout Policy
+
+**CRITICAL**: MUST use weighted-random selection with provided `rng()`. NOT deterministic.
+
+```typescript
+export function getPlayoutPolicy(
+  game: Game,
+  playerIndex: number,
+  availableMoves: BotMove[],
+  rng: () => number  // MUST use this for random selection
+): BotMove {
+  if (availableMoves.length <= 1) {
+    return availableMoves[0] ?? throw new Error('No moves');
+  }
+
+  // 1. Score each move based on heuristics
+  const scores: number[] = [];
+  let maxScore = -Infinity;
+
+  for (const move of availableMoves) {
+    let score = 0;
+
+    // Add game-specific scoring:
+    // - Connectivity to own pieces (+2 per neighbor)
+    // - Center position bonus (+0.5 * distance)
+    // - Path advancement (+1)
+    // - Blocking potential (+0.5 * distance)
+
+    scores.push(score);
+    maxScore = Math.max(maxScore, score);
+  }
+
+  // 2. Convert to weights using softmax
+  const weights: number[] = [];
+  let totalWeight = 0;
+
+  for (const score of scores) {
+    const weight = Math.exp(score - maxScore);  // Shift to prevent overflow
+    weights.push(weight);
+    totalWeight += weight;
+  }
+
+  // 3. Weighted-random selection using rng()
+  let target = rng() * totalWeight;
+  for (let i = 0; i < availableMoves.length; i++) {
+    target -= weights[i];
+    if (target <= 0) {
+      return availableMoves[i];
+    }
+  }
+
+  return availableMoves[availableMoves.length - 1];  // Fallback
+}
+```
+
+---
+
+## Pattern Reference: Move Ordering
+
+**Returns moves sorted by exploration priority (best first):**
+
+```typescript
+export function getMoveOrdering(
+  game: Game,
+  playerIndex: number,
+  moves: BotMove[]
+): BotMove[] {
+  if (moves.length <= 1) return moves;
+
+  // Score each move
+  const scoredMoves = moves.map(move => {
+    let score = 1;  // Base score
+
+    // Game-specific scoring:
+    // - Adjacent to opponent's recent move: +10 (contest)
+    // - Adjacent to opponent's stones: +5 (block)
+    // - Adjacent to own stones: +3 (connect)
+    // - In center region: +2 (strategic)
+
+    return { move, score };
+  });
+
+  // Sort by score descending
+  scoredMoves.sort((a, b) => b.score - a.score);
+
+  return scoredMoves.map(sm => sm.move);
+}
+```
+
+---
+
+## Pattern Reference: UCT Constant
+
+**Phase-based exploration tuning:**
+
+```typescript
+export function getUctConstant(
+  game: Game,
+  playerIndex: number
+): number {
+  // Calculate game progress
+  const totalCells = game.board.all(Cell).length;
+  const filledCells = game.board.all(Cell).filter(c => c.hasPiece()).length;
+  const progress = filledCells / totalCells;
+
+  // Phase-based UCT constant
+  if (progress < 0.3) {
+    return 1.4;  // Early: moderate exploration
+  }
+  if (progress < 0.6) {
+    return Math.sqrt(2);  // Mid: balanced (theoretical optimum)
+  }
+  return 1.0;  // Late: focused exploitation
+}
+```
+
+**Alternative: difficulty-based tuning:**
+```typescript
+// More exploration for easy mode, less for hard mode
+const C_BY_DIFFICULTY = {
+  easy: 2.0,    // Very exploratory
+  medium: 1.41, // Balanced
+  hard: 1.0,    // Focused
+};
+```
+
+---
 
 ## Phase 6: Validation
 
@@ -200,203 +416,133 @@ After generating the code:
    ```bash
    npx tsc --noEmit
    ```
-
-   If there are errors:
-   - Read the error messages carefully
-   - Fix type mismatches or import issues
-   - Run tsc again until no errors
+   Fix any errors and re-run.
 
 3. **Suggest testing**:
-   "The AI is ready! Test it with:"
    ```bash
    boardsmith dev --ai 1
    ```
-   This will have player 1 controlled by your new AI.
 
-### Human Exploit Testing
+---
 
-AI vs AI benchmarks can miss obvious human exploits. In Hex, the AI played well against itself but failed to block straight-line strategies a human would easily spot.
+## Phase 7: Human Exploit Testing
 
-**Manual testing is essential:**
-- Play 3-5 games manually against the AI
-- Try simple, obvious strategies first (straight lines, central control, aggressive attacks)
-- If the AI consistently fails to respond to an obvious threat, add threat detection
+**CRITICAL**: AI vs AI benchmarks miss obvious human exploits.
 
-**Checklist:**
+**Manual testing checklist:**
+- [ ] Play 3-5 games against the AI
+- [ ] Try simple, obvious strategies (straight lines, direct attacks)
 - [ ] AI blocks obvious winning threats
 - [ ] AI doesn't make random-looking moves late game
-- [ ] AI vs AI games are contested (not one-sided blowouts)
 - [ ] AI responds to central/key position control
 
-**If human testing reveals exploits, consider adding:**
-- `threatResponseMoves` (for blocking) - see Phase 7
-- `playoutPolicy` (for strategic move selection) - see Phase 8
-- Additional objectives (for position evaluation)
+**If testing reveals exploits:**
+1. Add/improve `threatResponseMoves` for blocking
+2. Add/improve `playoutPolicy` for strategic selection
+3. Add relevant objectives
 
-## Phase 7: Threat Response
+---
 
-**Purpose:** Some games require reactive defensive play when the opponent is close to winning. The `threatResponseMoves` hook identifies critical blocking moves.
+## Game-Type Specific Guidance
 
-### When Threat Response is Needed
+### Connection Games (Hex, TwixT, Y)
 
-Threat response is valuable when:
-- Opponent can win quickly if unchallenged (connection games, racing games)
-- There are specific "must block" positions (capture games)
-- The game has forcing sequences that require immediate response
+**Key algorithms needed:**
+- Dijkstra's algorithm for shortest path
+- Bidirectional search for finding ALL blocking cells
+- Flood fill for connected groups
 
-### ThreatResponse Interface
+**Key objectives:**
+- `path-distance-advantage` (weight: 10) - Primary evaluation
+- `near-win-within-N` (weight: 8/5/3) - Escalating near-win detection
+- `opponent-near-win` (weight: -10) - Blocking urgency
+- `fewer-groups` (weight: 2) - Connectivity preference
 
-```typescript
-import type { ThreatResponse, BotMove } from '@boardsmith/ai';
+**Threat response:**
+- Find empty cells on opponent's shortest path(s)
+- urgent=true when opponent ≤4 moves from winning
 
-export function get<GameName>ThreatResponseMoves(
-  game: Game,
-  playerPosition: number,
-  availableMoves: BotMove[]
-): ThreatResponse {
-  // Analyze opponent's position
-  // Find critical blocking moves
-  // Return { moves: [...], urgent: boolean }
-}
-```
-
-### Threat Patterns by Game Type
-
-**Connection games:**
-- Use shortest-path algorithms (Dijkstra) to find opponent's winning path
-- Return moves that block cells on that path
-- Example: In Hex, find empty cells on opponent's shortest connection
-
-**Capture games:**
-- Detect pieces under attack without defense
-- Find moves that protect threatened pieces or counterattack
-- Example: In Chess, respond to checks and hanging pieces
-
-**Racing games:**
-- Detect when opponent is close to goal/target score
-- Find moves that block opponent's progress or advance own position
-- Example: Block opponent when they're 1-2 moves from winning
-
-**Territory games:**
-- Detect invasions into own territory
-- Find moves that seal borders or kill invading groups
-- Example: In Go, respond to 3-3 invasions
-
-### The Urgent Flag
-
-The `urgent` field determines how MCTS uses threat response moves:
-
-- **`urgent: true`** - Opponent is about to win (1-2 moves away). MCTS will ONLY consider these blocking moves. This forces defensive play when necessary.
-
-- **`urgent: false`** - Threat exists but isn't immediate. These moves are prioritized for exploration, but MCTS still evaluates all options.
-
-Use `urgent: true` sparingly—only when failing to block guarantees a loss.
-
-### Reference Implementation
-
-See `packages/games/hex/rules/src/ai.ts` for `getHexThreatResponseMoves`:
-- Uses Dijkstra's algorithm with path reconstruction
-- Returns empty cells on opponent's shortest path
-- Sets `urgent: true` when opponent is within 4 moves of winning
-
-## Phase 8: Playout Policy (Optional)
-
-**Purpose:** Replace random move selection during MCTS playouts with weighted selection based on game-specific heuristics. This dramatically improves AI quality—random playouts produce random-looking play.
-
-### When to Use Playout Policy
-
-Playout policy is optional but recommended when:
-- Default AI makes random-looking moves late game
-- Game has clear "good move" heuristics (connectivity, center control, etc.)
-- AI vs AI games show poor strategic understanding
-
-### Playout Policy Template
-
-```typescript
-import type { BotMove } from '@boardsmith/ai';
-
-export function get<GameName>PlayoutPolicy(
-  game: Game,
-  playerIndex: number,
-  availableMoves: BotMove[],
-  rng: () => number
-): BotMove {
-  // Score each move based on heuristics
-  // Use weighted-random selection (not deterministic!)
-  // Return selected move
-}
-```
-
-### Weighted Selection Pattern
-
-**Critical: Playout policy MUST use weighted-random selection via the `rng` parameter. Deterministic selection breaks MCTS exploration and produces weak play.**
-
-The pattern (from Hex implementation):
-
-```typescript
-// 1. Score each move based on game-specific heuristics
-const scores: number[] = [];
-let maxScore = -Infinity;
-
-for (const move of availableMoves) {
-  let score = 0;
-  // Add game-specific scoring (connectivity, center control, etc.)
-  scores.push(score);
-  maxScore = Math.max(maxScore, score);
-}
-
-// 2. Convert scores to weights using softmax-like transformation
-const weights: number[] = [];
-let totalWeight = 0;
-
-for (const score of scores) {
-  const weight = Math.exp(score - maxScore);  // Shift to prevent overflow
-  weights.push(weight);
-  totalWeight += weight;
-}
-
-// 3. Select weighted-random using provided rng
-let target = rng() * totalWeight;
-for (let i = 0; i < availableMoves.length; i++) {
-  target -= weights[i];
-  if (target <= 0) {
-    return availableMoves[i];
-  }
-}
-return availableMoves[availableMoves.length - 1];  // Fallback
-```
-
-### Heuristics by Game Type
-
-**Connection games:**
-- Prefer moves adjacent to existing stones (connectivity)
+**Playout policy:**
+- Prefer moves adjacent to own stones (connectivity)
 - Prefer moves closer to center (early game)
 - Prefer moves that shorten own path or lengthen opponent's
 
-**Capture games:**
+### Capture Games (Chess, Checkers)
+
+**Key algorithms needed:**
+- Attacked/defended piece detection
+- Material counting by piece type
+- Mobility calculation
+
+**Key objectives:**
+- `material-advantage` (weight: 10) - Piece count
+- `piece-safety` (weight: 5) - Protected vs hanging pieces
+- `mobility-advantage` (weight: 3) - Available moves
+- `central-control` (weight: 2) - Strategic positioning
+
+**Threat response:**
+- Identify hanging pieces (attacked but not defended)
+- urgent=true for immediate capture threats
+
+**Playout policy:**
 - Prefer safe moves (not hanging)
 - Prefer moves that create threats
 - Avoid moves that allow captures
 
-**Territory games:**
-- Prefer moves that expand influence coherently
-- Avoid scattered moves with no support
-- Prefer moves that secure territory boundaries
+### Racing Games (Backgammon, Parcheesi)
 
-### Reference Implementation
+**Key objectives:**
+- `distance-to-goal` (weight: 10) - Progress
+- `lead-over-opponent` (weight: 5) - Relative progress
+- `safe-piece-count` (weight: 3) - Pieces not at risk
 
-See `packages/games/hex/rules/src/ai.ts` for `getHexPlayoutPolicy`:
-- Scores moves based on connectivity, center distance, and blocking potential
-- Uses softmax-weighted random selection
-- Dramatically improved AI quality (57.5% vs 40% P1 win rate in balanced play)
+**Threat response:**
+- Block opponent when they're close to goal
+- urgent=true when opponent is 1-2 moves from winning
+
+### Collection Games (Go Fish, Rummy)
+
+**Key objectives:**
+- `sets-completed` (weight: 10) - Winning progress
+- `near-complete-sets` (weight: 5) - Cards needed
+- `opponent-sets-blocked` (weight: 3) - Interference
+
+**Threat response:**
+- Block when opponent is one card from completing set
+- urgent=true for immediate win threats
+
+### Territory Games (Go, Othello)
+
+**Key objectives:**
+- `territory-control` (weight: 10) - Area owned
+- `influence` (weight: 5) - Potential territory
+- `border-strength` (weight: 3) - Secure boundaries
+
+**Threat response:**
+- Respond to invasions
+- urgent=true for threats to large groups
+
+---
 
 ## Critical Rules
 
-- **Read code-generator.ts first**: Understand the exact output format used by the automated trainer
-- **Use introspector output**: Base features on actual element types and properties
-- **Checker functions return boolean**: true means the condition is good for the player
-- **Weight semantics**: Positive weight = AI tries to make checker return true; negative = tries to make it return false
-- **Type safety**: Always use proper type imports from game.js and elements.js
-- **Verify before done**: Always run `npx tsc --noEmit` to ensure no TypeScript errors
-- **Don't over-engineer**: Start with 3-5 strong features; more isn't always better
-- **Test iteratively**: Suggest the user test and provide feedback for refinement
+1. **Gradient objectives** - Return 0.0-1.0, not boolean
+2. **Handle infinity** - Path calculations can return Infinity
+3. **Use rng()** - Playout policy MUST use weighted-random, not deterministic
+4. **playerPosition is 1-indexed** - In 2-player games: 1 or 2
+5. **Verify imports** - Check element types match actual class names
+6. **Run tsc** - Always verify TypeScript compiles
+7. **Test manually** - AI vs AI misses human exploits
+8. **Weight semantics** - Positive = maximize, negative = minimize/avoid
+
+---
+
+## Weight Tuning
+
+After creating the AI, weights can be optimized:
+
+```bash
+npx boardsmith evolve-ai-weights --generations 5 --population 20
+```
+
+This runs evolutionary optimization on the weights in your ai.ts file, preserving all code structure while tuning weight values for better win rates.

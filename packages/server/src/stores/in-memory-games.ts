@@ -81,9 +81,6 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
       throw new Error(`Unknown game type: ${options.gameType}`);
     }
 
-    // DEBUG: Log definition AI config
-    console.log(`[Store] Creating game, definition.ai=${definition.ai ? 'EXISTS' : 'UNDEFINED'}, objectives=${definition.ai?.objectives ? 'SET' : 'NOT SET'}`);
-
     const session = GameSession.create({
       gameType: options.gameType,
       GameClass: definition.gameClass,

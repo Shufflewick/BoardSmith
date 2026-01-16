@@ -376,12 +376,37 @@ export function buildPlayerState(
   const canUndo = isMyTurn && actionsThisTurn > 0 && flowState?.currentPlayer === playerPosition && !hasNonUndoableAction;
 
   // Get the full player data including custom properties (abilities, score, etc.)
-  // from the game's player objects via their toJSON methods
-  const fullPlayerData = [...runner.game.all(Player)].map((player: Player) => {
+  // from the game's player objects via their toJSON methods.
+  //
+  // IMPORTANT: We find players by checking for the `position` property instead of
+  // using `game.all(Player)`. This is because esbuild bundles @boardsmith/engine
+  // into the game rules, creating a separate copy of the Player class. When we
+  // import Player here in the session, it's a different class object than the
+  // bundled one, causing instanceof checks to fail. Players are direct children
+  // of the game and are the only elements with a numeric `position` property.
+  const allPlayers = (runner.game as any)._t.children.filter(
+    (el: any) => typeof el.position === 'number'
+  );
+  const fullPlayerData = allPlayers.map((player: any) => {
     if (typeof player.toJSON === 'function') {
-      // toJSON returns ElementJSON which includes position for Players
-      const json = player.toJSON() as unknown as { name: string; position: number; [key: string]: unknown };
-      return json;
+      // toJSON returns ElementJSON which puts custom props in `attributes`.
+      // We need to flatten attributes to root level for the UI.
+      const json = player.toJSON() as unknown as {
+        name: string;
+        className: string;
+        id: number;
+        attributes?: Record<string, unknown>;
+        [key: string]: unknown
+      };
+
+      // Flatten attributes to root level so UI can access p.color, p.position directly
+      const flattened = {
+        ...json,
+        ...(json.attributes || {}),
+      };
+      delete flattened.attributes;
+
+      return flattened;
     }
     // Fallback for players without toJSON
     return { name: player.name ?? `Player ${player.position}`, position: player.position };

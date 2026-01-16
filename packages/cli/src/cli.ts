@@ -10,6 +10,7 @@ import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
 import { trainAICommand } from './commands/train-ai.js';
+import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 
 const program = new Command();
 
@@ -77,10 +78,21 @@ program
   .option('-v, --verbose', 'Show detailed information')
   .action(analyzeCommand);
 
-// AI Training
+// AI Weight Evolution (new focused command)
+program
+  .command('evolve-ai-weights')
+  .description('Optimize AI weights through evolutionary self-play (requires existing ai.ts)')
+  .option('--generations <count>', 'Evolution generations (default: 5)')
+  .option('--population <count>', 'Population size per generation (default: 20)')
+  .option('-m, --mcts <iterations>', 'MCTS iterations for benchmarking (default: 100)')
+  .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
+  .option('-v, --verbose', 'Show detailed progress')
+  .action(evolveAIWeightsCommand);
+
+// AI Training (deprecated - kept for backwards compatibility)
 program
   .command('train-ai')
-  .description('Train AI through self-play simulation and generate ai.ts (uses all CPU cores)')
+  .description('[DEPRECATED] Use /generate-ai for new AI, evolve-ai-weights to optimize')
   .option('-g, --games <count>', 'Games per iteration', '200')
   .option('-i, --iterations <count>', 'Training iterations', '5')
   .option('-o, --output <path>', 'Output path for ai.ts')

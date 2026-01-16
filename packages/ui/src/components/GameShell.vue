@@ -2,6 +2,12 @@
 import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, provide } from 'vue';
 import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '@boardsmith/client';
 import { useGame } from '@boardsmith/client/vue';
+
+// HMR Debug logging (disabled in production)
+const DEBUG_HMR = false;
+function hmrLog(...args: unknown[]) {
+  if (DEBUG_HMR) console.log('[HMR-DEBUG]', ...args);
+}
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import DebugPanel from './DebugPanel.vue';
 import GameHeader from './GameHeader.vue';
@@ -337,6 +343,14 @@ provide('timeTravelDiff', timeTravelDiff);
 onMounted(async () => {
   const path = window.location.pathname;
 
+  hmrLog('onMounted', {
+    currentScreen: currentScreen.value,
+    lobbyInfo: !!lobbyInfo.value,
+    lobbyConnection: !!lobbyConnection.value,
+    path,
+    createdGameId: createdGameId.value,
+  });
+
   // Check for game URL: /game/:gameId/:position?
   const gameMatch = path.match(/^\/game\/([a-z0-9]+)(?:\/(\d))?$/);
   if (gameMatch) {
@@ -501,6 +515,10 @@ async function createGame(config?: LobbyConfig) {
 
 // Lobby WebSocket connection functions
 function connectToLobby(gid: string) {
+  hmrLog('connectToLobby', gid, {
+    existingConnection: !!lobbyConnection.value,
+  });
+
   // Disconnect any existing connection
   disconnectFromLobby();
 
@@ -514,6 +532,10 @@ function connectToLobby(gid: string) {
 
   // Listen for lobby updates
   connection.onLobbyChange((lobby) => {
+    hmrLog('onLobbyChange', {
+      state: lobby.state,
+      slots: lobby.slots.map(s => ({ position: s.position, status: s.status })),
+    });
     lobbyInfo.value = lobby;
 
     // If game has started, transition to game
@@ -534,7 +556,13 @@ function connectToLobby(gid: string) {
 
   // Handle connection errors
   connection.onError((err) => {
+    hmrLog('connection.onError', err);
     console.error('Lobby connection error:', err);
+  });
+
+  // Log connection state changes
+  connection.onConnectionChange?.((status) => {
+    hmrLog('connection.onConnectionChange', status);
   });
 
   // Connect
@@ -543,6 +571,7 @@ function connectToLobby(gid: string) {
 }
 
 function disconnectFromLobby() {
+  hmrLog('disconnectFromLobby', { hadConnection: !!lobbyConnection.value });
   if (lobbyConnection.value) {
     lobbyConnection.value.disconnect();
     lobbyConnection.value = null;
@@ -932,6 +961,29 @@ defineExpose({
   error,
   leaveGame,
 });
+
+// HMR detection - log state before and after hot reload
+if ((import.meta as any).hot) {
+  (import.meta as any).hot.on('vite:beforeUpdate', () => {
+    hmrLog('vite:beforeUpdate', {
+      screen: currentScreen.value,
+      hasLobbyInfo: !!lobbyInfo.value,
+      hasConnection: !!lobbyConnection.value,
+      gameId: gameId.value,
+      createdGameId: createdGameId.value,
+    });
+  });
+
+  (import.meta as any).hot.on('vite:afterUpdate', () => {
+    hmrLog('vite:afterUpdate', {
+      screen: currentScreen.value,
+      hasLobbyInfo: !!lobbyInfo.value,
+      hasConnection: !!lobbyConnection.value,
+      gameId: gameId.value,
+      createdGameId: createdGameId.value,
+    });
+  });
+}
 </script>
 
 <template>

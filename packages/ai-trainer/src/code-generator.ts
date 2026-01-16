@@ -392,3 +392,130 @@ export function saveAICode(
   // For now, just export the function
   // The actual file writing happens in the CLI command
 }
+
+/**
+ * Options for updating AI weights
+ */
+export interface UpdateWeightsOptions {
+  /** Add metadata comment about evolution */
+  addMetadata?: boolean;
+  /** Evolution statistics to include in metadata */
+  evolutionStats?: {
+    generations: number;
+    population: number;
+    initialWinRate: number;
+    finalWinRate: number;
+  };
+}
+
+/**
+ * Update weights in an existing ai.ts file, preserving all other code.
+ *
+ * This function parses the existing file, finds weight assignments,
+ * and updates them with new values from the evolved objectives.
+ * All other code (checker functions, imports, comments) is preserved.
+ *
+ * @param originalCode - The original ai.ts file content
+ * @param objectives - Updated objectives with new weights
+ * @param options - Options for updating
+ * @returns Updated code with new weights
+ */
+export function updateAIWeights(
+  originalCode: string,
+  objectives: LearnedObjective[],
+  options: UpdateWeightsOptions = {}
+): string {
+  // Create a map of feature IDs to new weights
+  const weightMap = new Map<string, number>();
+  for (const obj of objectives) {
+    weightMap.set(obj.featureId, obj.weight);
+  }
+
+  // Split into lines for processing
+  const lines = originalCode.split('\n');
+  const updatedLines: string[] = [];
+
+  // Track which objective we're currently in using brace depth
+  let currentObjectiveId: string | null = null;
+  let braceDepth = 0;
+
+  // Process each line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let updatedLine = line;
+
+    // Detect objective start: 'feature-id': {
+    const objectiveMatch = line.match(/^\s*['"]([a-z0-9-]+)['"]\s*:\s*\{/);
+    if (objectiveMatch && braceDepth === 0) {
+      currentObjectiveId = objectiveMatch[1];
+      braceDepth = 1;
+    } else if (currentObjectiveId) {
+      // Count braces to track nesting (checker functions have nested braces)
+      const opens = (line.match(/\{/g) || []).length;
+      const closes = (line.match(/\}/g) || []).length;
+      braceDepth += opens - closes;
+
+      // If brace depth returns to 0, we've exited the objective
+      if (braceDepth <= 0) {
+        currentObjectiveId = null;
+        braceDepth = 0;
+      }
+    }
+
+    // If we're inside an objective and this line has a weight assignment, update it
+    if (currentObjectiveId && braceDepth > 0) {
+      const weightMatch = line.match(/^(\s*)weight\s*:\s*(-?[\d.]+)\s*,?\s*(\/\/.*)?$/);
+      if (weightMatch) {
+        const newWeight = weightMap.get(currentObjectiveId);
+        if (newWeight !== undefined) {
+          const indent = weightMatch[1];
+          const comment = weightMatch[3] || '';
+          // Round to 1 decimal place
+          const roundedWeight = Math.round(newWeight * 10) / 10;
+          updatedLine = `${indent}weight: ${roundedWeight},${comment ? ' ' + comment : ''}`;
+        }
+      }
+    }
+
+    updatedLines.push(updatedLine);
+  }
+
+  let result = updatedLines.join('\n');
+
+  // Add or update evolution metadata if requested
+  if (options.addMetadata && options.evolutionStats) {
+    const stats = options.evolutionStats;
+    const metadataComment = [
+      `//`,
+      `// Weight Evolution (${new Date().toISOString().split('T')[0]}):`,
+      `//   Generations: ${stats.generations}`,
+      `//   Population: ${stats.population}`,
+      `//   Initial win rate: ${(stats.initialWinRate * 100).toFixed(1)}%`,
+      `//   Final win rate: ${(stats.finalWinRate * 100).toFixed(1)}%`,
+      `//   Improvement: ${((stats.finalWinRate - stats.initialWinRate) * 100).toFixed(1)}%`,
+      `//`,
+    ].join('\n');
+
+    // Find the right place to insert metadata (after the header comments, before imports)
+    const importIndex = result.indexOf('import ');
+    if (importIndex > 0) {
+      // Find the last comment line before the import
+      const beforeImport = result.slice(0, importIndex);
+      const afterImport = result.slice(importIndex);
+
+      // Check if there's already evolution metadata
+      if (beforeImport.includes('Weight Evolution')) {
+        // Replace existing evolution metadata
+        result = beforeImport.replace(
+          /\/\/\s*\n\/\/ Weight Evolution[^]*?\/\/\s*\n/,
+          metadataComment + '\n'
+        ) + afterImport;
+      } else {
+        // Insert new metadata before imports
+        result = beforeImport + metadataComment + '\n' + afterImport;
+      }
+    }
+  }
+
+  return result;
+}

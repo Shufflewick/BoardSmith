@@ -27,7 +27,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
   return count;
 }
 </script>
-
+   
 <template>
   <GameShell
     game-type="hex"

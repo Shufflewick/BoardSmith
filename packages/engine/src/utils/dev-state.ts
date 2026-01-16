@@ -169,11 +169,16 @@ export function restoreDevState<G extends Game>(
 ): G {
   // Create new game instance
   // Note: This creates new players and basic structure
+  // The constructor runs registerElements() which populates the class registry with NEW classes
   const game = new GameClass(options.gameOptions);
 
-  // Merge class registry from options
+  // Merge class registry from options, but DON'T overwrite classes already registered by constructor
+  // This is critical for HMR: the constructor registers NEW classes, but options.classRegistry
+  // might contain OLD classes (with different class identity). Overwriting would break instanceof checks.
   for (const [name, cls] of options.classRegistry) {
-    game._ctx.classRegistry.set(name, cls);
+    if (!game._ctx.classRegistry.has(name)) {
+      game._ctx.classRegistry.set(name, cls);
+    }
   }
 
   // Restore game-level state from snapshot

@@ -1,5 +1,4 @@
-// Main trainers
-export { AITrainer, trainAI } from './trainer.js';
+// Trainer (parallel-only)
 export { ParallelTrainer, type ParallelTrainingConfig } from './parallel-trainer.js';
 
 // Introspection
@@ -38,6 +37,13 @@ export {
   type ParallelSimulatorOptions,
 } from './parallel-simulator.js';
 
+// Parallel benchmarks
+export {
+  runParallelBenchmarks,
+  type ParallelBenchmarkOptions,
+  type IndividualFitness,
+} from './parallel-benchmark.js';
+
 // Analysis
 export {
   analyzeFeatures,
@@ -50,8 +56,17 @@ export {
 // Code generation
 export {
   generateAICode,
+  updateAIWeights,
   type CodeGeneratorOptions,
+  type UpdateWeightsOptions,
 } from './code-generator.js';
+
+// Weight evolution (focused alternative to full training)
+export {
+  WeightEvolver,
+  type WeightEvolverConfig,
+  type WeightEvolutionResult,
+} from './weight-evolver.js';
 
 // AI file parsing (for incremental training)
 export {

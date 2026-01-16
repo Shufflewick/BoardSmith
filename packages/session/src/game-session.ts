@@ -754,18 +754,25 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const snapshot = captureDevState(this.#runner.game);
     const elementCount = getSnapshotElementCount(snapshot);
 
+    // Capture flow state before HMR (will be restored after transfer)
+    const oldFlowState = this.#runner.getFlowState();
+    const oldFlowDefinition = this.#runner.game.getFlow();
+
     console.log(`[HMR] Capturing state: ${elementCount} elements`);
 
-    // Build class registry from definition
-    const classRegistry = new Map<string, any>();
-    classRegistry.set(definition.gameClass.name, definition.gameClass);
+    // Build class registry from the NEW game class
+    // We create a temporary game instance to get the class registry populated by registerElements()
+    // This ensures we have the NEW classes (with correct identity) for validation and restoration
+    const tempGame = new (definition.gameClass as GameClass<G>)({
+      playerCount: this.#storedState.playerCount,
+      playerNames: this.#storedState.playerNames,
+      seed: this.#storedState.seed,
+      ...this.#storedState.gameOptions,
+    });
+    const classRegistry = tempGame._ctx.classRegistry;
 
-    // Copy existing class registry from current game
-    for (const [name, cls] of this.#runner.game._ctx.classRegistry) {
-      if (!classRegistry.has(name)) {
-        classRegistry.set(name, cls);
-      }
-    }
+    // Also add the Game class itself to the registry (registerElements only adds element classes)
+    classRegistry.set(definition.gameClass.name, definition.gameClass as any);
 
     // Pre-transfer validation
     const validation = validateDevSnapshot(snapshot, classRegistry);
@@ -833,6 +840,28 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Copy action history to the new runner
     newRunner.actionHistory.push(...this.#storedState.actionHistory);
+
+    // Restore flow state if there was an active flow
+    // The flow definition comes from the new game class (via its static flow property or setup)
+    // but we restore the full state (position + awaitingInput + currentPlayer, etc.)
+    if (oldFlowState && oldFlowDefinition) {
+      try {
+        // The new game class may have a different flow definition (that's the point of HMR)
+        // Get the flow from the new game class if it's set, otherwise use the old one
+        const newFlowDef = newGame.getFlow() ?? oldFlowDefinition;
+        if (!newGame.getFlow()) {
+          newGame.setFlow(newFlowDef);
+        }
+        // Restore the full flow state (not just position) to preserve awaitingInput, etc.
+        newGame.restoreFlowState(oldFlowState);
+        console.log(`[HMR] ✓ Flow state restored`);
+      } catch (error) {
+        // Flow structure may have changed, fall back to replay
+        console.warn(`[HMR] ⚠️ Flow restore failed: ${error instanceof Error ? error.message : error}`);
+        console.log('[HMR] Falling back to full replay...');
+        return null;
+      }
+    }
 
     console.log(
       `[HMR] ✓ State transferred (${elementCount} elements)\n` +
@@ -926,14 +955,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    */
   #reloadFromCheckpoint(checkpoint: DevCheckpoint, definition: GameDefinition): GameRunner<G> | null {
     try {
-      // Build class registry
-      const classRegistry = new Map<string, any>();
-      classRegistry.set(definition.gameClass.name, definition.gameClass);
-      for (const [name, cls] of this.#runner.game._ctx.classRegistry) {
-        if (!classRegistry.has(name)) {
-          classRegistry.set(name, cls);
-        }
-      }
+      // Build class registry from the NEW game class
+      // Create a temporary game instance to get the NEW class registry
+      const tempGame = new (definition.gameClass as GameClass<G>)({
+        playerCount: this.#storedState.playerCount,
+        playerNames: this.#storedState.playerNames,
+        seed: this.#storedState.seed,
+        ...this.#storedState.gameOptions,
+      });
+      const classRegistry = tempGame._ctx.classRegistry;
+
+      // Also add the Game class itself to the registry (registerElements only adds element classes)
+      classRegistry.set(definition.gameClass.name, definition.gameClass as any);
 
       // Validate checkpoint snapshot with new classes
       const validation = validateDevSnapshot(checkpoint, classRegistry);

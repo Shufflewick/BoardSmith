@@ -505,6 +505,42 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
+   * Restore the full flow state including awaiting state.
+   * This should be used for HMR where we want to restore exactly where we were.
+   */
+  restoreFullState(state: FlowState): { success: true } | { success: false; error: string; validPath: number[] } {
+    // First restore the position (stack structure)
+    const result = this.tryRestore(state.position);
+    if (!result.success) {
+      return result;
+    }
+
+    // Restore the awaiting state directly (don't run the flow)
+    this.awaitingInput = state.awaitingInput;
+    this.complete = state.complete;
+
+    if (state.currentPlayer !== undefined) {
+      this.currentPlayer = this.game.getPlayer(state.currentPlayer);
+    }
+
+    if (state.availableActions) {
+      this.availableActions = [...state.availableActions];
+    }
+
+    // Restore awaiting players for simultaneous actions
+    if (state.awaitingPlayers) {
+      this.awaitingPlayers = state.awaitingPlayers.map(p => ({ ...p }));
+    }
+
+    // Restore phase
+    if (state.currentPhase !== undefined) {
+      this.currentPhase = state.currentPhase;
+    }
+
+    return { success: true };
+  }
+
+  /**
    * Validate that a flow path is still valid with the current flow definition.
    * Returns the longest valid prefix if the path is invalid.
    */

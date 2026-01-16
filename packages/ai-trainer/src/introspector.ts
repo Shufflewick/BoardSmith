@@ -288,6 +288,12 @@ function discoverSpatialInfo(
     if (elem.q !== undefined && elem.r !== undefined) {
       info.isHex = true;
       hasSpatialElements = true;
+      spatialElementCount++;
+      // For hex grids, use q as column and r as row for dimension calculation
+      minRow = Math.min(minRow, elem.r);
+      maxRow = Math.max(maxRow, elem.r);
+      minCol = Math.min(minCol, elem.q);
+      maxCol = Math.max(maxCol, elem.q);
     }
 
     for (const child of element.children) {

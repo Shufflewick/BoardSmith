@@ -19,6 +19,7 @@ import { DEFAULT_TRAINING_CONFIG } from './types.js';
 import { introspectGame, createIntrospectionGame } from './introspector.js';
 import { generateCandidateFeatures, getFeatureSummary } from './feature-generator.js';
 import { runParallelSimulations } from './parallel-simulator.js';
+import { serializeGameStructure } from './simulator.js';
 import {
   analyzeFeatures,
   analyzeActions,
@@ -33,6 +34,7 @@ import {
   type ParsedAIFile,
 } from './ai-parser.js';
 import { benchmarkAI } from './benchmark.js';
+import { runParallelBenchmarks } from './parallel-benchmark.js';
 import {
   createSeededRandom,
   generateOffspring,
@@ -261,6 +263,7 @@ export class ParallelTrainer<G extends Game = Game> {
           timeout: this.config.gameTimeout,
           maxActions: this.config.maxActionsPerGame,
           seed: `${this.config.seed ?? 'train'}-bench-${iteration}`,
+          features: this.candidateFeatures,
         }
       );
 
@@ -286,12 +289,22 @@ export class ParallelTrainer<G extends Game = Game> {
         totalGames: 0,
         bestWinRate,
         featuresSelected: learnedObjectives.length,
-        message: 'Evolution: Starting optimization...',
+        message: `Evolution: Starting optimization with ${learnedObjectives.length} objectives...`,
       });
 
       const evolutionResult = await this.runEvolution(learnedObjectives, bestWinRate);
       learnedObjectives = evolutionResult.objectives;
       bestWinRate = evolutionResult.bestFitness;
+
+      this.reportProgress({
+        iteration: this.config.iterations,
+        totalIterations: this.config.iterations,
+        gamesCompleted: 0,
+        totalGames: 0,
+        bestWinRate,
+        featuresSelected: learnedObjectives.length,
+        message: `Evolution: Complete - best fitness ${(bestWinRate * 100).toFixed(1)}%`,
+      });
     }
 
     // Phase 6: Create action preferences
@@ -471,53 +484,41 @@ export class ParallelTrainer<G extends Game = Game> {
         totalGames: population.length,
         bestWinRate: bestFitness,
         featuresSelected: bestObjectives.length,
-        message: `Evolution ${gen}/${generations}: Evaluating ${population.length} candidates...`,
+        message: `Evolution ${gen}/${generations}: Evaluating ${population.length} candidates in parallel...`,
       });
 
-      // Evaluate fitness for each individual
-      const fitnesses: number[] = [];
-      for (let i = 0; i < population.length; i++) {
-        const individual = population[i];
-
-        // Skip empty objective sets
-        if (individual.length === 0) {
-          fitnesses.push(0);
-          continue;
-        }
-
-        // Benchmark this individual
-        const benchResult = await benchmarkAI(
-          this.GameClass,
-          this.gameType,
-          individual,
-          {
-            gameCount: benchmarkGames,
-            mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-            timeout: this.config.gameTimeout,
-            maxActions: this.config.maxActionsPerGame,
-            seed: `${this.config.seed ?? 'evolution'}-gen-${gen}-ind-${i}`,
-          }
-        );
-
-        fitnesses.push(benchResult.winRate);
-
-        // Update best if improved
-        if (benchResult.winRate > bestFitness) {
-          bestFitness = benchResult.winRate;
-          bestObjectives = individual;
-        }
-
-        // Progress update every few evaluations
-        if ((i + 1) % 5 === 0 || i === population.length - 1) {
+      // Evaluate fitness for all individuals in parallel
+      const fitnesses = await runParallelBenchmarks(
+        this.gameModulePath,
+        this.gameType,
+        population,
+        serializeGameStructure(this.structure!),
+        {
+          gameCount: benchmarkGames,
+          mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
+          timeout: this.config.gameTimeout,
+          maxActions: this.config.maxActionsPerGame,
+          seed: `${this.config.seed ?? 'evolution'}-gen-${gen}`,
+        },
+        { workerCount: this.config.workerCount },
+        (completed, total) => {
           this.reportProgress({
             iteration: this.config.iterations,
             totalIterations: this.config.iterations,
-            gamesCompleted: i + 1,
-            totalGames: population.length,
+            gamesCompleted: completed,
+            totalGames: total,
             bestWinRate: bestFitness,
             featuresSelected: bestObjectives.length,
-            message: `Evolution ${gen}/${generations}: Evaluated ${i + 1}/${population.length} (best: ${(bestFitness * 100).toFixed(1)}%)`,
+            message: `Evolution ${gen}/${generations}: Evaluated ${completed}/${total}`,
           });
+        }
+      );
+
+      // Find best from this generation
+      for (let i = 0; i < fitnesses.length; i++) {
+        if (fitnesses[i] > bestFitness) {
+          bestFitness = fitnesses[i];
+          bestObjectives = population[i];
         }
       }
 

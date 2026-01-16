@@ -107,21 +107,49 @@ npx boardsmith analyze --verbose --json
 - `--json` - Output as JSON
 - `-v, --verbose` - Show detailed information
 
-### train-ai
+### evolve-ai-weights
 
-Train AI through self-play and generate ai.ts:
+Optimize AI weights through evolutionary self-play. Requires an existing `ai.ts` file (created via `/generate-ai` slash command):
+
+```bash
+npx boardsmith evolve-ai-weights
+npx boardsmith evolve-ai-weights --generations 10 --population 30
+```
+
+**Options:**
+- `--generations <count>` - Evolution generations (default: 5)
+- `--population <count>` - Population size per generation (default: 20)
+- `-m, --mcts <iterations>` - MCTS iterations for benchmarking (default: 100)
+- `--workers <count>` - Number of worker threads (default: CPU cores - 1)
+- `-v, --verbose` - Show detailed progress
+
+**How it works:**
+1. Parses your existing `ai.ts` file to extract objectives
+2. Creates variations of the weight values
+3. Benchmarks each variation through AI vs AI games
+4. Selects the best-performing weights
+5. Updates your `ai.ts` with optimized weights (preserving all code structure)
+
+### train-ai [DEPRECATED]
+
+> **Note:** Use `/generate-ai` to create AI files, then `evolve-ai-weights` to optimize weights.
+
+Legacy command for auto-discovering AI features through self-play:
 
 ```bash
 npx boardsmith train-ai
-npx boardsmith train-ai --games 500 --iterations 10
+npx boardsmith train-ai --games 500 --iterations 10 --evolve
 ```
 
 **Options:**
 - `-g, --games <count>` - Games per iteration (default: 200)
 - `-i, --iterations <count>` - Training iterations (default: 5)
 - `-o, --output <path>` - Output path for ai.ts
-- `-m, --mcts <iterations>` - MCTS iterations per move (default: 3)
+- `-m, --mcts <iterations>` - MCTS iterations per move (default: 15)
 - `--fresh` - Ignore existing ai.ts
+- `--evolve` - Enable evolutionary weight optimization
+- `--generations <count>` - Evolution generations (default: 5)
+- `--population <count>` - Evolution population size (default: 20)
 - `-v, --verbose` - Show detailed progress
 
 ### publish
@@ -141,13 +169,17 @@ npx boardsmith publish --dry-run
 Claude Code integration for AI-assisted game design:
 
 ```bash
-# Install the /design-game slash command
+# Install slash commands (/design-game, /generate-ai)
 npx boardsmith claude install
 npx boardsmith claude install --local  # Current project only
 
 # Uninstall
 npx boardsmith claude uninstall
 ```
+
+**Available slash commands after installation:**
+- `/design-game` - Interactive game design with Claude
+- `/generate-ai` - Generate complete AI implementation with all 5 hooks (objectives, threat response, playout policy, move ordering, UCT tuning)
 
 ## Development Workflow
 
@@ -191,10 +223,25 @@ npx boardsmith test --watch
 npx boardsmith validate
 ```
 
-### 6. Train AI (optional)
+### 6. Create AI (optional)
+
+**Option A: LLM-assisted generation (recommended)**
+
+Install Claude Code slash commands, then use `/generate-ai`:
 
 ```bash
-npx boardsmith train-ai --verbose
+npx boardsmith claude install
+# Then in Claude Code: /generate-ai
+```
+
+This generates a complete AI with all 5 hooks modeled on production patterns.
+
+**Option B: Optimize existing AI weights**
+
+If you already have an `ai.ts` file:
+
+```bash
+npx boardsmith evolve-ai-weights --generations 5
 ```
 
 ### 7. Publish

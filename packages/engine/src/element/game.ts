@@ -1305,6 +1305,27 @@ export class Game<
   }
 
   /**
+   * Restore full flow state including awaiting state.
+   * Used for HMR where we want to restore exactly where we were.
+   * Throws if the position is invalid (e.g., flow structure changed).
+   */
+  restoreFlowState(state: FlowState): void {
+    if (!this._flowDefinition) {
+      throw new Error('No flow definition set');
+    }
+
+    this._flowEngine = new FlowEngine(this, this._flowDefinition);
+    const result = this._flowEngine.restoreFullState(state);
+
+    if (!result.success) {
+      throw new Error(
+        `Flow position invalid: ${result.error}. ` +
+        `Valid path prefix: [${result.validPath.join(', ')}]`
+      );
+    }
+  }
+
+  /**
    * Check if flow is awaiting player input
    */
   isAwaitingInput(): boolean {
@@ -1424,7 +1445,12 @@ export class Game<
    * @see {@link Player.isCurrent} - Check if a specific player is current
    */
   get currentPlayer(): P | undefined {
-    return this.first(Player as unknown as ElementClass<P>, p => p.isCurrent()) as P | undefined;
+    // Find current player directly without instanceof check.
+    // This avoids issues when code is bundled (esbuild creates separate class copies).
+    // Players are direct children of game with numeric position property and isCurrent method.
+    return this._t.children.find(
+      el => typeof (el as any).position === 'number' && (el as any).isCurrent?.()
+    ) as P | undefined;
   }
 
   /**
@@ -1449,7 +1475,7 @@ export class Game<
    * @see {@link Player.isFirstPlayer} - Check if a player is first
    */
   get firstPlayer(): P | undefined {
-    return this.first(Player as unknown as ElementClass<P>, p => p.position === 1) as P | undefined;
+    return this.getPlayer(1);
   }
 
   /**
@@ -1476,7 +1502,12 @@ export class Game<
    * @see {@link Player.position} - The position property on players
    */
   getPlayer(position: number): P | undefined {
-    return this.first(Player as unknown as ElementClass<P>, p => p.position === position) as P | undefined;
+    // Find player by position directly without instanceof check.
+    // This avoids issues when code is bundled (esbuild creates separate class copies).
+    // Players are direct children of game with numeric position property.
+    return this._t.children.find(
+      el => typeof (el as any).position === 'number' && (el as any).position === position
+    ) as P | undefined;
   }
 
   /**

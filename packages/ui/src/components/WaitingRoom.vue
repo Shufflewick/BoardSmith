@@ -247,6 +247,16 @@ function handleToggleAI(slot: LobbySlot) {
   }
 }
 
+const DIFFICULTY_LEVELS = ['easy', 'medium', 'hard'] as const;
+
+function handleCycleAILevel(slot: LobbySlot) {
+  const currentLevel = slot.aiLevel || 'medium';
+  const currentIndex = DIFFICULTY_LEVELS.indexOf(currentLevel as typeof DIFFICULTY_LEVELS[number]);
+  const nextIndex = (currentIndex + 1) % DIFFICULTY_LEVELS.length;
+  const nextLevel = DIFFICULTY_LEVELS[nextIndex];
+  emit('set-slot-ai', slot.position, true, nextLevel);
+}
+
 function getSlotStatusClass(slot: LobbySlot): string {
   if (slot.status === 'ai') return 'ai';
   if (slot.status === 'claimed') return 'claimed';
@@ -567,7 +577,15 @@ function handleUpdateGameOption(key: string, value: unknown) {
           <template v-else-if="slot.status === 'ai'">
             <div class="slot-content">
               <span class="slot-name ai-name">{{ slot.name }}</span>
-              <span class="slot-badge ai-badge">AI ({{ slot.aiLevel || 'medium' }})</span>
+              <button
+                v-if="isCreator"
+                class="slot-badge ai-badge clickable"
+                @click="handleCycleAILevel(slot)"
+                title="Click to change difficulty"
+              >
+                AI ({{ slot.aiLevel || 'medium' }})
+              </button>
+              <span v-else class="slot-badge ai-badge">AI ({{ slot.aiLevel || 'medium' }})</span>
               <span class="ready-indicator ready">Ready</span>
               <div v-if="isCreator && slot.position !== 1" class="slot-controls">
                 <button
@@ -1059,6 +1077,18 @@ function handleUpdateGameOption(key: string, value: unknown) {
 .ai-badge {
   background: rgba(155, 89, 182, 0.2);
   color: #9b59b6;
+}
+
+.ai-badge.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.ai-badge.clickable:hover {
+  background: rgba(155, 89, 182, 0.35);
+  border-color: #9b59b6;
+  transform: scale(1.05);
 }
 
 .ready-indicator {

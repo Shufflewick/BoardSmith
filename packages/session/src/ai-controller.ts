@@ -140,8 +140,6 @@ export class AIController<G extends Game = Game> {
 
       // Create bot for this player
       const difficulty = parseAILevel(this.#aiLevel);
-      // DEBUG: Log bot AI config status
-      console.log(`[AIController] Creating bot, botAIConfig=${this.#botAIConfig ? 'SET' : 'NOT SET'}`);
       const bot = createBot(
         runner.game,
         this.#GameClass,

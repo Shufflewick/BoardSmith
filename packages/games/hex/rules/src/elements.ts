@@ -196,6 +196,15 @@ export class HexPlayer extends Player {
    * Uses configured color or defaults based on position
    */
   getColorHex(): string {
-    return this.color ?? DEFAULT_PLAYER_COLORS[this.position] ?? DEFAULT_PLAYER_COLORS[0];
+    const result = this.color ?? DEFAULT_PLAYER_COLORS[this.position] ?? DEFAULT_PLAYER_COLORS[0];
+    console.log('[HEX-COLOR]', {
+      playerPosition: this.position,
+      configuredColor: this.color,
+      arrayIndex: this.position,
+      lookupResult: DEFAULT_PLAYER_COLORS[this.position],
+      fallbackUsed: DEFAULT_PLAYER_COLORS[this.position] === undefined,
+      finalColor: result,
+    });
+    return result;
   }
 }
