@@ -1,5 +1,33 @@
 # Project Milestones: BoardSmith Large File Refactoring
 
+## v1.1 MCTS Strategy Improvements (Shipped: 2026-01-16)
+
+**Delivered:** Advanced MCTS search techniques including playout lookahead, threat response, RAVE, gradient objectives, dynamic UCT, and proof number search - making AI play strategically better with measurable improvements.
+
+**Phases completed:** 29-36 (+30.1 inserted), 10 plans total
+
+**Key accomplishments:**
+
+- Playout lookahead with depth-based presets (+17.5% P1 win rate)
+- Threat response forcing via threatResponseMoves hook (blocks straight-line exploits)
+- RAVE algorithm for rapid action value estimation across simulations
+- Gradient objectives (0-1) replacing boolean win/loss for finer evaluation
+- Dynamic UCT constant tuned by game phase (exploration → exploitation)
+- Proof Number Search (+7.5% P2 win rate as disadvantaged player)
+
+**Stats:**
+
+- 35 files modified
+- +4,943 / -152 lines
+- 9 phases (including 30.1), 10 plans
+- 2 days from start to ship (2026-01-15 → 2026-01-16)
+
+**Git range:** `27c7892` → `08cd681`
+
+**What's next:** AI system complete. Ready for new features or next milestone.
+
+---
+
 ## v0.4 Public API Docs (Shipped: 2026-01-09)
 
 **Delivered:** Comprehensive JSDoc documentation for all public APIs in @boardsmith/engine and @boardsmith/testing packages, enabling IDE autocompletion and clear API understanding.

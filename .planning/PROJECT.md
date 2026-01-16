@@ -47,6 +47,12 @@ Improve code maintainability, testability, and navigability equally—making it 
 - ✓ Type-specific feature generation via introspection — v1.0
 - ✓ Parallel training with evolution support — v1.0
 - ✓ /generate-ai slash command for LLM-assisted generation — v1.0
+- ✓ Playout lookahead for discovering forcing sequences — v1.1
+- ✓ Threat response hooks for blocking opponent wins — v1.1
+- ✓ RAVE algorithm for rapid action value estimation — v1.1
+- ✓ Gradient objectives (0-1) for finer evaluation — v1.1
+- ✓ Dynamic UCT constant tuned by game phase — v1.1
+- ✓ Proof Number Search for forced win/loss detection — v1.1
 
 ### Active
 
@@ -78,10 +84,10 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ## Context
 
-Shipped v1.0 with ~99k LOC TypeScript/Vue.
+Shipped v1.1 with ~99k LOC TypeScript/Vue.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 493 unit tests passing.
-All milestones complete: v0.1-v1.0 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing, HMR reliability, parallel AI training, AI system overhaul).
+All milestones complete: v0.1-v1.1 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing, HMR reliability, parallel AI training, AI system overhaul, MCTS strategy improvements).
 
 ---
-*Last updated: 2026-01-15 after v1.0 milestone*
+*Last updated: 2026-01-16 after v1.1 milestone*

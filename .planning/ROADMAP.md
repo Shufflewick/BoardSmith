@@ -12,7 +12,7 @@
 - ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
 - ✅ [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) — SHIPPED 2026-01-13
 - 🔄 [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) — REOPENED for MCTS performance
-- 🚧 **v1.1 MCTS Strategy Improvements** (Phases 29-36) — in progress
+- ✅ [v1.1 MCTS Strategy Improvements](milestones/v1.1-ROADMAP.md) (Phases 29-36) — SHIPPED 2026-01-16
 
 ## Overview
 
@@ -30,7 +30,7 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
 - ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
 - 🔄 **v1.0 AI System Overhaul** — Phases 24-28.1 (reopened for MCTS performance)
-- 🚧 **v1.1 MCTS Strategy Improvements** — Phases 29-36 (in progress)
+- ✅ **v1.1 MCTS Strategy Improvements** — Phases 29-36 (shipped 2026-01-16)
 
 ## Phases
 
@@ -266,7 +266,8 @@ Plans:
 
 </details>
 
-### ✅ v1.0 AI System Overhaul — SHIPPED 2026-01-15
+<details>
+<summary>✅ v1.0 AI System Overhaul — SHIPPED 2026-01-15</summary>
 
 **Milestone Goal:** Transform AI training from broken/useless to a tiered system that produces quality opponents with minimal designer effort.
 
@@ -356,7 +357,10 @@ Plans:
 
 **Success criteria:** MCTS can run 10x more iterations in the same time budget, producing noticeably better play.
 
-### 🚧 v1.1 MCTS Strategy Improvements (In Progress)
+</details>
+
+<details>
+<summary>✅ v1.1 MCTS Strategy Improvements — SHIPPED 2026-01-16</summary>
 
 **Milestone Goal:** Make MCTS AI play strategically better by adding lookahead, threat detection, and advanced search techniques. Each phase is tested against Hex AI - if no improvement, revert and skip.
 
@@ -460,6 +464,8 @@ Plans:
 Plans:
 - [x] 36-01: Add PN-MCTS core infrastructure (proof numbers, UCT-PN selection)
 - [x] 36-02: Final move selection using proof status, benchmark validation
+
+</details>
 
 ## Progress
 
