@@ -714,6 +714,41 @@ export function getHexPlayoutPolicy(
 }
 
 /**
+ * Phase-based UCT exploration constant for Hex.
+ * Adjusts exploration vs exploitation based on game progress:
+ * - Early game (0-30% filled): C=1.8 for wide exploration of diverse strategies
+ * - Mid game (30-70% filled): C=sqrt(2) ≈ 1.41 for balanced play
+ * - Late game (70%+ filled): C=1.0 for focused exploitation of winning lines
+ *
+ * @param game - Current game state
+ * @param playerIndex - Which player the bot is (1-indexed position)
+ * @returns UCT exploration constant
+ */
+export function getHexUctConstant(
+  game: Game,
+  playerIndex: number
+): number {
+  const hexGame = game as HexGame;
+
+  // Calculate game progress: ratio of filled cells to total cells
+  const totalCells = hexGame.board.all(Cell).length;
+  const filledCells = hexGame.board.all(Cell).filter(c => c.getStone() !== undefined).length;
+  const progress = filledCells / totalCells;
+
+  // Phase-based UCT constant
+  if (progress < 0.3) {
+    // Early game: high exploration to discover diverse strategies
+    return 1.8;
+  }
+  if (progress < 0.7) {
+    // Mid game: balanced exploration/exploitation
+    return Math.sqrt(2);
+  }
+  // Late game: focus on exploitation to find winning sequences
+  return 1.0;
+}
+
+/**
  * Order moves for MCTS exploration.
  * Prioritizes:
  * 1. Moves adjacent to opponent's most recent stone (contest recent activity)
