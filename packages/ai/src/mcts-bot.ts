@@ -1157,17 +1157,15 @@ export class MCTSBot<G extends Game = Game> {
         let maxPossibleScore = 0;
         let minPossibleScore = 0;
 
-        const matched: string[] = [];
         for (const [name, obj] of Object.entries(objectives)) {
           if (obj.weight > 0) {
             maxPossibleScore += obj.weight;
           } else {
             minPossibleScore += obj.weight;
           }
-          if (obj.checker(game, this.playerIndex)) {
-            totalScore += obj.weight;
-            matched.push(`${name}(${obj.weight})`);
-          }
+          // Gradient evaluation: multiply weight by achievement level (0.0-1.0)
+          const achieved = obj.checker(game, this.playerIndex);
+          totalScore += obj.weight * achieved;
         }
 
         // Normalize to [0.1, 0.9] range based on possible score range
