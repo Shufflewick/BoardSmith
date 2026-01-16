@@ -22,6 +22,14 @@ export interface BotConfig {
   useRAVE?: boolean;
   /** RAVE beta decay constant - higher values trust RAVE longer. Default: 500 */
   raveK?: number;
+  /**
+   * Static UCT exploration constant override.
+   * Default: Math.sqrt(2) ≈ 1.41, theoretically optimal for minimax.
+   * Higher values (e.g., 2.0) favor exploration - better for early game.
+   * Lower values (e.g., 0.5) favor exploitation - better for late game.
+   * Typical range: 0.5 (very exploitative) to 2.0 (very explorative).
+   */
+  uctC?: number;
 }
 
 /**
@@ -150,6 +158,25 @@ export interface AIConfig {
    * @returns Moves sorted by priority (explore first → last)
    */
   moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+
+  /**
+   * Optional function for dynamic UCT exploration constant based on game state.
+   * Called once per move selection (not per tree node) for performance.
+   *
+   * Default: Math.sqrt(2) ≈ 1.41, theoretically optimal for minimax.
+   * Higher values (e.g., 1.8-2.0) favor exploration - better for early game.
+   * Lower values (e.g., 0.8-1.0) favor exploitation - better for late game.
+   *
+   * Example phase-based tuning:
+   * - Early game (0-30% filled): C=1.8 (explore diverse strategies)
+   * - Mid game (30-70% filled): C=sqrt(2) (balanced)
+   * - Late game (70%+ filled): C=1.0 (focus on winning lines)
+   *
+   * @param game - Current game state
+   * @param playerIndex - Which player the bot is (1-indexed position)
+   * @returns UCT exploration constant (typical range: 0.5 to 2.0)
+   */
+  uctConstant?: (game: Game, playerIndex: number) => number;
 }
 
 /**
