@@ -51,6 +51,8 @@ export class MCTSBot<G extends Game = Game> {
   private rootSnapshot: GameStateSnapshot | null = null;
   /** Transposition table for caching position evaluations */
   private transpositionTable: Map<string, { value: number; visits: number }> = new Map();
+  /** RAVE table for move value estimation across all playouts */
+  private raveTable: Map<string, { visits: number; value: number }> = new Map();
 
   constructor(
     game: G,
@@ -204,8 +206,9 @@ export class MCTSBot<G extends Game = Game> {
       moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
     }
 
-    // Clear transposition table for fresh search
+    // Clear transposition table and RAVE table for fresh search
     this.transpositionTable.clear();
+    this.raveTable.clear();
 
     // Initialize incremental state management:
     // Clone game once and track root command count for undo
@@ -512,6 +515,13 @@ export class MCTSBot<G extends Game = Game> {
   // SECTION: Utility
   // Purpose: Helper methods for bot turn detection and position evaluation
   // ============================================================================
+
+  /**
+   * Generate a unique key for a move (used for RAVE table lookup)
+   */
+  private getMoveKey(move: BotMove): string {
+    return `${move.action}:${JSON.stringify(move.args)}`;
+  }
 
   /**
    * Check if the bot can act in the current flow state
