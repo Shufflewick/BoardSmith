@@ -227,7 +227,7 @@ export function useAutoAnimations(options: AutoAnimationsOptions): AutoAnimation
   for (const statConfig of flyToStats) {
     const { reset: statReset } = useAutoFlyToStat({
       gameView,
-      containerRef: statConfig.containerRef,
+      containerRefs: [statConfig.containerRef],
       selector: statConfig.selector,
       stats: [
         {

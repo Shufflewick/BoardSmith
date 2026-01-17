@@ -24,7 +24,7 @@
  * Elements will automatically animate when they move within their containers.
  */
 
-import { watch, computed, nextTick, type Ref } from 'vue';
+import { watch, computed, nextTick, onUnmounted, getCurrentInstance, type Ref } from 'vue';
 import { useFLIPAnimation } from './useFLIPAnimation.js';
 
 export interface AutoFLIPContainer {
@@ -80,9 +80,10 @@ export function useAutoFLIP(options: AutoFLIPOptions): AutoFLIPReturn {
   // We use a map to track them by a composite key
   const flipHandlers = new Map<string, ReturnType<typeof useFLIPAnimation>>();
 
-  function getOrCreateHandler(container: AutoFLIPContainer): ReturnType<typeof useFLIPAnimation> {
+  function getOrCreateHandler(container: AutoFLIPContainer, index: number): ReturnType<typeof useFLIPAnimation> {
     // Create a unique key for this container configuration
-    const key = `${container.selector}`;
+    // Include index to ensure each container gets its own handler even with same selector
+    const key = `${index}-${container.selector}`;
 
     if (!flipHandlers.has(key)) {
       const handler = useFLIPAnimation({
@@ -110,13 +111,14 @@ export function useAutoFLIP(options: AutoFLIPOptions): AutoFLIPReturn {
   });
 
   // Watch with flush: 'sync' to capture positions BEFORE DOM update
-  watch(
+  const stopSyncWatch = watch(
     gameViewComputed,
     () => {
       const containers = getContainers();
-      for (const container of containers) {
-        if (container.ref.value) {
-          const handler = getOrCreateHandler(container);
+      for (let i = 0; i < containers.length; i++) {
+        const container = containers[i];
+        if (container?.ref?.value) {
+          const handler = getOrCreateHandler(container, i);
           handler.capturePositions();
         }
       }
@@ -125,7 +127,7 @@ export function useAutoFLIP(options: AutoFLIPOptions): AutoFLIPReturn {
   );
 
   // Watch normally to animate AFTER DOM update
-  watch(
+  const stopPostWatch = watch(
     gameViewComputed,
     async () => {
       await nextTick();
@@ -133,9 +135,10 @@ export function useAutoFLIP(options: AutoFLIPOptions): AutoFLIPReturn {
       const containers = getContainers();
       const animationPromises: Promise<void>[] = [];
 
-      for (const container of containers) {
-        if (container.ref.value) {
-          const handler = getOrCreateHandler(container);
+      for (let i = 0; i < containers.length; i++) {
+        const container = containers[i];
+        if (container?.ref?.value) {
+          const handler = getOrCreateHandler(container, i);
           animationPromises.push(handler.animateToNewPositions());
         }
       }
@@ -144,6 +147,21 @@ export function useAutoFLIP(options: AutoFLIPOptions): AutoFLIPReturn {
     },
     { deep: true }
   );
+
+  // Auto-cleanup: register onUnmounted if we're in a component setup context
+  const instance = getCurrentInstance();
+  if (instance) {
+    onUnmounted(() => {
+      stopSyncWatch();
+      stopPostWatch();
+    });
+  } else {
+    console.warn(
+      '[useAutoFLIP] Called outside of component setup(). ' +
+      'Watchers will not be automatically cleaned up. ' +
+      'This can cause errors if the component unmounts while watchers are still active.'
+    );
+  }
 
   return {
     isAnimating: computed(() => isAnimating.value),

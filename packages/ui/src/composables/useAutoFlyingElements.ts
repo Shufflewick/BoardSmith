@@ -46,7 +46,7 @@
  *
  * Elements will automatically fly between containers when they move in game state.
  */
-import { watch, computed, type Ref, type ComputedRef } from 'vue';
+import { watch, computed, onUnmounted, getCurrentInstance, type Ref, type ComputedRef } from 'vue';
 import { useFlyingCards, type FlyingCardData } from './useFlyingCards.js';
 
 export interface ElementContainerConfig {
@@ -225,7 +225,7 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
   // Initialize element locations on first access
   let initialized = false;
 
-  watch(gameViewComputed, () => {
+  const stopWatch = watch(gameViewComputed, () => {
     // On first watch trigger, just populate locations without animating
     if (!initialized) {
       initialized = true;
@@ -251,8 +251,8 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
         const fromContainer = containers[oldContainerIndex];
         const toContainer = containers[newContainerIndex];
 
-        const fromRef = fromContainer.ref.value;
-        const toRef = toContainer.ref.value;
+        const fromRef = fromContainer?.ref?.value;
+        const toRef = toContainer?.ref?.value;
 
         if (fromRef && toRef) {
           // Get the element from the new container to extract display data
@@ -294,8 +294,8 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
         // If source lost N elements and dest gained N elements, animate N cards
         if (lostFromSource > 0 && gainedAtDest > 0) {
           const cardsToAnimate = Math.min(lostFromSource, gainedAtDest);
-          const fromRef = fromContainer.ref.value;
-          const toRef = toContainer.ref.value;
+          const fromRef = fromContainer?.ref?.value;
+          const toRef = toContainer?.ref?.value;
 
           if (fromRef && toRef) {
             const size = toContainer.elementSize || fromContainer.elementSize || elementSize;
@@ -331,6 +331,20 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
       elementLocations.set(elemId, containerIndex);
     }
   }, { deep: true });
+
+  // Auto-cleanup: register onUnmounted if we're in a component setup context
+  const instance = getCurrentInstance();
+  if (instance) {
+    onUnmounted(() => {
+      stopWatch();
+    });
+  } else {
+    console.warn(
+      '[useAutoFlyingElements] Called outside of component setup(). ' +
+      'Watchers will not be automatically cleaned up. ' +
+      'This can cause errors if the component unmounts while watchers are still active.'
+    );
+  }
 
   return {
     flyingElements: flyingCards,

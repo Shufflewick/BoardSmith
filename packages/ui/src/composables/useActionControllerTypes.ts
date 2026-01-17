@@ -225,6 +225,29 @@ export interface UseActionControllerOptions {
     actionName: string,
     initialArgs?: Record<string, unknown>
   ) => Promise<SelectionStepResult>;
+  /**
+   * Called before auto-execute fires (when all selections are filled).
+   * Use this to capture element positions for animations before the DOM updates.
+   * Return a Promise to delay execution until animation prep is complete.
+   *
+   * @example
+   * ```typescript
+   * const controller = useActionController({
+   *   // ...
+   *   onBeforeAutoExecute: async (actionName, args) => {
+   *     if (actionName === 'assignToSquad') {
+   *       // Capture element position before DOM updates
+   *       const el = document.querySelector(`[data-combatant="${args.combatantName}"]`);
+   *       startRect = el?.getBoundingClientRect();
+   *     }
+   *   },
+   * });
+   * ```
+   */
+  onBeforeAutoExecute?: (
+    actionName: string,
+    args: Record<string, unknown>
+  ) => void | Promise<void>;
 }
 
 /** State for repeating selections */
@@ -329,4 +352,26 @@ export interface UseActionControllerReturn {
   getCollectedSelection: (name: string) => CollectedSelection | undefined;
   /** Get all collected selections with their names */
   getCollectedSelections: () => Array<CollectedSelection & { name: string }>;
+
+  // === Hook Registration (for GameShell users) ===
+  /**
+   * Register a hook to be called before auto-execute.
+   * Use this when using GameShell (which creates the controller internally)
+   * and you need to capture element positions for animations.
+   *
+   * @example
+   * ```typescript
+   * // In game-board slot
+   * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
+   *   gameView,
+   *   animations: [...]
+   * });
+   *
+   * // Register the hook after getting actionController from slot props
+   * actionController.registerBeforeAutoExecute(onBeforeAutoExecute);
+   * ```
+   */
+  registerBeforeAutoExecute: (
+    hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
+  ) => void;
 }

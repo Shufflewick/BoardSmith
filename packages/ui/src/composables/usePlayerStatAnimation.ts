@@ -109,7 +109,9 @@ export function flyToPlayerStat(
     warnIfMissing = true,
   } = options;
 
-  if (cards.length === 0) return false;
+  if (cards.length === 0) {
+    return false;
+  }
 
   const targetEl = getPlayerStatElement(playerPosition, statName);
   if (!targetEl) {

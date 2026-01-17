@@ -100,7 +100,9 @@ export function useFLIPAnimation(options: FLIPAnimationOptions): FLIPAnimationRe
    */
   function capturePositions(): void {
     positions.clear();
-    if (!containerRef.value) return;
+    if (!containerRef?.value) {
+      return;
+    }
 
     const elements = containerRef.value.querySelectorAll(selector);
     elements.forEach((el) => {
@@ -135,7 +137,7 @@ export function useFLIPAnimation(options: FLIPAnimationOptions): FLIPAnimationRe
       return;
     }
 
-    if (!containerRef.value || positions.size === 0) {
+    if (!containerRef?.value || positions.size === 0) {
       return;
     }
 
@@ -222,7 +224,7 @@ export function createFLIPSnapshot(
   const positions = new Map<string, DOMRect>();
 
   // Capture positions immediately
-  if (containerRef.value) {
+  if (containerRef?.value) {
     const elements = containerRef.value.querySelectorAll(selector);
     elements.forEach((el) => {
       const id =
@@ -237,7 +239,7 @@ export function createFLIPSnapshot(
 
   return {
     async animate(): Promise<void> {
-      if (prefersReducedMotion.value || !containerRef.value || positions.size === 0) {
+      if (prefersReducedMotion.value || !containerRef?.value || positions.size === 0) {
         return;
       }
 

@@ -150,7 +150,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     externalArgs,
     fetchSelectionChoices,
     selectionStep,
+    onBeforeAutoExecute: initialBeforeAutoExecute,
   } = options;
+
+  // Registered hooks (can be added after creation via registerBeforeAutoExecute)
+  // Stored as ref to allow dynamic registration
+  const beforeAutoExecuteHook = ref<((actionName: string, args: Record<string, unknown>) => void | Promise<void>) | undefined>(
+    initialBeforeAutoExecute
+  );
 
   // Helper to get current value of potentially reactive options
   const getAutoFill = (): boolean => {
@@ -666,11 +673,38 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // === Auto-execute Watch ===
   // When all selections are filled, auto-execute
-  watch(isReady, (ready) => {
+  watch(isReady, async (ready) => {
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value) {
+      // Call hook before executing - allows capturing element positions for animations
+      if (beforeAutoExecuteHook.value) {
+        await beforeAutoExecuteHook.value(currentAction.value, { ...currentArgs.value });
+      }
       executeCurrentAction();
     }
   });
+
+  /**
+   * Register a hook to be called before auto-execute.
+   * Use this when using GameShell (which creates the controller internally)
+   * and you need to capture element positions for animations.
+   *
+   * @example
+   * ```typescript
+   * // In game-board slot
+   * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
+   *   gameView,
+   *   animations: [...]
+   * });
+   *
+   * // Register the hook after getting actionController from slot props
+   * actionController.registerBeforeAutoExecute(onBeforeAutoExecute);
+   * ```
+   */
+  function registerBeforeAutoExecute(
+    hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
+  ): void {
+    beforeAutoExecuteHook.value = hook;
+  }
 
   // === Methods ===
 
@@ -1385,6 +1419,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionSnapshot,  // Readonly access to frozen action state (for followUp metadata)
     getCollectedSelection,
     getCollectedSelections,
+
+    // Hook registration (for GameShell users who can't pass options at creation)
+    registerBeforeAutoExecute,
   };
 }
 

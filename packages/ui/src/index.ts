@@ -107,6 +107,15 @@ export {
   type FlyOnAppearReturn,
 } from './composables/useFlyOnAppear.js';
 
+// Action-triggered animations (for animating elements during action execution)
+export {
+  useActionAnimations,
+  type ActionAnimationConfig,
+  type AnimationElementData,
+  type UseActionAnimationsOptions,
+  type UseActionAnimationsReturn,
+} from './composables/useActionAnimations.js';
+
 export {
   useZoomPreview,
   type CardPreviewData,

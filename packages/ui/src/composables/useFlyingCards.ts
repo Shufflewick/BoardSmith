@@ -81,6 +81,7 @@ export interface FlyingCard {
     transition: string;
     zIndex: number;
     pointerEvents: 'none';
+    opacity?: number;
   };
   /** Whether the card is currently flipped (face down) */
   isFlipped: boolean;
@@ -105,6 +106,25 @@ export interface FlyCardOptions {
   zIndex?: number;
   /** Explicit card dimensions (default: 60x84) */
   cardSize?: { width: number; height: number };
+  /**
+   * Duration in ms to hold the card at the end position before removing.
+   * During this time, the card fades out (opacity 1 -> 0) unless skipFadeOut is true.
+   * Use this to overlap with the source element fading in.
+   * @default 0
+   */
+  holdDuration?: number;
+  /**
+   * Callback fired when position animation completes but before hold/fade-out starts.
+   * Use this to start fading in the source element at exactly the right moment.
+   */
+  onPositionComplete?: () => void;
+  /**
+   * If true, skip the fade-out animation and hide the flying card instantly when
+   * onPositionComplete is called. Use this for 3D flip animations where opacity
+   * on the parent breaks backface-visibility.
+   * @default false
+   */
+  skipFadeOut?: boolean;
 }
 
 export interface FlyingCardsReturn {
@@ -158,6 +178,9 @@ export function useFlyingCards(): FlyingCardsReturn {
       duration = DEFAULT_DURATION,
       zIndex = DEFAULT_Z_INDEX,
       cardSize,
+      holdDuration = 0,
+      onPositionComplete,
+      skipFadeOut = false,
     } = options;
 
     const startRect = getRect(startTarget);
@@ -272,8 +295,55 @@ export function useFlyingCards(): FlyingCardsReturn {
 
         if (rawProgress < 1) {
           animationFrameId = requestAnimationFrame(animate);
+        } else if (holdDuration > 0) {
+          // Position animation complete, notify caller so they can start fade-in
+          onPositionComplete?.();
+
+          if (skipFadeOut) {
+            // Hide instantly - useful for 3D flip animations where opacity breaks backface-visibility
+            flyingCards.value = flyingCards.value.filter(c => c.id !== id);
+            activeAnimations.delete(id);
+            resolve();
+          } else {
+            // Start hold/fade-out phase
+            const holdStartTime = performance.now();
+
+            function animateHold(currentTime: number) {
+              if (cancelled) return;
+
+              const holdElapsed = currentTime - holdStartTime;
+              const holdProgress = Math.min(holdElapsed / holdDuration, 1);
+              const opacity = 1 - holdProgress;
+
+              // Update opacity for fade-out
+              const cardIndex = flyingCards.value.findIndex(c => c.id === id);
+              if (cardIndex >= 0) {
+                const updated = [...flyingCards.value];
+                updated[cardIndex] = {
+                  ...updated[cardIndex],
+                  style: {
+                    ...updated[cardIndex].style,
+                    opacity,
+                  },
+                };
+                flyingCards.value = updated;
+              }
+
+              if (holdProgress < 1) {
+                animationFrameId = requestAnimationFrame(animateHold);
+              } else {
+                // Hold complete, remove card
+                flyingCards.value = flyingCards.value.filter(c => c.id !== id);
+                activeAnimations.delete(id);
+                resolve();
+              }
+            }
+
+            animationFrameId = requestAnimationFrame(animateHold);
+          }
         } else {
-          // Animation complete
+          // No hold, notify and remove immediately
+          onPositionComplete?.();
           flyingCards.value = flyingCards.value.filter(c => c.id !== id);
           activeAnimations.delete(id);
           resolve();

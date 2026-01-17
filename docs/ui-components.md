@@ -503,6 +503,77 @@ await flyCards([
 // <FlyingCardsOverlay :flying-cards="flyingCards" />
 ```
 
+### useActionAnimations
+
+Declarative animations triggered by action execution. Captures element positions before actions execute and animates to the new position after the DOM updates. Integrates with `actionController.registerBeforeAutoExecute()`.
+
+**Key Feature: Flip-in-Place Auto-Detection**
+
+When `elementSelector` equals `destinationSelector`, the composable auto-detects a "flip-in-place" animation and configures everything correctly:
+
+```typescript
+import { useActionAnimations, FlyingCardsOverlay } from '@boardsmith/ui';
+
+const gameViewRef = ref(null);
+
+const actionAnimations = useActionAnimations({
+  gameView: gameViewRef,
+  animations: [
+    // Movement animation (element moves to a different destination)
+    {
+      action: 'assignToSquad',
+      elementSelection: 'combatantName',
+      elementSelector: '[data-combatant="{combatantName}"]',
+      destinationSelector: '[data-squad="{targetSquad}"]',
+      duration: 500,
+    },
+    // Flip-in-place (auto-detected: same selector = flip animation)
+    {
+      action: 'flipCard',
+      elementSelection: 'card',
+      elementSelector: '[data-card-id="{card}"]',
+      destinationSelector: '[data-card-id="{card}"]', // Same = flip-in-place!
+      duration: 400,
+    },
+  ],
+});
+
+// Register with actionController (in GameBoard setup)
+function setupAnimations(actionController, gameView) {
+  gameViewRef.value = gameView;
+  actionController.registerBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
+}
+```
+
+In template:
+```vue
+<FlyingCardsOverlay :flying-cards="actionAnimations.flyingElements" />
+```
+
+**Flip-in-Place Behavior:**
+
+When the composable detects a flip-in-place animation (`elementSelector === destinationSelector`), it automatically:
+- Hides the element during animation (prevents "double card" effect)
+- Enables 3D flip animation
+- Uses instant reveal (no crossfade) to prevent visual artifacts
+- Configures internal timing to avoid flash/flicker issues
+
+You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
+
+**Animation Config Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `action` | `string` | required | Action name that triggers this animation |
+| `elementSelection` | `string` | required | Selection name whose value identifies the element |
+| `elementSelector` | `string` | required | CSS selector with `{placeholder}` for action args |
+| `destinationSelector` | `string \| function` | required | Where element moves to (same as source = flip-in-place) |
+| `duration` | `number` | 400 | Animation duration in ms |
+| `elementSize` | `{ width, height }` | 60x84 | Size of flying element |
+| `flip` | `boolean` | auto | Enable 3D flip (auto-enabled for flip-in-place) |
+| `hideDestination` | `boolean` | auto | Hide destination during animation (auto-enabled for flip-in-place) |
+| `getElementData` | `function` | innerHTML | Extract data for rendering flying element |
+
 ### useAutoAnimations
 
 **Recommended for all games.** The unified animation system that combines flying between containers, FLIP animations within containers, and flying to player stats. One composable to rule them all.

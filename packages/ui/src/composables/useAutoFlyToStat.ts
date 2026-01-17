@@ -2,30 +2,31 @@
  * useAutoFlyToStat - Automatic flying animations to player stat displays
  *
  * This composable automatically animates elements flying to player stats when they
- * are removed from a container and a stat count increases.
+ * are removed from one or more containers and a stat count increases.
  *
  * ## Usage
  *
  * ```typescript
  * import { useAutoFlyToStat, useFlyingCards } from '@boardsmith/ui';
  *
- * const handRef = ref<HTMLElement | null>(null);
+ * const zoneARef = ref<HTMLElement | null>(null);
+ * const zoneBRef = ref<HTMLElement | null>(null);
  * const { flyingCards, flyCards } = useFlyingCards();
  *
  * useAutoFlyToStat({
  *   gameView: () => props.gameView,
- *   containerRef: handRef,
+ *   containerRefs: [zoneARef, zoneBRef],  // Track multiple containers
  *   selector: '[data-card-id]',
  *   stats: [
  *     {
- *       stat: 'books',
+ *       stat: 'score',
  *       player: 0,
- *       trackCount: () => myBooksCount.value,
+ *       trackCount: () => playerScore.value,
  *     },
  *   ],
- *   getElementData: (element) => ({
- *     rank: element.attributes?.rank,
- *     suit: element.attributes?.suit,
+ *   getElementData: (el) => ({
+ *     rank: el.getAttribute('data-rank'),
+ *     suit: el.getAttribute('data-suit'),
  *   }),
  *   flyCards,
  * });
@@ -34,8 +35,8 @@
  * Cards will automatically fly to the player stat when removed and count increases.
  */
 
-import { watch, computed, type Ref, type ComputedRef } from 'vue';
-import { useElementChangeTracker, useCountTracker, type ElementPositionData } from './useElementChangeTracker.js';
+import { ref, watch, computed, onUnmounted, getCurrentInstance, type Ref } from 'vue';
+import { useCountTracker, type ElementPositionData } from './useElementChangeTracker.js';
 import { flyToPlayerStat, type CardForAnimation } from './usePlayerStatAnimation.js';
 import type { FlyCardOptions, FlyingCardData } from './useFlyingCards.js';
 
@@ -62,9 +63,9 @@ export interface StatConfig {
 export interface AutoFlyToStatOptions {
   /** Function that returns the current game view */
   gameView: () => any;
-  /** Ref to the container element to track removals from */
-  containerRef: Ref<HTMLElement | null>;
-  /** CSS selector to find elements in the container */
+  /** Refs to container elements to track removals from (supports multiple containers) */
+  containerRefs: Ref<HTMLElement | null>[];
+  /** CSS selector to find elements in the containers */
   selector: string;
   /** Stats to fly elements to when removed */
   stats: StatConfig[];
@@ -96,6 +97,10 @@ export interface AutoFlyToStatOptions {
 export interface AutoFlyToStatReturn {
   /** Force a reset of tracking state (e.g., on game restart) */
   reset: () => void;
+  /** Whether tracking has been initialized (useful for debugging) */
+  isInitialized: Readonly<Ref<boolean>>;
+  /** Current tracked IDs (useful for debugging) */
+  trackedIds: Readonly<Ref<Set<number>>>;
 }
 
 /**
@@ -104,7 +109,7 @@ export interface AutoFlyToStatReturn {
 export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatReturn {
   const {
     gameView,
-    containerRef,
+    containerRefs,
     selector,
     stats,
     getElementId = (el) => {
@@ -123,13 +128,10 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
     flip = false,
   } = options;
 
-  // Element change tracker for positions
-  const tracker = useElementChangeTracker({
-    containerRef,
-    selector,
-    getElementId,
-    getElementData: (el) => getElementData(el) as Record<string, any>,
-  });
+  // Track positions and IDs ourselves since we have multiple containers
+  const positions = ref<Map<number, ElementPositionData>>(new Map());
+  const prevIds = ref<Set<number>>(new Set());
+  const isInitialized = ref(false);
 
   // Count trackers for each stat that has trackCount
   const countTrackers = new Map<string, ReturnType<typeof useCountTracker>>();
@@ -141,43 +143,108 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
 
   const gameViewComputed = computed(() => gameView());
 
-  // Extract current element IDs from container
+  // Check if any container ref is ready
+  function hasAnyContainer(): boolean {
+    return containerRefs.some(ref => ref?.value !== null);
+  }
+
+  // Capture positions from all containers
+  function capturePositions(): void {
+    positions.value.clear();
+
+    for (const containerRef of containerRefs) {
+      if (!containerRef?.value) continue;
+
+      const elements = containerRef.value.querySelectorAll(selector);
+      elements.forEach((el) => {
+        const id = getElementId(el);
+        if (id) {
+          const rect = el.getBoundingClientRect();
+          const extraData = getElementData(el) as Record<string, any>;
+          positions.value.set(id, { rect, ...extraData });
+        }
+      });
+    }
+  }
+
+  // Extract current element IDs from all containers
   function getCurrentIds(): Set<number> {
     const ids = new Set<number>();
-    if (!containerRef.value) return ids;
 
-    const elements = containerRef.value.querySelectorAll(selector);
-    elements.forEach((el) => {
-      const id = getElementId(el);
-      if (id) ids.add(id);
-    });
+    for (const containerRef of containerRefs) {
+      if (!containerRef?.value) continue;
+
+      const elements = containerRef.value.querySelectorAll(selector);
+      elements.forEach((el) => {
+        const id = getElementId(el);
+        if (id) ids.add(id);
+      });
+    }
+
     return ids;
   }
 
+  // Get IDs that were removed (in previous but not in current)
+  function getRemovedIds(prev: Set<number>, current: Set<number>): Set<number> {
+    const removed = new Set<number>();
+    for (const id of prev) {
+      if (!current.has(id)) {
+        removed.add(id);
+      }
+    }
+    return removed;
+  }
+
   // Watch with flush: 'sync' to capture positions BEFORE DOM update
-  watch(
+  const stopSyncWatch = watch(
     gameViewComputed,
     () => {
-      tracker.capturePositions();
+      // Skip if no container refs are ready yet
+      if (!hasAnyContainer()) return;
+
+      capturePositions();
     },
     { flush: 'sync' }
   );
 
-  // Watch normally to detect removals and fly to stats
-  watch(
+  // Track initialization attempts for warning
+  let initAttempts = 0;
+  const MAX_INIT_ATTEMPTS_BEFORE_WARN = 10;
+
+  // Watch with flush: 'post' to detect removals AFTER DOM is fully updated
+  // This ensures getCurrentIds() sees the complete, updated DOM
+  const stopPostWatch = watch(
     gameViewComputed,
     () => {
+      // Skip if no container refs are ready yet (components not mounted)
+      if (!hasAnyContainer()) {
+        return;
+      }
+
       // Skip if not initialized
-      if (!tracker.isInitialized.value) {
+      if (!isInitialized.value) {
         const currentIds = getCurrentIds();
-        tracker.initialize(currentIds);
+        // Don't initialize with empty set - wait for elements to appear
+        if (currentIds.size === 0) {
+          initAttempts++;
+          if (initAttempts === MAX_INIT_ATTEMPTS_BEFORE_WARN) {
+            console.warn(
+              `[useAutoFlyToStat] No elements found after ${initAttempts} attempts. ` +
+              `Check that your selector "${selector}" matches elements in the containers.`
+            );
+          }
+          return;
+        }
+        prevIds.value = new Set(currentIds);
+        isInitialized.value = true;
 
         // Initialize count trackers
         for (const stat of stats) {
           if (stat.trackCount) {
             const countTracker = countTrackers.get(stat.stat);
             if (countTracker) {
-              countTracker.initialize(stat.trackCount());
+              const initialCount = stat.trackCount();
+              countTracker.initialize(initialCount);
             }
           }
         }
@@ -185,7 +252,7 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
       }
 
       const currentIds = getCurrentIds();
-      const removedIds = tracker.getRemovedIds(tracker.prevIds.value, currentIds);
+      const removedIds = getRemovedIds(prevIds.value, currentIds);
 
       if (removedIds.size > 0) {
         // Check each stat config
@@ -194,8 +261,11 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
           if (statConfig.trackCount) {
             const countTracker = countTrackers.get(statConfig.stat);
             if (countTracker) {
-              const delta = countTracker.updateCount(statConfig.trackCount());
-              if (delta <= 0) continue; // Skip if count didn't increase
+              const currentCount = statConfig.trackCount();
+              const delta = countTracker.updateCount(currentCount);
+              if (delta <= 0) {
+                continue; // Skip if count didn't increase
+              }
             }
           }
 
@@ -203,19 +273,22 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
           const cardsToFly: CardForAnimation[] = [];
 
           for (const id of removedIds) {
-            const posData = tracker.positions.value.get(id);
-            if (!posData) continue;
+            const posData = positions.value.get(id);
+            if (!posData) {
+              // This can happen if the sync watcher didn't capture the position
+              // (e.g., no container refs were ready when the watcher ran)
+              console.warn(
+                `[useAutoFlyToStat] Position not found for removed element ${id}. ` +
+                `This usually means the element was removed before its position could be captured. ` +
+                `Make sure the container refs are mounted before elements are added.`
+              );
+              continue;
+            }
 
             // Apply filter if provided
             if (statConfig.filter && !statConfig.filter(posData)) {
               continue;
             }
-
-            // Determine target player
-            const targetPlayer =
-              typeof statConfig.player === 'function'
-                ? statConfig.player(posData)
-                : statConfig.player;
 
             cardsToFly.push({
               rect: posData.rect,
@@ -232,7 +305,7 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
             // Determine target player from first card (or config)
             const targetPlayer =
               typeof statConfig.player === 'function'
-                ? statConfig.player(tracker.positions.value.get([...removedIds][0])!)
+                ? statConfig.player(positions.value.get([...removedIds][0])!)
                 : statConfig.player;
 
             flyToPlayerStat(flyCards, {
@@ -248,20 +321,39 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
         }
       }
 
-      // Update previous IDs
-      tracker.updateIds(currentIds);
+      // Update previous IDs for next comparison
+      prevIds.value = new Set(currentIds);
     },
-    { deep: true }
+    { deep: true, flush: 'post' }
   );
 
   function reset(): void {
-    tracker.reset();
+    prevIds.value = new Set();
+    positions.value.clear();
+    isInitialized.value = false;
     for (const countTracker of countTrackers.values()) {
       countTracker.reset();
     }
   }
 
+  // Auto-cleanup: register onUnmounted if we're in a component setup context
+  const instance = getCurrentInstance();
+  if (instance) {
+    onUnmounted(() => {
+      stopSyncWatch();
+      stopPostWatch();
+    });
+  } else {
+    console.warn(
+      '[useAutoFlyToStat] Called outside of component setup(). ' +
+      'Watchers will not be automatically cleaned up. ' +
+      'This can cause errors if the component unmounts while watchers are still active.'
+    );
+  }
+
   return {
     reset,
+    isInitialized,
+    trackedIds: prevIds,
   };
 }
