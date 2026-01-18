@@ -112,18 +112,54 @@ function generateTimestampVersion(baseVersion: string): string {
 }
 
 /**
+ * Resolve workspace: protocol dependencies to file: protocol.
+ * Converts "workspace:*" to "file:./vendor/{tarball}" for external use.
+ */
+function resolveWorkspaceDeps(
+  deps: Record<string, string> | undefined,
+  tarballMap: Map<string, string>
+): Record<string, string> | undefined {
+  if (!deps) return deps;
+
+  const resolved: Record<string, string> = {};
+  for (const [name, version] of Object.entries(deps)) {
+    if (version.startsWith('workspace:')) {
+      const tarball = tarballMap.get(name);
+      if (tarball) {
+        // Use file:./vendor/ path for the tarball
+        resolved[name] = `file:./vendor/${tarball}`;
+      } else {
+        // Keep original if not a packaged BoardSmith package
+        resolved[name] = version;
+      }
+    } else {
+      resolved[name] = version;
+    }
+  }
+  return resolved;
+}
+
+/**
  * Pack a single package with a timestamp version.
+ * Resolves workspace: dependencies to file: protocol for external use.
  * Returns the tarball filename.
  */
-function packPackage(pkgPath: string, outputDir: string, timestampVersion: string): string {
+function packPackage(
+  pkgPath: string,
+  outputDir: string,
+  timestampVersion: string,
+  tarballMap: Map<string, string>
+): string {
   const pkgJsonPath = join(pkgPath, 'package.json');
   const originalContent = readFileSync(pkgJsonPath, 'utf-8');
   const pkgJson = JSON.parse(originalContent);
-  const originalVersion = pkgJson.version;
 
   try {
-    // Write modified package.json with timestamp version
+    // Write modified package.json with timestamp version and resolved deps
     pkgJson.version = timestampVersion;
+    pkgJson.dependencies = resolveWorkspaceDeps(pkgJson.dependencies, tarballMap);
+    pkgJson.devDependencies = resolveWorkspaceDeps(pkgJson.devDependencies, tarballMap);
+    pkgJson.peerDependencies = resolveWorkspaceDeps(pkgJson.peerDependencies, tarballMap);
     writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
     // Run npm pack in the package directory
@@ -321,13 +357,22 @@ export async function packCommand(options: PackOptions): Promise<void> {
   const timestamp = generateTimestampVersion('0.0.0').split('-')[1]; // Just get the timestamp part
   const results: PackResult[] = [];
 
+  // Build tarball map upfront so we can resolve workspace: deps to file: deps
+  // The tarball name is computed from package name and timestamp version
+  const tarballMap = new Map<string, string>();
+  for (const pkg of packages) {
+    const timestampVersion = `${pkg.version}-${timestamp}`;
+    const tarballName = `${pkg.name.replace('@', '').replace('/', '-')}-${timestampVersion}.tgz`;
+    tarballMap.set(pkg.name, tarballName);
+  }
+
   // Pack each package
   for (const pkg of packages) {
     const pkgSpinner = ora(`Packing ${pkg.name}...`).start();
 
     try {
       const timestampVersion = `${pkg.version}-${timestamp}`;
-      const tarball = packPackage(pkg.path, outputPath, timestampVersion);
+      const tarball = packPackage(pkg.path, outputPath, timestampVersion, tarballMap);
       results.push({
         name: pkg.name,
         tarball,
