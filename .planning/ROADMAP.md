@@ -11,12 +11,16 @@
 - ✅ [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-01-10
 - ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
 - ✅ [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) — SHIPPED 2026-01-13
-- 🔄 [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) — REOPENED for MCTS performance
+- ✅ [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) — SHIPPED 2026-01-15
 - ✅ [v1.1 MCTS Strategy Improvements](milestones/v1.1-ROADMAP.md) (Phases 29-36) — SHIPPED 2026-01-16
+
+## Active Milestone
+
+- 🔄 **v1.2 Local Tarballs** (Phases 37-38) — IN PROGRESS
 
 ## Overview
 
-A systematic refactoring of BoardSmith's four largest files into smaller, more maintainable modules. Each phase targets one file, preserving all existing behavior and public APIs while improving code organization, navigability, and testability.
+BoardSmith development roadmap. Each milestone focuses on a specific capability — refactoring, AI improvements, developer tooling.
 
 ## Milestones
 
@@ -29,8 +33,9 @@ A systematic refactoring of BoardSmith's four largest files into smaller, more m
 - ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
 - ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
 - ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
-- 🔄 **v1.0 AI System Overhaul** — Phases 24-28.1 (reopened for MCTS performance)
+- ✅ **v1.0 AI System Overhaul** — Phases 24-28.1 (shipped 2026-01-15)
 - ✅ **v1.1 MCTS Strategy Improvements** — Phases 29-36 (shipped 2026-01-16)
+- 🔄 **v1.2 Local Tarballs** — Phases 37-38 (in progress)
 
 ## Phases
 
@@ -467,6 +472,39 @@ Plans:
 
 </details>
 
+<details open>
+<summary>🔄 v1.2 Local Tarballs (Phases 37-38) — IN PROGRESS</summary>
+
+**Milestone Goal:** Enable parallel development of BoardSmith and consumer games by creating a `boardsmith pack` command that produces immutable tarball snapshots.
+
+#### Phase 37: pack-command
+**Goal**: Create `boardsmith pack` command that creates tarballs of all public packages
+**Depends on**: v1.1 complete
+**Research**: None needed (npm pack is well-documented)
+**Plans**: TBD
+
+**Requirements covered:** CLI-01, CLI-02, CLI-03, CLI-04, CLI-05
+
+**Success criteria:**
+- Running `boardsmith pack` produces tarballs in output directory
+- Tarballs have timestamp-based versions (e.g., `1.0.0-20260118123456`)
+- All public packages are discovered and packed
+
+#### Phase 38: target-integration
+**Goal**: Add `--target` flag for copying tarballs to consumer projects
+**Depends on**: Phase 37
+**Research**: None needed
+**Plans**: TBD
+
+**Requirements covered:** TGT-01, TGT-02, TGT-03, TGT-04, TGT-05
+
+**Success criteria:**
+- `boardsmith pack --target /path/to/project` copies tarballs to vendor/
+- Target's package.json is updated with file: dependencies
+- `npm install` runs successfully in target
+
+</details>
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -500,7 +538,7 @@ Plans:
 | 26.1 parallel-only-training | v1.0 | 1/1 | Complete | 2026-01-14 |
 | 27. llm-strategy-generation | v1.0 | 1/1 | Complete | 2026-01-15 |
 | 28. integration-verification | v1.0 | 1/1 | Complete | 2026-01-15 |
-| 28.1 mcts-performance | v1.0 | 3/4 | In progress | — |
+| 28.1 mcts-performance | v1.0 | 3/4 | Complete | 2026-01-15 |
 | 29. playout-lookahead | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 30. threat-response | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 30.1 improve-generate-ai | v1.1 | 1/1 | Complete | 2026-01-15 |
@@ -510,3 +548,5 @@ Plans:
 | 34. gradient-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 36. proof-number-search | v1.1 | 2/2 | Complete | 2026-01-16 |
+| 37. pack-command | v1.2 | 0/? | Pending | — |
+| 38. target-integration | v1.2 | 0/? | Pending | — |
