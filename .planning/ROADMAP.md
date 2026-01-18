@@ -525,10 +525,10 @@ See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
 **Goal**: Establish single-package structure with npm tooling
 **Depends on**: v1.2 complete
 **Requirements**: PKG-01, PKG-13, SRC-14
-**Plans**: 1 plan
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 39-01-PLAN.md -- Migrate from pnpm to npm, add exports field
+- [x] 39-01-PLAN.md -- Migrate from pnpm to npm, add exports field
 
 #### Phase 40: Source Collapse
 **Goal**: Consolidate all package sources into src/ directory structure
@@ -617,7 +617,7 @@ Plans:
 | 36. proof-number-search | v1.1 | 2/2 | Complete | 2026-01-16 |
 | 37. pack-command | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 38. target-integration | v1.2 | 1/1 | Complete | 2026-01-18 |
-| 39. Foundation | v2.0 | 0/1 | Planned | - |
+| 39. Foundation | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 40. Source Collapse | v2.0 | 0/TBD | Not started | - |
 | 41. Test Colocation | v2.0 | 0/TBD | Not started | - |
 | 42. Subpath Exports | v2.0 | 0/TBD | Not started | - |

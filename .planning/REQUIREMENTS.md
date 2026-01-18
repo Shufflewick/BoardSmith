@@ -9,7 +9,7 @@ Requirements for Collapse the Monorepo milestone.
 
 ### Package Structure
 
-- [ ] **PKG-01**: Single `boardsmith` npm package replaces all `@boardsmith/*` packages
+- [x] **PKG-01**: Single `boardsmith` npm package replaces all `@boardsmith/*` packages
 - [ ] **PKG-02**: Subpath export `boardsmith` for core engine
 - [ ] **PKG-03**: Subpath export `boardsmith/ui` for Vue components
 - [ ] **PKG-04**: Subpath export `boardsmith/session` for game session
@@ -21,7 +21,7 @@ Requirements for Collapse the Monorepo milestone.
 - [ ] **PKG-10**: Subpath export `boardsmith/server` for server runtime
 - [ ] **PKG-11**: Subpath export `boardsmith/runtime` for shared runtime
 - [ ] **PKG-12**: Subpath export `boardsmith/worker` for web worker support
-- [ ] **PKG-13**: npm instead of pnpm (package-lock.json, no pnpm-workspace.yaml)
+- [x] **PKG-13**: npm instead of pnpm (package-lock.json, no pnpm-workspace.yaml)
 
 ### Source Organization
 
@@ -38,7 +38,7 @@ Requirements for Collapse the Monorepo milestone.
 - [ ] **SRC-11**: `src/runtime/` contains shared runtime (from @boardsmith/runtime)
 - [ ] **SRC-12**: `src/worker/` contains web worker (from @boardsmith/worker)
 - [ ] **SRC-13**: All tests colocated (*.test.ts next to source files)
-- [ ] **SRC-14**: Single root package.json with exports field
+- [x] **SRC-14**: Single root package.json with exports field
 
 ### Import Updates
 
@@ -89,7 +89,7 @@ Requirements for Collapse the Monorepo milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PKG-01 | 39 (Foundation) | Pending |
+| PKG-01 | 39 (Foundation) | Complete |
 | PKG-02 | 42 (Subpath Exports) | Pending |
 | PKG-03 | 42 (Subpath Exports) | Pending |
 | PKG-04 | 42 (Subpath Exports) | Pending |
@@ -101,7 +101,7 @@ Requirements for Collapse the Monorepo milestone.
 | PKG-10 | 42 (Subpath Exports) | Pending |
 | PKG-11 | 42 (Subpath Exports) | Pending |
 | PKG-12 | 42 (Subpath Exports) | Pending |
-| PKG-13 | 39 (Foundation) | Pending |
+| PKG-13 | 39 (Foundation) | Complete |
 | SRC-01 | 40 (Source Collapse) | Pending |
 | SRC-02 | 40 (Source Collapse) | Pending |
 | SRC-03 | 40 (Source Collapse) | Pending |
@@ -115,7 +115,7 @@ Requirements for Collapse the Monorepo milestone.
 | SRC-11 | 40 (Source Collapse) | Pending |
 | SRC-12 | 40 (Source Collapse) | Pending |
 | SRC-13 | 41 (Test Colocation) | Pending |
-| SRC-14 | 39 (Foundation) | Pending |
+| SRC-14 | 39 (Foundation) | Complete |
 | IMP-01 | 43 (Import Rewrite) | Pending |
 | IMP-02 | 43 (Import Rewrite) | Pending |
 | IMP-03 | 43 (Import Rewrite) | Pending |
