@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 40 of 46 (Source Collapse)
-Plan: 01 of 02 complete
-Status: In progress
-Last activity: 2026-01-18 -- Completed 40-01-PLAN.md (foundation packages)
+Plan: 02 of 02 complete
+Status: Phase complete
+Last activity: 2026-01-18 -- Completed 40-02-PLAN.md (peripheral packages)
 
-Progress: [======                                  ] 15% (1.5/8 phases)
+Progress: [========                                ] 20% (2/8 phases)
 
 ## Milestones
 
@@ -43,7 +43,7 @@ Progress: [======                                  ] 15% (1.5/8 phases)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Completed 40-01-PLAN.md, ready for 40-02-PLAN.md
+Stopped at: Completed 40-02-PLAN.md (Phase 40 complete), ready for Phase 41
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -58,3 +58,4 @@ Resume file: None
 | Exports field points to packages/engine/dist | Minimal foundation; expands in later phases | 39-01 |
 | Single atomic commit for source moves | Easier rollback if needed; all 84 files moved together | 40-01 |
 | git mv for all file moves | Preserves full git history | 40-01 |
+| Source collapse complete: 179 files | All 12 packages consolidated to src/*/ | 40-02 |
