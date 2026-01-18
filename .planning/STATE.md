@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 37 (pack-command)
-Plan: None yet
-Status: Ready to plan
-Last activity: 2026-01-18 — v1.2 milestone initialized
+Plan: 01 of 1 complete
+Status: Phase 37 complete, ready for Phase 38
+Last activity: 2026-01-18 — Completed 37-01-PLAN.md
 
-Progress: Phase 37 ready for planning
+Progress: [====================                    ] 50% (1/2 phases)
 
 ## Milestones
 
@@ -41,5 +41,13 @@ Progress: Phase 37 ready for planning
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Milestone initialized, ready to plan Phase 37
+Stopped at: Completed Phase 37 (pack-command), ready for Phase 38 (target-integration)
 Resume file: None
+
+## Key Decisions (v1.2)
+
+| Decision | Rationale | Phase |
+|----------|-----------|-------|
+| Pack only @boardsmith/* + eslint-plugin-boardsmith | Games use @mygames/*, should not be distributed | 37-01 |
+| Single timestamp for all packages in pack run | Creates consistent snapshot for reproducibility | 37-01 |
+| try/finally for package.json restoration | Ensures original version preserved even on error | 37-01 |
