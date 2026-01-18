@@ -13,10 +13,13 @@
 - [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) -- SHIPPED 2026-01-13
 - [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) -- SHIPPED 2026-01-15
 - [v1.1 MCTS Strategy Improvements](milestones/v1.1-ROADMAP.md) (Phases 29-36) -- SHIPPED 2026-01-16
+- [v1.2 Local Tarballs](milestones/v1.2-ROADMAP.md) (Phases 37-38) -- SHIPPED 2026-01-18
 
 ## Active Milestone
 
-None -- v1.2 complete, ready for milestone audit
+[v2.0 Collapse the Monorepo](milestones/v2.0-ROADMAP.md) (Phases 39-46)
+
+**Goal:** Transform BoardSmith from a pnpm monorepo with multiple `@boardsmith/*` packages into a single `boardsmith` npm package with subpath exports, and extract games to separate repos.
 
 ## Overview
 
@@ -35,7 +38,8 @@ BoardSmith development roadmap. Each milestone focuses on a specific capability 
 - **v0.9 Parallel AI Training** -- Phases 20-23 (shipped 2026-01-13)
 - **v1.0 AI System Overhaul** -- Phases 24-28.1 (shipped 2026-01-15)
 - **v1.1 MCTS Strategy Improvements** -- Phases 29-36 (shipped 2026-01-16)
-- **v1.2 Local Tarballs** -- Phases 37-38 (complete 2026-01-18)
+- **v1.2 Local Tarballs** -- Phases 37-38 (shipped 2026-01-18)
+- **v2.0 Collapse the Monorepo** -- Phases 39-46 (in progress)
 
 ## Phases
 
@@ -473,7 +477,7 @@ Plans:
 </details>
 
 <details>
-<summary>v1.2 Local Tarballs (Phases 37-38) -- COMPLETE 2026-01-18</summary>
+<summary>v1.2 Local Tarballs (Phases 37-38) -- SHIPPED 2026-01-18</summary>
 
 **Milestone Goal:** Enable parallel development of BoardSmith and consumer games by creating a `boardsmith pack` command that produces immutable tarball snapshots.
 
@@ -510,6 +514,60 @@ Plans:
 - `npm install` runs successfully in target
 
 </details>
+
+### v2.0 Collapse the Monorepo (Phases 39-46) -- IN PROGRESS
+
+**Milestone Goal:** Transform BoardSmith from a pnpm monorepo with multiple `@boardsmith/*` packages into a single `boardsmith` npm package with subpath exports, and extract games to separate repos.
+
+See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
+
+#### Phase 39: Foundation
+**Goal**: Establish single-package structure with npm tooling
+**Depends on**: v1.2 complete
+**Requirements**: PKG-01, PKG-13, SRC-14
+**Plans**: TBD
+
+#### Phase 40: Source Collapse
+**Goal**: Consolidate all package sources into src/ directory structure
+**Depends on**: Phase 39
+**Requirements**: SRC-01 through SRC-12
+**Plans**: TBD
+
+#### Phase 41: Test Colocation
+**Goal**: Move all tests to be colocated with source files
+**Depends on**: Phase 40
+**Requirements**: SRC-13
+**Plans**: TBD
+
+#### Phase 42: Subpath Exports
+**Goal**: Configure all package.json exports for subpath imports
+**Depends on**: Phase 41
+**Requirements**: PKG-02 through PKG-12
+**Plans**: TBD
+
+#### Phase 43: Import Rewrite
+**Goal**: Replace all @boardsmith/* imports with relative paths
+**Depends on**: Phase 42
+**Requirements**: IMP-01, IMP-02, IMP-03
+**Plans**: TBD
+
+#### Phase 44: Game Extraction
+**Goal**: Extract all games and demos to separate repositories
+**Depends on**: Phase 43
+**Requirements**: GAME-01 through GAME-11
+**Plans**: TBD
+
+#### Phase 45: CLI Update
+**Goal**: Update all CLI commands to work with new structure
+**Depends on**: Phase 44
+**Requirements**: CLI-01 through CLI-06
+**Plans**: TBD
+
+#### Phase 46: Documentation
+**Goal**: Update all documentation for new structure
+**Depends on**: Phase 45
+**Requirements**: DOC-01 through DOC-04
+**Plans**: TBD
 
 ## Progress
 
@@ -556,3 +614,11 @@ Plans:
 | 36. proof-number-search | v1.1 | 2/2 | Complete | 2026-01-16 |
 | 37. pack-command | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 38. target-integration | v1.2 | 1/1 | Complete | 2026-01-18 |
+| 39. Foundation | v2.0 | 0/TBD | Not started | - |
+| 40. Source Collapse | v2.0 | 0/TBD | Not started | - |
+| 41. Test Colocation | v2.0 | 0/TBD | Not started | - |
+| 42. Subpath Exports | v2.0 | 0/TBD | Not started | - |
+| 43. Import Rewrite | v2.0 | 0/TBD | Not started | - |
+| 44. Game Extraction | v2.0 | 0/TBD | Not started | - |
+| 45. CLI Update | v2.0 | 0/TBD | Not started | - |
+| 46. Documentation | v2.0 | 0/TBD | Not started | - |

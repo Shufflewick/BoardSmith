@@ -89,63 +89,63 @@ Requirements for Collapse the Monorepo milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PKG-01 | TBD | Pending |
-| PKG-02 | TBD | Pending |
-| PKG-03 | TBD | Pending |
-| PKG-04 | TBD | Pending |
-| PKG-05 | TBD | Pending |
-| PKG-06 | TBD | Pending |
-| PKG-07 | TBD | Pending |
-| PKG-08 | TBD | Pending |
-| PKG-09 | TBD | Pending |
-| PKG-10 | TBD | Pending |
-| PKG-11 | TBD | Pending |
-| PKG-12 | TBD | Pending |
-| PKG-13 | TBD | Pending |
-| SRC-01 | TBD | Pending |
-| SRC-02 | TBD | Pending |
-| SRC-03 | TBD | Pending |
-| SRC-04 | TBD | Pending |
-| SRC-05 | TBD | Pending |
-| SRC-06 | TBD | Pending |
-| SRC-07 | TBD | Pending |
-| SRC-08 | TBD | Pending |
-| SRC-09 | TBD | Pending |
-| SRC-10 | TBD | Pending |
-| SRC-11 | TBD | Pending |
-| SRC-12 | TBD | Pending |
-| SRC-13 | TBD | Pending |
-| SRC-14 | TBD | Pending |
-| IMP-01 | TBD | Pending |
-| IMP-02 | TBD | Pending |
-| IMP-03 | TBD | Pending |
-| GAME-01 | TBD | Pending |
-| GAME-02 | TBD | Pending |
-| GAME-03 | TBD | Pending |
-| GAME-04 | TBD | Pending |
-| GAME-05 | TBD | Pending |
-| GAME-06 | TBD | Pending |
-| GAME-07 | TBD | Pending |
-| GAME-08 | TBD | Pending |
-| GAME-09 | TBD | Pending |
-| GAME-10 | TBD | Pending |
-| GAME-11 | TBD | Pending |
-| CLI-01 | TBD | Pending |
-| CLI-02 | TBD | Pending |
-| CLI-03 | TBD | Pending |
-| CLI-04 | TBD | Pending |
-| CLI-05 | TBD | Pending |
-| CLI-06 | TBD | Pending |
-| DOC-01 | TBD | Pending |
-| DOC-02 | TBD | Pending |
-| DOC-03 | TBD | Pending |
-| DOC-04 | TBD | Pending |
+| PKG-01 | 39 (Foundation) | Pending |
+| PKG-02 | 42 (Subpath Exports) | Pending |
+| PKG-03 | 42 (Subpath Exports) | Pending |
+| PKG-04 | 42 (Subpath Exports) | Pending |
+| PKG-05 | 42 (Subpath Exports) | Pending |
+| PKG-06 | 42 (Subpath Exports) | Pending |
+| PKG-07 | 42 (Subpath Exports) | Pending |
+| PKG-08 | 42 (Subpath Exports) | Pending |
+| PKG-09 | 42 (Subpath Exports) | Pending |
+| PKG-10 | 42 (Subpath Exports) | Pending |
+| PKG-11 | 42 (Subpath Exports) | Pending |
+| PKG-12 | 42 (Subpath Exports) | Pending |
+| PKG-13 | 39 (Foundation) | Pending |
+| SRC-01 | 40 (Source Collapse) | Pending |
+| SRC-02 | 40 (Source Collapse) | Pending |
+| SRC-03 | 40 (Source Collapse) | Pending |
+| SRC-04 | 40 (Source Collapse) | Pending |
+| SRC-05 | 40 (Source Collapse) | Pending |
+| SRC-06 | 40 (Source Collapse) | Pending |
+| SRC-07 | 40 (Source Collapse) | Pending |
+| SRC-08 | 40 (Source Collapse) | Pending |
+| SRC-09 | 40 (Source Collapse) | Pending |
+| SRC-10 | 40 (Source Collapse) | Pending |
+| SRC-11 | 40 (Source Collapse) | Pending |
+| SRC-12 | 40 (Source Collapse) | Pending |
+| SRC-13 | 41 (Test Colocation) | Pending |
+| SRC-14 | 39 (Foundation) | Pending |
+| IMP-01 | 43 (Import Rewrite) | Pending |
+| IMP-02 | 43 (Import Rewrite) | Pending |
+| IMP-03 | 43 (Import Rewrite) | Pending |
+| GAME-01 | 44 (Game Extraction) | Pending |
+| GAME-02 | 44 (Game Extraction) | Pending |
+| GAME-03 | 44 (Game Extraction) | Pending |
+| GAME-04 | 44 (Game Extraction) | Pending |
+| GAME-05 | 44 (Game Extraction) | Pending |
+| GAME-06 | 44 (Game Extraction) | Pending |
+| GAME-07 | 44 (Game Extraction) | Pending |
+| GAME-08 | 44 (Game Extraction) | Pending |
+| GAME-09 | 44 (Game Extraction) | Pending |
+| GAME-10 | 44 (Game Extraction) | Pending |
+| GAME-11 | 44 (Game Extraction) | Pending |
+| CLI-01 | 45 (CLI Update) | Pending |
+| CLI-02 | 45 (CLI Update) | Pending |
+| CLI-03 | 45 (CLI Update) | Pending |
+| CLI-04 | 45 (CLI Update) | Pending |
+| CLI-05 | 45 (CLI Update) | Pending |
+| CLI-06 | 45 (CLI Update) | Pending |
+| DOC-01 | 46 (Documentation) | Pending |
+| DOC-02 | 46 (Documentation) | Pending |
+| DOC-03 | 46 (Documentation) | Pending |
+| DOC-04 | 46 (Documentation) | Pending |
 
 **Coverage:**
-- v2.0 requirements: 46 total
-- Mapped to phases: 0
-- Unmapped: 46
+- v2.0 requirements: 51 total
+- Mapped to phases: 51
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-18*
-*Last updated: 2026-01-18 after initial definition*
+*Last updated: 2026-01-18 after roadmap creation*
