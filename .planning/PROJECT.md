@@ -56,7 +56,7 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ### Active
 
-(None — all milestones complete)
+(Ready for next milestone)
 
 ### Out of Scope
 
@@ -88,6 +88,7 @@ Shipped v1.1 with ~99k LOC TypeScript/Vue.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 493 unit tests passing.
 All milestones complete: v0.1-v1.1 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing, HMR reliability, parallel AI training, AI system overhaul, MCTS strategy improvements).
+Ready to start next milestone.
 
 ---
 *Last updated: 2026-01-16 after v1.1 milestone*
