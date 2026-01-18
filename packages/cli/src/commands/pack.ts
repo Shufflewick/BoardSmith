@@ -112,54 +112,22 @@ function generateTimestampVersion(baseVersion: string): string {
 }
 
 /**
- * Resolve workspace: protocol dependencies to file: protocol.
- * Converts "workspace:*" to "file:./vendor/{tarball}" for external use.
- */
-function resolveWorkspaceDeps(
-  deps: Record<string, string> | undefined,
-  tarballMap: Map<string, string>
-): Record<string, string> | undefined {
-  if (!deps) return deps;
-
-  const resolved: Record<string, string> = {};
-  for (const [name, version] of Object.entries(deps)) {
-    if (version.startsWith('workspace:')) {
-      const tarball = tarballMap.get(name);
-      if (tarball) {
-        // Use file:./vendor/ path for the tarball
-        resolved[name] = `file:./vendor/${tarball}`;
-      } else {
-        // Keep original if not a packaged BoardSmith package
-        resolved[name] = version;
-      }
-    } else {
-      resolved[name] = version;
-    }
-  }
-  return resolved;
-}
-
-/**
  * Pack a single package with a timestamp version.
- * Resolves workspace: dependencies to file: protocol for external use.
  * Returns the tarball filename.
  */
 function packPackage(
   pkgPath: string,
   outputDir: string,
-  timestampVersion: string,
-  tarballMap: Map<string, string>
+  timestampVersion: string
 ): string {
   const pkgJsonPath = join(pkgPath, 'package.json');
   const originalContent = readFileSync(pkgJsonPath, 'utf-8');
   const pkgJson = JSON.parse(originalContent);
 
   try {
-    // Write modified package.json with timestamp version and resolved deps
+    // Write modified package.json with timestamp version
+    // Note: workspace: deps are left as-is; npm overrides in target handle resolution
     pkgJson.version = timestampVersion;
-    pkgJson.dependencies = resolveWorkspaceDeps(pkgJson.dependencies, tarballMap);
-    pkgJson.devDependencies = resolveWorkspaceDeps(pkgJson.devDependencies, tarballMap);
-    pkgJson.peerDependencies = resolveWorkspaceDeps(pkgJson.peerDependencies, tarballMap);
     writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
     // Run npm pack in the package directory
@@ -197,6 +165,7 @@ function packPackage(
  * Integrate tarballs into a target consumer project.
  * - Copies tarballs to target's vendor/ directory
  * - Updates target's package.json with file: dependencies
+ * - Adds npm overrides for all packages to resolve nested deps from vendor/
  * - Runs npm install in target
  */
 async function integrateWithTarget(
@@ -269,6 +238,16 @@ async function integrateWithTarget(
     console.log(chalk.dim('Tarballs copied but no dependencies updated'));
     return;
   }
+
+  // Add overrides for all BoardSmith packages
+  // This ensures nested dependencies (workspace:* in tarballs) resolve from vendor/
+  if (!targetPkgJson.overrides) {
+    targetPkgJson.overrides = {};
+  }
+  for (const [pkgName, tarball] of tarballMap) {
+    targetPkgJson.overrides[pkgName] = `file:./vendor/${tarball}`;
+  }
+  console.log(chalk.dim(`Added ${tarballMap.size} overrides for nested dependency resolution`));
 
   // Write updated package.json
   writeFileSync(targetPkgJsonPath, JSON.stringify(targetPkgJson, null, 2) + '\n');
@@ -372,7 +351,7 @@ export async function packCommand(options: PackOptions): Promise<void> {
 
     try {
       const timestampVersion = `${pkg.version}-${timestamp}`;
-      const tarball = packPackage(pkg.path, outputPath, timestampVersion, tarballMap);
+      const tarball = packPackage(pkg.path, outputPath, timestampVersion);
       results.push({
         name: pkg.name,
         tarball,

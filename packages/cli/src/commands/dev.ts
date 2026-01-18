@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, mkdirSync, rmSync, watch } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import { build } from 'esbuild';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import open from 'open';
 
@@ -70,6 +70,48 @@ async function createGame(workerPort: number, gameType: string, playerCount: num
   return null;
 }
 
+// Get the CLI's directory to find the monorepo packages
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// CLI is at packages/cli/dist/commands/dev.js, monorepo root is 4 levels up
+const cliMonorepoRoot = resolve(__dirname, '..', '..', '..', '..');
+const cliPackagesDir = join(cliMonorepoRoot, 'packages');
+
+/**
+ * esbuild plugin to resolve @boardsmith/* imports to the monorepo source.
+ * This is needed because pnpm doesn't hoist workspace packages to root node_modules.
+ */
+function boardsmithResolvePlugin() {
+  return {
+    name: 'boardsmith-resolve',
+    setup(build: { onResolve: (opts: { filter: RegExp }, cb: (args: { path: string }) => { path: string } | undefined) => void }) {
+      // Map package names to their directory names in packages/
+      const packageDirs: Record<string, string> = {
+        '@boardsmith/ai': 'ai',
+        '@boardsmith/ai-trainer': 'ai-trainer',
+        '@boardsmith/client': 'client',
+        '@boardsmith/engine': 'engine',
+        '@boardsmith/runtime': 'runtime',
+        '@boardsmith/server': 'server',
+        '@boardsmith/session': 'session',
+        '@boardsmith/testing': 'testing',
+        '@boardsmith/ui': 'ui',
+        '@boardsmith/worker': 'worker',
+      };
+
+      build.onResolve({ filter: /^@boardsmith\// }, (args: { path: string }) => {
+        const pkgName = args.path;
+        const dirName = packageDirs[pkgName];
+        if (dirName) {
+          // Resolve to the package's src/index.ts for bundling
+          return { path: join(cliPackagesDir, dirName, 'src', 'index.ts') };
+        }
+        return undefined;
+      });
+    },
+  };
+}
+
 /**
  * Bundle and load the game rules dynamically
  */
@@ -78,8 +120,7 @@ async function loadGameDefinition(rulesPath: string, tempDir: string): Promise<G
   const bundlePath = join(tempDir, 'rules-bundle.mjs');
 
   // Bundle the rules with esbuild
-  // Bundle everything - no externals since the temp bundle won't have
-  // access to node_modules from the game project
+  // Use plugin to resolve @boardsmith/* to monorepo source (pnpm doesn't hoist workspace packages)
   await build({
     entryPoints: [rulesIndexPath],
     bundle: true,
@@ -87,6 +128,7 @@ async function loadGameDefinition(rulesPath: string, tempDir: string): Promise<G
     platform: 'node',
     outfile: bundlePath,
     logLevel: 'silent',
+    plugins: [boardsmithResolvePlugin()],
   });
 
   // Import the bundled module with cache-busting to ensure fresh load
@@ -239,6 +281,66 @@ export async function devCommand(options: DevOptions): Promise<void> {
   }
 
   // Start Vite dev server for UI
+  // Vite plugin to resolve @boardsmith/* imports to monorepo source
+  // This handles both main exports and subpath exports (e.g., @boardsmith/client/vue)
+  const boardsmithVitePlugin = {
+    name: 'boardsmith-resolve',
+    enforce: 'pre' as const,  // Run before default resolver to intercept @boardsmith/* imports
+    resolveId(source: string) {
+      if (!source.startsWith('@boardsmith/')) return null;
+
+      // Parse package name and subpath
+      const parts = source.replace('@boardsmith/', '').split('/');
+      const pkgName = parts[0];
+      const subpath = parts.slice(1).join('/');
+
+      // Map package names to directories
+      const pkgDirs: Record<string, string> = {
+        'ai': 'ai',
+        'ai-trainer': 'ai-trainer',
+        'client': 'client',
+        'engine': 'engine',
+        'runtime': 'runtime',
+        'server': 'server',
+        'session': 'session',
+        'testing': 'testing',
+        'ui': 'ui',
+        'worker': 'worker',
+      };
+
+      const pkgDir = pkgDirs[pkgName];
+      if (!pkgDir) return null;
+
+      const pkgPath = join(cliPackagesDir, pkgDir);
+
+      // Handle subpath exports
+      if (subpath) {
+        // Check for .css files
+        if (subpath.endsWith('.css')) {
+          return join(pkgPath, 'src', subpath);
+        }
+        // Check for known subpath patterns
+        const subpathFile = join(pkgPath, 'src', `${subpath}.ts`);
+        if (existsSync(subpathFile)) {
+          return subpathFile;
+        }
+        // Try as directory with index.ts
+        const subpathIndex = join(pkgPath, 'src', subpath, 'index.ts');
+        if (existsSync(subpathIndex)) {
+          return subpathIndex;
+        }
+        // Try components subdirectory (for ui package)
+        const componentsPath = join(pkgPath, 'src', 'components', subpath, 'index.ts');
+        if (existsSync(componentsPath)) {
+          return componentsPath;
+        }
+      }
+
+      // Main package entry
+      return join(pkgPath, 'src', 'index.ts');
+    },
+  };
+
   try {
     const vite = await createViteServer({
       root: uiPath,
@@ -249,6 +351,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
         open: false,
       },
       plugins: [
+        boardsmithVitePlugin,
         {
           name: 'inject-api-url',
           transformIndexHtml(html) {
