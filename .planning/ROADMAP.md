@@ -481,10 +481,10 @@ Plans:
 **Goal**: Create `boardsmith pack` command that creates tarballs of all public packages
 **Depends on**: v1.1 complete
 **Research**: None needed (npm pack is well-documented)
-**Plans**: 1
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 37-01-PLAN.md -- Create pack command with timestamp versioning
+- [x] 37-01-PLAN.md -- Create pack command with timestamp versioning
 
 **Requirements covered:** CLI-01, CLI-02, CLI-03, CLI-04, CLI-05
 
@@ -551,5 +551,5 @@ Plans:
 | 34. gradient-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 36. proof-number-search | v1.1 | 2/2 | Complete | 2026-01-16 |
-| 37. pack-command | v1.2 | 0/1 | Pending | -- |
+| 37. pack-command | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 38. target-integration | v1.2 | 0/? | Pending | -- |

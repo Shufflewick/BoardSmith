@@ -9,11 +9,11 @@ Requirements for Local Tarballs milestone.
 
 ### CLI Command
 
-- [ ] **CLI-01**: `boardsmith pack` command exists and is callable
-- [ ] **CLI-02**: Command discovers all public packages in monorepo
-- [ ] **CLI-03**: Command runs `npm pack` on each discovered package
-- [ ] **CLI-04**: Tarballs use timestamp-based version (e.g., `1.2.0-20260118123456`)
-- [ ] **CLI-05**: Tarballs are collected in output directory
+- [x] **CLI-01**: `boardsmith pack` command exists and is callable
+- [x] **CLI-02**: Command discovers all public packages in monorepo
+- [x] **CLI-03**: Command runs `npm pack` on each discovered package
+- [x] **CLI-04**: Tarballs use timestamp-based version (e.g., `1.2.0-20260118123456`)
+- [x] **CLI-05**: Tarballs are collected in output directory
 
 ### Target Integration
 
@@ -36,11 +36,11 @@ Requirements for Local Tarballs milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLI-01 | Phase 37 | Pending |
-| CLI-02 | Phase 37 | Pending |
-| CLI-03 | Phase 37 | Pending |
-| CLI-04 | Phase 37 | Pending |
-| CLI-05 | Phase 37 | Pending |
+| CLI-01 | Phase 37 | Complete |
+| CLI-02 | Phase 37 | Complete |
+| CLI-03 | Phase 37 | Complete |
+| CLI-04 | Phase 37 | Complete |
+| CLI-05 | Phase 37 | Complete |
 | TGT-01 | Phase 38 | Pending |
 | TGT-02 | Phase 38 | Pending |
 | TGT-03 | Phase 38 | Pending |
