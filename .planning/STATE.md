@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-18)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.0 Collapse the Monorepo (starting)
+**Current focus:** v2.0 Collapse the Monorepo (in progress)
 
 ## Current Position
 
 Phase: 39 of 46 (Foundation)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-01-18 -- Roadmap created for v2.0 milestone
+Plan: 01 of 01 complete
+Status: Phase complete
+Last activity: 2026-01-18 -- Completed 39-01-PLAN.md (pnpm to npm migration)
 
-Progress: [                                        ] 0% (0/8 phases)
+Progress: [=====                                   ] 12.5% (1/8 phases)
 
 ## Milestones
 
@@ -43,7 +43,7 @@ Progress: [                                        ] 0% (0/8 phases)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Created roadmap for v2.0 milestone
+Stopped at: Completed 39-01-PLAN.md (pnpm to npm migration)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -53,3 +53,6 @@ Resume file: None
 | 8 phases for 46 requirements | Natural groupings: foundation, source, tests, exports, imports, games, CLI, docs | Roadmap |
 | Tests colocated in separate phase | Allows source collapse to complete before moving tests | 41 |
 | Game extraction after imports | Games validate the new structure works end-to-end | 44 |
+| Switch from pnpm to npm | Simpler single-package workflow for collapsed monorepo | 39-01 |
+| Remove workspaces config | No longer a monorepo after collapse | 39-01 |
+| Exports field points to packages/engine/dist | Minimal foundation; expands in later phases | 39-01 |
