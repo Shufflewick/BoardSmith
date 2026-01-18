@@ -1,12 +1,22 @@
-# BoardSmith Large File Refactoring
+# BoardSmith
 
 ## What This Is
 
-A focused refactoring effort to split BoardSmith's largest files into smaller, more maintainable modules. The codebase has four files exceeding 1800 lines that have grown organically and become difficult to navigate and modify.
+A library for designing digital board games. Provides a rules engine, UI components, AI bots, and CLI tooling for building and testing board games that run on web and server platforms.
 
 ## Core Value
 
-Improve code maintainability, testability, and navigability equally—making it easier to understand, modify, and test the codebase going forward.
+Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
+
+## Current Milestone: v1.2 Local Tarballs
+
+**Goal:** Enable parallel development of BoardSmith and consumer games by creating a `boardsmith pack` command that produces immutable tarball snapshots.
+
+**Target features:**
+- `boardsmith pack` command creates tarballs of all public packages
+- Timestamp-based versions ensure fresh installs without cache issues
+- `--target /path/to/project` copies tarballs and updates target's package.json
+- Automatic `npm install` in target after updating dependencies
 
 ## Requirements
 
@@ -56,13 +66,17 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ### Active
 
-(Ready for next milestone)
+- [ ] `boardsmith pack` command packs all public packages
+- [ ] Timestamp-based versioning for cache-busting
+- [ ] `--target` flag copies tarballs to consumer project
+- [ ] Automatic package.json update in target project
+- [ ] Automatic `npm install` after copying
 
 ### Out of Scope
 
-- Behavior changes — pure refactoring only, no bug fixes or feature work
-- New test coverage — restructure existing tests, don't add new ones
-- API changes — public exports must remain compatible
+- npm publish — tarballs are for local development only
+- Workspace protocol support — use file: protocol for simplicity
+- Version pinning UI — always pack latest, user manages versioning manually
 
 ## Constraints
 
@@ -84,11 +98,11 @@ Improve code maintainability, testability, and navigability equally—making it 
 
 ## Context
 
-Shipped v1.1 with ~99k LOC TypeScript/Vue.
+~99k LOC TypeScript/Vue across monorepo packages.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 493 unit tests passing.
-All milestones complete: v0.1-v1.1 (file refactoring, concerns cleanup, documentation, ESLint, players in tree, condition tracing, HMR reliability, parallel AI training, AI system overhaul, MCTS strategy improvements).
-Ready to start next milestone.
+CLI lives in `packages/cli/` with existing commands: dev, build, test, validate, train-ai.
+Packages use pnpm workspace with internal `workspace:*` dependencies.
 
 ---
-*Last updated: 2026-01-16 after v1.1 milestone*
+*Last updated: 2026-01-18 after starting v1.2 milestone*
