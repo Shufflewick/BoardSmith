@@ -8,15 +8,16 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v1.2 Local Tarballs
+## Current Milestone: v2.0 Collapse the Monorepo
 
-**Goal:** Enable parallel development of BoardSmith and consumer games by creating a `boardsmith pack` command that produces immutable tarball snapshots.
+**Goal:** Transform BoardSmith from a pnpm monorepo with multiple `@boardsmith/*` packages into a single `boardsmith` npm package with subpath exports, and extract games to separate repos.
 
 **Target features:**
-- `boardsmith pack` command creates tarballs of all public packages
-- Timestamp-based versions ensure fresh installs without cache issues
-- `--target /path/to/project` copies tarballs and updates target's package.json
-- Automatic `npm install` in target after updating dependencies
+- Single `boardsmith` package with subpath exports (`boardsmith`, `boardsmith/testing`, `boardsmith/session`, `boardsmith/ui`, `boardsmith/eslint-plugin`)
+- Collapsed `src/` structure with colocated tests
+- npm instead of pnpm
+- All games extracted to separate repos (proof the new structure works)
+- Updated CLI, docs, and migration guide
 
 ## Requirements
 
@@ -63,26 +64,33 @@ Make board game development fast and correct — the framework handles multiplay
 - ✓ Gradient objectives (0-1) for finer evaluation — v1.1
 - ✓ Dynamic UCT constant tuned by game phase — v1.1
 - ✓ Proof Number Search for forced win/loss detection — v1.1
+- ✓ `boardsmith pack` command with timestamp versioning — v1.2
+- ✓ `--target` flag for consumer project integration — v1.2
 
 ### Active
 
-- [ ] `boardsmith pack` command packs all public packages
-- [ ] Timestamp-based versioning for cache-busting
-- [ ] `--target` flag copies tarballs to consumer project
-- [ ] Automatic package.json update in target project
-- [ ] Automatic `npm install` after copying
+- [ ] Single `boardsmith` package replaces all `@boardsmith/*` packages
+- [ ] Subpath exports: `boardsmith`, `boardsmith/testing`, `boardsmith/session`, `boardsmith/ui`, `boardsmith/eslint-plugin`
+- [ ] Collapsed `src/` structure (engine, ui, session, cli, testing, eslint-plugin)
+- [ ] Colocated tests (*.test.ts next to source)
+- [ ] npm instead of pnpm (remove workspace protocol)
+- [ ] All games extracted to separate repos
+- [ ] CLI updated for new structure
+- [ ] All documentation updated
+- [ ] Migration guide for external team
 
 ### Out of Scope
 
-- npm publish — tarballs are for local development only
-- Workspace protocol support — use file: protocol for simplicity
-- Version pinning UI — always pack latest, user manages versioning manually
+- Backward compatibility — no fallbacks, clean break to v2.0
+- Multiple package versions — single version for entire library
+- Games in main repo — games are separate repos, not examples bundled with library
 
 ## Constraints
 
-- **Tests**: All existing tests must continue to pass after refactoring
-- **Tech stack**: TypeScript 5.7, Vue 3.5, Vitest — no new dependencies
-- **Exports**: Public package exports must remain compatible
+- **Tests**: All existing tests must continue to pass
+- **Tech stack**: TypeScript 5.7, Vue 3.5, Vitest, npm
+- **Pit of success**: One right way to import — subpath exports, no re-exports at root
+- **Games as validation**: All extracted games must work as standalone repos
 
 ## Key Decisions
 
@@ -98,11 +106,20 @@ Make board game development fast and correct — the framework handles multiplay
 
 ## Context
 
-~99k LOC TypeScript/Vue across monorepo packages.
+~99k LOC TypeScript/Vue across monorepo packages (pre-collapse).
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
 All 493 unit tests passing.
-CLI lives in `packages/cli/` with existing commands: dev, build, test, validate, train-ai.
-Packages use pnpm workspace with internal `workspace:*` dependencies.
+
+Current structure (to be collapsed):
+- `packages/engine/` → `src/engine/`
+- `packages/ui/` → `src/ui/`
+- `packages/session/` → `src/session/`
+- `packages/cli/` → `src/cli/`
+- `packages/testing/` → `src/testing/`
+- `eslint-plugin-boardsmith/` → `src/eslint-plugin/`
+- `packages/games/*` → separate repos in `~/BoardSmithGames/`
+
+One external team using BoardSmith — needs migration guide.
 
 ---
-*Last updated: 2026-01-18 after starting v1.2 milestone*
+*Last updated: 2026-01-18 after starting v2.0 milestone*
