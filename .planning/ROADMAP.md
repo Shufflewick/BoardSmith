@@ -2,55 +2,55 @@
 
 ## Completed Milestones
 
-- ✅ [v0.1 Large File Refactoring](milestones/v0.1-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-01-08
-- ✅ [v0.2 Concerns Cleanup](milestones/v0.2-ROADMAP.md) (Phases 5-8) — SHIPPED 2026-01-09
-- ✅ [v0.3 Flow Engine Docs](milestones/v0.3-ROADMAP.md) (Phase 9) — SHIPPED 2026-01-09
-- ✅ [v0.4 Public API Docs](milestones/v0.4-ROADMAP.md) (Phase 10) — SHIPPED 2026-01-09
-- ✅ [v0.5 ESLint No-Shadow](milestones/v0.5-ROADMAP.md) (Phase 11) — SHIPPED 2026-01-09
-- ✅ [v0.6 Players in Element Tree](milestones/v0.6-ROADMAP.md) (Phases 12-13) — SHIPPED 2026-01-09
-- ✅ [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-01-10
-- ✅ [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-01-11
-- ✅ [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) — SHIPPED 2026-01-13
-- ✅ [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) — SHIPPED 2026-01-15
-- ✅ [v1.1 MCTS Strategy Improvements](milestones/v1.1-ROADMAP.md) (Phases 29-36) — SHIPPED 2026-01-16
+- [v0.1 Large File Refactoring](milestones/v0.1-ROADMAP.md) (Phases 1-4) -- SHIPPED 2026-01-08
+- [v0.2 Concerns Cleanup](milestones/v0.2-ROADMAP.md) (Phases 5-8) -- SHIPPED 2026-01-09
+- [v0.3 Flow Engine Docs](milestones/v0.3-ROADMAP.md) (Phase 9) -- SHIPPED 2026-01-09
+- [v0.4 Public API Docs](milestones/v0.4-ROADMAP.md) (Phase 10) -- SHIPPED 2026-01-09
+- [v0.5 ESLint No-Shadow](milestones/v0.5-ROADMAP.md) (Phase 11) -- SHIPPED 2026-01-09
+- [v0.6 Players in Element Tree](milestones/v0.6-ROADMAP.md) (Phases 12-13) -- SHIPPED 2026-01-09
+- [v0.7 Condition Tracing Refactor](milestones/v0.7-ROADMAP.md) (Phases 14-16) -- SHIPPED 2026-01-10
+- [v0.8 HMR Reliability](milestones/v0.8-ROADMAP.md) (Phases 17-19) -- SHIPPED 2026-01-11
+- [v0.9 Parallel AI Training](milestones/v0.9-ROADMAP.md) (Phases 20-23) -- SHIPPED 2026-01-13
+- [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) -- SHIPPED 2026-01-15
+- [v1.1 MCTS Strategy Improvements](milestones/v1.1-ROADMAP.md) (Phases 29-36) -- SHIPPED 2026-01-16
 
 ## Active Milestone
 
-- 🔄 **v1.2 Local Tarballs** (Phases 37-38) — IN PROGRESS
+- **v1.2 Local Tarballs** (Phases 37-38) -- IN PROGRESS
 
 ## Overview
 
-BoardSmith development roadmap. Each milestone focuses on a specific capability — refactoring, AI improvements, developer tooling.
+BoardSmith development roadmap. Each milestone focuses on a specific capability -- refactoring, AI improvements, developer tooling.
 
 ## Milestones
 
-- ✅ **v0.1 Large File Refactoring** — Phases 1-4 (shipped 2026-01-08)
-- ✅ **v0.2 Concerns Cleanup** — Phases 5-8 (shipped 2026-01-09)
-- ✅ **v0.3 Flow Engine Docs** — Phase 9 (shipped 2026-01-09)
-- ✅ **v0.4 Public API Docs** — Phase 10 (shipped 2026-01-09)
-- ✅ **v0.5 ESLint No-Shadow** — Phase 11 (shipped 2026-01-09)
-- ✅ **v0.6 Players in Element Tree** — Phases 12-13 (shipped 2026-01-09)
-- ✅ **v0.7 Condition Tracing Refactor** — Phases 14-16 (shipped 2026-01-10)
-- ✅ **v0.8 HMR Reliability** — Phases 17-19 (shipped 2026-01-11)
-- ✅ **v0.9 Parallel AI Training** — Phases 20-23 (shipped 2026-01-13)
-- ✅ **v1.0 AI System Overhaul** — Phases 24-28.1 (shipped 2026-01-15)
-- ✅ **v1.1 MCTS Strategy Improvements** — Phases 29-36 (shipped 2026-01-16)
-- 🔄 **v1.2 Local Tarballs** — Phases 37-38 (in progress)
+- **v0.1 Large File Refactoring** -- Phases 1-4 (shipped 2026-01-08)
+- **v0.2 Concerns Cleanup** -- Phases 5-8 (shipped 2026-01-09)
+- **v0.3 Flow Engine Docs** -- Phase 9 (shipped 2026-01-09)
+- **v0.4 Public API Docs** -- Phase 10 (shipped 2026-01-09)
+- **v0.5 ESLint No-Shadow** -- Phase 11 (shipped 2026-01-09)
+- **v0.6 Players in Element Tree** -- Phases 12-13 (shipped 2026-01-09)
+- **v0.7 Condition Tracing Refactor** -- Phases 14-16 (shipped 2026-01-10)
+- **v0.8 HMR Reliability** -- Phases 17-19 (shipped 2026-01-11)
+- **v0.9 Parallel AI Training** -- Phases 20-23 (shipped 2026-01-13)
+- **v1.0 AI System Overhaul** -- Phases 24-28.1 (shipped 2026-01-15)
+- **v1.1 MCTS Strategy Improvements** -- Phases 29-36 (shipped 2026-01-16)
+- **v1.2 Local Tarballs** -- Phases 37-38 (in progress)
 
 ## Phases
 
 <details>
-<summary>✅ v0.1 Large File Refactoring (Phases 1-4) — SHIPPED 2026-01-08</summary>
+<summary>v0.1 Large File Refactoring (Phases 1-4) -- SHIPPED 2026-01-08</summary>
 
-- [x] Phase 1: game-session refactoring (4/4 plans) — completed 2026-01-08
-- [x] Phase 2: useActionController refactoring (4/4 plans) — completed 2026-01-08
-- [x] Phase 3: action refactoring (3/3 plans) — completed 2026-01-08
-- [x] Phase 4: test file refactoring (3/3 plans) — completed 2026-01-08
+- [x] Phase 1: game-session refactoring (4/4 plans) -- completed 2026-01-08
+- [x] Phase 2: useActionController refactoring (4/4 plans) -- completed 2026-01-08
+- [x] Phase 3: action refactoring (3/3 plans) -- completed 2026-01-08
+- [x] Phase 4: test file refactoring (3/3 plans) -- completed 2026-01-08
 
 </details>
 
 <details>
-<summary>✅ v0.2 Concerns Cleanup (Phases 5-8) — SHIPPED 2026-01-09</summary>
+<summary>v0.2 Concerns Cleanup (Phases 5-8) -- SHIPPED 2026-01-09</summary>
 
 ### Phase 5: type-safety
 **Goal**: Fix type assertion (`as any`) issues in UI code
@@ -89,7 +89,7 @@ BoardSmith development roadmap. Each milestone focuses on a specific capability 
 </details>
 
 <details>
-<summary>✅ v0.3 Flow Engine Docs (Phase 9) — SHIPPED 2026-01-09</summary>
+<summary>v0.3 Flow Engine Docs (Phase 9) -- SHIPPED 2026-01-09</summary>
 
 ### Phase 9: flow-engine-docs
 **Goal**: Add section dividers to group major subsystems in the 968-line flow engine file
@@ -102,7 +102,7 @@ BoardSmith development roadmap. Each milestone focuses on a specific capability 
 </details>
 
 <details>
-<summary>✅ v0.4 Public API Docs (Phase 10) — SHIPPED 2026-01-09</summary>
+<summary>v0.4 Public API Docs (Phase 10) -- SHIPPED 2026-01-09</summary>
 
 ### Phase 10: public-api-jsdoc
 **Goal**: Add JSDoc documentation to all public APIs since BoardSmith is a library for others to use
@@ -121,7 +121,7 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 </details>
 
 <details>
-<summary>✅ v0.5 ESLint No-Shadow (Phase 11) — SHIPPED 2026-01-09</summary>
+<summary>v0.5 ESLint No-Shadow (Phase 11) -- SHIPPED 2026-01-09</summary>
 
 ### Phase 11: eslint-no-shadow
 **Goal**: Add ESLint with @typescript-eslint/no-shadow rule and fix all existing violations
@@ -133,11 +133,11 @@ BoardSmith is a library. Library users need clear JSDoc documentation for IDE au
 </details>
 
 <details>
-<summary>✅ v0.6 Players in Element Tree (Phases 12-13) — SHIPPED 2026-01-09</summary>
+<summary>v0.6 Players in Element Tree (Phases 12-13) -- SHIPPED 2026-01-09</summary>
 
 **Milestone Goal:** Make Player extend GameElement so players are in the searchable tree, fixing the "player data in two worlds" problem from MERC post-mortem.
 
-#### Phase 12: player-in-tree ✅
+#### Phase 12: player-in-tree
 **Goal**: Make Player extend GameElement, remove PlayerCollection, migrate to `game.all(Player)`
 **Depends on**: v0.5 complete
 **Research**: Unlikely (internal refactoring)
@@ -148,7 +148,7 @@ Plans:
 - [x] 12-02: Update all game implementations and custom Player classes
 - [x] 12-03: Update tests and supporting packages, verify all pass
 
-#### Phase 13: player-access-docs ✅
+#### Phase 13: player-access-docs
 **Goal**: Document the new player access pattern (players as GameElements, anti-patterns to avoid)
 **Depends on**: Phase 12
 **Research**: Unlikely (documentation only)
@@ -160,11 +160,11 @@ Plans:
 </details>
 
 <details>
-<summary>✅ v0.7 Condition Tracing Refactor (Phases 14-16) — SHIPPED 2026-01-10</summary>
+<summary>v0.7 Condition Tracing Refactor (Phases 14-16) -- SHIPPED 2026-01-10</summary>
 
 **Milestone Goal:** Redesign action conditions to use object-based API where labels are structurally required, making detailed debugging automatic and mandatory.
 
-#### Phase 14: condition-api-refactor ✅
+#### Phase 14: condition-api-refactor
 **Goal**: Implement object-based condition API, remove ConditionTracer
 **Depends on**: v0.6 complete
 **Plans**: 2/2 complete
@@ -173,7 +173,7 @@ Plans:
 - [x] 14-01: Add condition API types and update Action builder
 - [x] 14-02: Implement auto-tracing in ActionExecutor, remove ConditionTracer
 
-#### Phase 15: game-migrations ✅
+#### Phase 15: game-migrations
 **Goal**: Update all BoardSmith games to new condition format
 **Depends on**: Phase 14
 **Plans**: 2/2 complete
@@ -182,7 +182,7 @@ Plans:
 - [x] 15-01: Migrate all game conditions to object format
 - [x] 15-02: Migrate test file conditions to object format
 
-#### Phase 16: docs-migration-guide ✅
+#### Phase 16: docs-migration-guide
 **Goal**: Update documentation and write migration guide for merc team
 **Depends on**: Phase 15
 **Plans**: 1/1 complete
@@ -193,13 +193,13 @@ Plans:
 </details>
 
 <details>
-<summary>✅ v0.8 HMR Reliability (Phases 17-19) — SHIPPED 2026-01-11</summary>
+<summary>v0.8 HMR Reliability (Phases 17-19) -- SHIPPED 2026-01-11</summary>
 
 **Milestone Goal:** Make HMR work reliably during development by bypassing replay and directly transferring game state to new code. Target: 90% of changes work seamlessly, with clear feedback and fast recovery when they don't.
 
-**Design Principle:** Pit of success — the easy/natural path is the correct path. No special hooks or annotations required. Use TypeScript idioms (getters for derived values).
+**Design Principle:** Pit of success -- the easy/natural path is the correct path. No special hooks or annotations required. Use TypeScript idioms (getters for derived values).
 
-#### Phase 17: dev-state-transfer ✅
+#### Phase 17: dev-state-transfer
 **Goal**: Bypass replay, directly transfer game state to new class definitions
 **Depends on**: v0.7 complete
 **Research**: Unlikely (internal refactoring)
@@ -208,7 +208,7 @@ Plans:
 Plans:
 - [x] 17-01: Create dev-state.ts, integrate into reloadWithCurrentRules, add tests
 
-#### Phase 18: validation-layer ✅
+#### Phase 18: validation-layer
 **Goal**: Clear error messages when state transfer fails, graceful flow position recovery
 **Depends on**: Phase 17
 **Research**: Unlikely (internal)
@@ -217,7 +217,7 @@ Plans:
 Plans:
 - [x] 18-01: Add validation layer with structured errors and flow recovery
 
-#### Phase 19: dev-checkpoints ✅
+#### Phase 19: dev-checkpoints
 **Goal**: Fast recovery via auto-checkpoints when HMR fails
 **Depends on**: Phase 18
 **Research**: Unlikely (internal)
@@ -229,11 +229,11 @@ Plans:
 </details>
 
 <details>
-<summary>✅ v0.9 Parallel AI Training — SHIPPED 2026-01-13</summary>
+<summary>v0.9 Parallel AI Training -- SHIPPED 2026-01-13</summary>
 
 **Milestone Goal:** Add worker thread parallelization to `train-ai` to utilize multiple CPU cores, achieving near-linear speedup on modern machines.
 
-#### Phase 20: simulator-exports ✅
+#### Phase 20: simulator-exports
 **Goal**: Export `simulateSingleGame` and prepare serializable simulation options
 **Depends on**: v0.8 complete
 **Research**: Unlikely (internal refactoring)
@@ -242,7 +242,7 @@ Plans:
 Plans:
 - [x] 20-01: Export simulateSingleGame, add serializable types and helpers
 
-#### Phase 21: worker-infrastructure ✅
+#### Phase 21: worker-infrastructure
 **Goal**: Create simulation-worker.ts and parallel-simulator.ts for multi-core execution
 **Depends on**: Phase 20
 **Research**: Unlikely (Node.js worker_threads API)
@@ -251,7 +251,7 @@ Plans:
 Plans:
 - [x] 21-01: Create simulation-worker.ts and parallel-simulator.ts
 
-#### Phase 22: cli-integration ✅
+#### Phase 22: cli-integration
 **Goal**: Add --parallel and --workers CLI flags, integrate with trainer
 **Depends on**: Phase 21
 **Research**: Unlikely (internal)
@@ -260,7 +260,7 @@ Plans:
 Plans:
 - [x] 22-01: Add CLI flags and parallel simulation integration
 
-#### Phase 23: verification ✅
+#### Phase 23: verification
 **Goal**: Verify correctness (same seed = same results), benchmark speedup
 **Depends on**: Phase 22
 **Research**: Unlikely (testing)
@@ -272,11 +272,11 @@ Plans:
 </details>
 
 <details>
-<summary>✅ v1.0 AI System Overhaul — SHIPPED 2026-01-15</summary>
+<summary>v1.0 AI System Overhaul -- SHIPPED 2026-01-15</summary>
 
 **Milestone Goal:** Transform AI training from broken/useless to a tiered system that produces quality opponents with minimal designer effort.
 
-#### Phase 24: game-type-detection ✅
+#### Phase 24: game-type-detection
 **Goal**: Analyze win conditions to auto-categorize games (connection, territory, capture, racing) and apply appropriate Tier 1 zero-config heuristics
 **Depends on**: v0.9 complete
 **Research**: Unlikely (internal patterns, analyzing existing game definitions)
@@ -286,7 +286,7 @@ Plans:
 - [x] 24-01: Add GameType enum, WinConditionInfo, and analyzeWinConditions to introspector
 - [x] 24-02: Add type-specific zero-config heuristic features with generateCandidateFeatures
 
-#### Phase 25: structural-features ✅
+#### Phase 25: structural-features
 **Goal**: Enhance introspector to detect connectivity patterns, graph-based features (paths, bridges, reachability), influence maps, and threat detection
 **Depends on**: Phase 24
 **Research**: Likely (graph algorithms, influence mapping patterns)
@@ -306,10 +306,10 @@ Plans:
 
 Plans:
 - [x] 26-01: Add benchmark infrastructure and separated oracle/trained MCTS configs
-- [x] 26-02: Implement µ+λ evolution strategy for weight optimization
+- [x] 26-02: Implement mu+lambda evolution strategy for weight optimization
 - [x] 26-03: Integrate evolution into training loop with CLI options (partially verified)
 
-#### Phase 26.1: parallel-only-training (INSERTED) ✅
+#### Phase 26.1: parallel-only-training (INSERTED)
 **Goal**: Consolidate training harnesses - make parallel the only execution path, eliminating duplicate AITrainer vs parallel-path code
 **Depends on**: Phase 26
 **Research**: Unlikely (internal refactoring)
@@ -324,7 +324,7 @@ Consolidated dual-path training to single ParallelTrainer:
 - Removed 147 lines of duplicate code from train-ai.ts
 - Evolution now works in parallel mode
 
-#### Phase 27: llm-strategy-generation ✅
+#### Phase 27: llm-strategy-generation
 **Goal**: `/generate-ai` Claude Code slash command that guides Claude through generating custom evaluation functions (Tier 3)
 **Depends on**: Phase 26.1
 **Research**: Not needed (leveraged existing slash command infrastructure)
@@ -333,7 +333,7 @@ Consolidated dual-path training to single ParallelTrainer:
 Plans:
 - [x] 27-01: Create /generate-ai slash command template, instructions, and tiered AI documentation
 
-#### Phase 28: integration-verification ✅
+#### Phase 28: integration-verification
 **Goal**: Unified CLI with tiered AI system, documentation, multi-game validation (test with Hex + at least one other game type)
 **Depends on**: Phase 27
 **Research**: Unlikely (internal wiring, docs, testing)
@@ -365,13 +365,13 @@ Plans:
 </details>
 
 <details>
-<summary>✅ v1.1 MCTS Strategy Improvements — SHIPPED 2026-01-16</summary>
+<summary>v1.1 MCTS Strategy Improvements -- SHIPPED 2026-01-16</summary>
 
 **Milestone Goal:** Make MCTS AI play strategically better by adding lookahead, threat detection, and advanced search techniques. Each phase is tested against Hex AI - if no improvement, revert and skip.
 
 **Testing Protocol:** Each phase runs benchmark (40+ AI vs AI games), measures win rate distribution, game length, and response time. Success = measurable improvement or theoretical foundation for later phases.
 
-#### Phase 29: playout-lookahead ✅
+#### Phase 29: playout-lookahead
 **Goal**: Enable simulation lookahead (playoutDepth > 0) so AI can discover forcing sequences
 **Depends on**: Phase 28.1
 **Research**: Unlikely (parameter change)
@@ -382,7 +382,7 @@ Plans:
 
 **Results:** P1 win rate improved from 40% to 57.5%, games 30% longer (more contested), response time improved.
 
-#### Phase 30: threat-response ✅
+#### Phase 30: threat-response
 **Goal**: Force AI to consider defensive moves when opponent has immediate threats
 **Depends on**: Phase 29
 **Research**: Unlikely (internal MCTS enhancement)
@@ -391,7 +391,7 @@ Plans:
 Plans:
 - [x] 30-01: Add threatResponseMoves hook, Hex blocking detection, session wiring
 
-#### Phase 30.1: improve-generate-ai (INSERTED) ✅
+#### Phase 30.1: improve-generate-ai (INSERTED)
 **Goal**: Improve `/generate-ai` slash command based on lessons from Hex AI debugging
 **Depends on**: Phase 30
 **Research**: Unlikely (leveraging existing implementation learnings)
@@ -414,7 +414,7 @@ The command should guide Claude to:
 - Create playout policies that bias toward strategically sound moves
 - Include human-style exploit testing, not just AI vs AI benchmarks
 
-#### Phase 31: trajectory-objectives ✅
+#### Phase 31: trajectory-objectives
 **Goal**: Add feature templates that detect momentum/trajectory, not just static state
 **Depends on**: Phase 30
 **Research**: Unlikely (feature template addition)
@@ -423,7 +423,7 @@ The command should guide Claude to:
 Plans:
 - [x] 31-01: Add 6 trajectory/momentum feature templates (tempo, initiative, position quality)
 
-#### Phase 32: move-ordering ✅
+#### Phase 32: move-ordering
 **Goal**: Prioritize exploring moves near opponent's pieces/recent activity
 **Depends on**: Phase 31
 **Research**: Unlikely (move sorting heuristic)
@@ -432,7 +432,7 @@ Plans:
 Plans:
 - [x] 32-01: Add moveOrdering hook to AIConfig, implement for Hex
 
-#### Phase 33: rave ✅
+#### Phase 33: rave
 **Goal**: Implement RAVE (Rapid Action Value Estimation) to learn from all simulations
 **Depends on**: Phase 32
 **Research**: Unlikely (well-documented algorithm)
@@ -441,7 +441,7 @@ Plans:
 Plans:
 - [x] 33-01: Add RAVE data structures, move tracking, UCT-RAVE selection
 
-#### Phase 34: gradient-objectives ✅
+#### Phase 34: gradient-objectives
 **Goal**: Change objectives from boolean to numeric for finer-grained evaluation
 **Depends on**: Phase 33
 **Research**: Unlikely (interface change)
@@ -450,7 +450,7 @@ Plans:
 Plans:
 - [x] 34-01: Update Objective interface, MCTS evaluation, Hex objectives to [0,1] gradients
 
-#### Phase 35: dynamic-uct ✅
+#### Phase 35: dynamic-uct
 **Goal**: Adjust UCT exploration constant based on game phase
 **Depends on**: Phase 34
 **Research**: Likely (needs parameter tuning research)
@@ -473,7 +473,7 @@ Plans:
 </details>
 
 <details open>
-<summary>🔄 v1.2 Local Tarballs (Phases 37-38) — IN PROGRESS</summary>
+<summary>v1.2 Local Tarballs (Phases 37-38) -- IN PROGRESS</summary>
 
 **Milestone Goal:** Enable parallel development of BoardSmith and consumer games by creating a `boardsmith pack` command that produces immutable tarball snapshots.
 
@@ -481,7 +481,10 @@ Plans:
 **Goal**: Create `boardsmith pack` command that creates tarballs of all public packages
 **Depends on**: v1.1 complete
 **Research**: None needed (npm pack is well-documented)
-**Plans**: TBD
+**Plans**: 1
+
+Plans:
+- [ ] 37-01-PLAN.md -- Create pack command with timestamp versioning
 
 **Requirements covered:** CLI-01, CLI-02, CLI-03, CLI-04, CLI-05
 
@@ -548,5 +551,5 @@ Plans:
 | 34. gradient-objectives | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 36. proof-number-search | v1.1 | 2/2 | Complete | 2026-01-16 |
-| 37. pack-command | v1.2 | 0/? | Pending | — |
-| 38. target-integration | v1.2 | 0/? | Pending | — |
+| 37. pack-command | v1.2 | 0/1 | Pending | -- |
+| 38. target-integration | v1.2 | 0/? | Pending | -- |
