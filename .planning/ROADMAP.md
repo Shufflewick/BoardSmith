@@ -16,7 +16,7 @@
 
 ## Active Milestone
 
-- **v1.2 Local Tarballs** (Phases 37-38) -- IN PROGRESS
+None -- v1.2 complete, ready for milestone audit
 
 ## Overview
 
@@ -35,7 +35,7 @@ BoardSmith development roadmap. Each milestone focuses on a specific capability 
 - **v0.9 Parallel AI Training** -- Phases 20-23 (shipped 2026-01-13)
 - **v1.0 AI System Overhaul** -- Phases 24-28.1 (shipped 2026-01-15)
 - **v1.1 MCTS Strategy Improvements** -- Phases 29-36 (shipped 2026-01-16)
-- **v1.2 Local Tarballs** -- Phases 37-38 (in progress)
+- **v1.2 Local Tarballs** -- Phases 37-38 (complete 2026-01-18)
 
 ## Phases
 
@@ -472,8 +472,8 @@ Plans:
 
 </details>
 
-<details open>
-<summary>v1.2 Local Tarballs (Phases 37-38) -- IN PROGRESS</summary>
+<details>
+<summary>v1.2 Local Tarballs (Phases 37-38) -- COMPLETE 2026-01-18</summary>
 
 **Milestone Goal:** Enable parallel development of BoardSmith and consumer games by creating a `boardsmith pack` command that produces immutable tarball snapshots.
 
@@ -497,10 +497,10 @@ Plans:
 **Goal**: Add `--target` flag for copying tarballs to consumer projects
 **Depends on**: Phase 37
 **Research**: None needed
-**Plans**: 1 plan
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 38-01-PLAN.md -- Add --target flag with vendor copy and dependency update
+- [x] 38-01-PLAN.md -- Add --target flag with vendor copy and dependency update
 
 **Requirements covered:** TGT-01, TGT-02, TGT-03, TGT-04, TGT-05
 
@@ -555,4 +555,4 @@ Plans:
 | 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 36. proof-number-search | v1.1 | 2/2 | Complete | 2026-01-16 |
 | 37. pack-command | v1.2 | 1/1 | Complete | 2026-01-18 |
-| 38. target-integration | v1.2 | 0/1 | Pending | -- |
+| 38. target-integration | v1.2 | 1/1 | Complete | 2026-01-18 |

@@ -17,11 +17,11 @@ Requirements for Local Tarballs milestone.
 
 ### Target Integration
 
-- [ ] **TGT-01**: `--target <path>` flag accepts path to consumer project
-- [ ] **TGT-02**: Creates `vendor/` directory in target if missing
-- [ ] **TGT-03**: Copies all tarballs to target's `vendor/` directory
-- [ ] **TGT-04**: Updates target's `package.json` dependencies to `file:./vendor/*.tgz`
-- [ ] **TGT-05**: Runs `npm install` in target after updating package.json
+- [x] **TGT-01**: `--target <path>` flag accepts path to consumer project
+- [x] **TGT-02**: Creates `vendor/` directory in target if missing
+- [x] **TGT-03**: Copies all tarballs to target's `vendor/` directory
+- [x] **TGT-04**: Updates target's `package.json` dependencies to `file:./vendor/*.tgz`
+- [x] **TGT-05**: Runs `npm install` in target after updating package.json
 
 ## Out of Scope
 
@@ -41,11 +41,11 @@ Requirements for Local Tarballs milestone.
 | CLI-03 | Phase 37 | Complete |
 | CLI-04 | Phase 37 | Complete |
 | CLI-05 | Phase 37 | Complete |
-| TGT-01 | Phase 38 | Pending |
-| TGT-02 | Phase 38 | Pending |
-| TGT-03 | Phase 38 | Pending |
-| TGT-04 | Phase 38 | Pending |
-| TGT-05 | Phase 38 | Pending |
+| TGT-01 | Phase 38 | Complete |
+| TGT-02 | Phase 38 | Complete |
+| TGT-03 | Phase 38 | Complete |
+| TGT-04 | Phase 38 | Complete |
+| TGT-05 | Phase 38 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 10 total
