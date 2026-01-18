@@ -21,6 +21,15 @@ interface PackResult {
 }
 
 /**
+ * Check if a package name is a BoardSmith package.
+ * Includes @boardsmith/* scoped packages and eslint-plugin-boardsmith.
+ */
+function isBoardSmithPackage(name: string | undefined): boolean {
+  if (!name) return false;
+  return name.startsWith('@boardsmith/') || name === 'eslint-plugin-boardsmith';
+}
+
+/**
  * Discover all public @boardsmith/* packages in the monorepo.
  * Scans packages/* and packages/games/* directories.
  */
@@ -42,8 +51,8 @@ function discoverPackages(monorepoRoot: string): PackageInfo[] {
         continue;
       }
 
-      // Only include @boardsmith/* packages
-      if (!pkgJson.name?.startsWith('@boardsmith/')) {
+      // Only include BoardSmith packages
+      if (!isBoardSmithPackage(pkgJson.name)) {
         continue;
       }
 
