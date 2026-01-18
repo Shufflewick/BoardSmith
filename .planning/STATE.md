@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 40 of 46 (Source Collapse)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-01-18 -- Phase 39 Foundation complete
+Plan: 01 of 02 complete
+Status: In progress
+Last activity: 2026-01-18 -- Completed 40-01-PLAN.md (foundation packages)
 
-Progress: [=====                                   ] 12.5% (1/8 phases)
+Progress: [======                                  ] 15% (1.5/8 phases)
 
 ## Milestones
 
@@ -43,7 +43,7 @@ Progress: [=====                                   ] 12.5% (1/8 phases)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Phase 39 complete, ready for Phase 40 planning
+Stopped at: Completed 40-01-PLAN.md, ready for 40-02-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -56,3 +56,5 @@ Resume file: None
 | Switch from pnpm to npm | Simpler single-package workflow for collapsed monorepo | 39-01 |
 | Remove workspaces config | No longer a monorepo after collapse | 39-01 |
 | Exports field points to packages/engine/dist | Minimal foundation; expands in later phases | 39-01 |
+| Single atomic commit for source moves | Easier rollback if needed; all 84 files moved together | 40-01 |
+| git mv for all file moves | Preserves full git history | 40-01 |
