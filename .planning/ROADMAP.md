@@ -534,11 +534,11 @@ Plans:
 **Goal**: Consolidate all package sources into src/ directory structure
 **Depends on**: Phase 39
 **Requirements**: SRC-01 through SRC-12
-**Plans**: 2 plans
+**Plans**: 2/2 complete
 
 Plans:
-- [ ] 40-01-PLAN.md -- Move foundation packages (engine, runtime, ai, ai-trainer, testing, session)
-- [ ] 40-02-PLAN.md -- Move peripheral packages (eslint-plugin, client, server, ui, worker, cli)
+- [x] 40-01-PLAN.md -- Move foundation packages (engine, runtime, ai, ai-trainer, testing, session)
+- [x] 40-02-PLAN.md -- Move peripheral packages (eslint-plugin, client, server, ui, worker, cli)
 
 #### Phase 41: Test Colocation
 **Goal**: Move all tests to be colocated with source files
@@ -622,7 +622,7 @@ Plans:
 | 37. pack-command | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 38. target-integration | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 39. Foundation | v2.0 | 1/1 | Complete | 2026-01-18 |
-| 40. Source Collapse | v2.0 | 0/2 | Not started | - |
+| 40. Source Collapse | v2.0 | 2/2 | Complete | 2026-01-18 |
 | 41. Test Colocation | v2.0 | 0/TBD | Not started | - |
 | 42. Subpath Exports | v2.0 | 0/TBD | Not started | - |
 | 43. Import Rewrite | v2.0 | 0/TBD | Not started | - |

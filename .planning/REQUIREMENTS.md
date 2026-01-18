@@ -25,18 +25,18 @@ Requirements for Collapse the Monorepo milestone.
 
 ### Source Organization
 
-- [ ] **SRC-01**: `src/engine/` contains core game logic (from @boardsmith/engine)
-- [ ] **SRC-02**: `src/ui/` contains Vue components (from @boardsmith/ui)
-- [ ] **SRC-03**: `src/session/` contains game session (from @boardsmith/session)
-- [ ] **SRC-04**: `src/cli/` contains CLI commands (from @boardsmith/cli)
-- [ ] **SRC-05**: `src/testing/` contains test utilities (from @boardsmith/testing)
-- [ ] **SRC-06**: `src/eslint-plugin/` contains ESLint rules (from eslint-plugin-boardsmith)
-- [ ] **SRC-07**: `src/ai/` contains AI/MCTS logic (from @boardsmith/ai)
-- [ ] **SRC-08**: `src/ai-trainer/` contains training (from @boardsmith/ai-trainer)
-- [ ] **SRC-09**: `src/client/` contains client runtime (from @boardsmith/client)
-- [ ] **SRC-10**: `src/server/` contains server runtime (from @boardsmith/server)
-- [ ] **SRC-11**: `src/runtime/` contains shared runtime (from @boardsmith/runtime)
-- [ ] **SRC-12**: `src/worker/` contains web worker (from @boardsmith/worker)
+- [x] **SRC-01**: `src/engine/` contains core game logic (from @boardsmith/engine)
+- [x] **SRC-02**: `src/ui/` contains Vue components (from @boardsmith/ui)
+- [x] **SRC-03**: `src/session/` contains game session (from @boardsmith/session)
+- [x] **SRC-04**: `src/cli/` contains CLI commands (from @boardsmith/cli)
+- [x] **SRC-05**: `src/testing/` contains test utilities (from @boardsmith/testing)
+- [x] **SRC-06**: `src/eslint-plugin/` contains ESLint rules (from eslint-plugin-boardsmith)
+- [x] **SRC-07**: `src/ai/` contains AI/MCTS logic (from @boardsmith/ai)
+- [x] **SRC-08**: `src/ai-trainer/` contains training (from @boardsmith/ai-trainer)
+- [x] **SRC-09**: `src/client/` contains client runtime (from @boardsmith/client)
+- [x] **SRC-10**: `src/server/` contains server runtime (from @boardsmith/server)
+- [x] **SRC-11**: `src/runtime/` contains shared runtime (from @boardsmith/runtime)
+- [x] **SRC-12**: `src/worker/` contains web worker (from @boardsmith/worker)
 - [ ] **SRC-13**: All tests colocated (*.test.ts next to source files)
 - [x] **SRC-14**: Single root package.json with exports field
 
@@ -102,18 +102,18 @@ Requirements for Collapse the Monorepo milestone.
 | PKG-11 | 42 (Subpath Exports) | Pending |
 | PKG-12 | 42 (Subpath Exports) | Pending |
 | PKG-13 | 39 (Foundation) | Complete |
-| SRC-01 | 40 (Source Collapse) | Pending |
-| SRC-02 | 40 (Source Collapse) | Pending |
-| SRC-03 | 40 (Source Collapse) | Pending |
-| SRC-04 | 40 (Source Collapse) | Pending |
-| SRC-05 | 40 (Source Collapse) | Pending |
-| SRC-06 | 40 (Source Collapse) | Pending |
-| SRC-07 | 40 (Source Collapse) | Pending |
-| SRC-08 | 40 (Source Collapse) | Pending |
-| SRC-09 | 40 (Source Collapse) | Pending |
-| SRC-10 | 40 (Source Collapse) | Pending |
-| SRC-11 | 40 (Source Collapse) | Pending |
-| SRC-12 | 40 (Source Collapse) | Pending |
+| SRC-01 | 40 (Source Collapse) | Complete |
+| SRC-02 | 40 (Source Collapse) | Complete |
+| SRC-03 | 40 (Source Collapse) | Complete |
+| SRC-04 | 40 (Source Collapse) | Complete |
+| SRC-05 | 40 (Source Collapse) | Complete |
+| SRC-06 | 40 (Source Collapse) | Complete |
+| SRC-07 | 40 (Source Collapse) | Complete |
+| SRC-08 | 40 (Source Collapse) | Complete |
+| SRC-09 | 40 (Source Collapse) | Complete |
+| SRC-10 | 40 (Source Collapse) | Complete |
+| SRC-11 | 40 (Source Collapse) | Complete |
+| SRC-12 | 40 (Source Collapse) | Complete |
 | SRC-13 | 41 (Test Colocation) | Pending |
 | SRC-14 | 39 (Foundation) | Complete |
 | IMP-01 | 43 (Import Rewrite) | Pending |
