@@ -24,6 +24,7 @@ import type {
   ElementRef,
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
+import { devWarn } from '../../composables/actionControllerHelpers.js';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
@@ -356,17 +357,10 @@ function selectElement(elementId: number, ref?: ElementRef) {
   // which would try to fill the NEXT selection with the same element
 }
 
-// Execute a choice directly (no confirm step for filtered selections)
-// But for repeating selections, delegate to setSelectionValue to handle the repeat flow
+// Execute a choice for filtered/dependent selections
+// Uses setSelectionValue to ensure auto-execute watcher fires (and beforeAutoExecuteHook)
 function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
   if (!currentAction.value) return;
-
-  // Check if this is a repeating selection - if so, use setSelectionValue instead
-  const selection = currentSelection.value;
-  if (selection && isRepeatingSelection(selection)) {
-    setSelectionValue(selectionName, choice.value, choice.display);
-    return;
-  }
 
   // Set the hovered choice to show on board briefly
   if (boardInteraction) {
@@ -378,8 +372,10 @@ function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
     });
   }
 
-  // Execute the action with this choice
-  executeAction(currentAction.value, { ...currentArgs, [selectionName]: choice.value });
+  // Use setSelectionValue which delegates to controller.fill()
+  // This triggers the isReady watcher to detect completion, fire beforeAutoExecuteHook,
+  // then auto-execute the action
+  setSelectionValue(selectionName, choice.value, choice.display);
 }
 
 // Hover handlers for element buttons (highlight on board)
@@ -840,57 +836,126 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
     return secondSel?.type === 'choice' && secondSel.filterBy;
   });
 
-  if (!dragAction) return;
+  if (dragAction) {
+    // Start the action and set the piece
+    const firstSel = dragAction.selections[0];
+    const secondSel = dragAction.selections[1];
 
-  // Start the action and set the piece
-  const firstSel = dragAction.selections[0];
-  const secondSel = dragAction.selections[1];
+    // Find the valid element that matches
+    const validPiece = firstSel.validElements?.find(e => {
+      if (dragged.id !== undefined && e.id === dragged.id) return true;
+      if (dragged.notation && e.ref?.notation === dragged.notation) return true;
+      return false;
+    });
 
-  // Find the valid element that matches
-  const validPiece = firstSel.validElements?.find(e => {
-    if (dragged.id !== undefined && e.id === dragged.id) return true;
-    if (dragged.notation && e.ref?.notation === dragged.notation) return true;
-    return false;
+    if (!validPiece) return;
+
+    // Set up the action state
+    currentAction.value = dragAction.name;
+    clearActionState(currentArgs);
+    currentArgs[firstSel.name] = validPiece.id;
+    // Note: Display is stored via controller's fill() - direct arg setting loses display info
+
+    // Get filtered choices for this piece (destinations)
+    const allChoices = secondSel.choices || [];
+    const filterBy = secondSel.filterBy!;
+    const filteredDestinations = allChoices.filter((choice: any) => {
+      const choiceValue = choice.value as Record<string, unknown>;
+      return choiceValue[filterBy.key] === validPiece.id;
+    });
+
+    // Convert choices to drop targets
+    const dropTargets: { id: number; ref: ElementRef }[] = [];
+    const choiceByTargetId = new Map<number, any>();
+
+    filteredDestinations.forEach((choice: any) => {
+      // Use targetRef for drop targets (the destination square)
+      const ref = choice.targetRef;
+      if (ref?.id !== undefined) {
+        dropTargets.push({ id: ref.id, ref });
+        choiceByTargetId.set(ref.id, choice);
+      }
+    });
+
+    // Set drop targets with callback to execute the action
+    boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
+      const choice = choiceByTargetId.get(targetId);
+      if (choice && currentAction.value) {
+        executeAction(currentAction.value, {
+          ...currentArgs,
+          [secondSel.name]: choice.value
+        });
+      }
+    });
+    return;
+  }
+
+  // Case 3: Element-element drag-drop (e.g., drag card to zone)
+  // First selection is element type, second selection is also element type
+  // NOTE: validElements is NOT populated in static metadata - it's only available after
+  // an action is started and fetchChoicesForSelection is called.
+  // So we find element-element actions by type, then start with the dragged element.
+
+  // Find actions with two element-type selections
+  const elementElementAction = actionsWithMetadata.value.find(action => {
+    const firstSel = action.selections[0];
+    const secondSel = action.selections[1];
+    return firstSel?.type === 'element' && secondSel?.type === 'element';
   });
 
-  if (!validPiece) return;
+  if (!elementElementAction) {
+    // No matching action found for this drag - warn the developer
+    devWarn(
+      `drag-no-action-${JSON.stringify(dragged)}`,
+      `Drag started for element ${JSON.stringify(dragged)} but no matching action found.
 
-  // Set up the action state
-  currentAction.value = dragAction.name;
-  clearActionState(currentArgs);
-  currentArgs[firstSel.name] = validPiece.id;
-  // Note: Display is stored via controller's fill() - direct arg setting loses display info
+For drag-drop to work automatically, your action needs one of these patterns:
+1. Element -> Choice with filterBy: .fromElements('piece', {...}).chooseFrom('dest', { filterBy: { key: 'pieceId' } })
+2. Element -> Element: .fromElements('source', {...}).fromElements('target', {...})
 
-  // Get filtered choices for this piece (destinations)
-  const allChoices = secondSel.choices || [];
-  const filterBy = secondSel.filterBy!;
-  const filteredDestinations = allChoices.filter((choice: any) => {
-    const choiceValue = choice.value as Record<string, unknown>;
-    return choiceValue[filterBy.key] === validPiece.id;
-  });
+Current action: ${currentAction.value || 'none'}
+Available actions: ${props.availableActions?.join(', ') || 'none'}`
+    );
+    return;
+  }
 
-  // Convert choices to drop targets
-  const dropTargets: { id: number; ref: ElementRef }[] = [];
-  const choiceByTargetId = new Map<number, any>();
+  const firstSel = elementElementAction.selections[0];
+  const secondSel = elementElementAction.selections[1];
 
-  filteredDestinations.forEach((choice: any) => {
-    // Use targetRef for drop targets (the destination square)
-    const ref = choice.targetRef;
-    if (ref?.id !== undefined) {
-      dropTargets.push({ id: ref.id, ref });
-      choiceByTargetId.set(ref.id, choice);
-    }
-  });
+  // Try to start the action with the dragged element as the first selection
+  // The controller will validate if this element is valid for the action
+  const draggedId = dragged.id;
+  if (draggedId === undefined) return;
 
-  // Set drop targets with callback to execute the action
-  boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
-    const choice = choiceByTargetId.get(targetId);
-    if (choice && currentAction.value) {
-      executeAction(currentAction.value, {
-        ...currentArgs,
-        [secondSel.name]: choice.value
-      });
-    }
+  actionController.start(elementElementAction.name, {
+    args: { [firstSel.name]: draggedId }
+  }).then(() => {
+    // After the action starts and choices are fetched, set up drop targets
+    // Get valid elements for the second selection from the controller
+    const secondValidElements = actionController.getValidElements(secondSel);
+
+    const dropTargets: { id: number; ref: ElementRef }[] = [];
+    const elementById = new Map<number, { id: number; ref?: ElementRef }>();
+
+    secondValidElements.forEach(elem => {
+      if (elem.id !== undefined && elem.ref) {
+        dropTargets.push({ id: elem.id, ref: elem.ref });
+        elementById.set(elem.id, elem);
+      }
+    });
+
+    // Set drop targets with callback to execute the action
+    boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
+      const elem = elementById.get(targetId);
+      if (elem && currentAction.value) {
+        executeAction(currentAction.value, {
+          ...currentArgs,
+          [secondSel.name]: targetId
+        });
+      }
+    });
+  }).catch(() => {
+    // Element might not be valid for this action - that's ok, just don't set up drop targets
   });
 });
 

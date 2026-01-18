@@ -52,6 +52,21 @@ export {
   type HighlightableChoice,
 } from './composables/useBoardInteraction.js';
 
+// Drag-and-drop composable for custom UIs
+export {
+  useDragDrop,
+  type DragProps,
+  type DropProps,
+  type UseDragDropReturn,
+  // Pit of Success types
+  type DragOptions,
+  type DragDropCondition, // @deprecated use DragOptions
+  type DragClasses,
+  type DropClasses,
+  type DragResult,
+  type DropResult,
+} from './composables/useDragDrop.js';
+
 // Animation composables
 export {
   useElementAnimation,

@@ -1374,6 +1374,119 @@ As of v0.8, BoardSmith automatically unwraps choice objects passed to `fill()` a
 
 ---
 
+## 19. Drag-Drop Not Working with ActionPanel
+
+### The Problem
+
+You've set up drag-drop using `useDragDrop`, but when you drag an element, nothing happens - no drop targets highlight, and dropping doesn't execute the action.
+
+### Check the Console for Warnings
+
+In development mode, BoardSmith warns you when a drag starts but no matching action is found:
+
+```
+[BoardSmith] Drag started for element {"id":42} but no matching action found.
+
+For drag-drop to work automatically, your action needs one of these patterns:
+1. Element -> Choice with filterBy: .fromElements('piece', {...}).chooseFrom('dest', { filterBy: { key: 'pieceId' } })
+2. Element -> Element: .fromElements('source', {...}).fromElements('target', {...})
+
+Current action: none
+Available actions: move, attack, endTurn
+```
+
+### Required Action Patterns
+
+For ActionPanel's automatic drag-drop to work, your action must follow one of these patterns:
+
+**Pattern 1: Element -> Choice with filterBy**
+```typescript
+Action.create('moveCard')
+  .fromElements('card', {
+    elements: (ctx) => [...ctx.game.all(Card)],
+  })
+  .chooseFrom('destination', {
+    choices: buildDestinationChoices(),  // Returns { value, targetRef }
+    filterBy: { key: 'cardId' },  // Filter destinations by the selected card
+  })
+```
+
+**Pattern 2: Element -> Element**
+```typescript
+Action.create('assignToSquad')
+  .fromElements('combatant', {
+    elements: (ctx) => [...ctx.game.all(Combatant)],
+  })
+  .fromElements('targetSquad', {
+    elements: (ctx) => [...ctx.game.all(Squad)],
+  })
+```
+
+### Common Mistakes
+
+1. **Action not available**: The action must be in `availableActions` for drag-drop to work. Check that:
+   - The action is listed in your flow's `actionStep({ actions: [...] })`
+   - The action's conditions pass
+
+2. **Wrong selection type**: Using `chooseFrom` without `filterBy` doesn't work for automatic drag-drop. The framework needs to know how to filter destinations based on the dragged element.
+
+3. **Missing targetRef**: For `chooseFrom` with `filterBy`, each choice needs a `targetRef` property that identifies the drop target element:
+   ```typescript
+   choices: zones.map(zone => ({
+     value: { zoneId: zone.id, cardId: selectedCard.id },
+     display: zone.name,
+     targetRef: { name: zone.name },  // Required for drop target identification
+   }))
+   ```
+
+4. **Element ref mismatch**: The `dragProps` ref must match what the action's `fromElements` returns:
+   ```typescript
+   // If your action uses element IDs:
+   dragProps({ id: card.id })  // ✓
+   dragProps({ name: card.name })  // ✗ Won't match
+
+   // If your action returns elements by name:
+   dragProps({ name: piece.name })  // ✓
+   ```
+
+### Debugging Checklist
+
+1. **Open browser console** - Look for `[BoardSmith] Drag started...` warnings
+2. **Check action availability** - Is the action in `availableActions`?
+3. **Verify action pattern** - Does it use one of the supported patterns?
+4. **Check element refs** - Do `dragProps` refs match what `fromElements` returns?
+5. **Inspect choices** - For `chooseFrom`, do choices have `targetRef`?
+
+### Using the Pit-of-Success API
+
+If drag-drop isn't working with the automatic ActionPanel integration, you can use the simpler `drag()` and `drop()` helpers which give you more control:
+
+```vue
+<script setup>
+import { useDragDrop } from '@boardsmith/ui';
+import '@boardsmith/ui/animation/drag-drop.css';
+
+const { drag, drop } = useDragDrop();
+
+const canDragCard = (cardId) =>
+  currentAction.value === 'moveCard' &&
+  currentSelection.value?.name === 'card' &&
+  isCardSelectable(cardId);
+</script>
+
+<template>
+  <div
+    v-for="card in cards"
+    v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
+    :class="drag({ id: card.id }, { when: canDragCard(card.id) }).classes"
+  />
+</template>
+```
+
+See [useDragDrop documentation](./ui-components.md#usedragdrop) for full details.
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -1397,6 +1510,7 @@ As of v0.8, BoardSmith automatically unwraps choice objects passed to `fill()` a
 | **Loop exit with pending state** | Loop checks only actions remaining | Use `stateAwareLoop()` with `pendingStates` |
 | **execute() vs start()** | `execute('retreat', {})` without params | `start('retreat')` for wizard mode |
 | **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
+| **Drag-drop not working** | No matching action for drag | Use element→element or element→choice with filterBy |
 
 ---
 

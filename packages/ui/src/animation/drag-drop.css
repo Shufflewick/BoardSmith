@@ -1,0 +1,85 @@
+/**
+ * BoardSmith Drag-and-Drop Styles
+ *
+ * CSS classes applied by useDragDrop's pit-of-success helpers:
+ * - .bs-draggable: Element can be dragged (condition passes)
+ * - .bs-dragging: Element is currently being dragged
+ * - .bs-drop-target: Element is a valid drop target for current drag
+ * - .bs-drop-hover: A dragged element is hovering over this drop target
+ *
+ * Customization:
+ * Override CSS variables in your game's stylesheet:
+ *
+ * :root {
+ *   --bs-draggable-cursor: grab;
+ *   --bs-dragging-opacity: 0.5;
+ *   --bs-drop-target-bg: rgba(0, 255, 136, 0.15);
+ *   --bs-drop-hover-bg: rgba(0, 255, 136, 0.3);
+ *   --bs-drop-hover-scale: 1.02;
+ * }
+ */
+
+:root {
+  /* Draggable element styling */
+  --bs-draggable-cursor: grab;
+  --bs-dragging-cursor: grabbing;
+  --bs-dragging-opacity: 0.5;
+  --bs-dragging-scale: 0.95;
+
+  /* Drop target styling */
+  --bs-drop-target-bg: rgba(0, 255, 136, 0.15);
+  --bs-drop-target-border-color: rgba(0, 255, 136, 0.6);
+  --bs-drop-target-shadow: 0 0 12px rgba(0, 255, 136, 0.4);
+
+  /* Drop hover styling (when dragged element is over this target) */
+  --bs-drop-hover-bg: rgba(0, 255, 136, 0.3);
+  --bs-drop-hover-border-color: rgba(0, 255, 136, 0.9);
+  --bs-drop-hover-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
+  --bs-drop-hover-scale: 1.02;
+
+  /* Transition timing */
+  --bs-drag-transition: all 0.2s ease;
+}
+
+/* Draggable element - ready to be dragged */
+.bs-draggable {
+  cursor: var(--bs-draggable-cursor);
+  transition: var(--bs-drag-transition);
+}
+
+/* Element currently being dragged */
+.bs-dragging {
+  opacity: var(--bs-dragging-opacity);
+  transform: scale(var(--bs-dragging-scale));
+  cursor: var(--bs-dragging-cursor);
+}
+
+/* Valid drop target for current drag operation */
+.bs-drop-target {
+  background-color: var(--bs-drop-target-bg);
+  border-color: var(--bs-drop-target-border-color);
+  box-shadow: var(--bs-drop-target-shadow);
+}
+
+/* Drop target being hovered by a dragged element */
+.bs-drop-hover {
+  background-color: var(--bs-drop-hover-bg);
+  border-color: var(--bs-drop-hover-border-color);
+  box-shadow: var(--bs-drop-hover-shadow);
+  transform: scale(var(--bs-drop-hover-scale));
+}
+
+/* Accessibility: Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .bs-draggable,
+  .bs-dragging,
+  .bs-drop-target,
+  .bs-drop-hover {
+    transition: none;
+  }
+
+  .bs-dragging,
+  .bs-drop-hover {
+    transform: none;
+  }
+}

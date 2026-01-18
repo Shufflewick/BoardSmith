@@ -14,7 +14,8 @@
     "./auto-ui": {
       "types": "./src/components/auto-ui/index.ts",
       "import": "./src/components/auto-ui/index.ts"
-    }
+    },
+    "./animation/drag-drop.css": "./src/animation/drag-drop.css"
   },
   "files": [
     "dist",

@@ -17,6 +17,7 @@ import {
   createFlyToStatAction,
   createActionTriggerAction,
   createCardFlipAction,
+  createDragDropAction,
 } from './actions.js';
 
 export interface DemoGameOptions extends GameOptions {
@@ -86,6 +87,7 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
     this.registerAction(createFlyToStatAction(this));
     this.registerAction(createActionTriggerAction(this));
     this.registerAction(createCardFlipAction(this));
+    this.registerAction(createDragDropAction(this));
 
     // Set up game flow
     this.setFlow(createGameFlow(this));

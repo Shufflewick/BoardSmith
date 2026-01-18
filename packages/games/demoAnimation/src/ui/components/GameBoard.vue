@@ -31,8 +31,10 @@ import {
   useAutoFlyToStat,
   useFlyingCards,
   useActionAnimations,
+  useDragDrop,
   FlyingCardsOverlay,
 } from '@boardsmith/ui';
+import '@boardsmith/ui/animation/drag-drop.css';
 
 // Props from GameShell
 const props = defineProps<{
@@ -116,6 +118,7 @@ const currentSelection = computed(() => props.actionController?.currentSelection
 const { flyingCards: manualFlyingCards, flyCards } = useFlyingCards();
 
 // 2. useAutoFlyingElements - Automatic flying between containers
+// Note: Drag-dropped elements are automatically excluded from animation (the drag gesture is the feedback)
 const { flyingElements: autoFlyingCards } = useAutoFlyingElements({
   gameView: () => props.gameView,
   containers: () => [
@@ -236,6 +239,10 @@ watch(
   { immediate: true }
 );
 
+// 6. useDragDrop - Drag-and-drop for custom UIs
+// Pit of Success API: drag() and drop() return both props and classes
+const { drag, drop } = useDragDrop();
+
 // Combine all flying elements for the overlay
 const allFlyingCards = computed(() => [
   ...manualFlyingCards.value,
@@ -265,6 +272,7 @@ const actionInfo: Record<string, { name: string; icon: string; color: string; an
   flyToStat: { name: 'Fly to Panel', icon: '\u2B50', color: '#a855f7', animation: 'useAutoFlyToStat' },
   actionTrigger: { name: 'Action-Trigger', icon: '\u26A1', color: '#10b981', animation: 'useActionAnimations' },
   cardFlip: { name: 'Card Flip', icon: '\u{1F503}', color: '#3b82f6', animation: 'Card Flip' },
+  dragDrop: { name: 'Drag & Drop', icon: '\u{1F91A}', color: '#ec4899', animation: 'useDragDrop' },
 };
 
 // Is card selectable for current action?
@@ -274,6 +282,12 @@ function isCardSelectable(cardId: number): boolean {
   const validIds = props.actionController.validElements.value.map((e: any) => e.id);
   return validIds.includes(cardId);
 }
+
+// Helper to determine if a card can be dragged (used with drag() pit-of-success helper)
+const canDragCard = (cardId: number) =>
+  currentAction.value === 'dragDrop' &&
+  currentSelection.value?.name === 'card' &&
+  isCardSelectable(cardId);
 
 // Handle card click
 async function handleCardClick(card: { id: number }) {
@@ -349,7 +363,13 @@ function cancelAction() {
     <div class="zone-grid">
       <!-- Row 1: Face-up zones A and B -->
       <div class="zone-row">
-        <div ref="zoneARef" class="zone face-up" data-zone="zone-a">
+        <div
+          ref="zoneARef"
+          class="zone face-up"
+          data-zone="zone-a"
+          v-bind="drop({ name: 'zone-a' }).props"
+          :class="drop({ name: 'zone-a' }).classes"
+        >
           <div class="zone-header">
             <span class="zone-label">Zone A</span>
             <span class="zone-type">Face-Up</span>
@@ -359,10 +379,17 @@ function cancelAction() {
               v-for="card in zoneACards"
               :key="card.id"
               class="card"
-              :class="{ selectable: isCardSelectable(card.id), 'card-back': !card.faceUp }"
+              :class="[
+                {
+                  selectable: isCardSelectable(card.id),
+                  'card-back': !card.faceUp,
+                },
+                drag({ id: card.id }, { when: canDragCard(card.id) }).classes
+              ]"
               :data-card-id="card.id"
               :data-rank="card.rank"
               :data-suit="card.suit"
+              v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
               @click="handleCardClick(card)"
             >
               <template v-if="card.faceUp">
@@ -386,7 +413,13 @@ function cancelAction() {
           </div>
         </div>
 
-        <div ref="zoneBRef" class="zone face-up" data-zone="zone-b">
+        <div
+          ref="zoneBRef"
+          class="zone face-up"
+          data-zone="zone-b"
+          v-bind="drop({ name: 'zone-b' }).props"
+          :class="drop({ name: 'zone-b' }).classes"
+        >
           <div class="zone-header">
             <span class="zone-label">Zone B</span>
             <span class="zone-type">Face-Up</span>
@@ -396,10 +429,17 @@ function cancelAction() {
               v-for="card in zoneBCards"
               :key="card.id"
               class="card"
-              :class="{ selectable: isCardSelectable(card.id), 'card-back': !card.faceUp }"
+              :class="[
+                {
+                  selectable: isCardSelectable(card.id),
+                  'card-back': !card.faceUp,
+                },
+                drag({ id: card.id }, { when: canDragCard(card.id) }).classes
+              ]"
               :data-card-id="card.id"
               :data-rank="card.rank"
               :data-suit="card.suit"
+              v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
               @click="handleCardClick(card)"
             >
               <template v-if="card.faceUp">
@@ -426,7 +466,13 @@ function cancelAction() {
 
       <!-- Row 2: Face-down zones C and D -->
       <div class="zone-row">
-        <div ref="zoneCRef" class="zone face-down" data-zone="zone-c">
+        <div
+          ref="zoneCRef"
+          class="zone face-down"
+          data-zone="zone-c"
+          v-bind="drop({ name: 'zone-c' }).props"
+          :class="drop({ name: 'zone-c' }).classes"
+        >
           <div class="zone-header">
             <span class="zone-label">Zone C</span>
             <span class="zone-type">Face-Down</span>
@@ -436,10 +482,17 @@ function cancelAction() {
               v-for="card in zoneCCards"
               :key="card.id"
               class="card"
-              :class="{ selectable: isCardSelectable(card.id), 'card-back': !card.faceUp }"
+              :class="[
+                {
+                  selectable: isCardSelectable(card.id),
+                  'card-back': !card.faceUp,
+                },
+                drag({ id: card.id }, { when: canDragCard(card.id) }).classes
+              ]"
               :data-card-id="card.id"
               :data-rank="card.rank"
               :data-suit="card.suit"
+              v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
               @click="handleCardClick(card)"
             >
               <template v-if="card.faceUp">
@@ -463,7 +516,13 @@ function cancelAction() {
           </div>
         </div>
 
-        <div ref="zoneDRef" class="zone face-down" data-zone="zone-d">
+        <div
+          ref="zoneDRef"
+          class="zone face-down"
+          data-zone="zone-d"
+          v-bind="drop({ name: 'zone-d' }).props"
+          :class="drop({ name: 'zone-d' }).classes"
+        >
           <div class="zone-header">
             <span class="zone-label">Zone D</span>
             <span class="zone-type">Face-Down</span>
@@ -473,10 +532,17 @@ function cancelAction() {
               v-for="card in zoneDCards"
               :key="card.id"
               class="card"
-              :class="{ selectable: isCardSelectable(card.id), 'card-back': !card.faceUp }"
+              :class="[
+                {
+                  selectable: isCardSelectable(card.id),
+                  'card-back': !card.faceUp,
+                },
+                drag({ id: card.id }, { when: canDragCard(card.id) }).classes
+              ]"
               :data-card-id="card.id"
               :data-rank="card.rank"
               :data-suit="card.suit"
+              v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
               @click="handleCardClick(card)"
             >
               <template v-if="card.faceUp">
@@ -554,6 +620,11 @@ function cancelAction() {
               <td><span class="ref-action">Card Flip</span></td>
               <td><code>Card Flip</code></td>
               <td>Toggle face state without moving</td>
+            </tr>
+            <tr>
+              <td><span class="ref-action" style="color: #ec4899">Drag & Drop</span></td>
+              <td><code>useDragDrop</code></td>
+              <td>Drag cards to zones with HTML5 drag-drop</td>
             </tr>
           </tbody>
         </table>
@@ -780,6 +851,13 @@ function cancelAction() {
   border-color: rgba(255, 165, 0, 0.3);
 }
 
+/* Drop target styling for drag-drop - customize the library's bs-drop-target */
+.zone.bs-drop-target {
+  background: rgba(236, 72, 153, 0.15);
+  border-color: rgba(236, 72, 153, 0.8);
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+}
+
 .zone-header {
   display: flex;
   justify-content: space-between;
@@ -871,6 +949,30 @@ function cancelAction() {
   transform: translateY(-8px);
   border-color: #00ff88;
   box-shadow: 0 8px 20px rgba(0, 255, 136, 0.4);
+}
+
+/* Draggable card styling - customize the library's bs-draggable/bs-dragging */
+.card.bs-draggable {
+  cursor: grab;
+  border-color: rgba(236, 72, 153, 0.6);
+  animation: pulse-drag 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-drag {
+  0%, 100% { box-shadow: 0 0 8px rgba(236, 72, 153, 0.4); }
+  50% { box-shadow: 0 0 16px rgba(236, 72, 153, 0.7); }
+}
+
+.card.bs-draggable:hover {
+  cursor: grab;
+  border-color: #ec4899;
+  box-shadow: 0 8px 20px rgba(236, 72, 153, 0.4);
+}
+
+.card.bs-dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+  cursor: grabbing;
 }
 
 .card.card-back {

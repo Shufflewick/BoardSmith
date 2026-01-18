@@ -48,6 +48,7 @@
  */
 import { watch, computed, onUnmounted, getCurrentInstance, type Ref, type ComputedRef } from 'vue';
 import { useFlyingCards, type FlyingCardData } from './useFlyingCards.js';
+import { useBoardInteraction } from './useBoardInteraction.js';
 
 export interface ElementContainerConfig {
   /** The game element (computed or ref) representing this container */
@@ -106,6 +107,12 @@ export interface AutoFlyingElementsOptions {
    * Containers must have 'name' set to use this feature.
    */
   countBasedRoutes?: CountBasedRoute[];
+
+  /**
+   * Function that returns additional element IDs to skip animating.
+   * Note: Drag-dropped elements are automatically skipped - this is for additional custom cases.
+   */
+  skipIds?: () => number[];
 }
 
 export interface AutoFlyingElementsReturn {
@@ -148,6 +155,9 @@ function findChildById(container: any, id: number): any | null {
 export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoFlyingElementsReturn {
   const { flyingCards, flyCard } = useFlyingCards();
 
+  // Get board interaction to automatically skip drag-dropped elements
+  const boardInteraction = useBoardInteraction();
+
   const {
     gameView,
     containers: containersProp,
@@ -156,6 +166,7 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
     elementSize = { width: 60, height: 84 },
     flip = 'never',
     countBasedRoutes = [],
+    skipIds,
   } = options;
 
   // Get current containers (supports static array or dynamic function)
@@ -242,12 +253,33 @@ export function useAutoFlyingElements(options: AutoFlyingElementsOptions): AutoF
     const containers = getContainers();
     const newLocations = buildElementLocations();
 
+    // Get IDs to skip - automatically includes drag-dropped elements + any custom skipIds
+    const idsToSkip = new Set<number>();
+
+    // Automatically skip elements that were just drag-dropped (the drag gesture is the visual feedback)
+    const lastDroppedId = boardInteraction?.lastDroppedElementId;
+    if (lastDroppedId !== undefined && lastDroppedId !== null) {
+      idsToSkip.add(lastDroppedId);
+    }
+
+    // Add any additional custom skipIds
+    if (skipIds) {
+      for (const id of skipIds()) {
+        idsToSkip.add(id);
+      }
+    }
+
     // Find elements that moved
     for (const [elemId, newContainerIndex] of newLocations) {
       const oldContainerIndex = elementLocations.get(elemId);
 
       // Element moved from one tracked container to another
       if (oldContainerIndex !== undefined && oldContainerIndex !== newContainerIndex) {
+        // Skip animation for elements that were just drag-dropped
+        if (idsToSkip.has(elemId)) {
+          continue;
+        }
+
         const fromContainer = containers[oldContainerIndex];
         const toContainer = containers[newContainerIndex];
 

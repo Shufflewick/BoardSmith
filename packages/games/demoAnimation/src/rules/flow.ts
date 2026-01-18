@@ -29,6 +29,7 @@ export function createGameFlow(game: DemoGame): FlowDefinition {
           'flyToStat',      // useAutoFlyToStat (card → score stat)
           'actionTrigger',  // useActionAnimations (action-triggered)
           'cardFlip',       // Card flip animation (in-place flip)
+          'dragDrop',       // useDragDrop (drag card to zone)
         ],
       }),
     }),

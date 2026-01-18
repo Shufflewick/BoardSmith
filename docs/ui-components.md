@@ -435,6 +435,207 @@ watch(() => boardInteraction?.currentAction, (action, prevAction) => {
 
 > **Note:** Action state is automatically cleared when the action completes, is cancelled, or the turn ends.
 
+### useDragDrop
+
+Composable for drag-and-drop in custom UIs. Call once at setup, get functions that work with any element. ActionPanel automatically orchestrates drag-drop by detecting when drag starts, finding matching actions, and executing on drop.
+
+#### Quick Start (Recommended)
+
+Use the pit-of-success API with the library's CSS for minimal boilerplate:
+
+```vue
+<script setup lang="ts">
+import { useDragDrop } from '@boardsmith/ui';
+import '@boardsmith/ui/animation/drag-drop.css';
+
+const { drag, drop } = useDragDrop();
+
+// Condition function determines when cards can be dragged
+const canDragCard = (cardId: number) =>
+  currentAction.value === 'moveCard' &&
+  currentSelection.value?.name === 'card' &&
+  isCardSelectable(cardId);
+</script>
+
+<template>
+  <!-- Cards: drag with condition -->
+  <div
+    v-for="card in cards"
+    :key="card.id"
+    v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
+    :class="drag({ id: card.id }, { when: canDragCard(card.id) }).classes"
+  >
+    {{ card.name }}
+  </div>
+
+  <!-- Zones: always accept drops (when action is active) -->
+  <div
+    v-for="zone in zones"
+    :key="zone.id"
+    v-bind="drop({ name: zone.id }).props"
+    :class="drop({ name: zone.id }).classes"
+  >
+    {{ zone.name }}
+  </div>
+</template>
+```
+
+The library CSS provides:
+- `.bs-draggable` - cursor: grab, smooth transitions
+- `.bs-dragging` - opacity: 0.5, scale(0.95), cursor: grabbing
+- `.bs-drop-target` - green highlight with glow
+
+#### Customizing Drag-Drop Styles
+
+Override CSS variables in your game's stylesheet:
+
+```css
+:root {
+  --bs-draggable-cursor: grab;
+  --bs-dragging-opacity: 0.5;
+  --bs-dragging-scale: 0.95;
+  --bs-drop-target-bg: rgba(236, 72, 153, 0.15);  /* Pink instead of green */
+  --bs-drop-target-border-color: rgba(236, 72, 153, 0.6);
+  --bs-drop-target-shadow: 0 0 12px rgba(236, 72, 153, 0.4);
+}
+```
+
+Or use your own class names alongside the library classes:
+
+```css
+/* Game-specific styling that extends the library's bs-* classes */
+.card.bs-draggable {
+  border-color: rgba(236, 72, 153, 0.6);
+  animation: pulse-drag 1.5s ease-in-out infinite;
+}
+
+.zone.bs-drop-target {
+  background: rgba(236, 72, 153, 0.15);
+}
+```
+
+#### API Reference
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `drag` | `(ref, options?) => { props, classes }` | **Recommended.** Combined helper for draggable elements |
+| `drop` | `(ref) => { props, classes }` | **Recommended.** Combined helper for drop targets |
+| `dragClasses` | `(ref, options?) => DragClasses` | Just the CSS classes for draggable elements |
+| `dropClasses` | `(ref) => DropClasses` | Just the CSS classes for drop targets |
+| `dragProps` | `(ref) => DragProps` | Low-level: just the drag props |
+| `dropProps` | `(ref) => DropProps` | Low-level: just the drop props |
+| `isDragging` | `(ref) => boolean` | Check if element is being dragged |
+| `isDropTarget` | `(ref) => boolean` | Check if element is valid drop target |
+
+**DragDropCondition:**
+- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are empty and `.bs-draggable` is not applied.
+
+**ElementRef:**
+- Can include `id`, `name`, or `notation` to identify the element.
+
+#### Migration from Verbose Pattern
+
+**Before (verbose):**
+```vue
+<script setup>
+const { dragProps, dropProps, isDragging, isDropTarget } = useDragDrop();
+
+const isDragDropCardSelection = computed(() =>
+  currentAction.value === 'moveCard' && currentSelection.value?.name === 'card'
+);
+
+function isCardDragging(cardId) { return isDragging({ id: cardId }); }
+function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
+</script>
+
+<template>
+  <div
+    v-bind="isDragDropCardSelection && isSelectable(card.id) ? dragProps({ id: card.id }) : {}"
+    :class="{
+      'is-dragging': isCardDragging(card.id),
+      'draggable': isDragDropCardSelection && isSelectable(card.id),
+    }"
+  />
+</template>
+
+<style>
+.draggable { cursor: grab; }
+.is-dragging { opacity: 0.5; }
+.drop-target { background: rgba(0, 255, 136, 0.3); }
+</style>
+```
+
+**After (pit of success):**
+```vue
+<script setup>
+import '@boardsmith/ui/animation/drag-drop.css';
+const { drag, drop } = useDragDrop();
+
+const canDrag = (cardId) =>
+  currentAction.value === 'moveCard' &&
+  currentSelection.value?.name === 'card' &&
+  isSelectable(cardId);
+</script>
+
+<template>
+  <div
+    v-bind="drag({ id: card.id }, { when: canDrag(card.id) }).props"
+    :class="drag({ id: card.id }, { when: canDrag(card.id) }).classes"
+  />
+</template>
+```
+
+**Lines reduced:** ~50 -> ~10 (80% reduction)
+
+### Drag-and-Drop in Custom UIs
+
+When building custom game boards with drag-and-drop, use `useDragDrop`. ActionPanel automatically:
+1. Detects when drag starts (via `boardInteraction.isDragging`)
+2. Finds matching actions for the dragged element
+3. Sets up valid drop targets from filtered choices
+4. Executes the action when dropped on a valid target
+
+**Example: Assigning Combatants to Squads**
+
+```vue
+<script setup lang="ts">
+import { useDragDrop } from '@boardsmith/ui';
+import '@boardsmith/ui/animation/drag-drop.css';
+
+const props = defineProps<{
+  squads: Squad[];
+}>();
+
+const { drag, drop } = useDragDrop();
+
+// Drag is always enabled for combatants in this simple example
+const canDrag = () => true;
+</script>
+
+<template>
+  <div class="squad-assignment">
+    <div
+      v-for="squad in squads"
+      :key="squad.id"
+      class="squad"
+      v-bind="drop({ name: squad.id }).props"
+      :class="drop({ name: squad.id }).classes"
+    >
+      <h3>{{ squad.name }}</h3>
+      <div
+        v-for="combatant in squad.combatants"
+        :key="combatant.id"
+        class="combatant"
+        v-bind="drag({ name: combatant.name }, { when: canDrag() }).props"
+        :class="drag({ name: combatant.name }, { when: canDrag() }).classes"
+      >
+        {{ combatant.name }}
+      </div>
+    </div>
+  </div>
+</template>
+```
+
 **Real Examples:**
 
 1. **Demo: Complex UI Interactions** (`packages/games/demoComplexUiInteractions/`)

@@ -234,6 +234,76 @@ export function createActionTriggerAction(game: DemoGame): ActionDefinition {
 }
 
 /**
+ * DRAG-DROP - Drag a card from one zone and drop it in another
+ * Animation: useDragDrop composable for custom UI drag-drop
+ *
+ * This demonstrates the useDragDrop composable which provides:
+ * - dragProps(ref) - Props to make elements draggable
+ * - dropProps(ref) - Props to make elements drop targets
+ * - isDragging(ref) - Check if element is being dragged
+ * - isDropTarget(ref) - Check if element is valid drop target
+ */
+export function createDragDropAction(game: DemoGame): ActionDefinition {
+  return Action.create('dragDrop')
+    .prompt('Drag a card to another zone')
+    .fromElements<Card>('card', {
+      prompt: 'Drag a card...',
+      elements: () => [
+        ...game.zoneA.all(Card),
+        ...game.zoneB.all(Card),
+        ...game.zoneC.all(Card),
+        ...game.zoneD.all(Card),
+      ],
+      display: (card) => {
+        if (card.faceUp) {
+          return `${card.rank}${card.suit}`;
+        }
+        return `Card (face-down)`;
+      },
+      boardRef: (card) => ({ id: card.id }),
+    })
+    .fromElements<Zone>('targetZone', {
+      prompt: '...and drop it here',
+      elements: (args) => {
+        const card = args.card as Card | undefined;
+        if (!card?.parent) {
+          // During availability checking, card may not be resolved yet
+          return game.allZones;
+        }
+        const currentZone = card.parent as Zone;
+        // Return all zones except the current one
+        return game.allZones.filter(z => z !== currentZone);
+      },
+      display: (zone) => {
+        const labels: Record<string, string> = {
+          'zone-a': 'Zone A (face-up)',
+          'zone-b': 'Zone B (face-up)',
+          'zone-c': 'Zone C (face-down)',
+          'zone-d': 'Zone D (face-down)',
+        };
+        return labels[zone.name] || zone.name;
+      },
+      boardRef: (zone) => ({ name: zone.name }),
+    })
+    .condition({
+      'has cards': () => game.allZones.some(z => z.count(Card) > 0),
+    })
+    .execute((args) => {
+      const card = args.card as Card;
+      const targetZone = args.targetZone as Zone;
+      const sourceZone = card.parent as Zone;
+
+      // Update card face state based on target zone
+      card.faceUp = targetZone.faceUp;
+      card.putInto(targetZone);
+
+      const flipMsg = sourceZone.faceUp !== targetZone.faceUp ? ' (flipped!)' : '';
+      game.message(`[useDragDrop] Dragged card from ${sourceZone.name} to ${targetZone.name}${flipMsg}`);
+      return { success: true };
+    });
+}
+
+/**
  * CARD FLIP - Toggle a card's face-up/face-down state in place
  * Animation: Card flip in overlay (no movement, just flip)
  */

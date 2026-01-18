@@ -72,6 +72,12 @@ export interface BoardInteractionState {
   /** Element that is selected and can be dragged (for auto-select scenarios) */
   draggableSelectedElement: ElementRef | null;
 
+  /** Last dropped element ID (persists briefly after drop for animation skipping) */
+  lastDroppedElementId: number | null;
+
+  /** Currently hovered drop target (for per-zone hover effects) */
+  hoveredDropTarget: ElementRef | null;
+
   // ---- Action State ----
 
   /** Currently active action name (null if no action is in progress) */
@@ -139,6 +145,12 @@ export interface BoardInteractionActions {
   /** Check if an element is the draggable selected element */
   isDraggableSelectedElement: (element: { id?: number; name?: string; notation?: string }) => boolean;
 
+  /** Set the hovered drop target (called by board during dragover) */
+  setHoveredDropTarget: (element: ElementRef | null) => void;
+
+  /** Check if an element is the currently hovered drop target */
+  isHoveredDropTarget: (element: { id?: number; name?: string; notation?: string }) => boolean;
+
   // ---- Action State Methods ----
 
   /** Set the current action (called by ActionPanel when action starts) */
@@ -172,6 +184,8 @@ export function createBoardInteraction(): BoardInteraction {
     dropTargets: [],
     isDragging: false,
     draggableSelectedElement: null,
+    lastDroppedElementId: null,
+    hoveredDropTarget: null,
     // Action state
     currentAction: null,
     currentSelectionIndex: 0,
@@ -218,6 +232,8 @@ export function createBoardInteraction(): BoardInteraction {
       state.dropTargets = [];
       state.isDragging = false;
       state.draggableSelectedElement = null;
+      state.lastDroppedElementId = null;
+      state.hoveredDropTarget = null;
       state.currentAction = null;
       state.currentSelectionIndex = 0;
       state.currentSelectionName = null;
@@ -265,6 +281,7 @@ export function createBoardInteraction(): BoardInteraction {
       state.draggedElement = null;
       state.isDragging = false;
       state.dropTargets = [];
+      state.hoveredDropTarget = null;
       onDropCallback = null;
     },
 
@@ -287,6 +304,15 @@ export function createBoardInteraction(): BoardInteraction {
       // Find the matching drop target and trigger the callback
       const dropTarget = state.dropTargets.find(dt => matchesRef(target, dt.ref));
       if (dropTarget && onDropCallback) {
+        // Store the dragged element's ID before ending drag (for animation skipping)
+        const draggedId = state.draggedElement?.id;
+        if (draggedId !== undefined) {
+          state.lastDroppedElementId = draggedId;
+          // Clear after a delay to allow gameView update and animation skip check
+          setTimeout(() => {
+            state.lastDroppedElementId = null;
+          }, 100);
+        }
         onDropCallback(dropTarget.id);
         // End drag after successful drop
         this.endDrag();
@@ -300,6 +326,15 @@ export function createBoardInteraction(): BoardInteraction {
     isDraggableSelectedElement(element) {
       if (!state.draggableSelectedElement) return false;
       return matchesRef(element, state.draggableSelectedElement);
+    },
+
+    setHoveredDropTarget(element) {
+      state.hoveredDropTarget = element;
+    },
+
+    isHoveredDropTarget(element) {
+      if (!state.hoveredDropTarget) return false;
+      return matchesRef(element, state.hoveredDropTarget);
     },
 
     setCurrentAction(actionName, selectionIndex = 0, selectionName = null) {
