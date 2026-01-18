@@ -61,6 +61,7 @@ program
   .command('pack')
   .description('Create tarballs of all public packages for local installation')
   .option('-o, --out-dir <dir>', 'Output directory for tarballs', '.boardsmith/tarballs')
+  .option('-t, --target <path>', 'Copy tarballs to target project and update dependencies')
   .action(packCommand);
 
 // Validation

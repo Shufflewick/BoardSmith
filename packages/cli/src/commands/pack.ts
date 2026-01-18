@@ -1,11 +1,12 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from 'node:fs';
+import { join, basename, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 
 interface PackOptions {
   outDir?: string;
+  target?: string;
 }
 
 interface PackageInfo {
@@ -157,6 +158,111 @@ function packPackage(pkgPath: string, outputDir: string, timestampVersion: strin
 }
 
 /**
+ * Integrate tarballs into a target consumer project.
+ * - Copies tarballs to target's vendor/ directory
+ * - Updates target's package.json with file: dependencies
+ * - Runs npm install in target
+ */
+async function integrateWithTarget(
+  targetPath: string,
+  sourceDir: string,
+  results: PackResult[]
+): Promise<void> {
+  const absoluteTarget = resolve(targetPath);
+  const targetPkgJsonPath = join(absoluteTarget, 'package.json');
+
+  // Validate target has package.json
+  if (!existsSync(targetPkgJsonPath)) {
+    console.error(chalk.red(`Error: No package.json found at ${absoluteTarget}`));
+    console.error(chalk.dim('Make sure the target path is a valid npm project'));
+    process.exit(1);
+  }
+
+  console.log(chalk.cyan('\nIntegrating with target project...\n'));
+
+  // Create vendor directory if missing
+  const vendorDir = join(absoluteTarget, 'vendor');
+  if (!existsSync(vendorDir)) {
+    mkdirSync(vendorDir, { recursive: true });
+    console.log(chalk.dim(`Created ${vendorDir}`));
+  }
+
+  // Copy tarballs to vendor/
+  const copySpinner = ora('Copying tarballs to vendor/').start();
+  for (const result of results) {
+    const sourceTarball = join(sourceDir, result.tarball);
+    const destTarball = join(vendorDir, result.tarball);
+    copyFileSync(sourceTarball, destTarball);
+  }
+  copySpinner.succeed(`Copied ${results.length} tarballs to vendor/`);
+
+  // Read and update target's package.json
+  const targetPkgJson = JSON.parse(readFileSync(targetPkgJsonPath, 'utf-8'));
+  const updatedDeps: string[] = [];
+
+  // Build a map from package name to tarball filename
+  const tarballMap = new Map<string, string>();
+  for (const result of results) {
+    tarballMap.set(result.name, result.tarball);
+  }
+
+  // Update dependencies if they reference BoardSmith packages
+  if (targetPkgJson.dependencies) {
+    for (const pkgName of Object.keys(targetPkgJson.dependencies)) {
+      const tarball = tarballMap.get(pkgName);
+      if (tarball) {
+        targetPkgJson.dependencies[pkgName] = `file:./vendor/${tarball}`;
+        updatedDeps.push(`dependencies.${pkgName}`);
+      }
+    }
+  }
+
+  // Update devDependencies if they reference BoardSmith packages
+  if (targetPkgJson.devDependencies) {
+    for (const pkgName of Object.keys(targetPkgJson.devDependencies)) {
+      const tarball = tarballMap.get(pkgName);
+      if (tarball) {
+        targetPkgJson.devDependencies[pkgName] = `file:./vendor/${tarball}`;
+        updatedDeps.push(`devDependencies.${pkgName}`);
+      }
+    }
+  }
+
+  if (updatedDeps.length === 0) {
+    console.log(chalk.yellow('No BoardSmith dependencies found in target package.json'));
+    console.log(chalk.dim('Tarballs copied but no dependencies updated'));
+    return;
+  }
+
+  // Write updated package.json
+  writeFileSync(targetPkgJsonPath, JSON.stringify(targetPkgJson, null, 2) + '\n');
+  console.log(chalk.dim(`Updated ${updatedDeps.length} dependencies in package.json`));
+
+  // Run npm install in target
+  const installSpinner = ora('Running npm install in target...').start();
+  try {
+    execSync('npm install', {
+      cwd: absoluteTarget,
+      stdio: 'pipe',
+    });
+    installSpinner.succeed('npm install completed');
+  } catch (error) {
+    installSpinner.fail('npm install failed');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`  ${errorMessage}`));
+    process.exit(1);
+  }
+
+  // Print summary
+  console.log(chalk.green('\nTarget integration complete!\n'));
+  console.log(chalk.dim('Updated dependencies:'));
+  for (const dep of updatedDeps) {
+    console.log(chalk.dim(`  ${dep}`));
+  }
+  console.log('');
+}
+
+/**
  * Validate that we're running from a monorepo root.
  */
 function validateMonorepoRoot(cwd: string): void {
@@ -244,8 +350,13 @@ export async function packCommand(options: PackOptions): Promise<void> {
     console.log(chalk.dim(`  ${result.tarball}`));
   }
 
-  console.log(chalk.cyan('\nNext steps:'));
-  console.log(chalk.dim('  In your consumer project:'));
-  console.log(chalk.dim(`  npm install ${outputPath}/<package>.tgz`));
-  console.log('');
+  // If target specified, integrate with target project
+  if (options.target) {
+    await integrateWithTarget(options.target, outputPath, results);
+  } else {
+    console.log(chalk.cyan('\nNext steps:'));
+    console.log(chalk.dim('  In your consumer project:'));
+    console.log(chalk.dim(`  npm install ${outputPath}/<package>.tgz`));
+    console.log('');
+  }
 }
