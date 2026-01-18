@@ -1,22 +1,17 @@
 {
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3"
-    ]
-  },
   "name": "boardsmith",
   "version": "0.0.1",
-  "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*",
-    "packages/games/*"
-  ],
+  "description": "Library for designing digital board games",
+  "exports": {
+    ".": {
+      "types": "./packages/engine/dist/index.d.ts",
+      "import": "./packages/engine/dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest --watch",
-    "cli": "npm run cli --workspace=@boardsmith/cli",
     "regen:llms": "npx repomix",
     "lint": "eslint packages/"
   },
