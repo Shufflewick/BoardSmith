@@ -497,7 +497,10 @@ Plans:
 **Goal**: Add `--target` flag for copying tarballs to consumer projects
 **Depends on**: Phase 37
 **Research**: None needed
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 38-01-PLAN.md -- Add --target flag with vendor copy and dependency update
 
 **Requirements covered:** TGT-01, TGT-02, TGT-03, TGT-04, TGT-05
 
@@ -552,4 +555,4 @@ Plans:
 | 35. dynamic-uct | v1.1 | 1/1 | Complete | 2026-01-15 |
 | 36. proof-number-search | v1.1 | 2/2 | Complete | 2026-01-16 |
 | 37. pack-command | v1.2 | 1/1 | Complete | 2026-01-18 |
-| 38. target-integration | v1.2 | 0/? | Pending | -- |
+| 38. target-integration | v1.2 | 0/1 | Pending | -- |
