@@ -11,6 +11,7 @@ import { analyzeCommand } from './commands/analyze.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
 import { trainAICommand } from './commands/train-ai.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
+import { packCommand } from './commands/pack.js';
 
 const program = new Command();
 
@@ -54,6 +55,13 @@ program
   .description('Build game for production')
   .option('-o, --out-dir <dir>', 'Output directory', 'dist')
   .action(buildCommand);
+
+// Packing for local development
+program
+  .command('pack')
+  .description('Create tarballs of all public packages for local installation')
+  .option('-o, --out-dir <dir>', 'Output directory for tarballs', '.boardsmith/tarballs')
+  .action(packCommand);
 
 // Validation
 program
