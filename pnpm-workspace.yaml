@@ -1,7 +1,0 @@
-packages:
-  - 'packages/*'
-  - 'packages/games/*'
-  - 'packages/games/*/rules'
-  - 'packages/games/*/ui'
-  - 'packages/games/*/tests'
-  - 'packages/shared/*'
