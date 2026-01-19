@@ -562,7 +562,11 @@ Plans:
 **Goal**: Replace all @boardsmith/* imports with relative paths
 **Depends on**: Phase 42
 **Requirements**: IMP-01, IMP-02, IMP-03
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 43-01-PLAN.md -- Rewrite foundation and middle layer imports (runtime, ai, testing, ai-trainer, session)
+- [ ] 43-02-PLAN.md -- Rewrite peripheral layer imports (server, ui, worker, client, cli) + update vitest config
 
 #### Phase 44: Game Extraction
 **Goal**: Extract all games and demos to separate repositories
@@ -631,7 +635,7 @@ Plans:
 | 40. Source Collapse | v2.0 | 2/2 | Complete | 2026-01-18 |
 | 41. Test Colocation | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 42. Subpath Exports | v2.0 | 1/1 | Complete | 2026-01-18 |
-| 43. Import Rewrite | v2.0 | 0/TBD | Not started | - |
+| 43. Import Rewrite | v2.0 | 0/2 | Not started | - |
 | 44. Game Extraction | v2.0 | 0/TBD | Not started | - |
 | 45. CLI Update | v2.0 | 0/TBD | Not started | - |
 | 46. Documentation | v2.0 | 0/TBD | Not started | - |
