@@ -8,9 +8,36 @@ interface BuildOptions {
   outDir?: string;
 }
 
+/**
+ * Detect if we're running in the BoardSmith monorepo or a standalone game project.
+ * - Monorepo: Has src/engine/ directory (collapsed structure)
+ * - Standalone: Has boardsmith.json but no src/engine/
+ */
+function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
+  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
+  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
+
+  // If we're in the monorepo root, it has src/engine
+  if (hasSrcEngine) return 'monorepo';
+
+  // Standalone game project
+  if (hasBoardsmithJson) return 'standalone';
+
+  // Fallback - treat as standalone (will fail with proper error if neither)
+  return 'standalone';
+}
+
 export async function buildCommand(options: BuildOptions): Promise<void> {
   const cwd = process.cwd();
   const outDir = options.outDir || 'dist';
+
+  // Detect context - build is only for game projects, not the library
+  const context = getProjectContext(cwd);
+  if (context === 'monorepo') {
+    console.error(chalk.red('Error: boardsmith build is for game projects, not the BoardSmith library'));
+    console.error(chalk.dim('To build BoardSmith itself, use the appropriate build tooling.'));
+    process.exit(1);
+  }
 
   // Validate project
   const configPath = join(cwd, 'boardsmith.json');
@@ -38,7 +65,8 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
           formats: ['es'],
         },
         rollupOptions: {
-          external: ['@boardsmith/engine'],
+          // Mark boardsmith and all its subpath exports as external
+          external: ['boardsmith', /^boardsmith\//],
         },
         emptyOutDir: true,
       },
