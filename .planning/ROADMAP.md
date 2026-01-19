@@ -601,7 +601,12 @@ Plans:
 **Goal**: Update all documentation for new structure
 **Depends on**: Phase 45
 **Requirements**: DOC-01 through DOC-04
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 46-01-PLAN.md -- Update existing docs with new import paths (DOC-01, DOC-02)
+- [ ] 46-02-PLAN.md -- Create API reference pages for subpath exports (DOC-03)
+- [ ] 46-03-PLAN.md -- Write migration guide for MERC team (DOC-04)
 
 ## Progress
 
@@ -655,4 +660,4 @@ Plans:
 | 43. Import Rewrite | v2.0 | 2/2 | Complete | 2026-01-19 |
 | 44. Game Extraction | v2.0 | 11/11 | Complete | 2026-01-18 |
 | 45. CLI Update | v2.0 | 2/2 | Complete | 2026-01-18 |
-| 46. Documentation | v2.0 | 0/TBD | Not started | - |
+| 46. Documentation | v2.0 | 0/3 | Not started | - |
