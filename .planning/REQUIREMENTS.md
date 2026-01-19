@@ -10,17 +10,17 @@ Requirements for Collapse the Monorepo milestone.
 ### Package Structure
 
 - [x] **PKG-01**: Single `boardsmith` npm package replaces all `@boardsmith/*` packages
-- [ ] **PKG-02**: Subpath export `boardsmith` for core engine
-- [ ] **PKG-03**: Subpath export `boardsmith/ui` for Vue components
-- [ ] **PKG-04**: Subpath export `boardsmith/session` for game session
-- [ ] **PKG-05**: Subpath export `boardsmith/testing` for test utilities
-- [ ] **PKG-06**: Subpath export `boardsmith/eslint-plugin` for ESLint rules
-- [ ] **PKG-07**: Subpath export `boardsmith/ai` for AI/MCTS logic
-- [ ] **PKG-08**: Subpath export `boardsmith/ai-trainer` for training infrastructure
-- [ ] **PKG-09**: Subpath export `boardsmith/client` for client runtime
-- [ ] **PKG-10**: Subpath export `boardsmith/server` for server runtime
-- [ ] **PKG-11**: Subpath export `boardsmith/runtime` for shared runtime
-- [ ] **PKG-12**: Subpath export `boardsmith/worker` for web worker support
+- [x] **PKG-02**: Subpath export `boardsmith` for core engine
+- [x] **PKG-03**: Subpath export `boardsmith/ui` for Vue components
+- [x] **PKG-04**: Subpath export `boardsmith/session` for game session
+- [x] **PKG-05**: Subpath export `boardsmith/testing` for test utilities
+- [x] **PKG-06**: Subpath export `boardsmith/eslint-plugin` for ESLint rules
+- [x] **PKG-07**: Subpath export `boardsmith/ai` for AI/MCTS logic
+- [x] **PKG-08**: Subpath export `boardsmith/ai-trainer` for training infrastructure
+- [x] **PKG-09**: Subpath export `boardsmith/client` for client runtime
+- [x] **PKG-10**: Subpath export `boardsmith/server` for server runtime
+- [x] **PKG-11**: Subpath export `boardsmith/runtime` for shared runtime
+- [x] **PKG-12**: Subpath export `boardsmith/worker` for web worker support
 - [x] **PKG-13**: npm instead of pnpm (package-lock.json, no pnpm-workspace.yaml)
 
 ### Source Organization
@@ -90,17 +90,17 @@ Requirements for Collapse the Monorepo milestone.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PKG-01 | 39 (Foundation) | Complete |
-| PKG-02 | 42 (Subpath Exports) | Pending |
-| PKG-03 | 42 (Subpath Exports) | Pending |
-| PKG-04 | 42 (Subpath Exports) | Pending |
-| PKG-05 | 42 (Subpath Exports) | Pending |
-| PKG-06 | 42 (Subpath Exports) | Pending |
-| PKG-07 | 42 (Subpath Exports) | Pending |
-| PKG-08 | 42 (Subpath Exports) | Pending |
-| PKG-09 | 42 (Subpath Exports) | Pending |
-| PKG-10 | 42 (Subpath Exports) | Pending |
-| PKG-11 | 42 (Subpath Exports) | Pending |
-| PKG-12 | 42 (Subpath Exports) | Pending |
+| PKG-02 | 42 (Subpath Exports) | Complete |
+| PKG-03 | 42 (Subpath Exports) | Complete |
+| PKG-04 | 42 (Subpath Exports) | Complete |
+| PKG-05 | 42 (Subpath Exports) | Complete |
+| PKG-06 | 42 (Subpath Exports) | Complete |
+| PKG-07 | 42 (Subpath Exports) | Complete |
+| PKG-08 | 42 (Subpath Exports) | Complete |
+| PKG-09 | 42 (Subpath Exports) | Complete |
+| PKG-10 | 42 (Subpath Exports) | Complete |
+| PKG-11 | 42 (Subpath Exports) | Complete |
+| PKG-12 | 42 (Subpath Exports) | Complete |
 | PKG-13 | 39 (Foundation) | Complete |
 | SRC-01 | 40 (Source Collapse) | Complete |
 | SRC-02 | 40 (Source Collapse) | Complete |
@@ -148,4 +148,4 @@ Requirements for Collapse the Monorepo milestone.
 
 ---
 *Requirements defined: 2026-01-18*
-*Last updated: 2026-01-18 after roadmap creation*
+*Last updated: 2026-01-18 after Phase 42 completion*

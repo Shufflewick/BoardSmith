@@ -553,10 +553,10 @@ Plans:
 **Goal**: Configure all package.json exports for subpath imports
 **Depends on**: Phase 41
 **Requirements**: PKG-02 through PKG-12
-**Plans**: 1 plan
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 42-01-PLAN.md -- Configure 11 subpath exports, verify with external test project
+- [x] 42-01-PLAN.md -- Configure 11 subpath exports, verify with external test project
 
 #### Phase 43: Import Rewrite
 **Goal**: Replace all @boardsmith/* imports with relative paths
@@ -630,7 +630,7 @@ Plans:
 | 39. Foundation | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 40. Source Collapse | v2.0 | 2/2 | Complete | 2026-01-18 |
 | 41. Test Colocation | v2.0 | 1/1 | Complete | 2026-01-18 |
-| 42. Subpath Exports | v2.0 | 0/1 | Not started | - |
+| 42. Subpath Exports | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 43. Import Rewrite | v2.0 | 0/TBD | Not started | - |
 | 44. Game Extraction | v2.0 | 0/TBD | Not started | - |
 | 45. CLI Update | v2.0 | 0/TBD | Not started | - |
