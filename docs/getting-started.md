@@ -180,7 +180,7 @@ Elements are the building blocks of your game state. BoardSmith provides base cl
 - **Card** - Playing cards
 
 ```typescript
-import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck } from '@boardsmith/engine';
+import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck } from 'boardsmith';
 
 export type Suit = 'H' | 'D' | 'C' | 'S';
 export type Rank = 'A' | '2' | '3' | ... | 'K';
@@ -199,7 +199,7 @@ export class Deck extends BaseDeck {}
 Actions define what players can do. Use the fluent builder API:
 
 ```typescript
-import { Action, type ActionDefinition } from '@boardsmith/engine';
+import { Action, type ActionDefinition } from 'boardsmith';
 
 export function createPlayAction(game: MyGame): ActionDefinition {
   return Action.create('play')
@@ -222,7 +222,7 @@ export function createPlayAction(game: MyGame): ActionDefinition {
 The flow defines turn structure and game phases:
 
 ```typescript
-import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from '@boardsmith/engine';
+import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from 'boardsmith';
 
 export function createGameFlow(game: MyGame): FlowDefinition {
   return {
@@ -245,7 +245,7 @@ export function createGameFlow(game: MyGame): FlowDefinition {
 
 ### UI (src/ui/App.vue)
 
-The UI uses Vue 3 and the `@boardsmith/ui` package:
+The UI uses Vue 3 and the `boardsmith/ui` package:
 
 ```vue
 <template>

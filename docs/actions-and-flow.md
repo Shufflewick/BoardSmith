@@ -9,7 +9,7 @@ Actions define what players can do during the game. They use a fluent builder pa
 ### Basic Action Structure
 
 ```typescript
-import { Action, type ActionDefinition } from '@boardsmith/engine';
+import { Action, type ActionDefinition } from 'boardsmith';
 
 export function createMyAction(game: MyGame): ActionDefinition {
   return Action.create('actionName')
@@ -74,7 +74,7 @@ Choices are always evaluated on-demand when the player needs to make a selection
 The `actionTempState()` helper provides a clean API for storing state between `choices()` and `execute()`:
 
 ```typescript
-import { Action, actionTempState } from '@boardsmith/engine';
+import { Action, actionTempState } from 'boardsmith';
 
 Action.create('armsDealer')
   .chooseFrom('equipment', {
@@ -702,7 +702,7 @@ The Flow system defines game structure using composable nodes.
 ### Flow Definition
 
 ```typescript
-import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from '@boardsmith/engine';
+import { loop, eachPlayer, actionStep, sequence, type FlowDefinition } from 'boardsmith';
 
 export function createGameFlow(game: MyGame): FlowDefinition {
   return {
@@ -846,7 +846,7 @@ setVar('roundNumber', (ctx) => (ctx.get('roundNumber') ?? 0) + 1)
 Control player order with `TurnOrder` presets. Use the spread operator to apply them:
 
 ```typescript
-import { TurnOrder } from '@boardsmith/engine';
+import { TurnOrder } from 'boardsmith';
 
 // Default round-robin from player 1
 eachPlayer({

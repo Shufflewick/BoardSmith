@@ -9,7 +9,7 @@ BoardSmith provides comprehensive support for dice games and roll-and-write styl
 The base `Die` class extends `Piece` with dice-specific properties:
 
 ```typescript
-import { Die } from '@boardsmith/engine';
+import { Die } from 'boardsmith';
 
 class MyDie extends Die<MyGame, MyPlayer> {
   // Inherited properties:
@@ -39,7 +39,7 @@ The engine supports standard polyhedral dice:
 A `DicePool` is a `Space` designed to hold multiple dice:
 
 ```typescript
-import { DicePool, Die } from '@boardsmith/engine';
+import { DicePool, Die } from 'boardsmith';
 
 class MyGame extends Game<MyGame, MyPlayer> {
   shelf!: DicePool;
@@ -84,13 +84,13 @@ die.value = Math.floor(Math.random() * 10) + 1;  // 1-10
 
 ## 3D Dice UI
 
-The `@boardsmith/ui` package includes a WebGL-based 3D dice renderer that displays accurate polyhedral geometry with smooth roll animations.
+The `boardsmith/ui` package includes a WebGL-based 3D dice renderer that displays accurate polyhedral geometry with smooth roll animations.
 
 ### Die3D Component
 
 ```vue
 <script setup lang="ts">
-import { Die3D } from '@boardsmith/ui';
+import { Die3D } from 'boardsmith/ui';
 
 const props = defineProps<{
   die: {
@@ -168,7 +168,7 @@ The `AbilityManager` provides a reusable system for games where players earn and
 ### Basic Usage
 
 ```typescript
-import { AbilityManager, Player } from '@boardsmith/engine';
+import { AbilityManager, Player } from 'boardsmith';
 
 // Define your ability types
 type MyAbility = 'reroll' | 'flip' | 'bonus' | 'skip';
@@ -246,7 +246,7 @@ BoardSmith provides abstract track classes for dice/roll-and-write games where p
 For tracks where values must increase or decrease:
 
 ```typescript
-import { MonotonicTrack } from '@boardsmith/engine';
+import { MonotonicTrack } from 'boardsmith';
 
 // Increasing track (values must go up)
 const fulminateTrack = new MonotonicTrack({
@@ -296,7 +296,7 @@ track.fromJSON(data);
 For tracks where each value can only appear once:
 
 ```typescript
-import { UniqueTrack } from '@boardsmith/engine';
+import { UniqueTrack } from 'boardsmith';
 
 const upperSection = new UniqueTrack({
   id: 'ones',
@@ -316,7 +316,7 @@ upperSection.canAdd(3);  // false (already used)
 For simple counting/tallying:
 
 ```typescript
-import { CounterTrack } from '@boardsmith/engine';
+import { CounterTrack } from 'boardsmith';
 
 const poisonTrack = new CounterTrack({
   id: 'poison',
@@ -346,7 +346,7 @@ import {
   AbilityManager,
   MonotonicTrack,
   CounterTrack
-} from '@boardsmith/engine';
+} from 'boardsmith';
 
 type PowerUp = 'reroll-2' | 'flip' | 'refresh' | 'adjust';
 

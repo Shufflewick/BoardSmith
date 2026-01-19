@@ -507,7 +507,7 @@ Module-level variables don't survive across these boundaries.
 ### The Solution: Use `actionTempState()`
 
 ```typescript
-import { Action, actionTempState } from '@boardsmith/engine';
+import { Action, actionTempState } from 'boardsmith';
 
 Action.create('armsDealer')
   .chooseFrom('equipment', {
@@ -672,7 +672,7 @@ filter: (element, ctx) => {
 Use the `resolveElementArg()` helper to handle both cases:
 
 ```typescript
-import { resolveElementArg } from '@boardsmith/engine';
+import { resolveElementArg } from 'boardsmith';
 
 // In collectEquipment filter():
 filter: (element, ctx) => {
@@ -829,7 +829,7 @@ for (const d of unavailable) {
 ### In Tests
 
 ```typescript
-import { createTestGame } from '@boardsmith/testing';
+import { createTestGame } from 'boardsmith/testing';
 
 const testGame = await createTestGame(gameDefinition, { playerCount: 2 });
 
@@ -1268,7 +1268,7 @@ loop({
 Use `stateAwareLoop()` to automatically check for pending state before exiting:
 
 ```typescript
-import { stateAwareLoop } from '@boardsmith/engine';
+import { stateAwareLoop } from 'boardsmith';
 
 stateAwareLoop({
   name: 'combat-action-loop',
@@ -1463,8 +1463,8 @@ If drag-drop isn't working with the automatic ActionPanel integration, you can u
 
 ```vue
 <script setup>
-import { useDragDrop } from '@boardsmith/ui';
-import '@boardsmith/ui/animation/drag-drop.css';
+import { useDragDrop } from 'boardsmith/ui';
+import 'boardsmith/ui/animation/drag-drop.css';
 
 const { drag, drop } = useDragDrop();
 

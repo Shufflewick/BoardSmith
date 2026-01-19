@@ -265,7 +265,7 @@ this.shelf.create(MyDie, 'd6-1', { sides: 6 });
 ### Ability System
 
 ```typescript
-import { AbilityManager } from '@boardsmith/engine';
+import { AbilityManager } from 'boardsmith';
 
 type PowerUp = 'reroll' | 'flip' | 'bonus';
 
@@ -286,7 +286,7 @@ if (player.abilities.hasUnused('reroll')) {
 ### Scoring Tracks
 
 ```typescript
-import { MonotonicTrack, UniqueTrack, CounterTrack } from '@boardsmith/engine';
+import { MonotonicTrack, UniqueTrack, CounterTrack } from 'boardsmith';
 
 // Increasing/decreasing sequence tracks
 const track = new MonotonicTrack({
@@ -313,7 +313,7 @@ counter.calculatePoints();  // Returns total points
 ## AI System
 
 ```typescript
-import { createBot } from '@boardsmith/ai';
+import { createBot } from 'boardsmith/ai';
 
 const bot = createBot(game, MyGame, 'my-game', 1, [], 'hard');
 const move = await bot.play();

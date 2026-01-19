@@ -124,7 +124,7 @@ Renders the entire game state as a tree of elements. Useful for:
 
 ```vue
 <script setup>
-import { useFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
+import { useFlyingCards, FlyingCardsOverlay } from 'boardsmith/ui';
 
 const { flyingCards, flyCard } = useFlyingCards();
 
@@ -148,7 +148,7 @@ async function dealCard() {
 
 ```vue
 <script setup>
-import { useAutoAnimations, FlyingCardsOverlay } from '@boardsmith/ui';
+import { useAutoAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
 
 const { flyingElements } = useAutoAnimations({
   gameView: () => props.gameView,
@@ -173,7 +173,7 @@ Bidirectional interaction between board and action panel.
 
 ```vue
 <script setup>
-import { useBoardInteraction } from '@boardsmith/ui';
+import { useBoardInteraction } from 'boardsmith/ui';
 
 const boardInteraction = useBoardInteraction();
 
@@ -191,7 +191,7 @@ const boardInteraction = useBoardInteraction();
 ### Square Grid (Chess-style)
 
 ```typescript
-import { toAlgebraicNotation, fromAlgebraicNotation } from '@boardsmith/ui';
+import { toAlgebraicNotation, fromAlgebraicNotation } from 'boardsmith/ui';
 
 toAlgebraicNotation(0, 0);    // "a1"
 toAlgebraicNotation(4, 3);    // "e4"
@@ -201,7 +201,7 @@ fromAlgebraicNotation('e4');  // { col: 4, row: 3 }
 ### Hex Grid
 
 ```typescript
-import { hexToPixel, getHexPolygonPoints } from '@boardsmith/ui';
+import { hexToPixel, getHexPolygonPoints } from 'boardsmith/ui';
 
 const { x, y } = hexToPixel(q, r, size, 'flat');
 const points = getHexPolygonPoints(cx, cy, size, 'flat');
@@ -210,7 +210,7 @@ const points = getHexPolygonPoints(cx, cy, size, 'flat');
 ## Card Display
 
 ```typescript
-import { getSuitSymbol, getSuitColor, isRedSuit } from '@boardsmith/ui';
+import { getSuitSymbol, getSuitColor, isRedSuit } from 'boardsmith/ui';
 
 getSuitSymbol('H');  // "♥"
 getSuitSymbol('S');  // "♠"
@@ -221,7 +221,7 @@ isRedSuit('D');      // true
 ## Theming
 
 ```typescript
-import { applyTheme } from '@boardsmith/ui';
+import { applyTheme } from 'boardsmith/ui';
 
 applyTheme({
   primary: '#00d9ff',

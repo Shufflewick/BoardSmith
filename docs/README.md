@@ -42,5 +42,5 @@ This produces a ~750KB file with:
 ## Quick Links
 
 - **CLI**: `boardsmith init`, `boardsmith dev`, `boardsmith test`
-- **Key packages**: `@boardsmith/engine`, `@boardsmith/ui`, `@boardsmith/ai`
+- **Key packages**: `boardsmith`, `boardsmith/ui`, `boardsmith/ai`
 - **Example games**: `packages/games/{hex, go-fish, checkers, cribbage}`

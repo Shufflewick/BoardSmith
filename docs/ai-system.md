@@ -4,7 +4,7 @@ BoardSmith includes a game-agnostic AI system using Monte-Carlo Tree Search (MCT
 
 ## Overview
 
-The `@boardsmith/ai` package provides:
+The `boardsmith/ai` package provides:
 - **MCTSBot**: MCTS-based AI player
 - **Difficulty presets**: easy, medium, hard
 - **Custom objectives**: Guide AI behavior for specific games
@@ -53,7 +53,7 @@ Note: Iterations are kept low because game operations can be slow (~18ms per mov
 ### Programmatic Usage
 
 ```typescript
-import { createBot, parseAILevel } from '@boardsmith/ai';
+import { createBot, parseAILevel } from 'boardsmith/ai';
 import { MyGame } from './game.js';
 
 // Create a bot for player 1
@@ -81,7 +81,7 @@ For games where win/loss isn't sufficient guidance, you can define objectives th
 ### Defining Objectives
 
 ```typescript
-import type { AIConfig, Game } from '@boardsmith/ai';
+import type { AIConfig, Game } from 'boardsmith/ai';
 
 const aiConfig: AIConfig = {
   objectives: (game: Game, playerIndex: number) => ({
@@ -134,7 +134,7 @@ Terminal states always use actual win/loss (1.0/0.0).
 From `packages/games/checkers/rules/src/ai.ts`:
 
 ```typescript
-import type { AIConfig, Game } from '@boardsmith/ai';
+import type { AIConfig, Game } from 'boardsmith/ai';
 
 export const checkersAIConfig: AIConfig = {
   objectives: (game: Game, playerIndex: number) => ({
@@ -174,10 +174,10 @@ export const checkersAIConfig: AIConfig = {
 
 ## Integration with GameSession
 
-The `@boardsmith/session` package integrates AI automatically:
+The `boardsmith/session` package integrates AI automatically:
 
 ```typescript
-import { GameSession } from '@boardsmith/session';
+import { GameSession } from 'boardsmith/session';
 import { MyGame } from './game.js';
 import { myGameAIConfig } from './ai.js';
 

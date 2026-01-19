@@ -43,7 +43,7 @@ const cardId = card.attributes.id;  // ✗ undefined
 
 ## Step 2: Finding Elements
 
-Use the helper functions from `@boardsmith/ui`:
+Use the helper functions from `boardsmith/ui`:
 
 ```typescript
 import {
@@ -54,7 +54,7 @@ import {
   findChildByAttribute,
   findElementByAttribute,
   getElementId,
-} from '@boardsmith/ui';
+} from 'boardsmith/ui';
 
 // Find by type (uses $type attribute)
 const deck = findElement(gameView, { type: 'deck' });
@@ -78,7 +78,7 @@ const sector = findElementByAttribute(gameView, 'sectorId', 'alpha-3');
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findPlayerHand, findElement } from '@boardsmith/ui';
+import { findPlayerHand, findElement } from 'boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;
@@ -214,7 +214,7 @@ After calling `start()`, BoardSmith:
 </template>
 
 <script setup lang="ts">
-import { useBoardInteraction } from '@boardsmith/ui';
+import { useBoardInteraction } from 'boardsmith/ui';
 
 const boardInteraction = useBoardInteraction();
 
@@ -231,7 +231,7 @@ function onSectorClick(sector: { id: number }) {
 Use the `actionNeedsWizardMode()` helper to check programmatically:
 
 ```typescript
-import { actionNeedsWizardMode } from '@boardsmith/ui';
+import { actionNeedsWizardMode } from 'boardsmith/ui';
 
 const meta = actionController.getActionMetadata('retreat');
 const check = actionNeedsWizardMode(meta, {});
@@ -253,7 +253,7 @@ When an action uses `fromElements()` or `chooseElement()`, the `actionController
 
 ```vue
 <script setup lang="ts">
-import type { UseActionControllerReturn } from '@boardsmith/ui';
+import type { UseActionControllerReturn } from 'boardsmith/ui';
 
 const props = defineProps<{
   actionController: UseActionControllerReturn;
@@ -350,7 +350,7 @@ The `display` property is the human-readable label for rendering in your UI (but
 For bidirectional interaction between the board and ActionPanel:
 
 ```typescript
-import { useBoardInteraction } from '@boardsmith/ui';
+import { useBoardInteraction } from 'boardsmith/ui';
 
 const boardInteraction = useBoardInteraction();
 
@@ -395,7 +395,7 @@ boardInteraction.currentSelectionName // 'destination' | null
 </template>
 
 <script setup lang="ts">
-import { useBoardInteraction, type UseActionControllerReturn } from '@boardsmith/ui';
+import { useBoardInteraction, type UseActionControllerReturn } from 'boardsmith/ui';
 
 const props = defineProps<{
   actionController: UseActionControllerReturn;
@@ -527,7 +527,7 @@ When a sector-related action starts (either from ActionPanel or via followUp), a
 ```vue
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { UseActionControllerReturn } from '@boardsmith/ui';
+import type { UseActionControllerReturn } from 'boardsmith/ui';
 
 const props = defineProps<{
   actionController: UseActionControllerReturn;
@@ -688,7 +688,7 @@ import {
   findPlayerHand,
   findElement,
   type UseActionControllerReturn,
-} from '@boardsmith/ui';
+} from 'boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;

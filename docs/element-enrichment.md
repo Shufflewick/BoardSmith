@@ -118,7 +118,7 @@ This can happen if the element was removed after selection metadata was built.
 The `findElementById` utility is still available for cases outside the action flow:
 
 ```typescript
-import { findElementById } from '@boardsmith/ui';
+import { findElementById } from 'boardsmith/ui';
 
 // Finding container elements for animations
 const deck = findElementById(gameView, deckId);
@@ -135,5 +135,5 @@ import type {
   ValidElement,
   SelectionMetadata,
   GameViewElement  // Alias for GameElement
-} from '@boardsmith/ui';
+} from 'boardsmith/ui';
 ```

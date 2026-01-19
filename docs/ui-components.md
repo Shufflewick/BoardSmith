@@ -1,6 +1,6 @@
 # UI Components & Composables
 
-BoardSmith provides Vue 3 components and composables for building game UIs. The `@boardsmith/ui` package includes everything from high-level shells to low-level animation utilities.
+BoardSmith provides Vue 3 components and composables for building game UIs. The `boardsmith/ui` package includes everything from high-level shells to low-level animation utilities.
 
 ## Core Components
 
@@ -48,7 +48,7 @@ The main wrapper component that provides the complete game UI structure: header,
 </template>
 
 <script setup lang="ts">
-import { GameShell } from '@boardsmith/ui';
+import { GameShell } from 'boardsmith/ui';
 import GameBoard from './components/GameBoard.vue';
 </script>
 ```
@@ -148,7 +148,7 @@ Automatic UI generation from game state. Useful for prototyping or as a referenc
 </template>
 
 <script setup lang="ts">
-import { AutoUI } from '@boardsmith/ui';
+import { AutoUI } from 'boardsmith/ui';
 </script>
 ```
 
@@ -189,7 +189,7 @@ The main lobby component that fetches game definition metadata and renders confi
 </template>
 
 <script setup lang="ts">
-import { GameLobby } from '@boardsmith/ui';
+import { GameLobby } from 'boardsmith/ui';
 
 const gameType = 'hex';
 const playerCount = 2;
@@ -279,7 +279,7 @@ import {
   STANDARD_PLAYER_COLORS,
   DEFAULT_PLAYER_COLORS,
   createColorOption
-} from '@boardsmith/session';
+} from 'boardsmith/session';
 
 // Standard 8-color palette
 STANDARD_PLAYER_COLORS
@@ -332,7 +332,7 @@ Overlay for card flight animations between positions.
 Bidirectional interaction between action panel and game board.
 
 ```typescript
-import { useBoardInteraction, createBoardInteraction, provideBoardInteraction } from '@boardsmith/ui';
+import { useBoardInteraction, createBoardInteraction, provideBoardInteraction } from 'boardsmith/ui';
 
 // In GameShell (provide)
 const boardInteraction = createBoardInteraction();
@@ -365,7 +365,7 @@ Custom game boards can detect which action is currently being filled in. This is
 - Customizing the board based on current selection step
 
 ```typescript
-import { useBoardInteraction } from '@boardsmith/ui';
+import { useBoardInteraction } from 'boardsmith/ui';
 import { computed, watch } from 'vue';
 
 const boardInteraction = useBoardInteraction();
@@ -385,7 +385,7 @@ boardInteraction.currentSelectionName  // string | null
 ```vue
 <script setup lang="ts">
 import { computed, watch } from 'vue';
-import { useBoardInteraction } from '@boardsmith/ui';
+import { useBoardInteraction } from 'boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;
@@ -445,8 +445,8 @@ Use the pit-of-success API with the library's CSS for minimal boilerplate:
 
 ```vue
 <script setup lang="ts">
-import { useDragDrop } from '@boardsmith/ui';
-import '@boardsmith/ui/animation/drag-drop.css';
+import { useDragDrop } from 'boardsmith/ui';
+import 'boardsmith/ui/animation/drag-drop.css';
 
 const { drag, drop } = useDragDrop();
 
@@ -568,7 +568,7 @@ function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
 **After (pit of success):**
 ```vue
 <script setup>
-import '@boardsmith/ui/animation/drag-drop.css';
+import 'boardsmith/ui/animation/drag-drop.css';
 const { drag, drop } = useDragDrop();
 
 const canDrag = (cardId) =>
@@ -599,8 +599,8 @@ When building custom game boards with drag-and-drop, use `useDragDrop`. ActionPa
 
 ```vue
 <script setup lang="ts">
-import { useDragDrop } from '@boardsmith/ui';
-import '@boardsmith/ui/animation/drag-drop.css';
+import { useDragDrop } from 'boardsmith/ui';
+import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<{
   squads: Squad[];
@@ -658,7 +658,7 @@ const canDrag = () => true;
 FLIP animations for smooth element movement.
 
 ```typescript
-import { useElementAnimation } from '@boardsmith/ui';
+import { useElementAnimation } from 'boardsmith/ui';
 
 const { capturePositions, animateToCurrentPositions, cancelAll } = useElementAnimation();
 
@@ -679,7 +679,7 @@ Elements must have `data-animatable="true"` and `data-element-id="..."` attribut
 Manually trigger card/element flight animations between positions.
 
 ```typescript
-import { useFlyingCards, FlyingCardsOverlay } from '@boardsmith/ui';
+import { useFlyingCards, FlyingCardsOverlay } from 'boardsmith/ui';
 
 const { flyingCards, flyCard, flyCards, cancelAll } = useFlyingCards();
 
@@ -713,7 +713,7 @@ Declarative animations triggered by action execution. Captures element positions
 When `elementSelector` equals `destinationSelector`, the composable auto-detects a "flip-in-place" animation and configures everything correctly:
 
 ```typescript
-import { useActionAnimations, FlyingCardsOverlay } from '@boardsmith/ui';
+import { useActionAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
 
 const gameViewRef = ref(null);
 
@@ -780,7 +780,7 @@ You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they'r
 **Recommended for all games.** The unified animation system that combines flying between containers, FLIP animations within containers, and flying to player stats. One composable to rule them all.
 
 ```typescript
-import { useAutoAnimations, FlyingCardsOverlay } from '@boardsmith/ui';
+import { useAutoAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
 
 // 1. Create refs for DOM elements
 const boardRef = ref<HTMLElement | null>(null);
@@ -911,7 +911,7 @@ const { flyingElements } = useAutoAnimations({
 Automatically animates elements (cards, pieces, tokens) when they move between registered containers. For new code, prefer `useAutoAnimations` which includes FLIP and fly-to-stat features.
 
 ```typescript
-import { useAutoFlyingElements, FlyingCardsOverlay } from '@boardsmith/ui';
+import { useAutoFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
 
 const { flyingElements } = useAutoFlyingElements({
   gameView: () => props.gameView,
@@ -936,7 +936,7 @@ const { flyingElements } = useAutoFlyingElements({
 Animate elements flying in when they appear.
 
 ```typescript
-import { useFlyOnAppear } from '@boardsmith/ui';
+import { useFlyOnAppear } from 'boardsmith/ui';
 
 const { trackElement, getInitialPosition } = useFlyOnAppear({
   from: 'deck',  // Element ID to fly from
@@ -949,7 +949,7 @@ const { trackElement, getInitialPosition } = useFlyOnAppear({
 Animate stat changes and fly elements to player stat displays.
 
 ```typescript
-import { usePlayerStatAnimation, flyToPlayerStat } from '@boardsmith/ui';
+import { usePlayerStatAnimation, flyToPlayerStat } from 'boardsmith/ui';
 
 // Fly a card to a player's score display
 flyToPlayerStat({
@@ -973,7 +973,7 @@ import {
   getCards,
   getElementOwner,
   isMyElement,
-} from '@boardsmith/ui';
+} from 'boardsmith/ui';
 
 // Find specific element
 const deck = findElement(gameView, { type: 'deck' });
@@ -994,7 +994,7 @@ const isMine = isMyElement(card, playerPosition);
 Utilities for square grids (chess notation, etc.).
 
 ```typescript
-import { useGameGrid, toAlgebraicNotation, fromAlgebraicNotation } from '@boardsmith/ui';
+import { useGameGrid, toAlgebraicNotation, fromAlgebraicNotation } from 'boardsmith/ui';
 
 const { getCellAt, getAlgebraic, pixelToCell } = useGameGrid({
   rows: 8,
@@ -1017,7 +1017,7 @@ import {
   hexToPixel,
   getHexPolygonPoints,
   calculateHexDistance
-} from '@boardsmith/ui';
+} from 'boardsmith/ui';
 
 const {
   hexToPixel,
@@ -1050,7 +1050,7 @@ import {
   getSuitColor,
   getRankName,
   isRedSuit
-} from '@boardsmith/ui';
+} from 'boardsmith/ui';
 
 getSuitSymbol('H');  // "♥"
 getSuitSymbol('D');  // "♦"
@@ -1069,7 +1069,7 @@ isRedSuit('D');      // true
 Track element position and count changes for animations.
 
 ```typescript
-import { useElementChangeTracker, useCountTracker } from '@boardsmith/ui';
+import { useElementChangeTracker, useCountTracker } from 'boardsmith/ui';
 
 const { trackElements, getChanges } = useElementChangeTracker();
 
@@ -1089,7 +1089,7 @@ const delta = getChange('deckCount');  // e.g., -3 (deck lost 3 cards)
 Low-level FLIP (First, Last, Invert, Play) animation utility.
 
 ```typescript
-import { useFLIPAnimation, createFLIPSnapshot } from '@boardsmith/ui';
+import { useFLIPAnimation, createFLIPSnapshot } from 'boardsmith/ui';
 
 const { recordFirst, recordLast, play } = useFLIPAnimation({
   duration: 300,
@@ -1111,7 +1111,7 @@ play();
 Customize the UI appearance with themes.
 
 ```typescript
-import { applyTheme, type ThemeConfig } from '@boardsmith/ui';
+import { applyTheme, type ThemeConfig } from 'boardsmith/ui';
 
 const customTheme: ThemeConfig = {
   primary: '#00d9ff',
@@ -1511,7 +1511,7 @@ const selectedEquipment = { name: 'Laser Rifle', damage: 10 };
 **The Solution:** Use `findChildByAttribute` to search children:
 
 ```typescript
-import { findChildByAttribute, getElementId } from '@boardsmith/ui';
+import { findChildByAttribute, getElementId } from 'boardsmith/ui';
 
 // Find equipment element by its name attribute
 const equipment = findChildByAttribute(merc, 'equipmentName', selectedEquipment.name);
@@ -1527,7 +1527,7 @@ if (equipmentId) {
 
 ### Helper Functions for Finding Elements
 
-The `@boardsmith/ui` package provides several helpers for finding elements:
+The `boardsmith/ui` package provides several helpers for finding elements:
 
 | Function | Description | Use When |
 |----------|-------------|----------|
@@ -1698,7 +1698,7 @@ import {
   findPlayerHand,
   getCards,
   type UseActionControllerReturn
-} from '@boardsmith/ui';
+} from 'boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;

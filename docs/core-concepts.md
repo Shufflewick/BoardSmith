@@ -93,7 +93,7 @@ Extend base classes to add game-specific properties:
 
 ```typescript
 // elements.ts
-import { Card as BaseCard, Piece as BasePiece } from '@boardsmith/engine';
+import { Card as BaseCard, Piece as BasePiece } from 'boardsmith';
 
 export class Card extends BaseCard {
   suit!: 'H' | 'D' | 'C' | 'S';
@@ -289,10 +289,10 @@ this.registerElements([Card, Hand, Deck, Board, Piece]);
 
 ### State Snapshots
 
-Use utility functions from `@boardsmith/engine` for state snapshots:
+Use utility functions from `boardsmith` for state snapshots:
 
 ```typescript
-import { createSnapshot, createPlayerView } from '@boardsmith/engine';
+import { createSnapshot, createPlayerView } from 'boardsmith';
 
 // Get complete state snapshot
 const snapshot = createSnapshot(game, 'my-game');
@@ -401,7 +401,7 @@ gameOptions: {
 Per-player settings that appear for each player slot in the lobby.
 
 ```typescript
-import { createColorOption } from '@boardsmith/session';
+import { createColorOption } from 'boardsmith/session';
 
 playerOptions: {
   // Standard color picker (8 colors)
