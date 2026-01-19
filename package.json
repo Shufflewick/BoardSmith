@@ -5,8 +5,48 @@
   "description": "Library for designing digital board games",
   "exports": {
     ".": {
-      "types": "./packages/engine/dist/index.d.ts",
-      "import": "./packages/engine/dist/index.js"
+      "types": "./src/engine/index.ts",
+      "import": "./src/engine/index.ts"
+    },
+    "./ui": {
+      "types": "./src/ui/index.ts",
+      "import": "./src/ui/index.ts"
+    },
+    "./session": {
+      "types": "./src/session/index.ts",
+      "import": "./src/session/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "import": "./src/testing/index.ts"
+    },
+    "./eslint-plugin": {
+      "types": "./src/eslint-plugin/index.ts",
+      "import": "./src/eslint-plugin/index.ts"
+    },
+    "./ai": {
+      "types": "./src/ai/index.ts",
+      "import": "./src/ai/index.ts"
+    },
+    "./ai-trainer": {
+      "types": "./src/ai-trainer/index.ts",
+      "import": "./src/ai-trainer/index.ts"
+    },
+    "./client": {
+      "types": "./src/client/index.ts",
+      "import": "./src/client/index.ts"
+    },
+    "./server": {
+      "types": "./src/server/index.ts",
+      "import": "./src/server/index.ts"
+    },
+    "./runtime": {
+      "types": "./src/runtime/index.ts",
+      "import": "./src/runtime/index.ts"
+    },
+    "./worker": {
+      "types": "./src/worker/index.ts",
+      "import": "./src/worker/index.ts"
     }
   },
   "scripts": {
