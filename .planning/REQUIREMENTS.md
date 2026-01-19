@@ -62,12 +62,12 @@ Requirements for Collapse the Monorepo milestone.
 
 ### CLI Updates
 
-- [ ] **CLI-01**: `boardsmith create` scaffolds standalone npm project
-- [ ] **CLI-02**: `boardsmith dev` works with new structure
-- [ ] **CLI-03**: `boardsmith build` works with new structure
-- [ ] **CLI-04**: `boardsmith test` works with new structure
-- [ ] **CLI-05**: `boardsmith pack` updated for single-package structure
-- [ ] **CLI-06**: All CLI help text updated for new import paths
+- [x] **CLI-01**: `boardsmith create` scaffolds standalone npm project
+- [x] **CLI-02**: `boardsmith dev` works with new structure
+- [x] **CLI-03**: `boardsmith build` works with new structure
+- [x] **CLI-04**: `boardsmith test` works with new structure
+- [x] **CLI-05**: `boardsmith pack` updated for single-package structure
+- [x] **CLI-06**: All CLI help text updated for new import paths
 
 ### Documentation
 
@@ -130,12 +130,12 @@ Requirements for Collapse the Monorepo milestone.
 | GAME-09 | 44 (Game Extraction) | Pending |
 | GAME-10 | 44 (Game Extraction) | Pending |
 | GAME-11 | 44 (Game Extraction) | Pending |
-| CLI-01 | 45 (CLI Update) | Pending |
-| CLI-02 | 45 (CLI Update) | Pending |
-| CLI-03 | 45 (CLI Update) | Pending |
-| CLI-04 | 45 (CLI Update) | Pending |
-| CLI-05 | 45 (CLI Update) | Pending |
-| CLI-06 | 45 (CLI Update) | Pending |
+| CLI-01 | 45 (CLI Update) | Complete |
+| CLI-02 | 45 (CLI Update) | Complete |
+| CLI-03 | 45 (CLI Update) | Complete |
+| CLI-04 | 45 (CLI Update) | Complete |
+| CLI-05 | 45 (CLI Update) | Complete |
+| CLI-06 | 45 (CLI Update) | Complete |
 | DOC-01 | 46 (Documentation) | Pending |
 | DOC-02 | 46 (Documentation) | Pending |
 | DOC-03 | 46 (Documentation) | Pending |
@@ -148,4 +148,4 @@ Requirements for Collapse the Monorepo milestone.
 
 ---
 *Requirements defined: 2026-01-18*
-*Last updated: 2026-01-18 after Phase 42 completion*
+*Last updated: 2026-01-18 after Phase 45 completion*
