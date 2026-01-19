@@ -572,7 +572,20 @@ Plans:
 **Goal**: Extract all games and demos to separate repositories
 **Depends on**: Phase 43
 **Requirements**: GAME-01 through GAME-11
-**Plans**: TBD
+**Plans**: 11 plans
+
+Plans:
+- [ ] 44-01-PLAN.md -- Create reusable template files for extracted games
+- [ ] 44-02-PLAN.md -- Extract Hex game (GAME-01)
+- [ ] 44-03-PLAN.md -- Extract Checkers game (GAME-03)
+- [ ] 44-04-PLAN.md -- Extract Cribbage game (GAME-04)
+- [ ] 44-05-PLAN.md -- Extract Go Fish game (GAME-02)
+- [ ] 44-06-PLAN.md -- Extract Polyhedral Potions game (GAME-06)
+- [ ] 44-07-PLAN.md -- Extract Demo Action Panel (GAME-07)
+- [ ] 44-08-PLAN.md -- Extract Demo Animation (GAME-08)
+- [ ] 44-09-PLAN.md -- Extract Demo Complex UI Interactions (GAME-09)
+- [ ] 44-10-PLAN.md -- Extract Floss Bitties (GAME-05, not working OK)
+- [ ] 44-11-PLAN.md -- Validate all extracted games (GAME-10, GAME-11)
 
 #### Phase 45: CLI Update
 **Goal**: Update all CLI commands to work with new structure
@@ -636,6 +649,6 @@ Plans:
 | 41. Test Colocation | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 42. Subpath Exports | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 43. Import Rewrite | v2.0 | 2/2 | Complete | 2026-01-19 |
-| 44. Game Extraction | v2.0 | 0/TBD | Not started | - |
+| 44. Game Extraction | v2.0 | 0/11 | Planned | - |
 | 45. CLI Update | v2.0 | 0/TBD | Not started | - |
 | 46. Documentation | v2.0 | 0/TBD | Not started | - |
