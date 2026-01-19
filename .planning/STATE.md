@@ -42,8 +42,8 @@ Progress: [============================            ] 70% (5.6/8 phases in v2.0)
 
 ## Session Continuity
 
-Last session: 2026-01-18
-Stopped at: Completed 44-09-PLAN.md (Demo Complex UI Extraction)
+Last session: 2026-01-19
+Stopped at: Completed 44-08-PLAN.md (Demo Animation Extraction)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -74,3 +74,4 @@ Resume file: None
 | Placeholder tokens {GAME_NAME}, {DISPLAY_NAME} | Per-game customization during extraction | 44-01 |
 | Preserve unified src/ structure for complex games | Demo Complex UI has src/rules and src/ui, preserved as-is | 44-09 |
 | No vitest for demos without tests | Cleaner package.json for demo games that have no tests | 44-07 |
+| Demos with tests get vitest.config.ts | Demo Animation has tests/game.test.ts, needs vitest setup | 44-08 |
