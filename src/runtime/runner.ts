@@ -13,7 +13,7 @@ import {
   type SerializeOptions,
   type GameStateSnapshot,
   type PlayerStateView,
-} from '@boardsmith/engine';
+} from '../engine/index.js';
 
 /**
  * Options for creating a game runner

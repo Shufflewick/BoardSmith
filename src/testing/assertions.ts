@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { Game, GameElement, Player } from '@boardsmith/engine';
+import type { Game, GameElement, Player } from '../engine/index.js';
 import type { TestGame } from './test-game.js';
 
 /**

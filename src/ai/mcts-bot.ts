@@ -7,8 +7,8 @@ import type {
   ActionDefinition,
   Selection,
   GameStateSnapshot,
-} from '@boardsmith/engine';
-import { createSnapshot, deserializeAction } from '@boardsmith/engine';
+} from '../engine/index.js';
+import { createSnapshot, deserializeAction } from '../engine/index.js';
 import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { createSeededRandom, randomChoice } from './utils.js';

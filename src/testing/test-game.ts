@@ -11,8 +11,8 @@ import {
   Player,
   type GameOptions,
   type FlowState,
-} from '@boardsmith/engine';
-import { GameRunner, type ActionExecutionResult } from '@boardsmith/runtime';
+} from '../engine/index.js';
+import { GameRunner, type ActionExecutionResult } from '../runtime/index.js';
 
 /**
  * Options for creating a test game.

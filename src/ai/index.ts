@@ -1,4 +1,4 @@
-import type { Game, GameOptions, SerializedAction } from '@boardsmith/engine';
+import type { Game, GameOptions, SerializedAction } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { BotConfig, AIConfig, DifficultyLevel } from './types.js';
 import { DIFFICULTY_PRESETS } from './types.js';

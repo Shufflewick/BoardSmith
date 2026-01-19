@@ -7,7 +7,7 @@ export {
   isSerializedReference,
   type SerializedReference,
   type SerializeOptions,
-} from '@boardsmith/engine';
+} from '../engine/index.js';
 
 // Re-export state snapshots from engine
 export {
@@ -16,7 +16,7 @@ export {
   createAllPlayerViews,
   type GameStateSnapshot,
   type PlayerStateView,
-} from '@boardsmith/engine';
+} from '../engine/index.js';
 
 // Re-export replay types from engine
 export {
@@ -24,7 +24,7 @@ export {
   validateReplayFile,
   parseReplayFile,
   type ReplayFile,
-} from '@boardsmith/engine';
+} from '../engine/index.js';
 
 // Game runner (runtime-specific)
 export {

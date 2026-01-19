@@ -6,9 +6,9 @@
  * @module
  */
 
-import type { Game } from '@boardsmith/engine';
+import type { Game } from '../engine/index.js';
 import type { TestGame } from './test-game.js';
-import type { ActionExecutionResult } from '@boardsmith/runtime';
+import type { ActionExecutionResult } from '../runtime/index.js';
 
 /**
  * Result of simulating an action, with additional test context.

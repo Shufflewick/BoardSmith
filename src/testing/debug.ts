@@ -7,7 +7,7 @@
  * @module
  */
 
-import { Player, type Game, type GameElement, type FlowEngine, type FlowNode, type Action, type ActionContext } from '@boardsmith/engine';
+import { Player, type Game, type GameElement, type FlowEngine, type FlowNode, type Action, type ActionContext } from '../engine/index.js';
 
 /**
  * Options for {@link toDebugString}.

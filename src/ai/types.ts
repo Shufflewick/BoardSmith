@@ -1,4 +1,4 @@
-import type { Game, FlowState } from '@boardsmith/engine';
+import type { Game, FlowState } from '../engine/index.js';
 
 /**
  * Configuration options for the MCTS bot
