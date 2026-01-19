@@ -2,8 +2,8 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, evaluateCondition, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '@boardsmith/engine';
-import type { GameRunner } from '@boardsmith/runtime';
+import { Player, evaluateCondition, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '../engine/index.js';
+import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
 
 /**

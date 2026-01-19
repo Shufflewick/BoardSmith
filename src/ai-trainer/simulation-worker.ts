@@ -3,7 +3,7 @@
  * Receives SerializableSimulationOptions, runs a game, and posts GameData back.
  */
 import { parentPort, workerData } from 'worker_threads';
-import type { Game } from '@boardsmith/engine';
+import type { Game } from '../engine/index.js';
 import type {
   SerializableSimulationOptions,
   GameData,

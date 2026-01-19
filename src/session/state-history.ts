@@ -9,8 +9,8 @@
  * - rewindToAction(): Rewind to arbitrary point
  */
 
-import type { FlowState, Game } from '@boardsmith/engine';
-import { GameRunner } from '@boardsmith/runtime';
+import type { FlowState, Game } from '../engine/index.js';
+import { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
   type GameClass,

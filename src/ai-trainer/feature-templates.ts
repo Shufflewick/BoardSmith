@@ -1,4 +1,4 @@
-import { Player, type Game, type GameElement } from '@boardsmith/engine';
+import { Player, type Game, type GameElement } from '../engine/index.js';
 import type { GameStructure, ElementTypeInfo, CandidateFeature, GameType } from './types.js';
 
 /**

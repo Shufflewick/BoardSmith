@@ -1,6 +1,6 @@
-import type { Game, FlowState, SerializedAction } from '@boardsmith/engine';
-import { GameRunner, type GameRunnerOptions } from '@boardsmith/runtime';
-import { createBot, type BotConfig, type AIConfig } from '@boardsmith/ai';
+import type { Game, FlowState, SerializedAction } from '../engine/index.js';
+import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
+import { createBot, type BotConfig, type AIConfig } from '../ai/index.js';
 import type {
   GameClass,
   CandidateFeature,

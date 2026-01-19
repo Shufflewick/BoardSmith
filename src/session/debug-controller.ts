@@ -12,9 +12,9 @@
  * They are intended for debug/development use only.
  */
 
-import type { Game, GameCommand } from '@boardsmith/engine';
-import { executeCommand } from '@boardsmith/engine';
-import type { GameRunner } from '@boardsmith/runtime';
+import type { Game, GameCommand } from '../engine/index.js';
+import { executeCommand } from '../engine/index.js';
+import type { GameRunner } from '../runtime/index.js';
 
 // ============================================
 // Types

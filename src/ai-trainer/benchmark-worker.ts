@@ -3,7 +3,7 @@
  * Receives benchmark request, runs benchmarkAI, and posts result back.
  */
 import { parentPort } from 'worker_threads';
-import type { Game } from '@boardsmith/engine';
+import type { Game } from '../engine/index.js';
 import type { GameClass, LearnedObjective, SerializableGameStructure } from './types.js';
 import { benchmarkAI, type BenchmarkConfig } from './benchmark.js';
 import { deserializeGameStructure } from './simulator.js';

@@ -2,10 +2,10 @@
  * AI controller for managing AI player moves
  */
 
-import type { Game, SerializedAction } from '@boardsmith/engine';
-import type { GameRunner } from '@boardsmith/runtime';
-import { createBot, parseAILevel } from '@boardsmith/ai';
-import type { AIConfig as BotAIConfig } from '@boardsmith/ai';
+import type { Game, SerializedAction } from '../engine/index.js';
+import type { GameRunner } from '../runtime/index.js';
+import { createBot, parseAILevel } from '../ai/index.js';
+import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import type { GameClass, AIConfig } from './types.js';
 
 /**

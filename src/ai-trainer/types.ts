@@ -1,4 +1,4 @@
-import type { Game, GameOptions, FlowState, SerializedAction } from '@boardsmith/engine';
+import type { Game, GameOptions, FlowState, SerializedAction } from '../engine/index.js';
 
 /** Game class constructor type */
 export type GameClass<G extends Game = Game> = new (options: GameOptions) => G;

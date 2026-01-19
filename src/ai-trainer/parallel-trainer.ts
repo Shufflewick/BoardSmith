@@ -2,7 +2,7 @@
  * Parallel trainer - runs AI training using worker threads for game simulation.
  * This is the consolidated trainer that replaces both AITrainer and the parallel path in train-ai.ts.
  */
-import type { Game } from '@boardsmith/engine';
+import type { Game } from '../engine/index.js';
 import type {
   GameClass,
   GameStructure,

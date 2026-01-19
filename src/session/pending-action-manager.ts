@@ -5,8 +5,8 @@
  * Handles the step-by-step processing of actions with repeating selections.
  */
 
-import type { FlowState, PendingActionState, Game } from '@boardsmith/engine';
-import type { GameRunner } from '@boardsmith/runtime';
+import type { FlowState, PendingActionState, Game } from '../engine/index.js';
+import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
   type StorageAdapter,

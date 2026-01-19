@@ -2,7 +2,7 @@
  * WeightEvolver - Focused class for evolving AI weights on existing objectives.
  * This is the streamlined replacement for auto-discovery training.
  */
-import type { Game } from '@boardsmith/engine';
+import type { Game } from '../engine/index.js';
 import type {
   GameClass,
   GameStructure,

@@ -16,9 +16,9 @@
  * - AI scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint } from '@boardsmith/engine';
-import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '@boardsmith/engine';
-import { GameRunner } from '@boardsmith/runtime';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint } from '../engine/index.js';
+import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
+import { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
   type GameClass,
@@ -41,7 +41,7 @@ import {
 } from './types.js';
 import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
-import type { AIConfig as BotAIConfig } from '@boardsmith/ai';
+import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import { LobbyManager } from './lobby-manager.js';
 import { SelectionHandler } from './selection-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';

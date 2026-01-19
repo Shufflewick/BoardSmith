@@ -2,8 +2,8 @@
  * Shared types for game hosting
  */
 
-import type { FlowState, SerializedAction, Game } from '@boardsmith/engine';
-import type { AIConfig as BotAIConfig } from '@boardsmith/ai';
+import type { FlowState, SerializedAction, Game } from '../engine/index.js';
+import type { AIConfig as BotAIConfig } from '../ai/index.js';
 
 // ============================================
 // Error Codes
@@ -65,10 +65,10 @@ export enum ErrorCode {
 }
 
 // Re-export debug tracing types from engine for convenience
-export type { ActionTrace, SelectionTrace, ConditionDetail } from '@boardsmith/engine';
+export type { ActionTrace, SelectionTrace, ConditionDetail } from '../engine/index.js';
 
 // Re-export repeating selection types from engine
-export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '@boardsmith/engine';
+export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
 
 // ============================================
 // Game Class Types

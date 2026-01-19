@@ -1,6 +1,6 @@
-import type { Game } from '@boardsmith/engine';
-import { GameRunner, type GameRunnerOptions } from '@boardsmith/runtime';
-import { createBot, type AIConfig } from '@boardsmith/ai';
+import type { Game } from '../engine/index.js';
+import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
+import { createBot, type AIConfig } from '../ai/index.js';
 import type { GameClass, LearnedObjective, CandidateFeature } from './types.js';
 
 /**

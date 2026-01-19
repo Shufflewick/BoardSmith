@@ -4,7 +4,7 @@
  */
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
-import type { Game } from '@boardsmith/engine';
+import type { Game } from '../engine/index.js';
 import type {
   GameStructure,
   GameData,

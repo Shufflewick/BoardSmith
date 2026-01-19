@@ -8,8 +8,8 @@
  * Dev-only: checkpoints are kept in memory, not persisted.
  */
 
-import type { Game, DevCheckpoint } from '@boardsmith/engine';
-import { createCheckpoint } from '@boardsmith/engine';
+import type { Game, DevCheckpoint } from '../engine/index.js';
+import { createCheckpoint } from '../engine/index.js';
 
 /**
  * Options for creating a CheckpointManager.

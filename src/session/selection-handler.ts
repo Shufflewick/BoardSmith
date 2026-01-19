@@ -5,8 +5,8 @@
  * Handles choice, element, elements, number, and text selection types.
  */
 
-import type { Game, Player } from '@boardsmith/engine';
-import type { GameRunner } from '@boardsmith/runtime';
+import type { Game, Player } from '../engine/index.js';
+import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
   type SelectionChoicesResponse,
