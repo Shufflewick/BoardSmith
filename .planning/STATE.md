@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 41 of 46 (Test Colocation)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-01-18 -- Phase 40 Source Collapse complete
+Plan: 01 complete
+Status: Phase 41 complete
+Last activity: 2026-01-18 -- Completed 41-01-PLAN.md (library test colocation)
 
-Progress: [==========                              ] 25% (2/8 phases)
+Progress: [============                            ] 37.5% (3/8 phases)
 
 ## Milestones
 
@@ -43,7 +43,7 @@ Progress: [==========                              ] 25% (2/8 phases)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Phase 40 complete, ready for Phase 41 planning
+Stopped at: Phase 41 complete, ready for Phase 42 planning
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -59,3 +59,6 @@ Resume file: None
 | Single atomic commit for source moves | Easier rollback if needed; all 84 files moved together | 40-01 |
 | git mv for all file moves | Preserves full git history | 40-01 |
 | Source collapse complete: 179 files | All 12 packages consolidated to src/*/ | 40-02 |
+| Vitest resolve.alias for packages | Tests need workspace package resolution from src/ | 41-01 |
+| Vue as root devDependency | UI composable tests need vue from root | 41-01 |
+| 14 tests + 1 helper colocated | All library tests now siblings of their source files | 41-01 |
