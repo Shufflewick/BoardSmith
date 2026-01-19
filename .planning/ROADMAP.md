@@ -591,7 +591,11 @@ Plans:
 **Goal**: Update all CLI commands to work with new structure
 **Depends on**: Phase 44
 **Requirements**: CLI-01 through CLI-06
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 45-01-PLAN.md -- Update init command and project-scaffold for standalone games
+- [ ] 45-02-PLAN.md -- Update dev, build, test, pack commands for new structure
 
 #### Phase 46: Documentation
 **Goal**: Update all documentation for new structure
@@ -650,5 +654,5 @@ Plans:
 | 42. Subpath Exports | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 43. Import Rewrite | v2.0 | 2/2 | Complete | 2026-01-19 |
 | 44. Game Extraction | v2.0 | 11/11 | Complete | 2026-01-18 |
-| 45. CLI Update | v2.0 | 0/TBD | Not started | - |
+| 45. CLI Update | v2.0 | 0/2 | Not started | - |
 | 46. Documentation | v2.0 | 0/TBD | Not started | - |
