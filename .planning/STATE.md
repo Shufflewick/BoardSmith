@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 42 of 46 (Subpath Exports)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-01-18 -- Phase 41 Test Colocation complete
+Plan: 01 complete
+Status: Phase complete
+Last activity: 2026-01-19 -- Completed 42-01-PLAN.md
 
-Progress: [===============                         ] 37.5% (3/8 phases)
+Progress: [===================                     ] 50.0% (4/8 phases)
 
 ## Milestones
 
@@ -42,8 +42,8 @@ Progress: [===============                         ] 37.5% (3/8 phases)
 
 ## Session Continuity
 
-Last session: 2026-01-18
-Stopped at: Phase 41 complete (verified), ready for Phase 42 planning
+Last session: 2026-01-19
+Stopped at: Phase 42 complete, ready for Phase 43 planning
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -62,3 +62,6 @@ Resume file: None
 | Vitest resolve.alias for packages | Tests need workspace package resolution from src/ | 41-01 |
 | Vue as root devDependency | UI composable tests need vue from root | 41-01 |
 | 14 tests + 1 helper colocated | All library tests now siblings of their source files | 41-01 |
+| Source-based exports | Point to .ts source files, bundler consumers compile | 42-01 |
+| Types condition first | Required for TypeScript moduleResolution: bundler | 42-01 |
+| 11 subpaths configured | ., ui, session, testing, eslint-plugin, ai, ai-trainer, client, server, runtime, worker | 42-01 |
