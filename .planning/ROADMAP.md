@@ -14,12 +14,11 @@
 - [v1.0 AI System Overhaul](milestones/v1.0-ROADMAP.md) (Phases 24-28.1) -- SHIPPED 2026-01-15
 - [v1.1 MCTS Strategy Improvements](milestones/v1.1-ROADMAP.md) (Phases 29-36) -- SHIPPED 2026-01-16
 - [v1.2 Local Tarballs](milestones/v1.2-ROADMAP.md) (Phases 37-38) -- SHIPPED 2026-01-18
+- [v2.0 Collapse the Monorepo](milestones/v2.0-ROADMAP.md) (Phases 39-46) -- SHIPPED 2026-01-19
 
 ## Active Milestone
 
-[v2.0 Collapse the Monorepo](milestones/v2.0-ROADMAP.md) (Phases 39-46)
-
-**Goal:** Transform BoardSmith from a pnpm monorepo with multiple `@boardsmith/*` packages into a single `boardsmith` npm package with subpath exports, and extract games to separate repos.
+None - v2.0 complete. Ready for next milestone.
 
 ## Overview
 
@@ -39,7 +38,7 @@ BoardSmith development roadmap. Each milestone focuses on a specific capability 
 - **v1.0 AI System Overhaul** -- Phases 24-28.1 (shipped 2026-01-15)
 - **v1.1 MCTS Strategy Improvements** -- Phases 29-36 (shipped 2026-01-16)
 - **v1.2 Local Tarballs** -- Phases 37-38 (shipped 2026-01-18)
-- **v2.0 Collapse the Monorepo** -- Phases 39-46 (in progress)
+- **v2.0 Collapse the Monorepo** -- Phases 39-46 (shipped 2026-01-19)
 
 ## Phases
 
@@ -515,98 +514,21 @@ Plans:
 
 </details>
 
-### v2.0 Collapse the Monorepo (Phases 39-46) -- IN PROGRESS
+<details>
+<summary>v2.0 Collapse the Monorepo (Phases 39-46) -- SHIPPED 2026-01-19</summary>
 
-**Milestone Goal:** Transform BoardSmith from a pnpm monorepo with multiple `@boardsmith/*` packages into a single `boardsmith` npm package with subpath exports, and extract games to separate repos.
+- [x] Phase 39: Foundation (1/1 plans) -- completed 2026-01-18
+- [x] Phase 40: Source Collapse (2/2 plans) -- completed 2026-01-18
+- [x] Phase 41: Test Colocation (1/1 plans) -- completed 2026-01-18
+- [x] Phase 42: Subpath Exports (1/1 plans) -- completed 2026-01-18
+- [x] Phase 43: Import Rewrite (2/2 plans) -- completed 2026-01-19
+- [x] Phase 44: Game Extraction (11/11 plans) -- completed 2026-01-18
+- [x] Phase 45: CLI Update (2/2 plans) -- completed 2026-01-18
+- [x] Phase 46: Documentation (3/3 plans) -- completed 2026-01-19
 
 See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
 
-#### Phase 39: Foundation
-**Goal**: Establish single-package structure with npm tooling
-**Depends on**: v1.2 complete
-**Requirements**: PKG-01, PKG-13, SRC-14
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 39-01-PLAN.md -- Migrate from pnpm to npm, add exports field
-
-#### Phase 40: Source Collapse
-**Goal**: Consolidate all package sources into src/ directory structure
-**Depends on**: Phase 39
-**Requirements**: SRC-01 through SRC-12
-**Plans**: 2/2 complete
-
-Plans:
-- [x] 40-01-PLAN.md -- Move foundation packages (engine, runtime, ai, ai-trainer, testing, session)
-- [x] 40-02-PLAN.md -- Move peripheral packages (eslint-plugin, client, server, ui, worker, cli)
-
-#### Phase 41: Test Colocation
-**Goal**: Move all tests to be colocated with source files
-**Depends on**: Phase 40
-**Requirements**: SRC-13
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 41-01-PLAN.md -- Move library tests to src/, update vitest config
-
-#### Phase 42: Subpath Exports
-**Goal**: Configure all package.json exports for subpath imports
-**Depends on**: Phase 41
-**Requirements**: PKG-02 through PKG-12
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 42-01-PLAN.md -- Configure 11 subpath exports, verify with external test project
-
-#### Phase 43: Import Rewrite
-**Goal**: Replace all @boardsmith/* imports with relative paths
-**Depends on**: Phase 42
-**Requirements**: IMP-01, IMP-02, IMP-03
-**Plans**: 2/2 complete
-
-Plans:
-- [x] 43-01-PLAN.md -- Rewrite foundation and middle layer imports (runtime, ai, testing, ai-trainer, session)
-- [x] 43-02-PLAN.md -- Rewrite peripheral layer imports (server, ui, worker, client, cli) + update vitest config
-
-#### Phase 44: Game Extraction
-**Goal**: Extract all games and demos to separate repositories
-**Depends on**: Phase 43
-**Requirements**: GAME-01 through GAME-11
-**Plans**: 11/11 complete
-
-Plans:
-- [x] 44-01-PLAN.md -- Create reusable template files for extracted games
-- [x] 44-02-PLAN.md -- Extract Hex game (GAME-01)
-- [x] 44-03-PLAN.md -- Extract Checkers game (GAME-03)
-- [x] 44-04-PLAN.md -- Extract Cribbage game (GAME-04)
-- [x] 44-05-PLAN.md -- Extract Go Fish game (GAME-02)
-- [x] 44-06-PLAN.md -- Extract Polyhedral Potions game (GAME-06)
-- [x] 44-07-PLAN.md -- Extract Demo Action Panel (GAME-07)
-- [x] 44-08-PLAN.md -- Extract Demo Animation (GAME-08)
-- [x] 44-09-PLAN.md -- Extract Demo Complex UI Interactions (GAME-09)
-- [x] 44-10-PLAN.md -- Extract Floss Bitties (GAME-05, not working OK)
-- [x] 44-11-PLAN.md -- Validate all extracted games (GAME-10, GAME-11)
-
-#### Phase 45: CLI Update
-**Goal**: Update all CLI commands to work with new structure
-**Depends on**: Phase 44
-**Requirements**: CLI-01 through CLI-06
-**Plans**: 2/2 complete
-
-Plans:
-- [x] 45-01-PLAN.md -- Update init command and project-scaffold for standalone games
-- [x] 45-02-PLAN.md -- Update dev, build, pack commands for new structure
-
-#### Phase 46: Documentation
-**Goal**: Update all documentation for new structure
-**Depends on**: Phase 45
-**Requirements**: DOC-01 through DOC-04
-**Plans**: 3 plans
-
-Plans:
-- [x] 46-01-PLAN.md -- Update existing docs with new import paths (DOC-01, DOC-02)
-- [x] 46-02-PLAN.md -- Create API reference pages for subpath exports (DOC-03)
-- [x] 46-03-PLAN.md -- Write migration guide for MERC team (DOC-04)
+</details>
 
 ## Progress
 

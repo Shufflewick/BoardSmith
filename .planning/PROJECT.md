@@ -8,16 +8,15 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v2.0 Collapse the Monorepo
+## Current State: v2.0 Shipped
 
-**Goal:** Transform BoardSmith from a pnpm monorepo with multiple `@boardsmith/*` packages into a single `boardsmith` npm package with subpath exports, and extract games to separate repos.
+BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Games live in separate repositories at `~/BoardSmithGames/`.
 
-**Target features:**
-- Single `boardsmith` package with subpath exports (`boardsmith`, `boardsmith/testing`, `boardsmith/session`, `boardsmith/ui`, `boardsmith/eslint-plugin`)
-- Collapsed `src/` structure with colocated tests
-- npm instead of pnpm
-- All games extracted to separate repos (proof the new structure works)
-- Updated CLI, docs, and migration guide
+**Package structure:**
+- Single package: `boardsmith` (replaces 12 `@boardsmith/*` packages)
+- Subpath exports: `boardsmith`, `boardsmith/ui`, `boardsmith/session`, `boardsmith/testing`, `boardsmith/eslint-plugin`, `boardsmith/ai`, `boardsmith/ai-trainer`, `boardsmith/client`, `boardsmith/server`, `boardsmith/runtime`, `boardsmith/worker`
+- Source: Unified `src/` directory with colocated tests
+- Tooling: npm (not pnpm)
 
 ## Requirements
 
@@ -66,24 +65,23 @@ Make board game development fast and correct — the framework handles multiplay
 - ✓ Proof Number Search for forced win/loss detection — v1.1
 - ✓ `boardsmith pack` command with timestamp versioning — v1.2
 - ✓ `--target` flag for consumer project integration — v1.2
+- ✓ Single `boardsmith` package replaces all `@boardsmith/*` packages — v2.0
+- ✓ 11 subpath exports configured — v2.0
+- ✓ Collapsed `src/` structure with colocated tests — v2.0
+- ✓ npm instead of pnpm — v2.0
+- ✓ 9 games extracted to `~/BoardSmithGames/` — v2.0
+- ✓ CLI updated for monorepo and standalone contexts — v2.0
+- ✓ Documentation and migration guide complete — v2.0
 
 ### Active
 
-- [ ] Single `boardsmith` package replaces all `@boardsmith/*` packages
-- [ ] Subpath exports: `boardsmith`, `boardsmith/testing`, `boardsmith/session`, `boardsmith/ui`, `boardsmith/eslint-plugin`
-- [ ] Collapsed `src/` structure (engine, ui, session, cli, testing, eslint-plugin)
-- [ ] Colocated tests (*.test.ts next to source)
-- [ ] npm instead of pnpm (remove workspace protocol)
-- [ ] All games extracted to separate repos
-- [ ] CLI updated for new structure
-- [ ] All documentation updated
-- [ ] Migration guide for external team
+(None — v2.0 complete, ready for next milestone)
 
 ### Out of Scope
 
 - Backward compatibility — no fallbacks, clean break to v2.0
 - Multiple package versions — single version for entire library
-- Games in main repo — games are separate repos, not examples bundled with library
+- Games in main repo — games are separate repos at `~/BoardSmithGames/`
 
 ## Constraints
 
@@ -106,20 +104,27 @@ Make board game development fast and correct — the framework handles multiplay
 
 ## Context
 
-~99k LOC TypeScript/Vue across monorepo packages (pre-collapse).
-Tech stack: TypeScript 5.7, Vue 3.5, Vitest.
-All 493 unit tests passing.
+~75k LOC TypeScript/Vue in unified `src/` structure.
+Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
+528 unit tests passing (15 e2e tests require running server).
 
-Current structure (to be collapsed):
-- `packages/engine/` → `src/engine/`
-- `packages/ui/` → `src/ui/`
-- `packages/session/` → `src/session/`
-- `packages/cli/` → `src/cli/`
-- `packages/testing/` → `src/testing/`
-- `eslint-plugin-boardsmith/` → `src/eslint-plugin/`
-- `packages/games/*` → separate repos in `~/BoardSmithGames/`
+**Current structure:**
+- `src/engine/` — Core game logic
+- `src/ui/` — Vue components
+- `src/session/` — Game session management
+- `src/cli/` — CLI commands
+- `src/testing/` — Test utilities
+- `src/eslint-plugin/` — ESLint rules
+- `src/ai/` — MCTS and AI logic
+- `src/ai-trainer/` — Training infrastructure
+- `src/client/` — Client runtime
+- `src/server/` — Server runtime
+- `src/runtime/` — Shared runtime
+- `src/worker/` — Web worker support
 
-One external team using BoardSmith — needs migration guide.
+**Games:** 9 games extracted to `~/BoardSmithGames/` (hex, checkers, cribbage, go-fish, polyhedral-potions, floss-bitties, demo-action-panel, demo-animation, demo-complex-ui)
+
+One external team using BoardSmith — migration guide at `docs/migration-guide.md`.
 
 ---
-*Last updated: 2026-01-18 after starting v2.0 milestone*
+*Last updated: 2026-01-19 after v2.0 milestone*

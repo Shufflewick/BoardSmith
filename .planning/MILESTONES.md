@@ -1,4 +1,59 @@
-# Project Milestones: BoardSmith Large File Refactoring
+# Project Milestones: BoardSmith
+
+## v2.0 Collapse the Monorepo (Shipped: 2026-01-19)
+
+**Delivered:** Transformed BoardSmith from a pnpm monorepo with 12 `@boardsmith/*` packages into a single `boardsmith` npm package with 11 subpath exports, extracted all games to separate repos.
+
+**Phases completed:** 39-46 (8 phases, 23 plans total)
+
+**Key accomplishments:**
+
+- Replaced 12 separate packages with single `boardsmith` npm package
+- Consolidated 179 source files into unified `src/` structure (git history preserved)
+- Configured 11 subpath exports (`boardsmith`, `boardsmith/ui`, `boardsmith/session`, etc.)
+- Colocated all library tests (*.test.ts next to source files)
+- Rewrote all internal imports to relative paths
+- Extracted 9 games to `~/BoardSmithGames/` as standalone git repos
+- Updated CLI for both monorepo and standalone game contexts
+- Complete migration guide for external team
+
+**Stats:**
+
+- 293 files changed
+- +19,773 / -7,278 lines
+- 8 phases, 23 plans
+- 2 days from start to ship (2026-01-18 → 2026-01-19)
+
+**Git range:** `5bba218` → `d3fd429`
+
+**What's next:** Package structure complete. Ready for v2.1 enhancements or new features.
+
+---
+
+## v1.2 Local Tarballs (Shipped: 2026-01-18)
+
+**Delivered:** Parallel development workflow with `boardsmith pack` command producing immutable tarball snapshots.
+
+**Phases completed:** 37-38 (2 plans total)
+
+**Key accomplishments:**
+
+- `boardsmith pack` command with timestamp versioning
+- `--target` flag for consumer project integration
+- Vendor directory management with dependency updates
+
+**Stats:**
+
+- 12 files modified
+- +1,200 lines
+- 2 phases, 2 plans
+- 1 day from start to ship
+
+**Git range:** `feat(37-01)` → `docs(38)`
+
+**What's next:** Monorepo collapse (v2.0)
+
+---
 
 ## v1.1 MCTS Strategy Improvements (Shipped: 2026-01-16)
 
