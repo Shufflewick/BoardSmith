@@ -377,16 +377,7 @@ export function buildPlayerState(
 
   // Get the full player data including custom properties (abilities, score, etc.)
   // from the game's player objects via their toJSON methods.
-  //
-  // IMPORTANT: We find players by checking for the `position` property instead of
-  // using `game.all(Player)`. This is because esbuild bundles @boardsmith/engine
-  // into the game rules, creating a separate copy of the Player class. When we
-  // import Player here in the session, it's a different class object than the
-  // bundled one, causing instanceof checks to fail. Players are direct children
-  // of the game and are the only elements with a numeric `position` property.
-  const allPlayers = (runner.game as any)._t.children.filter(
-    (el: any) => typeof el.position === 'number'
-  );
+  const allPlayers = runner.game.players;
   const fullPlayerData = allPlayers.map((player: any) => {
     if (typeof player.toJSON === 'function') {
       // toJSON returns ElementJSON which puts custom props in `attributes`.

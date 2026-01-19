@@ -1417,6 +1417,31 @@ export class Game<
   // ============================================
 
   /**
+   * Get all players in the game.
+   *
+   * Returns players in position order (Player 1, Player 2, etc.).
+   * This is the preferred way to iterate over all players.
+   *
+   * @example
+   * ```typescript
+   * // Deal to all players
+   * for (const player of game.players) {
+   *   deck.dealTo(player.hand, 5);
+   * }
+   *
+   * // Find richest player
+   * const richest = game.players.reduce((max, p) =>
+   *   p.gold > max.gold ? p : max
+   * );
+   * ```
+   */
+  get players(): P[] {
+    return (this._t.children as GameElement[])
+      .filter((el): el is P => (el as any).$type === 'player')
+      .sort((a, b) => a.position - b.position);
+  }
+
+  /**
    * Get the current player (the player whose turn it is).
    *
    * The current player is determined by the `_isCurrent` flag on Player instances,

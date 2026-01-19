@@ -78,6 +78,13 @@ import type { ElementContext, ElementClass, ElementFinder, ElementJSON } from '.
  */
 export class Player<G extends Game = any, P extends Player = any> extends GameElement<G, P> {
   /**
+   * System property to identify this element type for reliable detection.
+   * $ prefix indicates this is a system property.
+   * @internal
+   */
+  $type: 'player' = 'player';
+
+  /**
    * Seat position (1-indexed: Player 1 = position 1, Player 2 = position 2, etc.).
    *
    * Position is assigned at game creation and remains constant throughout the game.
