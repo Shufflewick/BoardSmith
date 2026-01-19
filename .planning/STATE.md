@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 45 of 46 (CLI Update)
-Plan: 01 of 02 complete
-Status: In progress
-Last activity: 2026-01-18 -- Completed 45-01-PLAN.md (Init Command Update)
+Plan: 02 of 02 complete
+Status: Phase complete
+Last activity: 2026-01-18 -- Completed 45-02-PLAN.md (CLI Commands Update)
 
-Progress: [=================================       ] 82% (6.5/8 phases in v2.0)
+Progress: [====================================    ] 87.5% (7/8 phases in v2.0)
 
 ## Milestones
 
@@ -43,7 +43,7 @@ Progress: [=================================       ] 82% (6.5/8 phases in v2.0)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Completed 45-01-PLAN.md - Ready for 45-02-PLAN.md
+Stopped at: Completed 45-02-PLAN.md - Phase 45 complete, ready for Phase 46
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -81,3 +81,7 @@ Resume file: None
 | Simplified package name | @mygames/${name} -> ${name} for standalone projects | 45-01 |
 | npx boardsmith for scripts | No @boardsmith/cli devDependency needed in generated projects | 45-01 |
 | Game-specific Player in tests | Use ${Pascal}Player from game.js instead of generic Player import | 45-01 |
+| Context detection via src/engine/ | Monorepo has src/engine/, standalone has boardsmith.json but no src/engine/ | 45-02 |
+| dev.ts noop plugin for standalone | Let node_modules resolution work naturally instead of intercepting | 45-02 |
+| build command is games-only | Clear error when run in monorepo context guides users to appropriate tooling | 45-02 |
+| pack packs single package | After monorepo collapse, there's only one boardsmith package at root | 45-02 |
