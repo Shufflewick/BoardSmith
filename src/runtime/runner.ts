@@ -258,8 +258,9 @@ export class GameRunner<G extends Game = Game> {
     // Start flow and replay actions to restore flow state
     runner.start();
     for (const action of snapshot.actionHistory) {
-      const { actionName, args } = deserializeAction(action, runner.game);
-      runner.game.continueFlow(actionName, args);
+      const { actionName, player, args } = deserializeAction(action, runner.game);
+      // Pass player position for simultaneous actions
+      runner.game.continueFlow(actionName, args, player.position);
     }
 
     return runner;

@@ -1171,6 +1171,7 @@ export class MCTSBot<G extends Game = Game> {
       return game;
     } catch (error) {
       // Restoration failed - this can happen with complex game state transitions
+      console.error('[MCTS] Game restoration failed:', error);
       return null;
     }
   }
