@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 44 of 46 (Game Extraction)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-01-19 -- Phase 43 Import Rewrite complete (verified)
+Plan: 01 of 07 (Templates)
+Status: Plan 01 complete
+Last activity: 2026-01-18 -- Completed 44-01-PLAN.md (Game Extraction Templates)
 
-Progress: [========================                ] 63% (5/8 phases in v2.0)
+Progress: [=========================               ] 64% (5.1/8 phases in v2.0)
 
 ## Milestones
 
@@ -42,8 +42,8 @@ Progress: [========================                ] 63% (5/8 phases in v2.0)
 
 ## Session Continuity
 
-Last session: 2026-01-19
-Stopped at: Phase 43 complete (verified), ready for Phase 44 planning
+Last session: 2026-01-18
+Stopped at: Completed 44-01-PLAN.md (Game Extraction Templates)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -69,3 +69,6 @@ Resume file: None
 | Preserve JSDoc @boardsmith examples | User-facing documentation should show public API, not internal paths | 43-01 |
 | Extended import rewrite scope | Completed worker, server, cli, ui imports in single phase for completeness | 43-01 |
 | Vitest aliases only for external packages | Internal modules use relative imports, aliases only for game packages in packages/ | 43-02 |
+| Templates in /private/tmp/ | Isolated testing environment for game extraction workflow | 44-01 |
+| file:../../BoardSmith for local dev | Local development uses file link; production uses npm version | 44-01 |
+| Placeholder tokens {GAME_NAME}, {DISPLAY_NAME} | Per-game customization during extraction | 44-01 |
