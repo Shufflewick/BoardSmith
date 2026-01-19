@@ -4,6 +4,7 @@ import {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
+  ActionExecutor,
   type Game,
   type GameOptions,
   type Player,
@@ -121,11 +122,20 @@ export class GameRunner<G extends Game = Game> {
     const actionDef = (this.game as any)._actions?.get(actionName);
     const isUndoable = actionDef?.undoable;
 
+    // Resolve raw element IDs to actual GameElement objects before serializing.
+    // This ensures element references are properly serialized (with branch paths or IDs)
+    // instead of being passed through as raw numbers which won't survive game restoration.
+    let argsToSerialize = args;
+    if (actionDef) {
+      const executor = new ActionExecutor(this.game);
+      argsToSerialize = executor.resolveArgs(actionDef, args, playerObj);
+    }
+
     // Serialize the action before executing (captures current element refs)
     const serializedAction = serializeAction(
       actionName,
       playerObj,
-      args,
+      argsToSerialize,
       this.game,
       this.serializeOptions,
       isUndoable
