@@ -34,14 +34,21 @@ export interface GeneratedFile {
  * Check if running from local dev environment
  */
 export function getMonorepoRoot(): string | null {
-  // __dirname is like /path/to/BoardSmith/dist/cli/lib
-  // Go up: lib -> cli -> dist -> BoardSmith
-  const potentialRoot = join(__dirname, '..', '..', '..');
-  const enginePath = join(potentialRoot, 'src', 'engine');
-  const uiPath = join(potentialRoot, 'src', 'ui');
+  // Try multiple possible paths depending on how CLI is built/bundled:
+  // - Unbundled: dist/cli/lib/project-scaffold.js -> go up 3 levels
+  // - Bundled:   dist/cli/cli.mjs -> go up 2 levels
+  // - Source:    src/cli/lib/project-scaffold.ts -> go up 3 levels
+  const candidates = [
+    join(__dirname, '..', '..', '..'),  // lib -> cli -> dist -> BoardSmith
+    join(__dirname, '..', '..'),        // cli -> dist -> BoardSmith (bundled)
+  ];
 
-  if (existsSync(enginePath) && existsSync(uiPath)) {
-    return potentialRoot;
+  for (const candidate of candidates) {
+    const enginePath = join(candidate, 'src', 'engine');
+    const uiPath = join(candidate, 'src', 'ui');
+    if (existsSync(enginePath) && existsSync(uiPath)) {
+      return candidate;
+    }
   }
   return null;
 }
