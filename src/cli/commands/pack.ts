@@ -22,80 +22,50 @@ interface PackResult {
 }
 
 /**
+ * Detect if we're running in the BoardSmith monorepo or a standalone game project.
+ * - Monorepo: Has src/engine/ directory (collapsed structure)
+ * - Standalone: Has boardsmith.json but no src/engine/
+ */
+function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
+  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
+  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
+
+  // If we're in the monorepo root, it has src/engine
+  if (hasSrcEngine) return 'monorepo';
+
+  // Standalone game project
+  if (hasBoardsmithJson) return 'standalone';
+
+  // Fallback - treat as standalone (will fail with proper error if neither)
+  return 'standalone';
+}
+
+/**
  * Check if a package name is a BoardSmith package.
- * Includes @boardsmith/* scoped packages and eslint-plugin-boardsmith.
+ * Includes the new 'boardsmith' single package name for backwards compatibility.
  */
 function isBoardSmithPackage(name: string | undefined): boolean {
   if (!name) return false;
+  // New single package name after monorepo collapse
+  if (name === 'boardsmith') return true;
+  // Legacy @boardsmith/* scoped packages (for backwards compatibility)
   return name.startsWith('@boardsmith/') || name === 'eslint-plugin-boardsmith';
 }
 
 /**
- * Discover all public @boardsmith/* packages in the monorepo.
- * Scans packages/* and packages/games/* directories.
+ * Discover the single boardsmith package at the monorepo root.
+ * After monorepo collapse, there's only one package to pack.
  */
 function discoverPackages(monorepoRoot: string): PackageInfo[] {
-  const packages: PackageInfo[] = [];
-  const packagesDir = join(monorepoRoot, 'packages');
+  const rootPkgJson = join(monorepoRoot, 'package.json');
+  const pkgJson = JSON.parse(readFileSync(rootPkgJson, 'utf-8'));
 
-  // Scan packages/* (depth 1)
-  const topLevelDirs = readdirSync(packagesDir, { withFileTypes: true })
-    .filter(d => d.isDirectory() && d.name !== 'games');
-
-  for (const dir of topLevelDirs) {
-    const pkgJsonPath = join(packagesDir, dir.name, 'package.json');
-    if (existsSync(pkgJsonPath)) {
-      const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-
-      // Skip private packages
-      if (pkgJson.private === true) {
-        continue;
-      }
-
-      // Only include BoardSmith packages
-      if (!isBoardSmithPackage(pkgJson.name)) {
-        continue;
-      }
-
-      packages.push({
-        name: pkgJson.name,
-        path: join(packagesDir, dir.name),
-        version: pkgJson.version || '0.0.1',
-      });
-    }
-  }
-
-  // Scan packages/games/* (depth 2)
-  const gamesDir = join(packagesDir, 'games');
-  if (existsSync(gamesDir)) {
-    const gameDirs = readdirSync(gamesDir, { withFileTypes: true })
-      .filter(d => d.isDirectory());
-
-    for (const dir of gameDirs) {
-      const pkgJsonPath = join(gamesDir, dir.name, 'package.json');
-      if (existsSync(pkgJsonPath)) {
-        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-
-        // Skip private packages
-        if (pkgJson.private === true) {
-          continue;
-        }
-
-        // Only include @boardsmith/* packages
-        if (!pkgJson.name?.startsWith('@boardsmith/')) {
-          continue;
-        }
-
-        packages.push({
-          name: pkgJson.name,
-          path: join(gamesDir, dir.name),
-          version: pkgJson.version || '0.0.1',
-        });
-      }
-    }
-  }
-
-  return packages;
+  // Only return the root package
+  return [{
+    name: pkgJson.name || 'boardsmith',
+    path: monorepoRoot,
+    version: pkgJson.version || '0.0.1',
+  }];
 }
 
 /**
@@ -278,28 +248,23 @@ async function integrateWithTarget(
 }
 
 /**
- * Validate that we're running from a monorepo root.
+ * Validate that we're running from the BoardSmith repository root.
+ * After monorepo collapse, we check for src/engine/ as the indicator.
  */
 function validateMonorepoRoot(cwd: string): void {
   const rootPkgJson = join(cwd, 'package.json');
 
   if (!existsSync(rootPkgJson)) {
     console.error(chalk.red('Error: package.json not found'));
-    console.error(chalk.dim('Make sure you are in the BoardSmith monorepo root'));
+    console.error(chalk.dim('Make sure you are in the BoardSmith repository root'));
     process.exit(1);
   }
 
-  const pkgJson = JSON.parse(readFileSync(rootPkgJson, 'utf-8'));
-
-  if (pkgJson.private !== true) {
-    console.error(chalk.red('Error: Root package.json must have "private": true'));
-    console.error(chalk.dim('Make sure you are in the BoardSmith monorepo root'));
-    process.exit(1);
-  }
-
-  if (!pkgJson.workspaces || !Array.isArray(pkgJson.workspaces)) {
-    console.error(chalk.red('Error: Root package.json must have "workspaces" array'));
-    console.error(chalk.dim('Make sure you are in the BoardSmith monorepo root'));
+  // Check for src/engine/ which indicates BoardSmith repo
+  const srcEngine = join(cwd, 'src', 'engine');
+  if (!existsSync(srcEngine)) {
+    console.error(chalk.red('Error: This command must be run from the BoardSmith repository root'));
+    console.error(chalk.dim('Current directory does not contain src/engine/'));
     process.exit(1);
   }
 }
@@ -313,6 +278,14 @@ export async function packCommand(options: PackOptions): Promise<void> {
   const outDir = options.outDir || '.boardsmith/tarballs';
   const outputPath = join(cwd, outDir);
 
+  // Check context - pack is only for the BoardSmith library, not game projects
+  if (getProjectContext(cwd) === 'standalone') {
+    console.error(chalk.red('Error: boardsmith pack is for packaging the BoardSmith library itself'));
+    console.error(chalk.dim('You are in a standalone game project.'));
+    console.error(chalk.dim('Games depend on boardsmith from npm or a local file: link.'));
+    process.exit(1);
+  }
+
   // Validate we're in monorepo root
   validateMonorepoRoot(cwd);
 
@@ -323,11 +296,11 @@ export async function packCommand(options: PackOptions): Promise<void> {
   const packages = discoverPackages(cwd);
 
   if (packages.length === 0) {
-    spinner.fail('No public @boardsmith/* packages found');
+    spinner.fail('No boardsmith package found');
     process.exit(1);
   }
 
-  spinner.succeed(`Found ${packages.length} public packages`);
+  spinner.succeed(`Found ${packages.length} package to pack`);
 
   // Create output directory
   mkdirSync(outputPath, { recursive: true });
