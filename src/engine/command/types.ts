@@ -193,6 +193,32 @@ export interface VisibilityConfig {
 }
 
 /**
+ * Add an entry to a scoring track
+ */
+export interface TrackAddCommand extends BaseCommand {
+  type: 'TRACK_ADD';
+  /** ID of element that owns the track (e.g., player) */
+  ownerId: number;
+  /** Track identifier (e.g., 'fulminate', 'distill-0') */
+  trackId: string;
+  /** Value to add */
+  value: number;
+  /** Whether this is a special entry */
+  isSpecial?: boolean;
+}
+
+/**
+ * Remove the last entry from a scoring track (for undo)
+ */
+export interface TrackRemoveLastCommand extends BaseCommand {
+  type: 'TRACK_REMOVE_LAST';
+  /** ID of element that owns the track */
+  ownerId: number;
+  /** Track identifier */
+  trackId: string;
+}
+
+/**
  * Union of all command types
  */
 export type GameCommand =
@@ -209,7 +235,9 @@ export type GameCommand =
   | StartGameCommand
   | EndGameCommand
   | SetOrderCommand
-  | ReorderChildCommand;
+  | ReorderChildCommand
+  | TrackAddCommand
+  | TrackRemoveLastCommand;
 
 /**
  * Result of executing a command

@@ -17,4 +17,5 @@ export type {
   MonotonicTrackConfig,
   UniqueTrackConfig,
   CounterTrackConfig,
+  TrackCommandEmitter,
 } from './track.js';

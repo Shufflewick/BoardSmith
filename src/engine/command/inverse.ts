@@ -22,7 +22,10 @@ import type {
   EndGameCommand,
   SetOrderCommand,
   ReorderChildCommand,
+  TrackAddCommand,
+  TrackRemoveLastCommand,
 } from './types.js';
+import type { TrackOwner } from './executor.js';
 import type { VisibilityState } from './visibility.js';
 
 /**
@@ -93,6 +96,12 @@ export function createInverseCommand(game: Game, command: GameCommand): GameComm
 
     case 'REORDER_CHILD':
       return createReorderChildInverse(game, command);
+
+    case 'TRACK_ADD':
+      return createTrackAddInverse(game, command);
+
+    case 'TRACK_REMOVE_LAST':
+      return createTrackRemoveLastInverse(game, command);
 
     default:
       return null;
@@ -255,5 +264,47 @@ function createReorderChildInverse(game: Game, command: ReorderChildCommand): Re
     type: 'REORDER_CHILD',
     elementId: command.elementId,
     targetIndex: currentIndex,
+  };
+}
+
+/**
+ * Create inverse for TRACK_ADD command.
+ * Inverse is TRACK_REMOVE_LAST - removes the entry that was just added.
+ */
+function createTrackAddInverse(_game: Game, command: TrackAddCommand): TrackRemoveLastCommand {
+  // The inverse of adding is removing the last entry
+  return {
+    type: 'TRACK_REMOVE_LAST',
+    ownerId: command.ownerId,
+    trackId: command.trackId,
+  };
+}
+
+/**
+ * Create inverse for TRACK_REMOVE_LAST command.
+ * Captures the last entry's value before removal for restoration.
+ */
+function createTrackRemoveLastInverse(game: Game, command: TrackRemoveLastCommand): TrackAddCommand | null {
+  const owner = game.getElementById(command.ownerId);
+  if (!owner) return null;
+
+  // Check if owner implements TrackOwner interface
+  if (!('getTrack' in owner) || typeof (owner as unknown as TrackOwner).getTrack !== 'function') {
+    return null;
+  }
+
+  const track = (owner as unknown as TrackOwner).getTrack(command.trackId);
+  if (!track) return null;
+
+  const lastEntry = track.getLastEntry();
+  if (!lastEntry) return null;
+
+  // The inverse of removing is adding the value back
+  return {
+    type: 'TRACK_ADD',
+    ownerId: command.ownerId,
+    trackId: command.trackId,
+    value: lastEntry.value,
+    isSpecial: lastEntry.isSpecial,
   };
 }

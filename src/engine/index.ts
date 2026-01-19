@@ -58,6 +58,7 @@ export type {
   MonotonicTrackConfig,
   UniqueTrackConfig,
   CounterTrackConfig,
+  TrackCommandEmitter,
 } from './scoring/index.js';
 
 // Command system (event sourcing)
@@ -88,6 +89,9 @@ export type {
   StartGameCommand,
   EndGameCommand,
   SetOrderCommand,
+  TrackAddCommand,
+  TrackRemoveLastCommand,
+  TrackOwner,
   VisibilityConfig,
   VisibilityMode,
   VisibilityState,

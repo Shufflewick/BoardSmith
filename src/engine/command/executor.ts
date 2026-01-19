@@ -15,8 +15,11 @@ import type {
   EndGameCommand,
   SetOrderCommand,
   ReorderChildCommand,
+  TrackAddCommand,
+  TrackRemoveLastCommand,
   VisibilityConfig,
 } from './types.js';
+import type { Track } from '../scoring/track.js';
 import { createInverseCommand } from './inverse.js';
 import type { Game } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
@@ -59,6 +62,10 @@ export function executeCommand(game: Game, command: GameCommand): CommandResult 
         return executeSetOrder(game, command);
       case 'REORDER_CHILD':
         return executeReorderChild(game, command);
+      case 'TRACK_ADD':
+        return executeTrackAdd(game, command);
+      case 'TRACK_REMOVE_LAST':
+        return executeTrackRemoveLast(game, command);
       default:
         return { success: false, error: `Unknown command type: ${(command as any).type}` };
     }
@@ -245,6 +252,54 @@ function executeReorderChild(game: Game, command: ReorderChildCommand): CommandR
   // Insert at target position
   children.splice(command.targetIndex, 0, element);
 
+  return { success: true };
+}
+
+/**
+ * Interface for elements that own tracks (e.g., Player with scoring tracks)
+ */
+export interface TrackOwner {
+  /** Get a track by its ID */
+  getTrack(trackId: string): Track | undefined;
+}
+
+function executeTrackAdd(game: Game, command: TrackAddCommand): CommandResult {
+  const owner = game.getElementById(command.ownerId);
+  if (!owner) {
+    return { success: false, error: `Track owner not found: ${command.ownerId}` };
+  }
+
+  // Check if owner implements TrackOwner interface
+  if (!('getTrack' in owner) || typeof (owner as any).getTrack !== 'function') {
+    return { success: false, error: `Element ${command.ownerId} does not support tracks` };
+  }
+
+  const track = (owner as unknown as TrackOwner).getTrack(command.trackId);
+  if (!track) {
+    return { success: false, error: `Track not found: ${command.trackId}` };
+  }
+
+  // Add to track (this will throw if invalid, which is caught by executeCommand)
+  track.addInternal(command.value, command.isSpecial ?? false);
+  return { success: true };
+}
+
+function executeTrackRemoveLast(game: Game, command: TrackRemoveLastCommand): CommandResult {
+  const owner = game.getElementById(command.ownerId);
+  if (!owner) {
+    return { success: false, error: `Track owner not found: ${command.ownerId}` };
+  }
+
+  if (!('getTrack' in owner) || typeof (owner as any).getTrack !== 'function') {
+    return { success: false, error: `Element ${command.ownerId} does not support tracks` };
+  }
+
+  const track = (owner as unknown as TrackOwner).getTrack(command.trackId);
+  if (!track) {
+    return { success: false, error: `Track not found: ${command.trackId}` };
+  }
+
+  track.removeLastInternal();
   return { success: true };
 }
 

@@ -17,6 +17,8 @@ export type {
   SetOrderCommand,
   ReorderChildCommand,
   VisibilityConfig,
+  TrackAddCommand,
+  TrackRemoveLastCommand,
 } from './types.js';
 
 export {
@@ -28,5 +30,5 @@ export {
   DEFAULT_VISIBILITY,
 } from './visibility.js';
 
-export { executeCommand, undoCommand } from './executor.js';
+export { executeCommand, undoCommand, type TrackOwner } from './executor.js';
 export { createInverseCommand } from './inverse.js';
