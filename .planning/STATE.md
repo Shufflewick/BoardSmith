@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 43 of 46 (Import Rewrite)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-01-18 -- Phase 42 Subpath Exports complete
+Plan: 01 complete
+Status: Phase complete
+Last activity: 2026-01-18 -- Phase 43 Import Rewrite complete (43-01-PLAN.md)
 
-Progress: [====================                    ] 50% (4/8 phases)
+Progress: [======================                  ] 55% (5/8 phases in v2.0)
 
 ## Milestones
 
@@ -43,7 +43,7 @@ Progress: [====================                    ] 50% (4/8 phases)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Phase 42 complete (verified), ready for Phase 43 planning
+Stopped at: Phase 43 complete, ready for Phase 44 (Game Extraction)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -65,3 +65,6 @@ Resume file: None
 | Source-based exports | Point to .ts source files, bundler consumers compile | 42-01 |
 | Types condition first | Required for TypeScript moduleResolution: bundler | 42-01 |
 | 11 subpaths configured | ., ui, session, testing, eslint-plugin, ai, ai-trainer, client, server, runtime, worker | 42-01 |
+| Relative imports with .js extension | ESM requires file extensions in import paths | 43-01 |
+| Preserve JSDoc @boardsmith examples | User-facing documentation should show public API, not internal paths | 43-01 |
+| Extended import rewrite scope | Completed worker, server, cli, ui imports in single phase for completeness | 43-01 |
