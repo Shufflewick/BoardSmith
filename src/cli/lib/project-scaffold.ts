@@ -31,14 +31,14 @@ export interface GeneratedFile {
 }
 
 /**
- * Check if running from local dev (monorepo) environment
+ * Check if running from local dev environment
  */
 export function getMonorepoRoot(): string | null {
-  // __dirname is like /path/to/BoardSmith/packages/cli/dist/lib
-  // Go up: lib -> dist -> cli -> packages -> BoardSmith
-  const potentialRoot = join(__dirname, '..', '..', '..', '..');
-  const enginePath = join(potentialRoot, 'packages', 'engine', 'package.json');
-  const uiPath = join(potentialRoot, 'packages', 'ui', 'package.json');
+  // __dirname is like /path/to/BoardSmith/dist/cli/lib
+  // Go up: lib -> cli -> dist -> BoardSmith
+  const potentialRoot = join(__dirname, '..', '..', '..');
+  const enginePath = join(potentialRoot, 'src', 'engine');
+  const uiPath = join(potentialRoot, 'src', 'ui');
 
   if (existsSync(enginePath) && existsSync(uiPath)) {
     return potentialRoot;
@@ -50,10 +50,7 @@ export function getMonorepoRoot(): string | null {
  * Get dependency paths (local file: links or npm versions)
  */
 export function getDependencyPaths(): {
-  engine: string;
-  ui: string;
-  cli: string;
-  testing: string;
+  boardsmith: string;
   isLocalDev: boolean;
 } {
   const monorepoRoot = getMonorepoRoot();
@@ -61,19 +58,13 @@ export function getDependencyPaths(): {
 
   if (isLocalDev) {
     return {
-      engine: `file:${join(monorepoRoot!, 'packages', 'engine')}`,
-      ui: `file:${join(monorepoRoot!, 'packages', 'ui')}`,
-      cli: `file:${join(monorepoRoot!, 'packages', 'cli')}`,
-      testing: `file:${join(monorepoRoot!, 'packages', 'testing')}`,
+      boardsmith: `file:${monorepoRoot}`,
       isLocalDev: true,
     };
   }
 
   return {
-    engine: '^0.0.1',
-    ui: '^0.0.1',
-    cli: '^0.0.1',
-    testing: '^0.0.1',
+    boardsmith: '^0.0.1',
     isLocalDev: false,
   };
 }
@@ -124,26 +115,23 @@ export function generatePackageJson(config: ProjectConfig): string {
   const deps = getDependencyPaths();
 
   const pkg = {
-    name: `@mygames/${config.name}`,
+    name: config.name,
     version: '0.0.1',
     type: 'module',
     scripts: {
-      dev: 'boardsmith dev',
-      build: 'boardsmith build',
+      dev: 'npx boardsmith dev',
+      build: 'npx boardsmith build',
       test: 'vitest',
-      validate: 'boardsmith validate',
+      validate: 'npx boardsmith validate',
     },
     dependencies: {
-      '@boardsmith/engine': deps.engine,
-      '@boardsmith/ui': deps.ui,
+      boardsmith: deps.boardsmith,
       vue: '^3.4.0',
     },
     devDependencies: {
-      '@boardsmith/cli': deps.cli,
-      '@boardsmith/testing': deps.testing,
+      '@vitejs/plugin-vue': '^5.0.0',
       typescript: '^5.7.0',
       vitest: '^2.0.0',
-      '@vitejs/plugin-vue': '^5.0.0',
     },
   };
 
@@ -264,7 +252,7 @@ export { default as GameBoard } from './components/GameBoard.vue';
  */
 export function generateAppVue(config: ProjectConfig): string {
   return `<script setup lang="ts">
-import { GameShell, AutoUI } from '@boardsmith/ui';
+import { GameShell, AutoUI } from 'boardsmith/ui';
 import GameBoard from './components/GameBoard.vue';
 </script>
 
