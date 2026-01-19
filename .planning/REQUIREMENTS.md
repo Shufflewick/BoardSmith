@@ -42,9 +42,9 @@ Requirements for Collapse the Monorepo milestone.
 
 ### Import Updates
 
-- [ ] **IMP-01**: All internal imports use relative paths within src/
-- [ ] **IMP-02**: No `@boardsmith/*` imports anywhere in codebase
-- [ ] **IMP-03**: Cross-concern imports use relative paths (e.g., `../engine/`)
+- [x] **IMP-01**: All internal imports use relative paths within src/
+- [x] **IMP-02**: No `@boardsmith/*` imports anywhere in codebase (except JSDoc examples and code-generator templates)
+- [x] **IMP-03**: Cross-concern imports use relative paths (e.g., `../engine/`)
 
 ### Game Extraction
 
@@ -116,9 +116,9 @@ Requirements for Collapse the Monorepo milestone.
 | SRC-12 | 40 (Source Collapse) | Complete |
 | SRC-13 | 41 (Test Colocation) | Complete |
 | SRC-14 | 39 (Foundation) | Complete |
-| IMP-01 | 43 (Import Rewrite) | Pending |
-| IMP-02 | 43 (Import Rewrite) | Pending |
-| IMP-03 | 43 (Import Rewrite) | Pending |
+| IMP-01 | 43 (Import Rewrite) | Complete |
+| IMP-02 | 43 (Import Rewrite) | Complete |
+| IMP-03 | 43 (Import Rewrite) | Complete |
 | GAME-01 | 44 (Game Extraction) | Pending |
 | GAME-02 | 44 (Game Extraction) | Pending |
 | GAME-03 | 44 (Game Extraction) | Pending |
