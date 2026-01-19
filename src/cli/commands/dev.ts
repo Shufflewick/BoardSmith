@@ -1,12 +1,32 @@
 import { existsSync, readFileSync, mkdirSync, rmSync, watch } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
-import { build } from 'esbuild';
+import type { Plugin as VitePlugin } from 'vite';
+import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import open from 'open';
 
 import { createLocalServer, type LocalServer, type GameDefinition } from '../local-server.js';
+
+/**
+ * Detect if we're running in the BoardSmith monorepo or a standalone game project.
+ * - Monorepo: Has src/engine/ directory (collapsed structure)
+ * - Standalone: Has boardsmith.json but no src/engine/
+ */
+function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
+  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
+  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
+
+  // If we're in the monorepo root, it has src/engine
+  if (hasSrcEngine) return 'monorepo';
+
+  // Standalone game project
+  if (hasBoardsmithJson) return 'standalone';
+
+  // Fallback - treat as standalone (will fail with proper error if neither)
+  return 'standalone';
+}
 
 interface DevOptions {
   port: string;
@@ -70,41 +90,53 @@ async function createGame(workerPort: number, gameType: string, playerCount: num
   return null;
 }
 
-// Get the CLI's directory to find the monorepo packages
+// Get the CLI's directory to find the monorepo root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// CLI is at packages/cli/dist/commands/dev.js, monorepo root is 4 levels up
-const cliMonorepoRoot = resolve(__dirname, '..', '..', '..', '..');
-const cliPackagesDir = join(cliMonorepoRoot, 'packages');
+// After monorepo collapse, CLI is at dist/cli/, monorepo root is 2 levels up
+const cliMonorepoRoot = resolve(__dirname, '..', '..');
 
 /**
  * esbuild plugin to resolve @boardsmith/* imports to the monorepo source.
- * This is needed because pnpm doesn't hoist workspace packages to root node_modules.
+ * Only used in monorepo context - standalone games resolve from node_modules.
+ * Returns a no-op plugin for standalone context.
  */
-function boardsmithResolvePlugin() {
+function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlugin {
+  // In standalone context, don't intercept - let esbuild resolve from node_modules
+  if (context === 'standalone') {
+    return {
+      name: 'boardsmith-resolve-noop',
+      setup() {
+        // No-op: let normal resolution handle boardsmith imports
+      },
+    };
+  }
+
   return {
     name: 'boardsmith-resolve',
-    setup(build: { onResolve: (opts: { filter: RegExp }, cb: (args: { path: string }) => { path: string } | undefined) => void }) {
-      // Map package names to their directory names in packages/
+    setup(build) {
+      // Map package names to their directory names in src/
+      // After monorepo collapse, packages are at src/<name>/
       const packageDirs: Record<string, string> = {
-        '@boardsmith/ai': 'ai',
-        '@boardsmith/ai-trainer': 'ai-trainer',
-        '@boardsmith/client': 'client',
-        '@boardsmith/engine': 'engine',
-        '@boardsmith/runtime': 'runtime',
-        '@boardsmith/server': 'server',
-        '@boardsmith/session': 'session',
-        '@boardsmith/testing': 'testing',
-        '@boardsmith/ui': 'ui',
-        '@boardsmith/worker': 'worker',
+        'boardsmith': 'engine',
+        'boardsmith/ai': 'ai',
+        'boardsmith/ai-trainer': 'ai-trainer',
+        'boardsmith/client': 'client',
+        'boardsmith/runtime': 'runtime',
+        'boardsmith/server': 'server',
+        'boardsmith/session': 'session',
+        'boardsmith/testing': 'testing',
+        'boardsmith/ui': 'ui',
+        'boardsmith/worker': 'worker',
       };
 
-      build.onResolve({ filter: /^@boardsmith\// }, (args: { path: string }) => {
-        const pkgName = args.path;
-        const dirName = packageDirs[pkgName];
+      // Handle boardsmith and boardsmith/* imports
+      build.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
+        const importPath = args.path;
+        const dirName = packageDirs[importPath];
         if (dirName) {
-          // Resolve to the package's src/index.ts for bundling
-          return { path: join(cliPackagesDir, dirName, 'src', 'index.ts') };
+          // Resolve to the src/<dir>/index.ts for bundling
+          return { path: join(cliMonorepoRoot, 'src', dirName, 'index.ts') };
         }
         return undefined;
       });
@@ -115,12 +147,17 @@ function boardsmithResolvePlugin() {
 /**
  * Bundle and load the game rules dynamically
  */
-async function loadGameDefinition(rulesPath: string, tempDir: string): Promise<GameDefinition> {
+async function loadGameDefinition(
+  rulesPath: string,
+  tempDir: string,
+  context: 'monorepo' | 'standalone'
+): Promise<GameDefinition> {
   const rulesIndexPath = join(rulesPath, 'index.ts');
   const bundlePath = join(tempDir, 'rules-bundle.mjs');
 
   // Bundle the rules with esbuild
-  // Use plugin to resolve @boardsmith/* to monorepo source (pnpm doesn't hoist workspace packages)
+  // In monorepo context, use plugin to resolve boardsmith imports to src/
+  // In standalone context, let normal node_modules resolution work
   await build({
     entryPoints: [rulesIndexPath],
     bundle: true,
@@ -128,7 +165,7 @@ async function loadGameDefinition(rulesPath: string, tempDir: string): Promise<G
     platform: 'node',
     outfile: bundlePath,
     logLevel: 'silent',
-    plugins: [boardsmithResolvePlugin()],
+    plugins: [boardsmithResolvePlugin(context)],
   });
 
   // Import the bundled module with cache-busting to ensure fresh load
@@ -190,6 +227,12 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   console.log(chalk.cyan(`\nStarting development server for ${config.displayName || config.name}...`));
 
+  // Detect project context - monorepo or standalone game
+  const context = getProjectContext(cwd);
+  if (context === 'monorepo') {
+    console.log(chalk.dim('  Running in monorepo context (using source resolution)'));
+  }
+
   // Determine paths
   const uiPath = config.paths?.ui ? resolve(cwd, config.paths.ui) : cwd;
   const rulesPath = config.paths?.rules ? resolve(cwd, config.paths.rules) : join(cwd, 'src', 'rules');
@@ -218,7 +261,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // Load the game definition
   let gameDefinition: GameDefinition;
   try {
-    gameDefinition = await loadGameDefinition(rulesPath, tempDir);
+    gameDefinition = await loadGameDefinition(rulesPath, tempDir, context);
 
     // Apply fallback config from boardsmith.json if needed
     const minPlayers = gameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
@@ -281,65 +324,93 @@ export async function devCommand(options: DevOptions): Promise<void> {
   }
 
   // Start Vite dev server for UI
-  // Vite plugin to resolve @boardsmith/* imports to monorepo source
-  // This handles both main exports and subpath exports (e.g., @boardsmith/client/vue)
-  const boardsmithVitePlugin = {
-    name: 'boardsmith-resolve',
-    enforce: 'pre' as const,  // Run before default resolver to intercept @boardsmith/* imports
-    resolveId(source: string) {
-      if (!source.startsWith('@boardsmith/')) return null;
-
-      // Parse package name and subpath
-      const parts = source.replace('@boardsmith/', '').split('/');
-      const pkgName = parts[0];
-      const subpath = parts.slice(1).join('/');
-
-      // Map package names to directories
-      const pkgDirs: Record<string, string> = {
-        'ai': 'ai',
-        'ai-trainer': 'ai-trainer',
-        'client': 'client',
-        'engine': 'engine',
-        'runtime': 'runtime',
-        'server': 'server',
-        'session': 'session',
-        'testing': 'testing',
-        'ui': 'ui',
-        'worker': 'worker',
-      };
-
-      const pkgDir = pkgDirs[pkgName];
-      if (!pkgDir) return null;
-
-      const pkgPath = join(cliPackagesDir, pkgDir);
-
-      // Handle subpath exports
-      if (subpath) {
-        // Check for .css files
-        if (subpath.endsWith('.css')) {
-          return join(pkgPath, 'src', subpath);
-        }
-        // Check for known subpath patterns
-        const subpathFile = join(pkgPath, 'src', `${subpath}.ts`);
-        if (existsSync(subpathFile)) {
-          return subpathFile;
-        }
-        // Try as directory with index.ts
-        const subpathIndex = join(pkgPath, 'src', subpath, 'index.ts');
-        if (existsSync(subpathIndex)) {
-          return subpathIndex;
-        }
-        // Try components subdirectory (for ui package)
-        const componentsPath = join(pkgPath, 'src', 'components', subpath, 'index.ts');
-        if (existsSync(componentsPath)) {
-          return componentsPath;
-        }
-      }
-
-      // Main package entry
-      return join(pkgPath, 'src', 'index.ts');
+  // Build Vite plugins based on context
+  const vitePlugins: VitePlugin[] = [
+    // Always include the API URL injection plugin
+    {
+      name: 'inject-api-url',
+      transformIndexHtml(html) {
+        // Inject API URL as global variable before any scripts run
+        // This works for external packages (unlike Vite's define option)
+        return html.replace(
+          '<head>',
+          `<head>\n    <script>window.__BOARDSMITH_API_URL__ = "http://localhost:${workerPort}";</script>`
+        );
+      },
     },
-  };
+  ];
+
+  // In monorepo context, add plugin to resolve boardsmith imports to src/
+  // In standalone context, let Vite resolve from node_modules naturally
+  if (context === 'monorepo') {
+    const boardsmithVitePlugin: VitePlugin = {
+      name: 'boardsmith-resolve',
+      enforce: 'pre',  // Run before default resolver to intercept boardsmith imports
+      resolveId(source: string) {
+        // Handle boardsmith and boardsmith/* imports
+        if (!source.startsWith('boardsmith')) return null;
+
+        // Map import paths to src/ directories
+        const srcDirs: Record<string, string> = {
+          'boardsmith': 'engine',
+          'boardsmith/ai': 'ai',
+          'boardsmith/ai-trainer': 'ai-trainer',
+          'boardsmith/client': 'client',
+          'boardsmith/runtime': 'runtime',
+          'boardsmith/server': 'server',
+          'boardsmith/session': 'session',
+          'boardsmith/testing': 'testing',
+          'boardsmith/ui': 'ui',
+          'boardsmith/worker': 'worker',
+        };
+
+        const srcDir = srcDirs[source];
+        if (srcDir) {
+          // Resolve to the src/<dir>/index.ts
+          return join(cliMonorepoRoot, 'src', srcDir, 'index.ts');
+        }
+
+        // Handle subpath imports (e.g., boardsmith/ui/GameShell.css)
+        if (source.startsWith('boardsmith/')) {
+          const parts = source.replace('boardsmith/', '').split('/');
+          const pkgName = parts[0];
+          const subpath = parts.slice(1).join('/');
+          const srcDir = srcDirs[`boardsmith/${pkgName}`];
+
+          if (srcDir && subpath) {
+            const srcPath = join(cliMonorepoRoot, 'src', srcDir);
+            // Check for .css files
+            if (subpath.endsWith('.css')) {
+              return join(srcPath, 'src', subpath);
+            }
+            // Check for known subpath patterns
+            const subpathFile = join(srcPath, 'src', `${subpath}.ts`);
+            if (existsSync(subpathFile)) {
+              return subpathFile;
+            }
+            // Try as directory with index.ts
+            const subpathIndex = join(srcPath, 'src', subpath, 'index.ts');
+            if (existsSync(subpathIndex)) {
+              return subpathIndex;
+            }
+            // Try components subdirectory (for ui package)
+            const componentsPath = join(srcPath, 'src', 'components', subpath, 'index.ts');
+            if (existsSync(componentsPath)) {
+              return componentsPath;
+            }
+          }
+        }
+
+        return null;
+      },
+    };
+    vitePlugins.unshift(boardsmithVitePlugin);
+  }
+
+  // Configure optimizeDeps based on context
+  const optimizeDepsExclude = context === 'monorepo'
+    ? ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session']
+    : ['boardsmith'];  // Exclude boardsmith in standalone to pick up local changes during dev
 
   try {
     const vite = await createViteServer({
@@ -350,23 +421,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
         strictPort: true, // Fail if port unavailable instead of silently using another
         open: false,
       },
-      plugins: [
-        boardsmithVitePlugin,
-        {
-          name: 'inject-api-url',
-          transformIndexHtml(html) {
-            // Inject API URL as global variable before any scripts run
-            // This works for external packages (unlike Vite's define option)
-            return html.replace(
-              '<head>',
-              `<head>\n    <script>window.__BOARDSMITH_API_URL__ = "http://localhost:${workerPort}";</script>`
-            );
-          },
-        },
-      ],
-      // Don't pre-bundle @boardsmith packages so changes are picked up immediately during development
+      plugins: vitePlugins,
+      // Don't pre-bundle boardsmith packages so changes are picked up immediately during development
       optimizeDeps: {
-        exclude: ['@boardsmith/ui', '@boardsmith/client', '@boardsmith/session', '@boardsmith/engine'],
+        exclude: optimizeDepsExclude,
       },
     });
 
@@ -500,7 +558,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
         try {
           // Reload the game definition
-          const newGameDefinition = await loadGameDefinition(rulesPath, tempDir);
+          const newGameDefinition = await loadGameDefinition(rulesPath, tempDir, context);
           const minPlayers = newGameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
           const maxPlayers = newGameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
 
