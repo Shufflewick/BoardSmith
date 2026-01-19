@@ -544,10 +544,10 @@ Plans:
 **Goal**: Move all tests to be colocated with source files
 **Depends on**: Phase 40
 **Requirements**: SRC-13
-**Plans**: 1 plan
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 41-01-PLAN.md -- Move library tests to src/, update vitest config
+- [x] 41-01-PLAN.md -- Move library tests to src/, update vitest config
 
 #### Phase 42: Subpath Exports
 **Goal**: Configure all package.json exports for subpath imports
@@ -626,7 +626,7 @@ Plans:
 | 38. target-integration | v1.2 | 1/1 | Complete | 2026-01-18 |
 | 39. Foundation | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 40. Source Collapse | v2.0 | 2/2 | Complete | 2026-01-18 |
-| 41. Test Colocation | v2.0 | 0/1 | Ready | - |
+| 41. Test Colocation | v2.0 | 1/1 | Complete | 2026-01-18 |
 | 42. Subpath Exports | v2.0 | 0/TBD | Not started | - |
 | 43. Import Rewrite | v2.0 | 0/TBD | Not started | - |
 | 44. Game Extraction | v2.0 | 0/TBD | Not started | - |

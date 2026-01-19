@@ -37,7 +37,7 @@ Requirements for Collapse the Monorepo milestone.
 - [x] **SRC-10**: `src/server/` contains server runtime (from @boardsmith/server)
 - [x] **SRC-11**: `src/runtime/` contains shared runtime (from @boardsmith/runtime)
 - [x] **SRC-12**: `src/worker/` contains web worker (from @boardsmith/worker)
-- [ ] **SRC-13**: All tests colocated (*.test.ts next to source files)
+- [x] **SRC-13**: All tests colocated (*.test.ts next to source files)
 - [x] **SRC-14**: Single root package.json with exports field
 
 ### Import Updates
@@ -114,7 +114,7 @@ Requirements for Collapse the Monorepo milestone.
 | SRC-10 | 40 (Source Collapse) | Complete |
 | SRC-11 | 40 (Source Collapse) | Complete |
 | SRC-12 | 40 (Source Collapse) | Complete |
-| SRC-13 | 41 (Test Colocation) | Pending |
+| SRC-13 | 41 (Test Colocation) | Complete |
 | SRC-14 | 39 (Foundation) | Complete |
 | IMP-01 | 43 (Import Rewrite) | Pending |
 | IMP-02 | 43 (Import Rewrite) | Pending |
