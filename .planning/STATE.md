@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 44 of 46 (Game Extraction)
-Plan: 09 of 10 (Demo Complex UI Extraction)
-Status: Plan 09 complete
-Last activity: 2026-01-18 -- Completed 44-09-PLAN.md (Demo Complex UI Extraction)
+Plan: 08 of 10 (Demo Animation Extraction)
+Status: Plan 08 complete
+Last activity: 2026-01-19 -- Completed 44-08-PLAN.md (Demo Animation Extraction)
 
 Progress: [============================            ] 70% (5.6/8 phases in v2.0)
 
