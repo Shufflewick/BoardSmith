@@ -71,10 +71,10 @@ Requirements for Collapse the Monorepo milestone.
 
 ### Documentation
 
-- [ ] **DOC-01**: All docs updated with new import paths
-- [ ] **DOC-02**: Getting started guide uses `boardsmith` imports
-- [ ] **DOC-03**: API reference reflects subpath exports
-- [ ] **DOC-04**: Migration guide written for external team
+- [x] **DOC-01**: All docs updated with new import paths
+- [x] **DOC-02**: Getting started guide uses `boardsmith` imports
+- [x] **DOC-03**: API reference reflects subpath exports
+- [x] **DOC-04**: Migration guide written for external team
 
 ## Out of Scope
 
@@ -136,10 +136,10 @@ Requirements for Collapse the Monorepo milestone.
 | CLI-04 | 45 (CLI Update) | Complete |
 | CLI-05 | 45 (CLI Update) | Complete |
 | CLI-06 | 45 (CLI Update) | Complete |
-| DOC-01 | 46 (Documentation) | Pending |
-| DOC-02 | 46 (Documentation) | Pending |
-| DOC-03 | 46 (Documentation) | Pending |
-| DOC-04 | 46 (Documentation) | Pending |
+| DOC-01 | 46 (Documentation) | Complete |
+| DOC-02 | 46 (Documentation) | Complete |
+| DOC-03 | 46 (Documentation) | Complete |
+| DOC-04 | 46 (Documentation) | Complete |
 
 **Coverage:**
 - v2.0 requirements: 51 total
