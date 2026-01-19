@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 44 of 46 (Game Extraction)
-Plan: 01 of 07 (Templates)
-Status: Plan 01 complete
-Last activity: 2026-01-18 -- Completed 44-01-PLAN.md (Game Extraction Templates)
+Plan: 09 of 10 (Demo Complex UI Extraction)
+Status: Plan 09 complete
+Last activity: 2026-01-18 -- Completed 44-09-PLAN.md (Demo Complex UI Extraction)
 
-Progress: [=========================               ] 64% (5.1/8 phases in v2.0)
+Progress: [============================            ] 70% (5.6/8 phases in v2.0)
 
 ## Milestones
 
@@ -43,7 +43,7 @@ Progress: [=========================               ] 64% (5.1/8 phases in v2.0)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Completed 44-01-PLAN.md (Game Extraction Templates)
+Stopped at: Completed 44-09-PLAN.md (Demo Complex UI Extraction)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -72,3 +72,5 @@ Resume file: None
 | Templates in /private/tmp/ | Isolated testing environment for game extraction workflow | 44-01 |
 | file:../../BoardSmith for local dev | Local development uses file link; production uses npm version | 44-01 |
 | Placeholder tokens {GAME_NAME}, {DISPLAY_NAME} | Per-game customization during extraction | 44-01 |
+| Preserve unified src/ structure for complex games | Demo Complex UI has src/rules and src/ui, preserved as-is | 44-09 |
+| No vitest for demos without tests | Cleaner package.json for demo games that have no tests | 44-07 |
