@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 
 ## Current Position
 
-Phase: 44 of 46 (Game Extraction)
-Plan: 10 of 10 (Floss Bitties Extraction)
-Status: Plan 10 complete - Phase 44 complete
-Last activity: 2026-01-19 -- Completed 44-10-PLAN.md (Floss Bitties Extraction)
+Phase: 45 of 46 (CLI Update)
+Plan: Not started
+Status: Phase 44 verified and approved
+Last activity: 2026-01-18 -- Completed Phase 44 (Game Extraction) - 9 games extracted
 
-Progress: [=============================           ] 72% (5.8/8 phases in v2.0)
+Progress: [================================        ] 80% (6/8 phases in v2.0)
 
 ## Milestones
 
@@ -42,8 +42,8 @@ Progress: [=============================           ] 72% (5.8/8 phases in v2.0)
 
 ## Session Continuity
 
-Last session: 2026-01-19
-Stopped at: Completed 44-10-PLAN.md (Floss Bitties Extraction) - Phase 44 complete
+Last session: 2026-01-18
+Stopped at: Phase 44 verified and approved - Ready for Phase 45 (CLI Update)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -76,3 +76,4 @@ Resume file: None
 | No vitest for demos without tests | Cleaner package.json for demo games that have no tests | 44-07 |
 | Demos with tests get vitest.config.ts | Demo Animation has tests/game.test.ts, needs vitest setup | 44-08 |
 | Non-working games extracted anyway | GAME-05 allows non-working state; Floss Bitties preserved as-is | 44-10 |
+| Track command system for MCTS | Added TRACK_ADD/TRACK_REMOVE_LAST commands so scoring tracks work with MCTS undo | 44-11 |
