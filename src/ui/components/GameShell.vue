@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, provide } from 'vue';
-import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '@boardsmith/client';
-import { useGame } from '@boardsmith/client/vue';
+import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '../../client/index.js';
+import { useGame } from '../../client/vue.js';
 
 // HMR Debug logging (disabled in production)
 const DEBUG_HMR = false;

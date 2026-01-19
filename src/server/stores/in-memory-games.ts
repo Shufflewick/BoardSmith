@@ -2,7 +2,7 @@
  * In-memory game store for local development
  */
 
-import { GameSession, type BroadcastAdapter, type GameDefinition, type SessionInfo } from '@boardsmith/session';
+import { GameSession, type BroadcastAdapter, type GameDefinition, type SessionInfo } from '../../session/index.js';
 import type { GameStore, GameRegistry, CreateGameOptions } from '../types.js';
 
 // ============================================

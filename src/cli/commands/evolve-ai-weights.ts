@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
-import type { TrainingProgress } from '@boardsmith/ai-trainer';
+import type { TrainingProgress } from '../../ai-trainer/index.js';
 
 interface EvolveAIWeightsOptions {
   generations?: string;
@@ -105,7 +105,7 @@ export async function evolveAIWeightsCommand(options: EvolveAIWeightsOptions): P
     // Import trainer
     spinner.start('Initializing weight optimizer...');
 
-    const trainerModule = await import('@boardsmith/ai-trainer');
+    const trainerModule = await import('../../ai-trainer/index.js');
     const { WeightEvolver, updateAIWeights } = trainerModule;
 
     spinner.succeed('Weight optimizer initialized');

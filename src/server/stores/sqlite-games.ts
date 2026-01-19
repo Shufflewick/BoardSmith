@@ -3,7 +3,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { GameSession, type BroadcastAdapter, type GameDefinition, type SessionInfo } from '@boardsmith/session';
+import { GameSession, type BroadcastAdapter, type GameDefinition, type SessionInfo } from '../../session/index.js';
 import type { GameStore, GameRegistry, CreateGameOptions } from '../types.js';
 import { SqliteStorageAdapter, initSqliteSchema } from './sqlite-storage.js';
 

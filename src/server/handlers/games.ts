@@ -2,7 +2,7 @@
  * Game route handlers - platform-agnostic HTTP request handling
  */
 
-import { generateGameId } from '@boardsmith/session';
+import { generateGameId } from '../../session/index.js';
 import type {
   ServerResponse,
   GameStore,

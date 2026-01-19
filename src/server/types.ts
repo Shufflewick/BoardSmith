@@ -2,7 +2,7 @@
  * Types for the platform-agnostic server core
  */
 
-import type { GameSession, GameDefinition, AIConfig } from '@boardsmith/session';
+import type { GameSession, GameDefinition, AIConfig } from '../session/index.js';
 
 // ============================================
 // Re-export common types from session
@@ -30,7 +30,7 @@ export type {
   ClaimPositionRequest,
   ClaimPositionResponse,
   PlayerConfig,
-} from '@boardsmith/session';
+} from '../session/index.js';
 
 // ============================================
 // Server Request/Response Types

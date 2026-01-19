@@ -3,7 +3,7 @@
  */
 
 import type Database from 'better-sqlite3';
-import type { StorageAdapter, StoredGameState } from '@boardsmith/session';
+import type { StorageAdapter, StoredGameState } from '../../session/index.js';
 
 /**
  * SQLite storage adapter that persists game state to a SQLite database.

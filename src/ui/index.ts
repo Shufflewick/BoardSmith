@@ -278,4 +278,4 @@ export {
   STANDARD_PLAYER_COLORS,
   DEFAULT_PLAYER_COLORS,
   type ColorChoice,
-} from '@boardsmith/session';
+} from '../session/index.js';

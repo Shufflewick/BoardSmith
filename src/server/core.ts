@@ -61,7 +61,7 @@ import {
   handleMatchmakingLeave,
   type CreateGameCallback,
 } from './handlers/matchmaking.js';
-import { generateGameId } from '@boardsmith/session';
+import { generateGameId } from '../session/index.js';
 
 // ============================================
 // Response Helpers

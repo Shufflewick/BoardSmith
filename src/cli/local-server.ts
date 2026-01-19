@@ -19,7 +19,7 @@ import {
   type SessionInfo,
   type BroadcastAdapter,
   type GameStore,
-} from '@boardsmith/server';
+} from '../server/index.js';
 
 // ============================================
 // WebSocket Broadcast Adapter for Node.js

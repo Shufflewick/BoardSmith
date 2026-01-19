@@ -30,8 +30,8 @@ import {
   type AIConfig,
   type BroadcastAdapter,
   type StorageAdapter,
-} from '@boardsmith/session';
-import type { FlowState } from '@boardsmith/engine';
+} from '../session/index.js';
+import type { FlowState } from '../engine/index.js';
 import {
   type MatchmakingStore,
   type QueueEntry,
@@ -41,7 +41,7 @@ import {
   handleMatchmakingJoin,
   handleMatchmakingStatus,
   handleMatchmakingLeave,
-} from '@boardsmith/server';
+} from '../server/index.js';
 
 // ============================================
 // Re-export types from session for convenience
@@ -54,7 +54,7 @@ export type {
   StoredGameState,
   PlayerGameState,
   AIConfig,
-} from '@boardsmith/session';
+} from '../session/index.js';
 
 // ============================================
 // Worker-specific Types

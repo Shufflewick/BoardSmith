@@ -3,8 +3,8 @@ import { join, dirname } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
-import type { Game, GameOptions } from '@boardsmith/engine';
-import type { TrainingProgress } from '@boardsmith/ai-trainer';
+import type { Game, GameOptions } from '../../engine/index.js';
+import type { TrainingProgress } from '../../ai-trainer/index.js';
 
 interface TrainAIOptions {
   games?: string;
@@ -109,11 +109,10 @@ export async function trainAICommand(options: TrainAIOptions): Promise<void> {
 
     spinner.succeed('Game module loaded');
 
-    // Import trainer (dynamically to avoid build issues)
+    // Import trainer
     spinner.start('Initializing AI trainer...');
 
-    // Use dynamic import for the trainer
-    const trainerModule = await import('@boardsmith/ai-trainer');
+    const trainerModule = await import('../../ai-trainer/index.js');
     const { ParallelTrainer, generateAICode, introspectGame, generateCandidateFeatures, printGameStructure, estimateComplexity } = trainerModule;
 
     spinner.succeed('AI trainer initialized');
