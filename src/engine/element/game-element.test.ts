@@ -6,8 +6,8 @@ import {
   GameElement,
   ElementCollection,
   Player,
-} from '../src/index.js';
-import type { ElementJSON, PlayerViewFunction } from '../src/index.js';
+} from '../index.js';
+import type { ElementJSON, PlayerViewFunction } from '../index.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}

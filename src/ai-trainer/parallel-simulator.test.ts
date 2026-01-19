@@ -3,25 +3,25 @@ import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 // Import from dist to ensure worker threads can load .js files
-import { runParallelSimulations } from '../dist/parallel-simulator.js';
+import { runParallelSimulations } from '../../packages/ai-trainer/dist/parallel-simulator.js';
 import {
   introspectGame,
   createIntrospectionGame,
-} from '../dist/introspector.js';
-import { generateCandidateFeatures } from '../dist/feature-generator.js';
-import type { GameStructure, CandidateFeature } from '../dist/types.js';
-import type { SimulationOptions } from '../dist/simulator.js';
+} from '../../packages/ai-trainer/dist/introspector.js';
+import { generateCandidateFeatures } from '../../packages/ai-trainer/dist/feature-generator.js';
+import type { GameStructure, CandidateFeature } from '../../packages/ai-trainer/dist/types.js';
+import type { SimulationOptions } from '../../packages/ai-trainer/dist/simulator.js';
 
 // Get the directory containing this test file
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Path to go-fish rules module (relative to monorepo root)
-// Go up from ai-trainer/tests to packages, then to games/go-fish/rules/dist
+// Path to go-fish rules module (from src/ai-trainer to packages/games/go-fish/rules/dist)
 const GOFISH_MODULE_PATH = join(
   __dirname,
   '..',
   '..',
+  'packages',
   'games',
   'go-fish',
   'rules',

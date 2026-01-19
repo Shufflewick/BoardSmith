@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { LearnedObjective } from '../src/types';
+import type { LearnedObjective } from './types.js';
 import {
   mutateWeights,
   crossoverWeights,
   selectBest,
   generateOffspring,
   createSeededRandom,
-} from '../src/evolution';
+} from './evolution.js';
 
 // Helper to create test objectives
 function createObjective(featureId: string, weight: number): LearnedObjective {

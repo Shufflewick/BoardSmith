@@ -14,8 +14,8 @@ import {
   eachPlayer,
   actionStep,
   Action,
-} from '../src/index.js';
-import type { DevSnapshot } from '../src/index.js';
+} from '../index.js';
+import type { DevSnapshot } from '../index.js';
 
 // ============================================
 // Test Game Classes

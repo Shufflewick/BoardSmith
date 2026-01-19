@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CheckersGame, getCheckersObjectives } from '@boardsmith/checkers-rules';
-import { MCTSBot } from '../src/mcts-bot.js';
-import { DIFFICULTY_PRESETS } from '../src/types.js';
+import { MCTSBot } from './mcts-bot.js';
+import { DIFFICULTY_PRESETS } from './types.js';
 
 function createCheckersGame() {
   const game = new CheckersGame({

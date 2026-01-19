@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CribbageGame } from '@boardsmith/cribbage-rules';
-import { MCTSBot } from '../src/mcts-bot.js';
-import { DIFFICULTY_PRESETS } from '../src/types.js';
+import { MCTSBot } from './mcts-bot.js';
+import { DIFFICULTY_PRESETS } from './types.js';
 
 function createCribbageGame() {
   const game = new CribbageGame({

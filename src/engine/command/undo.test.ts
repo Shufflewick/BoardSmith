@@ -4,7 +4,7 @@ import {
   Space,
   Piece,
   Player,
-} from '../src/index.js';
+} from '../index.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}

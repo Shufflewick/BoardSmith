@@ -22,8 +22,8 @@ import {
   phase,
   TurnOrder,
   turnLoop,
-} from '../src/index.js';
-import type { FlowContext, FlowDefinition } from '../src/index.js';
+} from '../index.js';
+import type { FlowContext, FlowDefinition } from '../index.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}

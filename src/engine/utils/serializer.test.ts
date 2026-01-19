@@ -5,14 +5,12 @@ import {
   Piece,
   Player,
   Action,
-} from '@boardsmith/engine';
-import {
   serializeValue,
   deserializeValue,
   serializeAction,
   deserializeAction,
   isSerializedReference,
-} from '../src/index.js';
+} from '../index.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}

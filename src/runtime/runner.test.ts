@@ -9,8 +9,8 @@ import {
   loop,
   eachPlayer,
   actionStep,
-} from '@boardsmith/engine';
-import { GameRunner } from '../src/runner.js';
+} from '../engine/index.js';
+import { GameRunner } from './runner.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {

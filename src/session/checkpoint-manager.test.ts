@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CheckpointManager } from '../src/checkpoint-manager.js';
+import { CheckpointManager } from './checkpoint-manager.js';
 import {
   Game,
   Space,
@@ -7,7 +7,7 @@ import {
   Player,
   createCheckpoint,
   type DevCheckpoint,
-} from '@boardsmith/engine';
+} from '../engine/index.js';
 
 // ============================================
 // Test Game Classes

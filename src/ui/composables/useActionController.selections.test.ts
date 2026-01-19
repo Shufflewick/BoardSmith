@@ -15,7 +15,7 @@ import { ref, nextTick } from 'vue';
 import {
   useActionController,
   type ActionMetadata,
-} from '../src/composables/useActionController.js';
+} from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 
 describe('useActionController selections', () => {

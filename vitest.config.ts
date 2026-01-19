@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
 
 export default defineConfig({
   test: {
@@ -9,5 +10,20 @@ export default defineConfig({
       'packages/games/**/tests/**/*.test.ts', // Game tests (until Phase 44)
       'cli/tests/**/*.test.ts', // CLI tests
     ],
+  },
+  resolve: {
+    alias: {
+      // Workspace package aliases for colocated tests in src/
+      '@boardsmith/engine': resolve(__dirname, 'src/engine/index.ts'),
+      '@boardsmith/runtime': resolve(__dirname, 'src/runtime/index.ts'),
+      '@boardsmith/ai': resolve(__dirname, 'src/ai/index.ts'),
+      '@boardsmith/ai-trainer': resolve(__dirname, 'src/ai-trainer/index.ts'),
+      '@boardsmith/session': resolve(__dirname, 'src/session/index.ts'),
+      '@boardsmith/ui': resolve(__dirname, 'src/ui/index.ts'),
+      // Game rules packages (still in packages/)
+      '@boardsmith/checkers-rules': resolve(__dirname, 'packages/games/checkers/rules/src/index.ts'),
+      '@boardsmith/cribbage-rules': resolve(__dirname, 'packages/games/cribbage/rules/src/index.ts'),
+      '@boardsmith/go-fish-rules': resolve(__dirname, 'packages/games/go-fish/rules/src/index.ts'),
+    },
   },
 });

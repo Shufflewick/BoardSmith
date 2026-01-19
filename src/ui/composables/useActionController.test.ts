@@ -21,7 +21,7 @@ import {
   injectBoardInteraction,
   ACTION_CONTROLLER_KEY,
   type ActionMetadata,
-} from '../src/composables/useActionController.js';
+} from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 
 describe('useActionController', () => {

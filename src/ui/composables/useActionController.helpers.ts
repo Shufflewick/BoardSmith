@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'vitest';
-import type { ActionMetadata, ActionResult } from '../src/composables/useActionController.js';
+import type { ActionMetadata, ActionResult } from './useActionController.js';
 
 /**
  * Creates a mock sendAction function for testing.

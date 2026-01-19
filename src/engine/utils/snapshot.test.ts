@@ -9,12 +9,10 @@ import {
   loop,
   eachPlayer,
   actionStep,
-} from '@boardsmith/engine';
-import {
   createSnapshot,
   createPlayerView,
   createAllPlayerViews,
-} from '../src/index.js';
+} from '../index.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}

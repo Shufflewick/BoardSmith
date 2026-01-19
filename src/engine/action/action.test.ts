@@ -7,8 +7,8 @@ import {
   Action,
   ActionExecutor,
   actionTempState,
-} from '../src/index.js';
-import type { ActionContext, ActionDefinition } from '../src/index.js';
+} from '../index.js';
+import type { ActionContext, ActionDefinition } from '../index.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
