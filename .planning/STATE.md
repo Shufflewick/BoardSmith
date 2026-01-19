@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-18)
 ## Current Position
 
 Phase: 43 of 46 (Import Rewrite)
-Plan: 01 complete
+Plan: 02 complete
 Status: Phase complete
-Last activity: 2026-01-18 -- Phase 43 Import Rewrite complete (43-01-PLAN.md)
+Last activity: 2026-01-18 -- Completed 43-02-PLAN.md (vitest config cleanup)
 
 Progress: [======================                  ] 55% (5/8 phases in v2.0)
 
@@ -43,7 +43,7 @@ Progress: [======================                  ] 55% (5/8 phases in v2.0)
 ## Session Continuity
 
 Last session: 2026-01-18
-Stopped at: Phase 43 complete, ready for Phase 44 (Game Extraction)
+Stopped at: Phase 43 complete (both plans), ready for Phase 44 (Game Extraction)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -68,3 +68,4 @@ Resume file: None
 | Relative imports with .js extension | ESM requires file extensions in import paths | 43-01 |
 | Preserve JSDoc @boardsmith examples | User-facing documentation should show public API, not internal paths | 43-01 |
 | Extended import rewrite scope | Completed worker, server, cli, ui imports in single phase for completeness | 43-01 |
+| Vitest aliases only for external packages | Internal modules use relative imports, aliases only for game packages in packages/ | 43-02 |
