@@ -59,7 +59,7 @@ export async function initCommand(name: string, options: InitOptions): Promise<v
     // Log if using local dev
     const deps = getDependencyPaths();
     if (deps.isLocalDev) {
-      console.log(chalk.dim(`  Using local packages from monorepo`));
+      console.log(chalk.dim(`  Using local BoardSmith from monorepo`));
     }
 
     spinner.succeed(chalk.green(`Created ${name} successfully!`));
@@ -80,7 +80,7 @@ ${chalk.dim('This will start the development server and open player tabs in your
 }
 
 function generateGameTs(pascal: string): string {
-  return `import { Game, Player, type GameOptions } from '@boardsmith/engine';
+  return `import { Game, Player, type GameOptions } from 'boardsmith';
 import { Card, Hand, Deck } from './elements.js';
 import { createGameFlow } from './flow.js';
 import { createDrawAction, createPlayAction } from './actions.js';
@@ -172,7 +172,7 @@ export class ${pascal}Player extends Player<${pascal}Game, ${pascal}Player> {
 }
 
 function generateElementsTs(): string {
-  return `import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck, Space } from '@boardsmith/engine';
+  return `import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck, Space } from 'boardsmith';
 
 export type Suit = 'H' | 'D' | 'C' | 'S';
 export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
@@ -194,7 +194,7 @@ export class PlayArea extends Space {
 }
 
 function generateActionsTs(pascal: string): string {
-  return `import { Action, type ActionDefinition } from '@boardsmith/engine';
+  return `import { Action, type ActionDefinition } from 'boardsmith';
 import type { ${pascal}Game, ${pascal}Player } from './game.js';
 import { Card } from './elements.js';
 
@@ -240,7 +240,7 @@ function generateFlowTs(pascal: string): string {
   actionStep,
   sequence,
   type FlowDefinition,
-} from '@boardsmith/engine';
+} from 'boardsmith';
 import type { ${pascal}Game, ${pascal}Player } from './game.js';
 import { Card } from './elements.js';
 
@@ -283,7 +283,7 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
 
 function generateTestTs(pascal: string): string {
   return `import { describe, it, expect } from 'vitest';
-import { ${pascal}Game } from '../src/rules/game.js';
+import { ${pascal}Game, ${pascal}Player } from '../src/rules/game.js';
 
 describe('${pascal}Game', () => {
   it('should create a game with correct number of cards', () => {
@@ -296,7 +296,7 @@ describe('${pascal}Game', () => {
     const game = new ${pascal}Game({ playerCount: 2, seed: 'test' });
     game.setup();
     game.start();
-    for (const player of game.all(Player)) {
+    for (const player of game.all(${pascal}Player)) {
       expect(player.hand.all().length).toBe(5);
     }
   });
