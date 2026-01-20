@@ -468,6 +468,59 @@ export const gameDefinition = {
 
 ---
 
+## Phase 6: Verify Compilation
+
+After generating code, verify it compiles:
+
+```bash
+npx tsc --noEmit
+```
+
+**If errors occur:**
+1. Read the error message carefully
+2. Fix the specific issue
+3. Run tsc again
+4. Repeat until clean
+
+**Common issues:**
+- Missing imports (add the import statement)
+- Type mismatches (check element class names)
+- Missing exports (add to index.ts)
+
+Update STATE.md progress checkbox "Code compiles" when tsc passes.
+
+---
+
+## Phase 7: Playtest Prompt
+
+After successful compilation, display this message to the designer:
+
+```markdown
+## Ready to Playtest!
+
+Your game compiles and runs. Here's how to test it:
+
+1. Run `boardsmith dev` to start the development server
+2. Open the URL shown in your browser
+3. Play a few turns with the placeholder action
+4. Notice what feels missing or broken
+
+When ready to add more, run `/design-game` again. I'll ask:
+- What worked well?
+- What felt missing?
+- Which deferred idea should we add first?
+
+**Your Deferred Ideas:**
+[List from PROJECT.md]
+```
+
+**STATE.md Final Update:**
+- Set Status to "Complete"
+- Check all progress checkboxes
+- Set Next Steps to "Playtest, then run /design-game to continue"
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
