@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 48 (continuation-flow)
-Plan: 01 complete
+Plan: 02 complete
 Status: In progress
-Last activity: 2026-01-20 -- Completed 48-01-PLAN.md
+Last activity: 2026-01-20 -- Completed 48-02-PLAN.md
 
-Progress: [████████████                            ] 31% (1.25/4 phases in v2.1)
+Progress: [████████████████                        ] 38% (1.5/4 phases in v2.1)
 
 ## Milestones
 
@@ -46,7 +46,7 @@ Progress: [████████████                            ] 31%
 ## Session Continuity
 
 Last session: 2026-01-20
-Stopped at: Completed 48-01-PLAN.md
+Stopped at: Completed 48-02-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -103,3 +103,7 @@ Resume file: None
 | Feedback is optional with skip path | Designer can say "nothing to report" to avoid interrogation feel | 48-01 |
 | Structured feedback categories | Works/Needs Fix/Ideas for actionable extraction | 48-01 |
 | Silent repair protocol | Fix broken code without asking designer about errors | 48-01 |
+| Ranked option presentation | Needs Fix > Deferred Ideas > New Ideas priority | 48-02 |
+| Feature scope limit 3-4 requirements | Larger features split with ACDR defer pattern | 48-02 |
+| Every feature needs rules AND UI | Must be visually playable, not just logically correct | 48-02 |
+| HISTORY.md 3-5 bullets per phase | Prevent bloat, archive after 20 phases | 48-02 |

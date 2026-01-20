@@ -710,7 +710,7 @@ Feedback is OPTIONAL. If the designer wants to skip:
 **You respond:**
 > "No problem! Let's look at what to build next."
 
-Then proceed to Phase 10 (Present Options - covered in Phase 48-02).
+Then proceed to Phase 10 (Present Next Options).
 
 ### Example Dialogues
 
