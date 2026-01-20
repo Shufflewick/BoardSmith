@@ -12,7 +12,7 @@ A complete AI implementation provides these hooks (all optional, but recommended
 4. **`moveOrdering`** - Prioritize promising moves for exploration
 5. **`uctConstant`** - Dynamic exploration tuning by game phase
 
-Reference implementation: `<BOARDSMITH_ROOT>/packages/games/hex/rules/src/ai.ts` (884 lines)
+Reference: The Hex game AI implementation demonstrates all 5 hooks with production-quality patterns.
 
 ---
 

@@ -21,6 +21,9 @@ interface InstallOptions {
 
 /**
  * Install a single slash command
+ *
+ * For commands with instructions files, embeds the full content to be self-contained.
+ * No external file reads required when the command runs.
  */
 async function installCommand(
   commandName: string,
@@ -40,21 +43,50 @@ async function installCommand(
     // File doesn't exist, that's fine
   }
 
-  // Read template - look in src directory (not dist) since .md files aren't compiled
-  // Post v2.0 monorepo collapse: templates are in src/cli/slash-command/
-  const templatePath = join(boardsmithRoot, 'src', 'cli', 'slash-command', `${commandName}.template.md`);
-  let template: string;
+  const slashCommandDir = join(boardsmithRoot, 'src', 'cli', 'slash-command');
+  let content: string;
 
-  try {
-    template = await fs.readFile(templatePath, 'utf-8');
-  } catch {
-    console.error(chalk.red(`Error: Could not find ${commandName} template.`));
-    console.error(chalk.gray(`Looked in: ${templatePath}`));
-    return false;
+  // Map command names to their instructions files
+  const instructionsFiles: Record<string, string> = {
+    'design-game': 'instructions.md',
+    'generate-ai': 'generate-ai-instructions.md',
+  };
+
+  const instructionsFile = instructionsFiles[commandName];
+  const instructionsPath = instructionsFile ? join(slashCommandDir, instructionsFile) : null;
+
+  if (instructionsPath) {
+    try {
+      // Read instructions and create self-contained command
+      const instructions = await fs.readFile(instructionsPath, 'utf-8');
+
+      // Create self-contained command with embedded instructions
+      const titles: Record<string, string> = {
+        'design-game': 'Design a BoardSmith Game',
+        'generate-ai': 'Generate AI for BoardSmith Game',
+      };
+
+      content = `# ${titles[commandName] ?? commandName}
+
+${instructions}`;
+
+    } catch (err) {
+      console.error(chalk.red(`Error: Could not read instructions for ${commandName}.`));
+      console.error(chalk.gray(`Looked in: ${instructionsPath}`));
+      return false;
+    }
+  } else {
+    // No instructions mapping - fall back to template
+    const templatePath = join(slashCommandDir, `${commandName}.template.md`);
+    try {
+      const template = await fs.readFile(templatePath, 'utf-8');
+      content = template.replace(/\{\{BOARDSMITH_ROOT\}\}/g, boardsmithRoot);
+    } catch {
+      console.error(chalk.red(`Error: Could not find ${commandName} template.`));
+      console.error(chalk.gray(`Looked in: ${slashCommandDir}`));
+      return false;
+    }
   }
-
-  // Replace placeholder with actual path
-  const content = template.replace(/\{\{BOARDSMITH_ROOT\}\}/g, boardsmithRoot);
 
   // Write to target
   await fs.writeFile(targetPath, content);
