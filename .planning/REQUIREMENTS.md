@@ -7,40 +7,40 @@
 
 ### State Detection
 
-- [ ] **STATE-01**: Detect "no project" state (no .planning/ or no PROJECT.md)
+- [x] **STATE-01**: Detect "no project" state (no .planning/ or no PROJECT.md)
 - [ ] **STATE-02**: Detect "phase complete" state (STATE.md shows phase verified)
 - [ ] **STATE-03**: Detect "mid-phase" state (STATE.md shows phase in progress)
-- [ ] **STATE-04**: Single `/design-game` command adapts behavior to detected state
+- [x] **STATE-04**: Single `/design-game` command adapts behavior to detected state
 
 ### Initial Interview
 
-- [ ] **INT-01**: Open question for game identity ("Tell me about your game")
-- [ ] **INT-02**: Structured prompts for component types (cards, dice, board, tokens)
-- [ ] **INT-03**: Structured prompts for turn structure (sequential, simultaneous, phases)
-- [ ] **INT-04**: Structured prompts for round completion (all players done, pass, etc.)
-- [ ] **INT-05**: Structured prompts for game end condition (deck empty, goal reached, etc.)
-- [ ] **INT-06**: Summary and confirmation before proceeding
+- [x] **INT-01**: Open question for game identity ("Tell me about your game")
+- [x] **INT-02**: Structured prompts for component types (cards, dice, board, tokens)
+- [x] **INT-03**: Structured prompts for turn structure (sequential, simultaneous, phases)
+- [x] **INT-04**: Structured prompts for round completion (all players done, pass, etc.)
+- [x] **INT-05**: Structured prompts for game end condition (deck empty, goal reached, etc.)
+- [x] **INT-06**: Summary and confirmation before proceeding
 
 ### Governor Pattern
 
-- [ ] **GOV-01**: Instructions for detecting scope creep (content details, strategy, scoring)
-- [ ] **GOV-02**: Acknowledge/capture/defer/redirect pattern in instructions
-- [ ] **GOV-03**: Deferred Ideas section in PROJECT.md template
+- [x] **GOV-01**: Instructions for detecting scope creep (content details, strategy, scoring)
+- [x] **GOV-02**: Acknowledge/capture/defer/redirect pattern in instructions
+- [x] **GOV-03**: Deferred Ideas section in PROJECT.md template
 
 ### Artifacts
 
-- [ ] **ART-01**: Game-specific PROJECT.md template (game identity, core mechanics, deferred ideas)
-- [ ] **ART-02**: STATE.md template for progress tracking
-- [ ] **ART-03**: Phase PLAN.md template
+- [x] **ART-01**: Game-specific PROJECT.md template (game identity, core mechanics, deferred ideas)
+- [x] **ART-02**: STATE.md template for progress tracking
+- [x] **ART-03**: Phase PLAN.md template
 - [ ] **ART-04**: HISTORY.md template for phase summaries
 
 ### Code Generation
 
-- [ ] **GEN-01**: Generate elements.ts from component types
-- [ ] **GEN-02**: Generate game.ts with basic setup
-- [ ] **GEN-03**: Generate flow.ts from turn/round/end structure
-- [ ] **GEN-04**: Generate actions.ts with placeholder actions
-- [ ] **GEN-05**: Verify generated code compiles (tsc --noEmit)
+- [x] **GEN-01**: Generate elements.ts from component types
+- [x] **GEN-02**: Generate game.ts with basic setup
+- [x] **GEN-03**: Generate flow.ts from turn/round/end structure
+- [x] **GEN-04**: Generate actions.ts with placeholder actions
+- [x] **GEN-05**: Verify generated code compiles (tsc --noEmit)
 
 ### Continuation Flow
 
@@ -81,28 +81,28 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STATE-01 | Phase 47 | Pending |
+| STATE-01 | Phase 47 | Complete |
 | STATE-02 | Phase 48 | Pending |
 | STATE-03 | Phase 49 | Pending |
-| STATE-04 | Phase 47 | Pending |
-| INT-01 | Phase 47 | Pending |
-| INT-02 | Phase 47 | Pending |
-| INT-03 | Phase 47 | Pending |
-| INT-04 | Phase 47 | Pending |
-| INT-05 | Phase 47 | Pending |
-| INT-06 | Phase 47 | Pending |
-| GOV-01 | Phase 47 | Pending |
-| GOV-02 | Phase 47 | Pending |
-| GOV-03 | Phase 47 | Pending |
-| ART-01 | Phase 47 | Pending |
-| ART-02 | Phase 47 | Pending |
-| ART-03 | Phase 47 | Pending |
+| STATE-04 | Phase 47 | Complete |
+| INT-01 | Phase 47 | Complete |
+| INT-02 | Phase 47 | Complete |
+| INT-03 | Phase 47 | Complete |
+| INT-04 | Phase 47 | Complete |
+| INT-05 | Phase 47 | Complete |
+| INT-06 | Phase 47 | Complete |
+| GOV-01 | Phase 47 | Complete |
+| GOV-02 | Phase 47 | Complete |
+| GOV-03 | Phase 47 | Complete |
+| ART-01 | Phase 47 | Complete |
+| ART-02 | Phase 47 | Complete |
+| ART-03 | Phase 47 | Complete |
 | ART-04 | Phase 48 | Pending |
-| GEN-01 | Phase 47 | Pending |
-| GEN-02 | Phase 47 | Pending |
-| GEN-03 | Phase 47 | Pending |
-| GEN-04 | Phase 47 | Pending |
-| GEN-05 | Phase 47 | Pending |
+| GEN-01 | Phase 47 | Complete |
+| GEN-02 | Phase 47 | Complete |
+| GEN-03 | Phase 47 | Complete |
+| GEN-04 | Phase 47 | Complete |
+| GEN-05 | Phase 47 | Complete |
 | CON-01 | Phase 48 | Pending |
 | CON-02 | Phase 48 | Pending |
 | CON-03 | Phase 48 | Pending |

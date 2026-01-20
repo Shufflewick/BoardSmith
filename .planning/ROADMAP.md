@@ -28,9 +28,9 @@ Transform `/design-game` from monolithic code generator into iterative, state-dr
 **Plans**: 3 plans
 
 Plans:
-- [ ] 47-01-PLAN.md — State detection, interview flow, governor pattern
-- [ ] 47-02-PLAN.md — Artifact templates and code generation patterns
-- [ ] 47-03-PLAN.md — Template update and verification
+- [x] 47-01-PLAN.md — State detection, interview flow, governor pattern
+- [x] 47-02-PLAN.md — Artifact templates and code generation patterns
+- [x] 47-03-PLAN.md — Template update and verification
 
 **Success criteria**:
 - `/design-game` detects no project and starts interview
@@ -633,7 +633,7 @@ See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
 | 44. Game Extraction | v2.0 | 11/11 | Complete | 2026-01-18 |
 | 45. CLI Update | v2.0 | 2/2 | Complete | 2026-01-18 |
 | 46. Documentation | v2.0 | 3/3 | Complete | 2026-01-19 |
-| 47. initial-interview-and-generation | v2.1 | 0/3 | Pending | - |
+| 47. initial-interview-and-generation | v2.1 | 3/3 | Complete | 2026-01-19 |
 | 48. continuation-flow | v2.1 | 0/? | Pending | - |
 | 49. session-continuity | v2.1 | 0/? | Pending | - |
 | 50. cli-integration | v2.1 | 0/? | Pending | - |

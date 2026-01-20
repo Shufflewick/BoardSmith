@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.1 Design-Game Skill Redesign - Phase 47
+**Current focus:** v2.1 Design-Game Skill Redesign - Phase 48
 
 ## Current Position
 
-Phase: 47 (initial-interview-and-generation)
-Plan: 02 of 4 complete
-Status: In progress - ready for 47-03
-Last activity: 2026-01-20 -- Completed 47-02-PLAN.md
+Phase: 48 (continuation-flow)
+Plan: None yet
+Status: Phase 47 complete -- ready for /gsd:plan-phase 48
+Last activity: 2026-01-20 -- Phase 47 complete
 
-Progress: [####                                    ] 12% (2/16 plans in v2.1)
+Progress: [██████████                              ] 25% (1/4 phases in v2.1)
 
 ## Milestones
 
@@ -46,7 +46,7 @@ Progress: [####                                    ] 12% (2/16 plans in v2.1)
 ## Session Continuity
 
 Last session: 2026-01-20
-Stopped at: Completed 47-02-PLAN.md
+Stopped at: Phase 47 complete, ready for Phase 48
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -97,3 +97,5 @@ Resume file: None
 | boardsmith init then modify | Scaffolding creates correct structure, Claude customizes | 47-02 |
 | Placeholder action only in Phase 1 | Real actions added based on playtest feedback | 47-02 |
 | tsc --noEmit verification | Catches real errors before playtest, no extra tooling needed | 47-02 |
+| Self-contained slash commands | Embed instructions into installed .md files, no external file reads | 47-03 |
+| Quick Reference in instructions | Condensed code patterns inline, no doc file reads needed | 47-03 |
