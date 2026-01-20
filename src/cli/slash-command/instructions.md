@@ -279,6 +279,195 @@ Create minimal playable game matching interview requirements
 
 ---
 
+## Phase 5: Generate Initial Code
+
+**IMPORTANT:** First run `boardsmith init <game-name>` to scaffold the project, then MODIFY the generated files (not create from scratch).
+
+### elements.ts Generation
+
+Based on interview component types, modify the template:
+
+**For card games:**
+```typescript
+import { Card as BaseCard, Hand as BaseHand, Deck, Player } from 'boardsmith';
+
+// Custom card with game-specific properties
+export class Card extends BaseCard<MyGame, MyPlayer> {
+  suit!: 'Red' | 'Blue' | 'Green';  // Use EXACT values from interview
+  rank!: string;
+}
+
+export class Hand extends BaseHand<MyGame, MyPlayer> {}
+export class DrawPile extends Deck<MyGame, MyPlayer> {}
+
+export class MyPlayer extends Player {
+  score: number = 0;
+}
+
+import type { MyGame } from './game.js';
+```
+
+**For board games:**
+```typescript
+import { Piece as BasePiece, Grid, GridCell, Player } from 'boardsmith';
+
+export class Piece extends BasePiece<MyGame, MyPlayer> {
+  // Game-specific piece properties
+}
+
+export class Cell extends GridCell<MyGame, MyPlayer> {
+  row!: number;
+  col!: number;
+
+  isEmpty(): boolean {
+    return this.count(Piece) === 0;
+  }
+}
+
+export class Board extends Grid<MyGame, MyPlayer> {
+  getCell(row: number, col: number): Cell | undefined {
+    return this.first(Cell, { row, col });
+  }
+}
+
+export class MyPlayer extends Player {}
+
+import type { MyGame } from './game.js';
+```
+
+### game.ts Generation
+
+```typescript
+import { Game, type GameOptions } from 'boardsmith';
+import { /* Elements */ } from './elements.js';
+import { createPlaceholderAction } from './actions.js';
+import { createGameFlow } from './flow.js';
+
+export interface MyGameOptions extends GameOptions {}
+
+export class MyGame extends Game<MyGame, MyPlayer> {
+  static PlayerClass = MyPlayer;
+
+  // Game state - uncomment based on game type
+  // board!: Board;  // For board games
+  // deck!: DrawPile;  // For card games
+
+  constructor(options: MyGameOptions) {
+    super(options);
+
+    // Register element classes
+    this.registerElements([/* All element classes */]);
+
+    // Create game elements based on type
+    // this.board = this.create(Board, 'board');
+    // this.deck = this.create(DrawPile, 'deck');
+
+    // Setup (shuffle, deal, etc.)
+
+    // Register actions
+    this.registerAction(createPlaceholderAction(this));
+
+    // Set flow
+    this.setFlow(createGameFlow(this));
+  }
+
+  override isFinished(): boolean {
+    // TODO: Implement game end condition
+    return false;
+  }
+
+  override getWinners(): MyPlayer[] {
+    // TODO: Implement winner determination
+    return [];
+  }
+}
+```
+
+### flow.ts Generation
+
+Map interview turn structure to flow primitives:
+- **Sequential turns:** loop > eachPlayer > actionStep
+- **Simultaneous turns:** loop > parallel > actionStep (rare)
+- **Phased turns:** loop > sequence of actionSteps
+
+```typescript
+import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { MyGame } from './game.js';
+
+export function createGameFlow(game: MyGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 1000,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({
+          name: 'player-action',
+          actions: ['placeholder'],  // Replace with real actions
+        }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+```
+
+### actions.ts Generation
+
+Create ONE placeholder action that:
+- Has a simple prompt ("Take your turn")
+- Logs a message when executed
+- Returns success
+
+```typescript
+import { Action, type ActionDefinition } from 'boardsmith';
+import type { MyGame } from './game.js';
+
+export function createPlaceholderAction(game: MyGame): ActionDefinition {
+  return Action.create('placeholder')
+    .prompt('Take your turn')
+    .execute((args, ctx) => {
+      game.message(`${ctx.player.name} took their turn`);
+      return { success: true };
+    });
+}
+```
+
+### index.ts Generation
+
+Standard game definition export:
+
+```typescript
+export { MyGame, type MyGameOptions } from './game.js';
+export { /* Elements */ } from './elements.js';
+export { createPlaceholderAction } from './actions.js';
+export { createGameFlow } from './flow.js';
+
+import { MyGame } from './game.js';
+
+export const gameDefinition = {
+  gameClass: MyGame,
+  gameType: 'my-game',
+  displayName: 'My Game',
+  minPlayers: 2,
+  maxPlayers: 4,
+};
+```
+
+### Generation Rules
+
+**CRITICAL:** Generate minimal code that compiles and runs. Do NOT try to implement complete game logic. The goal is a playtest loop, not a finished game.
+
+1. Replace `MyGame`, `MyPlayer` with names from interview
+2. Use EXACT terminology from interview (if they say "gems", use "gems")
+3. Only include component types mentioned in interview
+4. Leave `isFinished()` returning false (we'll add win conditions later)
+5. Leave `getWinners()` returning [] (we'll add scoring later)
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
