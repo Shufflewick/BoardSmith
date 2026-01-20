@@ -1160,6 +1160,49 @@ After updating state files, proceed to Phase 14 (Iteration Playtest Prompt).
 
 ---
 
+## Phase 14: Iteration Playtest Prompt
+
+After updating state files, prompt the designer to playtest the new feature.
+
+### Summary Display
+
+Show what was built in this iteration:
+
+```markdown
+## Phase 2 Complete: Card Trading
+
+**What was added:**
+- Trade action: active player swaps one card with another player
+- TradeButton component in the UI
+- Trade confirmation feedback
+
+**How to test:**
+1. Run `boardsmith dev` to start the development server
+2. Open the URL in your browser
+3. Try trading cards between players
+4. Notice what works and what feels off
+
+**Remaining backlog:** 4 ideas
+```
+
+### Next Steps
+
+Point the designer to the continuation flow:
+
+> "When ready to continue, run `/design-game` again. I'll ask about your playtest experience and we'll pick the next feature."
+
+### Backlog Preview
+
+Show the count of remaining Deferred Ideas (without listing them all):
+
+- 0 items: "Your backlog is empty - you've built everything you planned!"
+- 1-5 items: "Remaining backlog: [N] ideas"
+- 6+ items: "Remaining backlog: [N] ideas (plenty to work on!)"
+
+This is the END of an iteration cycle. The designer playtests, then returns to Phase 1 (State Detection) which routes to Phase 8 (Validate Completion) to start the next iteration.
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
@@ -1167,3 +1210,5 @@ After updating state files, proceed to Phase 14 (Iteration Playtest Prompt).
 3. **Use EXACT terminology** - If they say "gems", use "gems" (not "tokens")
 4. **Minimal first pass** - Core loop only, no scoring details, no special abilities
 5. **Playtest-driven** - Features are added based on playtest feedback, not upfront planning
+6. **Every feature needs rules AND UI** - Features must be visually playable, not just logically correct
+7. **Keep HISTORY.md entries brief** - 3-5 bullets per phase, no verbose descriptions
