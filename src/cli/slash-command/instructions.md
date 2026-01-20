@@ -1062,6 +1062,104 @@ After verification passes, proceed to Phase 13 (Update State Files).
 
 ---
 
+## Phase 13: Update State Files
+
+After generating and verifying feature code, update all state files to reflect the completed phase.
+
+### STATE.md Updates
+
+Update STATE.md with the new phase status:
+
+```markdown
+# [Game Name] - Design State
+
+## Current Phase
+**Phase:** 2 - Card Trading    ← Increment phase number, name from feature
+**Status:** Complete           ← Set to Complete after verification
+
+## Progress
+- [x] Feature selected
+- [x] Mini-interview complete
+- [x] Rules implemented
+- [x] UI implemented
+- [x] Code compiles
+- [x] Ready for playtest
+
+## Last Action
+Implemented card trading action and TradeButton component
+
+## Next Steps
+Playtest trading, then run /design-game to continue
+```
+
+### PROJECT.md Updates
+
+Check off the implemented feature and add any new deferred items:
+
+```markdown
+## Deferred Ideas
+Ideas captured during design that we'll implement in later phases:
+
+- [x] Card trading between players (Phase 2)   ← Check off with phase number
+- [ ] Variable scoring: Blue gems worth 2, red worth 1
+- [ ] Bonus for collecting all colors
+- [ ] Multi-card trades (captured Phase 2)     ← Add items deferred during mini-interview
+- [ ] Trade history tracking (captured Phase 2)
+```
+
+### HISTORY.md Creation/Update
+
+Create HISTORY.md if it doesn't exist, or append to it:
+
+```markdown
+# [Game Name] - Design History
+
+## Phase 1: Initial Generation
+**Completed:** [date]
+**What was built:**
+- Basic game structure with [components]
+- [Core action] action
+- Sequential turn flow
+- Placeholder scoring
+
+**Playtest feedback:**
+- [Feedback from Phase 9]
+
+**Deferred to backlog:**
+- [Items captured during governor pattern]
+
+---
+
+## Phase 2: Card Trading
+**Completed:** [today's date]
+**What was built:**
+- Trade action: active player swaps one card with another player
+- TradeButton component for initiating trades
+- Trade confirmation UI
+
+**Playtest feedback:**
+- [Will be filled after next playtest]
+
+**Deferred to backlog:**
+- Multi-card trades
+- Trade history tracking
+
+---
+```
+
+### HISTORY.md Rules
+
+Keep entries brief:
+- 3-5 bullets per "What was built" section
+- Only include significant feedback, not "all good"
+- Deferred items should match PROJECT.md additions
+
+If HISTORY.md exceeds 20 phases, consider archiving older phases to HISTORY-ARCHIVE.md.
+
+After updating state files, proceed to Phase 14 (Iteration Playtest Prompt).
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
