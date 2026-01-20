@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 47 (initial-interview-and-generation)
-Plan: 01 of 4 complete
-Status: In progress - ready for 47-02
-Last activity: 2026-01-19 -- Completed 47-01-PLAN.md
+Plan: 02 of 4 complete
+Status: In progress - ready for 47-03
+Last activity: 2026-01-20 -- Completed 47-02-PLAN.md
 
-Progress: [##                                      ] 6% (1/16 plans in v2.1)
+Progress: [####                                    ] 12% (2/16 plans in v2.1)
 
 ## Milestones
 
@@ -45,8 +45,8 @@ Progress: [##                                      ] 6% (1/16 plans in v2.1)
 
 ## Session Continuity
 
-Last session: 2026-01-19
-Stopped at: Completed 47-01-PLAN.md
+Last session: 2026-01-20
+Stopped at: Completed 47-02-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -94,3 +94,6 @@ Resume file: None
 | 6-question interview replaces 16-question | Minimal first pass, gather core loop only, defer details | 47-01 |
 | ACDR governor pattern | Acknowledge, Capture, Defer, Redirect - preserves ideas without blocking | 47-01 |
 | Reference files before interview | Claude needs BoardSmith context to ask informed questions | 47-01 |
+| boardsmith init then modify | Scaffolding creates correct structure, Claude customizes | 47-02 |
+| Placeholder action only in Phase 1 | Real actions added based on playtest feedback | 47-02 |
+| tsc --noEmit verification | Catches real errors before playtest, no extra tooling needed | 47-02 |
