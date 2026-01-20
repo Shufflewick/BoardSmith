@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 49 (session-continuity)
-Plan: None yet
-Status: Phase 48 complete -- ready for /gsd:plan-phase 49
-Last activity: 2026-01-19 -- Phase 48 complete
+Plan: 01 complete
+Status: Plan 49-01 complete -- ready for next plan or phase
+Last activity: 2026-01-19 -- Completed 49-01-PLAN.md
 
-Progress: [████████████████████                    ] 50% (2/4 phases in v2.1)
+Progress: [██████████████████████████              ] 62.5% (2.5/4 phases in v2.1)
 
 ## Milestones
 
@@ -46,7 +46,7 @@ Progress: [████████████████████         
 ## Session Continuity
 
 Last session: 2026-01-19
-Stopped at: Phase 48 complete, ready for Phase 49
+Stopped at: Completed 49-01-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -107,3 +107,6 @@ Resume file: None
 | Feature scope limit 3-4 requirements | Larger features split with ACDR defer pattern | 48-02 |
 | Every feature needs rules AND UI | Must be visually playable, not just logically correct | 48-02 |
 | HISTORY.md 3-5 bullets per phase | Prevent bloat, archive after 20 phases | 48-02 |
+| Resume without interrogation | Detect state from STATE.md, don't ask designer | 49-01 |
+| Three-level error recovery hierarchy | Recoverable (silent repair), corrupt (backtrack), unrecoverable (options) | 49-01 |
+| Checkpoint mapping tables | Clear reference for Phase 1 and Phase N resume points | 49-01 |
