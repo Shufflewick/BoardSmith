@@ -1,0 +1,123 @@
+# Requirements: BoardSmith v2.1 Design-Game Skill Redesign
+
+**Defined:** 2026-01-19
+**Core Value:** Guide non-programmer game designers to a working game through iterative, playtest-driven development
+
+## v1 Requirements
+
+### State Detection
+
+- [ ] **STATE-01**: Detect "no project" state (no .planning/ or no PROJECT.md)
+- [ ] **STATE-02**: Detect "phase complete" state (STATE.md shows phase verified)
+- [ ] **STATE-03**: Detect "mid-phase" state (STATE.md shows phase in progress)
+- [ ] **STATE-04**: Single `/design-game` command adapts behavior to detected state
+
+### Initial Interview
+
+- [ ] **INT-01**: Open question for game identity ("Tell me about your game")
+- [ ] **INT-02**: Structured prompts for component types (cards, dice, board, tokens)
+- [ ] **INT-03**: Structured prompts for turn structure (sequential, simultaneous, phases)
+- [ ] **INT-04**: Structured prompts for round completion (all players done, pass, etc.)
+- [ ] **INT-05**: Structured prompts for game end condition (deck empty, goal reached, etc.)
+- [ ] **INT-06**: Summary and confirmation before proceeding
+
+### Governor Pattern
+
+- [ ] **GOV-01**: Instructions for detecting scope creep (content details, strategy, scoring)
+- [ ] **GOV-02**: Acknowledge/capture/defer/redirect pattern in instructions
+- [ ] **GOV-03**: Deferred Ideas section in PROJECT.md template
+
+### Artifacts
+
+- [ ] **ART-01**: Game-specific PROJECT.md template (game identity, core mechanics, deferred ideas)
+- [ ] **ART-02**: STATE.md template for progress tracking
+- [ ] **ART-03**: Phase PLAN.md template
+- [ ] **ART-04**: HISTORY.md template for phase summaries
+
+### Code Generation
+
+- [ ] **GEN-01**: Generate elements.ts from component types
+- [ ] **GEN-02**: Generate game.ts with basic setup
+- [ ] **GEN-03**: Generate flow.ts from turn/round/end structure
+- [ ] **GEN-04**: Generate actions.ts with placeholder actions
+- [ ] **GEN-05**: Verify generated code compiles (tsc --noEmit)
+
+### Continuation Flow
+
+- [ ] **CON-01**: Ask about playtest results after phase completion
+- [ ] **CON-02**: Option to report bugs/issues from playtesting
+- [ ] **CON-03**: "What's next?" prompt showing deferred ideas
+- [ ] **CON-04**: Plan single feature as next phase
+
+### Session Continuity
+
+- [ ] **RES-01**: Resume mid-phase from STATE.md
+- [ ] **RES-02**: Show progress and what was left to do
+- [ ] **RES-03**: Graceful error recovery with clear next steps
+
+### CLI Integration
+
+- [ ] **CLI-01**: `npx boardsmith claude` creates/updates ~/.claude skill file
+- [ ] **CLI-02**: Instructions or automation for GSD dependency
+
+## v2 Requirements (Deferred)
+
+### Enhanced Features
+
+- **ENH-01**: AI opponent generation integration
+- **ENH-02**: Custom UI layout guidance
+- **ENH-03**: Multi-game project support
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Full GSD integration | Design-game has its own lightweight iterative loop |
+| Upfront roadmap | Roadmap emerges through playtesting, not planned ahead |
+| Complex state machines | Keep it simple for non-programmers |
+| Automatic playtesting | Designers must playtest manually to learn their game |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| STATE-01 | Phase 47 | Pending |
+| STATE-02 | Phase 48 | Pending |
+| STATE-03 | Phase 49 | Pending |
+| STATE-04 | Phase 47 | Pending |
+| INT-01 | Phase 47 | Pending |
+| INT-02 | Phase 47 | Pending |
+| INT-03 | Phase 47 | Pending |
+| INT-04 | Phase 47 | Pending |
+| INT-05 | Phase 47 | Pending |
+| INT-06 | Phase 47 | Pending |
+| GOV-01 | Phase 47 | Pending |
+| GOV-02 | Phase 47 | Pending |
+| GOV-03 | Phase 47 | Pending |
+| ART-01 | Phase 47 | Pending |
+| ART-02 | Phase 47 | Pending |
+| ART-03 | Phase 47 | Pending |
+| ART-04 | Phase 48 | Pending |
+| GEN-01 | Phase 47 | Pending |
+| GEN-02 | Phase 47 | Pending |
+| GEN-03 | Phase 47 | Pending |
+| GEN-04 | Phase 47 | Pending |
+| GEN-05 | Phase 47 | Pending |
+| CON-01 | Phase 48 | Pending |
+| CON-02 | Phase 48 | Pending |
+| CON-03 | Phase 48 | Pending |
+| CON-04 | Phase 48 | Pending |
+| RES-01 | Phase 49 | Pending |
+| RES-02 | Phase 49 | Pending |
+| RES-03 | Phase 49 | Pending |
+| CLI-01 | Phase 50 | Pending |
+| CLI-02 | Phase 50 | Pending |
+
+**Coverage:**
+- v1 requirements: 27 total
+- Mapped to phases: 27
+- Unmapped: 0 ✓
+
+---
+*Requirements defined: 2026-01-19*
+*Last updated: 2026-01-19 after initial definition*

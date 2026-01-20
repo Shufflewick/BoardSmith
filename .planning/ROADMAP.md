@@ -18,7 +18,49 @@
 
 ## Active Milestone
 
-None - v2.0 complete. Ready for next milestone.
+**v2.1 Design-Game Skill Redesign** (Phases 47-50)
+
+Transform `/design-game` from monolithic code generator into iterative, state-driven skill for non-programmer game designers.
+
+### Phase 47: initial-interview-and-generation
+**Goal**: Build the core skill flow — detect no-project state, run structured interview, generate Phase 1 code
+**Requirements**: STATE-01, STATE-04, INT-01 through INT-06, GOV-01 through GOV-03, ART-01 through ART-03, GEN-01 through GEN-05
+**Success criteria**:
+- `/design-game` detects no project and starts interview
+- Structured prompts gather component types, turn/round/end structure
+- Governor pattern defers details to backlog
+- PROJECT.md and STATE.md created with game info
+- Phase 1 code generated and compiles
+- Designer prompted to playtest
+
+### Phase 48: continuation-flow
+**Goal**: Handle post-playtest return — gather feedback, plan next feature
+**Requirements**: STATE-02, ART-04, CON-01 through CON-04
+**Depends on**: Phase 47
+**Success criteria**:
+- `/design-game` detects phase-complete state
+- Asks about playtest results
+- Shows deferred ideas as "what's next?" options
+- Plans and executes single feature as next phase
+
+### Phase 49: session-continuity
+**Goal**: Resume interrupted sessions gracefully
+**Requirements**: STATE-03, RES-01 through RES-03
+**Depends on**: Phase 48
+**Success criteria**:
+- `/design-game` detects mid-phase state
+- Shows what was in progress
+- Continues execution from where it left off
+- Handles errors with clear recovery steps
+
+### Phase 50: cli-integration
+**Goal**: `npx boardsmith claude` sets up the skill and dependencies
+**Requirements**: CLI-01, CLI-02
+**Depends on**: Phase 49
+**Success criteria**:
+- `npx boardsmith claude` creates/updates ~/.claude/commands/design-game.md
+- Skill file points to correct instructions path
+- Clear guidance on GSD dependency if needed
 
 ## Overview
 
@@ -39,6 +81,7 @@ BoardSmith development roadmap. Each milestone focuses on a specific capability 
 - **v1.1 MCTS Strategy Improvements** -- Phases 29-36 (shipped 2026-01-16)
 - **v1.2 Local Tarballs** -- Phases 37-38 (shipped 2026-01-18)
 - **v2.0 Collapse the Monorepo** -- Phases 39-46 (shipped 2026-01-19)
+- **v2.1 Design-Game Skill Redesign** -- Phases 47-50 (active)
 
 ## Phases
 
@@ -583,3 +626,7 @@ See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
 | 44. Game Extraction | v2.0 | 11/11 | Complete | 2026-01-18 |
 | 45. CLI Update | v2.0 | 2/2 | Complete | 2026-01-18 |
 | 46. Documentation | v2.0 | 3/3 | Complete | 2026-01-19 |
+| 47. initial-interview-and-generation | v2.1 | 0/? | Pending | - |
+| 48. continuation-flow | v2.1 | 0/? | Pending | - |
+| 49. session-continuity | v2.1 | 0/? | Pending | - |
+| 50. cli-integration | v2.1 | 0/? | Pending | - |

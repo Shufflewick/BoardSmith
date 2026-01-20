@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** Ready for next milestone
+**Current focus:** v2.1 Design-Game Skill Redesign - Phase 47
 
 ## Current Position
 
-Phase: None active
-Plan: None active
-Status: v2.0 shipped -- ready for /gsd:new-milestone
-Last activity: 2026-01-19 -- v2.0 Collapse the Monorepo shipped
+Phase: 47 (initial-interview-and-generation)
+Plan: None yet
+Status: v2.1 started -- ready for /gsd:plan-phase 47
+Last activity: 2026-01-19 -- v2.1 Design-Game Skill Redesign started
 
-Progress: [========================================] 100% (46/46 phases through v2.0)
+Progress: [                                        ] 0% (0/4 phases in v2.1)
 
 ## Milestones
 
@@ -34,17 +34,19 @@ Progress: [========================================] 100% (46/46 phases through 
 - v2.0 Collapse the Monorepo (Phases 39-46) -- shipped 2026-01-19
 
 **Active:**
-None - ready for next milestone
+- v2.1 Design-Game Skill Redesign (Phases 47-50) -- started 2026-01-19
 
 ## Roadmap Evolution
 
 - Milestone v2.0 created: Collapse the Monorepo, 8 phases (Phases 39-46)
 - 46 v2.0 requirements mapped to 8 phases
+- Milestone v2.1 created: Design-Game Skill Redesign, 4 phases (Phases 47-50)
+- 27 v2.1 requirements mapped to 4 phases
 
 ## Session Continuity
 
 Last session: 2026-01-19
-Stopped at: Phase 46 verified - Milestone v2.0 complete, ready for audit
+Stopped at: v2.1 milestone started, ready for /gsd:plan-phase 47
 Resume file: None
 
 ## Key Decisions (v2.0)
