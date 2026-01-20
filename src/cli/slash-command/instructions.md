@@ -748,6 +748,73 @@ Claude: "No problem! Let's look at what to build next."
 
 ---
 
+## Phase 10: Present Next Options
+
+After gathering feedback (or skip), present the designer with prioritized options for what to build next.
+
+### Option Ranking
+
+Options are prioritized by urgency:
+
+| Priority | Source | Why First |
+|----------|--------|-----------|
+| 1. Needs Fix | Phase 9 feedback | Broken mechanics block playtesting |
+| 2. Deferred Ideas | PROJECT.md | Already captured and validated |
+| 3. New Ideas | Phase 9 feedback | Fresh ideas not yet in backlog |
+
+### Display Format
+
+Present options as a numbered list with a recommendation:
+
+```markdown
+## What's Next?
+
+Based on your feedback and deferred ideas:
+
+**Recommended (fix first):**
+1. Card drawing feels slow (from playtest feedback)
+
+**From your idea backlog:**
+2. Variable scoring: Blue gems worth 2, red worth 1
+3. Bonus for collecting all colors
+4. Card trading between players (from playtest feedback)
+
+I suggest fixing the card drawing issue first since it affects core gameplay.
+Which would you like to tackle?
+```
+
+### Recommendation Pattern
+
+Always provide a recommendation with reasoning:
+
+> "I suggest [option] first since [reason affecting gameplay]."
+
+Reasons to use:
+- "affects core gameplay" - for Needs Fix items
+- "builds on what's already there" - for related features
+- "quick to implement" - for simple additions
+
+But let the designer choose any option, including new ideas not in the list.
+
+### Handling New Ideas
+
+If the designer mentions a new idea during feedback that they DON'T choose to implement now:
+1. Add it to PROJECT.md Deferred Ideas section
+2. Confirm: "Added [idea] to your backlog for later."
+
+### Empty Backlog
+
+If all Deferred Ideas are checked off and no feedback provided:
+
+> "Your backlog is empty! What would you like to add next?
+> - Describe a new feature
+> - Add polish and finishing touches
+> - Or say 'done' if you're ready to ship!"
+
+After the designer selects an option, proceed to Phase 11 (Feature Mini-Interview).
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
