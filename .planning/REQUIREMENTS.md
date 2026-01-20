@@ -57,8 +57,8 @@
 
 ### CLI Integration
 
-- [ ] **CLI-01**: `npx boardsmith claude` creates/updates ~/.claude skill file
-- [ ] **CLI-02**: Instructions or automation for GSD dependency
+- [x] **CLI-01**: `npx boardsmith claude` creates/updates ~/.claude skill file
+- [x] **CLI-02**: Instructions or automation for GSD dependency
 
 ## v2 Requirements (Deferred)
 
@@ -110,8 +110,8 @@
 | RES-01 | Phase 49 | Complete |
 | RES-02 | Phase 49 | Complete |
 | RES-03 | Phase 49 | Complete |
-| CLI-01 | Phase 50 | Pending |
-| CLI-02 | Phase 50 | Pending |
+| CLI-01 | Phase 50 | Complete |
+| CLI-02 | Phase 50 | Complete |
 
 **Coverage:**
 - v1 requirements: 27 total
@@ -120,4 +120,4 @@
 
 ---
 *Requirements defined: 2026-01-19*
-*Last updated: 2026-01-19 after initial definition*
+*Last updated: 2026-01-19 after Phase 50 completion*

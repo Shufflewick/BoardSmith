@@ -78,12 +78,12 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 50-01-PLAN.md — Default install action and self-contained messaging
+- [x] 50-01-PLAN.md — Default install action and self-contained messaging
 
 **Success criteria**:
-- `npx boardsmith claude` creates/updates ~/.claude/commands/design-game.md
-- Skill file points to correct instructions path
-- Clear guidance on GSD dependency if needed
+- `npx boardsmith claude` creates/updates ~/.claude/commands/design-game.md ✓
+- Skill file points to correct instructions path ✓
+- Clear guidance on GSD dependency if needed ✓
 
 ## Overview
 
@@ -652,4 +652,4 @@ See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
 | 47. initial-interview-and-generation | v2.1 | 3/3 | Complete | 2026-01-19 |
 | 48. continuation-flow | v2.1 | 2/2 | Complete | 2026-01-19 |
 | 49. session-continuity | v2.1 | 1/1 | Complete | 2026-01-19 |
-| 50. cli-integration | v2.1 | 0/1 | Pending | - |
+| 50. cli-integration | v2.1 | 1/1 | Complete | 2026-01-19 |

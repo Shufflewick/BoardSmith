@@ -32,9 +32,10 @@ Progress: [███████████████████████
 - v1.1 MCTS Strategy Improvements (Phases 29-36) -- shipped 2026-01-16
 - v1.2 Local Tarballs (Phases 37-38) -- shipped 2026-01-18
 - v2.0 Collapse the Monorepo (Phases 39-46) -- shipped 2026-01-19
+- v2.1 Design-Game Skill Redesign (Phases 47-50) -- shipped 2026-01-19
 
 **Active:**
-- v2.1 Design-Game Skill Redesign (Phases 47-50) -- shipped 2026-01-19
+- None (ready for next milestone)
 
 ## Roadmap Evolution
 
