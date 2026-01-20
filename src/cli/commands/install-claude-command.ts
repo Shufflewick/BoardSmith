@@ -41,7 +41,8 @@ async function installCommand(
   }
 
   // Read template - look in src directory (not dist) since .md files aren't compiled
-  const templatePath = join(boardsmithRoot, 'packages', 'cli', 'src', 'slash-command', `${commandName}.template.md`);
+  // Post v2.0 monorepo collapse: templates are in src/cli/slash-command/
+  const templatePath = join(boardsmithRoot, 'src', 'cli', 'slash-command', `${commandName}.template.md`);
   let template: string;
 
   try {
@@ -61,8 +62,8 @@ async function installCommand(
 }
 
 export async function installClaudeCommand(options: InstallOptions = {}): Promise<void> {
-  // Determine BoardSmith root (go up from packages/cli/dist/commands)
-  const boardsmithRoot = resolve(__dirname, '../../../..');
+  // Determine BoardSmith root (go up from packages/cli/dist/ where bundled cli.js lives)
+  const boardsmithRoot = resolve(__dirname, '../../..');
 
   // Verify this is actually a BoardSmith installation
   try {
