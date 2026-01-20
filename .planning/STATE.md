@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 50 (cli-integration)
-Plan: None yet
-Status: Phase 49 complete -- ready for /gsd:plan-phase 50
-Last activity: 2026-01-19 -- Phase 49 session-continuity complete
+Plan: 01 of 01 complete
+Status: Phase 50 complete -- v2.1 milestone complete
+Last activity: 2026-01-19 -- Completed 50-01-PLAN.md
 
-Progress: [██████████████████████████████          ] 75% (3/4 phases in v2.1)
+Progress: [████████████████████████████████████████] 100% (4/4 phases in v2.1)
 
 ## Milestones
 
@@ -34,7 +34,7 @@ Progress: [███████████████████████
 - v2.0 Collapse the Monorepo (Phases 39-46) -- shipped 2026-01-19
 
 **Active:**
-- v2.1 Design-Game Skill Redesign (Phases 47-50) -- started 2026-01-19
+- v2.1 Design-Game Skill Redesign (Phases 47-50) -- shipped 2026-01-19
 
 ## Roadmap Evolution
 
@@ -46,7 +46,7 @@ Progress: [███████████████████████
 ## Session Continuity
 
 Last session: 2026-01-19
-Stopped at: Phase 49 complete, ready for Phase 50
+Stopped at: Phase 50 complete, v2.1 milestone shipped
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -110,3 +110,5 @@ Resume file: None
 | Resume without interrogation | Detect state from STATE.md, don't ask designer | 49-01 |
 | Three-level error recovery hierarchy | Recoverable (silent repair), corrupt (backtrack), unrecoverable (options) | 49-01 |
 | Checkpoint mapping tables | Clear reference for Phase 1 and Phase N resume points | 49-01 |
+| Install as default action | Run install when no subcommand provided for `boardsmith claude` | 50-01 |
+| Self-contained messaging | Clarify no external framework dependency in success message | 50-01 |
