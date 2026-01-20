@@ -8,6 +8,7 @@
 export interface Player {
   position: number;
   name: string;
+  color?: string;
 }
 
 defineProps<{
@@ -36,6 +37,7 @@ defineSlots<{
       <div class="player-name-row">
         <span v-if="player.position === currentPlayerPosition" class="turn-indicator-dot"></span>
         <span class="player-name">{{ player.name }}</span>
+        <span v-if="player.color" class="player-color" :style="{ backgroundColor: player.color }"></span>
         <span v-if="player.position === playerPosition" class="you-badge">(You)</span>
       </div>
       <slot name="player-stats" :player="player"></slot>
@@ -70,6 +72,14 @@ defineSlots<{
 
 .player-name {
   font-weight: 600;
+}
+
+.player-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .you-badge {
