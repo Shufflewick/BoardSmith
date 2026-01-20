@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.1 Design-Game Skill Redesign - Phase 50
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 50 (cli-integration)
-Plan: 01 of 01 complete
-Status: Phase 50 complete -- v2.1 milestone complete
-Last activity: 2026-01-19 -- Completed 50-01-PLAN.md
+Phase: Ready for next milestone
+Plan: N/A
+Status: v2.1 shipped, ready for /gsd:new-milestone
+Last activity: 2026-01-19 — v2.1 milestone complete
 
-Progress: [████████████████████████████████████████] 100% (4/4 phases in v2.1)
+Progress: [████████████████████████████████████████] v2.1 SHIPPED
 
 ## Milestones
 
@@ -32,10 +32,10 @@ Progress: [███████████████████████
 - v1.1 MCTS Strategy Improvements (Phases 29-36) -- shipped 2026-01-16
 - v1.2 Local Tarballs (Phases 37-38) -- shipped 2026-01-18
 - v2.0 Collapse the Monorepo (Phases 39-46) -- shipped 2026-01-19
-- v2.1 Design-Game Skill Redesign (Phases 47-50) -- shipped 2026-01-19
+- v2.1 Design-Game Skill Redesign (Phases 47-50) — shipped 2026-01-19
 
 **Active:**
-- None (ready for next milestone)
+- None (use /gsd:new-milestone to start)
 
 ## Roadmap Evolution
 
@@ -47,7 +47,7 @@ Progress: [███████████████████████
 ## Session Continuity
 
 Last session: 2026-01-19
-Stopped at: Phase 50 complete, v2.1 milestone shipped
+Stopped at: v2.1 milestone complete, ready for next milestone
 Resume file: None
 
 ## Key Decisions (v2.0)

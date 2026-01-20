@@ -8,13 +8,7 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v2.1 Design-Game Skill Redesign
-
-**Goal:** Transform `/design-game` from a monolithic code generator into an iterative, state-driven skill that guides non-programmer game designers through building games one phase at a time.
-
-**Core insight:** Game design is discovery — you don't know what a game needs until you playtest it. The skill should build a minimal core loop first, then add features incrementally based on playtesting feedback.
-
-## Current State: v2.0 Shipped
+## Current State: v2.1 Shipped
 
 BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Games live in separate repositories at `~/BoardSmithGames/`.
 
@@ -78,16 +72,17 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ 9 games extracted to `~/BoardSmithGames/` — v2.0
 - ✓ CLI updated for monorepo and standalone contexts — v2.0
 - ✓ Documentation and migration guide complete — v2.0
+- ✓ State-driven `/design-game` skill that adapts behavior based on project state — v2.1
+- ✓ Structured interview for core loop (components, turns, rounds, end condition) — v2.1
+- ✓ Governor pattern to keep designers focused, defer details to backlog — v2.1
+- ✓ Planning artifacts (PROJECT.md, STATE.md, HISTORY.md) for session continuity — v2.1
+- ✓ Phase 1 code generation (core event loop + basic UI) — v2.1
+- ✓ Playtest-driven iteration (one feature per phase, test before continuing) — v2.1
+- ✓ `npx boardsmith claude` setup for skill + dependencies — v2.1
 
 ### Active
 
-- [ ] State-driven `/design-game` skill that adapts behavior based on project state
-- [ ] Structured interview for core loop (components, turns, rounds, end condition)
-- [ ] Governor pattern to keep designers focused, defer details to backlog
-- [ ] Planning artifacts (PROJECT.md, STATE.md, HISTORY.md) for session continuity
-- [ ] Phase 1 code generation (core event loop + basic UI)
-- [ ] Playtest-driven iteration (one feature per phase, test before continuing)
-- [ ] `npx boardsmith claude` setup for skill + dependencies
+(None — ready for next milestone)
 
 ### Out of Scope
 
@@ -113,6 +108,13 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | Handlers expose updateRunner() method | Hot reload support for reloadWithCurrentRules | ✓ Good |
 | Extract types + helpers only, not stateful composables | actionSnapshot is central; Pit of Success pattern requires centralized state | ✓ Good |
 | ActionExecutor kept intact | Cohesive class with internal method dependencies | ✓ Good |
+| 6-question interview replaces 16-question | Minimal first pass, gather core loop only, defer details | ✓ Good |
+| ACDR governor pattern | Acknowledge, Capture, Defer, Redirect — preserves ideas without blocking | ✓ Good |
+| Self-contained slash commands | Embed instructions into installed .md files, no external file reads | ✓ Good |
+| boardsmith init then modify | Scaffolding creates correct structure, Claude customizes based on interview | ✓ Good |
+| tsc --noEmit verification | Catches real errors before playtest, no extra tooling needed | ✓ Good |
+| Resume without interrogation | Detect state from STATE.md, don't ask designer questions | ✓ Good |
+| Install as default action | `boardsmith claude` runs install without subcommand | ✓ Good |
 
 ## Context
 
@@ -139,4 +141,4 @@ Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
 One external team using BoardSmith — migration guide at `docs/migration-guide.md`.
 
 ---
-*Last updated: 2026-01-19 after starting v2.1 milestone*
+*Last updated: 2026-01-19 after v2.1 milestone shipped*

@@ -1,5 +1,35 @@
 # Project Milestones: BoardSmith
 
+## v2.1 Design-Game Skill Redesign (Shipped: 2026-01-19)
+
+**Delivered:** Transformed `/design-game` from a monolithic code generator into an iterative, state-driven skill that guides non-programmer game designers through building games one phase at a time.
+
+**Phases completed:** 47-50 (4 phases, 7 plans total)
+
+**Key accomplishments:**
+
+- State detection routes designers to interview (new), continuation (complete), or resume (in-progress)
+- 6-question structured interview gathers core mechanics without scope creep
+- Governor pattern (ACDR) captures deferred ideas while maintaining focus
+- Code generation produces minimal playable game (elements, game, flow, actions)
+- Continuation flow: playtest feedback → ranked options → mini-interview → feature generation
+- Resume flow: checkpoint-based recovery with three-level error hierarchy
+- Self-contained slash commands (no external file permission prompts)
+- `npx boardsmith claude` installs everything with a single command
+
+**Stats:**
+
+- 5 files changed
+- +1,320 / -194 lines (1,342-line instructions.md)
+- 4 phases, 7 plans
+- Same day from start to ship (2026-01-19)
+
+**Git range:** `9cd5c30` → `dff1e6b`
+
+**What's next:** /design-game skill complete. Ready for real-world testing with game designers.
+
+---
+
 ## v2.0 Collapse the Monorepo (Shipped: 2026-01-19)
 
 **Delivered:** Transformed BoardSmith from a pnpm monorepo with 12 `@boardsmith/*` packages into a single `boardsmith` npm package with 11 subpath exports, extracted all games to separate repos.
