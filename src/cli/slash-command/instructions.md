@@ -1203,6 +1203,133 @@ This is the END of an iteration cycle. The designer playtests, then returns to P
 
 ---
 
+## Phase 15: Resume Flow
+
+When STATE.md shows Status: "In Progress", the designer is returning mid-session. Resume execution from where they left off without interrogating them about state.
+
+### Step 1: Display Context
+
+Show the designer what was in progress and what remains:
+
+```markdown
+## Picking Up Where We Left Off
+
+**Phase:** [N] - [Feature Name]
+**Last Action:** [From STATE.md Last Action field]
+
+**Done:**
+- [x] [Checked items from Progress]
+
+**Remaining:**
+- [ ] [Unchecked items from Progress]
+
+Continuing with [next unchecked item]...
+```
+
+Key principles:
+- Show phase name (not just number) for context
+- Show Last Action so designer knows what was happening
+- Show done/remaining split for orientation
+- Clear "Continuing with X..." to set expectations
+
+### Step 2: Determine Resume Point
+
+Find the first unchecked `[ ]` in the Progress section and map to the appropriate phase.
+
+**For Phase 1 (Initial Generation) checkpoints:**
+
+| Checkpoint | Resume At |
+|------------|-----------|
+| Interview complete | Phase 2: Structured Interview |
+| PROJECT.md created | Phase 4: Create Artifacts |
+| Code generated | Phase 5: Generate Initial Code |
+| Code compiles | Phase 6: Verify Compilation |
+| Ready for playtest | Phase 7: Playtest Prompt |
+
+**For Phase N (Feature Iteration) checkpoints:**
+
+| Checkpoint | Resume At |
+|------------|-----------|
+| Feature selected | Phase 10: Present Next Options |
+| Mini-interview complete | Phase 11: Feature Mini-Interview |
+| Rules implemented | Phase 12: Generate Feature Code |
+| UI implemented | Phase 12: Generate Feature Code |
+| Code compiles | Phase 12 verification step |
+| Ready for playtest | Phase 14: Iteration Playtest Prompt |
+
+### Step 3: Validate Prior Checkpoints
+
+Before resuming, verify all checked `[x]` items are actually done:
+
+**FILE validation:**
+- Do expected files exist? (PROJECT.md, STATE.md, src/rules/*.ts, src/ui/*.vue)
+
+**COMPILE validation:**
+- Does `npx tsc --noEmit` pass?
+
+**If validation fails:**
+1. Display: "Let me fix that first..."
+2. Use silent repair protocol (from Phase 8)
+3. Re-validate after repair
+4. Limit repair attempts to 2-3. If still failing, backtrack to the first invalid checkpoint
+
+### Step 4: Error Recovery Hierarchy
+
+Handle errors at three severity levels:
+
+**Level 1: Recoverable (most common)**
+- Examples: tsc fails, missing import, type mismatch
+- Response: Silent repair, then continue
+
+```markdown
+Picking up where we left off...
+
+**Phase:** 1 - Initial Generation
+**Last Action:** Generated initial code
+
+Let me fix a compilation issue first...
+
+[Silent repair happens here]
+
+Code now compiles. Continuing with verification...
+```
+
+**Level 2: Corrupt State**
+- Examples: Progress claims [x] Code generated but src/rules/*.ts files missing
+- Response: Backtrack to first valid checkpoint with explanation
+
+```markdown
+Picking up where we left off...
+
+**Phase:** 2 - Card Trading
+
+I noticed some files are missing. Let me catch up...
+
+The trading action code wasn't saved. I'll regenerate it based on your previous answers:
+- Active player can propose trade with any player
+- One-for-one card swap
+- Trading replaces normal turn action
+
+[Regenerate code]
+
+Done! Continuing with verification...
+```
+
+**Level 3: Unrecoverable**
+- Examples: STATE.md malformed, can't parse Progress section
+- Response: Display error with recovery options
+
+```markdown
+I couldn't understand your design state file. Here are your options:
+
+1. **Let me try to recover:** Share your PROJECT.md content and I'll reconstruct
+2. **Start fresh:** We can begin a new `/design-game` interview
+
+Which would you prefer?
+```
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
