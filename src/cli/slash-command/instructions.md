@@ -612,6 +612,142 @@ When ready to add more, run `/design-game` again. I'll ask:
 
 ---
 
+## Phase 8: Validate Completion
+
+When Phase 1 state detection finds PROJECT.md + STATE.md with Status: "Complete", the designer is returning after playtesting. Before proceeding, validate that the code actually works.
+
+### Validation Flow
+
+```
+STATE.md shows Status: "Complete"
+         │
+         ▼
+    Run: npx tsc --noEmit
+         │
+         ├─► Passes ──► Proceed to Phase 9 (Gather Feedback)
+         │
+         └─► Fails ──► State is actually "In Progress"
+                       Display: "Let me fix that first..."
+                       Repair the broken code
+                       Re-run tsc until it passes
+                       Then proceed to Phase 9
+```
+
+### Why Validate?
+
+STATE.md is the **claim**, artifacts are the **proof**. A STATE.md saying "Complete" with broken code is actually "In Progress" state that needs repair before the designer can playtest.
+
+Common causes of false "Complete" state:
+- Session interrupted before final verification
+- Manual file editing introduced errors
+- Dependency updates broke compilation
+
+### Repair Protocol
+
+If tsc fails:
+
+1. **Announce:** "Let me fix that first..."
+2. **Read the error messages** - TypeScript tells you exactly what's wrong
+3. **Fix each error** - Missing imports, type mismatches, etc.
+4. **Re-run tsc --noEmit** until clean
+5. **Then proceed** to Phase 9
+
+Do NOT ask the designer about the errors. Fix them silently and move on.
+
+---
+
+## Phase 9: Gather Playtest Feedback
+
+After validation passes, gather optional feedback about the playtest experience.
+
+### Opening Prompt
+
+Display to the designer:
+
+> "Phase [N] complete! What stood out from playtesting?"
+
+Where [N] is the phase number from STATE.md (e.g., "Phase 1 complete!").
+
+### Feedback Categories
+
+Listen for feedback in three categories:
+
+| Category | Signal | Example |
+|----------|--------|---------|
+| **Works** | Positive experience, enjoyment | "The card drawing felt snappy" |
+| **Needs Fix** | Broken or confusing mechanics | "I couldn't tell whose turn it was" |
+| **Ideas** | New features that emerged | "I wished I could trade cards" |
+
+### Structured Extraction
+
+Extract freeform feedback into categories:
+
+**Designer says:**
+> "The card drawing felt slow and I wanted to trade cards with other players"
+
+**You extract:**
+- Works: (none mentioned)
+- Needs Fix: Card drawing feels slow
+- Ideas: Card trading between players
+
+### Response Pattern
+
+After extracting feedback, confirm understanding:
+
+> "Got it! Captured:
+> - Needs Fix: Card drawing feels slow
+> - Ideas: Card trading between players
+>
+> Anything else, or should we move to what's next?"
+
+### Skip Path
+
+Feedback is OPTIONAL. If the designer wants to skip:
+
+**Designer says:**
+> "Nothing to report" / "Let's move on" / "All good"
+
+**You respond:**
+> "No problem! Let's look at what to build next."
+
+Then proceed to Phase 10 (Present Options - covered in Phase 48-02).
+
+### Example Dialogues
+
+**Full feedback example:**
+
+```
+Claude: "Phase 1 complete! What stood out from playtesting?"
+
+Designer: "I liked how fast setup was, but the scoring felt confusing
+and I think we need a way to undo moves."
+
+Claude: "Got it! Captured:
+- Works: Fast setup
+- Needs Fix: Scoring feels confusing
+- Ideas: Undo moves
+
+Anything else, or should we move to what's next?"
+
+Designer: "That's it!"
+
+Claude: [Proceeds to Phase 10]
+```
+
+**Skip example:**
+
+```
+Claude: "Phase 1 complete! What stood out from playtesting?"
+
+Designer: "Let's just move on"
+
+Claude: "No problem! Let's look at what to build next."
+
+[Proceeds to Phase 10]
+```
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
