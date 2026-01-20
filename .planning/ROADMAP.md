@@ -47,8 +47,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 48-01-PLAN.md — State validation and feedback gathering (Phases 8-9)
-- [ ] 48-02-PLAN.md — Feature selection, mini-interview, generation (Phases 10-14)
+- [x] 48-01-PLAN.md — State validation and feedback gathering (Phases 8-9)
+- [x] 48-02-PLAN.md — Feature selection, mini-interview, generation (Phases 10-14)
 
 **Success criteria**:
 - `/design-game` detects phase-complete state
@@ -640,6 +640,6 @@ See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
 | 45. CLI Update | v2.0 | 2/2 | Complete | 2026-01-18 |
 | 46. Documentation | v2.0 | 3/3 | Complete | 2026-01-19 |
 | 47. initial-interview-and-generation | v2.1 | 3/3 | Complete | 2026-01-19 |
-| 48. continuation-flow | v2.1 | 0/2 | Pending | - |
+| 48. continuation-flow | v2.1 | 2/2 | Complete | 2026-01-19 |
 | 49. session-continuity | v2.1 | 0/? | Pending | - |
 | 50. cli-integration | v2.1 | 0/? | Pending | - |

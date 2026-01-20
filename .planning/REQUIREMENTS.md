@@ -8,7 +8,7 @@
 ### State Detection
 
 - [x] **STATE-01**: Detect "no project" state (no .planning/ or no PROJECT.md)
-- [ ] **STATE-02**: Detect "phase complete" state (STATE.md shows phase verified)
+- [x] **STATE-02**: Detect "phase complete" state (STATE.md shows phase verified)
 - [ ] **STATE-03**: Detect "mid-phase" state (STATE.md shows phase in progress)
 - [x] **STATE-04**: Single `/design-game` command adapts behavior to detected state
 
@@ -32,7 +32,7 @@
 - [x] **ART-01**: Game-specific PROJECT.md template (game identity, core mechanics, deferred ideas)
 - [x] **ART-02**: STATE.md template for progress tracking
 - [x] **ART-03**: Phase PLAN.md template
-- [ ] **ART-04**: HISTORY.md template for phase summaries
+- [x] **ART-04**: HISTORY.md template for phase summaries
 
 ### Code Generation
 
@@ -44,10 +44,10 @@
 
 ### Continuation Flow
 
-- [ ] **CON-01**: Ask about playtest results after phase completion
-- [ ] **CON-02**: Option to report bugs/issues from playtesting
-- [ ] **CON-03**: "What's next?" prompt showing deferred ideas
-- [ ] **CON-04**: Plan single feature as next phase
+- [x] **CON-01**: Ask about playtest results after phase completion
+- [x] **CON-02**: Option to report bugs/issues from playtesting
+- [x] **CON-03**: "What's next?" prompt showing deferred ideas
+- [x] **CON-04**: Plan single feature as next phase
 
 ### Session Continuity
 
@@ -82,7 +82,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | STATE-01 | Phase 47 | Complete |
-| STATE-02 | Phase 48 | Pending |
+| STATE-02 | Phase 48 | Complete |
 | STATE-03 | Phase 49 | Pending |
 | STATE-04 | Phase 47 | Complete |
 | INT-01 | Phase 47 | Complete |
@@ -97,16 +97,16 @@
 | ART-01 | Phase 47 | Complete |
 | ART-02 | Phase 47 | Complete |
 | ART-03 | Phase 47 | Complete |
-| ART-04 | Phase 48 | Pending |
+| ART-04 | Phase 48 | Complete |
 | GEN-01 | Phase 47 | Complete |
 | GEN-02 | Phase 47 | Complete |
 | GEN-03 | Phase 47 | Complete |
 | GEN-04 | Phase 47 | Complete |
 | GEN-05 | Phase 47 | Complete |
-| CON-01 | Phase 48 | Pending |
-| CON-02 | Phase 48 | Pending |
-| CON-03 | Phase 48 | Pending |
-| CON-04 | Phase 48 | Pending |
+| CON-01 | Phase 48 | Complete |
+| CON-02 | Phase 48 | Complete |
+| CON-03 | Phase 48 | Complete |
+| CON-04 | Phase 48 | Complete |
 | RES-01 | Phase 49 | Pending |
 | RES-02 | Phase 49 | Pending |
 | RES-03 | Phase 49 | Pending |
