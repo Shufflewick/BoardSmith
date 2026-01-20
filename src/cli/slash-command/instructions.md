@@ -183,17 +183,99 @@ Ideas captured during design that we'll implement in later phases:
 
 ---
 
-## Phase 4: Proceed to Artifact Creation
+## Phase 4: Create Artifacts
 
-After the interview is confirmed, proceed to create the planning artifacts and initial code. This is covered in Plan 02 of this phase.
+After the interview is confirmed, create planning artifacts to track the game design.
 
-The next step will:
-1. Create PROJECT.md with the captured requirements
-2. Create STATE.md to track progress
-3. Initialize the game project with `boardsmith init`
-4. Generate minimal working code for the core loop
-5. Verify the code compiles
-6. Prompt for playtesting
+### PROJECT.md Template
+
+Create `PROJECT.md` in the game directory with this structure:
+
+```markdown
+# [Game Name]
+
+## Identity
+**Theme:** [One sentence theme/setting from interview]
+**Core Loop:** [One sentence description of what players do]
+**Win Condition:** [How someone wins]
+
+## Core Mechanics
+
+### Components
+- **Cards:** [Description from interview, or "None"]
+- **Board:** [Description from interview, or "None"]
+- **Dice:** [Description from interview, or "None"]
+- **Tokens:** [Description from interview, or "None"]
+
+### Turn Structure
+[Sequential/Simultaneous/Phased from interview]
+
+### Round End
+[From interview]
+
+### Game End
+[From interview]
+
+## Deferred Ideas
+Ideas captured during design that we'll implement in later phases:
+
+- [ ] [Captured ideas from governor pattern]
+```
+
+### STATE.md Template
+
+Create `STATE.md` in the game directory with this structure:
+
+```markdown
+# [Game Name] - Design State
+
+## Current Phase
+**Phase:** 1 - Initial Generation
+**Status:** In Progress
+
+## Progress
+- [x] Interview complete
+- [x] PROJECT.md created
+- [ ] Code generated
+- [ ] Code compiles
+- [ ] Ready for playtest
+
+## Last Action
+Created PROJECT.md and STATE.md from interview
+
+## Next Steps
+Generate initial game code
+```
+
+### Phase PLAN.md Template
+
+For internal tracking, create a simplified plan:
+
+```markdown
+# Phase 1: Initial Generation
+
+## Goal
+Create minimal playable game matching interview requirements
+
+## Tasks
+1. Generate elements.ts with component types
+2. Generate game.ts with setup
+3. Generate flow.ts with turn structure
+4. Generate actions.ts with placeholder action
+5. Generate index.ts with game definition
+6. Verify compilation with tsc --noEmit
+
+## Success
+- Game compiles
+- Can run boardsmith dev
+- Basic turn loop works
+```
+
+### Artifact Creation Steps
+
+1. Create PROJECT.md with all interview data
+2. Create STATE.md with initial status
+3. Update STATE.md progress checkboxes as each step completes
 
 ---
 
