@@ -9,7 +9,7 @@
 
 - [x] **STATE-01**: Detect "no project" state (no .planning/ or no PROJECT.md)
 - [x] **STATE-02**: Detect "phase complete" state (STATE.md shows phase verified)
-- [ ] **STATE-03**: Detect "mid-phase" state (STATE.md shows phase in progress)
+- [x] **STATE-03**: Detect "mid-phase" state (STATE.md shows phase in progress)
 - [x] **STATE-04**: Single `/design-game` command adapts behavior to detected state
 
 ### Initial Interview
@@ -51,9 +51,9 @@
 
 ### Session Continuity
 
-- [ ] **RES-01**: Resume mid-phase from STATE.md
-- [ ] **RES-02**: Show progress and what was left to do
-- [ ] **RES-03**: Graceful error recovery with clear next steps
+- [x] **RES-01**: Resume mid-phase from STATE.md
+- [x] **RES-02**: Show progress and what was left to do
+- [x] **RES-03**: Graceful error recovery with clear next steps
 
 ### CLI Integration
 
@@ -83,7 +83,7 @@
 |-------------|-------|--------|
 | STATE-01 | Phase 47 | Complete |
 | STATE-02 | Phase 48 | Complete |
-| STATE-03 | Phase 49 | Pending |
+| STATE-03 | Phase 49 | Complete |
 | STATE-04 | Phase 47 | Complete |
 | INT-01 | Phase 47 | Complete |
 | INT-02 | Phase 47 | Complete |
@@ -107,9 +107,9 @@
 | CON-02 | Phase 48 | Complete |
 | CON-03 | Phase 48 | Complete |
 | CON-04 | Phase 48 | Complete |
-| RES-01 | Phase 49 | Pending |
-| RES-02 | Phase 49 | Pending |
-| RES-03 | Phase 49 | Pending |
+| RES-01 | Phase 49 | Complete |
+| RES-02 | Phase 49 | Complete |
+| RES-03 | Phase 49 | Complete |
 | CLI-01 | Phase 50 | Pending |
 | CLI-02 | Phase 50 | Pending |
 

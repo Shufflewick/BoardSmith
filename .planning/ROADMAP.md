@@ -63,7 +63,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 49-01-PLAN.md — Resume flow, checkpoint detection, error recovery (Phase 15)
+- [x] 49-01-PLAN.md — Resume flow, checkpoint detection, error recovery (Phase 15)
 
 **Success criteria**:
 - `/design-game` detects mid-phase state
@@ -646,5 +646,5 @@ See [v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full details.
 | 46. Documentation | v2.0 | 3/3 | Complete | 2026-01-19 |
 | 47. initial-interview-and-generation | v2.1 | 3/3 | Complete | 2026-01-19 |
 | 48. continuation-flow | v2.1 | 2/2 | Complete | 2026-01-19 |
-| 49. session-continuity | v2.1 | 0/1 | Pending | - |
+| 49. session-continuity | v2.1 | 1/1 | Complete | 2026-01-19 |
 | 50. cli-integration | v2.1 | 0/? | Pending | - |
