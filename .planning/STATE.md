@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 47 (initial-interview-and-generation)
-Plan: None yet
-Status: v2.1 started -- ready for /gsd:plan-phase 47
-Last activity: 2026-01-19 -- v2.1 Design-Game Skill Redesign started
+Plan: 01 of 4 complete
+Status: In progress - ready for 47-02
+Last activity: 2026-01-19 -- Completed 47-01-PLAN.md
 
-Progress: [                                        ] 0% (0/4 phases in v2.1)
+Progress: [##                                      ] 6% (1/16 plans in v2.1)
 
 ## Milestones
 
@@ -46,7 +46,7 @@ Progress: [                                        ] 0% (0/4 phases in v2.1)
 ## Session Continuity
 
 Last session: 2026-01-19
-Stopped at: v2.1 milestone started, ready for /gsd:plan-phase 47
+Stopped at: Completed 47-01-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -91,3 +91,6 @@ Resume file: None
 | Table format for import mappings | Clear visual reference for all 13 import paths in migration guide | 46-03 |
 | Documentation import updates | All docs use new boardsmith paths, migration-guide shows both | 46-01 |
 | API reference template | Consistent structure: When to Use, Usage, Exports, Examples, See Also | 46-02 |
+| 6-question interview replaces 16-question | Minimal first pass, gather core loop only, defer details | 47-01 |
+| ACDR governor pattern | Acknowledge, Capture, Defer, Redirect - preserves ideas without blocking | 47-01 |
+| Reference files before interview | Claude needs BoardSmith context to ask informed questions | 47-01 |
