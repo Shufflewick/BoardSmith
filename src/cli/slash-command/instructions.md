@@ -125,9 +125,9 @@ Look for `PROJECT.md` in the current directory.
   - Designer has finished playtesting and returned for next iteration
   - Proceed to Phase 8: Validate Completion
 
-  **If status shows "phase in progress":**
+  **If status shows "In Progress":**
   - Designer returned mid-session
-  - Proceed to Resume Flow (covered in Phase 49)
+  - Proceed to Phase 15: Resume Flow
 
 ---
 
