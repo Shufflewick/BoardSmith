@@ -124,18 +124,14 @@ program
 // Claude Code integration
 const claudeCmd = program
   .command('claude')
-  .description('Claude Code integration for game design');
-
-claudeCmd
-  .command('install')
-  .description('Install /design-game and /generate-ai slash commands for Claude Code')
+  .description('Install Claude Code slash commands for game design')
   .option('--force', 'Overwrite existing slash commands')
   .option('--local', 'Install to current project instead of globally')
   .action(installClaudeCommand);
 
 claudeCmd
   .command('uninstall')
-  .description('Uninstall /design-game and /generate-ai slash commands')
+  .description('Remove /design-game and /generate-ai slash commands')
   .option('--local', 'Uninstall from current project instead of globally')
   .action(uninstallClaudeCommand);
 
