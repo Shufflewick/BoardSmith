@@ -918,6 +918,150 @@ Designer: "Yes!"
 
 ---
 
+## Phase 12: Generate Feature Code
+
+After the designer approves the feature scope, generate working code. Every feature requires BOTH rules AND basic UI.
+
+### Dual Requirement
+
+Every feature needs two parts:
+
+| Part | What It Does | Files Modified |
+|------|--------------|----------------|
+| **Rules** | Game logic, element updates, actions | elements.ts, game.ts, actions.ts, flow.ts |
+| **UI** | Visual representation and controls | src/ui/*.vue components |
+
+A feature without UI cannot be visually playtested. A UI without rules is just decoration.
+
+### Rules Generation
+
+Based on the feature type, update the appropriate files:
+
+**New action:**
+1. Create action function in actions.ts using Action DSL
+2. Register action in game.ts constructor
+3. Add action name to flow.ts actionStep
+
+**New element property:**
+1. Add property to element class in elements.ts
+2. Update any queries that filter on that property
+3. Initialize property in game.ts setup
+
+**New game state:**
+1. Add state property to game.ts
+2. Update isFinished() or getWinners() if relevant
+
+### Basic UI Scope
+
+"Basic" means functional, not polished:
+
+| Include | Exclude |
+|---------|---------|
+| Functional controls (buttons, selectors) | Animations or transitions |
+| Clear visual feedback (highlights, states) | Sound effects |
+| Readable text and labels | Detailed graphics |
+| Obvious click/tap targets | Mobile-specific layouts |
+
+The designer can add polish later. Right now they need to playtest the mechanic.
+
+### Action-UI Wiring
+
+Use the `useBoardInteraction` composable to wire UI to actions:
+
+```typescript
+// In your Vue component
+import { useBoardInteraction } from 'boardsmith/ui';
+
+const { availableActions, submitAction } = useBoardInteraction();
+
+// Check if action is available
+const canTrade = computed(() =>
+  availableActions.value.some(a => a.name === 'trade')
+);
+
+// Execute action
+function handleTrade(targetPlayerId: string) {
+  submitAction('trade', { targetPlayer: targetPlayerId });
+}
+```
+
+### Common Generation Patterns
+
+**Pattern 1: Simple Action**
+```typescript
+// actions.ts
+export function createTradeAction(game: MyGame): ActionDefinition {
+  return Action.create('trade')
+    .prompt('Trade a card with another player')
+    .chooseElement('targetPlayer', {
+      prompt: 'Select player to trade with',
+      elementClass: MyPlayer,
+      filter: (p, ctx) => p !== ctx.player,
+    })
+    .chooseElement('myCard', {
+      prompt: 'Select your card to trade',
+      elementClass: Card,
+      filter: (c, ctx) => c.container === ctx.player.hand,
+    })
+    .execute((args, ctx) => {
+      // Swap cards
+      const theirCard = args.targetPlayer.hand.first(Card);
+      if (!theirCard) return { success: false };
+
+      args.myCard.putInto(args.targetPlayer.hand);
+      theirCard.putInto(ctx.player.hand);
+
+      game.message(`${ctx.player.name} traded with ${args.targetPlayer.name}`);
+      return { success: true };
+    });
+}
+```
+
+**Pattern 2: Basic UI Component**
+```vue
+<!-- TradeButton.vue -->
+<template>
+  <button
+    v-if="canTrade"
+    @click="startTrade"
+    class="trade-button"
+  >
+    Trade Cards
+  </button>
+</template>
+
+<script setup>
+import { computed } from 'vue';
+import { useBoardInteraction } from 'boardsmith/ui';
+
+const { availableActions, submitAction } = useBoardInteraction();
+
+const canTrade = computed(() =>
+  availableActions.value.some(a => a.name === 'trade')
+);
+
+function startTrade() {
+  // UI for selecting target and card
+}
+</script>
+```
+
+### Verification
+
+After generating code, verify compilation:
+
+```bash
+npx tsc --noEmit
+```
+
+If errors occur, fix them before proceeding. Use the same repair protocol from Phase 8.
+
+Reference the Quick Reference section at the top of this document for Action DSL and flow primitives.
+
+After verification passes, proceed to Phase 13 (Update State Files).
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
