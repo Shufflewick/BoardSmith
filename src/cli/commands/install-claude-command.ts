@@ -167,6 +167,9 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.cyan('  /design-game') + chalk.gray('  - Design and generate a new BoardSmith game'));
   console.log(chalk.cyan('  /generate-ai') + chalk.gray('  - Generate AI evaluation functions for existing game'));
   console.log('');
+  console.log(chalk.gray('The /design-game skill is self-contained - no additional'));
+  console.log(chalk.gray('frameworks or dependencies required.'));
+  console.log('');
 
   if (options.local) {
     console.log(chalk.yellow('Note: Installed locally to this project.'));
