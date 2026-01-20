@@ -1339,3 +1339,4 @@ Which would you prefer?
 5. **Playtest-driven** - Features are added based on playtest feedback, not upfront planning
 6. **Every feature needs rules AND UI** - Features must be visually playable, not just logically correct
 7. **Keep HISTORY.md entries brief** - 3-5 bullets per phase, no verbose descriptions
+8. **Resume without interrogation** - Don't ask designer where they were; detect from STATE.md and proceed
