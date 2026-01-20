@@ -121,9 +121,9 @@ Look for `PROJECT.md` in the current directory.
 - Read PROJECT.md and STATE.md
 - Check the `Status` field in STATE.md:
 
-  **If status shows "phase complete":**
+  **If status shows "Complete":**
   - Designer has finished playtesting and returned for next iteration
-  - Proceed to Continuation Flow (covered in Phase 48)
+  - Proceed to Phase 8: Validate Completion
 
   **If status shows "phase in progress":**
   - Designer returned mid-session
