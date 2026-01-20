@@ -815,6 +815,109 @@ After the designer selects an option, proceed to Phase 11 (Feature Mini-Intervie
 
 ---
 
+## Phase 11: Feature Mini-Interview
+
+Before implementing the chosen feature, gather specifics through a focused mini-interview. This applies the ACDR governor pattern from Phase 3 to feature scope.
+
+### Purpose
+
+The designer chose a feature by name ("Card Trading"), but implementation requires specifics:
+- Who is involved?
+- What exactly happens?
+- When can it happen?
+- What are the constraints?
+
+### Question Structure
+
+Ask 2-4 focused questions based on the feature type. Keep questions concrete:
+
+**For actions:**
+> "Who can [action]? (All players? Active player only? Specific conditions?)"
+> "What can be [action]ed? (Any cards? Limited types? Quantity limits?)"
+> "When can [action] happen? (Any time? Start of turn? Special phase?)"
+
+**For game state:**
+> "What triggers [state change]? (Player action? Automatic? End of round?)"
+> "What happens when [state change] occurs? (Points? Cards? Position change?)"
+
+**For UI/feedback:**
+> "What should players see when [event] happens?"
+> "How should [element] look different from [other element]?"
+
+### ACDR for Feature Scope
+
+Just like the initial interview, designers may expand scope. Apply ACDR:
+
+1. **ACKNOWLEDGE:** "Great addition!"
+2. **CAPTURE:** "Adding that to the backlog."
+3. **DEFER:** "Let's get the basic version working first."
+4. **REDIRECT:** Return to confirmation.
+
+### Scope Limit
+
+If the mini-interview reveals more than 3-4 requirements, the feature is too big:
+
+> "That's quite a bit! Let's break it down. For this phase, I'll implement:
+> - [Core requirement 1]
+> - [Core requirement 2]
+>
+> And capture these for later:
+> - [Extended requirement 1]
+> - [Extended requirement 2]"
+
+### Confirmation Pattern
+
+Before implementing, present what will be built vs what was deferred:
+
+```markdown
+## Ready to Build
+
+I'll implement:
+- Active player can propose a trade with any other player
+- Trade any cards, one-for-one
+- Trading is a turn action (replaces normal action)
+
+Captured for later:
+- Multi-card trades
+- Trade rejection mechanics
+- Trade history tracking
+
+Sound good?
+```
+
+Wait for designer approval before proceeding to Phase 12.
+
+### Example Dialogue
+
+```
+Designer picks: "Card trading"
+
+Claude: "Great choice! Let me understand card trading better.
+
+1. Who can trade with whom? (All players? Adjacent? Active player only?)
+2. What can be traded? (Any cards? Same type only? Limited quantity?)
+3. When can trading happen? (Any time? Start of turn? Special action?)"
+
+Designer: "Active player picks another player and they swap one card each.
+Oh, and eventually I want to track who traded with whom for scoring."
+
+Claude: "Got it. I'll implement:
+- Active player can propose a trade with any other player
+- Trade any cards, one-for-one
+- Trading is a turn action
+
+Captured for later:
+- Trade history tracking for scoring
+
+Sound good?"
+
+Designer: "Yes!"
+
+[Proceeds to Phase 12]
+```
+
+---
+
 ## Critical Rules
 
 1. **Ask ONE question at a time** - Wait for response before continuing
