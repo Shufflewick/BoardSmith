@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-21)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.2 gap closure (Phase 53)
+**Current focus:** Milestone v2.2 complete
 
 ## Current Position
 
 Phase: 53-deploy-aspect-templates (1 of 1)
 Plan: 01 of 01
-Status: Phase complete
-Last activity: 2026-01-21 — Completed 53-01-PLAN.md
+Status: Milestone complete
+Last activity: 2026-01-21 — v2.2 shipped
 
 Progress: [████████████████████████████████████████] v2.2 COMPLETE
 
@@ -33,9 +33,10 @@ Progress: [███████████████████████
 - v1.2 Local Tarballs (Phases 37-38) -- shipped 2026-01-18
 - v2.0 Collapse the Monorepo (Phases 39-46) -- shipped 2026-01-19
 - v2.1 Design-Game Skill Redesign (Phases 47-50) — shipped 2026-01-19
+- v2.2 Game Design Aspects (Phases 51-53) — shipped 2026-01-21
 
 **Active:**
-- v2.2 Game Design Aspects (Phases 51-53) — shipped 2026-01-21
+- None (ready for next milestone)
 
 ## Roadmap Evolution
 
