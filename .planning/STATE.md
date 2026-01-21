@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-19)
+See: .planning/PROJECT.md (updated 2026-01-21)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** Planning next milestone
+**Current focus:** v2.2 gap closure (Phase 53)
 
 ## Current Position
 
-Phase: Ready for next milestone
-Plan: N/A
-Status: v2.1 shipped, ready for /gsd:new-milestone
-Last activity: 2026-01-19 — v2.1 milestone complete
+Phase: 53-deploy-aspect-templates
+Plan: Pending (/gsd:plan-phase 53)
+Status: Gap closure phase created from audit
+Last activity: 2026-01-21 — Gap closure phase added
 
-Progress: [████████████████████████████████████████] v2.1 SHIPPED
+Progress: [████████████████████████████████████████] v2.2 GAP CLOSURE
 
 ## Milestones
 
@@ -35,7 +35,7 @@ Progress: [███████████████████████
 - v2.1 Design-Game Skill Redesign (Phases 47-50) — shipped 2026-01-19
 
 **Active:**
-- None (use /gsd:new-milestone to start)
+- v2.2 Game Design Aspects (Phases 51-53) — gap closure in progress
 
 ## Roadmap Evolution
 
@@ -43,6 +43,8 @@ Progress: [███████████████████████
 - 46 v2.0 requirements mapped to 8 phases
 - Milestone v2.1 created: Design-Game Skill Redesign, 4 phases (Phases 47-50)
 - 27 v2.1 requirements mapped to 4 phases
+- Milestone v2.2 audited: 1 gap found (INT-02: templates not deployed)
+- Phase 53 added for gap closure + tech debt
 
 ## Session Continuity
 
