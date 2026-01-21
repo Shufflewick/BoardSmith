@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 
 ## Current Position
 
-Phase: 53-deploy-aspect-templates
-Plan: Pending (/gsd:plan-phase 53)
-Status: Gap closure phase created from audit
-Last activity: 2026-01-21 — Gap closure phase added
+Phase: 53-deploy-aspect-templates (1 of 1)
+Plan: 01 of 01
+Status: Phase complete
+Last activity: 2026-01-21 — Completed 53-01-PLAN.md
 
-Progress: [████████████████████████████████████████] v2.2 GAP CLOSURE
+Progress: [████████████████████████████████████████] v2.2 COMPLETE
 
 ## Milestones
 
@@ -35,7 +35,7 @@ Progress: [███████████████████████
 - v2.1 Design-Game Skill Redesign (Phases 47-50) — shipped 2026-01-19
 
 **Active:**
-- v2.2 Game Design Aspects (Phases 51-53) — gap closure in progress
+- v2.2 Game Design Aspects (Phases 51-53) — shipped 2026-01-21
 
 ## Roadmap Evolution
 
@@ -48,8 +48,8 @@ Progress: [███████████████████████
 
 ## Session Continuity
 
-Last session: 2026-01-19
-Stopped at: v2.1 milestone complete, ready for next milestone
+Last session: 2026-01-21
+Stopped at: v2.2 milestone complete
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -115,3 +115,5 @@ Resume file: None
 | Checkpoint mapping tables | Clear reference for Phase 1 and Phase N resume points | 49-01 |
 | Install as default action | Run install when no subcommand provided for `boardsmith claude` | 50-01 |
 | Self-contained messaging | Clarify no external framework dependency in success message | 50-01 |
+| Inline aspect templates | Claude cannot read external files at skill runtime, so templates embedded in instructions.md | 53-01 |
+| Keyword sync with index.md | Added rolling, trump, discard, hexes, hexagonal, tiles to Phase 2B table | 53-01 |
