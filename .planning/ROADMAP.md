@@ -57,6 +57,15 @@ Plans:
 
 **Requirements:** SEAT-01, SEAT-02, SEAT-03, SEAT-04
 
+**Plans:** 5 plans
+
+Plans:
+- [ ] 56-01-PLAN.md — Core engine: Player.position -> Player.seat
+- [ ] 56-02-PLAN.md — Session/client/server types update
+- [ ] 56-03-PLAN.md — UI components and composables update
+- [ ] 56-04-PLAN.md — Extracted games update (all 9 games)
+- [ ] 56-05-PLAN.md — Documentation and CLI templates update
+
 **Success Criteria:**
 - Player API uses `seat` instead of `position`
 - All internal code updated
