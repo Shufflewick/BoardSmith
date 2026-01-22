@@ -29,9 +29,10 @@ export interface PendingActionCallbacks {
 }
 
 /**
- * Result from processing a selection step
+ * Result from processing a pick step.
+ * A "pick" represents a choice the player must make during action resolution.
  */
-export interface SelectionStepResult {
+export interface PickStepResult {
   success: boolean;
   error?: string;
   done?: boolean;
@@ -45,6 +46,9 @@ export interface SelectionStepResult {
   };
   state?: PlayerGameState;
 }
+
+/** @deprecated Use PickStepResult instead */
+export type SelectionStepResult = PickStepResult;
 
 /**
  * Manages pending actions for players.

@@ -1,25 +1,27 @@
 /**
- * SelectionHandler - Encapsulates selection choice resolution logic
+ * PickHandler - Encapsulates pick choice resolution logic
  *
  * Extracted from GameSession to reduce cognitive load and improve testability.
- * Handles choice, element, elements, number, and text selection types.
+ * Handles choice, element, elements, number, and text pick types.
+ * A "pick" represents a choice the player must make during action resolution.
  */
 
 import type { Game, Player } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
-  type SelectionChoicesResponse,
+  type PickChoicesResponse,
   type ValidElement,
 } from './types.js';
 
 /**
- * Handles selection choice resolution for game actions.
+ * Handles pick choice resolution for game actions.
  *
  * This class encapsulates the logic for evaluating and returning choices
- * for different selection types (choice, element, elements, number, text).
+ * for different pick types (choice, element, elements, number, text).
+ * A "pick" represents a choice the player must make.
  */
-export class SelectionHandler<G extends Game = Game> {
+export class PickHandler<G extends Game = Game> {
   readonly #runner: GameRunner<G>;
   readonly #playerCount: number;
 
@@ -31,27 +33,27 @@ export class SelectionHandler<G extends Game = Game> {
   /**
    * Update the runner reference (needed after hot reload)
    */
-  updateRunner(runner: GameRunner<G>): SelectionHandler<G> {
-    return new SelectionHandler(runner, this.#playerCount);
+  updateRunner(runner: GameRunner<G>): PickHandler<G> {
+    return new PickHandler(runner, this.#playerCount);
   }
 
   /**
-   * Get choices for any selection.
-   * This is the unified endpoint for fetching selection choices on-demand.
-   * Called when advancing to a new selection in the action flow.
+   * Get choices for any pick.
+   * This is the unified endpoint for fetching pick choices on-demand.
+   * Called when advancing to a new pick in the action flow.
    *
    * @param actionName Name of the action
-   * @param selectionName Name of the selection to get choices for
+   * @param selectionName Name of the pick to get choices for
    * @param playerPosition Player requesting choices
-   * @param currentArgs Arguments collected so far (for dependent selections)
+   * @param currentArgs Arguments collected so far (for dependent picks)
    * @returns Choices/elements with display strings and board refs, plus multiSelect config
    */
-  getSelectionChoices(
+  getPickChoices(
     actionName: string,
     selectionName: string,
     playerPosition: number,
     currentArgs: Record<string, unknown> = {}
-  ): SelectionChoicesResponse {
+  ): PickChoicesResponse {
     // Validate player seat (1-indexed)
     if (playerPosition < 1 || playerPosition > this.#playerCount) {
       return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
@@ -63,10 +65,10 @@ export class SelectionHandler<G extends Game = Game> {
       return { success: false, error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
 
-    // Find the selection
+    // Find the pick
     const selection = action.selections.find(s => s.name === selectionName);
     if (!selection) {
-      return { success: false, error: `Selection not found: ${selectionName}`, errorCode: ErrorCode.SELECTION_NOT_FOUND };
+      return { success: false, error: `Pick not found: ${selectionName}`, errorCode: ErrorCode.PICK_NOT_FOUND };
     }
 
     // Build context with current args (playerPosition is 1-indexed seat number)
@@ -291,7 +293,7 @@ export class SelectionHandler<G extends Game = Game> {
 
   /**
    * Build validElements list with auto-disambiguation.
-   * Used internally by getSelectionChoices.
+   * Used internally by getPickChoices.
    */
   #buildValidElementsList(
     elements: any[],

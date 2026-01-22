@@ -69,6 +69,16 @@ export type {
   ClaimSeatRequest,
   ClaimSeatResponse,
   UpdateNameRequest,
+  // Pick types (new terminology)
+  PickMetadata,
+  PickFilter,
+  PickChoicesResponse,
+  PickTrace,
+  // Deprecated aliases (for backward compatibility)
+  SelectionMetadata,
+  SelectionFilter,
+  SelectionChoicesResponse,
+  SelectionTrace,
 } from './types.js';
 
 // Error codes enum (value export, not just type)
@@ -113,3 +123,7 @@ export {
   CheckpointManager,
   type CheckpointManagerOptions,
 } from './checkpoint-manager.js';
+
+export { PickHandler } from './pick-handler.js';
+
+export type { PickStepResult, SelectionStepResult } from './pending-action-manager.js';

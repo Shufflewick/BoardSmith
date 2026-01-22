@@ -40,8 +40,13 @@ export enum ErrorCode {
   // Action errors
   ACTION_NOT_FOUND = 'ACTION_NOT_FOUND',
   ACTION_NOT_AVAILABLE = 'ACTION_NOT_AVAILABLE',
+  /** @deprecated Use INVALID_PICK instead */
   INVALID_SELECTION = 'INVALID_SELECTION',
+  /** @deprecated Use PICK_NOT_FOUND instead */
   SELECTION_NOT_FOUND = 'SELECTION_NOT_FOUND',
+  // Pick errors (preferred terminology)
+  INVALID_PICK = 'INVALID_PICK',
+  PICK_NOT_FOUND = 'PICK_NOT_FOUND',
 
   // State errors
   INVALID_ACTION_INDEX = 'INVALID_ACTION_INDEX',
@@ -65,7 +70,7 @@ export enum ErrorCode {
 }
 
 // Re-export debug tracing types from engine for convenience
-export type { ActionTrace, SelectionTrace, ConditionDetail } from '../engine/index.js';
+export type { ActionTrace, PickTrace, ConditionDetail, SelectionTrace } from '../engine/index.js';
 
 // Re-export repeating selection types from engine
 export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
@@ -288,19 +293,21 @@ export interface ValidElement {
 }
 
 /**
- * Filter configuration for dependent selections
+ * Filter configuration for dependent picks.
+ * A "pick" represents a choice the player must make during action resolution.
  */
-export interface SelectionFilter {
+export interface PickFilter {
   /** Key in the choice value object to filter by */
   key: string;
-  /** Name of the previous selection to match against */
+  /** Name of the previous pick to match against */
   selectionName: string;
 }
 
 /**
- * Selection metadata for auto-UI generation
+ * Pick metadata for auto-UI generation.
+ * A "pick" represents a choice the player must make during action resolution.
  */
-export interface SelectionMetadata {
+export interface PickMetadata {
   name: string;
   type: 'choice' | 'element' | 'elements' | 'number' | 'text';
   prompt?: string;
@@ -315,41 +322,41 @@ export interface SelectionMetadata {
   minLength?: number;
   maxLength?: number;
   elementClassName?: string;
-  /** For element selections: list of valid element IDs the user can select */
+  /** For element picks: list of valid element IDs the user can select */
   validElements?: ValidElement[];
-  /** For choice selections: filter choices based on a previous selection */
-  filterBy?: SelectionFilter;
+  /** For choice picks: filter choices based on a previous pick */
+  filterBy?: PickFilter;
   /**
-   * For choice selections with dependsOn: name of the selection this depends on.
+   * For choice picks with dependsOn: name of the pick this depends on.
    * When present, use choicesByDependentValue to look up choices based on
-   * the current value of the dependent selection.
+   * the current value of the dependent pick.
    */
   dependsOn?: string;
   /**
-   * For choice selections with dependsOn: choices indexed by the dependent selection's value.
-   * Key is the string representation of the dependent value (element ID, player position, etc.)
+   * For choice picks with dependsOn: choices indexed by the dependent pick's value.
+   * Key is the string representation of the dependent value (element ID, player seat, etc.)
    */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
   /**
-   * For element selections with dependsOn: elements indexed by the dependent selection's value.
-   * Key is the string representation of the dependent value (element ID, player position, etc.)
+   * For element picks with dependsOn: elements indexed by the dependent pick's value.
+   * Key is the string representation of the dependent value (element ID, player seat, etc.)
    * Used when fromElements() has dependsOn option.
    */
   elementsByDependentValue?: Record<string, ValidElement[]>;
-  /** For repeating choice selections: configuration for repeat behavior */
+  /** For repeating choice picks: configuration for repeat behavior */
   repeat?: {
-    /** Whether the selection has an onEach callback (requires server round-trip) */
+    /** Whether the pick has an onEach callback (requires server round-trip) */
     hasOnEach: boolean;
     /** The terminator value (if using repeatUntil shorthand) */
     terminator?: unknown;
   };
   /**
-   * For choice selections with dependsOn + multiSelect: multiSelect config indexed by dependent value.
-   * Key is the string representation of the dependent value (element ID, player position, etc.)
+   * For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value.
+   * Key is the string representation of the dependent value (element ID, player seat, etc.)
    * Value is the multiSelect config for that dependent value, or undefined if single-select.
    */
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
-  /** For multi-select choice selections: min/max selection configuration */
+  /** For multi-select choice picks: min/max selection configuration */
   multiSelect?: {
     /** Minimum selections required (default: 1) */
     min: number;
@@ -364,21 +371,22 @@ export interface SelectionMetadata {
 export interface ActionMetadata {
   name: string;
   prompt?: string;
-  selections: SelectionMetadata[];
+  selections: PickMetadata[];
 }
 
 /**
- * Response from getSelectionChoices endpoint.
- * Used when fetching choices on-demand for any selection type.
+ * Response from getPickChoices endpoint.
+ * Used when fetching choices on-demand for any pick type.
+ * A "pick" represents a choice the player must make during action resolution.
  */
-export interface SelectionChoicesResponse {
+export interface PickChoicesResponse {
   success: boolean;
   error?: string;
   /** Programmatic error code for switch statements. See ErrorCode enum. */
   errorCode?: ErrorCode;
-  /** For choice selections: formatted choices with display strings and board refs */
+  /** For choice picks: formatted choices with display strings and board refs */
   choices?: ChoiceWithRefs[];
-  /** For element/elements selections: valid elements the user can select */
+  /** For element/elements picks: valid elements the user can select */
   validElements?: ValidElement[];
   /** Multi-select configuration (evaluated at request time for function-based configs) */
   multiSelect?: { min: number; max?: number };
@@ -625,3 +633,16 @@ export interface LobbyUpdate {
   type: 'lobby';
   lobby: LobbyInfo;
 }
+
+// ============================================
+// Deprecation Aliases (for backward compatibility)
+// ============================================
+
+/** @deprecated Use PickFilter instead */
+export type SelectionFilter = PickFilter;
+
+/** @deprecated Use PickMetadata instead */
+export type SelectionMetadata = PickMetadata;
+
+/** @deprecated Use PickChoicesResponse instead */
+export type SelectionChoicesResponse = PickChoicesResponse;

@@ -37,13 +37,13 @@ import {
   type PlayerConfig,
   type PlayerOptionDefinition,
   type GameOptionDefinition,
-  type SelectionChoicesResponse,
+  type PickChoicesResponse,
 } from './types.js';
 import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import { LobbyManager } from './lobby-manager.js';
-import { SelectionHandler } from './selection-handler.js';
+import { PickHandler } from './pick-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
 import { DebugController } from './debug-controller.js';
@@ -151,8 +151,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #displayName?: string;
   /** Lobby manager for games with lobby flow */
   #lobbyManager?: LobbyManager<TSession>;
-  /** Selection handler for resolving selection choices */
-  #selectionHandler: SelectionHandler<G>;
+  /** Pick handler for resolving pick choices */
+  #pickHandler: PickHandler<G>;
   /** Pending action manager for repeating selections */
   #pendingActionManager: PendingActionManager<G>;
   /** State history for time travel and undo */
@@ -170,7 +170,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     aiController?: AIController<G>,
     displayName?: string,
     lobbyManager?: LobbyManager<TSession>,
-    selectionHandler?: SelectionHandler<G>,
+    pickHandler?: PickHandler<G>,
     pendingActionManager?: PendingActionManager<G>
   ) {
     this.#runner = runner;
@@ -183,7 +183,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Initialize handlers - create them if not provided (for backward compatibility during construction)
     // The factory methods will create and pass these in
-    this.#selectionHandler = selectionHandler ?? new SelectionHandler(runner, storedState.playerCount);
+    this.#pickHandler = pickHandler ?? new PickHandler(runner, storedState.playerCount);
     this.#pendingActionManager = pendingActionManager ?? new PendingActionManager(
       runner,
       storedState,
@@ -208,7 +208,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         replaceRunner: (newRunner) => {
           this.#runner = newRunner;
           // Update handlers with new runner reference
-          this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+          this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
           this.#pendingActionManager.updateRunner(newRunner);
         },
         save: async () => {
@@ -709,7 +709,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         if (newRunner) {
           this.#runner = newRunner;
           this.#GameClass = definition.gameClass as GameClass<G>;
-          this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+          this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
           this.#pendingActionManager.updateRunner(newRunner);
           this.broadcast();
           return;
@@ -731,7 +731,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#GameClass = definition.gameClass as GameClass<G>;
 
     // Update handlers with new runner reference
-    this.#selectionHandler = this.#selectionHandler.updateRunner(newRunner);
+    this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
     this.#pendingActionManager.updateRunner(newRunner);
 
     // Broadcast updated state to all clients
@@ -1128,27 +1128,40 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   // ============================================
-  // Selection Choices Methods (delegated to SelectionHandler)
+  // Pick Choices Methods (delegated to PickHandler)
   // ============================================
 
   /**
-   * Get choices for any selection.
-   * This is the unified endpoint for fetching selection choices on-demand.
-   * Called when advancing to a new selection in the action flow.
+   * Get choices for any pick.
+   * This is the unified endpoint for fetching pick choices on-demand.
+   * Called when advancing to a new pick in the action flow.
+   * A "pick" represents a choice the player must make.
    *
    * @param actionName Name of the action
-   * @param selectionName Name of the selection to get choices for
+   * @param selectionName Name of the pick to get choices for
    * @param playerPosition Player requesting choices
-   * @param currentArgs Arguments collected so far (for dependent selections)
+   * @param currentArgs Arguments collected so far (for dependent picks)
    * @returns Choices/elements with display strings and board refs, plus multiSelect config
+   */
+  getPickChoices(
+    actionName: string,
+    selectionName: string,
+    playerPosition: number,
+    currentArgs: Record<string, unknown> = {}
+  ): PickChoicesResponse {
+    return this.#pickHandler.getPickChoices(actionName, selectionName, playerPosition, currentArgs);
+  }
+
+  /**
+   * @deprecated Use getPickChoices instead
    */
   getSelectionChoices(
     actionName: string,
     selectionName: string,
     playerPosition: number,
     currentArgs: Record<string, unknown> = {}
-  ): SelectionChoicesResponse {
-    return this.#selectionHandler.getSelectionChoices(actionName, selectionName, playerPosition, currentArgs);
+  ): PickChoicesResponse {
+    return this.getPickChoices(actionName, selectionName, playerPosition, currentArgs);
   }
 
   // ============================================
