@@ -77,10 +77,10 @@ Plans:
   2. useActionController exposes showActionPanel that gates on animation completion
   3. useAutoAnimations accepts eventHandlers option for handler registration
   4. useAnimationEvents exported from boardsmith/ui
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 62-01: TBD
+- [ ] 62-01-PLAN.md - ActionController and AutoAnimations animation integration
 
 ### Phase 63: Documentation
 **Goal**: Animation event system fully documented for game developers
@@ -104,5 +104,5 @@ Phases execute in numeric order: 59 -> 60 -> 61 -> 62 -> 63
 | 59. Core Animation Events | 2/2 | ✓ Complete | 2026-01-22 |
 | 60. Session Integration | 1/1 | ✓ Complete | 2026-01-22 |
 | 61. Animation Playback | 1/1 | ✓ Complete | 2026-01-22 |
-| 62. ActionController Integration | 0/? | Not started | - |
+| 62. ActionController Integration | 0/1 | Ready | - |
 | 63. Documentation | 0/? | Not started | - |
