@@ -16,7 +16,7 @@ This milestone adds infrastructure-level support for dramatic UI playback of gam
 - Decimal phases (59.1, 59.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 59: Core Animation Events** - Engine types, buffer, emit/acknowledge API
-- [ ] **Phase 60: Session Integration** - PlayerGameState and snapshot support
+- [x] **Phase 60: Session Integration** - PlayerGameState and snapshot support
 - [ ] **Phase 61: Animation Playback** - useAnimationEvents composable with handlers
 - [ ] **Phase 62: ActionController Integration** - Action panel waits for animations
 - [ ] **Phase 63: Documentation** - Document animation event system
@@ -51,7 +51,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 60-01-PLAN.md - Session animation event integration
+- [x] 60-01-PLAN.md - Session animation event integration
 
 ### Phase 61: Animation Playback
 **Goal**: UI can register handlers and play back animation events sequentially
@@ -102,7 +102,7 @@ Phases execute in numeric order: 59 -> 60 -> 61 -> 62 -> 63
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 59. Core Animation Events | 2/2 | ✓ Complete | 2026-01-22 |
-| 60. Session Integration | 0/1 | Planned | - |
+| 60. Session Integration | 1/1 | ✓ Complete | 2026-01-22 |
 | 61. Animation Playback | 0/? | Not started | - |
 | 62. ActionController Integration | 0/? | Not started | - |
 | 63. Documentation | 0/? | Not started | - |

@@ -68,10 +68,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENG-04 | Phase 59 | Complete |
 | ENG-05 | Phase 59 | Complete |
 | ENG-06 | Phase 59 | Complete |
-| SES-01 | Phase 60 | Pending |
-| SES-02 | Phase 60 | Pending |
-| SES-03 | Phase 60 | Pending |
-| SES-04 | Phase 60 | Pending |
+| SES-01 | Phase 60 | Complete |
+| SES-02 | Phase 60 | Complete |
+| SES-03 | Phase 60 | Complete |
+| SES-04 | Phase 60 | Complete |
 | UI-01 | Phase 61 | Pending |
 | UI-02 | Phase 61 | Pending |
 | UI-03 | Phase 61 | Pending |
