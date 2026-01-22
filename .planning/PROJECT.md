@@ -8,7 +8,7 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State: v2.1 Shipped
+## Current State: v2.2 Shipped
 
 BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Games live in separate repositories at `~/BoardSmithGames/`.
 
@@ -79,6 +79,9 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ Phase 1 code generation (core event loop + basic UI) — v2.1
 - ✓ Playtest-driven iteration (one feature per phase, test before continuing) — v2.1
 - ✓ `npx boardsmith claude` setup for skill + dependencies — v2.1
+- ✓ Composable aspect detection from interview answers — v2.2
+- ✓ Aspect templates (Dice, PlayingCards, HexGrid, SquareGrid) — v2.2
+- ✓ Aspect-driven code generation with UI components — v2.2
 
 ### Active
 
@@ -115,6 +118,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | tsc --noEmit verification | Catches real errors before playtest, no extra tooling needed | ✓ Good |
 | Resume without interrogation | Detect state from STATE.md, don't ask designer questions | ✓ Good |
 | Install as default action | `boardsmith claude` runs install without subcommand | ✓ Good |
+| Composable aspects over --type flag | Games have multiple component types; aspects are detected and combined | ✓ Good |
 
 ## Context
 
@@ -141,4 +145,4 @@ Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
 One external team using BoardSmith — migration guide at `docs/migration-guide.md`.
 
 ---
-*Last updated: 2026-01-19 after v2.1 milestone shipped*
+*Last updated: 2026-01-21 after v2.2 milestone*

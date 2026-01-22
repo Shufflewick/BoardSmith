@@ -1,5 +1,33 @@
 # Project Milestones: BoardSmith
 
+## v2.2 Game Design Aspects (Shipped: 2026-01-21)
+
+**Delivered:** Added composable aspect templates (Dice, PlayingCards, HexGrid, SquareGrid) to `/design-game` that auto-detect from interview answers and merge into generated code.
+
+**Phases completed:** 51-53 (3 phases, 3 plans total)
+
+**Key accomplishments:**
+
+- Created 4 aspect templates with element setup, action patterns, and UI components
+- Keyword-based aspect detection added to interview (Phase 2B)
+- Multiple aspects can be detected and combined in a single game
+- Templates embedded inline in instructions.md (self-contained skill)
+- Aspect templates include findElements(), safe defaults, documentation links
+- E2E flow verified: Interview → Detection → Template Access → Generation
+
+**Stats:**
+
+- 16 files changed
+- +4,031 / -167 lines
+- 3 phases, 3 plans
+- 1 day from start to ship (2026-01-21)
+
+**Git range:** `1ba5985` → `604160f`
+
+**What's next:** Aspect system complete. Ready for nomenclature standardization.
+
+---
+
 ## v2.1 Design-Game Skill Redesign (Shipped: 2026-01-19)
 
 **Delivered:** Transformed `/design-game` from a monolithic code generator into an iterative, state-driven skill that guides non-programmer game designers through building games one phase at a time.
