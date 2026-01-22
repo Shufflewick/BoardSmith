@@ -8,7 +8,7 @@
 
 import type { Ref } from 'vue';
 import type { GameElement } from '../types.js';
-import type { ValidElement, SelectionMetadata } from './useActionControllerTypes.js';
+import type { ValidElement, PickMetadata } from './useActionControllerTypes.js';
 import { findElementById } from './useGameViewHelpers.js';
 
 /**
@@ -49,11 +49,11 @@ export function createEnrichment(
   }
 
   /**
-   * Enrich a selection's validElements with full element data from gameView.
+   * Enrich a pick's validElements with full element data from gameView.
    * This is the "pit of success" - designers get full element data automatically.
    * Handles both static validElements and dependent elementsByDependentValue.
    */
-  function enrichValidElements(sel: SelectionMetadata): SelectionMetadata {
+  function enrichValidElements(sel: PickMetadata): PickMetadata {
     if (!gameView?.value) return sel;
 
     // Handle elementsByDependentValue (for element selections with dependsOn)

@@ -5,7 +5,7 @@
  * They handle development warnings, value display extraction, and action analysis.
  */
 
-import type { ActionMetadata, SelectionMetadata } from './useActionControllerTypes.js';
+import type { ActionMetadata, PickMetadata } from './useActionControllerTypes.js';
 
 // ============================================
 // Development Mode Detection
