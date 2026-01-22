@@ -505,22 +505,23 @@ export interface ConditionDetail {
 }
 
 /**
- * Trace information for a selection within an action
+ * Trace information for a pick within an action.
+ * A "pick" represents a choice the player must make during action resolution.
  */
-export interface SelectionTrace {
-  /** Selection name */
+export interface PickTrace {
+  /** Pick name */
   name: string;
-  /** Selection type (choice, player, element, etc.) */
+  /** Pick type (choice, player, element, etc.) */
   type: string;
   /** Number of available choices */
   choiceCount: number;
   /** Whether auto-selected (single choice with Auto mode) */
   skipped?: boolean;
-  /** Whether this selection is optional. If a string, shows that text instead of "Skip". */
+  /** Whether this pick is optional. If a string, shows that text instead of "Skip". */
   optional?: boolean | string;
   /** Whether filterBy was applied */
   filterApplied?: boolean;
-  /** Name of selection this depends on (if using dependsOn) */
+  /** Name of pick this depends on (if using dependsOn) */
   dependentOn?: string;
 }
 
@@ -539,8 +540,8 @@ export interface ActionTrace {
   conditionError?: string;
   /** Detailed condition trace (automatically populated for object-based conditions) */
   conditionDetails?: ConditionDetail[];
-  /** Trace of each selection */
-  selections: SelectionTrace[];
+  /** Trace of each pick */
+  selections: PickTrace[];
 }
 
 // ============================================
@@ -548,15 +549,16 @@ export interface ActionTrace {
 // ============================================
 
 /**
- * Detailed info about a selection's availability.
+ * Detailed info about a pick's availability.
  * Used by debugActionAvailability() for human-readable output.
+ * A "pick" represents a choice the player must make.
  */
-export interface SelectionDebugInfo {
-  /** Selection name */
+export interface PickDebugInfo {
+  /** Pick name */
   name: string;
   /** Number of choices available */
   choices: number;
-  /** Whether this selection passed (had choices or was optional) */
+  /** Whether this pick passed (had choices or was optional) */
   passed: boolean;
   /** Human-readable note explaining the status */
   note?: string;
@@ -597,7 +599,17 @@ export interface ActionDebugInfo {
     conditionPassed: boolean;
     /** Condition failure details if available */
     conditionNote?: string;
-    /** Info about each selection */
-    selections: SelectionDebugInfo[];
+    /** Info about each pick */
+    selections: PickDebugInfo[];
   };
 }
+
+// ============================================
+// Deprecation Aliases (for backward compatibility)
+// ============================================
+
+/** @deprecated Use PickTrace instead */
+export type SelectionTrace = PickTrace;
+
+/** @deprecated Use PickDebugInfo instead */
+export type SelectionDebugInfo = PickDebugInfo;

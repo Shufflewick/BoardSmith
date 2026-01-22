@@ -134,11 +134,14 @@ export type {
   DependentFilterOptions,
   // Debug tracing types
   ConditionDetail,
-  SelectionTrace,
+  PickTrace,
   ActionTrace,
   // Human-readable debug types
-  SelectionDebugInfo,
+  PickDebugInfo,
   ActionDebugInfo,
+  // Deprecated aliases (for backward compatibility)
+  SelectionTrace,
+  SelectionDebugInfo,
   // Repeating selections types
   RepeatConfig,
   RepeatingSelectionState,
