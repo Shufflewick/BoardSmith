@@ -34,6 +34,8 @@ export type {
   LayoutDirection,
   LayoutAlignment,
   DieSides,
+  AnimationEvent,
+  EmitAnimationEventOptions,
 } from './element/index.js';
 
 // Player system
