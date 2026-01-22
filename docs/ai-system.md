@@ -89,7 +89,7 @@ const aiConfig: AIConfig = {
     controlCenter: {
       checker: (g, p) => {
         const center = g.board.cells.filter(c => c.isCentral);
-        const playerPieces = center.filter(c => c.piece?.player?.position === p);
+        const playerPieces = center.filter(c => c.piece?.player?.seat === p);
         return playerPieces.length >= 2;
       },
       weight: 0.3,
@@ -107,8 +107,8 @@ const aiConfig: AIConfig = {
     // Material advantage
     materialAdvantage: {
       checker: (g, p) => {
-        const myPieces = g.pieces.filter(pc => pc.player?.position === p);
-        const oppPieces = g.pieces.filter(pc => pc.player?.position !== p);
+        const myPieces = g.pieces.filter(pc => pc.player?.seat === p);
+        const oppPieces = g.pieces.filter(pc => pc.player?.seat !== p);
         return myPieces.length > oppPieces.length;
       },
       weight: 0.4,
@@ -162,7 +162,7 @@ export const checkersAIConfig: AIConfig = {
       checker: (g, p) => {
         const centerCells = getCenterCells(g);
         const myPiecesInCenter = centerCells.filter(
-          c => c.piece?.player?.position === p
+          c => c.piece?.player?.seat === p
         );
         return myPiecesInCenter.length >= 2;
       },
