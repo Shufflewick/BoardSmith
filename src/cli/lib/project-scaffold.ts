@@ -250,7 +250,7 @@ export const gameDefinition = {
 export function generateUiIndexTs(): string {
   return `import App from './App.vue';
 export { App };
-export { default as GameBoard } from './components/GameBoard.vue';
+export { default as GameTable } from './components/GameTable.vue';
 `;
 }
 
@@ -260,7 +260,7 @@ export { default as GameBoard } from './components/GameBoard.vue';
 export function generateAppVue(config: ProjectConfig): string {
   return `<script setup lang="ts">
 import { GameShell, AutoUI } from 'boardsmith/ui';
-import GameBoard from './components/GameBoard.vue';
+import GameTable from './components/GameTable.vue';
 </script>
 
 <template>
@@ -269,20 +269,16 @@ import GameBoard from './components/GameBoard.vue';
     display-name="${config.displayName}"
     :player-count="${config.playerCount.min}"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt, startAction }">
+    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
-          <GameBoard
+          <GameTable
             :game-view="gameView"
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
-            :action="action"
-            :action-args="actionArgs"
-            :execute-action="executeAction"
-            :set-board-prompt="setBoardPrompt"
-            :start-action="startAction"
+            :action-controller="actionController"
           />
         </div>
         <div class="board-section">
@@ -349,38 +345,79 @@ import GameBoard from './components/GameBoard.vue';
 }
 
 /**
- * Generate src/ui/components/GameBoard.vue (placeholder)
+ * Generate src/ui/components/GameTable.vue (placeholder)
  */
-export function generateGameBoardVue(): string {
+export function generateGameTableVue(): string {
   return `<script setup lang="ts">
+import { computed } from 'vue';
+import type { UseActionControllerReturn } from 'boardsmith/ui';
+
 // Props from GameShell
 const props = defineProps<{
   gameView: any;
   playerPosition: number;
   isMyTurn: boolean;
   availableActions: string[];
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
-  actionArgs: Record<string, unknown>;
-  executeAction: (name: string) => Promise<void>;
-  setBoardPrompt: (prompt: string | null) => void;
-  startAction: (name: string, initialArgs?: Record<string, unknown>) => void;
+  actionController: UseActionControllerReturn;
 }>();
+
+// TODO: Customize this component based on your game type!
+// - For dice games: import { Die3D } from 'boardsmith/ui' and render dice
+// - For card games: render hands and card piles
+// - For board games: render a grid or board layout
+
+// Example: Check if an action is available
+const canTakeAction = computed(() => props.availableActions.length > 0);
+const firstAction = computed(() => props.availableActions[0]);
+
+function handleAction() {
+  if (firstAction.value) {
+    props.actionController.start(firstAction.value);
+  }
+}
 </script>
 
 <template>
   <div class="game-board">
-    <p v-if="isMyTurn" class="turn-indicator">Your Turn</p>
-    <p v-else class="waiting">Waiting for other player...</p>
-
-    <div class="game-state">
-      <pre>{{ JSON.stringify(gameView, null, 2) }}</pre>
+    <div class="placeholder-notice">
+      ⚠️ This is a placeholder UI - customize GameTable.vue for your game!
     </div>
+
+    <div class="turn-status">
+      <span v-if="isMyTurn" class="turn-indicator">Your Turn</span>
+      <span v-else class="waiting">Waiting for other player...</span>
+    </div>
+
+    <button
+      v-if="canTakeAction && isMyTurn"
+      @click="handleAction"
+      class="action-button"
+    >
+      {{ firstAction }}
+    </button>
   </div>
 </template>
 
 <style scoped>
 .game-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 20px;
+  gap: 20px;
+}
+
+.placeholder-notice {
+  background: rgba(255, 193, 7, 0.2);
+  border: 1px solid #ffc107;
+  color: #ffc107;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.turn-status {
+  font-size: 1.1rem;
 }
 
 .turn-indicator {
@@ -389,25 +426,26 @@ const props = defineProps<{
   padding: 8px 24px;
   border-radius: 20px;
   font-weight: bold;
-  display: inline-block;
-  margin-bottom: 20px;
 }
 
 .waiting {
   color: #888;
 }
 
-.game-state {
-  background: rgba(0, 0, 0, 0.3);
-  padding: 16px;
+.action-button {
+  background: linear-gradient(90deg, #00d9ff, #00ff88);
+  color: #1a1a2e;
+  border: none;
+  padding: 12px 32px;
   border-radius: 8px;
-  overflow: auto;
-  max-height: 400px;
+  font-weight: bold;
+  font-size: 1.1rem;
+  cursor: pointer;
+  text-transform: capitalize;
 }
 
-.game-state pre {
-  font-size: 12px;
-  color: #aaa;
+.action-button:hover {
+  transform: scale(1.05);
 }
 </style>
 `;
@@ -438,7 +476,7 @@ export function generateScaffoldFiles(config: ProjectConfig): GeneratedFile[] {
     { path: 'src/rules/index.ts', content: generateRulesIndexTs(config) },
     { path: 'src/ui/index.ts', content: generateUiIndexTs() },
     { path: 'src/ui/App.vue', content: generateAppVue(config) },
-    { path: 'src/ui/components/GameBoard.vue', content: generateGameBoardVue() },
+    { path: 'src/ui/components/GameTable.vue', content: generateGameTableVue() },
     { path: '.gitignore', content: generateGitignore() },
   ];
 }
