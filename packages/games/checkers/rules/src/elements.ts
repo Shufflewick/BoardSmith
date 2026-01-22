@@ -15,7 +15,7 @@ export class CheckerPiece extends Piece<CheckersGame, CheckersPlayer> {
   get forwardDirection(): number {
     // Player 1 (dark) starts at top, moves down (+1)
     // Player 2 (light) starts at bottom, moves up (-1)
-    return this.player?.position === 1 ? 1 : -1;
+    return this.player?.seat === 1 ? 1 : -1;
   }
 
   /**

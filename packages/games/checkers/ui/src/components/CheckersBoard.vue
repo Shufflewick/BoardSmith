@@ -53,7 +53,7 @@ interface Move {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, unknown>;
@@ -97,14 +97,14 @@ const { flyingElements: flyingCards } = useAutoAnimations({
       selector: '[data-piece-id]',
       // The capturing player is the opponent of the piece owner (1-indexed)
       player: (pieceData) => {
-        const pieceOwner = (pieceData.playerPosition as number) ?? 1;
+        const pieceOwner = (pieceData.playerSeat as number) ?? 1;
         return pieceOwner === 1 ? 2 : 1;
       },
     },
   ],
   getDOMElementData: (el) => ({
     // Track which player owns this piece for color rendering (1-indexed)
-    playerPosition: el.classList.contains('player-1') ? 1 : 2,
+    playerSeat: el.classList.contains('player-1') ? 1 : 2,
   }),
   duration: 400,
   flipDuration: 300,
@@ -124,24 +124,24 @@ function getPieceAt(row: number, col: number): CheckerPiece | undefined {
 
 // Check if a piece belongs to the current player (using shared utility)
 function isMyPiece(piece: CheckerPiece | undefined): boolean {
-  return isMyElement(piece as GameViewElement | undefined, props.playerPosition);
+  return isMyElement(piece as GameViewElement | undefined, props.playerSeat);
 }
 
 // Check if a piece belongs to the opponent (using shared utility)
 function isOpponentPiece(piece: CheckerPiece | undefined): boolean {
-  return isOpponentElement(piece as GameViewElement | undefined, props.playerPosition);
+  return isOpponentElement(piece as GameViewElement | undefined, props.playerSeat);
 }
 
 // Get forward direction for current player
 function getForwardDirection(): number {
   // Player 1 moves down (+1), Player 2 moves up (-1)
-  return props.playerPosition === 1 ? 1 : -1;
+  return props.playerSeat === 1 ? 1 : -1;
 }
 
 // Check if a row is the king row for the current player
 function isKingRow(row: number): boolean {
   // Player 1 promotes at row 7 (bottom), Player 2 promotes at row 0 (top)
-  return props.playerPosition === 1 ? row === 7 : row === 0;
+  return props.playerSeat === 1 ? row === 7 : row === 0;
 }
 
 // Get capture moves for a piece
@@ -474,10 +474,10 @@ function isSelectablePiece(row: number, col: number): boolean {
 const DEFAULT_CHECKERS_COLORS = ['#e74c3c', '#2c3e50'] as const;
 
 // Get player color (hex code) from gameView
-// playerPosition is 1-indexed, but arrays are 0-indexed
-function getPlayerColor(playerPosition: number): string {
+// playerSeat is 1-indexed, but arrays are 0-indexed
+function getPlayerColor(playerSeat: number): string {
   const players = props.gameView?.players;
-  const arrayIndex = playerPosition - 1;
+  const arrayIndex = playerSeat - 1;
   if (players && players[arrayIndex]?.color) {
     return players[arrayIndex].color;
   }
@@ -516,7 +516,7 @@ function isLightColor(hex: string): boolean {
 
 // Get piece color class (for fallback/compatibility)
 function getPieceColorClass(piece: CheckerPiece): string {
-  const playerPos = piece.attributes?.player?.position;
+  const playerPos = piece.attributes?.player?.seat;
   if (playerPos === undefined || playerPos === null) {
     // Fallback: check piece name to determine color (names are p1-, p2-)
     if (piece.name?.startsWith('p1-')) return 'player-1';
@@ -529,7 +529,7 @@ function getPieceColorClass(piece: CheckerPiece): string {
 // Get piece style for dynamic coloring using hex colors
 function getPieceStyle(piece: CheckerPiece): Record<string, string> {
   // Player positions are 1-indexed; piece names are p1-, p2-
-  const playerPos = piece.attributes?.player?.position ??
+  const playerPos = piece.attributes?.player?.seat ??
     (piece.name?.startsWith('p1-') ? 1 : piece.name?.startsWith('p2-') ? 2 : 1);
   const color = getPlayerColor(playerPos);
 
@@ -541,14 +541,14 @@ function getPieceStyle(piece: CheckerPiece): Record<string, string> {
 
 // Check if piece color is light (for crown color)
 function isPieceLight(piece: CheckerPiece): boolean {
-  const playerPos = piece.attributes?.player?.position ?? 1;
+  const playerPos = piece.attributes?.player?.seat ?? 1;
   const color = getPlayerColor(playerPos);
   return isLightColor(color);
 }
 
 // Get style for flying piece animation (uses same color as board pieces)
-function getFlyingPieceStyle(playerPosition: number): Record<string, string> {
-  const color = getPlayerColor(playerPosition ?? 1);
+function getFlyingPieceStyle(playerSeat: number): Record<string, string> {
+  const color = getPlayerColor(playerSeat ?? 1);
 
   return {
     background: `linear-gradient(145deg, ${lightenColor(color, 0.1)}, ${darkenColor(color, 0.1)})`,
@@ -563,7 +563,7 @@ const pieceCount = computed(() => {
   for (const [, square] of squaresMap.value) {
     const piece = getPiece(square);
     if (piece) {
-      if (piece.attributes?.player?.position === 1) dark++;
+      if (piece.attributes?.player?.seat === 1) dark++;
       else light++;
     }
   }
@@ -579,9 +579,9 @@ const winner = computed(() => {
   if (!gameOver.value) return null;
   // dark = Player 1's pieces, light = Player 2's pieces
   // If dark is 0, Player 2 (light) wins
-  if (pieceCount.value.dark === 0) return props.playerPosition === 2 ? 'You win!' : 'Opponent wins!';
+  if (pieceCount.value.dark === 0) return props.playerSeat === 2 ? 'You win!' : 'Opponent wins!';
   // If light is 0, Player 1 (dark) wins
-  if (pieceCount.value.light === 0) return props.playerPosition === 1 ? 'You win!' : 'Opponent wins!';
+  if (pieceCount.value.light === 0) return props.playerSeat === 1 ? 'You win!' : 'Opponent wins!';
   return 'Game Over!';
 });
 
@@ -667,7 +667,7 @@ const currentPlayerColor = computed(() => {
       <template #card="{ card }">
         <div
           class="flying-piece"
-          :style="getFlyingPieceStyle((card.cardData.playerPosition as number) ?? 0)"
+          :style="getFlyingPieceStyle((card.cardData.playerSeat as number) ?? 0)"
         ></div>
       </template>
     </FlyingCardsOverlay>

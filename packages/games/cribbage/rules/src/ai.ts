@@ -9,11 +9,11 @@ import type { CribbagePlayer } from './elements.js';
  */
 export function getCribbageObjectives(
   game: Game,
-  playerPosition: number
+  playerSeat: number
 ): Record<string, Objective> {
   const cribbageGame = game as CribbageGame;
-  const player = cribbageGame.getPlayer(playerPosition) as CribbagePlayer;
-  const opponentPosition = playerPosition === 1 ? 2 : 1;
+  const player = cribbageGame.getPlayer(playerSeat) as CribbagePlayer;
+  const opponentPosition = playerSeat === 1 ? 2 : 1;
   const opponent = cribbageGame.getPlayer(opponentPosition) as CribbagePlayer;
 
   return {

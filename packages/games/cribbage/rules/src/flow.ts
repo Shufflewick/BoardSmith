@@ -55,7 +55,7 @@ export function createCribbageFlow(): FlowDefinition {
         game.currentPlayCards = [];
         game.playerSaidGo = [false, false];
         // Non-dealer plays first
-        game.currentPlayTurn = game.getNonDealer().position;
+        game.currentPlayTurn = game.getNonDealer().seat;
       }),
 
       // Main play loop - continues until all cards played
@@ -76,11 +76,11 @@ export function createCribbageFlow(): FlowDefinition {
 
           const currentCanPlay = game.getPlayableCards(currentPlayer).length > 0;
           const currentHasCards = game.getPlayerHand(currentPlayer).count(Card) > 0;
-          const currentSaidGo = game.playerSaidGo[currentPlayer.position - 1];
+          const currentSaidGo = game.playerSaidGo[currentPlayer.seat - 1];
 
           const otherCanPlay = game.getPlayableCards(otherPlayer).length > 0;
           const otherHasCards = game.getPlayerHand(otherPlayer).count(Card) > 0;
-          const otherSaidGo = game.playerSaidGo[otherPlayer.position - 1];
+          const otherSaidGo = game.playerSaidGo[otherPlayer.seat - 1];
 
           // Check if current player is stuck (said Go or can't play)
           const currentStuck = currentSaidGo || !currentCanPlay;
@@ -120,7 +120,7 @@ export function createCribbageFlow(): FlowDefinition {
             // Skip if player has no cards
             if (!hasCards) return true;
 
-            const alreadySaidGo = game.playerSaidGo[currentPlayer.position - 1];
+            const alreadySaidGo = game.playerSaidGo[currentPlayer.seat - 1];
 
             // Skip if already said Go - once you say Go, you're out until count resets
             if (alreadySaidGo) return true;

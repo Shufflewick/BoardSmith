@@ -91,9 +91,9 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
    */
   private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
     // playerConfigs and CHECKERS_DEFAULT_COLORS are 0-indexed arrays,
-    // but player.position is 1-indexed, so use position - 1 for array access
+    // but player.seat is 1-indexed, so use seat - 1 for array access
     for (const player of this.all(Player)) {
-      const arrayIndex = player.position - 1;
+      const arrayIndex = player.seat - 1;
       const config = playerConfigs?.[arrayIndex];
       if (config?.color) {
         player.color = config.color;
@@ -386,7 +386,7 @@ export class CheckersGame extends Game<CheckersGame, CheckersPlayer> {
    */
   isKingRow(row: number, player: CheckersPlayer): boolean {
     // Player 1 kings at row 7, Player 2 kings at row 0
-    return player.position === 1 ? row === 7 : row === 0;
+    return player.seat === 1 ? row === 7 : row === 0;
   }
 
   /**

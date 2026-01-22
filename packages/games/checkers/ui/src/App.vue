@@ -5,14 +5,14 @@ import CheckersBoard from './components/CheckersBoard.vue';
 // Default checkers colors (0-indexed array)
 const DEFAULT_CHECKERS_COLORS = ['#e74c3c', '#2c3e50'] as const;
 
-// Get player color hex code (falls back to position-based default)
-// player.position is 1-indexed, so use position - 1 for array access
-function getPlayerColorHex(player: { position: number; color?: string }): string {
+// Get player color hex code (falls back to seat-based default)
+// player.seat is 1-indexed, so use seat - 1 for array access
+function getPlayerColorHex(player: { seat: number; color?: string }): string {
   if (player.color) {
     return player.color;
   }
-  // Fallback to default colors (position is 1-indexed, array is 0-indexed)
-  const arrayIndex = player.position - 1;
+  // Fallback to default colors (seat is 1-indexed, array is 0-indexed)
+  const arrayIndex = player.seat - 1;
   return DEFAULT_CHECKERS_COLORS[arrayIndex] ?? DEFAULT_CHECKERS_COLORS[0];
 }
 
@@ -30,7 +30,7 @@ function getColorDisplayName(hex: string): string {
 }
 
 // Count pieces for a player from gameView
-function getPieceCount(playerPosition: number, gameView: any): number {
+function getPieceCount(playerSeat: number, gameView: any): number {
   if (!gameView?.children) return 0;
   const board = gameView.children.find((c: any) => c.className === 'Board');
   if (!board?.children) return 0;
@@ -39,7 +39,7 @@ function getPieceCount(playerPosition: number, gameView: any): number {
   for (const square of board.children) {
     if (square.className !== 'Square') continue;
     for (const piece of square.children || []) {
-      if (piece.className === 'CheckerPiece' && piece.attributes?.player?.position === playerPosition) {
+      if (piece.className === 'CheckerPiece' && piece.attributes?.player?.position === playerSeat) {
         count++;
       }
     }
@@ -48,7 +48,7 @@ function getPieceCount(playerPosition: number, gameView: any): number {
 }
 
 // Count kings for a player
-function getKingCount(playerPosition: number, gameView: any): number {
+function getKingCount(playerSeat: number, gameView: any): number {
   if (!gameView?.children) return 0;
   const board = gameView.children.find((c: any) => c.className === 'Board');
   if (!board?.children) return 0;
@@ -58,7 +58,7 @@ function getKingCount(playerPosition: number, gameView: any): number {
     if (square.className !== 'Square') continue;
     for (const piece of square.children || []) {
       if (piece.className === 'CheckerPiece' &&
-          piece.attributes?.player?.position === playerPosition &&
+          piece.attributes?.player?.position === playerSeat &&
           piece.attributes?.isKing) {
         count++;
       }
@@ -68,10 +68,10 @@ function getKingCount(playerPosition: number, gameView: any): number {
 }
 
 // Get captured count from player data
-function getCapturedCount(playerPosition: number, gameView: any): number {
+function getCapturedCount(playerSeat: number, gameView: any): number {
   // Calculate from missing opponent pieces (12 - opponent's pieces)
   // Player positions are 1-indexed: Player 1's opponent is Player 2, and vice versa
-  const opponentPosition = playerPosition === 1 ? 2 : 1;
+  const opponentPosition = playerSeat === 1 ? 2 : 1;
   const opponentPieces = getPieceCount(opponentPosition, gameView);
   return 12 - opponentPieces;
 }
@@ -83,13 +83,13 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
     display-name="Checkers"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
+    <template #game-board="{ state, gameView, playerSeat, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <CheckersBoard
             :game-view="gameView"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-args="actionArgs"
@@ -101,7 +101,7 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
           <h2 class="board-title">Auto-Generated UI</h2>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>
@@ -118,24 +118,24 @@ function getCapturedCount(playerPosition: number, gameView: any): number {
         <span
           class="stat-value"
           data-player-stat="pieces"
-          :data-player-position="player.position"
-        >{{ getPieceCount(player.position, gameView) }}</span>
+          :data-player-seat="player.seat"
+        >{{ getPieceCount(player.seat, gameView) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Kings:</span>
         <span
           class="stat-value kings"
           data-player-stat="kings"
-          :data-player-position="player.position"
-        >{{ getKingCount(player.position, gameView) }}</span>
+          :data-player-seat="player.seat"
+        >{{ getKingCount(player.seat, gameView) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Captured:</span>
         <span
           class="stat-value captured"
           data-player-stat="captured"
-          :data-player-position="player.position"
-        >{{ getCapturedCount(player.position, gameView) }}</span>
+          :data-player-seat="player.seat"
+        >{{ getCapturedCount(player.seat, gameView) }}</span>
       </div>
     </template>
   </GameShell>

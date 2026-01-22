@@ -10,7 +10,7 @@ interface ScoringItem {
 
 interface HandScore {
   playerName: string;
-  playerPosition: number;
+  playerSeat: number;
   cardIds: string[];
   items: ScoringItem[];
   totalPoints: number;

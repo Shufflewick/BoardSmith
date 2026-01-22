@@ -55,7 +55,7 @@ interface Player {
 const props = defineProps<{
   gameView: GameElement | null | undefined;
   players: Player[];
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, unknown>;
@@ -162,19 +162,19 @@ const allPlayers = computed(() => {
 
 // Get opponent players (everyone except me)
 const opponents = computed(() => {
-  return allPlayers.value.filter((p: any) => p.position !== props.playerPosition);
+  return allPlayers.value.filter((p: any) => p.position !== props.playerSeat);
 });
 
 // Get player's hand using utility
-const myHand = computed(() => findPlayerHand(props.gameView, props.playerPosition));
+const myHand = computed(() => findPlayerHand(props.gameView, props.playerSeat));
 
 // Get all opponent hands as a map by player position
 const opponentHands = computed(() => {
   const allHands = findAllHands(props.gameView);
   const handMap = new Map<number, GameElement>();
   for (const hand of allHands) {
-    const pos = (hand.attributes as any)?.player?.position;
-    if (pos !== undefined && pos !== props.playerPosition) {
+    const pos = (hand.attributes as any)?.player?.seat;
+    if (pos !== undefined && pos !== props.playerSeat) {
       handMap.set(pos, hand);
     }
   }
@@ -198,21 +198,21 @@ function setOpponentHandRef(position: number, el: HTMLElement | null) {
 const pond = computed(() => findElement(props.gameView, { type: 'deck' }));
 
 // Get Books containers for all players
-function getBooksContainer(playerPosition: number) {
+function getBooksContainer(playerSeat: number) {
   if (!props.gameView?.children) return null;
   return props.gameView.children.find((child: any) =>
     child.className === 'Books' &&
-    child.attributes?.player?.position === playerPosition
+    child.attributes?.player?.seat === playerSeat
   );
 }
 
 // Count books for a player (each book is 4 cards)
-function getBooksCount(playerPosition: number): number {
-  const container = getBooksContainer(playerPosition);
+function getBooksCount(playerSeat: number): number {
+  const container = getBooksContainer(playerSeat);
   return container ? Math.floor((container.children?.length || 0) / 4) : 0;
 }
 
-const myBooksCount = computed(() => getBooksCount(props.playerPosition));
+const myBooksCount = computed(() => getBooksCount(props.playerSeat));
 
 // For display in custom UI - keep the old Book element lookup for now
 const books = computed(() => findElements(props.gameView, { className: 'Book' }));
@@ -220,14 +220,14 @@ const books = computed(() => findElements(props.gameView, { className: 'Book' })
 // Get my books for display
 const myBooks = computed(() => {
   return books.value.filter(book =>
-    (book.attributes as any)?.player?.position === props.playerPosition
+    (book.attributes as any)?.player?.seat === props.playerSeat
   );
 });
 
 // Get books for a specific player
-function getPlayerBooks(playerPosition: number) {
+function getPlayerBooks(playerSeat: number) {
   return books.value.filter(book =>
-    (book.attributes as any)?.player?.position === playerPosition
+    (book.attributes as any)?.player?.seat === playerSeat
   );
 }
 
@@ -416,7 +416,7 @@ watch(
       // Fly removed cards to my books stat using the utility
       flyToPlayerStat(flyCards, {
         cards: removedCards,
-        playerPosition: props.playerPosition,
+        playerSeat: props.playerSeat,
         statName: 'books',
         duration: 500,
         cardSize: { width: 70, height: 100 },
@@ -441,7 +441,7 @@ watch(
               faceUp: false,
               backImage: cardBackImageUrl.value || undefined,
             })),
-            playerPosition: opponentPos,
+            playerSeat: opponentPos,
             statName: 'books',
             duration: 500,
             cardSize: { width: 70, height: 100 },

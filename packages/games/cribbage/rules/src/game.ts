@@ -89,7 +89,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
   scoringAnimation: {
     active: boolean;
     type: 'hand' | 'crib' | null;
-    playerPosition: number;
+    playerSeat: number;
     playerName: string;
     handCards: string[];
     starterCard: string | null;
@@ -104,7 +104,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
   } = {
     active: false,
     type: null,
-    playerPosition: -1,
+    playerSeat: -1,
     playerName: '',
     handCards: [],
     starterCard: null,
@@ -119,14 +119,14 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     starterCard: string | null;
     nonDealerHand: {
       playerName: string;
-      playerPosition: number;
+      playerSeat: number;
       cardIds: string[];
       items: Array<{ category: string; points: number; cardIds: string[]; description: string }>;
       totalPoints: number;
     } | null;
     dealerHand: {
       playerName: string;
-      playerPosition: number;
+      playerSeat: number;
       cardIds: string[];
       items: Array<{ category: string; points: number; cardIds: string[]; description: string }>;
       totalPoints: number;
@@ -184,7 +184,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
 
     // Create hands for each player
     for (const player of this.all(Player) as unknown as CribbagePlayer[]) {
-      const hand = this.create(Hand, `hand-${player.position}`);
+      const hand = this.create(Hand, `hand-${player.seat}`);
       hand.player = player;
       hand.contentsVisibleToOwner();
     }
@@ -305,7 +305,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
    * Get a player's hand space
    */
   getPlayerHand(player: CribbagePlayer): Hand {
-    return this.first(Hand, `hand-${player.position}`)!;
+    return this.first(Hand, `hand-${player.seat}`)!;
   }
 
   /**
@@ -434,7 +434,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
       this.currentPlayCards.push(card.name);
     }
     this.runningTotal += card.pointValue;
-    this.lastPlayerToPlay = player.position;
+    this.lastPlayerToPlay = player.seat;
     player.cardsPlayedThisRound++;
 
     this.message(`${player.name} plays ${card.rank}${card.suit} (count: ${this.runningTotal})`);
@@ -478,7 +478,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     this.scoringAnimation = {
       active: true,
       type: 'hand',
-      playerPosition: player.position,
+      playerSeat: player.seat,
       playerName: player.name!,
       handCards: handCards.map(c => c.name!),
       starterCard: starter?.name ?? null,
@@ -528,7 +528,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     this.scoringAnimation = {
       active: true,
       type: 'crib',
-      playerPosition: dealer.position,
+      playerSeat: dealer.seat,
       playerName: dealer.name!,
       handCards: cribCards.map(c => c.name!),
       starterCard: starter?.name ?? null,
@@ -571,7 +571,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
     this.scoringAnimation = {
       active: false,
       type: null,
-      playerPosition: -1,
+      playerSeat: -1,
       playerName: '',
       handCards: [],
       starterCard: null,
@@ -689,7 +689,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
       starterCard: starter?.name ?? null,
       nonDealerHand: {
         playerName: nonDealer.name!,
-        playerPosition: nonDealer.position,
+        playerSeat: nonDealer.seat,
         cardIds: nonDealerCards.map(c => c.name!),
         items: nonDealerScore.items.map(item => ({
           category: item.category,
@@ -701,7 +701,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
       },
       dealerHand: dealerCards && dealerScore ? {
         playerName: dealer.name!,
-        playerPosition: dealer.position,
+        playerSeat: dealer.seat,
         cardIds: dealerCards.map(c => c.name!),
         items: dealerScore.items.map(item => ({
           category: item.category,
@@ -770,7 +770,7 @@ export class CribbageGame extends Game<CribbageGame, CribbagePlayer> {
       const hand = this.getPlayerHand(p);
       // Started with 6, discarded = 6 - current hand size (during discard phase)
       // During discard, hand goes from 6 to 4
-      counts.set(p.position, Math.max(0, 6 - hand.count(Card)));
+      counts.set(p.seat, Math.max(0, 6 - hand.count(Card)));
     }
     return counts;
   }

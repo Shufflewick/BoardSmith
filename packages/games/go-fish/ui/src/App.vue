@@ -8,12 +8,12 @@ function getCardCount(hand: any): number {
 }
 
 // Count books for a player
-function getBookCount(playerPosition: number, gameView: any): number {
+function getBookCount(playerSeat: number, gameView: any): number {
   if (!gameView?.children) return 0;
   // Find the Books space for this player
   const booksSpace = gameView.children.find((child: any) =>
     child.className === 'Books' &&
-    child.attributes?.player?.position === playerPosition
+    child.attributes?.player?.position === playerSeat
   );
   // Each book is 4 cards
   return booksSpace ? Math.floor((booksSpace.children?.length || 0) / 4) : 0;
@@ -22,14 +22,14 @@ function getBookCount(playerPosition: number, gameView: any): number {
 
 <template>
   <GameShell game-type="go-fish" display-name="Go Fish">
-    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
+    <template #game-board="{ state, gameView, players, playerSeat, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <GoFishBoard
             :game-view="gameView"
             :players="players"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-args="actionArgs"
@@ -41,7 +41,7 @@ function getBookCount(playerPosition: number, gameView: any): number {
           <h2 class="board-title">Auto-Generated UI</h2>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>
@@ -54,7 +54,7 @@ function getBookCount(playerPosition: number, gameView: any): number {
         <span class="stat-value">
           {{
             gameView?.children?.find((c: any) =>
-              c.className === 'Hand' && c.attributes?.player?.position === player.position
+              c.className === 'Hand' && c.attributes?.player?.position === player.seat
             )?.children?.length || 0
           }}
         </span>
@@ -64,8 +64,8 @@ function getBookCount(playerPosition: number, gameView: any): number {
         <span
           class="stat-value books"
           data-player-stat="books"
-          :data-player-position="player.position"
-        >{{ getBookCount(player.position, gameView) }}</span>
+          :data-player-seat="player.seat"
+        >{{ getBookCount(player.seat, gameView) }}</span>
       </div>
     </template>
   </GameShell>

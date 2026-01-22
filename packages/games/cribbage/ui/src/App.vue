@@ -3,28 +3,28 @@ import { GameShell, AutoUI } from '@boardsmith/ui';
 import CribbageBoard from './components/CribbageBoard.vue';
 
 // Check if a player is the dealer based on gameView
-function isDealer(playerPosition: number, gameView: any): boolean {
+function isDealer(playerSeat: number, gameView: any): boolean {
   const dealerPosition = gameView?.attributes?.dealerPosition ?? 1;  // 1-indexed
-  return playerPosition === dealerPosition;
+  return playerSeat === dealerPosition;
 }
 
 // Get player's hand data from gameView
-function getPlayerHand(playerPosition: number, gameView: any) {
+function getPlayerHand(playerSeat: number, gameView: any) {
   if (!gameView?.children) return null;
   return gameView.children.find(
-    (c: any) => c.attributes?.$type === 'hand' && c.attributes?.player?.position === playerPosition
+    (c: any) => c.attributes?.$type === 'hand' && c.attributes?.player?.seat === playerSeat
   );
 }
 
 // Get player's score from gameView (stored in Hand element)
-function getPlayerScore(playerPosition: number, gameView: any): number {
-  const hand = getPlayerHand(playerPosition, gameView);
+function getPlayerScore(playerSeat: number, gameView: any): number {
+  const hand = getPlayerHand(playerSeat, gameView);
   return hand?.attributes?.player?.score ?? 0;
 }
 
 // Get player's card count from gameView
-function getCardCount(playerPosition: number, gameView: any): number {
-  const hand = getPlayerHand(playerPosition, gameView);
+function getCardCount(playerSeat: number, gameView: any): number {
+  const hand = getPlayerHand(playerSeat, gameView);
   // Count all children in hand (includes face-down cards without visible rank)
   return hand?.children?.length ?? 0;
 }
@@ -36,13 +36,13 @@ function getCardCount(playerPosition: number, gameView: any): number {
     display-name="Cribbage"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController }">
+    <template #game-board="{ state, gameView, playerSeat, isMyTurn, availableActions, actionArgs, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <CribbageBoard
             :game-view="gameView"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-args="actionArgs"
@@ -53,7 +53,7 @@ function getCardCount(playerPosition: number, gameView: any): number {
           <h2 class="board-title">Auto-Generated UI</h2>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>
@@ -63,13 +63,13 @@ function getCardCount(playerPosition: number, gameView: any): number {
     <template #player-stats="{ player, gameView }">
       <div class="player-stat">
         <span class="stat-label">Score:</span>
-        <span class="stat-value">{{ getPlayerScore(player.position, gameView) }}</span>
+        <span class="stat-value">{{ getPlayerScore(player.seat, gameView) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Cards:</span>
-        <span class="stat-value cards">{{ getCardCount(player.position, gameView) }}</span>
+        <span class="stat-value cards">{{ getCardCount(player.seat, gameView) }}</span>
       </div>
-      <span v-if="isDealer(player.position, gameView)" class="dealer-badge">Dealer</span>
+      <span v-if="isDealer(player.seat, gameView)" class="dealer-badge">Dealer</span>
     </template>
   </GameShell>
 </template>

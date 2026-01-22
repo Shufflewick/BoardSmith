@@ -144,18 +144,18 @@ export function createSayGoAction(game: CribbageGame): ActionDefinition {
       'has not already said go': (ctx) => {
         const game = ctx.game as CribbageGame;
         const player = ctx.player as CribbagePlayer;
-        return !game.playerSaidGo[player.position - 1];
+        return !game.playerSaidGo[player.seat - 1];
       },
     })
     .execute((args, ctx) => {
       const game = ctx.game as CribbageGame;
       const player = ctx.player as CribbagePlayer;
-      game.playerSaidGo[player.position - 1] = true;
+      game.playerSaidGo[player.seat - 1] = true;
       game.message(`${player.name} says "Go"`);
 
       // Check if both players have said Go
-      const otherPlayer = game.all(Player).find(p => p.position !== player.position) as CribbagePlayer;
-      const otherSaidGo = game.playerSaidGo[otherPlayer.position - 1];
+      const otherPlayer = game.all(Player).find(p => p.seat !== player.seat) as CribbagePlayer;
+      const otherSaidGo = game.playerSaidGo[otherPlayer.seat - 1];
       const otherCanPlay = game.getPlayableCards(otherPlayer).length > 0;
       const otherHasCards = game.getPlayerHand(otherPlayer).count(Card) > 0;
 

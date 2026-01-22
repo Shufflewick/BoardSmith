@@ -110,10 +110,10 @@ function getHandSize(game: GoFishGame, player: GoFishPlayer): number {
  */
 export function getGoFishObjectives(
   game: Game,
-  playerPosition: number
+  playerSeat: number
 ): Record<string, Objective> {
   const goFishGame = game as GoFishGame;
-  const player = goFishGame.getPlayer(playerPosition) as GoFishPlayer;
+  const player = goFishGame.getPlayer(playerSeat) as GoFishPlayer;
   const opponents = getOpponents(goFishGame, player);
 
   // Constants for normalization
@@ -249,17 +249,17 @@ export function getGoFishObjectives(
  * potentially disrupting their progress toward books.
  *
  * @param game - Current game state
- * @param playerPosition - Which player the bot is (1-indexed)
+ * @param playerSeat - Which player the bot is (1-indexed)
  * @param availableMoves - All legal moves at this position
  * @returns ThreatResponse with priority moves and urgency flag
  */
 export function getGoFishThreatResponseMoves(
   game: Game,
-  playerPosition: number,
+  playerSeat: number,
   availableMoves: BotMove[]
 ): ThreatResponse {
   const goFishGame = game as GoFishGame;
-  const player = goFishGame.getPlayer(playerPosition) as GoFishPlayer;
+  const player = goFishGame.getPlayer(playerSeat) as GoFishPlayer;
   const opponents = getOpponents(goFishGame, player);
 
   // Check if any opponent is close to winning (has 5+ books)
@@ -272,7 +272,7 @@ export function getGoFishThreatResponseMoves(
 
   // Find opponents who are threats (have 5+ books)
   const threatOpponents = opponents.filter(p => p.bookCount >= 5);
-  const threatPositions = new Set(threatOpponents.map(p => p.position));
+  const threatPositions = new Set(threatOpponents.map(p => p.seat));
 
   // Prioritize asking threat opponents first
   // These moves target opponents who are close to winning

@@ -53,11 +53,11 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
 
     // Create hands and books for each player
     for (const player of this.all(Player) as unknown as GoFishPlayer[]) {
-      const hand = this.create(Hand, `hand-${player.position}`);
+      const hand = this.create(Hand, `hand-${player.seat}`);
       hand.player = player;
       hand.contentsVisibleToOwner(); // Only owner sees their hand
 
-      const books = this.create(Books, `books-${player.position}`);
+      const books = this.create(Books, `books-${player.seat}`);
       books.player = player;
       books.contentsVisible(); // Everyone sees books
     }
@@ -112,14 +112,14 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
    * Get a player's hand space
    */
   getPlayerHand(player: GoFishPlayer): Hand {
-    return this.first(Hand, `hand-${player.position}`)!;
+    return this.first(Hand, `hand-${player.seat}`)!;
   }
 
   /**
    * Get a player's books space
    */
   getPlayerBooks(player: GoFishPlayer): Books {
-    return this.first(Books, `books-${player.position}`)!;
+    return this.first(Books, `books-${player.seat}`)!;
   }
 
   /**

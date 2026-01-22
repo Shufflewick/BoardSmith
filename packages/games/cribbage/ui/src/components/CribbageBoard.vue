@@ -189,7 +189,7 @@ interface ScoringCardData {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, unknown>;
@@ -213,7 +213,7 @@ const dealerPosition = computed(() => props.gameView?.attributes?.dealerPosition
 const targetScore = computed(() => props.gameView?.attributes?.targetScore || 121);
 
 // Find player hands using helper (searches by $type which handles bundler mangling)
-const myHandElement = computed(() => findPlayerHand(props.gameView, props.playerPosition));
+const myHandElement = computed(() => findPlayerHand(props.gameView, props.playerSeat));
 const myHand = computed<Card[]>(() => getCards(myHandElement.value) as unknown as Card[]);
 
 const opponentHandElement = computed(() => {
@@ -221,7 +221,7 @@ const opponentHandElement = computed(() => {
   const hands = props.gameView?.children?.filter(
     (c: any) => c.attributes?.$type === 'hand'
   ) || [];
-  return hands.find((h: any) => h.attributes?.player?.position !== props.playerPosition);
+  return hands.find((h: any) => h.attributes?.player?.position !== props.playerSeat);
 });
 const opponentHand = computed(() => opponentHandElement.value?.children || []);
 
@@ -341,7 +341,7 @@ const allFlyingCards = computed(() => [
 const myScore = computed(() => (myHandElement.value?.attributes as any)?.player?.score ?? 0);
 const opponentScore = computed(() => (opponentHandElement.value?.attributes as any)?.player?.score ?? 0);
 
-const isDealer = computed(() => dealerPosition.value === props.playerPosition);
+const isDealer = computed(() => dealerPosition.value === props.playerSeat);
 
 const needsToDiscard = computed(() => {
   if (cribbagePhase.value !== 'discarding') return false;
@@ -379,7 +379,7 @@ const dismissedScoringKey = ref<string | null>(null);
 const currentScoringKey = computed(() => {
   const anim = scoringAnimation.value;
   if (!anim?.active) return null;
-  return `${anim.type}-${anim.playerPosition}-${anim.handCards?.join(',')}`;
+  return `${anim.type}-${anim.playerSeat}-${anim.handCards?.join(',')}`;
 });
 
 // Only show overlay if active AND not dismissed by user
