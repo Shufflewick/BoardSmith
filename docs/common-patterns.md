@@ -33,7 +33,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
    */
   rotateDealer(): void {
     const nextDealer = this.players.nextAfter(this.dealer);
-    this.dealerPosition = nextDealer.position;
+    this.dealerPosition = nextDealer.seat;
   }
 }
 ```
@@ -324,7 +324,7 @@ class CheckerPiece extends Piece {
    * Get valid move directions
    */
   getMoveDirections(): Array<{ row: number; col: number }> {
-    const forward = this.player?.position === 1 ? -1 : 1;  // Player 1 moves "up"
+    const forward = this.player?.seat === 1 ? -1 : 1;  // Player 1 moves "up"
 
     if (this.isKing) {
       return [
@@ -354,7 +354,7 @@ class CheckerPiece extends Piece {
   piece.putInto(destination);
 
   // Check for promotion (player 1 promotes at row 0, player 2 at row 7)
-  const promotionRow = piece.player?.position === 1 ? 0 : 7;
+  const promotionRow = piece.player?.seat === 1 ? 0 : 7;
   if (destination.row === promotionRow && !piece.isKing) {
     piece.promote();
     game.message(`${piece} was crowned king!`);
