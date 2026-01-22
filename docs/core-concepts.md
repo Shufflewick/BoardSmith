@@ -535,3 +535,4 @@ export class HexGame extends Game<HexGame, HexPlayer> {
 - [Actions & Flow](./actions-and-flow.md) - Deep dive on actions and game flow
 - [UI Components](./ui-components.md) - Building game UIs
 - [Game Examples](./game-examples.md) - Real game implementations
+- [Nomenclature](./nomenclature.md) - Standard terminology reference
