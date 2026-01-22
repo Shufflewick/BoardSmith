@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 57-selection-pick-rename (4 of 5)
-Plan: 03 of 5 complete
-Status: Plan 03 complete
-Last activity: 2026-01-22 — Completed 57-03-PLAN.md
+Plan: 04 of 5 complete (Phase 57 complete)
+Status: Phase 57 complete
+Last activity: 2026-01-22 — Completed 57-04-PLAN.md
 
 Progress: [████████████████████████████████░░░░░░░░] 4/5 phases
 
@@ -52,7 +52,7 @@ Progress: [███████████████████████
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 57-03-PLAN.md
+Stopped at: Completed 57-04-PLAN.md (Phase 57 complete)
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -137,3 +137,5 @@ Resume file: None
 | fetchPickChoices primary option | fetchSelectionChoices retained as deprecated alias | 57-02 |
 | Extracted games use currentPick | GoFish, demoAnimation, demoComplexUiInteractions updated | 57-03 |
 | Plan scope refined | 5 files changed, not all 9 games (others had no API usage) | 57-03 |
+| Documentation uses pick terminology | docs/custom-ui-guide.md, docs/common-pitfalls.md, docs/ui-components.md updated | 57-04 |
+| CLI templates use pick | boardsmith init generates currentPick-based code | 57-04 |
