@@ -127,9 +127,10 @@ export interface ElementMatchOptions {
 }
 
 /**
- * Selection type for action parameters.
+ * Pick type for action parameters.
+ * A "pick" is a choice the player must make to complete an action (per nomenclature.md).
  */
-export interface Selection {
+export interface Pick {
   name: string;
   type: 'choice' | 'player' | 'element' | 'number' | 'text';
   prompt?: string;
@@ -145,13 +146,16 @@ export interface Selection {
   elementClassName?: string;
 }
 
+/** @deprecated Use Pick instead */
+export type Selection = Pick;
+
 /**
  * Metadata for an available action.
  */
 export interface ActionMetadata {
   name: string;
   prompt?: string;
-  selections: Selection[];
+  selections: Pick[];
 }
 
 /**

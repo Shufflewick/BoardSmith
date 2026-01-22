@@ -30,6 +30,8 @@ export {
   AutoElement,
   ActionPanel,
   type GameElement,
+  type Pick,
+  /** @deprecated Use Pick instead */
   type Selection,
   type ActionMetadata,
   type Player,
@@ -159,6 +161,8 @@ export {
   findAllByAttribute,
   getElementId,
   findPlayerHand,
+  findPlayerElement,
+  getPlayerAttribute,
   findAllHands,
   getElementCount,
   getCards,
@@ -231,22 +235,40 @@ export {
   injectActionController,
   ACTION_CONTROLLER_KEY,
   // Advanced feature injection helpers
+  injectPickStepFn,
+  /** @deprecated Use injectPickStepFn instead */
   injectSelectionStepFn,
   injectBoardInteraction,
-  // Types
+  // Primary types (use these)
+  type PickMetadata,
+  type PickStepResult,
+  type PickChoicesResult,
+  type PickSnapshot,
+  type CollectedPick,
+  type PickStepFn,
+  // Deprecated type aliases (for backward compatibility)
+  /** @deprecated Use PickMetadata instead */
   type SelectionMetadata,
+  /** @deprecated Use PickStepResult instead */
+  type SelectionStepResult,
+  /** @deprecated Use PickChoicesResult instead */
+  type SelectionChoicesResult,
+  /** @deprecated Use PickSnapshot instead */
+  type SelectionSnapshot,
+  /** @deprecated Use CollectedPick instead */
+  type CollectedSelection,
+  /** @deprecated Use PickStepFn instead */
+  type SelectionStepFn,
+  // Other types
   type ActionMetadata as ControllerActionMetadata,
   type ActionResult as ControllerActionResult,
   type FollowUpAction,
   type ValidationResult,
-  type SelectionStepResult,
-  type SelectionChoicesResult,
   type RepeatingState,
   type ActionStateSnapshot,
   type UseActionControllerOptions,
   type UseActionControllerReturn,
-  type SelectionStepFn,
-  // Selection-related types
+  // Pick-related types
   type ChoiceWithRefs,
   type ValidElement,
   type ElementRef as SelectionElementRef,

@@ -13,6 +13,8 @@ export { default as ActionPanel } from './ActionPanel.vue';
 // Re-export types from shared types file
 export type {
   GameElement,
+  Pick,
+  /** @deprecated Use Pick instead */
   Selection,
   ActionMetadata,
   Player,
