@@ -7,9 +7,9 @@
 
 ### Dictionary (DICT)
 
-- [ ] **DICT-01**: Create `docs/nomenclature.md` as the authoritative terminology reference
-- [ ] **DICT-02**: Dictionary includes all defined terms with definitions
-- [ ] **DICT-03**: Dictionary organized by category (Core, Players, Flow, Elements, Zones, Actions, etc.)
+- [x] **DICT-01**: Create `docs/nomenclature.md` as the authoritative terminology reference
+- [x] **DICT-02**: Dictionary includes all defined terms with definitions
+- [x] **DICT-03**: Dictionary organized by category (Core, Players, Flow, Elements, Zones, Actions, etc.)
 
 ### UI Rename (UI)
 
@@ -51,9 +51,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DICT-01 | Phase 54 | Pending |
-| DICT-02 | Phase 54 | Pending |
-| DICT-03 | Phase 54 | Pending |
+| DICT-01 | Phase 54 | Complete |
+| DICT-02 | Phase 54 | Complete |
+| DICT-03 | Phase 54 | Complete |
 | UI-01 | Phase 55 | Pending |
 | UI-02 | Phase 55 | Pending |
 | UI-03 | Phase 55 | Pending |

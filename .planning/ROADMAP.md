@@ -17,7 +17,7 @@
 **Plans:** 1 plan
 
 Plans:
-- [ ] 54-01-PLAN.md — Create docs/nomenclature.md with all defined terms
+- [x] 54-01-PLAN.md — Create docs/nomenclature.md with all defined terms
 
 **Success Criteria:**
 - `docs/nomenclature.md` exists with all defined terms
@@ -99,7 +99,7 @@ Plans:
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 54 | Nomenclature Dictionary | 3 | Planned |
+| 54 | Nomenclature Dictionary | 3 | Complete |
 | 55 | GameTable Rename | 4 | Not started |
 | 56 | Position → Seat | 4 | Not started |
 | 57 | Selection → Pick | 4 | Not started |
