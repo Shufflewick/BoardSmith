@@ -27,8 +27,8 @@ export type {
   LobbySlot,
   LobbyInfo,
   LobbyUpdate,
-  ClaimPositionRequest,
-  ClaimPositionResponse,
+  ClaimSeatRequest,
+  ClaimSeatResponse,
   PlayerConfig,
 } from '../session/index.js';
 
@@ -153,7 +153,7 @@ export interface QueueEntry {
  */
 export interface MatchInfo {
   gameId: string;
-  playerPosition: number;
+  playerSeat: number;
   gameType: string;
   players: string[];
   matchedAt: number;
@@ -245,7 +245,7 @@ export interface WebSocketAdapter {
  */
 export interface WebSocketSession {
   ws: WebSocketAdapter;
-  playerPosition: number;
+  playerSeat: number;
   isSpectator: boolean;
   playerId?: string;
 }

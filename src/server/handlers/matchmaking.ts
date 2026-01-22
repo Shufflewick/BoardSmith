@@ -120,7 +120,7 @@ export async function handleMatchmakingJoin(
         player.playerId,
         {
           gameId,
-          playerPosition: i,
+          playerSeat: i + 1, // 1-indexed
           gameType,
           players: matchedPlayers.map((p) => p.playerName),
           matchedAt: Date.now(),
@@ -137,7 +137,7 @@ export async function handleMatchmakingJoin(
       success: true,
       matched: true,
       gameId,
-      playerPosition: matchedPlayers.findIndex((p) => p.playerId === playerId),
+      playerSeat: matchedPlayers.findIndex((p) => p.playerId === playerId) + 1, // 1-indexed
       players: matchedPlayers.map((p) => p.playerName),
     });
   }

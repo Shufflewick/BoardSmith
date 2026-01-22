@@ -28,13 +28,13 @@ import {
   handleRestart,
   handleHealth,
   handleGetLobby,
-  handleClaimPosition,
+  handleClaimSeat,
   handleUpdateName,
   handleSetReady,
   handleAddSlot,
   handleRemoveSlot,
   handleSetSlotAI,
-  handleLeavePosition,
+  handleLeaveSeat,
   handleKickPlayer,
   handleUpdatePlayerOptions,
   handleUpdateSlotPlayerOptions,
@@ -53,7 +53,7 @@ import {
   // Selection choices handlers
   handleGetSelectionChoices,
 } from './handlers/games.js';
-import type { ClaimPositionRequest } from './types.js';
+import type { ClaimSeatRequest } from './types.js';
 
 import {
   handleMatchmakingJoin,
@@ -308,11 +308,11 @@ export class GameServerCore {
         return await handleGetLobby(this.#store, gameId);
       }
 
-      // POST /games/:gameId/claim-position - Claim a position in the lobby
-      const claimMatch = path.match(/^\/games\/([^/]+)\/claim-position$/);
+      // POST /games/:gameId/claim-seat - Claim a seat in the lobby
+      const claimMatch = path.match(/^\/games\/([^/]+)\/claim-seat$/);
       if (claimMatch && method === 'POST') {
         const gameId = claimMatch[1];
-        return await handleClaimPosition(this.#store, gameId, body as ClaimPositionRequest);
+        return await handleClaimSeat(this.#store, gameId, body as ClaimSeatRequest);
       }
 
       // POST /games/:gameId/update-name - Update player name in lobby
@@ -343,32 +343,32 @@ export class GameServerCore {
       const removeSlotMatch = path.match(/^\/games\/([^/]+)\/remove-slot$/);
       if (removeSlotMatch && method === 'POST') {
         const gameId = removeSlotMatch[1];
-        const { playerId, position } = body as { playerId: string; position: number };
-        return await handleRemoveSlot(this.#store, gameId, playerId, position);
+        const { playerId, seat } = body as { playerId: string; seat: number };
+        return await handleRemoveSlot(this.#store, gameId, playerId, seat);
       }
 
       // POST /games/:gameId/set-slot-ai - Toggle slot between open and AI (host only)
       const setSlotAIMatch = path.match(/^\/games\/([^/]+)\/set-slot-ai$/);
       if (setSlotAIMatch && method === 'POST') {
         const gameId = setSlotAIMatch[1];
-        const { playerId, position, isAI, aiLevel } = body as { playerId: string; position: number; isAI: boolean; aiLevel?: string };
-        return await handleSetSlotAI(this.#store, gameId, playerId, position, isAI, aiLevel);
+        const { playerId, seat, isAI, aiLevel } = body as { playerId: string; seat: number; isAI: boolean; aiLevel?: string };
+        return await handleSetSlotAI(this.#store, gameId, playerId, seat, isAI, aiLevel);
       }
 
-      // POST /games/:gameId/leave-position - Leave/unclaim position in lobby (non-hosts)
-      const leavePositionMatch = path.match(/^\/games\/([^/]+)\/leave-position$/);
-      if (leavePositionMatch && method === 'POST') {
-        const gameId = leavePositionMatch[1];
+      // POST /games/:gameId/leave-seat - Leave/unclaim seat in lobby (non-hosts)
+      const leaveSeatMatch = path.match(/^\/games\/([^/]+)\/leave-seat$/);
+      if (leaveSeatMatch && method === 'POST') {
+        const gameId = leaveSeatMatch[1];
         const { playerId } = body as { playerId: string };
-        return await handleLeavePosition(this.#store, gameId, playerId);
+        return await handleLeaveSeat(this.#store, gameId, playerId);
       }
 
       // POST /games/:gameId/kick-player - Kick a player from lobby (host only)
       const kickPlayerMatch = path.match(/^\/games\/([^/]+)\/kick-player$/);
       if (kickPlayerMatch && method === 'POST') {
         const gameId = kickPlayerMatch[1];
-        const { playerId, position } = body as { playerId: string; position: number };
-        return await handleKickPlayer(this.#store, gameId, playerId, position);
+        const { playerId, seat } = body as { playerId: string; seat: number };
+        return await handleKickPlayer(this.#store, gameId, playerId, seat);
       }
 
       // POST /games/:gameId/player-options - Update player's options (color, etc.)
@@ -391,8 +391,8 @@ export class GameServerCore {
       const slotPlayerOptionsMatch = path.match(/^\/games\/([^/]+)\/slot-player-options$/);
       if (slotPlayerOptionsMatch && method === 'POST') {
         const gameId = slotPlayerOptionsMatch[1];
-        const { playerId, position, options } = body as { playerId: string; position: number; options: Record<string, unknown> };
-        return await handleUpdateSlotPlayerOptions(this.#store, gameId, playerId, position, options);
+        const { playerId, seat, options } = body as { playerId: string; seat: number; options: Record<string, unknown> };
+        return await handleUpdateSlotPlayerOptions(this.#store, gameId, playerId, seat, options);
       }
 
       // PUT /games/:gameId/players/:position/name - Update player name
@@ -496,7 +496,7 @@ export class GameServerCore {
 
         const result = await gameSession.performAction(
           message.action!,
-          session.playerPosition,
+          session.playerSeat,
           message.args || {}
         );
 
@@ -519,14 +519,14 @@ export class GameServerCore {
           return;
         }
 
-        const effectivePosition = session.isSpectator ? 0 : session.playerPosition;
+        const effectivePosition = session.isSpectator ? 0 : session.playerSeat;
         const stateResult = gameSession.getState(effectivePosition);
         const flowState = gameSession.getFlowState();
         session.ws.send({
           type: 'state',
           flowState,
           state: stateResult.state,
-          playerPosition: session.playerPosition,
+          playerSeat: session.playerSeat,
           isSpectator: session.isSpectator,
         });
         break;
@@ -549,19 +549,19 @@ export class GameServerCore {
         }
         break;
 
-      case 'claimPosition':
+      case 'claimSeat':
         if (!gameSession) {
           session.ws.send({ type: 'error', error: 'Game not found' });
           return;
         }
 
-        if (message.position === undefined || message.name === undefined || !session.playerId) {
-          session.ws.send({ type: 'error', error: 'Position, name, and playerId are required' });
+        if (message.seat === undefined || message.name === undefined || !session.playerId) {
+          session.ws.send({ type: 'error', error: 'Seat, name, and playerId are required' });
           return;
         }
 
-        const claimResult = await gameSession.claimPosition(
-          message.position,
+        const claimResult = await gameSession.claimSeat(
+          message.seat,
           session.playerId,
           message.name
         );
@@ -569,7 +569,7 @@ export class GameServerCore {
         if (!claimResult.success) {
           session.ws.send({ type: 'error', error: claimResult.error });
         }
-        // Success: broadcast happens automatically in GameSession.claimPosition
+        // Success: broadcast happens automatically in GameSession.claimSeat
         break;
 
       case 'updateName':
@@ -632,12 +632,12 @@ export class GameServerCore {
           return;
         }
 
-        if (!session.playerId || message.position === undefined) {
-          session.ws.send({ type: 'error', error: 'PlayerId and position are required' });
+        if (!session.playerId || message.seat === undefined) {
+          session.ws.send({ type: 'error', error: 'PlayerId and seat are required' });
           return;
         }
 
-        const removeSlotResult = await gameSession.removeSlot(session.playerId, message.position);
+        const removeSlotResult = await gameSession.removeSlot(session.playerId, message.seat);
         if (!removeSlotResult.success) {
           session.ws.send({ type: 'error', error: removeSlotResult.error });
         }
@@ -650,14 +650,14 @@ export class GameServerCore {
           return;
         }
 
-        if (!session.playerId || message.position === undefined || message.isAI === undefined) {
-          session.ws.send({ type: 'error', error: 'PlayerId, position, and isAI are required' });
+        if (!session.playerId || message.seat === undefined || message.isAI === undefined) {
+          session.ws.send({ type: 'error', error: 'PlayerId, seat, and isAI are required' });
           return;
         }
 
         const setSlotAIResult = await gameSession.setSlotAI(
           session.playerId,
-          message.position,
+          message.seat,
           message.isAI,
           message.aiLevel
         );
@@ -667,7 +667,7 @@ export class GameServerCore {
         // Success: broadcast happens automatically
         break;
 
-      case 'leavePosition':
+      case 'leaveSeat':
         if (!gameSession) {
           session.ws.send({ type: 'error', error: 'Game not found' });
           return;
@@ -678,9 +678,9 @@ export class GameServerCore {
           return;
         }
 
-        const leavePositionResult = await gameSession.leavePosition(session.playerId);
-        if (!leavePositionResult.success) {
-          session.ws.send({ type: 'error', error: leavePositionResult.error });
+        const leaveSeatResult = await gameSession.leaveSeat(session.playerId);
+        if (!leaveSeatResult.success) {
+          session.ws.send({ type: 'error', error: leaveSeatResult.error });
         }
         // Success: broadcast happens automatically
         break;
@@ -691,12 +691,12 @@ export class GameServerCore {
           return;
         }
 
-        if (!session.playerId || message.position === undefined) {
-          session.ws.send({ type: 'error', error: 'PlayerId and position are required' });
+        if (!session.playerId || message.seat === undefined) {
+          session.ws.send({ type: 'error', error: 'PlayerId and seat are required' });
           return;
         }
 
-        const kickPlayerResult = await gameSession.kickPlayer(session.playerId, message.position);
+        const kickPlayerResult = await gameSession.kickPlayer(session.playerId, message.seat);
         if (!kickPlayerResult.success) {
           session.ws.send({ type: 'error', error: kickPlayerResult.error });
         }
@@ -730,14 +730,14 @@ export class GameServerCore {
           return;
         }
 
-        if (!session.playerId || message.position === undefined || !message.playerOptions) {
-          session.ws.send({ type: 'error', error: 'PlayerId, position, and playerOptions are required' });
+        if (!session.playerId || message.seat === undefined || !message.playerOptions) {
+          session.ws.send({ type: 'error', error: 'PlayerId, seat, and playerOptions are required' });
           return;
         }
 
         const updateSlotOptionsResult = await gameSession.updateSlotPlayerOptions(
           session.playerId,
-          message.position,
+          message.seat,
           message.playerOptions
         );
         if (!updateSlotOptionsResult.success) {
@@ -774,15 +774,15 @@ export class GameServerCore {
    */
   async getWebSocketInitialState(
     gameId: string,
-    playerPosition: number,
+    playerSeat: number,
     isSpectator: boolean
-  ): Promise<{ type: string; flowState: unknown; state: unknown; playerPosition: number; isSpectator: boolean } | null> {
+  ): Promise<{ type: string; flowState: unknown; state: unknown; playerSeat: number; isSpectator: boolean } | null> {
     const gameSession = await this.#store.getGame(gameId);
     if (!gameSession) {
       return null;
     }
 
-    const effectivePosition = isSpectator ? 0 : playerPosition;
+    const effectivePosition = isSpectator ? 0 : playerSeat;
     const stateResult = gameSession.getState(effectivePosition);
     const flowState = gameSession.getFlowState();
 
@@ -791,7 +791,7 @@ export class GameServerCore {
       type: 'state',
       flowState,
       state: stateResult.state,
-      playerPosition,
+      playerSeat,
       isSpectator,
     };
   }

@@ -42,8 +42,8 @@ export interface MatchmakingResult {
   /** Game ID (if matched) */
   gameId?: string;
 
-  /** Player's position in the game (1-indexed, if matched) */
-  playerPosition?: number;
+  /** Player's seat in the game (1-indexed, if matched) */
+  playerSeat?: number;
 
   /** All player names in the match (if matched) */
   players?: string[];
@@ -71,8 +71,8 @@ export interface MatchmakingStatus {
   /** Game ID (if matched) */
   gameId?: string;
 
-  /** Player position (if matched) */
-  playerPosition?: number;
+  /** Player seat (if matched) */
+  playerSeat?: number;
 
   /** Player names (if matched) */
   players?: string[];
@@ -103,7 +103,7 @@ export interface PlayerState {
   phase: string;
 
   /** All players in the game */
-  players: Array<{ name: string; position: number }>;
+  players: Array<{ name: string; seat: number }>;
 
   /** Current player's position (whose turn it is) */
   currentPlayer?: number;
@@ -125,8 +125,8 @@ export interface GameState {
   /** Player-specific state */
   state: PlayerState;
 
-  /** This player's position */
-  playerPosition: number;
+  /** This player's seat */
+  playerSeat: number;
 
   /** Whether this connection is a spectator */
   isSpectator: boolean;
@@ -150,8 +150,8 @@ export interface GameConnectionConfig {
   /** Player ID (from matchmaking) */
   playerId: string;
 
-  /** Player position (if known) */
-  playerPosition?: number;
+  /** Player seat (if known) */
+  playerSeat?: number;
 
   /** Connect as spectator */
   spectator?: boolean;
@@ -217,7 +217,7 @@ export interface WebSocketIncomingMessage {
   type: 'state' | 'restart' | 'error' | 'pong' | 'lobby' | 'actionResult';
   flowState?: FlowState;
   state?: PlayerState;
-  playerPosition?: number;
+  playerSeat?: number;
   isSpectator?: boolean;
   error?: string;
   timestamp?: number;
@@ -302,8 +302,8 @@ export type SlotStatus = 'open' | 'ai' | 'claimed';
 
 /** Information about a player slot in the lobby */
 export interface LobbySlot {
-  /** Position index (1-based) */
-  position: number;
+  /** Seat number (1-based) */
+  seat: number;
   /** Current status of this slot */
   status: SlotStatus;
   /** Player name */
@@ -344,19 +344,19 @@ export interface LobbyInfo {
   maxPlayers?: number;
 }
 
-/** Request to claim a position in the lobby */
-export interface ClaimPositionRequest {
-  position: number;
+/** Request to claim a seat in the lobby */
+export interface ClaimSeatRequest {
+  seat: number;
   name: string;
   playerId: string;
 }
 
-/** Response to claim position */
-export interface ClaimPositionResponse {
+/** Response to claim seat */
+export interface ClaimSeatResponse {
   success: boolean;
   error?: string;
   lobby?: LobbyInfo;
-  position?: number;
+  seat?: number;
 }
 
 /** Generic lobby response */
@@ -380,13 +380,13 @@ export interface AddSlotRequest {
 /** Request to remove a player slot (host only) */
 export interface RemoveSlotRequest {
   playerId: string;
-  position: number;
+  seat: number;
 }
 
 /** Request to set a slot to AI or open (host only) */
 export interface SetSlotAIRequest {
   playerId: string;
-  position: number;
+  seat: number;
   isAI: boolean;
   aiLevel?: string;
 }

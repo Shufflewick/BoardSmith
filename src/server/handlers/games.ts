@@ -11,7 +11,7 @@ import type {
   ActionRequest,
   AIConfig,
   GameDefinition,
-  ClaimPositionRequest,
+  ClaimSeatRequest,
 } from '../types.js';
 
 // ============================================
@@ -394,22 +394,22 @@ export async function handleGetLobby(
 }
 
 /**
- * POST /games/:gameId/claim-position - Claim a position in the lobby
+ * POST /games/:gameId/claim-seat - Claim a seat in the lobby
  */
-export async function handleClaimPosition(
+export async function handleClaimSeat(
   store: GameStore,
   gameId: string,
-  request: ClaimPositionRequest
+  request: ClaimSeatRequest
 ): Promise<ServerResponse> {
   const session = await store.getGame(gameId);
   if (!session) {
     return error('Game not found', 404);
   }
 
-  const { position, playerId, name } = request;
+  const { seat, playerId, name } = request;
 
-  if (position === undefined || position === null) {
-    return error('Position is required');
+  if (seat === undefined || seat === null) {
+    return error('Seat is required');
   }
 
   if (!playerId) {
@@ -420,16 +420,16 @@ export async function handleClaimPosition(
     return error('Player name is required');
   }
 
-  const result = await session.claimPosition(position, playerId, name);
+  const result = await session.claimSeat(seat, playerId, name);
 
   if (result.success) {
     return success({
       success: true,
       lobby: result.lobby,
-      position,
+      seat,
     });
   } else {
-    return error(result.error ?? 'Failed to claim position');
+    return error(result.error ?? 'Failed to claim seat');
   }
 }
 
@@ -516,7 +516,7 @@ export async function handleRemoveSlot(
   store: GameStore,
   gameId: string,
   playerId: string,
-  position: number
+  seat: number
 ): Promise<ServerResponse> {
   const session = await store.getGame(gameId);
   if (!session) {
@@ -527,11 +527,11 @@ export async function handleRemoveSlot(
     return error('Player ID is required');
   }
 
-  if (position === undefined || position === null) {
-    return error('Position is required');
+  if (seat === undefined || seat === null) {
+    return error('Seat is required');
   }
 
-  const result = await session.removeSlot(playerId, position);
+  const result = await session.removeSlot(playerId, seat);
 
   if (result.success) {
     return success({ success: true, lobby: result.lobby });
@@ -547,7 +547,7 @@ export async function handleSetSlotAI(
   store: GameStore,
   gameId: string,
   playerId: string,
-  position: number,
+  seat: number,
   isAI: boolean,
   aiLevel?: string
 ): Promise<ServerResponse> {
@@ -560,11 +560,11 @@ export async function handleSetSlotAI(
     return error('Player ID is required');
   }
 
-  if (position === undefined || position === null) {
-    return error('Position is required');
+  if (seat === undefined || seat === null) {
+    return error('Seat is required');
   }
 
-  const result = await session.setSlotAI(playerId, position, isAI, aiLevel);
+  const result = await session.setSlotAI(playerId, seat, isAI, aiLevel);
 
   if (result.success) {
     return success({ success: true, lobby: result.lobby });
@@ -574,9 +574,9 @@ export async function handleSetSlotAI(
 }
 
 /**
- * POST /games/:gameId/leave-position - Leave/unclaim position in lobby (non-hosts)
+ * POST /games/:gameId/leave-seat - Leave/unclaim seat in lobby (non-hosts)
  */
-export async function handleLeavePosition(
+export async function handleLeaveSeat(
   store: GameStore,
   gameId: string,
   playerId: string
@@ -590,12 +590,12 @@ export async function handleLeavePosition(
     return error('Player ID is required');
   }
 
-  const result = await session.leavePosition(playerId);
+  const result = await session.leaveSeat(playerId);
 
   if (result.success) {
     return success({ success: true, lobby: result.lobby });
   } else {
-    return error(result.error ?? 'Failed to leave position');
+    return error(result.error ?? 'Failed to leave seat');
   }
 }
 
@@ -606,7 +606,7 @@ export async function handleKickPlayer(
   store: GameStore,
   gameId: string,
   playerId: string,
-  position: number
+  seat: number
 ): Promise<ServerResponse> {
   const session = await store.getGame(gameId);
   if (!session) {
@@ -617,11 +617,11 @@ export async function handleKickPlayer(
     return error('Player ID is required');
   }
 
-  if (position === undefined || position === null) {
-    return error('Position is required');
+  if (seat === undefined || seat === null) {
+    return error('Seat is required');
   }
 
-  const result = await session.kickPlayer(playerId, position);
+  const result = await session.kickPlayer(playerId, seat);
 
   if (result.success) {
     return success({ success: true, lobby: result.lobby });
@@ -699,7 +699,7 @@ export async function handleUpdateSlotPlayerOptions(
   store: GameStore,
   gameId: string,
   playerId: string,
-  position: number,
+  seat: number,
   options: Record<string, unknown>
 ): Promise<ServerResponse> {
   const session = await store.getGame(gameId);
@@ -711,15 +711,15 @@ export async function handleUpdateSlotPlayerOptions(
     return error('Player ID is required');
   }
 
-  if (position === undefined || position === null) {
-    return error('Position is required');
+  if (seat === undefined || seat === null) {
+    return error('Seat is required');
   }
 
   if (!options || typeof options !== 'object') {
     return error('Options are required');
   }
 
-  const result = await session.updateSlotPlayerOptions(playerId, position, options);
+  const result = await session.updateSlotPlayerOptions(playerId, seat, options);
 
   if (result.success) {
     return success({ success: true, lobby: result.lobby });
