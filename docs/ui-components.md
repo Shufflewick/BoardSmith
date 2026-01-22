@@ -1127,6 +1127,219 @@ const customTheme: ThemeConfig = {
 applyTheme(customTheme);
 ```
 
+## Animation Events
+
+BoardSmith's animation event system enables game UIs to play back animations asynchronously while game state advances immediately. This is called the **soft continuation pattern** - the game doesn't wait for animations to complete before proceeding.
+
+### Key Concepts
+
+**Animation events are UI hints, NOT commands or state mutations.** The game state has already changed by the time the UI receives the animation event. The UI "catches up" visually while the game has moved on. This parallel channel approach means:
+
+- Game logic remains clean and synchronous
+- UI can skip or speed through animations without affecting game correctness
+- Reconnecting players see current state immediately (with optional animation replay)
+
+### Engine-Side: Emitting Events
+
+Use `game.emitAnimationEvent(type, data, options?)` to emit animation hints during action execution:
+
+```typescript
+// In action execute() or game logic
+execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
+  const damage = attacker.attack - target.defense;
+  target.health -= damage;
+
+  // Emit animation event - game state already changed!
+  this.emitAnimationEvent('combat', {
+    attackerId: attacker.id,
+    targetId: target.id,
+    damage,
+    outcome: target.health <= 0 ? 'kill' : 'hit',
+  });
+
+  if (target.health <= 0) {
+    target.putInto(this.graveyard);
+  }
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `type` | `string` | Event type identifier (e.g., 'combat', 'score', 'cardFlip') |
+| `data` | `Record<string, unknown>` | Event-specific payload (must be JSON-serializable - use element IDs, not references) |
+| `options` | `{ group?: string }` | Optional group ID for batching related events |
+
+**Grouped events** for complex sequences:
+
+```typescript
+execute({ attacker, targets }: { attacker: Combatant; targets: Combatant[] }) {
+  const groupId = `attack-${this.turnCount}`;
+
+  this.emitAnimationEvent('attack-start', { attackerId: attacker.id }, { group: groupId });
+
+  for (const target of targets) {
+    const damage = calculateDamage(attacker, target);
+    target.health -= damage;
+    this.emitAnimationEvent('damage', { targetId: target.id, damage }, { group: groupId });
+  }
+
+  this.emitAnimationEvent('attack-end', { attackerId: attacker.id }, { group: groupId });
+}
+```
+
+### UI-Side: Consuming Events
+
+The UI-side uses a composable pattern with provide/inject for component tree access.
+
+**Creating the instance (in GameShell or root component):**
+
+```typescript
+import { createAnimationEvents, provideAnimationEvents } from 'boardsmith/ui';
+
+const animationEvents = createAnimationEvents({
+  // Get events from player state (reactive getter)
+  events: () => state.value?.animationEvents,
+
+  // Acknowledge events when played back
+  acknowledge: (upToId) => {
+    session.acknowledgeAnimations(playerSeat, upToId);
+  },
+
+  // Optional: delay for events without handlers (useful for debugging)
+  defaultDuration: 0, // ms
+});
+
+// Provide to component tree
+provideAnimationEvents(animationEvents);
+```
+
+**Registering handlers (in game board components):**
+
+```typescript
+import { useAnimationEvents } from 'boardsmith/ui';
+
+const animations = useAnimationEvents();
+
+// Register handler - returns cleanup function
+const unregister = animations?.registerHandler('combat', async (event) => {
+  const { attackerId, targetId, damage, outcome } = event.data;
+
+  // Find DOM elements
+  const attackerEl = document.querySelector(`[data-combatant-id="${attackerId}"]`);
+  const targetEl = document.querySelector(`[data-combatant-id="${targetId}"]`);
+
+  // Play attack animation
+  await playAttackAnimation(attackerEl, targetEl);
+
+  // Show damage number
+  await showDamageNumber(targetEl, damage);
+
+  if (outcome === 'kill') {
+    await playDeathAnimation(targetEl);
+  }
+});
+
+// Clean up on unmount (optional - composable handles cleanup)
+onUnmounted(() => unregister?.());
+```
+
+**Composable API:**
+
+| Function | Description |
+|----------|-------------|
+| `createAnimationEvents(options)` | Create an animation events instance in root component |
+| `provideAnimationEvents(instance)` | Provide instance to component tree |
+| `useAnimationEvents()` | Inject animation events from ancestor |
+
+**Instance API:**
+
+| Property/Method | Type | Description |
+|-----------------|------|-------------|
+| `registerHandler(type, handler)` | `(string, (event) => Promise<void>) => () => void` | Register handler, returns cleanup function |
+| `isAnimating` | `Ref<boolean>` | Whether animations are currently playing |
+| `paused` | `Ref<boolean>` | Pause/resume control |
+| `skipAll()` | `() => void` | Skip remaining animations, acknowledge all |
+| `pendingCount` | `Ref<number>` | Number of pending events (for UI indicators) |
+
+### Integration with useAutoAnimations
+
+The `useAutoAnimations` composable supports declarative event handler registration via the `eventHandlers` option:
+
+```typescript
+import { useAutoAnimations } from 'boardsmith/ui';
+
+const { flyingElements } = useAutoAnimations({
+  gameView: () => props.gameView,
+  containers: [
+    { element: board, ref: boardRef, flipWithin: '[data-piece-id]' },
+  ],
+
+  // Register animation event handlers declaratively
+  eventHandlers: {
+    combat: async (event) => {
+      await playCombatAnimation(event.data);
+    },
+    score: async (event) => {
+      await playScoreAnimation(event.data);
+    },
+  },
+
+  // Required when using eventHandlers
+  animationEvents,
+});
+```
+
+This is the recommended approach for most games - it combines auto-animations with custom event handling in one place.
+
+### ActionController Integration
+
+The `useActionController` composable integrates with animation events to gate the ActionPanel on animation completion:
+
+```typescript
+const actionController = useActionController({
+  // ... other options ...
+  animationEvents, // Pass animation events instance for gating
+});
+
+// Available computed properties:
+// actionController.animationsPending - true when animations playing
+// actionController.showActionPanel - true when safe to show action UI
+```
+
+**showActionPanel** gates on three conditions:
+
+1. `isMyTurn` - It's this player's turn
+2. `!animationsPending` - No animations are currently playing
+3. `!pendingFollowUp` - No follow-up action pending
+
+This ensures players don't make decisions before seeing the results of previous actions.
+
+### Common Pitfalls
+
+**1. Forgetting to acknowledge events**
+
+Events accumulate in the buffer and replay on every state update if not acknowledged. Always pass the `acknowledge` callback to `createAnimationEvents()`.
+
+**2. Mutating event data in handlers**
+
+Event data is a shallow copy - nested objects share references. Don't modify `event.data` directly in handlers.
+
+**3. Not handling handler errors gracefully**
+
+Handler errors are logged but don't stop the processing chain. Design handlers defensively - one broken handler shouldn't break all animations.
+
+**4. Blocking entire UI on animations**
+
+Only gate decision-making (ActionPanel). Let players inspect the board, view history, etc. during animations.
+
+**5. Checking isMyTurn instead of showActionPanel**
+
+Custom UIs should use `showActionPanel` (which includes animation gating), not just `isMyTurn`. Otherwise, actions may be shown during animation playback.
+
+See [Nomenclature](./nomenclature.md) for animation event terminology definitions.
+
 ## Action Controller API
 
 The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It's provided via the `#game-board` slot and handles all action execution, wizard mode navigation, and auto-fill logic.
