@@ -2,7 +2,7 @@
  * Shared types for game hosting
  */
 
-import type { FlowState, SerializedAction, Game } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, AnimationEvent } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 
 // ============================================
@@ -413,6 +413,10 @@ export interface PlayerGameState {
   turnStartActionIndex?: number;
   /** Custom debug data from game's registerDebug() calls (optional, debug mode only) */
   customDebug?: Record<string, unknown>;
+  /** Animation events pending playback (from game buffer). Only present when events exist. */
+  animationEvents?: AnimationEvent[];
+  /** ID of the last animation event, for acknowledgment convenience. Only present when events exist. */
+  lastAnimationEventId?: number;
 }
 
 // ============================================
