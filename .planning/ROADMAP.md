@@ -60,11 +60,11 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 56-01-PLAN.md — Core engine: Player.position -> Player.seat
-- [ ] 56-02-PLAN.md — Session/client/server types update
-- [ ] 56-03-PLAN.md — UI components and composables update
-- [ ] 56-04-PLAN.md — Extracted games update (all 9 games)
-- [ ] 56-05-PLAN.md — Documentation and CLI templates update
+- [x] 56-01-PLAN.md — Core engine: Player.position -> Player.seat
+- [x] 56-02-PLAN.md — Session/client/server types update
+- [x] 56-03-PLAN.md — UI components and composables update
+- [x] 56-04-PLAN.md — Extracted games update (all 9 games)
+- [x] 56-05-PLAN.md — Documentation and CLI templates update
 
 **Success Criteria:**
 - Player API uses `seat` instead of `position`
@@ -116,7 +116,7 @@ Plans:
 |-------|------|--------------|--------|
 | 54 | Nomenclature Dictionary | 3 | Complete |
 | 55 | GameTable Rename | 4 | Complete |
-| 56 | Position → Seat | 4 | Not started |
+| 56 | Position → Seat | 4 | Complete |
 | 57 | Selection → Pick | 4 | Not started |
 | 58 | Documentation Audit | 4 | Not started |
 

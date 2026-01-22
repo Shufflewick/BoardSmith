@@ -20,10 +20,10 @@
 
 ### API Rename - Seat (SEAT)
 
-- [ ] **SEAT-01**: Rename `position` → `seat` in Player class/types
-- [ ] **SEAT-02**: Update all internal references to player position
-- [ ] **SEAT-03**: Update documentation references to position
-- [ ] **SEAT-04**: Update extracted games that reference player position
+- [x] **SEAT-01**: Rename `position` → `seat` in Player class/types
+- [x] **SEAT-02**: Update all internal references to player position
+- [x] **SEAT-03**: Update documentation references to position
+- [x] **SEAT-04**: Update extracted games that reference player position
 
 ### API Rename - Pick (PICK)
 
@@ -58,10 +58,10 @@
 | UI-02 | Phase 55 | Complete |
 | UI-03 | Phase 55 | Complete |
 | UI-04 | Phase 55 | Complete |
-| SEAT-01 | Phase 56 | Pending |
-| SEAT-02 | Phase 56 | Pending |
-| SEAT-03 | Phase 56 | Pending |
-| SEAT-04 | Phase 56 | Pending |
+| SEAT-01 | Phase 56 | Complete |
+| SEAT-02 | Phase 56 | Complete |
+| SEAT-03 | Phase 56 | Complete |
+| SEAT-04 | Phase 56 | Complete |
 | PICK-01 | Phase 57 | Pending |
 | PICK-02 | Phase 57 | Pending |
 | PICK-03 | Phase 57 | Pending |
