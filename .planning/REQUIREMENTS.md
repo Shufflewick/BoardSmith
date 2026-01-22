@@ -72,11 +72,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SES-02 | Phase 60 | Complete |
 | SES-03 | Phase 60 | Complete |
 | SES-04 | Phase 60 | Complete |
-| UI-01 | Phase 61 | Pending |
-| UI-02 | Phase 61 | Pending |
-| UI-03 | Phase 61 | Pending |
-| UI-04 | Phase 61 | Pending |
-| UI-05 | Phase 61 | Pending |
+| UI-01 | Phase 61 | Complete |
+| UI-02 | Phase 61 | Complete |
+| UI-03 | Phase 61 | Complete |
+| UI-04 | Phase 61 | Complete |
+| UI-05 | Phase 61 | Complete |
 | UI-06 | Phase 62 | Pending |
 | UI-07 | Phase 62 | Pending |
 | UI-08 | Phase 62 | Pending |
