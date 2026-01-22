@@ -62,24 +62,96 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
 ### Rolling Dice
 
-Dice are rolled by setting their values randomly:
+Use the `roll()` method to roll dice. It:
+- Uses `game.random()` internally (seeded, reproducible)
+- Increments `rollCount` to trigger UI animations
+- Returns the rolled value
 
 ```typescript
 const rollAction = Action.create('roll')
   .prompt('Roll all dice')
   .execute((args, ctx) => {
     const dice = ctx.game.shelf.all(MyDie);
+    let total = 0;
     for (const die of dice) {
-      die.value = Math.floor(Math.random() * die.sides) + 1;
+      const rolled = die.roll();  // Returns value, triggers animation
+      total += rolled;
     }
+    ctx.game.message(`Rolled ${total}!`);
+    return { success: true };
   });
 ```
 
-For D10s that can show 0:
+For a single die:
 ```typescript
-// D10 can be 0-9 or 1-10 depending on game rules
-die.value = Math.floor(Math.random() * 10);  // 0-9
-die.value = Math.floor(Math.random() * 10) + 1;  // 1-10
+const die = ctx.game.shelf.first(Die);
+const rolled = die.roll();  // Returns 1-6 for d6
+ctx.game.message(`You rolled a ${rolled}!`);
+```
+
+### Common Mistakes
+
+#### Mistake 1: Calling roll() but ignoring the return value
+
+```typescript
+// WRONG - value is lost, you can't know what was rolled
+die.roll();
+game.message(`Rolled... something?`);
+
+// CORRECT - capture the returned value
+const rolled = die.roll();
+game.message(`Rolled ${rolled}!`);
+```
+
+#### Mistake 2: Using Math.random() instead of roll()
+
+```typescript
+// WRONG - not seeded, breaks replay and determinism
+const value = Math.floor(Math.random() * 6) + 1;
+die.setValue(value);
+
+// CORRECT - roll() is seeded and returns the value
+const value = die.roll();
+```
+
+#### Mistake 3: Calling both roll() and setValue()
+
+```typescript
+// WRONG - roll() already set a value, then you overwrite it
+// This causes the die to briefly show one value, then change
+die.roll();
+die.setValue(someOtherValue);
+
+// CORRECT - use one or the other based on intent
+const rolled = die.roll();  // For normal random rolling
+
+// OR for abilities that set specific values:
+die.setValue(6);  // "Set die to maximum"
+die.setValue(die.getOpposite());  // "Flip to opposite face"
+```
+
+#### Die Methods
+
+| Method | Description |
+|--------|-------------|
+| `roll()` | Roll and return value (uses seeded random, triggers animation) |
+| `setValue(n)` | Set to specific value (for abilities like "flip to opposite") |
+| `getOpposite()` | Get the opposite face value |
+
+#### Important: Never use Math.random()
+
+```typescript
+// WRONG - breaks determinism and replay!
+die.value = Math.floor(Math.random() * die.sides) + 1;
+
+// CORRECT - use the roll() method
+const rolled = die.roll();
+```
+
+For other randomness needs (not dice), use `game.random()`:
+```typescript
+// Seeded random 0-1 (like Math.random but reproducible)
+const randomIndex = Math.floor(game.random() * array.length);
 ```
 
 ## 3D Dice UI
@@ -135,14 +207,23 @@ Style dice using CSS variables:
 
 ### Roll Animations
 
-The Die3D component automatically animates when the value changes:
+The Die3D component animates when `rollCount` changes. The `roll()` method automatically increments this, so animations happen automatically when you call `die.roll()`.
 
-```typescript
-// In your game board component
-watch(() => props.gameView.dice, (newDice) => {
-  // Die3D components will automatically animate to new values
-}, { deep: true });
+Pass `rollCount` to the Die3D component:
+
+```vue
+<Die3D
+  :die-id="die.id"
+  :sides="die.attributes.sides"
+  :value="die.attributes.value"
+  :roll-count="die.attributes.rollCount"
+  :size="80"
+/>
 ```
+
+The animation is triggered by changes to `rollCount`, not `value`. This ensures:
+- Rolling to the same value still animates
+- Setting a value directly (like for abilities) doesn't animate
 
 ### Zoom Preview
 
@@ -176,17 +257,17 @@ type MyAbility = 'reroll' | 'flip' | 'bonus' | 'skip';
 class MyPlayer extends Player<MyGame, MyPlayer> {
   abilities = new AbilityManager<MyAbility>();
 
-  constructor(position: number, name: string) {
-    super(position, name);
+  constructor(seat: number, name: string) {
+    super(seat, name);
     // Give each player a starting ability
     this.abilities.add('reroll', 'starting');
   }
 
-  override toJSON(): Record<string, unknown> {
-    return {
-      ...super.toJSON(),
-      abilities: this.abilities.toJSON(),
-    };
+  // Override needed for AbilityManager because it has its own toJSON() method
+  override toJSON() {
+    const json = super.toJSON();
+    json.attributes.abilities = this.abilities.toJSON();
+    return json;
   }
 }
 ```
@@ -355,8 +436,8 @@ class DiceGamePlayer extends Player<DiceGame, DiceGamePlayer> {
   scoreTrack: MonotonicTrack;
   bonusTrack: CounterTrack;
 
-  constructor(position: number, name: string) {
-    super(position, name);
+  constructor(seat: number, name: string) {
+    super(seat, name);
 
     // Initialize ability manager
     this.abilities = new AbilityManager<PowerUp>();
@@ -383,14 +464,14 @@ class DiceGamePlayer extends Player<DiceGame, DiceGamePlayer> {
     return this.scoreTrack.calculatePoints() + this.bonusTrack.calculatePoints();
   }
 
-  override toJSON(): Record<string, unknown> {
-    return {
-      ...super.toJSON(),
-      totalScore: this.totalScore,
-      abilities: this.abilities.toJSON(),
-      scoreTrack: this.scoreTrack.toJSON(),
-      bonusTrack: this.bonusTrack.toJSON(),
-    };
+  // Override needed for objects with toJSON() methods (AbilityManager, tracks)
+  override toJSON() {
+    const json = super.toJSON();
+    json.attributes.totalScore = this.totalScore;
+    json.attributes.abilities = this.abilities.toJSON();
+    json.attributes.scoreTrack = this.scoreTrack.toJSON();
+    json.attributes.bonusTrack = this.bonusTrack.toJSON();
+    return json;
   }
 }
 ```
