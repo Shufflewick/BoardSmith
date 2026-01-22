@@ -99,6 +99,23 @@ hand.contentsVisibleToOwner();   // Only owner sees
 board.contentsVisible();         // Everyone sees
 ```
 
+### 5. Players and Seats
+
+Each player has a **seat** (1-indexed position at the table):
+
+```typescript
+// Access player's seat
+player.seat  // 1, 2, 3, etc.
+
+// Create per-player elements
+const hand = game.create(Hand, `hand-${player.seat}`);
+
+// UI receives playerSeat prop
+<GameTable :player-seat="playerSeat" />
+```
+
+**Note**: `player.seat` is 1-indexed (Seat 1, Seat 2). Use for display and element naming.
+
 ## Creating a Game
 
 ### 1. Initialize Project
@@ -393,27 +410,19 @@ User Action → Action System → Commands → State Change
 
 ## Common Pitfalls
 
-### Custom Player Properties Not Showing in UI
+### Custom Player Properties - Auto-Serialization
 
-If your custom Player class has properties (score, abilities, etc.) that aren't appearing in the UI, you need to override `toJSON()`:
+Public properties on Player (and all GameElements) are **automatically serialized** to the game view:
 
 ```typescript
 export class MyPlayer extends Player<MyGame, MyPlayer> {
-  score: number = 0;
-  abilities: Record<string, number> = { reroll: 1 };
-
-  // REQUIRED: Include custom properties in serialization
-  override toJSON(): Record<string, unknown> {
-    return {
-      ...super.toJSON(),
-      score: this.score,
-      abilities: this.abilities,
-    };
-  }
+  score: number = 0;  // Automatically appears in gameView
+  abilities: Record<string, number> = { reroll: 1 };  // Automatically serialized
+  _privateData: string = '';  // NOT serialized (underscore prefix)
 }
 ```
 
-The base `Player.toJSON()` only serializes `position`, `name`, `color`, `avatar`.
+You do NOT need to override `toJSON()` for simple properties. The UI accesses them via `player.attributes.score`.
 
 ### PlayerCollection Array Subclass Gotcha
 
