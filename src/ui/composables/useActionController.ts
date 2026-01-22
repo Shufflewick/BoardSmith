@@ -1405,6 +1405,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return result;
   }
 
+  // === Animation Gating ===
+  // Gates action panel on animation completion (soft continuation pattern)
+
+  const animationsPending = computed((): boolean => {
+    return options.animationEvents?.isAnimating.value ?? false;
+  });
+
+  const showActionPanel = computed((): boolean => {
+    // Show when:
+    // 1. It's my turn
+    // 2. No animations pending
+    // 3. No followUp action pending
+    return isMyTurn.value && !animationsPending.value && !pendingFollowUp.value;
+  });
+
   return {
     // State
     currentAction,
@@ -1443,6 +1458,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Hook registration (for GameShell users who can't pass options at creation)
     registerBeforeAutoExecute,
+
+    // Animation gating (soft continuation pattern)
+    animationsPending,       // True when animations are playing
+    showActionPanel,         // True when safe to show action UI (turn + no animations + no followUp)
   };
 }
 

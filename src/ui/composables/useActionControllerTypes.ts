@@ -7,6 +7,7 @@
 
 import type { Ref, ComputedRef } from 'vue';
 import type { GameElement } from '../types.js';
+import type { UseAnimationEventsReturn } from './useAnimationEvents.js';
 
 // Re-export GameElement as GameViewElement for external use
 export type { GameElement as GameViewElement };
@@ -286,6 +287,12 @@ export interface UseActionControllerOptions {
     actionName: string,
     args: Record<string, unknown>
   ) => void | Promise<void>;
+  /**
+   * Animation events instance for animation-gated action panel.
+   * When provided, animationsPending and showActionPanel become functional.
+   * If not provided, animationsPending is always false and showActionPanel equals isMyTurn.
+   */
+  animationEvents?: UseAnimationEventsReturn;
 }
 
 /** State for repeating selections */
@@ -416,4 +423,19 @@ export interface UseActionControllerReturn {
   registerBeforeAutoExecute: (
     hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
   ) => void;
+
+  // === Animation Gating ===
+  /**
+   * Whether animations are currently pending/playing.
+   * True when animationEvents.isAnimating is true.
+   * Always false if animationEvents not provided.
+   */
+  animationsPending: ComputedRef<boolean>;
+
+  /**
+   * Whether to show the action panel to the user.
+   * True when: isMyTurn && !animationsPending && !pendingFollowUp
+   * Use this to gate ActionPanel visibility/interactivity.
+   */
+  showActionPanel: ComputedRef<boolean>;
 }
