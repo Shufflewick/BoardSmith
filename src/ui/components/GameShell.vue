@@ -112,7 +112,7 @@ const gamePlayerOptions = ref<Record<string, unknown> | undefined>(undefined);
 
 // Game state
 const gameId = ref<string | null>(null);
-const playerPosition = ref<number>(0);
+const playerSeat = ref<number>(0);
 
 // UI state
 const historyCollapsed = ref(false);
@@ -149,7 +149,7 @@ audioService.init({
 const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGame(
   client,
   gameId,
-  { playerPosition }
+  { playerSeat }
 );
 
 // Action metadata for auto-UI (selections, choices)
@@ -165,7 +165,7 @@ const availableActions = computed(() => {
   // Check awaitingPlayers for simultaneous actions
   if (flowState.awaitingPlayers?.length > 0) {
     const myPlayerState = flowState.awaitingPlayers.find(
-      (p: { playerIndex: number }) => p.playerIndex === playerPosition.value
+      (p: { playerIndex: number }) => p.playerIndex === playerSeat.value
     );
     if (myPlayerState && !myPlayerState.completed) {
       return myPlayerState.availableActions || [];
@@ -198,7 +198,7 @@ const actionController = useActionController({
   actionMetadata,
   isMyTurn,
   gameView,
-  playerPosition,
+  playerSeat,
   // Use autoEndTurn ref for both autoFill and autoExecute
   // When auto mode is OFF, user must manually select each option even if only one choice
   autoFill: autoEndTurn,
@@ -261,12 +261,12 @@ const gameMessages = computed(() => {
 
 // Computed properties derived from game view
 const players = computed(() => state.value?.state.players || []);
-const myPlayer = computed(() => players.value.find(p => p.position === playerPosition.value));
-const opponentPlayers = computed(() => players.value.filter(p => p.position !== playerPosition.value));
+const myPlayer = computed(() => players.value.find(p => p.seat === playerSeat.value));
+const opponentPlayers = computed(() => players.value.filter(p => p.seat !== playerSeat.value));
 const currentPlayerName = computed(() => {
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return '';
-  const player = players.value.find(p => p.position === currentPos);
+  const player = players.value.find(p => p.seat === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
 
@@ -289,7 +289,7 @@ async function handleUndo(): Promise<void> {
     const response = await fetch(`${props.apiUrl}/games/${gameId.value}/undo`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player: playerPosition.value }),
+      body: JSON.stringify({ player: playerSeat.value }),
     });
     const result = await response.json();
     if (!result.success) {
@@ -331,7 +331,7 @@ provide('gameState', state);
 provide('gameView', gameView);
 provide('players', players);
 provide('myPlayer', myPlayer);
-provide('playerPosition', playerPosition);
+provide('playerSeat', playerSeat);
 provide('isMyTurn', isMyTurn);
 provide('availableActions', availableActions);
 provide('actionArgs', actionArgs);
@@ -357,7 +357,7 @@ onMounted(async () => {
     const urlGameId = gameMatch[1];
     const urlPosition = gameMatch[2] ? parseInt(gameMatch[2], 10) : 0;
 
-    playerPosition.value = urlPosition;
+    playerSeat.value = urlPosition;
     setTimeout(() => {
       gameId.value = urlGameId;
       currentScreen.value = 'game';
@@ -379,7 +379,7 @@ onMounted(async () => {
         // Game already started - find our position and go to game
         const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
         if (mySlot) {
-          playerPosition.value = mySlot.position;
+          playerSeat.value = mySlot.position;
           gameId.value = urlGameId;
           currentScreen.value = 'game';
           updateUrl(urlGameId, mySlot.position);
@@ -397,7 +397,7 @@ onMounted(async () => {
       // Check if we have a claimed slot
       const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
       if (mySlot) {
-        playerPosition.value = mySlot.position;
+        playerSeat.value = mySlot.position;
       }
 
       lobbyInfo.value = lobby;
@@ -489,7 +489,7 @@ async function createGame(config?: LobbyConfig) {
 
     if (result.success && result.gameId) {
       createdGameId.value = result.gameId;
-      playerPosition.value = 0;
+      playerSeat.value = 0;
       isCreator.value = true;
 
       if (result.lobby) {
@@ -526,7 +526,7 @@ function connectToLobby(gid: string) {
   const connection = new GameConnection(props.apiUrl, {
     gameId: gid,
     playerId: playerId.value,
-    playerPosition: playerPosition.value,
+    playerPosition: playerSeat.value,
     autoReconnect: true,
   });
 
@@ -545,12 +545,12 @@ function connectToLobby(gid: string) {
       // Find my position from the lobby slots
       const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
       if (mySlot) {
-        playerPosition.value = mySlot.position;
+        playerSeat.value = mySlot.position;
       }
 
       gameId.value = gid;
       currentScreen.value = 'game';
-      updateUrl(gid, playerPosition.value);
+      updateUrl(gid, playerSeat.value);
     }
   });
 
@@ -620,7 +620,7 @@ async function joinGame() {
 
             // Check if game started (all slots filled)
             if (claimResult.lobby.state === 'playing') {
-              playerPosition.value = firstOpenSlot.position;
+              playerSeat.value = firstOpenSlot.position;
               gameId.value = gid;
               currentScreen.value = 'game';
               updateUrl(gid, firstOpenSlot.position);
@@ -651,7 +651,7 @@ async function joinGame() {
     const stateResult = await client.getGameState(gid, 1);
 
     if (stateResult) {
-      playerPosition.value = 1;
+      playerSeat.value = 1;
       await new Promise(resolve => setTimeout(resolve, 10));
       gameId.value = gid;
       currentScreen.value = 'game';
@@ -684,7 +684,7 @@ async function handleClaimPosition(position: number, name: string) {
       // If game started, transition
       if (result.lobby.state === 'playing') {
         disconnectFromLobby();
-        playerPosition.value = position;
+        playerSeat.value = position;
         gameId.value = createdGameId.value;
         currentScreen.value = 'game';
         updateUrl(createdGameId.value, position);
@@ -727,12 +727,12 @@ async function handleSetReady(ready: boolean) {
         // Find my position from the lobby slots
         const mySlot = result.lobby.slots.find(s => s.playerId === playerId.value);
         if (mySlot) {
-          playerPosition.value = mySlot.position;
+          playerSeat.value = mySlot.position;
         }
 
         gameId.value = createdGameId.value;
         currentScreen.value = 'game';
-        updateUrl(createdGameId.value, playerPosition.value);
+        updateUrl(createdGameId.value, playerSeat.value);
       }
     } else {
       console.error('Failed to set ready:', result.error);
@@ -902,7 +902,7 @@ function leaveGame() {
 
 // Debug panel handlers
 function handleSwitchPlayer(position: number) {
-  playerPosition.value = position;
+  playerSeat.value = position;
   if (gameId.value) {
     updateUrl(gameId.value, position);
   }
@@ -952,7 +952,7 @@ defineExpose({
   gameView,
   players,
   myPlayer,
-  playerPosition,
+  playerSeat,
   isMyTurn,
   availableActions,
   action,
@@ -1042,8 +1042,8 @@ if ((import.meta as any).hot) {
         <aside class="game-shell__sidebar">
           <PlayersPanel
             :players="players"
-            :player-position="playerPosition"
-            :current-player-position="state?.state.currentPlayer"
+            :player-seat="playerSeat"
+            :current-player-seat="state?.state.currentPlayer"
           >
             <template #player-stats="{ player }">
               <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>
@@ -1080,7 +1080,7 @@ if ((import.meta as any).hot) {
                 :game-view="gameView"
                 :players="players"
                 :my-player="myPlayer"
-                :player-position="playerPosition"
+                :player-seat="playerSeat"
                 :is-my-turn="isMyTurn"
                 :available-actions="availableActions"
                 :action-args="actionArgs"
@@ -1103,7 +1103,7 @@ if ((import.meta as any).hot) {
           :available-actions="isViewingHistory ? [] : availableActions"
           :action-metadata="isViewingHistory ? {} : actionMetadata"
           :players="players"
-          :player-position="playerPosition"
+          :player-seat="playerSeat"
           :is-my-turn="isMyTurn && !isViewingHistory"
           :can-undo="canUndo && !isViewingHistory"
           :auto-end-turn="autoEndTurn"
@@ -1121,7 +1121,7 @@ if ((import.meta as any).hot) {
       <DebugPanel
         v-if="debugMode"
         :state="state"
-        :player-position="playerPosition"
+        :player-seat="playerSeat"
         :player-count="playerCount"
         :game-id="gameId"
         :api-url="apiUrl"

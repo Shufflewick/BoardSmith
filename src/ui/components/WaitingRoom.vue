@@ -298,10 +298,10 @@ function getPlayerOptionChoices(opt: PlayerOptionDefinition): Array<{ value: str
 /**
  * Get values taken by OTHER players for a given option key
  */
-function getTakenValues(playerPosition: number, key: string): Set<string> {
+function getTakenValues(playerSeat: number, key: string): Set<string> {
   const takenValues = new Set<string>();
   for (const slot of props.lobby.slots) {
-    if (slot.position !== playerPosition && slot.playerOptions) {
+    if (slot.position !== playerSeat && slot.playerOptions) {
       const val = slot.playerOptions[key];
       if (val !== undefined) {
         takenValues.add(String(val));
@@ -314,8 +314,8 @@ function getTakenValues(playerPosition: number, key: string): Set<string> {
 /**
  * Check if a choice is taken by another player
  */
-function isChoiceTaken(playerPosition: number, key: string, choiceValue: string): boolean {
-  return getTakenValues(playerPosition, key).has(choiceValue);
+function isChoiceTaken(playerSeat: number, key: string, choiceValue: string): boolean {
+  return getTakenValues(playerSeat, key).has(choiceValue);
 }
 
 /**

@@ -214,8 +214,8 @@ interface ActionTrace {
 interface DebugPanelProps {
   /** Current game state (raw) */
   state: any;
-  /** Current player position */
-  playerPosition: number;
+  /** Current player seat */
+  playerSeat: number;
   /** Total number of players */
   playerCount: number;
   /** Game ID */
@@ -459,7 +459,7 @@ async function fetchActionTraces() {
   tracesError.value = null;
 
   try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/action-traces?player=${props.playerPosition}`);
+    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/action-traces?player=${props.playerSeat}`);
     const data = await response.json();
 
     if (!data.success) {
@@ -1157,10 +1157,10 @@ async function fetchStateAtAction(actionIndex: number) {
   try {
     // Fetch state and diff in parallel
     const [stateResponse, diffResponse] = await Promise.all([
-      fetch(`${props.apiUrl}/games/${props.gameId}/state-at/${actionIndex}?player=${props.playerPosition}`),
+      fetch(`${props.apiUrl}/games/${props.gameId}/state-at/${actionIndex}?player=${props.playerSeat}`),
       // Diff from previous action to this action (what changed to get here)
       actionIndex > 0
-        ? fetch(`${props.apiUrl}/games/${props.gameId}/state-diff/${actionIndex - 1}/${actionIndex}?player=${props.playerPosition}`)
+        ? fetch(`${props.apiUrl}/games/${props.gameId}/state-diff/${actionIndex - 1}/${actionIndex}?player=${props.playerSeat}`)
         : Promise.resolve(null),
     ]);
 
@@ -1958,7 +1958,7 @@ const displayedState = computed(() => {
                 v-for="i in playerCount"
                 :key="i - 1"
                 @click="switchToPlayer(i - 1)"
-                :class="{ active: playerPosition === i - 1 }"
+                :class="{ active: playerSeat === i - 1 }"
                 class="debug-btn"
               >
                 Player {{ i }}

@@ -6,7 +6,7 @@
  */
 
 export interface Player {
-  position: number;
+  seat: number;
   name: string;
   color?: string;
 }
@@ -14,10 +14,10 @@ export interface Player {
 defineProps<{
   /** Array of players in the game */
   players: Player[];
-  /** Current player's position (the viewer) */
-  playerPosition: number;
-  /** Position of the player whose turn it is */
-  currentPlayerPosition?: number;
+  /** Current player's seat (the viewer) */
+  playerSeat: number;
+  /** Seat of the player whose turn it is */
+  currentPlayerSeat?: number;
 }>();
 
 defineSlots<{
@@ -30,15 +30,15 @@ defineSlots<{
   <div class="players-panel">
     <div
       v-for="player in players"
-      :key="player.position"
+      :key="player.seat"
       class="player-card"
-      :class="{ current: player.position === currentPlayerPosition }"
+      :class="{ current: player.seat === currentPlayerSeat }"
     >
       <div class="player-name-row">
-        <span v-if="player.position === currentPlayerPosition" class="turn-indicator-dot"></span>
+        <span v-if="player.seat === currentPlayerSeat" class="turn-indicator-dot"></span>
         <span class="player-name">{{ player.name }}</span>
         <span v-if="player.color" class="player-color" :style="{ backgroundColor: player.color }"></span>
-        <span v-if="player.position === playerPosition" class="you-badge">(You)</span>
+        <span v-if="player.seat === playerSeat" class="you-badge">(You)</span>
       </div>
       <slot name="player-stats" :player="player"></slot>
     </div>
