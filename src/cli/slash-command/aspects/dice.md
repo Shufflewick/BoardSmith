@@ -77,7 +77,7 @@ import { Die3D, findElements, getPlayerAttribute, type UseActionControllerReturn
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -92,12 +92,12 @@ const dice = computed(() => {
 // Access custom player attributes from the element tree
 // NOTE: gameView.players is for display only (names, basic info)
 // For custom attributes, use getPlayerAttribute() which searches the element tree
-const myScore = computed(() => getPlayerAttribute(props.gameView, props.playerPosition, 'score', 0));
+const myScore = computed(() => getPlayerAttribute(props.gameView, props.playerSeat, 'score', 0));
 
 // Game over detection - check isFinished property (NOT a method call)
 const isGameOver = computed(() => props.gameView?.isFinished ?? false);
 const winners = computed(() => props.gameView?.settings?.winners ?? []);
-const didIWin = computed(() => winners.value.includes(props.playerPosition));
+const didIWin = computed(() => winners.value.includes(props.playerSeat));
 
 // Check if roll action is available
 const canRoll = computed(() => props.availableActions.includes('roll'));

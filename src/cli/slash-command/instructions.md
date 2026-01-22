@@ -707,7 +707,7 @@ Props available from GameShell:
 ```typescript
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -755,11 +755,11 @@ const score = gameView.players[0]?.myCustomAttribute;  // undefined!
 
 // CORRECT - use getPlayerAttribute() to search the element tree
 import { getPlayerAttribute } from 'boardsmith/ui';
-const score = getPlayerAttribute(gameView, playerPosition, 'score', 0);
-const customProp = getPlayerAttribute(gameView, playerPosition, 'myCustomAttribute', defaultValue);
+const score = getPlayerAttribute(gameView, playerSeat, 'score', 0);
+const customProp = getPlayerAttribute(gameView, playerSeat, 'myCustomAttribute', defaultValue);
 ```
 
-**Game Over State:** Use `gameView.isFinished` (boolean property, NOT a method call). Winners are in `gameView.settings.winners` (array of player positions).
+**Game Over State:** Use `gameView.isFinished` (boolean property, NOT a method call). Winners are in `gameView.settings.winners` (array of player seats).
 
 ```vue
 <script setup lang="ts">
@@ -769,7 +769,7 @@ import { Die3D, findElements, getPlayerAttribute, type UseActionControllerReturn
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -788,16 +788,16 @@ const die = computed(() => dice.value[0] ?? null);
 // Access custom player attributes from the element tree
 // CORRECT: Use getPlayerAttribute() which searches the element tree
 // WRONG: gameView.players[i].customProp - this is undefined!
-const myScore = computed(() => getPlayerAttribute(props.gameView, props.playerPosition, 'score', 0));
+const myScore = computed(() => getPlayerAttribute(props.gameView, props.playerSeat, 'score', 0));
 
 // Game over detection
 // CORRECT: Check isFinished property (serialized boolean)
 // WRONG: gameView.isFinished() - don't call it as a method
 const isGameOver = computed(() => props.gameView?.isFinished ?? false);
 
-// Winners are stored in settings.winners as player positions
+// Winners are stored in settings.winners as player seats
 const winners = computed(() => props.gameView?.settings?.winners ?? []);
-const didIWin = computed(() => winners.value.includes(props.playerPosition));
+const didIWin = computed(() => winners.value.includes(props.playerSeat));
 
 // Check if roll action is available
 const canRoll = computed(() => props.availableActions.includes('roll'));
@@ -913,7 +913,7 @@ import type { UseActionControllerReturn } from 'boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -923,7 +923,7 @@ const props = defineProps<{
 const myHand = computed(() => {
   if (!props.gameView) return [];
   const players = props.gameView.children?.filter((c: any) => c.className?.includes('Player'));
-  const myPlayer = players?.[props.playerPosition];
+  const myPlayer = players?.[props.playerSeat];
   const hand = myPlayer?.children?.find((c: any) => c.className === 'Hand');
   return hand?.children || [];
 });
@@ -1174,7 +1174,7 @@ import { Die3D, findElements, getPlayerAttribute, type UseActionControllerReturn
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -1189,12 +1189,12 @@ const dice = computed(() => {
 // Access custom player attributes from the element tree
 // NOTE: gameView.players is for display only (names, basic info)
 // For custom attributes, use getPlayerAttribute() which searches the element tree
-const myScore = computed(() => getPlayerAttribute(props.gameView, props.playerPosition, 'score', 0));
+const myScore = computed(() => getPlayerAttribute(props.gameView, props.playerSeat, 'score', 0));
 
 // Game over detection - check isFinished property (NOT a method call)
 const isGameOver = computed(() => props.gameView?.isFinished ?? false);
 const winners = computed(() => props.gameView?.settings?.winners ?? []);
-const didIWin = computed(() => winners.value.includes(props.playerPosition));
+const didIWin = computed(() => winners.value.includes(props.playerSeat));
 
 // Check if roll action is available
 const canRoll = computed(() => props.availableActions.includes('roll'));
@@ -1346,7 +1346,7 @@ export class MyGame extends Game<MyGame, MyPlayer> {
 
     // Create player hands and deal
     for (const player of this.players) {
-      player.hand = this.create(Hand, `hand-${player.position}`);
+      player.hand = this.create(Hand, `hand-${player.seat}`);
       player.hand.player = player;
       player.hand.contentsVisibleToOwner();
     }
@@ -1441,7 +1441,7 @@ import { findElements, getSuitSymbol, getSuitColor, type UseActionControllerRetu
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -1451,7 +1451,7 @@ const props = defineProps<{
 const myHand = computed(() => {
   if (!props.gameView) return [];
   const hands = findElements(props.gameView, { className: 'Hand' });
-  const myHandElement = hands.find(h => h.attributes?.player?.position === props.playerPosition);
+  const myHandElement = hands.find(h => h.attributes?.player?.seat === props.playerSeat);
   return myHandElement?.children ?? [];
 });
 
@@ -1738,7 +1738,7 @@ export function createPlaceStoneAction(game: MyGame): ActionDefinition {
       const cell = currentGame.board.all(Cell).find(c => c.id === cellArg.id);
       if (!cell) return { success: false };
 
-      cell.create(Stone, `stone-${ctx.player.position}-${Date.now()}`, {
+      cell.create(Stone, `stone-${ctx.player.seat}-${Date.now()}`, {
         player: ctx.player,
       });
 
@@ -1757,7 +1757,7 @@ import { findElements, hexToPixel, getHexPolygonPoints, type UseActionController
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -1796,8 +1796,8 @@ function getCellStone(cell: any) {
 }
 
 // Get player color
-function getPlayerColor(playerPosition: number) {
-  return playerPosition === 1 ? '#e74c3c' : '#3498db';
+function getPlayerColor(playerSeat: number) {
+  return playerSeat === 1 ? '#e74c3c' : '#3498db';
 }
 
 // Check if cell is playable
@@ -1844,7 +1844,7 @@ const isGameOver = computed(() => props.gameView?.isFinished ?? false);
             :cx="getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).x"
             :cy="getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).y"
             :r="HEX_SIZE * 0.6"
-            :fill="getPlayerColor(getCellStone(cell).attributes?.player?.position)"
+            :fill="getPlayerColor(getCellStone(cell).attributes?.player?.seat)"
             class="stone"
           />
         </g>
@@ -2012,7 +2012,7 @@ export function createPlacePieceAction(game: MyGame): ActionDefinition {
       const cell = currentGame.board.all(Cell).find(c => c.id === cellArg.id);
       if (!cell) return { success: false };
 
-      cell.create(Piece, `piece-${ctx.player.position}-${Date.now()}`, {
+      cell.create(Piece, `piece-${ctx.player.seat}-${Date.now()}`, {
         player: ctx.player,
       });
 
@@ -2065,7 +2065,7 @@ import { findElements, toAlgebraicNotation, type UseActionControllerReturn } fro
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -2086,8 +2086,8 @@ function getCellPiece(cell: any) {
 }
 
 // Get player color
-function getPlayerColor(playerPosition: number) {
-  return playerPosition === 1 ? '#e74c3c' : '#3498db';
+function getPlayerColor(playerSeat: number) {
+  return playerSeat === 1 ? '#e74c3c' : '#3498db';
 }
 
 // Check available actions
@@ -2121,7 +2121,7 @@ function handleCellClick(cell: any) {
 
     if (!pendingAction) {
       // Start move by selecting a piece
-      if (piece && piece.attributes?.player?.position === props.playerPosition) {
+      if (piece && piece.attributes?.player?.seat === props.playerSeat) {
         props.actionController.start('move');
         props.actionController.fill('piece', piece.id);
       }
@@ -2170,7 +2170,7 @@ const isGameOver = computed(() => props.gameView?.isFinished ?? false);
             v-if="getCellPiece(cell)"
             class="piece"
             :style="{
-              backgroundColor: getPlayerColor(getCellPiece(cell).attributes?.player?.position),
+              backgroundColor: getPlayerColor(getCellPiece(cell).attributes?.player?.seat),
             }"
           />
 

@@ -99,7 +99,7 @@ export function createPlacePieceAction(game: MyGame): ActionDefinition {
       const cell = currentGame.board.all(Cell).find(c => c.id === cellArg.id);
       if (!cell) return { success: false };
 
-      cell.create(Piece, `piece-${ctx.player.position}-${Date.now()}`, {
+      cell.create(Piece, `piece-${ctx.player.seat}-${Date.now()}`, {
         player: ctx.player,
       });
 
@@ -152,7 +152,7 @@ import { findElements, toAlgebraicNotation, type UseActionControllerReturn } fro
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -173,8 +173,8 @@ function getCellPiece(cell: any) {
 }
 
 // Get player color
-function getPlayerColor(playerPosition: number) {
-  return playerPosition === 1 ? '#e74c3c' : '#3498db';
+function getPlayerColor(playerSeat: number) {
+  return playerSeat === 1 ? '#e74c3c' : '#3498db';
 }
 
 // Check available actions
@@ -208,7 +208,7 @@ function handleCellClick(cell: any) {
 
     if (!pendingAction) {
       // Start move by selecting a piece
-      if (piece && piece.attributes?.player?.position === props.playerPosition) {
+      if (piece && piece.attributes?.player?.seat === props.playerSeat) {
         props.actionController.start('move');
         props.actionController.fill('piece', piece.id);
       }
@@ -257,7 +257,7 @@ const isGameOver = computed(() => props.gameView?.isFinished ?? false);
             v-if="getCellPiece(cell)"
             class="piece"
             :style="{
-              backgroundColor: getPlayerColor(getCellPiece(cell).attributes?.player?.position),
+              backgroundColor: getPlayerColor(getCellPiece(cell).attributes?.player?.seat),
             }"
           />
 

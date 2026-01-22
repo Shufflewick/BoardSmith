@@ -131,12 +131,12 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
     this.setFlow(createGameFlow(this));
   }
 
-  protected override createPlayer(position: number, name: string): ${pascal}Player {
-    return new ${pascal}Player(position, name, this);
+  protected override createPlayer(seat: number, name: string): ${pascal}Player {
+    return new ${pascal}Player(seat, name, this);
   }
 
   getPlayerHand(player: ${pascal}Player): Hand {
-    return this.first(Hand, \`hand-\${player.position}\`)!;
+    return this.first(Hand, \`hand-\${player.seat}\`)!;
   }
 
   override isFinished(): boolean {
@@ -159,11 +159,11 @@ export class ${pascal}Player extends Player<${pascal}Game, ${pascal}Player> {
   hand!: Hand;
   score: number = 0;
 
-  constructor(position: number, name: string, game: ${pascal}Game) {
-    super(position, name);
+  constructor(seat: number, name: string, game: ${pascal}Game) {
+    super(seat, name);
     this.game = game;
     // Create player's hand
-    this.hand = game.create(Hand, \`hand-\${position}\`);
+    this.hand = game.create(Hand, \`hand-\${seat}\`);
     this.hand.player = this;
     this.hand.contentsVisibleToOwner();
   }
@@ -250,13 +250,11 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
     actionStep({
       name: 'draw-step',
       actions: ['draw'],
-      prompt: 'Draw a card from the deck',
       skipIf: () => game.deck.count(Card) === 0,
     }),
     actionStep({
       name: 'play-step',
       actions: ['play'],
-      prompt: 'Play a card from your hand',
       skipIf: (ctx) => {
         const player = ctx.player as ${pascal}Player;
         return player.hand.count(Card) === 0;

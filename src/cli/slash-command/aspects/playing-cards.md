@@ -33,7 +33,7 @@ export class MyGame extends Game<MyGame, MyPlayer> {
 
     // Create player hands and deal
     for (const player of this.players) {
-      player.hand = this.create(Hand, `hand-${player.position}`);
+      player.hand = this.create(Hand, `hand-${player.seat}`);
       player.hand.player = player;
       player.hand.contentsVisibleToOwner();
     }
@@ -128,7 +128,7 @@ import { findElements, getSuitSymbol, getSuitColor, type UseActionControllerRetu
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -138,7 +138,7 @@ const props = defineProps<{
 const myHand = computed(() => {
   if (!props.gameView) return [];
   const hands = findElements(props.gameView, { className: 'Hand' });
-  const myHandElement = hands.find(h => h.attributes?.player?.position === props.playerPosition);
+  const myHandElement = hands.find(h => h.attributes?.player?.seat === props.playerSeat);
   return myHandElement?.children ?? [];
 });
 

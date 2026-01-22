@@ -94,7 +94,7 @@ export function createPlaceStoneAction(game: MyGame): ActionDefinition {
       const cell = currentGame.board.all(Cell).find(c => c.id === cellArg.id);
       if (!cell) return { success: false };
 
-      cell.create(Stone, `stone-${ctx.player.position}-${Date.now()}`, {
+      cell.create(Stone, `stone-${ctx.player.seat}-${Date.now()}`, {
         player: ctx.player,
       });
 
@@ -113,7 +113,7 @@ import { findElements, hexToPixel, getHexPolygonPoints, type UseActionController
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -152,8 +152,8 @@ function getCellStone(cell: any) {
 }
 
 // Get player color
-function getPlayerColor(playerPosition: number) {
-  return playerPosition === 1 ? '#e74c3c' : '#3498db';
+function getPlayerColor(playerSeat: number) {
+  return playerSeat === 1 ? '#e74c3c' : '#3498db';
 }
 
 // Check if cell is playable
@@ -200,7 +200,7 @@ const isGameOver = computed(() => props.gameView?.isFinished ?? false);
             :cx="getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).x"
             :cy="getCellPosition(cell.attributes?.q ?? 0, cell.attributes?.r ?? 0).y"
             :r="HEX_SIZE * 0.6"
-            :fill="getPlayerColor(getCellStone(cell).attributes?.player?.position)"
+            :fill="getPlayerColor(getCellStone(cell).attributes?.player?.seat)"
             class="stone"
           />
         </g>

@@ -269,13 +269,13 @@ import GameTable from './components/GameTable.vue';
     display-name="${config.displayName}"
     :player-count="${config.playerCount.min}"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionController }">
+    <template #game-board="{ state, gameView, playerSeat, isMyTurn, availableActions, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <GameTable
             :game-view="gameView"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-controller="actionController"
@@ -285,7 +285,7 @@ import GameTable from './components/GameTable.vue';
           <h2 class="board-title">Auto-Generated UI</h2>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>
@@ -355,7 +355,7 @@ import type { UseActionControllerReturn } from 'boardsmith/ui';
 // Props from GameShell
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
