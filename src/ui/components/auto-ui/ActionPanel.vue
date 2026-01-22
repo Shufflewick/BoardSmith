@@ -3,12 +3,12 @@
  * ActionPanel - Automatically generates action UI from action metadata
  *
  * Features:
- * - Generates UI for each selection type (choice, element, number, text)
+ * - Generates UI for each pick type (choice, element, number, text)
  * - Hover over choices to highlight elements on the board
  * - Click elements on board to filter choices
  * - Bidirectional interaction with the game board
- * - Element selections show buttons for valid elements
- * - Choice selections can filter based on previous selections (filterBy)
+ * - Element picks show buttons for valid elements
+ * - Choice picks can filter based on previous picks (filterBy)
  *
  * Requires: ActionPanel must be used inside a GameShell context where the
  * action controller is provided via inject('actionController').
@@ -17,7 +17,7 @@ import { ref, computed, watch, inject, reactive } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
 import type {
   UseActionControllerReturn,
-  SelectionMetadata,
+  PickMetadata,
   ActionMetadata as ControllerActionMetadata,
   ChoiceWithRefs,
   ValidElement,
@@ -52,7 +52,10 @@ function clearActionState(args: Record<string, unknown>): void {
 
 // Re-export types for backwards compatibility
 export type { ChoiceWithRefs, ValidElement, ElementRef };
-export type Selection = SelectionMetadata;
+/** @deprecated Use PickMetadata instead */
+export type Selection = PickMetadata;
+/** Primary type - a pick/choice the player must make */
+export type Pick = PickMetadata;
 export type ActionMetadata = ControllerActionMetadata;
 
 const props = defineProps<{
@@ -163,8 +166,9 @@ const currentActionMeta = computed(() => {
   return actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
 });
 
-// Current selection - delegates to controller (required)
-const currentSelection = computed(() => actionController.currentSelection.value);
+// Current pick - delegates to controller (required)
+// Note: currentSelection alias used for backward compatibility in template
+const currentSelection = computed(() => actionController.currentPick.value);
 
 // Note: Auto-fill is handled by the controller's internal watch
 
@@ -561,7 +565,7 @@ watch([currentSelection, filteredValidElements], ([selection]) => {
   // Update action state for custom GameBoard components
   if (currentAction.value && currentActionMeta.value) {
     const selectionIndex = currentActionMeta.value.selections.findIndex(s => s.name === selection.name);
-    boardInteraction.setCurrentSelection(selectionIndex, selection.name);
+    boardInteraction.setCurrentPick(selectionIndex, selection.name);
   }
 
   let validElems: { id: number; ref: any }[] = [];
@@ -1016,9 +1020,9 @@ function getDisplayLabel(value: unknown): string {
 }
 
 /**
- * Check if a selection is repeating
+ * Check if a pick is repeating
  */
-function isRepeatingSelection(sel: Selection): boolean {
+function isRepeatingSelection(sel: PickMetadata): boolean {
   return sel.repeat !== undefined;
 }
 
