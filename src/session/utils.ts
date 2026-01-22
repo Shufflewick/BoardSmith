@@ -432,6 +432,13 @@ export function buildPlayerState(
     }
   }
 
+  // Include animation events if any are pending
+  const animationEvents = runner.game.pendingAnimationEvents;
+  if (animationEvents.length > 0) {
+    state.animationEvents = animationEvents;
+    state.lastAnimationEventId = animationEvents[animationEvents.length - 1].id;
+  }
+
   return state;
 }
 
