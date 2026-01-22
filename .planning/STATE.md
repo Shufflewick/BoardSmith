@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-21)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** Milestone v2.2 complete
+**Current focus:** v2.3 Nomenclature Standardization
 
 ## Current Position
 
-Phase: 53-deploy-aspect-templates (1 of 1)
-Plan: 01 of 01
-Status: Milestone complete
-Last activity: 2026-01-21 — v2.2 shipped
+Phase: 54-nomenclature-dictionary (1 of 5)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-01-21 — v2.3 milestone created
 
-Progress: [████████████████████████████████████████] v2.2 COMPLETE
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0/5 phases
 
 ## Milestones
 
@@ -36,7 +36,7 @@ Progress: [███████████████████████
 - v2.2 Game Design Aspects (Phases 51-53) — shipped 2026-01-21
 
 **Active:**
-- None (ready for next milestone)
+- v2.3 Nomenclature Standardization (Phases 54-58) — in progress
 
 ## Roadmap Evolution
 
@@ -46,6 +46,8 @@ Progress: [███████████████████████
 - 27 v2.1 requirements mapped to 4 phases
 - Milestone v2.2 audited: 1 gap found (INT-02: templates not deployed)
 - Phase 53 added for gap closure + tech debt
+- Milestone v2.3 created: Nomenclature Standardization, 5 phases (Phases 54-58)
+- 19 v2.3 requirements mapped to 5 phases
 
 ## Session Continuity
 

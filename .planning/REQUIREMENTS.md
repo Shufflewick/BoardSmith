@@ -1,0 +1,80 @@
+# Requirements: BoardSmith v2.3 Nomenclature Standardization
+
+**Defined:** 2026-01-21
+**Core Value:** Consistent terminology across the entire codebase before external adoption
+
+## v1 Requirements
+
+### Dictionary (DICT)
+
+- [ ] **DICT-01**: Create `docs/nomenclature.md` as the authoritative terminology reference
+- [ ] **DICT-02**: Dictionary includes all defined terms with definitions
+- [ ] **DICT-03**: Dictionary organized by category (Core, Players, Flow, Elements, Zones, Actions, etc.)
+
+### UI Rename (UI)
+
+- [ ] **UI-01**: Rename `GameBoard.vue` → `GameTable.vue` in BoardSmith UI components
+- [ ] **UI-02**: Update all imports/references to GameBoard in BoardSmith source
+- [ ] **UI-03**: Update `/design-game` templates to generate `GameTable.vue`
+- [ ] **UI-04**: Rename `GameBoard.vue` → `GameTable.vue` in all 9 extracted games
+
+### API Rename - Seat (SEAT)
+
+- [ ] **SEAT-01**: Rename `position` → `seat` in Player class/types
+- [ ] **SEAT-02**: Update all internal references to player position
+- [ ] **SEAT-03**: Update documentation references to position
+- [ ] **SEAT-04**: Update extracted games that reference player position
+
+### API Rename - Pick (PICK)
+
+- [ ] **PICK-01**: Rename selection-related APIs to use "pick" terminology
+- [ ] **PICK-02**: Update internal references to selection
+- [ ] **PICK-03**: Update documentation references to selection
+- [ ] **PICK-04**: Update `/design-game` templates for pick terminology
+
+### Documentation (DOCS)
+
+- [ ] **DOCS-01**: Audit all docs/*.md files for terminology consistency
+- [ ] **DOCS-02**: Update docs to use standardized terms (Table, Board, Zone, etc.)
+- [ ] **DOCS-03**: Add nomenclature.md reference link to relevant docs
+- [ ] **DOCS-04**: Update migration guide with terminology changes
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Renaming `boardsmith/session` module | Would break imports; Session as instance name is fine |
+| Renaming `Game` base class to `Rules` | Too disruptive; Game is acceptable |
+| Defining game-specific terms (capture, market) | Not universal enough |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DICT-01 | Phase 54 | Pending |
+| DICT-02 | Phase 54 | Pending |
+| DICT-03 | Phase 54 | Pending |
+| UI-01 | Phase 55 | Pending |
+| UI-02 | Phase 55 | Pending |
+| UI-03 | Phase 55 | Pending |
+| UI-04 | Phase 55 | Pending |
+| SEAT-01 | Phase 56 | Pending |
+| SEAT-02 | Phase 56 | Pending |
+| SEAT-03 | Phase 56 | Pending |
+| SEAT-04 | Phase 56 | Pending |
+| PICK-01 | Phase 57 | Pending |
+| PICK-02 | Phase 57 | Pending |
+| PICK-03 | Phase 57 | Pending |
+| PICK-04 | Phase 57 | Pending |
+| DOCS-01 | Phase 58 | Pending |
+| DOCS-02 | Phase 58 | Pending |
+| DOCS-03 | Phase 58 | Pending |
+| DOCS-04 | Phase 58 | Pending |
+
+**Coverage:**
+- v1 requirements: 19 total
+- Mapped to phases: 19
+- Unmapped: 0 ✓
+
+---
+*Requirements defined: 2026-01-21*
