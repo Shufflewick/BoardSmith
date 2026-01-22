@@ -8,7 +8,20 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State: v2.3 Shipped
+## Current Milestone: v2.4 Animation Event System
+
+**Goal:** Infrastructure-level support for dramatic UI playback of game calculations — enabling games like MERC to animate combat sequences while game state advances immediately.
+
+**Target features:**
+- `game.emitAnimationEvent(type, data)` API for emitting events during calculations
+- Soft continuation model (state advances, UI plays back asynchronously)
+- Animation events as parallel channel (separate from commands, not state mutations)
+- Automatic ActionPanel coordination (waits for animations before showing new decisions)
+- Event serialization with game state (checkpoint/replay safe)
+- `useAnimationEvents` composable for UI consumption
+- Integration with existing `useAutoAnimations`
+
+## Previous: v2.3 Shipped
 
 BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Games live in separate repositories at `~/BoardSmithGames/`.
 
@@ -92,7 +105,17 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-(None — v2.3 milestone complete)
+- [ ] Animation events emittable during game execution via `game.emitAnimationEvent()`
+- [ ] Animation event buffer serializes with game state
+- [ ] `pendingAnimationEvents` getter returns unacknowledged events
+- [ ] `acknowledgeAnimationEvents(upToId)` clears consumed events
+- [ ] `PlayerGameState` includes `animationEvents` array
+- [ ] `GameSession.acknowledgeAnimations()` method (not an action)
+- [ ] `useAnimationEvents` composable with handler registration
+- [ ] `useActionController` gates ActionPanel on pending animations
+- [ ] `useAutoAnimations` integrates custom event handlers
+- [ ] Snapshot serialization includes animation buffer
+- [ ] Documentation for animation event system
 
 ### Out of Scope
 
@@ -158,4 +181,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-01-22 after completing v2.3 milestone*
+*Last updated: 2026-01-22 after starting v2.4 milestone*
