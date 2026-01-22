@@ -225,9 +225,11 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 
 ### Player Properties
 
-- `position`: 1-indexed player position (Player 1 = position 1)
+- `seat`: 1-indexed seat number (Player 1 has seat 1)
 - `name`: Display name
 - `game`: Reference to the game instance
+
+> **Note**: The constructor parameter is still `position` for backward compatibility, but access the property via `player.seat`.
 
 ### Accessing Players
 

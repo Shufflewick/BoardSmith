@@ -530,7 +530,7 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
   constructor(position: number, name: string, game: MyGame) {
     super(position, name);
     this.game = game;
-    this.hand = game.create(Hand, `hand-${position}`);
+    this.hand = game.create(Hand, `hand-${this.seat}`);
     this.hand.player = this;
   }
   // No toJSON override needed - simple properties are auto-serialized
@@ -538,6 +538,8 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 ```
 
 > **Note**: Simple properties (numbers, strings, plain objects) are auto-serialized. Only override `toJSON()` when using classes with their own `toJSON()` methods (like `AbilityManager`).
+
+> **Note**: The constructor parameter is `position` for backward compatibility, but after `super()` completes, access the property via `this.seat` (or `player.seat` from outside the class).
 
 ### 3. Win Condition Checking
 
