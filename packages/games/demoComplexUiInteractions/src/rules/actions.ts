@@ -2,11 +2,11 @@
  * Demo Complex UI Interactions - Actions
  *
  * This demo showcases how custom UIs can detect which action is being filled in
- * using boardInteraction.currentAction and boardInteraction.currentSelectionName.
+ * using boardInteraction.currentAction and boardInteraction.currentPickName.
  *
  * All actions are available simultaneously so the UI can demonstrate:
  * 1. Detecting when a specific action button is clicked
- * 2. Showing which selection step the player is on
+ * 2. Showing which pick step the player is on
  * 3. Different visual feedback for different actions
  */
 
@@ -39,14 +39,14 @@ export function createCollectAction(game: DemoGame): ActionDefinition {
 }
 
 /**
- * DISCARD - Discard a card from your hand (1 selection)
+ * DISCARD - Discard a card from your hand (1 pick)
  *
  * Single-step action using fromElements() for easy custom UI integration.
  * Custom UIs can send: props.action('discard', { card: cardId })
  *
  * UI can show:
  * - currentAction === 'discard'
- * - currentSelectionName === 'card'
+ * - currentPickName === 'card'
  */
 export function createDiscardAction(game: DemoGame): ActionDefinition {
   return Action.create('discard')
@@ -77,14 +77,14 @@ export function createDiscardAction(game: DemoGame): ActionDefinition {
 }
 
 /**
- * TRADE - Give a card to another player in exchange (2 selections)
+ * TRADE - Give a card to another player in exchange (2 picks)
  *
- * Two-step action using fromElements() for the card selection.
+ * Two-step action using fromElements() for the card pick.
  * Custom UIs can send: props.action('trade', { myCard: cardId, targetPlayer: playerChoice })
  *
  * UI can show:
- * - Step 1: currentAction === 'trade', currentSelectionName === 'myCard'
- * - Step 2: currentAction === 'trade', currentSelectionName === 'targetPlayer'
+ * - Step 1: currentAction === 'trade', currentPickName === 'myCard'
+ * - Step 2: currentAction === 'trade', currentPickName === 'targetPlayer'
  */
 export function createTradeAction(game: DemoGame): ActionDefinition {
   return Action.create('trade')

@@ -2,12 +2,12 @@
   Demo: Complex UI Interactions - GameTable
 
   This component demonstrates how to use actionController to detect action state
-  and handle selections directly from a custom UI.
+  and handle picks directly from a custom UI.
 
   Key Features Demonstrated:
   1. Using actionController.currentAction to detect which action is being filled
-  2. Using actionController.currentSelection to show which selection step the player is on
-  3. Using actionController.fill() to submit selections from custom UI elements
+  2. Using actionController.currentPick to show which pick step the player is on
+  3. Using actionController.fill() to submit picks from custom UI elements
   4. Different visual styles for different actions
   5. Full integration with actionController for "pit of success" pattern
 -->
@@ -35,15 +35,15 @@ const props = defineProps<{
 // Use actionController for action state - this is the "pit of success" pattern
 // Use computed to safely access these since actionController may be undefined initially
 const currentAction = computed(() => props.actionController?.currentAction.value ?? null);
-const currentSelection = computed(() => props.actionController?.currentSelection.value ?? null);
+const currentPick = computed(() => props.actionController?.currentPick.value ?? null);
 
-// Which selection step are they on?
-const currentSelectionName = computed(() => currentSelection.value?.name || null);
+// Which pick step are they on?
+const currentPickName = computed(() => currentPick.value?.name || null);
 
-// Compute the selection index by counting filled args
-const currentSelectionIndex = computed(() => {
+// Compute the pick index by counting filled args
+const currentPickIndex = computed(() => {
   if (!currentAction.value) return 0;
-  // Count how many selections have been filled
+  // Count how many picks have been filled
   const args = props.actionController?.currentArgs.value ?? {};
   return Object.keys(args).length;
 });
@@ -84,8 +84,8 @@ const currentActionInfo = computed(() => {
   return actionDescriptions[currentAction.value] || { name: currentAction.value, color: '#888', icon: '?' };
 });
 
-// Selection step descriptions for each action
-const selectionStepDescriptions: Record<string, Record<string, string>> = {
+// Pick step descriptions for each action
+const pickStepDescriptions: Record<string, Record<string, string>> = {
   discard: { card: 'Select a card to discard' },
   trade: { myCard: 'Select YOUR card to trade', targetPlayer: 'Select a player to trade with' },
   gift: { card: 'Select a card to gift', recipient: 'Select who to gift to' },
@@ -94,10 +94,10 @@ const selectionStepDescriptions: Record<string, Record<string, string>> = {
 
 // Get current step description
 const currentStepDescription = computed(() => {
-  if (!currentAction.value || !currentSelectionName.value) return null;
-  const actionSteps = selectionStepDescriptions[currentAction.value];
+  if (!currentAction.value || !currentPickName.value) return null;
+  const actionSteps = pickStepDescriptions[currentAction.value];
   if (!actionSteps) return null;
-  return actionSteps[currentSelectionName.value] || `Select: ${currentSelectionName.value}`;
+  return actionSteps[currentPickName.value] || `Select: ${currentPickName.value}`;
 });
 
 // ============================================
@@ -167,19 +167,19 @@ const suitInfo: Record<string, { symbol: string; name: string; color: string }> 
   S: { symbol: '♠', name: 'Spades', color: '#2c3e50' },
 };
 
-// Is suit selection active?
-const isSuitSelectionActive = computed(() =>
-  isScoring.value && currentSelectionName.value === 'suit'
+// Is suit pick active?
+const isSuitPickActive = computed(() =>
+  isScoring.value && currentPickName.value === 'suit'
 );
 
-// Handle suit selection - use actionController to fill the selection
+// Handle suit pick - use actionController to fill the pick
 async function handleSuitClick(suit: string) {
   if (!props.actionController) return;
-  if (!isSuitSelectionActive.value) return;
-  if (!currentSelection.value) return;
+  if (!isSuitPickActive.value) return;
+  if (!currentPick.value) return;
 
   // Get available choices from actionController
-  const choices = props.actionController.getChoices(currentSelection.value);
+  const choices = props.actionController.getChoices(currentPick.value);
 
   // Check if this suit is a valid choice
   const isValidSuit = choices.some((c) => c.value === suit);
@@ -307,56 +307,56 @@ function shouldHighlightCard(card: { id: number; suit: string }): boolean {
   return false;
 }
 
-// Check if we're in an element selection step for cards (fromElements)
+// Check if we're in an element pick step for cards (fromElements)
 function isCardSelectable(cardId: number): boolean {
-  if (!currentAction.value || !currentSelection.value) return false;
-  // Check if this is a fromElements selection type (type is 'element' singular)
-  if (currentSelection.value.type !== 'element') return false;
+  if (!currentAction.value || !currentPick.value) return false;
+  // Check if this is a fromElements pick type (type is 'element' singular)
+  if (currentPick.value.type !== 'element') return false;
 
   // Check if this card is in the valid elements list (reactive computed)
   const validIds = props.actionController.validElements.value.map((e: any) => e.id);
   return validIds.includes(cardId);
 }
 
-// Handle card click - fill the selection with the card ID
+// Handle card click - fill the pick with the card ID
 async function handleCardClick(card: { id: number }) {
   if (!props.actionController) return;
   if (!isCardSelectable(card.id)) return;
-  if (!currentSelection.value) return;
+  if (!currentPick.value) return;
 
   // Fill with the element ID (fromElements expects the ID)
-  await props.actionController.fill(currentSelection.value.name, card.id);
+  await props.actionController.fill(currentPick.value.name, card.id);
 }
 
-// Handle opponent click - for chooseFrom selections (targetPlayer, recipient)
+// Handle opponent click - for chooseFrom picks (targetPlayer, recipient)
 async function handleOpponentClick(position: number) {
   if (!props.actionController) return;
-  if (!currentAction.value || !currentSelection.value) return;
+  if (!currentAction.value || !currentPick.value) return;
 
-  // Check if this is a choice selection type
-  if (currentSelection.value.type !== 'choice') return;
+  // Check if this is a choice pick type
+  if (currentPick.value.type !== 'choice') return;
 
   // Get available choices from actionController
-  const choices = props.actionController.getChoices(currentSelection.value);
+  const choices = props.actionController.getChoices(currentPick.value);
 
   // Find the choice for this player position
   const playerChoice = choices.find((c: any) => c.value?.value === position);
   if (!playerChoice) return;
 
   // Fill with the choice value (player choice object)
-  await props.actionController.fill(currentSelection.value.name, playerChoice.value);
+  await props.actionController.fill(currentPick.value.name, playerChoice.value);
 }
 
-// Is opponent selectable? Check if we're in a player choice selection
+// Is opponent selectable? Check if we're in a player choice pick
 function isOpponentSelectable(position: number): boolean {
   if (!props.actionController) return false;
-  if (!currentAction.value || !currentSelection.value) return false;
+  if (!currentAction.value || !currentPick.value) return false;
 
-  // Check if this is a choice selection type
-  if (currentSelection.value.type !== 'choice') return false;
+  // Check if this is a choice pick type
+  if (currentPick.value.type !== 'choice') return false;
 
   // Get available choices from actionController
-  const choices = props.actionController.getChoices(currentSelection.value);
+  const choices = props.actionController.getChoices(currentPick.value);
 
   // Check if this player position is a valid choice
   return choices.some((c: any) => c.value?.value === position);
@@ -389,7 +389,7 @@ function cancelAction() {
             {{ currentActionInfo.name }}
           </div>
           <div v-if="currentStepDescription" class="action-step">
-            Step {{ currentSelectionIndex + 1 }}: {{ currentStepDescription }}
+            Step {{ currentPickIndex + 1 }}: {{ currentStepDescription }}
           </div>
           <div v-else class="action-step">
             Confirming...
@@ -458,7 +458,7 @@ function cancelAction() {
       </div>
 
       <!-- Suit Selector (for Score action) -->
-      <div v-if="isSuitSelectionActive" class="suit-selector">
+      <div v-if="isSuitPickActive" class="suit-selector">
         <div class="suit-selector-label">Choose a suit to score:</div>
         <div class="suit-buttons">
           <button
@@ -483,7 +483,7 @@ function cancelAction() {
           class="opponent"
           :class="{
             'selectable': isOpponentSelectable(opponent.seat),
-            'highlight': (isTrading || isGifting) && currentSelectionName === (isTrading ? 'targetPlayer' : 'recipient')
+            'highlight': (isTrading || isGifting) && currentPickName === (isTrading ? 'targetPlayer' : 'recipient')
           }"
           @click="handleOpponentClick(opponent.seat)"
         >
@@ -511,8 +511,8 @@ function cancelAction() {
               'selectable': isCardSelectable(card.id),
               'selected': shouldHighlightCard(card),
               'discard-target': isDiscarding && isCardSelectable(card.id),
-              'trade-target': isTrading && currentSelectionName === 'myCard' && isCardSelectable(card.id),
-              'gift-target': isGifting && currentSelectionName === 'card' && isCardSelectable(card.id),
+              'trade-target': isTrading && currentPickName === 'myCard' && isCardSelectable(card.id),
+              'gift-target': isGifting && currentPickName === 'card' && isCardSelectable(card.id),
               'score-match': isScoring && props.actionArgs.suit === card.suit,
             }"
             @click="handleCardClick(card)"
@@ -539,8 +539,8 @@ function cancelAction() {
       <summary>Debug: actionController State</summary>
       <div class="debug-content">
         <div><strong>currentAction:</strong> {{ currentAction || 'null' }}</div>
-        <div><strong>currentSelectionName:</strong> {{ currentSelectionName || 'null' }}</div>
-        <div><strong>currentSelectionIndex:</strong> {{ currentSelectionIndex }}</div>
+        <div><strong>currentPickName:</strong> {{ currentPickName || 'null' }}</div>
+        <div><strong>currentPickIndex:</strong> {{ currentPickIndex }}</div>
         <div><strong>availableActions:</strong> {{ availableActions.join(', ') }}</div>
         <div><strong>actionArgs:</strong> {{ JSON.stringify(actionArgs) }}</div>
       </div>

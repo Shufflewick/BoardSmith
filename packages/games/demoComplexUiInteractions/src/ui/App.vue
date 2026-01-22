@@ -10,7 +10,7 @@
 
   Key feature demonstrated:
   - boardInteraction.currentAction: Detects which action button was clicked
-  - boardInteraction.currentSelectionName: Shows which selection step is active
+  - boardInteraction.currentPickName: Shows which pick step is active
   - Different visual styles for each action type
 -->
 <script setup lang="ts">
