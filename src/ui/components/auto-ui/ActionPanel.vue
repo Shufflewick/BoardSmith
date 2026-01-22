@@ -15,6 +15,7 @@
  */
 import { ref, computed, watch, inject, reactive } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
+import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import type {
   UseActionControllerReturn,
   PickMetadata,
@@ -84,6 +85,18 @@ const emit = defineEmits<{
 
 // Board interaction for hover/selection sync
 const boardInteraction = useBoardInteraction();
+
+// Animation events for skip functionality (optional - may not be provided)
+const animationEvents = useAnimationEvents();
+
+// Animation gating from controller
+const animationsPending = computed(() => actionController.animationsPending.value);
+const showActionPanel = computed(() => actionController.showActionPanel.value);
+
+// Skip handler
+function skipAnimations(): void {
+  animationEvents?.skipAll();
+}
 
 // Use controller state directly (controller is required)
 const currentAction = actionController.currentAction;
@@ -1357,7 +1370,14 @@ function clearBoardSelection() {
 </script>
 
 <template>
-  <div class="action-panel" v-if="isMyTurn">
+  <!-- Animations pending indicator -->
+  <div v-if="animationsPending" class="action-panel-pending">
+    <span class="pending-text">Playing animations...</span>
+    <button class="skip-btn" @click="skipAnimations">Skip</button>
+  </div>
+
+  <!-- Normal action panel content, gated on showActionPanel -->
+  <div class="action-panel" v-else-if="showActionPanel">
     <!-- No action being configured -->
     <!-- Key forces re-render when available actions change -->
     <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
@@ -2030,5 +2050,34 @@ function clearBoardSelection() {
 @keyframes pulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
+}
+
+/* Animation pending state */
+.action-panel-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 0.5rem;
+}
+
+.pending-text {
+  color: var(--text-secondary, #666);
+  font-style: italic;
+}
+
+.skip-btn {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 0.25rem;
+  background: var(--bg-primary, #fff);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.skip-btn:hover {
+  background: var(--bg-hover, #eee);
 }
 </style>
