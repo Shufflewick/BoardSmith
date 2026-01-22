@@ -3,15 +3,15 @@ import { GameShell, AutoUI, findElement, getElementOwner, DEFAULT_PLAYER_COLORS 
 import HexBoard from './components/HexBoard.vue';
 
 // Get player color from player object or fallback
-// player.position is 1-indexed, DEFAULT_PLAYER_COLORS is 0-indexed
+// player.seat is 1-indexed, DEFAULT_PLAYER_COLORS is 0-indexed
 function getPlayerColorHex(player: any): string {
   if (player?.color) return player.color;
-  const arrayIndex = (player?.position ?? 1) - 1;
+  const arrayIndex = (player?.seat ?? 1) - 1;
   return DEFAULT_PLAYER_COLORS[arrayIndex] ?? DEFAULT_PLAYER_COLORS[0];
 }
 
 // Count stones for a player from gameView using shared helpers
-function getStoneCount(playerPosition: number, gameView: any): number {
+function getStoneCount(playerSeat: number, gameView: any): number {
   const board = findElement(gameView, { className: 'Board' });
   if (!board?.children) return 0;
 
@@ -19,7 +19,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
   for (const cell of board.children) {
     if (cell.className !== 'Cell') continue;
     for (const piece of cell.children || []) {
-      if (piece.className === 'Stone' && getElementOwner(piece) === playerPosition) {
+      if (piece.className === 'Stone' && getElementOwner(piece) === playerSeat) {
         count++;
       }
     }
@@ -34,7 +34,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
     display-name="Hex"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, actionController }">
+    <template #game-board="{ state, gameView, players, playerSeat, isMyTurn, availableActions, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
@@ -44,7 +44,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
           </p>
           <HexBoard
             :game-view="gameView"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-controller="actionController"
@@ -54,7 +54,7 @@ function getStoneCount(playerPosition: number, gameView: any): number {
           <h2 class="board-title">Auto-Generated UI</h2>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>
@@ -74,12 +74,12 @@ function getStoneCount(playerPosition: number, gameView: any): number {
         <span
           class="stat-value"
           data-player-stat="stones"
-          :data-player-position="player.position"
-        >{{ getStoneCount(player.position, gameView) }}</span>
+          :data-player-seat="player.seat"
+        >{{ getStoneCount(player.seat, gameView) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Goal:</span>
-        <span class="stat-value goal">{{ player.position === 1 ? 'Top-Bottom' : 'Left-Right' }}</span>
+        <span class="stat-value goal">{{ player.seat === 1 ? 'Top-Bottom' : 'Left-Right' }}</span>
       </div>
     </template>
   </GameShell>

@@ -10,7 +10,7 @@
  * <template #player-stats="{ player }">
  *   <div class="stat">
  *     <span>Score:</span>
- *     <span :data-player-stat="'score'" :data-player-position="player.position">
+ *     <span :data-player-stat="'score'" :data-player-seat="player.seat">
  *       {{ player.score }}
  *     </span>
  *   </div>
@@ -28,7 +28,7 @@
  * // Fly cards to a player's stat
  * flyToPlayerStat(flyCards, {
  *   cards: removedCards.map(c => ({ rect: c.rect, rank: c.rank, suit: c.suit })),
- *   playerPosition: 0,
+ *   playerSeat: 0,
  *   statName: 'books',
  * });
  * ```
@@ -49,8 +49,8 @@ export interface CardForAnimation {
   faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
   /** Back image - URL string or sprite object (optional) */
   backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
-  /** Player position who owns this card/piece (for piece rendering) */
-  playerPosition?: number;
+  /** Player seat who owns this card/piece (for piece rendering) */
+  playerSeat?: number;
   /** Allow additional custom properties */
   [key: string]: unknown;
 }
@@ -58,8 +58,8 @@ export interface CardForAnimation {
 export interface FlyToStatOptions {
   /** Cards to animate */
   cards: CardForAnimation[];
-  /** Player position to target */
-  playerPosition: number;
+  /** Player seat to target */
+  playerSeat: number;
   /** Name of the stat (e.g., 'score', 'books', 'resources') */
   statName: string;
   /** Animation duration in ms (default: 500) */
@@ -75,15 +75,15 @@ export interface FlyToStatOptions {
 }
 
 /**
- * Get a player stat element by position and stat name.
- * Looks for elements with data-player-stat and data-player-position attributes.
+ * Get a player stat element by seat and stat name.
+ * Looks for elements with data-player-stat and data-player-seat attributes.
  */
 export function getPlayerStatElement(
-  playerPosition: number,
+  playerSeat: number,
   statName: string
 ): HTMLElement | null {
   return document.querySelector(
-    `[data-player-stat="${statName}"][data-player-position="${playerPosition}"]`
+    `[data-player-stat="${statName}"][data-player-seat="${playerSeat}"]`
   );
 }
 
@@ -100,7 +100,7 @@ export function flyToPlayerStat(
 ): boolean {
   const {
     cards,
-    playerPosition,
+    playerSeat,
     statName,
     duration = 500,
     stagger = 50,
@@ -113,12 +113,12 @@ export function flyToPlayerStat(
     return false;
   }
 
-  const targetEl = getPlayerStatElement(playerPosition, statName);
+  const targetEl = getPlayerStatElement(playerSeat, statName);
   if (!targetEl) {
     if (warnIfMissing) {
       console.warn(
-        `[usePlayerStatAnimation] Target element not found for player ${playerPosition}, stat "${statName}". ` +
-        `Make sure the element has data-player-stat="${statName}" and data-player-position="${playerPosition}".`
+        `[usePlayerStatAnimation] Target element not found for player ${playerSeat}, stat "${statName}". ` +
+        `Make sure the element has data-player-stat="${statName}" and data-player-seat="${playerSeat}".`
       );
     }
     return false;
@@ -126,7 +126,7 @@ export function flyToPlayerStat(
 
   flyCards(
     cards.map((card, i) => ({
-      id: `fly-stat-${statName}-${playerPosition}-${Date.now()}-${i}`,
+      id: `fly-stat-${statName}-${playerSeat}-${Date.now()}-${i}`,
       startRect: card.rect,
       endRect: () => targetEl.getBoundingClientRect(),
       cardData: {
@@ -135,7 +135,7 @@ export function flyToPlayerStat(
         faceUp: card.faceUp ?? true,
         faceImage: card.faceImage,
         backImage: card.backImage,
-        // Pass through any extra custom properties (like playerPosition for checkers)
+        // Pass through any extra custom properties (like playerSeat for checkers)
         ...Object.fromEntries(
           Object.entries(card).filter(([k]) => !['rect', 'rank', 'suit', 'faceUp', 'faceImage', 'backImage'].includes(k))
         ),

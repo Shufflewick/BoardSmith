@@ -21,7 +21,7 @@ type IngredientTrackConfig = {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   players: any[];
 }>();
 
@@ -57,7 +57,7 @@ const ABILITY_NAMES: Record<string, string> = {
 // Get player data from players prop
 const playerData = computed(() => {
   if (!props.players) return null;
-  return props.players.find((p: any) => p.position === props.playerPosition);
+  return props.players.find((p: any) => p.seat === props.playerSeat);
 });
 
 // Ingredient tracks for the current player

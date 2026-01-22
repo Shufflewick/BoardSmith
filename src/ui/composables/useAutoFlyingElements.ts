@@ -7,14 +7,14 @@
  * Works with any element type - cards, checkers pieces, chess pieces, tokens, etc.
  * The rendering is determined by the data returned from getElementData:
  * - Cards: provide rank, suit, faceImage, backImage
- * - Pieces: provide playerPosition (triggers circular piece rendering)
+ * - Pieces: provide playerSeat (triggers circular piece rendering)
  *
  * ## Usage
  *
  * ```typescript
  * // 1. Find your game elements (you probably already do this)
  * const deck = computed(() => findElement(gameView, { type: 'deck' }));
- * const myHand = computed(() => findPlayerHand(gameView, playerPosition));
+ * const myHand = computed(() => findPlayerHand(gameView, playerSeat));
  * const board = computed(() => findElement(gameView, { type: 'board' }));
  *
  * // 2. Create refs for the DOM elements
@@ -35,7 +35,7 @@
  *     rank: element.attributes?.rank,
  *     suit: element.attributes?.suit,
  *     // For pieces (triggers circular rendering)
- *     playerPosition: element.attributes?.player?.position,
+ *     playerSeat: element.attributes?.player?.seat,
  *     isKing: element.attributes?.isKing,
  *   }),
  * });
@@ -80,7 +80,7 @@ export interface AutoFlyingElementsOptions {
   /**
    * Function to extract display data from a game element.
    * For cards: return rank, suit, faceImage, backImage
-   * For pieces: return playerPosition (triggers circular piece rendering)
+   * For pieces: return playerSeat (triggers circular piece rendering)
    */
   getElementData?: (element: any) => FlyingCardData;
 

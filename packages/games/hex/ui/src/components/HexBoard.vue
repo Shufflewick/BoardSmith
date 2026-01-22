@@ -37,7 +37,7 @@ interface Cell {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -60,7 +60,7 @@ const stoneTracker = useElementChangeTracker<number>({
   selector: '[data-stone-id]',
   getElementId: (el) => parseInt(el.getAttribute('data-stone-id') || '0', 10),
   getElementData: (el) => ({
-    playerPosition: el.classList.contains('player-0') ? 0 : 1,
+    playerSeat: el.classList.contains('player-0') ? 0 : 1,
   }),
 });
 
@@ -122,17 +122,17 @@ async function handleCellClick(cell: Cell) {
 
 // Get stone color class (player positions are 1-indexed)
 function getStoneClass(stone: Stone): string {
-  const playerPos = stone.attributes?.player?.position;
+  const playerPos = stone.attributes?.player?.seat;
   return playerPos === 1 ? 'player-1' : 'player-2';
 }
 
 // Check stone ownership
 function isMyStone(stone: Stone | undefined): boolean {
-  return isMyElement(stone as GameViewElement | undefined, props.playerPosition);
+  return isMyElement(stone as GameViewElement | undefined, props.playerSeat);
 }
 
 function isOpponentStone(stone: Stone | undefined): boolean {
-  return isOpponentElement(stone as GameViewElement | undefined, props.playerPosition);
+  return isOpponentElement(stone as GameViewElement | undefined, props.playerSeat);
 }
 
 // Get player colors from game state (returns 0-indexed array with at least 2 colors)
@@ -153,10 +153,10 @@ const getPlayerColors = computed(() => {
   return colors;
 });
 
-// playerPosition is 1-indexed, so use position - 1 for array access
-const myColor = computed(() => getPlayerColors.value[props.playerPosition - 1] || DEFAULT_PLAYER_COLORS[0]);
+// playerSeat is 1-indexed, so use position - 1 for array access
+const myColor = computed(() => getPlayerColors.value[props.playerSeat - 1] || DEFAULT_PLAYER_COLORS[0]);
 const opponentColor = computed(() => {
-  const opponentArrayIndex = props.playerPosition === 1 ? 1 : 0;
+  const opponentArrayIndex = props.playerSeat === 1 ? 1 : 0;
   return getPlayerColors.value[opponentArrayIndex] || DEFAULT_PLAYER_COLORS[1];
 });
 
@@ -180,7 +180,7 @@ function darkenColor(hex: string, percent: number): string {
 
 // Get stone fill color (playerPos is 1-indexed, array is 0-indexed)
 function getStoneColor(stone: Stone): string {
-  const playerPos = stone.attributes?.player?.position ?? 1;
+  const playerPos = stone.attributes?.player?.seat ?? 1;
   return getPlayerColors.value[playerPos - 1] || '#888888';
 }
 
@@ -297,7 +297,7 @@ watch(
             class="hex-stone"
             :class="{ 'is-mine': isMyStone(stone), 'is-opponent': isOpponentStone(stone) }"
             :style="{
-              fill: `url(#player${(stone.attributes?.player?.position ?? 1) - 1}StoneGradient)`,
+              fill: `url(#player${(stone.attributes?.player?.seat ?? 1) - 1}StoneGradient)`,
               stroke: lightenColor(getStoneColor(stone), 0.2),
             }"
           />

@@ -142,7 +142,7 @@ export class Board extends HexGrid<HexGame, HexPlayer> {
    * Uses flood fill / BFS from starting edge
    */
   checkWin(player: HexPlayer): boolean {
-    const isRed = player.position === 1;
+    const isRed = player.seat === 1;
     const size = this.boardSize;
 
     // Get all cells on player's starting edge that have their stone
@@ -193,16 +193,16 @@ export class HexPlayer extends Player {
 
   /**
    * Get the player's color (hex code)
-   * Uses configured color or defaults based on position
+   * Uses configured color or defaults based on seat
    */
   getColorHex(): string {
-    const result = this.color ?? DEFAULT_PLAYER_COLORS[this.position] ?? DEFAULT_PLAYER_COLORS[0];
+    const result = this.color ?? DEFAULT_PLAYER_COLORS[this.seat] ?? DEFAULT_PLAYER_COLORS[0];
     console.log('[HEX-COLOR]', {
-      playerPosition: this.position,
+      playerSeat: this.seat,
       configuredColor: this.color,
-      arrayIndex: this.position,
-      lookupResult: DEFAULT_PLAYER_COLORS[this.position],
-      fallbackUsed: DEFAULT_PLAYER_COLORS[this.position] === undefined,
+      arrayIndex: this.seat,
+      lookupResult: DEFAULT_PLAYER_COLORS[this.seat],
+      fallbackUsed: DEFAULT_PLAYER_COLORS[this.seat] === undefined,
       finalColor: result,
     });
     return result;

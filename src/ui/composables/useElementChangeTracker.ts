@@ -42,7 +42,7 @@
  *   getElementId: (el) => parseInt(el.getAttribute('data-piece-id') || '0', 10),
  *   getElementData: (el) => ({
  *     // Track which player owns this piece (dark = 0, light = 1)
- *     playerPosition: el.classList.contains('dark') ? 0 : 1,
+ *     playerSeat: el.classList.contains('dark') ? 0 : 1,
  *     isKing: el.classList.contains('king'),
  *   }),
  * });
@@ -50,7 +50,7 @@
  * // Later, when detecting captures:
  * const pieceData = positions.value.get(capturedId);
  * // pieceData.rect - position for animation
- * // pieceData.playerPosition - owner for correct styling
+ * // pieceData.playerSeat - owner for correct styling
  * ```
  */
 

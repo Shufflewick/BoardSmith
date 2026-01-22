@@ -43,7 +43,7 @@
  *       stat: 'books',
  *       containerRef: handRef,
  *       selector: '[data-card-id]',
- *       player: playerPosition,
+ *       player: playerSeat,
  *       trackCount: () => myBooksCount.value,
  *     },
  *     // Captured pieces fly to opponent's captured stat
@@ -51,13 +51,13 @@
  *       stat: 'captured',
  *       containerRef: boardRef,
  *       selector: '[data-piece-id]',
- *       player: (piece) => piece.playerPosition === 0 ? 1 : 0,
+ *       player: (piece) => piece.playerSeat === 0 ? 1 : 0,
  *     },
  *   ],
  *   getElementData: (el) => ({
  *     rank: el.attributes?.rank,
  *     suit: el.attributes?.suit,
- *     playerPosition: el.attributes?.player?.position,
+ *     playerSeat: el.attributes?.player?.seat,
  *   }),
  * });
  * ```
@@ -89,7 +89,7 @@ export interface FlyToStatConfig {
   selector: string;
   /**
    * Target player position, or a function to determine the player from the removed element.
-   * For captures, use a function: (element) => element.playerPosition === 0 ? 1 : 0
+   * For captures, use a function: (element) => element.playerSeat === 0 ? 1 : 0
    */
   player: number | ((elementData: any) => number);
   /**
@@ -122,7 +122,7 @@ export interface AutoAnimationsOptions {
   /**
    * Function to extract display data from a game element.
    * For cards: return rank, suit, faceImage, backImage
-   * For pieces: return playerPosition (triggers circular piece rendering)
+   * For pieces: return playerSeat (triggers circular piece rendering)
    */
   getElementData?: (element: any) => FlyingCardData;
 
@@ -242,11 +242,11 @@ export function useAutoAnimations(options: AutoAnimationsOptions): AutoAnimation
         const data: Partial<FlyingCardData> = {};
         const rank = el.getAttribute('data-rank');
         const suit = el.getAttribute('data-suit');
-        const playerPos = el.getAttribute('data-player-position');
+        const playerSeatStr = el.getAttribute('data-player-seat');
 
         if (rank) data.rank = rank;
         if (suit) data.suit = suit;
-        if (playerPos) data.playerPosition = parseInt(playerPos, 10);
+        if (playerSeatStr) data.playerSeat = parseInt(playerSeatStr, 10);
 
         return data;
       }),

@@ -29,18 +29,18 @@ const HEX_DIRECTIONS = [
  */
 function computeShortestPathLength(
   game: HexGame,
-  playerPosition: number
+  playerSeat: number
 ): number {
   const boardSize = game.boardSize;
   const players = [...game.all(HexPlayer)];
-  // playerPosition is 1-indexed (1 or 2), find by position property
-  const myPlayer = players.find(p => p.position === playerPosition);
+  // playerSeat is 1-indexed (1 or 2), find by position property
+  const myPlayer = players.find(p => p.seat === playerSeat);
   if (!myPlayer) return Infinity;
 
   // In Hex:
   // - Player 1 (Red, position 1, index 0) connects r=0 to r=boardSize-1
   // - Player 2 (Blue, position 2, index 1) connects q=0 to q=boardSize-1
-  const isRed = myPlayer.position === 1;
+  const isRed = myPlayer.seat === 1;
 
   // Build lookup map of all cells
   const cells = new Map<string, Cell>();
@@ -150,13 +150,13 @@ function findBlockingCells(
 ): number[] {
   const boardSize = game.boardSize;
   const players = [...game.all(HexPlayer)];
-  const opponent = players.find(p => p.position === opponentPosition);
+  const opponent = players.find(p => p.seat === opponentPosition);
   if (!opponent) return [];
 
   // In Hex:
   // - Player 1 (Red, position 1) connects r=0 to r=boardSize-1
   // - Player 2 (Blue, position 2) connects q=0 to q=boardSize-1
-  const isRed = opponent.position === 1;
+  const isRed = opponent.seat === 1;
 
   // Build lookup map of all cells
   const cells = new Map<string, Cell>();
@@ -337,17 +337,17 @@ function findBlockingCells(
  * - urgent=false when opponent is 3-5 moves from winning (should consider blocking)
  *
  * @param game - Current game state
- * @param playerPosition - Which player the bot is (1-indexed position)
+ * @param playerSeat - Which player the bot is (1-indexed position)
  * @param availableMoves - All legal moves at this position
  * @returns ThreatResponse with blocking moves and urgency flag
  */
 export function getHexThreatResponseMoves(
   game: Game,
-  playerPosition: number,
+  playerSeat: number,
   availableMoves: BotMove[]
 ): ThreatResponse {
   const hexGame = game as HexGame;
-  const opponentPosition = 3 - playerPosition;
+  const opponentPosition = 3 - playerSeat;
 
   // Check opponent's path length
   const opponentPath = computeShortestPathLength(hexGame, opponentPosition);
@@ -378,7 +378,7 @@ export function getHexThreatResponseMoves(
   const opponentStonePositions = new Set<string>();
   for (const cell of cells) {
     const stone = cell.getStone();
-    if (stone && stone.player && stone.player.position === opponentPosition) {
+    if (stone && stone.player && stone.player.seat === opponentPosition) {
       opponentStonePositions.add(`${cell.q},${cell.r}`);
     }
   }
@@ -395,7 +395,7 @@ export function getHexThreatResponseMoves(
     // Check if this cell is directly in front of (toward goal) any opponent stone
     for (const opponentCell of cells) {
       const stone = opponentCell.getStone();
-      if (!stone || !stone.player || stone.player.position !== opponentPosition) continue;
+      if (!stone || !stone.player || stone.player.seat !== opponentPosition) continue;
 
       // For Player 1 (top-to-bottom): blocking cell must have higher r
       // For Player 2 (left-to-right): blocking cell must have higher q
@@ -428,7 +428,7 @@ export function getHexThreatResponseMoves(
 
     for (const opponentCell of cells) {
       const stone = opponentCell.getStone();
-      if (!stone?.player || stone.player.position !== opponentPosition) continue;
+      if (!stone?.player || stone.player.seat !== opponentPosition) continue;
 
       // Hex distance to this opponent stone
       const dq = Math.abs(cell.q - opponentCell.q);
@@ -472,29 +472,29 @@ export function getHexThreatResponseMoves(
  * Count connected groups of a player's stones using flood fill.
  * Fewer groups = more connected = closer to winning.
  */
-function countConnectedGroups(game: HexGame, playerPosition: number): number {
+function countConnectedGroups(game: HexGame, playerSeat: number): number {
   const players = [...game.all(HexPlayer)];
-  // playerPosition is 1-indexed (1 or 2), find by position property
-  const player = players.find(p => p.position === playerPosition);
+  // playerSeat is 1-indexed (1 or 2), find by position property
+  const player = players.find(p => p.seat === playerSeat);
   if (!player) return 0;
 
   // Build set of player's stone positions
-  const playerPositions = new Set<string>();
+  const playerSeats = new Set<string>();
   const posKey = (q: number, r: number) => `${q},${r}`;
 
   for (const cell of game.board.all(Cell)) {
     const stone = cell.getStone();
     if (stone && stone.player === player) {
-      playerPositions.add(posKey(cell.q, cell.r));
+      playerSeats.add(posKey(cell.q, cell.r));
     }
   }
 
-  if (playerPositions.size === 0) return 0;
+  if (playerSeats.size === 0) return 0;
 
   const visited = new Set<string>();
   let groupCount = 0;
 
-  for (const pos of playerPositions) {
+  for (const pos of playerSeats) {
     if (visited.has(pos)) continue;
 
     // BFS flood fill
@@ -509,7 +509,7 @@ function countConnectedGroups(game: HexGame, playerPosition: number): number {
 
       for (const dir of HEX_DIRECTIONS) {
         const neighborKey = posKey(q + dir.dq, r + dir.dr);
-        if (playerPositions.has(neighborKey) && !visited.has(neighborKey)) {
+        if (playerSeats.has(neighborKey) && !visited.has(neighborKey)) {
           visited.add(neighborKey);
           queue.push(neighborKey);
         }
@@ -528,14 +528,14 @@ function countConnectedGroups(game: HexGame, playerPosition: number): number {
  */
 export function getHexObjectives(
   game: Game,
-  playerPosition: number
+  playerSeat: number
 ): Record<string, Objective> {
   const hexGame = game as HexGame;
   const players = [...hexGame.all(HexPlayer)];
-  // playerPosition is 1-indexed (1 or 2), find by position property
-  const player = players.find(p => p.position === playerPosition);
-  const opponentPosition = 3 - playerPosition; // If player is 1, opponent is 2; if player is 2, opponent is 1
-  const opponent = players.find(p => p.position === opponentPosition);
+  // playerSeat is 1-indexed (1 or 2), find by position property
+  const player = players.find(p => p.seat === playerSeat);
+  const opponentPosition = 3 - playerSeat; // If player is 1, opponent is 2; if player is 2, opponent is 1
+  const opponent = players.find(p => p.seat === opponentPosition);
 
   return {
     // KEY FEATURE: Player has shorter path to victory than opponent
@@ -543,7 +543,7 @@ export function getHexObjectives(
     // Gradient: 0.5 = tied, 1.0 = max advantage, 0.0 = max disadvantage
     'path-distance-advantage': {
       checker: () => {
-        const myPath = computeShortestPathLength(hexGame, playerPosition);
+        const myPath = computeShortestPathLength(hexGame, playerSeat);
         const theirPath = computeShortestPathLength(hexGame, opponentPosition);
         // Handle infinity cases
         if (myPath === Infinity && theirPath === Infinity) return 0.5;
@@ -561,7 +561,7 @@ export function getHexObjectives(
     // Only activates when pathLength <= 1, peaks at 1.0 when pathLength = 0
     'near-win-within-1': {
       checker: () => {
-        const pathLength = computeShortestPathLength(hexGame, playerPosition);
+        const pathLength = computeShortestPathLength(hexGame, playerSeat);
         if (pathLength === Infinity || pathLength > 1) return 0.0;
         return 1 - pathLength; // 1.0 at 0 moves, 0.0 at 1 move
       },
@@ -572,7 +572,7 @@ export function getHexObjectives(
     // Only activates when pathLength <= 2, gradient within threshold
     'near-win-within-2': {
       checker: () => {
-        const pathLength = computeShortestPathLength(hexGame, playerPosition);
+        const pathLength = computeShortestPathLength(hexGame, playerSeat);
         if (pathLength === Infinity || pathLength > 2) return 0.0;
         return 1 - pathLength / 2; // 1.0 at 0, 0.5 at 1, 0.0 at 2
       },
@@ -583,7 +583,7 @@ export function getHexObjectives(
     // Only activates when pathLength <= 3, gradient within threshold
     'near-win-within-3': {
       checker: () => {
-        const pathLength = computeShortestPathLength(hexGame, playerPosition);
+        const pathLength = computeShortestPathLength(hexGame, playerSeat);
         if (pathLength === Infinity || pathLength > 3) return 0.0;
         return 1 - pathLength / 3; // 1.0 at 0, 0.67 at 1, 0.33 at 2, 0.0 at 3
       },
@@ -625,7 +625,7 @@ export function getHexObjectives(
     // Gradient: 1.0 = opponent has many groups, 0.0 = we have many groups
     'fewer-groups': {
       checker: () => {
-        const myGroups = countConnectedGroups(hexGame, playerPosition);
+        const myGroups = countConnectedGroups(hexGame, playerSeat);
         const theirGroups = countConnectedGroups(hexGame, opponentPosition);
         if (myGroups === 0 && theirGroups === 0) return 0.5;
         if (myGroups === 0) return 0.0;
@@ -639,7 +639,7 @@ export function getHexObjectives(
     // Gradient: 1.0 for single group, 0.5 for two groups, etc.
     'single-group': {
       checker: () => {
-        const groups = countConnectedGroups(hexGame, playerPosition);
+        const groups = countConnectedGroups(hexGame, playerSeat);
         const stoneCount = [...hexGame.board.all(Cell)]
           .filter(c => c.getStone()?.player === player)
           .length;
@@ -696,7 +696,7 @@ export function getHexPlayoutPolicy(
   // Get positions of our existing stones for connectivity bonus
   const myStonePositions = new Set<string>();
   const players = [...hexGame.all(HexPlayer)];
-  const myPlayer = players.find(p => p.position === playerIndex);
+  const myPlayer = players.find(p => p.seat === playerIndex);
 
   for (const cell of hexGame.board.all(Cell)) {
     const stone = cell.getStone();
@@ -868,8 +868,8 @@ export function getHexMoveOrdering(
 
   // Find all player stones and their positions
   const players = [...hexGame.all(HexPlayer)];
-  const myPlayer = players.find(p => p.position === playerIndex);
-  const opponent = players.find(p => p.position === opponentIndex);
+  const myPlayer = players.find(p => p.seat === playerIndex);
+  const opponent = players.find(p => p.seat === opponentIndex);
 
   const myStonePositions = new Set<string>();
   const opponentStonePositions = new Set<string>();

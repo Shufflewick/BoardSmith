@@ -12,7 +12,7 @@ provide(DIE_ANIMATION_CONTEXT_KEY, dieAnimationContext);
 const props = defineProps<{
   gameView: any;
   players: any[];
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, any>;
@@ -59,7 +59,7 @@ function handleRecord(track: string) {
 // Get player data for abilities
 const playerData = computed(() => {
   if (!props.players) return null;
-  return props.players.find((p: any) => p.position === props.playerPosition);
+  return props.players.find((p: any) => p.seat === props.playerSeat);
 });
 
 // Check if player has subtract ability
@@ -93,7 +93,7 @@ const hasAdjustAbility = computed(() => {
       <div class="left-panel">
         <DiceShelf
           :game-view="gameView"
-          :player-position="playerPosition"
+          :player-seat="playerSeat"
           :is-my-turn="isMyTurn"
           :available-actions="availableActions"
           :action-args="actionArgs"
@@ -177,7 +177,7 @@ const hasAdjustAbility = computed(() => {
       <div class="right-panel">
         <ScoreSheet
           :game-view="gameView"
-          :player-position="playerPosition"
+          :player-seat="playerSeat"
           :players="players"
         />
       </div>

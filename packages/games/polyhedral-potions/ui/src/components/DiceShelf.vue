@@ -8,7 +8,7 @@ const containerRef = ref<HTMLElement | null>(null);
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, any>;
@@ -51,7 +51,7 @@ const shelfDice = computed(() => {
 const draftArea = computed(() => {
   if (!props.gameView?.children) return null;
   return props.gameView.children.find(
-    (c: any) => c.name === `draft-${props.playerPosition}`
+    (c: any) => c.name === `draft-${props.playerSeat}`
   );
 });
 
@@ -105,7 +105,7 @@ const hasSelectableElements = computed(() => {
 // Get player data for abilities
 const playerData = computed(() => {
   if (!props.players) return null;
-  return props.players.find((p: any) => p.position === props.playerPosition);
+  return props.players.find((p: any) => p.seat === props.playerSeat);
 });
 
 // Check which ability actions are available

@@ -3,26 +3,26 @@ import { GameShell, AutoUI } from '@boardsmith/ui';
 import GameTable from './components/GameTable.vue';
 
 // Get player data from players array (passed from GameShell)
-function getPlayerData(playerPosition: number, players: any[]) {
+function getPlayerData(playerSeat: number, players: any[]) {
   if (!players) return null;
-  return players.find((p: any) => p.position === playerPosition);
+  return players.find((p: any) => p.seat === playerSeat);
 }
 
 // Get player score from their attributes
-function getPlayerScore(playerPosition: number, players: any[]): number {
-  const player = getPlayerData(playerPosition, players);
+function getPlayerScore(playerSeat: number, players: any[]): number {
+  const player = getPlayerData(playerSeat, players);
   return player?.score ?? 0;
 }
 
 // Get player's star count
-function getPlayerStars(playerPosition: number, players: any[]): number {
-  const player = getPlayerData(playerPosition, players);
+function getPlayerStars(playerSeat: number, players: any[]): number {
+  const player = getPlayerData(playerSeat, players);
   return player?.stars ?? 0;
 }
 
 // Get unused abilities grouped by type
-function getAbilitiesByType(playerPosition: number, players: any[]): Record<string, number> {
-  const player = getPlayerData(playerPosition, players);
+function getAbilitiesByType(playerSeat: number, players: any[]): Record<string, number> {
+  const player = getPlayerData(playerSeat, players);
   if (!player?.abilities) return {};
 
   const counts: Record<string, number> = {};
@@ -45,8 +45,8 @@ const ABILITY_INFO: Record<string, { icon: string; label: string; color: string 
 };
 
 // Get potions crafted count
-function getPotionCount(playerPosition: number, players: any[]): number {
-  const player = getPlayerData(playerPosition, players);
+function getPotionCount(playerSeat: number, players: any[]): number {
+  const player = getPlayerData(playerSeat, players);
   if (!player?.potionsCrafted) return 0;
   return player.potionsCrafted.filter((p: boolean) => p).length;
 }
@@ -54,14 +54,14 @@ function getPotionCount(playerPosition: number, players: any[]): number {
 
 <template>
   <GameShell game-type="polyhedral-potions" display-name="Polyhedral Potions" :player-count="2">
-    <template #game-board="{ state, gameView, players, playerPosition, isMyTurn, availableActions, actionArgs, actionController }">
+    <template #game-board="{ state, gameView, players, playerSeat, isMyTurn, availableActions, actionArgs, actionController }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <GameTable
             :game-view="gameView"
             :players="players"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-args="actionArgs"
@@ -72,7 +72,7 @@ function getPotionCount(playerPosition: number, players: any[]): number {
           <h2 class="board-title">Auto-Generated UI</h2>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>
@@ -82,22 +82,22 @@ function getPotionCount(playerPosition: number, players: any[]): number {
     <template #player-stats="{ player, players }">
       <div class="player-stat">
         <span class="stat-label">Score:</span>
-        <span class="stat-value">{{ getPlayerScore(player.position, players) }}</span>
+        <span class="stat-value">{{ getPlayerScore(player.seat, players) }}</span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Stars:</span>
         <span class="stat-value stars">
-          <span v-for="i in 3" :key="i" :class="{ earned: i <= getPlayerStars(player.position, players) }">★</span>
+          <span v-for="i in 3" :key="i" :class="{ earned: i <= getPlayerStars(player.seat, players) }">★</span>
         </span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Potions:</span>
-        <span class="stat-value potions">{{ getPotionCount(player.position, players) }}/32</span>
+        <span class="stat-value potions">{{ getPotionCount(player.seat, players) }}/32</span>
       </div>
       <div class="player-stat abilities-row">
         <span class="stat-label">Abilities:</span>
         <div class="abilities-list">
-          <template v-for="(count, abilityType) in getAbilitiesByType(player.position, players)" :key="abilityType">
+          <template v-for="(count, abilityType) in getAbilitiesByType(player.seat, players)" :key="abilityType">
             <span
               v-if="count > 0"
               class="ability-badge"
@@ -108,7 +108,7 @@ function getPotionCount(playerPosition: number, players: any[]): number {
               <span v-if="count > 1" class="ability-count">{{ count }}</span>
             </span>
           </template>
-          <span v-if="Object.keys(getAbilitiesByType(player.position, players)).length === 0" class="no-abilities">
+          <span v-if="Object.keys(getAbilitiesByType(player.seat, players)).length === 0" class="no-abilities">
             None
           </span>
         </div>

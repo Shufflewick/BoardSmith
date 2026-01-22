@@ -44,8 +44,8 @@ export interface StatConfig {
   /** Name of the stat (e.g., 'books', 'captured', 'score') */
   stat: string;
   /**
-   * Target player position, or a function to determine the player from the removed element.
-   * For captures, use a function: (element) => element.playerPosition === 0 ? 1 : 0
+   * Target player seat, or a function to determine the player from the removed element.
+   * For captures, use a function: (element) => element.playerSeat === 0 ? 1 : 0
    */
   player: number | ((elementData: ElementPositionData) => number);
   /**
@@ -76,7 +76,7 @@ export interface AutoFlyToStatOptions {
   getElementId?: (el: Element) => number;
   /**
    * Function to extract additional element data from DOM for rendering during animation.
-   * Returns data like rank, suit, playerPosition, isKing, etc.
+   * Returns data like rank, suit, playerSeat, isKing, etc.
    */
   getElementData?: (el: Element) => Partial<FlyingCardData>;
   /**
@@ -294,7 +294,7 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
               rect: posData.rect,
               rank: posData.rank as string,
               suit: posData.suit as string,
-              playerPosition: posData.playerPosition as number,
+              playerSeat: posData.playerSeat as number,
               isKing: posData.isKing as boolean,
               faceImage: posData.faceImage as string,
               backImage: posData.backImage as string,
@@ -310,7 +310,7 @@ export function useAutoFlyToStat(options: AutoFlyToStatOptions): AutoFlyToStatRe
 
             flyToPlayerStat(flyCards, {
               cards: cardsToFly,
-              playerPosition: targetPlayer,
+              playerSeat: targetPlayer,
               statName: statConfig.stat,
               duration,
               stagger,

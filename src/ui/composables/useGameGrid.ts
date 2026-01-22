@@ -9,7 +9,7 @@
  * ```typescript
  * import { useGameGrid } from '@boardsmith/ui';
  *
- * const props = defineProps<{ gameView: GameElement; playerPosition: number }>();
+ * const props = defineProps<{ gameView: GameElement; playerSeat: number }>();
  *
  * const {
  *   grid,

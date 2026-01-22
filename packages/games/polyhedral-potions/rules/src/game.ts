@@ -122,7 +122,7 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
 
     // Create draft areas for each player
     for (const player of this.all(Player) as unknown as PolyPotionsPlayer[]) {
-      const draftArea = this.create(DraftArea, `draft-${player.position}`);
+      const draftArea = this.create(DraftArea, `draft-${player.seat}`);
       draftArea.player = player;
       draftArea.$direction = 'horizontal';
       draftArea.$gap = '12px';
@@ -146,7 +146,7 @@ export class PolyPotionsGame extends Game<PolyPotionsGame, PolyPotionsPlayer> {
    * Get a player's draft area
    */
   getPlayerDraftArea(player: PolyPotionsPlayer): DraftArea {
-    return this.first(DraftArea, `draft-${player.position}`)!;
+    return this.first(DraftArea, `draft-${player.seat}`)!;
   }
 
   /**

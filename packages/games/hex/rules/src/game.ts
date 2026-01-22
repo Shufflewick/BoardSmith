@@ -90,9 +90,9 @@ export class HexGame extends Game<HexGame, HexPlayer> {
    */
   private applyPlayerColors(playerConfigs?: PlayerConfig[]): void {
     // playerConfigs and DEFAULT_PLAYER_COLORS are 0-indexed arrays,
-    // but player.position is 1-indexed, so use position - 1 for array access
+    // but player.seat is 1-indexed, so use seat - 1 for array access
     for (const player of this.all(Player)) {
-      const arrayIndex = player.position - 1;
+      const arrayIndex = player.seat - 1;
       const config = playerConfigs?.[arrayIndex];
       if (config?.color) {
         player.color = config.color;

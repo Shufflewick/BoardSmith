@@ -98,7 +98,7 @@
  *   actionMetadata,
  *   isMyTurn,
  *   gameView,
- *   playerPosition,
+ *   playerSeat,
  *   onBeforeAutoExecute,  // Pass directly at creation
  * });
  * ```
