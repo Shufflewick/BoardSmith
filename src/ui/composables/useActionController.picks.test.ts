@@ -1,12 +1,12 @@
 /**
- * Test suite for useActionController selection-related functionality
+ * Test suite for useActionController pick-related functionality
  *
- * Tests selection handling including:
- * - Repeating selections
- * - Dependent selections (dependsOn)
- * - Filtered selections (filterBy)
+ * Tests pick handling including:
+ * - Repeating picks
+ * - Dependent picks (dependsOn)
+ * - Filtered picks (filterBy)
  * - Text and number inputs
- * - Element selections
+ * - Element picks
  * - MultiSelect validation
  */
 
@@ -18,7 +18,7 @@ import {
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 
-describe('useActionController selections', () => {
+describe('useActionController picks', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
   let availableActions: ReturnType<typeof ref<string[]>>;
   let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
