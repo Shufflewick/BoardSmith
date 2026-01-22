@@ -38,8 +38,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 55-01-PLAN.md — Rename GameBoard.vue files in extracted games
-- [ ] 55-02-PLAN.md — Update CLI templates and documentation
+- [x] 55-01-PLAN.md — Rename GameBoard.vue files in extracted games
+- [x] 55-02-PLAN.md — Update CLI templates and documentation
 
 **Success Criteria:**
 - No files named `GameBoard.vue` in BoardSmith or extracted games
@@ -106,7 +106,7 @@ Plans:
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
 | 54 | Nomenclature Dictionary | 3 | Complete |
-| 55 | GameTable Rename | 4 | Not started |
+| 55 | GameTable Rename | 4 | Complete |
 | 56 | Position → Seat | 4 | Not started |
 | 57 | Selection → Pick | 4 | Not started |
 | 58 | Documentation Audit | 4 | Not started |

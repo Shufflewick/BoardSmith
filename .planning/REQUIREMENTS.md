@@ -13,10 +13,10 @@
 
 ### UI Rename (UI)
 
-- [ ] **UI-01**: Rename `GameBoard.vue` → `GameTable.vue` in BoardSmith UI components
-- [ ] **UI-02**: Update all imports/references to GameBoard in BoardSmith source
-- [ ] **UI-03**: Update `/design-game` templates to generate `GameTable.vue`
-- [ ] **UI-04**: Rename `GameBoard.vue` → `GameTable.vue` in all 9 extracted games
+- [x] **UI-01**: Rename `GameBoard.vue` → `GameTable.vue` in BoardSmith UI components (N/A: no GameBoard.vue in core UI)
+- [x] **UI-02**: Update all imports/references to GameBoard in BoardSmith source
+- [x] **UI-03**: Update `/design-game` templates to generate `GameTable.vue`
+- [x] **UI-04**: Rename `GameBoard.vue` → `GameTable.vue` in all 9 extracted games (4 games had GameBoard.vue)
 
 ### API Rename - Seat (SEAT)
 
@@ -54,10 +54,10 @@
 | DICT-01 | Phase 54 | Complete |
 | DICT-02 | Phase 54 | Complete |
 | DICT-03 | Phase 54 | Complete |
-| UI-01 | Phase 55 | Pending |
-| UI-02 | Phase 55 | Pending |
-| UI-03 | Phase 55 | Pending |
-| UI-04 | Phase 55 | Pending |
+| UI-01 | Phase 55 | Complete |
+| UI-02 | Phase 55 | Complete |
+| UI-03 | Phase 55 | Complete |
+| UI-04 | Phase 55 | Complete |
 | SEAT-01 | Phase 56 | Pending |
 | SEAT-02 | Phase 56 | Pending |
 | SEAT-03 | Phase 56 | Pending |
