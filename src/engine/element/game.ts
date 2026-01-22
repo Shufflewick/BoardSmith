@@ -2382,6 +2382,8 @@ export class Game<
     isFinished: boolean;
     messages: Array<{ text: string; data?: Record<string, unknown> }>;
     settings: Record<string, unknown>;
+    animationEvents?: AnimationEvent[];
+    animationEventSeq?: number;
   } {
     return {
       ...super.toJSON(),
@@ -2389,6 +2391,11 @@ export class Game<
       isFinished: this.isFinished(),
       messages: this.messages,
       settings: this.settings,
+      // Only include animation events if buffer is non-empty (avoid cluttering empty snapshots)
+      ...(this._animationEvents.length > 0 && {
+        animationEvents: this._animationEvents,
+        animationEventSeq: this._animationEventSeq,
+      }),
     };
   }
 
@@ -2551,6 +2558,13 @@ export class Game<
     game.phase = json.phase;
     game.messages = json.messages;
     game.settings = json.settings;
+
+    // Restore animation events if present
+    if ((json as { animationEvents?: AnimationEvent[] }).animationEvents) {
+      const jsonWithEvents = json as { animationEvents: AnimationEvent[]; animationEventSeq?: number };
+      game._animationEvents = [...jsonWithEvents.animationEvents];
+      game._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
+    }
 
     // Clear auto-created children and restore from JSON
     game._t.children = [];
