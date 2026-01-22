@@ -49,8 +49,8 @@ export enum ErrorCode {
   CANNOT_REWIND_FORWARD = 'CANNOT_REWIND_FORWARD',
 
   // Lobby errors
-  POSITION_ALREADY_CLAIMED = 'POSITION_ALREADY_CLAIMED',
-  INVALID_POSITION = 'INVALID_POSITION',
+  SEAT_ALREADY_CLAIMED = 'SEAT_ALREADY_CLAIMED',
+  INVALID_SEAT = 'INVALID_SEAT',
   NOT_AUTHORIZED = 'NOT_AUTHORIZED',
   GAME_ALREADY_STARTED = 'GAME_ALREADY_STARTED',
   LOBBY_NOT_READY = 'LOBBY_NOT_READY',
@@ -181,7 +181,7 @@ export interface ExclusivePlayerOption {
    * Which player has this option by default.
    * - 'first': Player 1 (first player)
    * - 'last': Last player
-   * - number: Specific player position (1-indexed)
+   * - number: Specific player seat (1-indexed)
    */
   default?: 'first' | 'last' | number;
 }
@@ -390,7 +390,7 @@ export interface SelectionChoicesResponse {
 export interface PlayerGameState {
   phase: string;
   /** Full player data including custom properties (abilities, score, etc.) */
-  players: Array<{ name: string; position: number; [key: string]: unknown }>;
+  players: Array<{ name: string; seat: number; [key: string]: unknown }>;
   currentPlayer?: number;
   availableActions?: string[];
   isMyTurn: boolean;
@@ -425,8 +425,8 @@ export type SlotStatus = 'open' | 'ai' | 'claimed';
  * Information about a player slot in the lobby
  */
 export interface LobbySlot {
-  /** Position index (0-based) */
-  position: number;
+  /** Seat number (1-indexed) */
+  seat: number;
   /** Current status of this slot */
   status: SlotStatus;
   /** Player name (set by creator for AI, by joiner for humans) */
@@ -480,7 +480,7 @@ export interface LobbyInfo {
  */
 export interface SessionInfo {
   playerId?: string;
-  playerPosition: number;
+  playerSeat: number;
   isSpectator: boolean;
 }
 
@@ -491,7 +491,7 @@ export interface StateUpdate {
   type: 'state';
   flowState: FlowState | undefined;
   state: PlayerGameState;
-  playerPosition: number;
+  playerSeat: number;
   isSpectator: boolean;
 }
 
@@ -561,13 +561,13 @@ export interface ActionRequest {
  * WebSocket message from client
  */
 export interface WebSocketMessage {
-  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimPosition' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leavePosition' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
+  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimSeat' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leaveSeat' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
   action?: string;
   args?: Record<string, unknown>;
   /** Request ID for action request/response correlation */
   requestId?: string;
-  /** For claimPosition/kickPlayer: which position to target */
-  position?: number;
+  /** For claimSeat/kickPlayer: which seat to target */
+  seat?: number;
   /** For updateName/claimPosition: player's name */
   name?: string;
   /** For setReady: ready state */
@@ -587,11 +587,11 @@ export interface WebSocketMessage {
 // ============================================
 
 /**
- * Request to claim a position in the lobby
+ * Request to claim a seat in the lobby
  */
-export interface ClaimPositionRequest {
-  /** Position to claim (0-indexed) */
-  position: number;
+export interface ClaimSeatRequest {
+  /** Seat to claim (1-indexed) */
+  seat: number;
   /** Player's name */
   name: string;
   /** Player's unique ID */
@@ -599,9 +599,9 @@ export interface ClaimPositionRequest {
 }
 
 /**
- * Response to claim position request
+ * Response to claim seat request
  */
-export interface ClaimPositionResponse {
+export interface ClaimSeatResponse {
   success: boolean;
   error?: string;
   /** Updated lobby info */
