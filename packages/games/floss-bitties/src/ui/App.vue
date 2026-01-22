@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GameShell, AutoUI } from '@boardsmith/ui';
-import GameBoard from './components/GameBoard.vue';
+import GameTable from './components/GameTable.vue';
 </script>
 
 <template>
@@ -13,7 +13,7 @@ import GameBoard from './components/GameBoard.vue';
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
-          <GameBoard
+          <GameTable
             :game-view="gameView"
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"

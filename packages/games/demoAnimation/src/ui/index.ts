@@ -1,3 +1,3 @@
 import App from './App.vue';
 export { App };
-export { default as GameBoard } from './components/GameBoard.vue';
+export { default as GameTable } from './components/GameTable.vue';

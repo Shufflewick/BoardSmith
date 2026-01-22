@@ -12,7 +12,7 @@
 -->
 <script setup lang="ts">
 import { GameShell } from '@boardsmith/ui';
-import GameBoard from './components/GameBoard.vue';
+import GameTable from './components/GameTable.vue';
 </script>
 
 <template>
@@ -22,7 +22,7 @@ import GameBoard from './components/GameBoard.vue';
     :player-count="1"
   >
     <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
-      <GameBoard
+      <GameTable
         :game-view="gameView"
         :player-position="playerPosition"
         :is-my-turn="isMyTurn"

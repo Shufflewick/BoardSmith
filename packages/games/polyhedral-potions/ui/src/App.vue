@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GameShell, AutoUI } from '@boardsmith/ui';
-import GameBoard from './components/GameBoard.vue';
+import GameTable from './components/GameTable.vue';
 
 // Get player data from players array (passed from GameShell)
 function getPlayerData(playerPosition: number, players: any[]) {
@@ -58,7 +58,7 @@ function getPotionCount(playerPosition: number, players: any[]): number {
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
-          <GameBoard
+          <GameTable
             :game-view="gameView"
             :players="players"
             :player-position="playerPosition"

@@ -1,5 +1,5 @@
 <!--
-  Demo: Complex UI Interactions - GameBoard
+  Demo: Complex UI Interactions - GameTable
 
   This component demonstrates how to use actionController to detect action state
   and handle selections directly from a custom UI.

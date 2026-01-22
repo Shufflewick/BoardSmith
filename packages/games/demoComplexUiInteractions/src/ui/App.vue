@@ -2,7 +2,7 @@
   Demo: Complex UI Interactions
 
   This demo showcases how to use boardInteraction.currentAction to coordinate
-  between the ActionPanel and a custom GameBoard.
+  between the ActionPanel and a custom GameTable.
 
   The game displays:
   - Custom UI (left): Shows action state detection and custom visual feedback
@@ -15,7 +15,7 @@
 -->
 <script setup lang="ts">
 import { GameShell, AutoUI } from '@boardsmith/ui';
-import GameBoard from './components/GameBoard.vue';
+import GameTable from './components/GameTable.vue';
 </script>
 
 <template>
@@ -34,7 +34,7 @@ import GameBoard from './components/GameBoard.vue';
           <p class="board-description">
             Uses <code>boardInteraction.currentAction</code> to show which action is being filled in
           </p>
-          <GameBoard
+          <GameTable
             :game-view="gameView"
             :player-position="playerPosition"
             :is-my-turn="isMyTurn"

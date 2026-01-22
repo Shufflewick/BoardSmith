@@ -1,5 +1,5 @@
 <!--
-  Demo: Animation Feature Showcase - GameBoard
+  Demo: Animation Feature Showcase - GameTable
 
   This component demonstrates ALL BoardSmith animation capabilities.
   Actions are named after the animation composable they showcase.
