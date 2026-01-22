@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 58-documentation-audit (5 of 5)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-22 — Phase 57 complete
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-01-22 — Completed 58-02-PLAN.md
 
-Progress: [████████████████████████████████░░░░░░░░] 4/5 phases
+Progress: [████████████████████████████████████████] 5/5 phases
 
 ## Milestones
 
@@ -35,8 +35,8 @@ Progress: [███████████████████████
 - v2.1 Design-Game Skill Redesign (Phases 47-50) — shipped 2026-01-19
 - v2.2 Game Design Aspects (Phases 51-53) — shipped 2026-01-21
 
-**Active:**
-- v2.3 Nomenclature Standardization (Phases 54-58) — in progress
+**Completed:**
+- v2.3 Nomenclature Standardization (Phases 54-58) — shipped 2026-01-22
 
 ## Roadmap Evolution
 
@@ -52,7 +52,7 @@ Progress: [███████████████████████
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Phase 57 complete
+Stopped at: v2.3 Nomenclature Standardization complete
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -139,3 +139,5 @@ Resume file: None
 | Plan scope refined | 5 files changed, not all 9 games (others had no API usage) | 57-03 |
 | Documentation uses pick terminology | docs/custom-ui-guide.md, docs/common-pitfalls.md, docs/ui-components.md updated | 57-04 |
 | CLI templates use pick | boardsmith init generates currentPick-based code | 57-04 |
+| Migration guide with v2.3 API tables | Clear before/after mappings for all terminology changes | 58-02 |
+| Nomenclature cross-references | getting-started.md and core-concepts.md link to nomenclature.md | 58-02 |
