@@ -2288,6 +2288,89 @@ export class Game<
   }
 
   // ============================================
+  // Animation Events
+  // ============================================
+
+  /**
+   * Emit an animation event for UI playback.
+   *
+   * Animation events are UI hints that flow through the session layer to UI
+   * consumers. They do NOT mutate game state - the game continues immediately
+   * while UI plays back events asynchronously (soft continuation pattern).
+   *
+   * @param type - Event type identifier (e.g., 'combat', 'score', 'cardFlip')
+   * @param data - Event-specific data payload (must be JSON-serializable - use element IDs, not references)
+   * @param options - Optional configuration including group ID for batching
+   * @returns The created animation event (for reference, though usually not needed)
+   *
+   * @example
+   * ```typescript
+   * // Emit a combat animation event
+   * this.emitAnimationEvent('combat', {
+   *   attackerId: attacker.id,
+   *   defenderId: defender.id,
+   *   damage: 5,
+   *   outcome: 'hit'
+   * });
+   *
+   * // Emit grouped events (e.g., all combat in a single action)
+   * this.emitAnimationEvent('attack', { ... }, { group: `combat-${turnNumber}` });
+   * this.emitAnimationEvent('damage', { ... }, { group: `combat-${turnNumber}` });
+   * this.emitAnimationEvent('death', { ... }, { group: `combat-${turnNumber}` });
+   * ```
+   */
+  emitAnimationEvent(
+    type: string,
+    data: Record<string, unknown>,
+    options?: EmitAnimationEventOptions
+  ): AnimationEvent {
+    const event: AnimationEvent = {
+      id: ++this._animationEventSeq,
+      type,
+      data: { ...data }, // Shallow copy to prevent external mutation
+      timestamp: Date.now(),
+      ...(options?.group && { group: options.group }),
+    };
+    this._animationEvents.push(event);
+    return event;
+  }
+
+  /**
+   * Get animation events that have not yet been acknowledged.
+   *
+   * UI consumers read this to get events to play back. Events remain in the
+   * buffer until explicitly acknowledged via `acknowledgeAnimationEvents()`.
+   *
+   * @returns Array of pending animation events (copy - modifications don't affect buffer)
+   */
+  get pendingAnimationEvents(): AnimationEvent[] {
+    return [...this._animationEvents];
+  }
+
+  /**
+   * Acknowledge animation events up to (and including) the given ID.
+   *
+   * Call this after UI has finished playing back events. Events with ID <= upToId
+   * are removed from the buffer. Safe to call with any ID value - events that
+   * don't exist or have already been acknowledged are simply ignored.
+   *
+   * @param upToId - Acknowledge all events with ID <= this value
+   *
+   * @example
+   * ```typescript
+   * // After playing back events
+   * const events = game.pendingAnimationEvents;
+   * await playAnimations(events);
+   * if (events.length > 0) {
+   *   game.acknowledgeAnimationEvents(events[events.length - 1].id);
+   * }
+   * ```
+   */
+  acknowledgeAnimationEvents(upToId: number): void {
+    this._animationEvents = this._animationEvents.filter(e => e.id > upToId);
+  }
+
+  // ============================================
   // Serialization
   // ============================================
 
