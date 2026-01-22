@@ -48,10 +48,10 @@ Plans:
   2. PlayerGameState includes lastAnimationEventId for acknowledgment tracking
   3. GameSession.acknowledgeAnimations(playerSeat, upToId) clears events
   4. Session snapshots preserve animation event buffer
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 60-01: TBD
+- [ ] 60-01-PLAN.md - Session animation event integration
 
 ### Phase 61: Animation Playback
 **Goal**: UI can register handlers and play back animation events sequentially
@@ -102,7 +102,7 @@ Phases execute in numeric order: 59 -> 60 -> 61 -> 62 -> 63
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 59. Core Animation Events | 2/2 | ✓ Complete | 2026-01-22 |
-| 60. Session Integration | 0/? | Not started | - |
+| 60. Session Integration | 0/1 | Planned | - |
 | 61. Animation Playback | 0/? | Not started | - |
 | 62. ActionController Integration | 0/? | Not started | - |
 | 63. Documentation | 0/? | Not started | - |
