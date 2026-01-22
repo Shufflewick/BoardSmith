@@ -8,9 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State: v2.2 Shipped
+## Current State: v2.2 Shipped → v2.3 In Progress
 
 BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Games live in separate repositories at `~/BoardSmithGames/`.
+
+**v2.3 Focus:** Nomenclature standardization — consistent terminology across the entire codebase, documentation, and games before external adoption.
 
 **Package structure:**
 - Single package: `boardsmith` (replaces 12 `@boardsmith/*` packages)
@@ -85,7 +87,11 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-(None — ready for next milestone)
+- [ ] Nomenclature dictionary created as authoritative reference — v2.3
+- [ ] `GameBoard.vue` → `GameTable.vue` across all games and templates — v2.3
+- [ ] `position` → `seat` in API and documentation — v2.3
+- [ ] `selection` → `pick` in API and documentation — v2.3
+- [ ] All documentation uses standardized terminology — v2.3
 
 ### Out of Scope
 
@@ -145,4 +151,4 @@ Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
 One external team using BoardSmith — migration guide at `docs/migration-guide.md`.
 
 ---
-*Last updated: 2026-01-21 after v2.2 milestone*
+*Last updated: 2026-01-21 after starting v2.3 milestone*
