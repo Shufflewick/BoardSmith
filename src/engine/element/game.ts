@@ -126,6 +126,32 @@ export type GameOptions = {
 export type GamePhase = 'setup' | 'started' | 'finished';
 
 /**
+ * Animation event emitted during game execution.
+ * These are UI hints, NOT state mutations. They flow through the session
+ * layer to UI consumers who play them back asynchronously.
+ */
+export interface AnimationEvent {
+  /** Unique ID for acknowledgment (monotonically increasing) */
+  id: number;
+  /** Event type (e.g., 'combat', 'score', 'cardFlip') */
+  type: string;
+  /** Event-specific data payload (must be JSON-serializable) */
+  data: Record<string, unknown>;
+  /** Timestamp when event was emitted */
+  timestamp: number;
+  /** Optional group ID for batching related events */
+  group?: string;
+}
+
+/**
+ * Options for emitting an animation event
+ */
+export interface EmitAnimationEventOptions {
+  /** Group ID for batching related events (e.g., all combat events in a turn) */
+  group?: string;
+}
+
+/**
  * Function to transform game state for a specific player's view.
  * Runs AFTER zone-based visibility filtering.
  * Use for attribute-level filtering that zone visibility can't handle.
@@ -290,6 +316,12 @@ export class Game<
   /** Persistent maps that survive HMR (synced to settings) */
   private _persistentMaps: Map<string, PersistentMap<unknown, unknown>> = new Map();
 
+  /** Animation events buffer (for UI playback) */
+  private _animationEvents: AnimationEvent[] = [];
+
+  /** Animation event sequence counter (for unique IDs) */
+  private _animationEventSeq: number = 0;
+
   /** Properties that are safe and shouldn't trigger HMR warnings */
   private static readonly _safeProperties = new Set([
     // Base GameElement properties
@@ -298,6 +330,7 @@ export class Game<
     'pile', 'phase', 'random', 'messages', 'settings',
     'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
     '_flowEngine', '_debugRegistry', '_persistentMaps',
+    '_animationEvents', '_animationEventSeq',
   ]);
 
   static override unserializableAttributes = [
