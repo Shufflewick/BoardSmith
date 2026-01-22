@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 56-position-seat-rename (3 of 5)
-Plan: 04 of 4 complete
+Plan: 05 of 5 complete
 Status: Phase complete
-Last activity: 2026-01-22 — Completed 56-04-PLAN.md
+Last activity: 2026-01-22 — Completed 56-05-PLAN.md
 
-Progress: [████████████████████░░░░░░░░░░░░░░░░░░░░] 2.3/5 phases
+Progress: [████████████████████░░░░░░░░░░░░░░░░░░░░░] 2.6/5 phases
 
 ## Milestones
 
@@ -52,7 +52,7 @@ Progress: [████████████████████░░░
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 56-04-PLAN.md
+Stopped at: Completed 56-05-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -127,3 +127,5 @@ Resume file: None
 | Player.position renamed to Player.seat | Aligns with nomenclature.md "Seat" term | 56-01 |
 | Keep playerPosition param names | API stability for internal types; JSDoc clarifies meaning | 56-01 |
 | All 9 extracted games use seat | Checkers, Cribbage, Go Fish, Hex, Polyhedral Potions, Floss Bitties, 3 demos | 56-04 |
+| Documentation uses seat consistently | player.seat in code, playerSeat in Vue props, getPlayerColor(playerSeat) | 56-05 |
+| CLI templates generate seat-based code | New projects via boardsmith init use seat terminology | 56-05 |
