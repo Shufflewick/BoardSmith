@@ -7,6 +7,8 @@ This document defines the standard terminology used throughout BoardSmith. Use t
 | Term | Definition |
 |------|------------|
 | Action | A player operation with prompt, selections, and effects |
+| Animation Event | A UI hint for asynchronous animation playback |
+| Animation Handler | A function that plays back a specific event type |
 | Active Player | The player whose turn it is |
 | AutoUI | Auto-generated game interface |
 | Board | A Space containing the main game area |
@@ -34,6 +36,7 @@ This document defines the standard terminology used throughout BoardSmith. Use t
 | Rules | The game logic and setup (Game class) |
 | Seat | A player's place at the table (replaces "position" in v2.3) |
 | Session | A single game instance |
+| Soft Continuation | Pattern where state advances immediately, UI plays back |
 | Space | A container/location for pieces |
 | Table | The visual game area where all components are displayed (replaces GameBoard in v2.3) |
 | Turn | A player's opportunity to act |
@@ -416,6 +419,42 @@ Terms for the user interface layer.
 **Usage:**
 - "Use AutoUI to test rules before building custom UI"
 - "AutoUI displays the element tree automatically"
+
+---
+
+## Animation
+
+Terms related to the animation event system for asynchronous UI playback.
+
+### Animation Event
+
+**Definition:** A UI hint emitted during game execution that flows to UI consumers for asynchronous playback. Animation events do NOT mutate game state - the game continues immediately while UI plays back events (soft continuation pattern).
+
+**In Code:** `AnimationEvent` interface; `game.emitAnimationEvent()` method
+**Related Terms:** Soft Continuation, Animation Handler, ActionPanel
+**Usage:**
+- "Emit an animation event when combat resolves"
+- "The UI plays back animation events while state already advanced"
+
+### Animation Handler
+
+**Definition:** A function registered with the animation events system to play back a specific event type. Handlers receive the event and return a Promise that resolves when the animation completes.
+
+**In Code:** `AnimationHandler` type; registered via `registerHandler()`
+**Related Terms:** Animation Event, Soft Continuation
+**Usage:**
+- "Register a handler for combat animation events"
+- "The handler controls animation timing via its returned Promise"
+
+### Soft Continuation
+
+**Definition:** Design pattern where game state advances immediately and UI plays back asynchronously. The UI "catches up" to the current state through animation playback, rather than blocking state advancement.
+
+**In Code:** Architecture pattern (not a specific type)
+**Related Terms:** Animation Event, ActionPanel
+**Usage:**
+- "BoardSmith uses soft continuation - state doesn't wait for animations"
+- "The ActionPanel gates on animation completion to prevent premature decisions"
 
 ---
 
