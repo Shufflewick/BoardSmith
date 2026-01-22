@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 56-position-seat-rename (3 of 5)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-22 — Phase 55 complete
+Plan: 01 of 3 complete
+Status: In progress
+Last activity: 2026-01-22 — Completed 56-01-PLAN.md
 
-Progress: [████████████████░░░░░░░░░░░░░░░░░░░░░░░░] 2/5 phases
+Progress: [████████████████████░░░░░░░░░░░░░░░░░░░░] 2.3/5 phases
 
 ## Milestones
 
@@ -52,7 +52,7 @@ Progress: [████████████████░░░░░░░
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Phase 55 complete
+Stopped at: Completed 56-01-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -124,3 +124,5 @@ Resume file: None
 | v2.3 terms inline in entries | Migration notes for Table, Seat, Pick placed in entry definitions | 54-01 |
 | git mv for component renames | Preserves file history across renames | 55-01 |
 | Preserve AutoGameBoard references | AutoGameBoard is a distinct component in public API | 55-02 |
+| Player.position renamed to Player.seat | Aligns with nomenclature.md "Seat" term | 56-01 |
+| Keep playerPosition param names | API stability for internal types; JSDoc clarifies meaning | 56-01 |
