@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-22)
 ## Current Position
 
 Phase: 61 of 63 (Animation Playback)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-22 — Phase 60 Session Integration complete
+Plan: 01 of 01 complete
+Status: Phase complete
+Last activity: 2026-01-22 — Completed 61-01-PLAN.md
 
-Progress: [████......] 40% (2/5 phases)
+Progress: [██████....] 60% (3/5 phases)
 
 ## Milestones
 
@@ -46,8 +46,8 @@ Progress: [████......] 40% (2/5 phases)
 
 ## Session Continuity
 
-Last session: 2026-01-22T21:54:00Z
-Stopped at: Completed 60-01-PLAN.md
+Last session: 2026-01-22T22:06:20Z
+Stopped at: Completed 61-01-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.4)
@@ -68,3 +68,7 @@ Resume file: None
 | Spectators receive animation events | Universal events - all viewers see all animations | 60-01 |
 | Broadcast on acknowledge | All clients notified when events consumed | 60-01 |
 | playerSeat param for future | Included for multi-client per-client tracking | 60-01 |
+| Track lastQueuedId separate from lastProcessedId | Prevents re-queueing when watcher fires during processing | 61-01 |
+| Handler errors logged but do not stop chain | One handler error shouldn't break entire animation sequence | 61-01 |
+| Pause/resume via Promise synchronization | Allows processQueue to await unpause without polling | 61-01 |
+| skipAll acknowledges all pending events | Prevents replay on reconnect even when animations skipped | 61-01 |
