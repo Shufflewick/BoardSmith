@@ -13,8 +13,8 @@ import type { ElementContext, ElementClass, ElementFinder, ElementJSON } from '.
  * // Find all players
  * const players = game.all(Player);
  *
- * // Find player by position
- * const player1 = game.first(Player, { position: 1 });
+ * // Find player by seat
+ * const player1 = game.first(Player, { seat: 1 });
  *
  * // Find players meeting a condition
  * const richPlayers = game.all(Player, p => p.gold > 10);
@@ -67,12 +67,12 @@ import type { ElementContext, ElementClass, ElementFinder, ElementJSON } from '.
  *   action handlers where the player must exist.
  *
  * - **Don't cache player references**: Players may be recreated during state restoration.
- *   Always query for players fresh when needed, or use position numbers as stable identifiers.
+ *   Always query for players fresh when needed, or use seat numbers as stable identifiers.
  *
  * @typeParam G - The Game subclass type
  * @typeParam P - The Player subclass type (for type-safe player references)
  *
- * @see {@link Game.getPlayer} - Get player by position
+ * @see {@link Game.getPlayer} - Get player by seat
  * @see {@link Game.currentPlayer} - Get current player
  * @see {@link Game.all} - Query players with `game.all(Player, ...)`
  */
@@ -85,23 +85,23 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
   $type: 'player' = 'player';
 
   /**
-   * Seat position (1-indexed: Player 1 = position 1, Player 2 = position 2, etc.).
+   * Seat number (1-indexed: Player 1 = seat 1, Player 2 = seat 2, etc.).
    *
-   * Position is assigned at game creation and remains constant throughout the game.
-   * Use position as a stable identifier when you need to reference players across
+   * Seat is assigned at game creation and remains constant throughout the game.
+   * Use seat as a stable identifier when you need to reference players across
    * state serialization/deserialization.
    *
    * @example
    * ```typescript
-   * // Position is 1-indexed
+   * // Seat is 1-indexed
    * const player1 = game.getPlayer(1); // First player
    * const player2 = game.getPlayer(2); // Second player
    *
    * // Use in turn order logic
-   * const nextPosition = (current.position % playerCount) + 1;
+   * const nextSeat = (current.seat % playerCount) + 1;
    * ```
    */
-  position!: number;
+  seat!: number;
 
   /**
    * Player color for UI display (hex code like '#FF0000' or color name).
@@ -112,7 +112,7 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * ```typescript
    * // Set colors during setup
    * for (const player of game.all(Player)) {
-   *   player.color = PLAYER_COLORS[player.position - 1];
+   *   player.color = PLAYER_COLORS[player.seat - 1];
    * }
    * ```
    */
@@ -129,7 +129,7 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
   }
 
   /**
-   * Check if this player is the first player (position 1).
+   * Check if this player is the first player (seat 1).
    *
    * Useful for determining starting player or special first-player rules.
    *
@@ -142,7 +142,7 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * ```
    */
   get isFirstPlayer(): boolean {
-    return this.position === 1;
+    return this.seat === 1;
   }
 
   /**
