@@ -83,6 +83,14 @@ Plans:
 
 **Requirements:** PICK-01, PICK-02, PICK-03, PICK-04
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 57-01-PLAN.md — Engine types + session types + handler rename
+- [ ] 57-02-PLAN.md — UI composables rename
+- [ ] 57-03-PLAN.md — Extracted games update (all 9 games)
+- [ ] 57-04-PLAN.md — Documentation and CLI templates update
+
 **Success Criteria:**
 - Selection-related APIs use "pick" terminology
 - All internal code updated
@@ -117,7 +125,7 @@ Plans:
 | 54 | Nomenclature Dictionary | 3 | Complete |
 | 55 | GameTable Rename | 4 | Complete |
 | 56 | Position → Seat | 4 | Complete |
-| 57 | Selection → Pick | 4 | Not started |
+| 57 | Selection → Pick | 4 | Ready |
 | 58 | Documentation Audit | 4 | Not started |
 
 **Total:** 5 phases, 19 requirements
