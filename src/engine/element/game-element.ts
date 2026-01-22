@@ -642,12 +642,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * Check if this element is visible to a player
    */
   isVisibleTo(player: Player | number): boolean {
-    const position = typeof player === 'number' ? player : player.position;
+    const seat = typeof player === 'number' ? player : player.seat;
     const visibility = this.getEffectiveVisibility();
     // For owner-based visibility, check this element's owner first,
     // then walk up the tree to find an owner (for inherited visibility)
-    const ownerPosition = this.getEffectiveOwner()?.position;
-    return canPlayerSee(visibility, position, ownerPosition);
+    const ownerSeat = this.getEffectiveOwner()?.seat;
+    return canPlayerSee(visibility, seat, ownerSeat);
   }
 
   /**
@@ -751,14 +751,14 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     // GameElement references get special handling (no cycle risk - they become refs)
     if (value instanceof GameElement) {
-      // Check if this is a Player (has position property unique to Player)
+      // Check if this is a Player (has seat property unique to Player)
       // Use duck typing to avoid circular import (Player extends GameElement)
-      if ('position' in value && typeof (value as Player).position === 'number') {
+      if ('seat' in value && typeof (value as Player).seat === 'number') {
         const player = value as Player;
         // Include useful properties for UI while maintaining deserializability via __playerRef
         return {
-          __playerRef: player.position,
-          position: player.position,
+          __playerRef: player.seat,
+          seat: player.seat,
           color: player.color,
           name: player.name,
         };

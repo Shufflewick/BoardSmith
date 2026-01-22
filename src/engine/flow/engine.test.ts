@@ -252,7 +252,7 @@ describe('FlowEngine', () => {
         root: eachPlayer({
           name: 'player',
           do: execute((ctx) => {
-            visitedPlayers.push(ctx.player!.position);
+            visitedPlayers.push(ctx.player!.seat);
           }),
         }),
       });
@@ -268,9 +268,9 @@ describe('FlowEngine', () => {
 
       const flow = defineFlow({
         root: eachPlayer({
-          filter: (p) => p.position !== 2,  // Skip player at position 2
+          filter: (p) => p.seat !== 2,  // Skip player at seat 2
           do: execute((ctx) => {
-            visitedPlayers.push(ctx.player!.position);
+            visitedPlayers.push(ctx.player!.seat);
           }),
         }),
       });
@@ -288,7 +288,7 @@ describe('FlowEngine', () => {
         root: eachPlayer({
           direction: 'backward',
           do: execute((ctx) => {
-            visitedPlayers.push(ctx.player!.position);
+            visitedPlayers.push(ctx.player!.seat);
           }),
         }),
       });
@@ -1249,7 +1249,7 @@ describe('Turn Order Presets', () => {
       root: eachPlayer({
         ...TurnOrder.DEFAULT,
         do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.position);
+          visitedPlayers.push(ctx.player!.seat);
         }),
       }),
     });
@@ -1267,7 +1267,7 @@ describe('Turn Order Presets', () => {
       root: eachPlayer({
         ...TurnOrder.REVERSE,
         do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.position);
+          visitedPlayers.push(ctx.player!.seat);
         }),
       }),
     });
@@ -1285,7 +1285,7 @@ describe('Turn Order Presets', () => {
       root: eachPlayer({
         ...TurnOrder.ONLY([1, 3]),  // 1-indexed: players at positions 1 and 3
         do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.position);
+          visitedPlayers.push(ctx.player!.seat);
         }),
       }),
     });
@@ -1304,7 +1304,7 @@ describe('Turn Order Presets', () => {
       root: eachPlayer({
         ...TurnOrder.START_FROM(2),  // 1-indexed: start from player at position 2
         do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.position);
+          visitedPlayers.push(ctx.player!.seat);
         }),
       }),
     });
@@ -1326,7 +1326,7 @@ describe('Turn Order Presets', () => {
       root: eachPlayer({
         ...TurnOrder.CONTINUE,
         do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.position);
+          visitedPlayers.push(ctx.player!.seat);
         }),
       }),
     });
@@ -1355,7 +1355,7 @@ describe('Turn Order Presets', () => {
       root: eachPlayer({
         ...TurnOrder.ACTIVE_ONLY,
         do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.position);
+          visitedPlayers.push(ctx.player!.seat);
         }),
       }),
     });

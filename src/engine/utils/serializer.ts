@@ -36,7 +36,7 @@ export function serializeValue(
   // Handle Player references (check before GameElement since Player now extends GameElement)
   if (value instanceof Player) {
     const player = value as Player;
-    return { __playerRef: player.position };
+    return { __playerRef: player.seat };
   }
 
   // Handle GameElement references
@@ -128,7 +128,7 @@ export function serializeAction(
 ): SerializedAction {
   const serialized: SerializedAction = {
     name: actionName,
-    player: player.position,
+    player: player.seat,
     args: serializeValue(args, game, options) as Record<string, unknown>,
     timestamp: Date.now(),
   };

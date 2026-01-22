@@ -32,8 +32,8 @@ describe('Element Tree', () => {
   describe('Game creation', () => {
     it('should create a game with players', () => {
       expect(game.all(Player).length).toBe(2);
-      expect(game.getPlayer(1)!.position).toBe(1);
-      expect(game.getPlayer(2)!.position).toBe(2);
+      expect(game.getPlayer(1)!.seat).toBe(1);
+      expect(game.getPlayer(2)!.seat).toBe(2);
     });
 
     it('should have a pile for removed elements', () => {

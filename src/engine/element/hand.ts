@@ -14,7 +14,7 @@ import type { Game } from './game.js';
  * ```typescript
  * // Create hands for each player
  * for (const player of game.players) {
- *   const hand = game.create(Hand, `hand-${player.position}`, {
+ *   const hand = game.create(Hand, `hand-${player.seat}`, {
  *     player
  *   });
  *   hand.contentsVisibleToOwner(); // Only owner sees their cards

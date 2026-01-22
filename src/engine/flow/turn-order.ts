@@ -105,7 +105,7 @@ export const TurnOrder = {
    */
   ONLY: (positions: number[]): TurnOrderConfig => ({
     direction: 'forward' as const,
-    filter: (player: Player) => positions.includes(player.position),
+    filter: (player: Player) => positions.includes(player.seat),
   }),
 
   /**
@@ -124,7 +124,7 @@ export const TurnOrder = {
    * // At end of hand - use nextAfter to handle wrap-around:
    * execute(ctx => {
    *   const dealer = ctx.game.players.get(ctx.game.dealerPosition);
-   *   ctx.game.dealerPosition = ctx.game.players.nextAfter(dealer).position;
+   *   ctx.game.dealerSeat = ctx.game.players.nextAfter(dealer).seat;
    * })
    * ```
    */

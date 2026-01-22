@@ -176,7 +176,7 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
    * Add specific players who can see this piece (beyond inherited visibility)
    */
   addVisibleTo(...players: (Player | number)[]): void {
-    const positions = players.map((p) => (typeof p === 'number' ? p : p.position));
+    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
     this.addVisibleToInternal(positions);
   }
 
@@ -184,10 +184,10 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
    * Show this piece only to a specific player (hide from all others)
    */
   showOnlyTo(player: Player | number): void {
-    const position = typeof player === 'number' ? player : player.position;
+    const seat = typeof player === 'number' ? player : player.seat;
     this._visibility = {
       mode: 'hidden',
-      addPlayers: [position],
+      addPlayers: [seat],
       explicit: true,
     };
   }
@@ -196,7 +196,7 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
    * Hide this piece from specific players (visible to all others)
    */
   hideFrom(...players: (Player | number)[]): void {
-    const positions = players.map((p) => (typeof p === 'number' ? p : p.position));
+    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
     this._visibility = {
       mode: 'all',
       exceptPlayers: positions,

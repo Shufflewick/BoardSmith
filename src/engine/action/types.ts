@@ -103,7 +103,7 @@ export interface RepeatingSelectionState {
 export interface PendingActionState {
   /** Action being executed */
   actionName: string;
-  /** Player position */
+  /** Player seat number */
   playerPosition: number;
   /** Collected args for completed selections */
   collectedArgs: Record<string, unknown>;

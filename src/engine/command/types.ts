@@ -126,7 +126,7 @@ export interface AddVisibleToCommand extends BaseCommand {
  */
 export interface SetCurrentPlayerCommand extends BaseCommand {
   type: 'SET_CURRENT_PLAYER';
-  /** Player position */
+  /** Player seat number */
   playerPosition: number;
 }
 

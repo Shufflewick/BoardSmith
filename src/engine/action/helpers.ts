@@ -157,12 +157,12 @@ export function actionTempState(
     // Called with (ctx, actionName)
     const ctx = ctxOrGame as ActionContext;
     game = ctx.game;
-    playerPosition = ctx.player.position;
+    playerPosition = ctx.player.seat;
     actionName = actionNameOrPlayer;
   } else {
     // Called with (game, player, actionName)
     game = ctxOrGame as Game;
-    playerPosition = actionNameOrPlayer.position;
+    playerPosition = actionNameOrPlayer.seat;
     actionName = maybeActionName!;
   }
 

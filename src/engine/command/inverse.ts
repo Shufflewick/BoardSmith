@@ -208,7 +208,7 @@ function createSetCurrentPlayerInverse(game: Game, _command: SetCurrentPlayerCom
 
   return {
     type: 'SET_CURRENT_PLAYER',
-    playerPosition: currentPlayer.position,
+    playerPosition: currentPlayer.seat,
   };
 }
 

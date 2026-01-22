@@ -110,7 +110,7 @@ export function createPlayerView(
     messages: game.getFormattedMessages().map(text => ({ text })),
     phase: game.phase,
     complete: flowState?.complete ?? false,
-    winners: flowState?.complete ? game.getWinners().map(p => p.position) : undefined,
+    winners: flowState?.complete ? game.getWinners().map(p => p.seat) : undefined,
   };
 }
 
@@ -118,5 +118,5 @@ export function createPlayerView(
  * Create views for all players
  */
 export function createAllPlayerViews(game: Game): PlayerStateView[] {
-  return (game.all(Player as any) as Player[]).map((p) => createPlayerView(game, p.position));
+  return (game.all(Player as any) as Player[]).map((p) => createPlayerView(game, p.seat));
 }

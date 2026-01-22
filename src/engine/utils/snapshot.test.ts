@@ -38,7 +38,7 @@ describe('GameStateSnapshot', () => {
 
     hands = [];
     for (const player of game.all(Player)) {
-      const hand = game.create(Hand, `hand-${player.position}`);
+      const hand = game.create(Hand, `hand-${player.seat}`);
       hand.player = player;
       hand.contentsVisibleToOwner();
       hands.push(hand);

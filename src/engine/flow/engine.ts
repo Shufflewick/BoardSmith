@@ -401,7 +401,7 @@ export class FlowEngine<G extends Game = Game> {
       position: this.getPosition(),
       complete: this.complete,
       awaitingInput: this.awaitingInput,
-      currentPlayer: this.currentPlayer?.position,
+      currentPlayer: this.currentPlayer?.seat,
       availableActions: this.awaitingInput ? this.availableActions : undefined,
       awaitingPlayers: this.awaitingPlayers.length > 0 ? this.awaitingPlayers : undefined,
       currentPhase: this.currentPhase,
@@ -682,7 +682,7 @@ export class FlowEngine<G extends Game = Game> {
     return {
       path,
       iterations,
-      playerIndex: this.currentPlayer?.position,
+      playerIndex: this.currentPlayer?.seat,
       variables: { ...this.variables },
     };
   }
@@ -1105,7 +1105,7 @@ export class FlowEngine<G extends Game = Game> {
       // Only add player if they have available actions
       if (available.length > 0) {
         this.awaitingPlayers.push({
-          playerIndex: player.position,
+          playerIndex: player.seat,
           availableActions: available,
           completed: false,
         });

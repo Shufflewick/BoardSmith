@@ -117,7 +117,7 @@ describe('Action Builder', () => {
   it('should set condition', () => {
     const action = Action.create('test')
       .condition({
-        'player is first': (ctx) => ctx.player.position === 1,
+        'player is first': (ctx) => ctx.player.seat === 1,
       })
       .execute(() => {});
 
@@ -152,11 +152,11 @@ describe('Action Executor', () => {
     it('should return dynamic choices', () => {
       const action = Action.create('test')
         .chooseFrom('double', {
-          choices: (ctx) => [ctx.player.position * 2],
+          choices: (ctx) => [ctx.player.seat * 2],
         })
         .execute(() => {});
 
-      // Player at position 2, so position * 2 = 4
+      // Player at seat 2, so seat * 2 = 4
       const choices = executor.getChoices(
         action.selections[0],
         game.getPlayer(2)!,
