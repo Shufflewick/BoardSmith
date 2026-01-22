@@ -374,10 +374,10 @@ const boardInteraction = useBoardInteraction();
 boardInteraction.currentAction         // string | null
 
 // Which selection step the player is on (0-based)
-boardInteraction.currentSelectionIndex // number
+boardInteraction.currentPickIndex // number
 
-// Name of the current selection
-boardInteraction.currentSelectionName  // string | null
+// Name of the current pick
+boardInteraction.currentPickName  // string | null
 ```
 
 **Example: Detecting when "Hire First MERC" is clicked**
@@ -453,7 +453,7 @@ const { drag, drop } = useDragDrop();
 // Condition function determines when cards can be dragged
 const canDragCard = (cardId: number) =>
   currentAction.value === 'moveCard' &&
-  currentSelection.value?.name === 'card' &&
+  currentPick.value?.name === 'card' &&
   isCardSelectable(cardId);
 </script>
 
@@ -541,7 +541,7 @@ Or use your own class names alongside the library classes:
 const { dragProps, dropProps, isDragging, isDropTarget } = useDragDrop();
 
 const isDragDropCardSelection = computed(() =>
-  currentAction.value === 'moveCard' && currentSelection.value?.name === 'card'
+  currentAction.value === 'moveCard' && currentPick.value?.name === 'card'
 );
 
 function isCardDragging(cardId) { return isDragging({ id: cardId }); }
@@ -573,7 +573,7 @@ const { drag, drop } = useDragDrop();
 
 const canDrag = (cardId) =>
   currentAction.value === 'moveCard' &&
-  currentSelection.value?.name === 'card' &&
+  currentPick.value?.name === 'card' &&
   isSelectable(cardId);
 </script>
 
@@ -1155,7 +1155,7 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | Property | Type | Description |
 |----------|------|-------------|
 | `pendingAction` | `string \| null` | Name of action currently in wizard mode |
-| `currentSelection` | `SelectionMetadata \| null` | Metadata for the current selection step |
+| `currentPick` | `PickMetadata \| null` | Metadata for the current pick step |
 | `validElements` | `ComputedRef<ValidElement[]>` | **Reactive** list of valid elements for current selection |
 | `isExecuting` | `boolean` | Whether an action is currently executing |
 | `error` | `string \| null` | Error message from last failed execution |
@@ -1168,11 +1168,11 @@ When building custom UIs for element selections (`fromElements`, `chooseElement`
 - The gameView updates
 
 ```typescript
-const { validElements, currentSelection } = props.actionController;
+const { validElements, currentPick } = props.actionController;
 
 // Use the reactive computed directly - it updates automatically!
 const selectableCards = computed(() => {
-  if (currentSelection.value?.type !== 'element') return [];
+  if (currentPick.value?.type !== 'element') return [];
 
   return validElements.value.map(ve => ({
     id: ve.id,
@@ -1422,8 +1422,8 @@ function isCardPlayable(card: GameViewElement): boolean {
   if (!props.availableActions.includes('play')) return false;
 
   // If in wizard mode, check validElements
-  const { currentSelection, validElements } = props.actionController;
-  if (currentSelection.value?.name === 'card') {
+  const { currentPick, validElements } = props.actionController;
+  if (currentPick.value?.name === 'card') {
     return validElements.value.some(ve => ve.id === card.id);
   }
 
@@ -1663,10 +1663,10 @@ async function onMercClick(merc: GameViewElement) {
 
 // 4. User clicks equipment (using validElements from actionController)
 async function onEquipmentClick(equipment: GameViewElement) {
-  const { currentSelection, validElements } = props.actionController;
+  const { currentPick, validElements } = props.actionController;
 
   // Check if this equipment is selectable
-  if (currentSelection.value?.name !== 'equipment') return;
+  if (currentPick.value?.name !== 'equipment') return;
   if (!validElements.value.some(ve => ve.id === equipment.id)) return;
 
   // Fill the selection with the equipment ID

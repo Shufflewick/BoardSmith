@@ -11,11 +11,11 @@ The `actionController` provides a **reactive `validElements` computed** that aut
 
 ```typescript
 // In your custom UI component
-const { validElements, currentSelection } = props.actionController;
+const { validElements, currentPick } = props.actionController;
 
 // Use the reactive computed directly - it updates automatically!
 const selectableCards = computed(() => {
-  if (currentSelection.value?.type !== 'element') return [];
+  if (currentPick.value?.type !== 'element') return [];
 
   return validElements.value.map(ve => ({
     id: ve.id,
@@ -46,7 +46,7 @@ interface ValidElement {
 
 ```typescript
 function isCardSelectable(cardId: number): boolean {
-  if (currentSelection.value?.type !== 'element') return false;
+  if (currentPick.value?.type !== 'element') return false;
 
   // Use the reactive validElements computed
   return validElements.value.some(ve => ve.id === cardId);
@@ -57,7 +57,7 @@ function isCardSelectable(cardId: number): boolean {
 
 ```typescript
 const equipmentChoices = computed(() => {
-  if (currentSelection.value?.name !== 'equipment') return [];
+  if (currentPick.value?.name !== 'equipment') return [];
 
   return validElements.value.map(ve => ({
     id: ve.id,
@@ -74,7 +74,7 @@ const equipmentChoices = computed(() => {
 ```typescript
 async function handleCardClick(cardId: number) {
   if (!isCardSelectable(cardId)) return;
-  await actionController.fill(currentSelection.value!.name, cardId);
+  await actionController.fill(currentPick.value!.name, cardId);
 }
 ```
 
@@ -85,7 +85,7 @@ The `getValidElements()` method reads from an internal Map which Vue can't track
 ```typescript
 // BAD - Not reactive! Will show empty until something else triggers re-render
 const items = computed(() => {
-  const sel = currentSelection.value;
+  const sel = currentPick.value;
   return actionController.getValidElements(sel);  // May be empty!
 });
 ```
@@ -133,7 +133,7 @@ const parentContainer = findElementById(gameView, parentId);
 import type {
   UseActionControllerReturn,
   ValidElement,
-  SelectionMetadata,
+  PickMetadata,
   GameViewElement  // Alias for GameElement
 } from 'boardsmith/ui';
 ```

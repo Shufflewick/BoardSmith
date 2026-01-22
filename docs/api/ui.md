@@ -142,7 +142,7 @@ import {
 - `useActionController()` - Action handling for custom UIs
 - `injectActionController()` - Inject action controller
 - `ACTION_CONTROLLER_KEY` - Injection key
-- `injectSelectionStepFn()` - Inject selection step function
+- `injectPickStepFn()` - Inject pick step function
 - `injectBoardInteraction()` - Inject board interaction
 - `actionNeedsWizardMode()` - Check if action needs wizard
 
