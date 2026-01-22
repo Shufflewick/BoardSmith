@@ -111,8 +111,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 58-01-PLAN.md — Update code examples (position -> seat)
-- [ ] 58-02-PLAN.md — Create migration guide + add nomenclature links
+- [x] 58-01-PLAN.md — Update code examples (position -> seat)
+- [x] 58-02-PLAN.md — Create migration guide + add nomenclature links
 
 **Success Criteria:**
 - All docs/*.md files audited
@@ -132,7 +132,7 @@ Plans:
 | 55 | GameTable Rename | 4 | Complete |
 | 56 | Position → Seat | 4 | Complete |
 | 57 | Selection → Pick | 4 | Complete |
-| 58 | Documentation Audit | 4 | Not started |
+| 58 | Documentation Audit | 4 | Complete |
 
 **Total:** 5 phases, 19 requirements
 

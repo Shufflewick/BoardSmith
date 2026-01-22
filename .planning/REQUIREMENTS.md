@@ -34,10 +34,10 @@
 
 ### Documentation (DOCS)
 
-- [ ] **DOCS-01**: Audit all docs/*.md files for terminology consistency
-- [ ] **DOCS-02**: Update docs to use standardized terms (Table, Board, Zone, etc.)
-- [ ] **DOCS-03**: Add nomenclature.md reference link to relevant docs
-- [ ] **DOCS-04**: Update migration guide with terminology changes
+- [x] **DOCS-01**: Audit all docs/*.md files for terminology consistency
+- [x] **DOCS-02**: Update docs to use standardized terms (Table, Board, Zone, etc.)
+- [x] **DOCS-03**: Add nomenclature.md reference link to relevant docs
+- [x] **DOCS-04**: Update migration guide with terminology changes
 
 ## Out of Scope
 
@@ -66,10 +66,10 @@
 | PICK-02 | Phase 57 | Complete |
 | PICK-03 | Phase 57 | Complete |
 | PICK-04 | Phase 57 | Complete |
-| DOCS-01 | Phase 58 | Pending |
-| DOCS-02 | Phase 58 | Pending |
-| DOCS-03 | Phase 58 | Pending |
-| DOCS-04 | Phase 58 | Pending |
+| DOCS-01 | Phase 58 | Complete |
+| DOCS-02 | Phase 58 | Complete |
+| DOCS-03 | Phase 58 | Complete |
+| DOCS-04 | Phase 58 | Complete |
 
 **Coverage:**
 - v1 requirements: 19 total
