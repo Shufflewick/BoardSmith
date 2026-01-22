@@ -27,10 +27,10 @@
 
 ### API Rename - Pick (PICK)
 
-- [ ] **PICK-01**: Rename selection-related APIs to use "pick" terminology
-- [ ] **PICK-02**: Update internal references to selection
-- [ ] **PICK-03**: Update documentation references to selection
-- [ ] **PICK-04**: Update `/design-game` templates for pick terminology
+- [x] **PICK-01**: Rename selection-related APIs to use "pick" terminology
+- [x] **PICK-02**: Update internal references to selection
+- [x] **PICK-03**: Update documentation references to selection
+- [x] **PICK-04**: Update `/design-game` templates for pick terminology
 
 ### Documentation (DOCS)
 
@@ -62,10 +62,10 @@
 | SEAT-02 | Phase 56 | Complete |
 | SEAT-03 | Phase 56 | Complete |
 | SEAT-04 | Phase 56 | Complete |
-| PICK-01 | Phase 57 | Pending |
-| PICK-02 | Phase 57 | Pending |
-| PICK-03 | Phase 57 | Pending |
-| PICK-04 | Phase 57 | Pending |
+| PICK-01 | Phase 57 | Complete |
+| PICK-02 | Phase 57 | Complete |
+| PICK-03 | Phase 57 | Complete |
+| PICK-04 | Phase 57 | Complete |
 | DOCS-01 | Phase 58 | Pending |
 | DOCS-02 | Phase 58 | Pending |
 | DOCS-03 | Phase 58 | Pending |
