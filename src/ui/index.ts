@@ -133,6 +133,17 @@ export {
   type UseActionAnimationsReturn,
 } from './composables/useActionAnimations.js';
 
+// Animation event playback (sequential handler-based playback)
+export {
+  createAnimationEvents,
+  provideAnimationEvents,
+  useAnimationEvents,
+  ANIMATION_EVENTS_KEY,
+  type AnimationHandler,
+  type UseAnimationEventsOptions,
+  type UseAnimationEventsReturn,
+} from './composables/useAnimationEvents.js';
+
 export {
   useZoomPreview,
   type CardPreviewData,
@@ -301,3 +312,6 @@ export {
   DEFAULT_PLAYER_COLORS,
   type ColorChoice,
 } from '../session/index.js';
+
+// Re-export animation event types from engine for convenience
+export type { AnimationEvent, EmitAnimationEventOptions } from '../engine/index.js';
