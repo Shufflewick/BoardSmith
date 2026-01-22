@@ -131,13 +131,13 @@ export type GamePhase = 'setup' | 'started' | 'finished';
  * Use for attribute-level filtering that zone visibility can't handle.
  *
  * @param state - The zone-filtered state
- * @param playerPosition - The player position (null for spectators)
+ * @param playerSeat - The player seat (null for spectators)
  * @param game - The game instance
  * @returns The transformed state
  */
 export type PlayerViewFunction<G extends Game = Game> = (
   state: ElementJSON,
-  playerPosition: number | null,
+  playerSeat: number | null,
   game: G
 ) => ElementJSON;
 
@@ -381,10 +381,10 @@ export class Game<
       this._ctx.classRegistry.set(PlayerClassToUse.name, PlayerClassToUse as unknown as ElementClass);
     }
 
-    // Create players (1-indexed: Player 1 has position 1)
+    // Create players (1-indexed: Player 1 has seat 1)
     for (let i = 0; i < options.playerCount; i++) {
       const playerName = options.playerNames?.[i] ?? `Player ${i + 1}`;
-      const player = this.create(PlayerClassToUse as unknown as ElementClass<P>, playerName, { position: i + 1 } as any);
+      const player = this.create(PlayerClassToUse as unknown as ElementClass<P>, playerName, { seat: i + 1 } as any);
       if (i === 0) player.setCurrent(true);
     }
 
@@ -394,12 +394,37 @@ export class Game<
     // Schedule HMR warning check after subclass constructor completes
     // Uses queueMicrotask so it runs after the full constructor chain
     if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
-      queueMicrotask(() => this._checkForVolatileState());
+      queueMicrotask(() => {
+        try {
+          this._checkForVolatileState();
+        } catch (e) {
+          this._initError = e as Error;
+        }
+      });
     }
   }
 
   /**
-   * Check for Map/Array properties that won't survive HMR.
+   * Stored initialization error from _checkForVolatileState (for testing).
+   * @internal
+   */
+  _initError?: Error;
+
+  /**
+   * Wait for initialization to complete. Throws if there was an error during setup.
+   * Useful for testing to catch async initialization errors.
+   */
+  async ready(): Promise<this> {
+    // Let the microtask complete
+    await Promise.resolve();
+    if (this._initError) {
+      throw this._initError;
+    }
+    return this;
+  }
+
+  /**
+   * Check for Map/Set properties that won't survive HMR and auto-sync arrays.
    * Runs after construction in development mode.
    */
   private _checkForVolatileState(): void {
@@ -430,13 +455,9 @@ export class Game<
         );
       }
 
-      // Check for arrays that look like they hold state
+      // Auto-sync arrays to settings (instead of warning)
       if (Array.isArray(value) && key !== 'messages') {
-        warnings.push(
-          `  ⚠️  game.${key} is an Array - will be reset on HMR.\n` +
-          `      Consider storing items as element children instead,\n` +
-          `      or use game.settings.${key} for simple data.`
-        );
+        this._autoSyncArray(key, value, `game.${key}`);
       }
     }
 
@@ -444,7 +465,7 @@ export class Game<
     for (const player of this.all(Player as unknown as ElementClass<P>)) {
       for (const key of Object.keys(player)) {
         if (key.startsWith('_')) continue;
-        if (['position', 'name', 'game', 'score'].includes(key)) continue;
+        if (['seat', 'name', 'game', 'score'].includes(key)) continue;
 
         const value = (player as Record<string, unknown>)[key];
 
@@ -455,13 +476,10 @@ export class Game<
           );
         }
 
-        if (Array.isArray(value) && value.length === 0) {
-          // Only warn about arrays with initializers (empty on construction)
-          // This catches patterns like: myItems: Item[] = []
-          warnings.push(
-            `  ⚠️  player.${key} is an Array - will be reset on HMR.\n` +
-            `      Consider storing items as element children instead.`
-          );
+        // Auto-sync player arrays
+        if (Array.isArray(value)) {
+          const settingsKey = `__player_${player.seat}_${key}`;
+          this._autoSyncArrayOnTarget(player, key, value, `player.${key}`, settingsKey);
         }
       }
     }
@@ -472,6 +490,194 @@ export class Game<
         warnings.join('\n\n') +
         '\n\n  Learn more: https://boardsmith.dev/docs/hmr-state\n'
       );
+    }
+  }
+
+  /**
+   * Auto-sync an array property on the game to settings.
+   * The array is replaced with a Proxy that syncs all mutations.
+   */
+  private _autoSyncArray(key: string, array: unknown[], displayPath: string): void {
+    const settingsKey = `__autoSync_${key}`;
+    this._autoSyncArrayOnTarget(this, key, array, displayPath, settingsKey);
+  }
+
+  /**
+   * Auto-sync an array property on any target object to game settings.
+   * Uses Object.defineProperty to intercept both reads and assignments.
+   */
+  private _autoSyncArrayOnTarget(
+    target: object,
+    key: string,
+    array: unknown[],
+    displayPath: string,
+    settingsKey: string
+  ): void {
+    // Check if we have stored data from a previous HMR cycle
+    const storedData = this.settings[settingsKey] as unknown[] | undefined;
+
+    // Validate existing array contents
+    for (const item of array) {
+      this._validateArrayValue(item, displayPath);
+    }
+
+    // Initialize the backing array - either from stored data or current array
+    let backingArray: unknown[];
+    if (storedData && Array.isArray(storedData)) {
+      // Restore from HMR - use stored data
+      backingArray = [...storedData];
+    } else {
+      // Fresh construction - use the initial array
+      backingArray = [...array];
+    }
+    // Sync to settings immediately
+    this.settings[settingsKey] = [...backingArray];
+
+    const game = this;
+
+    // Create a function that wraps an array with a sync proxy
+    const createSyncProxy = (arr: unknown[]): unknown[] => {
+      return new Proxy(arr, {
+        get(target, prop, receiver) {
+          const value = Reflect.get(target, prop, receiver);
+
+          // Wrap mutation methods to sync after mutation
+          if (typeof prop === 'string') {
+            const mutatingMethods = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin'];
+            if (mutatingMethods.includes(prop) && typeof value === 'function') {
+              return function (this: unknown[], ...args: unknown[]) {
+                // Validate any new values being added
+                if (prop === 'push' || prop === 'unshift') {
+                  for (const arg of args) {
+                    game._validateArrayValue(arg, displayPath);
+                  }
+                } else if (prop === 'splice' && args.length > 2) {
+                  for (let i = 2; i < args.length; i++) {
+                    game._validateArrayValue(args[i], displayPath);
+                  }
+                } else if (prop === 'fill' && args.length > 0) {
+                  game._validateArrayValue(args[0], displayPath);
+                }
+
+                const result = (value as Function).apply(target, args);
+                // Sync to settings after mutation
+                game.settings[settingsKey] = [...target];
+                return result;
+              };
+            }
+          }
+
+          return value;
+        },
+
+        set(target, prop, value, receiver) {
+          // Handle index assignment and length changes
+          if (typeof prop === 'string' || typeof prop === 'symbol') {
+            const numProp = typeof prop === 'string' ? Number(prop) : NaN;
+
+            // If setting an index, validate the value
+            if (!isNaN(numProp)) {
+              game._validateArrayValue(value, displayPath);
+            }
+
+            const result = Reflect.set(target, prop, value, receiver);
+
+            // Sync to settings after any property change
+            game.settings[settingsKey] = [...target];
+            return result;
+          }
+          return Reflect.set(target, prop, value, receiver);
+        },
+
+        deleteProperty(target, prop) {
+          const result = Reflect.deleteProperty(target, prop);
+          game.settings[settingsKey] = [...target];
+          return result;
+        },
+      });
+    };
+
+    // Create initial proxy
+    let currentProxy = createSyncProxy(backingArray);
+
+    // Use Object.defineProperty to intercept both reads AND assignments
+    // This allows `game.items = [1,2,3]` to work correctly
+    Object.defineProperty(target, key, {
+      get() {
+        return currentProxy;
+      },
+      set(newValue: unknown[]) {
+        // Validate the new array is actually an array
+        if (!Array.isArray(newValue)) {
+          throw new Error(`Cannot assign non-array to ${displayPath}`);
+        }
+
+        // Validate all values in the new array
+        for (const item of newValue) {
+          game._validateArrayValue(item, displayPath);
+        }
+
+        // Create a new backing array with the new values
+        backingArray = [...newValue];
+
+        // Sync to settings
+        game.settings[settingsKey] = [...backingArray];
+
+        // Create a new proxy for the new backing array
+        currentProxy = createSyncProxy(backingArray);
+      },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  /**
+   * Validate that a value can be stored in an auto-synced array.
+   * Throws if the value is a GameElement, function, undefined, Symbol, or has circular references.
+   */
+  private _validateArrayValue(value: unknown, displayPath: string): void {
+    // Check for GameElement (element arrays should use children instead)
+    if (value instanceof GameElement) {
+      throw new Error(
+        `Element arrays cannot be auto-synced: ${displayPath} contains a GameElement.\n` +
+        `Use element children instead:\n` +
+        `  // Instead of: ${displayPath} = []\n` +
+        `  // Use: dicePool = this.create(Space, 'dicePool')\n` +
+        `  //      dicePool.create(Die, 'd6')\n` +
+        `  //      Access via: this.dicePool.all(Die)`
+      );
+    }
+
+    // Check for functions
+    if (typeof value === 'function') {
+      throw new Error(
+        `Cannot store non-serializable value in ${displayPath}: functions are not JSON-serializable.`
+      );
+    }
+
+    // Check for undefined
+    if (value === undefined) {
+      throw new Error(
+        `Cannot store non-serializable value in ${displayPath}: undefined is not JSON-serializable. Use null instead.`
+      );
+    }
+
+    // Check for Symbol
+    if (typeof value === 'symbol') {
+      throw new Error(
+        `Cannot store non-serializable value in ${displayPath}: symbols are not JSON-serializable.`
+      );
+    }
+
+    // Check for circular references by attempting JSON serialization
+    if (value !== null && typeof value === 'object') {
+      try {
+        JSON.stringify(value);
+      } catch {
+        throw new Error(
+          `Cannot store non-serializable value in ${displayPath}: circular reference or non-serializable object detected.`
+        );
+      }
     }
   }
 
@@ -773,7 +979,7 @@ export class Game<
   performSerializedAction(serialized: SerializedAction): ActionResult {
     const player = this.getPlayer(serialized.player);
     if (!player) {
-      return { success: false, error: `Invalid player position: ${serialized.player}. Expected 1 to ${this.all(Player as unknown as ElementClass<P>).length}.` };
+      return { success: false, error: `Invalid player seat: ${serialized.player}. Expected 1 to ${this.all(Player as unknown as ElementClass<P>).length}.` };
     }
 
     return this.performAction(serialized.name, player as P, serialized.args);
@@ -1247,7 +1453,7 @@ export class Game<
       this.phase = 'finished';
       const winners = this._flowEngine.getWinners();
       if (winners.length > 0) {
-        this.settings.winners = winners.map(p => p.position);
+        this.settings.winners = winners.map(p => p.seat);
       }
     }
 
@@ -1270,7 +1476,7 @@ export class Game<
       this.phase = 'finished';
       const winners = this._flowEngine.getWinners();
       if (winners.length > 0) {
-        this.settings.winners = winners.map(p => p.position);
+        this.settings.winners = winners.map(p => p.seat);
       }
     }
 
@@ -1419,7 +1625,7 @@ export class Game<
   /**
    * Get all players in the game.
    *
-   * Returns players in position order (Player 1, Player 2, etc.).
+   * Returns players in seat order (Player 1, Player 2, etc.).
    * This is the preferred way to iterate over all players.
    *
    * @example
@@ -1438,7 +1644,7 @@ export class Game<
   get players(): P[] {
     return (this._t.children as GameElement[])
       .filter((el): el is P => (el as any).$type === 'player')
-      .sort((a, b) => a.position - b.position);
+      .sort((a, b) => a.seat - b.seat);
   }
 
   /**
@@ -1472,18 +1678,18 @@ export class Game<
   get currentPlayer(): P | undefined {
     // Find current player directly without instanceof check.
     // This avoids issues when code is bundled (esbuild creates separate class copies).
-    // Players are direct children of game with numeric position property and isCurrent method.
+    // Players are direct children of game with numeric seat property and isCurrent method.
     return this._t.children.find(
-      el => typeof (el as any).position === 'number' && (el as any).isCurrent?.()
+      el => typeof (el as any).seat === 'number' && (el as any).isCurrent?.()
     ) as P | undefined;
   }
 
   /**
-   * Get the first player (position 1).
+   * Get the first player (seat 1).
    *
    * Shorthand for `game.getPlayer(1)`. Useful for first-player-related logic.
    *
-   * @returns Player at position 1, or `undefined` if no players
+   * @returns Player at seat 1, or `undefined` if no players
    *
    * @example
    * ```typescript
@@ -1496,7 +1702,7 @@ export class Game<
    * game.setCurrentPlayer(game.firstPlayer!);
    * ```
    *
-   * @see {@link getPlayer} - Get player by any position
+   * @see {@link getPlayer} - Get player by any seat
    * @see {@link Player.isFirstPlayer} - Check if a player is first
    */
   get firstPlayer(): P | undefined {
@@ -1504,13 +1710,13 @@ export class Game<
   }
 
   /**
-   * Get a player by their position (1-indexed).
+   * Get a player by their seat (1-indexed).
    *
-   * Positions are assigned at game creation and remain constant. Use position
+   * Seats are assigned at game creation and remain constant. Use seat
    * as a stable identifier for players across serialization/deserialization.
    *
-   * @param position - Player position (1 = first player, 2 = second player, etc.)
-   * @returns The player at that position, or `undefined` if not found
+   * @param seat - Player seat (1 = first player, 2 = second player, etc.)
+   * @returns The player at that seat, or `undefined` if not found
    *
    * @example
    * ```typescript
@@ -1524,19 +1730,19 @@ export class Game<
    * ```
    *
    * @see {@link getPlayerOrThrow} - Throws if player not found (use in actions)
-   * @see {@link Player.position} - The position property on players
+   * @see {@link Player.seat} - The seat property on players
    */
-  getPlayer(position: number): P | undefined {
-    // Find player by position directly without instanceof check.
+  getPlayer(seat: number): P | undefined {
+    // Find player by seat directly without instanceof check.
     // This avoids issues when code is bundled (esbuild creates separate class copies).
-    // Players are direct children of game with numeric position property.
+    // Players are direct children of game with numeric seat property.
     return this._t.children.find(
-      el => typeof (el as any).position === 'number' && (el as any).position === position
+      el => typeof (el as any).seat === 'number' && (el as any).seat === seat
     ) as P | undefined;
   }
 
   /**
-   * Get a player by position, throwing an error if not found.
+   * Get a player by seat, throwing an error if not found.
    *
    * Use this in action handlers and flow logic where a player MUST exist.
    * The error message includes diagnostic info to help debug the issue.
@@ -1544,14 +1750,14 @@ export class Game<
    * **Prefer this over `getPlayer()` when the player must exist** - it fails
    * loudly rather than silently returning undefined.
    *
-   * @param position - Player position (1-indexed)
-   * @returns The player at that position
-   * @throws Error if no player exists at that position
+   * @param seat - Player seat (1-indexed)
+   * @returns The player at that seat
+   * @throws Error if no player exists at that seat
    *
    * @example
    * ```typescript
-   * // In an action - player position comes from serialized action
-   * const targetPlayer = game.getPlayerOrThrow(targetPosition);
+   * // In an action - player seat comes from serialized action
+   * const targetPlayer = game.getPlayerOrThrow(targetSeat);
    * targetPlayer.health -= damage;
    *
    * // In flow logic
@@ -1561,11 +1767,11 @@ export class Game<
    *
    * @see {@link getPlayer} - Returns undefined instead of throwing
    */
-  getPlayerOrThrow(position: number): P {
-    const player = this.getPlayer(position);
+  getPlayerOrThrow(seat: number): P {
+    const player = this.getPlayer(seat);
     if (!player) {
       throw new Error(
-        `No player at position ${position}. ` +
+        `No player at seat ${seat}. ` +
         `This game has ${this.all(Player as unknown as ElementClass<P>).length} players.`
       );
     }
@@ -1576,17 +1782,17 @@ export class Game<
    * Set the current player (whose turn it is).
    *
    * Automatically clears the previous current player before setting the new one.
-   * Accepts either a Player object or a position number.
+   * Accepts either a Player object or a seat number.
    *
-   * @param playerOrPosition - Player object or position number (1-indexed)
-   * @throws Error if position doesn't correspond to an existing player
+   * @param playerOrSeat - Player object or seat number (1-indexed)
+   * @throws Error if seat doesn't correspond to an existing player
    *
    * @example
    * ```typescript
    * // Set by player object
    * game.setCurrentPlayer(player);
    *
-   * // Set by position
+   * // Set by seat number
    * game.setCurrentPlayer(1);
    *
    * // Advance to next player in a turn-based game
@@ -1620,7 +1826,7 @@ export class Game<
   /**
    * Get the next player after the current player (circular turn order).
    *
-   * Returns the player with the next-highest position, wrapping from the last
+   * Returns the player with the next-highest seat, wrapping from the last
    * player back to player 1. Returns `undefined` if there's no current player.
    *
    * In a 4-player game: Player 1 → 2 → 3 → 4 → 1 → ...
@@ -1648,8 +1854,8 @@ export class Game<
     const current = this.currentPlayer;
     if (!current) return undefined;
 
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
-    const idx = players.findIndex(p => p.position === current.position);
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const idx = players.findIndex(p => p.seat === current.seat);
     const nextIdx = (idx + 1) % players.length;
     return players[nextIdx] as P | undefined;
   }
@@ -1657,7 +1863,7 @@ export class Game<
   /**
    * Get the previous player before the current player (circular turn order).
    *
-   * Returns the player with the next-lowest position, wrapping from player 1
+   * Returns the player with the next-lowest seat, wrapping from player 1
    * back to the last player. Returns `undefined` if there's no current player.
    *
    * In a 4-player game: Player 1 → 4 → 3 → 2 → 1 → ...
@@ -1684,8 +1890,8 @@ export class Game<
     const current = this.currentPlayer;
     if (!current) return undefined;
 
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
-    const idx = players.findIndex(p => p.position === current.position);
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const idx = players.findIndex(p => p.seat === current.seat);
     const prevIdx = (idx - 1 + players.length) % players.length;
     return players[prevIdx] as P | undefined;
   }
@@ -1723,8 +1929,8 @@ export class Game<
    * @see {@link previousBefore} - Get player before any specific player
    */
   nextAfter(player: P): P | undefined {
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
-    const idx = players.findIndex(p => p.position === player.position);
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const idx = players.findIndex(p => p.seat === player.seat);
     if (idx === -1) return undefined;
     const nextIdx = (idx + 1) % players.length;
     return players[nextIdx] as P | undefined;
@@ -1755,8 +1961,8 @@ export class Game<
    * @see {@link nextAfter} - Get player after any specific player
    */
   previousBefore(player: P): P | undefined {
-    const players = this.all(Player as unknown as ElementClass<P>).sortBy('position');
-    const idx = players.findIndex(p => p.position === player.position);
+    const players = this.all(Player as unknown as ElementClass<P>).sortBy('seat');
+    const idx = players.findIndex(p => p.seat === player.seat);
     if (idx === -1) return undefined;
     const prevIdx = (idx - 1 + players.length) % players.length;
     return players[prevIdx] as P | undefined;
@@ -1785,7 +1991,7 @@ export class Game<
    *   .chooseFrom('target', {
    *     prompt: 'Choose target',
    *     choices: ctx => game.others(ctx.player).map(p => ({
-   *       value: p.position,
+   *       value: p.seat,
    *       display: p.name
    *     }))
    *   })
@@ -1795,14 +2001,14 @@ export class Game<
    */
   others(player: P): P[] {
     return [...this.all(Player as unknown as ElementClass<P>)].filter(
-      p => p.position !== player.position
+      p => p.seat !== player.seat
     ) as P[];
   }
 
   /**
    * Get player choices formatted for use with `chooseFrom` selection.
    *
-   * Returns an array of choice objects with player position as `value` (stable
+   * Returns an array of choice objects with player seat as `value` (stable
    * across serialization) and player name as `display`.
    *
    * @param options - Configuration options
@@ -1845,7 +2051,7 @@ export class Game<
    * ```
    *
    * @see {@link others} - Get array of other players directly
-   * @see {@link getPlayerOrThrow} - Convert position back to player
+   * @see {@link getPlayerOrThrow} - Convert seat back to player
    */
   playerChoices(options: {
     excludeSelf?: boolean;
@@ -1855,7 +2061,7 @@ export class Game<
     let players = [...this.all(Player as unknown as ElementClass<P>)] as P[];
 
     if (options.excludeSelf && options.currentPlayer) {
-      players = players.filter(p => p.position !== options.currentPlayer!.position);
+      players = players.filter(p => p.seat !== options.currentPlayer!.seat);
     }
 
     if (options.filter) {
@@ -1863,8 +2069,8 @@ export class Game<
     }
 
     return players.map(p => ({
-      value: p.position,
-      display: p.name ?? `Player ${p.position}`,
+      value: p.seat,
+      display: p.name ?? `Player ${p.seat}`,
     }));
   }
 
@@ -1911,7 +2117,7 @@ export class Game<
   finish(winners?: P[]): void {
     this.phase = 'finished';
     if (winners) {
-      this.settings.winners = winners.map(p => p.position);
+      this.settings.winners = winners.map(p => p.seat);
     }
   }
 
@@ -1951,9 +2157,9 @@ export class Game<
    * ```
    */
   getWinners(): P[] {
-    const positions = this.settings.winners as number[] | undefined;
-    if (!positions) return [];
-    return positions.map(pos => this.getPlayer(pos)).filter((p): p is P => p !== undefined);
+    const winnerSeats = this.settings.winners as number[] | undefined;
+    if (!winnerSeats) return [];
+    return winnerSeats.map(seat => this.getPlayer(seat)).filter((p): p is P => p !== undefined);
   }
 
   // ============================================
@@ -1962,7 +2168,7 @@ export class Game<
 
   /**
    * Set the current player context for "mine" queries
-   * @param player - Player object or 1-indexed position
+   * @param player - Player object or 1-indexed seat
    */
   setPlayerContext(player: P | number | undefined): void {
     if (player === undefined) {
@@ -2040,7 +2246,7 @@ export class Game<
         const replacement = value instanceof GameElement
           ? value.toString()
           : value instanceof Player
-            ? (value.name ?? `Player ${value.position}`)
+            ? (value.name ?? `Player ${value.seat}`)
             : String(value);
         processed = processed.replace(new RegExp(`{{${key}}}`, 'g'), replacement);
       }
@@ -2057,12 +2263,14 @@ export class Game<
    */
   override toJSON(): ElementJSON & {
     phase: GamePhase;
+    isFinished: boolean;
     messages: Array<{ text: string; data?: Record<string, unknown> }>;
     settings: Record<string, unknown>;
   } {
     return {
       ...super.toJSON(),
       phase: this.phase,
+      isFinished: this.isFinished(),
       messages: this.messages,
       settings: this.settings,
     };
@@ -2071,12 +2279,12 @@ export class Game<
   /**
    * Get the game state from the perspective of a specific player
    * (hides elements that player shouldn't see based on zone visibility)
-   * @param player - Player, player position, or null for spectator view
+   * @param player - Player, player seat, or null for spectator view
    */
   toJSONForPlayer(player: P | number | null): ElementJSON {
-    const position = player === null ? null : (typeof player === 'number' ? player : player.position);
+    const playerSeat = player === null ? null : (typeof player === 'number' ? player : player.seat);
     // For visibility checks, spectators use -1 (no special access)
-    const visibilityPosition = position ?? -1;
+    const visibilityPosition = playerSeat ?? -1;
 
     const filterElement = (json: ElementJSON, element: GameElement): ElementJSON | null => {
       const visibility = element.getEffectiveVisibility();
@@ -2143,7 +2351,7 @@ export class Game<
             children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
-        } else if (zoneVisibility.mode === 'owner' && element.player?.position !== visibilityPosition) {
+        } else if (zoneVisibility.mode === 'owner' && element.player?.seat !== visibilityPosition) {
           // Owner-only zone and this player doesn't own it - show hidden placeholders
           // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
           const hiddenChildren: ElementJSON[] = [];
@@ -2194,7 +2402,7 @@ export class Game<
     // Apply playerView transformation if defined
     const GameClass = this.constructor as typeof Game;
     if (GameClass.playerView) {
-      filteredState = GameClass.playerView(filteredState, position, this);
+      filteredState = GameClass.playerView(filteredState, playerSeat, this);
     }
 
     return filteredState;
