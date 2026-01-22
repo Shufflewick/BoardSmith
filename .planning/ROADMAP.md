@@ -63,10 +63,10 @@ Plans:
   3. isAnimating ref correctly reflects playback state
   4. skipAll() method bypasses remaining animations
   5. paused ref enables pause/resume control
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 61-01: TBD
+- [ ] 61-01-PLAN.md - Animation event playback composable
 
 ### Phase 62: ActionController Integration
 **Goal**: Action panel waits for animations before showing new decisions
@@ -103,6 +103,6 @@ Phases execute in numeric order: 59 -> 60 -> 61 -> 62 -> 63
 |-------|----------------|--------|-----------|
 | 59. Core Animation Events | 2/2 | ✓ Complete | 2026-01-22 |
 | 60. Session Integration | 1/1 | ✓ Complete | 2026-01-22 |
-| 61. Animation Playback | 0/? | Not started | - |
+| 61. Animation Playback | 0/1 | Not started | - |
 | 62. ActionController Integration | 0/? | Not started | - |
 | 63. Documentation | 0/? | Not started | - |
