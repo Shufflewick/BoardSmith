@@ -191,8 +191,8 @@ export interface UseActionControllerOptions {
   isMyTurn: Ref<boolean>;
   /** Game view (for enriching validElements with full element data) */
   gameView?: Ref<GameElement | null | undefined>;
-  /** Player position (needed for fetching choices/repeating features) */
-  playerPosition?: Ref<number>;
+  /** Player seat (needed for fetching choices/repeating features) */
+  playerSeat?: Ref<number>;
   /** Enable auto-fill for single-choice selections (default: true). Can be reactive. */
   autoFill?: boolean | Ref<boolean>;
   /** Enable auto-execute when all selections filled (default: true). Can be reactive. */

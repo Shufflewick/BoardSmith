@@ -80,7 +80,7 @@
  *   availableActions,
  *   actionMetadata,
  *   isMyTurn,
- *   playerPosition,
+ *   playerSeat,
  *   fetchSelectionChoices: async (action, selection, player, args) => {
  *     const result = await fetch('/api/selection-choices', { ... });
  *     return result.json();
@@ -144,7 +144,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionMetadata,
     isMyTurn,
     gameView,
-    playerPosition,
+    playerSeat,
     autoFill: autoFillOption = true,
     autoExecute: autoExecuteOption = true,
     externalArgs,
@@ -486,7 +486,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
-    const player = playerPosition?.value ?? 0;
+    const player = playerSeat?.value ?? 0;
 
     isLoadingChoices.value = true;
     const fetchStartTime = Date.now();
@@ -1207,7 +1207,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error: 'selectionStep function not provided for repeating selection' };
     }
 
-    const player = playerPosition?.value ?? 0;
+    const player = playerSeat?.value ?? 0;
 
     // Initialize repeating state if needed
     if (!repeatingState.value || repeatingState.value.selectionName !== selection.name) {
@@ -1480,7 +1480,7 @@ export type SelectionStepFn = (
  * ```typescript
  * const stepFn = injectSelectionStepFn();
  * if (stepFn && selection.repeat) {
- *   const result = await stepFn(playerPosition, 'card', selectedValue, 'discard');
+ *   const result = await stepFn(playerSeat, 'card', selectedValue, 'discard');
  *   if (result.done) {
  *     // Repeating selection complete
  *   } else {
