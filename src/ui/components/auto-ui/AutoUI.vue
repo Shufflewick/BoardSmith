@@ -8,7 +8,7 @@
  * Usage:
  * <AutoUI
  *   :game-view="gameView"
- *   :player-position="playerPosition"
+ *   :player-seat="playerSeat"
  * />
  */
 import AutoGameBoard from './AutoGameBoard.vue';
@@ -23,8 +23,8 @@ defineProps<{
   gameView: GameElement | null | undefined;
   /** Flow state (for game complete detection) */
   flowState?: FlowState;
-  /** Current player's position */
-  playerPosition: number;
+  /** Current player's seat */
+  playerSeat: number;
 }>();
 </script>
 
@@ -42,7 +42,7 @@ defineProps<{
     <AutoGameBoard
       v-else
       :game-view="gameView"
-      :player-position="playerPosition"
+      :player-seat="playerSeat"
     />
   </div>
 </template>

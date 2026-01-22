@@ -41,7 +41,7 @@ const emit = defineEmits<{
 }>();
 
 // Inject context
-const playerPosition = inject<number>('playerPosition', 0);
+const playerSeat = inject<number>('playerSeat', 0);
 const selectableElements = inject<Ref<Set<number>>>('selectableElements');
 const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
@@ -138,14 +138,14 @@ const elementType = computed(() => {
 
 // Check if element is owned by current player
 const isOwned = computed(() => {
-  const player = props.element.attributes?.player as { position?: number } | undefined;
-  return player?.position === playerPosition;
+  const player = props.element.attributes?.player as { seat?: number } | undefined;
+  return player?.seat === playerSeat;
 });
 
 // Get player name from element attributes
 const playerName = computed(() => {
-  const player = props.element.attributes?.player as { name?: string; position?: number } | undefined;
-  return player?.name || `Player ${(player?.position ?? 0) + 1}`;
+  const player = props.element.attributes?.player as { name?: string; seat?: number } | undefined;
+  return player?.name || `Player ${(player?.seat ?? 0) + 1}`;
 });
 
 // Check if element is selectable/selected
@@ -1217,8 +1217,8 @@ const cardBackPreviewData = computed(() => {
               :r="hexGridProps.hexSize * 0.35"
               class="hex-piece-circle"
               :class="[
-                (grandchild.attributes?.player as any)?.position
-                  ? `player-${(grandchild.attributes?.player as any)?.position}`
+                (grandchild.attributes?.player as any)?.seat
+                  ? `player-${(grandchild.attributes?.player as any)?.seat}`
                   : ''
               ]"
             >

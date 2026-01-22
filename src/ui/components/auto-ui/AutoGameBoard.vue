@@ -15,7 +15,7 @@
  * Usage:
  * <AutoGameBoard
  *   :game-view="gameView"
- *   :player-position="playerPosition"
+ *   :player-seat="playerSeat"
  *   :selectable-elements="selectableIds"
  *   @element-click="handleElementClick"
  * />
@@ -45,8 +45,8 @@ export interface GameElement {
 const props = defineProps<{
   /** The game view tree from the server */
   gameView: GameElement | null | undefined;
-  /** Current player's position */
-  playerPosition: number;
+  /** Current player's seat */
+  playerSeat: number;
   /** IDs of elements that can be selected (for action targeting) */
   selectableElements?: Set<number>;
   /** Currently selected element IDs */
@@ -60,7 +60,7 @@ const emit = defineEmits<{
 }>();
 
 // Provide context to child elements
-provide('playerPosition', props.playerPosition);
+provide('playerSeat', props.playerSeat);
 provide('selectableElements', computed(() => props.selectableElements ?? new Set()));
 provide('selectedElements', computed(() => props.selectedElements ?? new Set()));
 

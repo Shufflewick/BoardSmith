@@ -58,7 +58,7 @@ export type ActionMetadata = ControllerActionMetadata;
 const props = defineProps<{
   availableActions: string[];
   actionMetadata?: Record<string, ActionMetadata>;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   selectedElementId?: number;
   canUndo?: boolean;

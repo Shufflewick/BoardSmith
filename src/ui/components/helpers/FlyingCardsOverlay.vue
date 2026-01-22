@@ -8,7 +8,7 @@
  * Supports three rendering modes:
  * 1. **Card images**: When `faceImage`/`backImage` are provided
  * 2. **Text cards**: When `rank`/`suit` are provided (default card face)
- * 3. **Player pieces**: When `playerPosition` is set (circular pieces with player colors)
+ * 3. **Player pieces**: When `playerSeat` is set (circular pieces with player colors)
  *
  * ## Usage
  *
@@ -45,8 +45,8 @@ const props = defineProps<{
   /** Optional custom suit color */
   getSuitColor?: (suit: string) => string;
   /**
-   * Player colors for piece rendering (indexed by playerPosition).
-   * When set, elements with playerPosition but no images render as colored pieces.
+   * Player colors for piece rendering (indexed by playerSeat).
+   * When set, elements with playerSeat but no images render as colored pieces.
    * Default: ['#e74c3c', '#2c3e50'] (red, dark gray)
    */
   playerColors?: string[];
@@ -59,31 +59,31 @@ const defaultPlayerColors = ['#e74c3c', '#2c3e50', '#27ae60', '#f39c12', '#9b59b
  * Determine rendering mode for a flying card:
  * - 'image': Has face/back images
  * - 'card': Has rank/suit (text-based card)
- * - 'piece': Has playerPosition (colored piece)
+ * - 'piece': Has playerSeat (colored piece)
  * - 'default': None of the above
  */
 function getRenderMode(cardData: Record<string, unknown>): 'image' | 'card' | 'piece' | 'default' {
   if (cardData.faceImage || cardData.backImage) return 'image';
   if (cardData.rank || cardData.suit) return 'card';
-  if (typeof cardData.playerPosition === 'number') return 'piece';
+  if (typeof cardData.playerSeat === 'number') return 'piece';
   return 'default';
 }
 
 /**
  * Get player color for piece rendering
  */
-function getPlayerColor(playerPosition: number): string {
+function getPlayerColor(playerSeat: number): string {
   const colors = props.playerColors || defaultPlayerColors;
-  return colors[playerPosition % colors.length] || defaultPlayerColors[0];
+  return colors[playerSeat % colors.length] || defaultPlayerColors[0];
 }
 
 /**
  * Get piece style based on player position
  */
 function getPieceStyle(cardData: Record<string, unknown>): CSSProperties {
-  const playerPosition = cardData.playerPosition as number;
+  const playerSeat = cardData.playerSeat as number;
   return {
-    backgroundColor: getPlayerColor(playerPosition),
+    backgroundColor: getPlayerColor(playerSeat),
   };
 }
 
