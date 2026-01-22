@@ -2,7 +2,7 @@
 // Props from GameShell
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;

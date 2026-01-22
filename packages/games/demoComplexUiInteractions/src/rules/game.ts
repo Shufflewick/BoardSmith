@@ -45,7 +45,7 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
     // Create hands for each player
     for (const player of this.all(BasePlayer)) {
       const demoPlayer = player as DemoPlayer;
-      demoPlayer.hand = this.create(Hand, `hand-${player.position}`);
+      demoPlayer.hand = this.create(Hand, `hand-${player.seat}`);
       demoPlayer.hand.player = player;
       demoPlayer.hand.contentsVisibleToOwner();
     }
@@ -88,7 +88,7 @@ export class DemoGame extends Game<DemoGame, DemoPlayer> {
   }
 
   getPlayerHand(player: DemoPlayer): Hand {
-    return this.first(Hand, `hand-${player.position}`)!;
+    return this.first(Hand, `hand-${player.seat}`)!;
   }
 
   override isFinished(): boolean {

@@ -21,10 +21,10 @@ import GameTable from './components/GameTable.vue';
     display-name="Demo: Animation Showcase"
     :player-count="1"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
+    <template #game-board="{ state, gameView, playerSeat, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
       <GameTable
         :game-view="gameView"
-        :player-position="playerPosition"
+        :player-seat="playerSeat"
         :is-my-turn="isMyTurn"
         :available-actions="availableActions"
         :action-args="actionArgs"
@@ -39,7 +39,7 @@ import GameTable from './components/GameTable.vue';
         <span
           class="stat-value"
           data-player-stat="score"
-          :data-player-position="(player as any).position"
+          :data-player-seat="(player as any).seat"
         >
           {{ (player as any).score || 0 }}
         </span>
@@ -47,7 +47,7 @@ import GameTable from './components/GameTable.vue';
       <div class="player-stat">
         <span class="stat-label">Cards:</span>
         <span class="stat-value">
-          {{ getCardCount(gameView, (player as any).position) }}
+          {{ getCardCount(gameView, (player as any).seat) }}
         </span>
       </div>
     </template>
@@ -58,7 +58,7 @@ import GameTable from './components/GameTable.vue';
 function getCardCount(gameView: any, position: number): number {
   if (!gameView?.children) return 0;
   const hand = gameView.children.find(
-    (c: any) => c.className === 'Hand' && c.attributes?.player?.position === position
+    (c: any) => c.className === 'Hand' && c.attributes?.player?.seat === position
   );
   return hand?.children?.length || 0;
 }

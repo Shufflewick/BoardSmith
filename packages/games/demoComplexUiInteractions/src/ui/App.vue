@@ -24,7 +24,7 @@ import GameTable from './components/GameTable.vue';
     display-name="Demo: Complex UI Interactions"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
+    <template #game-board="{ state, gameView, playerSeat, isMyTurn, availableActions, actionArgs, actionController, setBoardPrompt }">
       <div class="board-comparison">
         <div class="board-section custom-board">
           <h2 class="board-title">
@@ -36,7 +36,7 @@ import GameTable from './components/GameTable.vue';
           </p>
           <GameTable
             :game-view="gameView"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action-args="actionArgs"
@@ -54,7 +54,7 @@ import GameTable from './components/GameTable.vue';
           </p>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>
@@ -64,14 +64,14 @@ import GameTable from './components/GameTable.vue';
     <template #player-stats="{ player, gameView }">
       <div class="player-stat">
         <span class="stat-label">Score:</span>
-        <span class="stat-value" data-player-stat="score" :data-player-position="(player as any).position">
+        <span class="stat-value" data-player-stat="score" :data-player-seat="(player as any).seat">
           {{ (player as any).score || 0 }}
         </span>
       </div>
       <div class="player-stat">
         <span class="stat-label">Cards:</span>
         <span class="stat-value">
-          {{ getCardCount(gameView, (player as any).position) }}
+          {{ getCardCount(gameView, (player as any).seat) }}
         </span>
       </div>
     </template>
@@ -83,7 +83,7 @@ import GameTable from './components/GameTable.vue';
 function getCardCount(gameView: any, position: number): number {
   if (!gameView?.children) return 0;
   const hand = gameView.children.find(
-    (c: any) => c.className === 'Hand' && c.attributes?.player?.position === position
+    (c: any) => c.className === 'Hand' && c.attributes?.player?.seat === position
   );
   return hand?.children?.length || 0;
 }

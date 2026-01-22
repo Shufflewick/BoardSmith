@@ -9,13 +9,13 @@ import GameTable from './components/GameTable.vue';
     display-name="Floss Bitties"
     :player-count="2"
   >
-    <template #game-board="{ state, gameView, playerPosition, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt, startAction }">
+    <template #game-board="{ state, gameView, playerSeat, isMyTurn, availableActions, action, actionArgs, executeAction, setBoardPrompt, startAction }">
       <div class="board-comparison">
         <div class="board-section">
           <h2 class="board-title">Custom UI</h2>
           <GameTable
             :game-view="gameView"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :is-my-turn="isMyTurn"
             :available-actions="availableActions"
             :action="action"
@@ -29,7 +29,7 @@ import GameTable from './components/GameTable.vue';
           <h2 class="board-title">Auto-Generated UI</h2>
           <AutoUI
             :game-view="gameView || null"
-            :player-position="playerPosition"
+            :player-seat="playerSeat"
             :flow-state="state?.flowState as any"
           />
         </div>

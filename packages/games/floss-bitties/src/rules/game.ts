@@ -32,7 +32,7 @@ export class FlossBittiesGame extends Game<FlossBittiesGame, FlossBittiesPlayer>
 
   /** Track the last discarded card and who discarded it (to prevent immediate pickup) */
   lastDiscardedCardId: number | null = null;
-  lastDiscardedByPosition: number | null = null;
+  lastDiscardedBySeat: number | null = null;
 
   constructor(options: FlossBittiesOptions) {
     super(options);
@@ -67,7 +67,7 @@ export class FlossBittiesGame extends Game<FlossBittiesGame, FlossBittiesPlayer>
 
     // Create hands for each player
     for (const player of this.all(Player)) {
-      const hand = this.create(Hand, `hand-${player.position}`);
+      const hand = this.create(Hand, `hand-${player.seat}`);
       hand.player = player;
       hand.contentsVisibleToOwner();
     }
@@ -122,7 +122,7 @@ export class FlossBittiesGame extends Game<FlossBittiesGame, FlossBittiesPlayer>
    * Get a player's hand
    */
   getPlayerHand(player: FlossBittiesPlayer): Hand {
-    return this.first(Hand, `hand-${player.position}`)!;
+    return this.first(Hand, `hand-${player.seat}`)!;
   }
 
   /**
@@ -194,7 +194,7 @@ export class FlossBittiesGame extends Game<FlossBittiesGame, FlossBittiesPlayer>
       if (topCard) {
         // Can't draw the card you just discarded
         if (topCard.id === this.lastDiscardedCardId &&
-            this.lastDiscardedByPosition === player.position) {
+            this.lastDiscardedBySeat === player.seat) {
           continue;
         }
         piles.push(pile);
@@ -258,7 +258,7 @@ export class FlossBittiesGame extends Game<FlossBittiesGame, FlossBittiesPlayer>
    */
   clearLastDiscarded(): void {
     this.lastDiscardedCardId = null;
-    this.lastDiscardedByPosition = null;
+    this.lastDiscardedBySeat = null;
   }
 
   /**
@@ -266,6 +266,6 @@ export class FlossBittiesGame extends Game<FlossBittiesGame, FlossBittiesPlayer>
    */
   trackDiscard(card: Card, player: FlossBittiesPlayer): void {
     this.lastDiscardedCardId = card.id;
-    this.lastDiscardedByPosition = player.position;
+    this.lastDiscardedBySeat = player.seat;
   }
 }

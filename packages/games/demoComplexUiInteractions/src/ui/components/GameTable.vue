@@ -19,7 +19,7 @@ import { findPlayerHand, findElement, getElementCount, useAutoFlyingElements, Fl
 // Props from GameShell
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, unknown>;
@@ -105,7 +105,7 @@ const currentStepDescription = computed(() => {
 // ============================================
 
 // Get player's hand
-const myHand = computed(() => findPlayerHand(props.gameView, props.playerPosition));
+const myHand = computed(() => findPlayerHand(props.gameView, props.playerSeat));
 
 // Get my cards
 const myCards = computed(() => {
@@ -129,15 +129,15 @@ const discardCount = computed(() => getElementCount(discardPile.value));
 const otherPlayers = computed(() => {
   // First try gameView.players
   if (props.gameView?.players?.length > 0) {
-    return props.gameView.players.filter((p: any) => p.position !== props.playerPosition);
+    return props.gameView.players.filter((p: any) => p.seat !== props.playerSeat);
   }
   // Fallback: derive from hands in element tree
   const allHands = findAllHands(props.gameView);
   const opponents = allHands
-    .filter((h: any) => h.attributes?.player?.position !== props.playerPosition)
+    .filter((h: any) => h.attributes?.player?.seat !== props.playerSeat)
     .map((h: any) => ({
-      position: h.attributes?.player?.position,
-      name: h.attributes?.player?.name || `Player ${h.attributes?.player?.position}`,
+      position: h.attributes?.player?.seat,
+      name: h.attributes?.player?.name || `Player ${h.attributes?.player?.seat}`,
       // Include other player data if available
       ...h.attributes?.player
     }));
@@ -250,7 +250,7 @@ const { flyingElements: flyingCards } = useAutoFlyingElements({
 
     // Add opponent hand containers (only those with valid refs)
     for (const opponent of otherPlayers.value) {
-      const pos = opponent.position;
+      const pos = opponent.seat;
       const handElement = opponentHandElements[pos]?.value;
       const handRef = opponentHandRefs[pos]?.value;
       if (handElement && handRef) {
@@ -479,21 +479,21 @@ function cancelAction() {
       <div class="opponents-area">
         <div
           v-for="opponent in otherPlayers"
-          :key="opponent.position"
+          :key="opponent.seat"
           class="opponent"
           :class="{
-            'selectable': isOpponentSelectable(opponent.position),
+            'selectable': isOpponentSelectable(opponent.seat),
             'highlight': (isTrading || isGifting) && currentSelectionName === (isTrading ? 'targetPlayer' : 'recipient')
           }"
-          @click="handleOpponentClick(opponent.position)"
+          @click="handleOpponentClick(opponent.seat)"
         >
           <div class="opponent-name">{{ opponent.name }}</div>
           <div
             class="opponent-hand"
-            :ref="(el) => setOpponentRef(opponent.position, el as HTMLElement)"
+            :ref="(el) => setOpponentRef(opponent.seat, el as HTMLElement)"
           >
-            <div v-for="i in getOpponentHandCount(opponent.position)" :key="i" class="card card-back small" />
-            <div v-if="getOpponentHandCount(opponent.position) === 0" class="no-cards">No cards</div>
+            <div v-for="i in getOpponentHandCount(opponent.seat)" :key="i" class="card card-back small" />
+            <div v-if="getOpponentHandCount(opponent.seat) === 0" class="no-cards">No cards</div>
           </div>
           <div class="opponent-score">Score: {{ opponent.score || 0 }}</div>
         </div>

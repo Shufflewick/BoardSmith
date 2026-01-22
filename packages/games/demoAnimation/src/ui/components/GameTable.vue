@@ -39,7 +39,7 @@ import '@boardsmith/ui/animation/drag-drop.css';
 // Props from GameShell
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionArgs: Record<string, unknown>;
@@ -99,7 +99,7 @@ const playerScore = computed(() => {
   }
   // Fallback to players array
   const players = props.gameView?.players || [];
-  const player = players.find((p: any) => p.position === props.playerPosition);
+  const player = players.find((p: any) => p.seat === props.playerSeat);
   return player?.score ?? 0;
 });
 
@@ -162,7 +162,7 @@ useAutoFlyToStat({
   stats: [
     {
       stat: 'score',
-      player: props.playerPosition,
+      player: props.playerSeat,
       trackCount: () => playerScore.value,
     },
   ],
@@ -318,7 +318,7 @@ function cancelAction() {
     <div class="header">
       <div class="title">Animation Feature Showcase</div>
       <div class="subtitle">Each button demonstrates a different BoardSmith animation composable</div>
-      <div ref="scoreRef" class="score-display" data-player-stat="score" :data-player-position="playerPosition">
+      <div ref="scoreRef" class="score-display" data-player-stat="score" :data-player-seat="playerSeat">
         Score: {{ playerScore }}
       </div>
     </div>
