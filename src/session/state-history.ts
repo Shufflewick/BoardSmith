@@ -252,7 +252,7 @@ export class StateHistory<G extends Game = Game> {
 
   /**
    * Get action traces for debugging (shows why actions are available/unavailable)
-   * @param playerPosition Player's position
+   * @param playerPosition Player's seat number
    */
   getActionTraces(playerPosition: number): {
     success: boolean;
@@ -266,7 +266,7 @@ export class StateHistory<G extends Game = Game> {
     error?: string;
   } {
     if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player position: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).` };
+      return { success: false, error: `Invalid player seat: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#storedState.playerCount}).` };
     }
 
     try {
@@ -320,9 +320,9 @@ export class StateHistory<G extends Game = Game> {
    * Only works if it's the player's turn and they've made at least one action.
    */
   async undoToTurnStart(playerPosition: number): Promise<UndoResult> {
-    // Validate player position (1-indexed)
+    // Validate player seat (1-indexed)
     if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
+      return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     const runner = this.#getRunner();

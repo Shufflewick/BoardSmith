@@ -126,12 +126,12 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   }
 
   /**
-   * Get position for a player ID
+   * Get seat for a player ID
    */
-  getPositionForPlayer(playerId: string): number | undefined {
+  getSeatForPlayer(playerId: string): number | undefined {
     if (!this.#storedState.lobbySlots) return undefined;
     const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
-    return slot?.position;
+    return slot?.seat;
   }
 
   // ============================================
@@ -139,15 +139,15 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   // ============================================
 
   /**
-   * Claim a position in the lobby
+   * Claim a seat in the lobby
    *
-   * @param position Position to claim (1-indexed)
+   * @param seat Seat to claim (1-indexed)
    * @param playerId Player's unique ID
    * @param name Player's display name
    * @returns Result with updated lobby info
    */
-  async claimPosition(
-    position: number,
+  async claimSeat(
+    seat: number,
     playerId: string,
     name: string
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
@@ -159,35 +159,35 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Game has already started' };
     }
 
-    // Position is 1-indexed, convert to array index
-    const arrayIndex = position - 1;
-    if (position < 1 || position > this.#storedState.lobbySlots.length) {
-      return { success: false, error: 'Invalid position' };
+    // Seat is 1-indexed, convert to array index
+    const arrayIndex = seat - 1;
+    if (seat < 1 || seat > this.#storedState.lobbySlots.length) {
+      return { success: false, error: 'Invalid seat' };
     }
 
     const slot = this.#storedState.lobbySlots[arrayIndex];
 
     if (slot.status === 'ai') {
-      return { success: false, error: 'This position is reserved for AI' };
+      return { success: false, error: 'This seat is reserved for AI' };
     }
 
     if (slot.status === 'claimed' && slot.playerId !== playerId) {
-      return { success: false, error: 'This position is already taken' };
+      return { success: false, error: 'This seat is already taken' };
     }
 
-    // Check if player already claimed another position
+    // Check if player already claimed another seat
     const existingSlot = this.#storedState.lobbySlots.find(
-      s => s.playerId === playerId && s.position !== position
+      s => s.playerId === playerId && s.seat !== seat
     );
     if (existingSlot) {
-      // Release the old position
+      // Release the old seat
       existingSlot.status = 'open';
       existingSlot.playerId = undefined;
-      existingSlot.name = `Player ${existingSlot.position}`;
+      existingSlot.name = `Player ${existingSlot.seat}`;
       existingSlot.ready = false;
     }
 
-    // Claim the position (starts not ready - player must explicitly ready up)
+    // Claim the seat (starts not ready - player must explicitly ready up)
     slot.status = 'claimed';
     slot.playerId = playerId;
     slot.name = name;
@@ -195,11 +195,11 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
 
     // Initialize player options with defaults (if definitions exist)
     if (this.#storedState.playerOptionsDefinitions) {
-      slot.playerOptions = this.#computeDefaultPlayerOptions(position);
+      slot.playerOptions = this.#computeDefaultPlayerOptions(seat);
     }
 
-    // Update player names in stored state (convert 1-indexed position to array index)
-    this.#storedState.playerNames[position - 1] = name;
+    // Update player names in stored state (convert 1-indexed seat to array index)
+    this.#storedState.playerNames[seat - 1] = name;
 
     // Note: Game no longer auto-starts when slots are filled
     // Players must use setReady() to ready up, and game starts when all are ready
@@ -212,8 +212,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    // Note: Game doesn't auto-start from claimPosition anymore
-    // Players must use setReady() after claiming their position
+    // Note: Game doesn't auto-start from claimSeat anymore
+    // Players must use setReady() after claiming their seat
 
     return { success: true, lobby: this.getLobbyInfo()! };
   }
@@ -239,7 +239,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
 
     slot.name = name;
     // Convert 1-indexed position to array index
-    this.#storedState.playerNames[slot.position - 1] = name;
+    this.#storedState.playerNames[slot.seat - 1] = name;
 
     // Persist changes
     if (this.#storage) {
@@ -324,17 +324,17 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: `Cannot exceed ${maxPlayers} players` };
     }
 
-    const newPosition = currentCount + 1;  // 1-indexed
+    const newSeat = currentCount + 1;  // 1-indexed
     this.#storedState.lobbySlots.push({
-      position: newPosition,
+      seat: newSeat,
       status: 'open',
-      name: `Player ${newPosition}`,
+      name: `Player ${newSeat}`,
       ready: false,
     });
 
     // Update player count and names
     this.#storedState.playerCount = currentCount + 1;
-    this.#storedState.playerNames.push(`Player ${newPosition}`);
+    this.#storedState.playerNames.push(`Player ${newSeat}`);
 
     // Persist changes
     if (this.#storage) {
@@ -351,12 +351,12 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
    * Remove a player slot (host only, slot must be open or AI)
    *
    * @param playerId Must be the creator's ID
-   * @param position Position of the slot to remove
+   * @param seat Seat of the slot to remove
    * @returns Result with updated lobby info
    */
   async removeSlot(
     playerId: string,
-    position: number
+    seat: number
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
@@ -377,16 +377,16 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: `Cannot have fewer than ${minPlayers} players` };
     }
 
-    // Position is 1-indexed
-    if (position === 1) {
+    // Seat is 1-indexed
+    if (seat === 1) {
       return { success: false, error: 'Cannot remove the host slot' };
     }
 
-    if (position < 1 || position > currentCount) {
-      return { success: false, error: 'Invalid position' };
+    if (seat < 1 || seat > currentCount) {
+      return { success: false, error: 'Invalid seat' };
     }
 
-    const arrayIndex = position - 1;
+    const arrayIndex = seat - 1;
     const slot = this.#storedState.lobbySlots[arrayIndex];
     if (slot.status === 'claimed') {
       return { success: false, error: 'Cannot remove a slot with a player - they must leave first' };
@@ -399,7 +399,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
 
     // Renumber remaining slots (1-indexed)
     this.#storedState.lobbySlots.forEach((s, i) => {
-      s.position = i + 1; // 1-indexed
+      s.seat = i + 1; // 1-indexed
       if (s.status === 'open') {
         s.name = `Player ${i + 1}`;
       }
@@ -420,14 +420,14 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
    * Toggle a slot between open and AI (host only)
    *
    * @param playerId Must be the creator's ID
-   * @param position Position of the slot to modify
+   * @param seat Seat of the slot to modify
    * @param isAI Whether to make this an AI slot
    * @param aiLevel AI difficulty level (if isAI is true)
    * @returns Result with updated lobby info
    */
   async setSlotAI(
     playerId: string,
-    position: number,
+    seat: number,
     isAI: boolean,
     aiLevel: string = 'medium'
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo; gameStarted?: boolean }> {
@@ -443,16 +443,16 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Only the host can modify slots' };
     }
 
-    // Position is 1-indexed
-    if (position === 1) {
+    // Seat is 1-indexed
+    if (seat === 1) {
       return { success: false, error: 'Cannot change the host slot to AI' };
     }
 
-    if (position < 1 || position > this.#storedState.lobbySlots.length) {
-      return { success: false, error: 'Invalid position' };
+    if (seat < 1 || seat > this.#storedState.lobbySlots.length) {
+      return { success: false, error: 'Invalid seat' };
     }
 
-    const arrayIndex = position - 1;
+    const arrayIndex = seat - 1;
     const slot = this.#storedState.lobbySlots[arrayIndex];
 
     if (slot.status === 'claimed') {
@@ -467,7 +467,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       slot.ready = true; // AI is always ready
     } else {
       slot.status = 'open';
-      slot.name = `Player ${slot.position}`;
+      slot.name = `Player ${slot.seat}`;
       slot.aiLevel = undefined;
       slot.playerId = undefined;
       slot.ready = false;
@@ -491,10 +491,10 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   }
 
   /**
-   * Leave/unclaim a position in the lobby
+   * Leave/unclaim a seat in the lobby
    * Used when a player leaves the waiting room
    */
-  async leavePosition(playerId: string): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+  async leaveSeat(playerId: string): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
     }
@@ -506,23 +506,23 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Find the slot claimed by this player
     const slot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
     if (!slot) {
-      return { success: false, error: 'Player has not claimed a position' };
+      return { success: false, error: 'Player has not claimed a seat' };
     }
 
-    // Cannot leave if you're the creator/host (position 1)
-    if (slot.position === 1) {
+    // Cannot leave if you're the creator/host (seat 1)
+    if (slot.seat === 1) {
       return { success: false, error: 'Host cannot leave. Cancel the game instead.' };
     }
 
-    // Release the position
+    // Release the seat
     slot.status = 'open';
     slot.playerId = undefined;
-    slot.name = `Player ${slot.position}`;
+    slot.name = `Player ${slot.seat}`;
     slot.ready = false;
     slot.connected = undefined;
 
     // Update player names in stored state
-    this.#storedState.playerNames[slot.position - 1] = slot.name;
+    this.#storedState.playerNames[slot.seat - 1] = slot.name;
 
     // Persist changes
     if (this.#storage) {
@@ -564,7 +564,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       }
 
       // Start timeout for auto-kick (non-host players only)
-      if (slot.position !== 1 && this.#storedState.lobbyState === 'waiting') {
+      if (slot.seat !== 1 && this.#storedState.lobbyState === 'waiting') {
         // Clear any existing timeout first
         const existingTimeout = this.#disconnectTimeouts.get(playerId);
         if (existingTimeout) {
@@ -575,7 +575,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
           this.#disconnectTimeouts.delete(playerId);
           // Auto-kick if still in waiting state
           if (this.#storedState.lobbyState === 'waiting') {
-            await this.leavePosition(playerId);
+            await this.leaveSeat(playerId);
           }
         }, LobbyManager.DISCONNECT_TIMEOUT_MS);
 
@@ -603,12 +603,12 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
    * Kick a player from the lobby (host only)
    *
    * @param hostPlayerId Must be the creator's ID
-   * @param position Position of the player to kick
+   * @param seat Seat of the player to kick
    * @returns Result with updated lobby info
    */
   async kickPlayer(
     hostPlayerId: string,
-    position: number
+    seat: number
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
@@ -623,20 +623,20 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Only the host can kick players' };
     }
 
-    // Position is 1-indexed. Can't kick yourself (host is position 1)
-    if (position === 1) {
+    // Seat is 1-indexed. Can't kick yourself (host is seat 1)
+    if (seat === 1) {
       return { success: false, error: 'Cannot kick the host' };
     }
 
-    if (position < 1 || position > this.#storedState.lobbySlots.length) {
-      return { success: false, error: 'Invalid position' };
+    if (seat < 1 || seat > this.#storedState.lobbySlots.length) {
+      return { success: false, error: 'Invalid seat' };
     }
 
-    const arrayIndex = position - 1;
+    const arrayIndex = seat - 1;
     const slot = this.#storedState.lobbySlots[arrayIndex];
 
     if (slot.status !== 'claimed') {
-      return { success: false, error: 'Position is not occupied by a player' };
+      return { success: false, error: 'Seat is not occupied by a player' };
     }
 
     // Clear any pending disconnect timeout for this player
@@ -651,12 +651,12 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Release the slot
     slot.status = 'open';
     slot.playerId = undefined;
-    slot.name = `Player ${slot.position}`;
+    slot.name = `Player ${slot.seat}`;
     slot.ready = false;
     slot.connected = undefined;
 
     // Update player names in stored state
-    this.#storedState.playerNames[slot.position - 1] = slot.name;
+    this.#storedState.playerNames[slot.seat - 1] = slot.name;
 
     // Persist changes
     if (this.#storage) {
@@ -729,13 +729,13 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
    * Used for exclusive options that the host assigns to players
    *
    * @param hostPlayerId Must be the creator's ID
-   * @param position The slot position to update
+   * @param seat The slot seat to update
    * @param options The player options to set
    * @returns Result with updated lobby info
    */
   async updateSlotPlayerOptions(
     hostPlayerId: string,
-    position: number,
+    seat: number,
     options: Record<string, unknown>
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#storedState.lobbySlots) {
@@ -751,7 +751,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Only the host can modify other players\' options' };
     }
 
-    const slot = this.#storedState.lobbySlots.find(s => s.position === position);
+    const slot = this.#storedState.lobbySlots.find(s => s.seat === seat);
     if (!slot) {
       return { success: false, error: 'Slot not found' };
     }
@@ -892,11 +892,11 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   // ============================================
 
   /**
-   * Compute default player options for a position (static version)
+   * Compute default player options for a seat (static version)
    * Takes into account options already taken by other players
    */
   static computeDefaultPlayerOptions(
-    position: number,
+    seat: number,
     definitions: Record<string, PlayerOptionDefinition>,
     lobbySlots: LobbySlot[],
     playerCount: number
@@ -906,7 +906,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Collect values already taken by other players
     const takenValues: Record<string, Set<string>> = {};
     for (const slot of lobbySlots) {
-      if (slot.position !== position && slot.playerOptions) {
+      if (slot.seat !== seat && slot.playerOptions) {
         for (const [key, value] of Object.entries(slot.playerOptions)) {
           if (!takenValues[key]) {
             takenValues[key] = new Set();
@@ -940,7 +940,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
           }
         }
       } else if (opt.type === 'exclusive') {
-        // For exclusive options, check if this position matches the default
+        // For exclusive options, check if this seat matches the default
         let defaultIndex: number;
         if (opt.default === 'first' || opt.default === undefined) {
           defaultIndex = 0;
@@ -949,7 +949,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
         } else {
           defaultIndex = opt.default;
         }
-        result[key] = position === defaultIndex;
+        result[key] = seat === defaultIndex;
       } else if (opt.type === 'text') {
         // For text, use the default if provided
         if (opt.default !== undefined) {
@@ -966,14 +966,14 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   // ============================================
 
   /**
-   * Compute default player options for a position (instance method wrapper)
+   * Compute default player options for a seat (instance method wrapper)
    */
-  #computeDefaultPlayerOptions(position: number): Record<string, unknown> {
+  #computeDefaultPlayerOptions(seat: number): Record<string, unknown> {
     const definitions = this.#storedState.playerOptionsDefinitions;
     if (!definitions || !this.#storedState.lobbySlots) return {};
 
     return LobbyManager.computeDefaultPlayerOptions(
-      position,
+      seat,
       definitions,
       this.#storedState.lobbySlots,
       this.#storedState.playerCount

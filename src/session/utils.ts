@@ -400,7 +400,7 @@ export function buildPlayerState(
       return flattened;
     }
     // Fallback for players without toJSON
-    return { name: player.name ?? `Player ${player.position}`, position: player.position };
+    return { name: player.name ?? `Player ${player.seat}`, seat: player.seat };
   });
 
   const state: PlayerGameState = {

@@ -1227,14 +1227,14 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const sessions = this.#broadcaster.getSessions();
 
     for (const session of sessions) {
-      const effectivePosition = session.isSpectator ? 0 : session.playerPosition;
+      const effectivePosition = session.isSpectator ? 0 : session.playerSeat;
       const state = buildPlayerState(this.#runner, this.#storedState.playerNames, effectivePosition, { includeActionMetadata: true, includeDebugData: true });
 
       const update: StateUpdate = {
         type: 'state',
         flowState,
         state,
-        playerPosition: session.playerPosition,
+        playerSeat: session.playerSeat,
         isSpectator: session.isSpectator,
       };
 
@@ -1326,22 +1326,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Claim a position in the lobby
+   * Claim a seat in the lobby
    *
-   * @param position Position to claim (1-indexed)
+   * @param seat Seat to claim (1-indexed)
    * @param playerId Player's unique ID
    * @param name Player's display name
    * @returns Result with updated lobby info
    */
-  async claimPosition(
-    position: number,
+  async claimSeat(
+    seat: number,
     playerId: string,
     name: string
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    return this.#lobbyManager.claimPosition(position, playerId, name);
+    return this.#lobbyManager.claimSeat(seat, playerId, name);
   }
 
   /**
@@ -1401,38 +1401,38 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Remove a player slot (host only, slot must be open or AI)
    *
    * @param playerId Must be the creator's ID
-   * @param position Position of the slot to remove
+   * @param seat Seat of the slot to remove
    * @returns Result with updated lobby info
    */
   async removeSlot(
     playerId: string,
-    position: number
+    seat: number
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    return this.#lobbyManager.removeSlot(playerId, position);
+    return this.#lobbyManager.removeSlot(playerId, seat);
   }
 
   /**
    * Toggle a slot between open and AI (host only)
    *
    * @param playerId Must be the creator's ID
-   * @param position Position of the slot to modify
+   * @param seat Seat of the slot to modify
    * @param isAI Whether to make this an AI slot
    * @param aiLevel AI difficulty level (if isAI is true)
    * @returns Result with updated lobby info
    */
   async setSlotAI(
     playerId: string,
-    position: number,
+    seat: number,
     isAI: boolean,
     aiLevel: string = 'medium'
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    const result = await this.#lobbyManager.setSlotAI(playerId, position, isAI, aiLevel);
+    const result = await this.#lobbyManager.setSlotAI(playerId, seat, isAI, aiLevel);
     // If game started, also broadcast initial game state
     if (result.success && result.gameStarted) {
       this.broadcast();
@@ -1441,23 +1441,23 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Compute default player options for a position (static version)
+   * Compute default player options for a seat (static version)
    * Takes into account options already taken by other players
    */
   static computeDefaultPlayerOptions(
-    position: number,
+    seat: number,
     definitions: Record<string, PlayerOptionDefinition>,
     lobbySlots: LobbySlot[],
     playerCount: number
   ): Record<string, unknown> {
-    return LobbyManager.computeDefaultPlayerOptions(position, definitions, lobbySlots, playerCount);
+    return LobbyManager.computeDefaultPlayerOptions(seat, definitions, lobbySlots, playerCount);
   }
 
   /**
-   * Get position for a player ID
+   * Get seat for a player ID
    */
-  getPositionForPlayer(playerId: string): number | undefined {
-    return this.#lobbyManager?.getPositionForPlayer(playerId);
+  getSeatForPlayer(playerId: string): number | undefined {
+    return this.#lobbyManager?.getSeatForPlayer(playerId);
   }
 
   /**
@@ -1468,14 +1468,14 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Leave/unclaim a position in the lobby
+   * Leave/unclaim a seat in the lobby
    * Used when a player leaves the waiting room
    */
-  async leavePosition(playerId: string): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+  async leaveSeat(playerId: string): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    return this.#lobbyManager.leavePosition(playerId);
+    return this.#lobbyManager.leaveSeat(playerId);
   }
 
   /**
@@ -1494,17 +1494,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Kick a player from the lobby (host only)
    *
    * @param hostPlayerId Must be the creator's ID
-   * @param position Position of the player to kick
+   * @param seat Seat of the player to kick
    * @returns Result with updated lobby info
    */
   async kickPlayer(
     hostPlayerId: string,
-    position: number
+    seat: number
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    return this.#lobbyManager.kickPlayer(hostPlayerId, position);
+    return this.#lobbyManager.kickPlayer(hostPlayerId, seat);
   }
 
   /**
@@ -1536,19 +1536,19 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Used for exclusive options that the host assigns to players
    *
    * @param hostPlayerId Must be the creator's ID
-   * @param position The slot position to update
+   * @param seat The slot seat to update
    * @param options The player options to set
    * @returns Result with updated lobby info
    */
   async updateSlotPlayerOptions(
     hostPlayerId: string,
-    position: number,
+    seat: number,
     options: Record<string, unknown>
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
     if (!this.#lobbyManager) {
       return { success: false, error: 'Game does not have a lobby' };
     }
-    return this.#lobbyManager.updateSlotPlayerOptions(hostPlayerId, position, options);
+    return this.#lobbyManager.updateSlotPlayerOptions(hostPlayerId, seat, options);
   }
 
   /**

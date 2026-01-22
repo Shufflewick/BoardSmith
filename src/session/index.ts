@@ -66,8 +66,8 @@ export type {
   LobbySlot,
   LobbyInfo,
   LobbyUpdate,
-  ClaimPositionRequest,
-  ClaimPositionResponse,
+  ClaimSeatRequest,
+  ClaimSeatResponse,
   UpdateNameRequest,
 } from './types.js';
 

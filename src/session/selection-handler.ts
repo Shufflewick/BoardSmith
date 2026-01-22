@@ -52,9 +52,9 @@ export class SelectionHandler<G extends Game = Game> {
     playerPosition: number,
     currentArgs: Record<string, unknown> = {}
   ): SelectionChoicesResponse {
-    // Validate player position (1-indexed)
+    // Validate player seat (1-indexed)
     if (playerPosition < 1 || playerPosition > this.#playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
+      return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Get action definition
@@ -69,10 +69,10 @@ export class SelectionHandler<G extends Game = Game> {
       return { success: false, error: `Selection not found: ${selectionName}`, errorCode: ErrorCode.SELECTION_NOT_FOUND };
     }
 
-    // Build context with current args (playerPosition is 1-indexed)
+    // Build context with current args (playerPosition is 1-indexed seat number)
     const player = this.#runner.game.getPlayer(playerPosition);
     if (!player) {
-      return { success: false, error: `Player not found at position ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
+      return { success: false, error: `Player not found at seat ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     // Resolve any element IDs in currentArgs to actual elements

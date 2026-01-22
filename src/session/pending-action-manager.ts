@@ -91,7 +91,7 @@ export class PendingActionManager<G extends Game = Game> {
     pendingState?: PendingActionState;
   } {
     if (playerPosition < 1 || playerPosition > this.#storedState.playerCount) {
-      return { success: false, error: `Invalid player: ${playerPosition}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
+      return { success: false, error: `Invalid player: ${playerPosition}. Player seats are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     const action = this.#runner.game.getAction(actionName);
