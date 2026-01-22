@@ -40,27 +40,31 @@ export interface ValidElement {
 }
 
 // Types for action metadata (from server)
-export interface SelectionMetadata {
+/**
+ * Metadata for a pick (choice the player must make).
+ * "Pick" = a choice player must make to complete an action (per nomenclature.md).
+ */
+export interface PickMetadata {
   name: string;
   type: 'choice' | 'element' | 'elements' | 'text' | 'number';
   prompt?: string;
   /** If true, shows "Skip" button. If a string, shows that text instead. */
   optional?: boolean | string;
-  /** For choice selections: available choices */
+  /** For choice picks: available choices */
   choices?: ChoiceWithRefs[];
-  /** For element selections: list of valid element IDs the user can select */
+  /** For element picks: list of valid element IDs the user can select */
   validElements?: ValidElement[];
   /** For multi-select: min/max selection configuration */
   multiSelect?: { min: number; max?: number };
-  /** Filter choices based on a previous selection's value */
+  /** Filter choices based on a previous pick's value */
   filterBy?: { key: string; selectionName: string };
-  /** Look up choices from choicesByDependentValue based on previous selection */
+  /** Look up choices from choicesByDependentValue based on previous pick */
   dependsOn?: string;
-  /** Choices indexed by dependent value (used with dependsOn for choice selections) */
+  /** Choices indexed by dependent value (used with dependsOn for choice picks) */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
-  /** Elements indexed by dependent value (used with dependsOn for element selections) */
+  /** Elements indexed by dependent value (used with dependsOn for element picks) */
   elementsByDependentValue?: Record<string, ValidElement[]>;
-  /** Selection can repeat until terminator */
+  /** Pick can repeat until terminator */
   repeat?: { hasOnEach: boolean; terminator?: unknown };
   /** For number inputs: minimum value */
   min?: number;
@@ -74,16 +78,19 @@ export interface SelectionMetadata {
   maxLength?: number;
   /** For text inputs: regex pattern */
   pattern?: string;
-  /** For element selections: CSS class name of selectable elements */
+  /** For element picks: CSS class name of selectable elements */
   elementClassName?: string;
-  /** For choice selections with dependsOn + multiSelect: multiSelect config indexed by dependent value */
+  /** For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value */
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
 }
+
+/** @deprecated Use PickMetadata instead */
+export type SelectionMetadata = PickMetadata;
 
 export interface ActionMetadata {
   name: string;
   prompt?: string;
-  selections: SelectionMetadata[];
+  selections: PickMetadata[];
 }
 
 /** Follow-up action to chain after an action completes */
@@ -112,8 +119,8 @@ export interface ValidationResult {
   error?: string;
 }
 
-/** Result from a selection step (repeating selections) */
-export interface SelectionStepResult {
+/** Result from a pick step (repeating picks) */
+export interface PickStepResult {
   success: boolean;
   error?: string;
   done?: boolean;
@@ -121,8 +128,11 @@ export interface SelectionStepResult {
   actionComplete?: boolean;
 }
 
-/** Result from fetching selection choices */
-export interface SelectionChoicesResult {
+/** @deprecated Use PickStepResult instead */
+export type SelectionStepResult = PickStepResult;
+
+/** Result from fetching pick choices */
+export interface PickChoicesResult {
   success: boolean;
   choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown }>;
   validElements?: ValidElement[];
@@ -130,28 +140,34 @@ export interface SelectionChoicesResult {
   error?: string;
 }
 
+/** @deprecated Use PickChoicesResult instead */
+export type SelectionChoicesResult = PickChoicesResult;
+
 // ============================================
 // Action State Snapshot Types (Pit of Success)
 // ============================================
 
 /**
- * Snapshot of a selection's available choices.
+ * Snapshot of a pick's available choices.
  * Frozen when fetched, not affected by server broadcasts.
  */
-export interface SelectionSnapshot {
-  /** Choices for choice selections */
+export interface PickSnapshot {
+  /** Choices for choice picks */
   choices?: Array<{ value: unknown; display: string; sourceRef?: ElementRef; targetRef?: ElementRef }>;
-  /** Valid elements for element selections */
+  /** Valid elements for element picks */
   validElements?: ValidElement[];
   /** MultiSelect config (evaluated when fetched) */
   multiSelect?: { min: number; max?: number };
 }
 
+/** @deprecated Use PickSnapshot instead */
+export type SelectionSnapshot = PickSnapshot;
+
 /**
- * A collected selection value with its display text.
+ * A collected pick value with its display text.
  * Display is stored at selection time - single source of truth.
  */
-export interface CollectedSelection {
+export interface CollectedPick {
   /** The selected value(s) */
   value: unknown;
   /** Display text captured at selection time */
@@ -159,6 +175,9 @@ export interface CollectedSelection {
   /** Whether this was explicitly skipped */
   skipped: boolean;
 }
+
+/** @deprecated Use CollectedPick instead */
+export type CollectedSelection = CollectedPick;
 
 /**
  * Complete snapshot of an in-progress action.
@@ -170,13 +189,13 @@ export interface ActionStateSnapshot {
   actionName: string;
   /** Full action metadata - frozen at start time */
   metadata: ActionMetadata;
-  /** Selection snapshots indexed by selection name */
-  selectionSnapshots: Map<string, SelectionSnapshot>;
-  /** Collected selections with value+display stored together */
-  collectedSelections: Map<string, CollectedSelection>;
-  /** For repeating selections: current state (reuses existing RepeatingState) */
+  /** Pick snapshots indexed by pick name */
+  pickSnapshots: Map<string, PickSnapshot>;
+  /** Collected picks with value+display stored together */
+  collectedPicks: Map<string, CollectedPick>;
+  /** For repeating picks: current state (reuses existing RepeatingState) */
   repeatingState: RepeatingState | null;
-  /** Queued fills for future selections - applied when selection becomes active */
+  /** Queued fills for future picks - applied when pick becomes active */
   prefills: Map<string, unknown>;
 }
 
@@ -205,18 +224,37 @@ export interface UseActionControllerOptions {
    */
   externalArgs?: Record<string, unknown>;
   /**
-   * Function to fetch selection choices from server.
-   * Required for choice/element/elements selections.
+   * Function to fetch pick choices from server.
+   * Required for choice/element/elements picks.
+   */
+  fetchPickChoices?: (
+    actionName: string,
+    selectionName: string,
+    player: number,
+    currentArgs: Record<string, unknown>
+  ) => Promise<PickChoicesResult>;
+  /**
+   * @deprecated Use fetchPickChoices instead
    */
   fetchSelectionChoices?: (
     actionName: string,
     selectionName: string,
     player: number,
     currentArgs: Record<string, unknown>
-  ) => Promise<SelectionChoicesResult>;
+  ) => Promise<PickChoicesResult>;
   /**
-   * Function to process a repeating selection step.
-   * Required for selections with `repeat` config.
+   * Function to process a repeating pick step.
+   * Required for picks with `repeat` config.
+   */
+  pickStep?: (
+    player: number,
+    selectionName: string,
+    value: unknown,
+    actionName: string,
+    initialArgs?: Record<string, unknown>
+  ) => Promise<PickStepResult>;
+  /**
+   * @deprecated Use pickStep instead
    */
   selectionStep?: (
     player: number,
@@ -224,7 +262,7 @@ export interface UseActionControllerOptions {
     value: unknown,
     actionName: string,
     initialArgs?: Record<string, unknown>
-  ) => Promise<SelectionStepResult>;
+  ) => Promise<PickStepResult>;
   /**
    * Called before auto-execute fires (when all selections are filled).
    * Use this to capture element positions for animations before the DOM updates.
@@ -265,8 +303,10 @@ export interface UseActionControllerReturn {
   currentAction: Ref<string | null>;
   /** Args collected so far for current action */
   currentArgs: Ref<Record<string, unknown>>;
-  /** Current selection that needs user input (null if all filled or no action) */
-  currentSelection: ComputedRef<SelectionMetadata | null>;
+  /** Current pick that needs user input (null if all filled or no action) */
+  currentPick: ComputedRef<PickMetadata | null>;
+  /** @deprecated Use currentPick instead */
+  currentSelection: ComputedRef<PickMetadata | null>;
   /**
    * Valid elements for the current selection (reactive).
    * Use this in custom UIs instead of getValidElements() for automatic reactivity.
@@ -332,17 +372,19 @@ export interface UseActionControllerReturn {
   cancel: () => void;
 
   // === Utility ===
-  /** Get available choices for a selection (handles filterBy, dependsOn) */
-  getChoices: (selection: SelectionMetadata) => Array<{ value: unknown; display: string }>;
-  /** Get filtered choices for current selection (convenience method) */
+  /** Get available choices for a pick (handles filterBy, dependsOn) */
+  getChoices: (pick: PickMetadata) => Array<{ value: unknown; display: string }>;
+  /** Get filtered choices for current pick (convenience method) */
   getCurrentChoices: () => Array<{ value: unknown; display: string }>;
-  /** Get valid elements for an element/elements selection from cache */
-  getValidElements: (selection: SelectionMetadata) => ValidElement[];
+  /** Get valid elements for an element/elements pick from cache */
+  getValidElements: (pick: PickMetadata) => ValidElement[];
   /** Get metadata for an action */
   getActionMetadata: (actionName: string) => ActionMetadata | undefined;
   /** Clear all args (preserves reactivity for external args) */
   clearArgs: () => void;
-  /** Fetch choices for a selection from server (called automatically by start/fill) */
+  /** Fetch choices for a pick from server (called automatically by start/fill) */
+  fetchChoicesForPick: (selectionName: string) => Promise<void>;
+  /** @deprecated Use fetchChoicesForPick instead */
   fetchChoicesForSelection: (selectionName: string) => Promise<void>;
 
   // === Snapshot API (Pit of Success) ===
