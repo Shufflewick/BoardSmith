@@ -85,8 +85,8 @@
  *     const result = await fetch('/api/selection-choices', { ... });
  *     return result.json();
  *   },
- *   selectionStep: async (player, selection, value, action, args) => {
- *     const result = await fetch('/api/selection-step', { ... });
+ *   pickStep: async (player, selection, value, action, args) => {
+ *     const result = await fetch('/api/pick-step', { ... });
  *     return result.json();
  *   },
  * });
@@ -98,20 +98,29 @@ import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode } from '
 import { createEnrichment } from './useGameViewEnrichment.js';
 
 // Re-export all types from the types module for consumers
+// New Pick* names are primary, Selection* aliases are deprecated
 export type {
   GameViewElement,
   ElementRef,
   ChoiceWithRefs,
   ValidElement,
+  // Primary types (use these)
+  PickMetadata,
+  PickStepResult,
+  PickChoicesResult,
+  PickSnapshot,
+  CollectedPick,
+  // Deprecated aliases (for backward compatibility)
   SelectionMetadata,
-  ActionMetadata,
-  FollowUpAction,
-  ActionResult,
-  ValidationResult,
   SelectionStepResult,
   SelectionChoicesResult,
   SelectionSnapshot,
   CollectedSelection,
+  // Other types
+  ActionMetadata,
+  FollowUpAction,
+  ActionResult,
+  ValidationResult,
   ActionStateSnapshot,
   UseActionControllerOptions,
   RepeatingState,
@@ -121,12 +130,12 @@ export type {
 import type {
   ElementRef,
   ValidElement,
-  SelectionMetadata,
+  PickMetadata,
+  PickSnapshot,
+  CollectedPick,
   ActionMetadata,
   ActionResult,
   ValidationResult,
-  SelectionSnapshot,
-  CollectedSelection,
   ActionStateSnapshot,
   UseActionControllerOptions,
   RepeatingState,
@@ -149,7 +158,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     autoExecute: autoExecuteOption = true,
     externalArgs,
     fetchSelectionChoices,
-    selectionStep,
+    // Note: pickStep is primary, selectionStep is deprecated alias
     onBeforeAutoExecute: initialBeforeAutoExecute,
   } = options;
 
@@ -171,7 +180,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const currentAction = ref<string | null>(null);
 
   // Args storage - uses externalArgs if provided (for custom UI sync), otherwise internal ref
-  // Note: fill() updates both currentArgs AND collectedSelections (for display tracking)
+  // Note: fill() updates both currentArgs AND collectedPicks (for display tracking)
   // Direct modifications to currentArgs work but lose display info - use fill() for proper display
   const internalArgs = ref<Record<string, unknown>>({});
   const currentArgs = computed({
@@ -204,7 +213,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // Pit of Success: Client-owned action state snapshot
   // When start() is called, we clone the metadata so we don't depend on server broadcasts
-  // selectionSnapshots stores fetched choices - single source of truth
+  // pickSnapshots stores fetched choices - single source of truth
   const actionSnapshot = ref<ActionStateSnapshot | null>(null);
 
   // Flag to prevent double-fetch when startFollowUp/start already fetched choices
@@ -243,11 +252,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * Find the display value for a selection value from snapshot.
-   * Used to store display alongside value in collectedSelections.
+   * Used to store display alongside value in collectedPicks.
    */
   function findDisplayForValue(selectionName: string, value: unknown): string {
     // Get from snapshot - single source of truth
-    const snapshot = actionSnapshot.value?.selectionSnapshots.get(selectionName);
+    const snapshot = actionSnapshot.value?.pickSnapshots.get(selectionName);
 
     if (snapshot?.choices) {
       const match = snapshot.choices.find(c =>
@@ -268,10 +277,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Get available choices for a selection.
-   * Priority: selectionSnapshots > static metadata (for execute() and tests)
+   * Get available choices for a pick.
+   * Priority: pickSnapshots > static metadata (for execute() and tests)
    */
-  function getChoices(selection: SelectionMetadata): Array<{ value: unknown; display: string }> {
+  function getChoices(selection: PickMetadata): Array<{ value: unknown; display: string }> {
     let choices: Array<{ value: unknown; display: string }> = [];
 
     // For repeating selections with dynamic choices from server
@@ -280,9 +289,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         choices = repeatingState.value.currentChoices;
       }
     }
-    // Primary: Use selectionSnapshots (populated by fetchChoicesForSelection)
+    // Primary: Use pickSnapshots (populated by fetchChoicesForSelection)
     else if (actionSnapshot.value) {
-      const snapshot = actionSnapshot.value.selectionSnapshots.get(selection.name);
+      const snapshot = actionSnapshot.value.pickSnapshots.get(selection.name);
 
       if (snapshot) {
         if (snapshot.choices) {
@@ -343,23 +352,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return choices;
   }
 
-  /** Get choices for the current selection (convenience method) */
+  /** Get choices for the current pick (convenience method) */
   function getCurrentChoices(): Array<{ value: unknown; display: string }> {
-    const sel = currentSelection.value;
+    const sel = currentPick.value;
     if (!sel) return [];
     return getChoices(sel);
   }
 
-  /** Get valid elements for an element/elements selection from snapshot */
-  function getValidElements(selection: SelectionMetadata): ValidElement[] {
+  /** Get valid elements for an element/elements pick from snapshot */
+  function getValidElements(selection: PickMetadata): ValidElement[] {
     if (!actionSnapshot.value) return [];
     if (selection.type !== 'element' && selection.type !== 'elements') return [];
 
-    const snapshot = actionSnapshot.value.selectionSnapshots.get(selection.name);
+    const snapshot = actionSnapshot.value.pickSnapshots.get(selection.name);
     return snapshot?.validElements || [];
   }
 
-  function selectionNeedsInput(selection: SelectionMetadata): boolean {
+  function selectionNeedsInput(selection: PickMetadata): boolean {
     const value = currentArgs.value[selection.name];
     return value === undefined;
   }
@@ -374,7 +383,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return typeof obj === 'object' && obj !== null && 'value' in obj;
   }
 
-  function validateSelection(selection: SelectionMetadata, value: unknown): ValidationResult {
+  function validateSelection(selection: PickMetadata, value: unknown): ValidationResult {
     // For repeating selections, validation is done by the server
     if (selection.repeat) {
       return { valid: true };
@@ -428,16 +437,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   function buildServerArgs(): Record<string, unknown> {
     const args: Record<string, unknown> = {};
 
-    // Use collectedSelections as the source of truth
+    // Use collectedPicks as the source of truth
     if (actionSnapshot.value) {
-      for (const [name, collected] of actionSnapshot.value.collectedSelections) {
+      for (const [name, collected] of actionSnapshot.value.collectedPicks) {
         args[name] = collected.value;
       }
     }
 
     // Development warning: detect when externalArgs has been polluted by external code
     if (externalArgs && actionSnapshot.value) {
-      const controllerKeys = new Set(actionSnapshot.value.collectedSelections.keys());
+      const controllerKeys = new Set(actionSnapshot.value.collectedPicks.keys());
       const externalKeys = Object.keys(externalArgs);
       const unknownKeys = externalKeys.filter(k => !controllerKeys.has(k));
 
@@ -457,17 +466,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Fetch choices for a selection from the server.
+   * Fetch choices for a pick from the server.
    */
-  async function fetchChoicesForSelection(selectionName: string): Promise<void> {
-    if (!fetchSelectionChoices) {
+  async function fetchChoicesForPick(selectionName: string): Promise<void> {
+    // Support both new and deprecated option names
+    const fetchFn = options.fetchPickChoices ?? options.fetchSelectionChoices;
+    if (!fetchFn) {
       return;
     }
     if (!currentAction.value) {
       return;
     }
 
-    // Get selection metadata - check snapshot first (for followUp actions), then live metadata
+    // Get pick metadata - check snapshot first (for followUp actions), then live metadata
     let meta: ActionMetadata | undefined;
     if (actionSnapshot.value?.actionName === currentAction.value) {
       meta = actionSnapshot.value.metadata;
@@ -477,11 +488,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const selection = meta?.selections.find(s => s.name === selectionName);
     if (!selection) {
-      console.warn(`[ActionController] fetchChoicesForSelection: selection "${selectionName}" not found in metadata`);
+      console.warn(`[ActionController] fetchChoicesForPick: pick "${selectionName}" not found in metadata`);
       return;
     }
 
-    // Skip fetch for number/text selections - they don't have choices
+    // Skip fetch for number/text picks - they don't have choices
     if (selection.type === 'number' || selection.type === 'text') {
       return;
     }
@@ -494,7 +505,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Use controller's source of truth for args, not the shared externalArgs
       // This prevents pollution from custom UI code writing to the shared args object
-      const result = await fetchSelectionChoices(
+      const result = await fetchFn(
         currentAction.value,
         selectionName,
         player,
@@ -505,26 +516,29 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       if (result.success && actionSnapshot.value) {
         // Store in snapshot - this is the single source of truth
-        actionSnapshot.value.selectionSnapshots.set(selectionName, {
-          choices: result.choices as SelectionSnapshot['choices'],
+        actionSnapshot.value.pickSnapshots.set(selectionName, {
+          choices: result.choices as PickSnapshot['choices'],
           validElements: result.validElements,
           multiSelect: result.multiSelect,
         });
         // Increment version to trigger reactive computeds (Maps aren't reactive)
         snapshotVersion.value++;
       } else if (!result.success) {
-        console.error(`[BoardSmith] Failed to fetch selection choices for '${selectionName}' after ${fetchDuration}ms:`, result.error);
+        console.error(`[BoardSmith] Failed to fetch pick choices for '${selectionName}' after ${fetchDuration}ms:`, result.error);
       }
     } catch (err) {
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
-        `[BoardSmith] Error fetching selection choices for '${selectionName}' after ${fetchDuration}ms:`,
+        `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
         err
       );
     } finally {
       isLoadingChoices.value = false;
     }
   }
+
+  // Deprecated alias
+  const fetchChoicesForSelection = fetchChoicesForPick;
 
   // === Computed ===
 
@@ -542,17 +556,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return getActionMetadata(currentAction.value);
   });
 
-  const currentSelection = computed((): SelectionMetadata | null => {
+  const currentPick = computed((): PickMetadata | null => {
     if (!currentActionMeta.value) return null;
 
-    // Find first selection that needs input
+    // Find first pick that needs input
     for (const sel of currentActionMeta.value.selections) {
       if (selectionNeedsInput(sel) && !sel.optional) {
         return enrichValidElements(sel);
       }
     }
 
-    // Then check optional selections
+    // Then check optional picks
     for (const sel of currentActionMeta.value.selections) {
       if (selectionNeedsInput(sel) && sel.optional) {
         return enrichValidElements(sel);
@@ -562,16 +576,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return null;
   });
 
+  // Deprecated alias for currentPick
+  const currentSelection = currentPick;
+
   const isReady = computed((): boolean => {
     if (!currentActionMeta.value) return false;
-    return currentSelection.value === null;
+    return currentPick.value === null;
   });
 
   /**
-   * Reactive valid elements for the current selection.
+   * Reactive valid elements for the current pick.
    * This is the "pit of success" for custom UIs - just use this computed directly.
    * It automatically updates when:
-   * - currentSelection changes
+   * - currentPick changes
    * - choices are fetched from server
    * - gameView updates (elements are enriched with full data)
    */
@@ -580,12 +597,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // (Maps aren't reactive, so we use this counter to trigger updates)
     const _version = snapshotVersion.value;
 
-    const sel = currentSelection.value;
+    const sel = currentPick.value;
     if (!sel) return [];
     if (sel.type !== 'element' && sel.type !== 'elements') return [];
 
-    // Get from snapshot (populated by fetchChoicesForSelection)
-    const snapshot = actionSnapshot.value?.selectionSnapshots.get(sel.name);
+    // Get from snapshot (populated by fetchChoicesForPick)
+    const snapshot = actionSnapshot.value?.pickSnapshots.get(sel.name);
     const elements = snapshot?.validElements || [];
 
     // Enrich with full element data from gameView
@@ -593,9 +610,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   });
 
   // === Auto-fill Watch ===
-  // When a selection changes, fetch choices if needed and auto-fill if only one choice
-  // Also applies prefills when a selection becomes active
-  watch(currentSelection, async (sel) => {
+  // When a pick changes, fetch choices if needed and auto-fill if only one choice
+  // Also applies prefills when a pick becomes active
+  watch(currentPick, async (sel) => {
     if (!sel || isExecuting.value) return;
 
     // Skip fetch if start/startFollowUp already handled it (prevents double-fetch)
@@ -607,9 +624,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Fetch choices if not in snapshot yet (handles case where board sets args directly)
     if (!shouldSkipFetch) {
-      const snapshot = actionSnapshot.value?.selectionSnapshots.get(sel.name);
+      const snapshot = actionSnapshot.value?.pickSnapshots.get(sel.name);
       if (!snapshot && (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')) {
-        await fetchChoicesForSelection(sel.name);
+        await fetchChoicesForPick(sel.name);
       }
     }
 
@@ -634,9 +651,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Apply prefill
         currentArgs.value[sel.name] = validChoice.value;
 
-        // Update collectedSelections
+        // Update collectedPicks
         if (actionSnapshot.value) {
-          actionSnapshot.value.collectedSelections.set(sel.name, {
+          actionSnapshot.value.collectedPicks.set(sel.name, {
             value: validChoice.value,
             display: validChoice.display,
             skipped: false,
@@ -659,9 +676,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         const choice = choices[0];
         currentArgs.value[sel.name] = choice.value;
 
-        // Also update collectedSelections so UI reflects the selection
+        // Also update collectedPicks so UI reflects the selection
         if (actionSnapshot.value) {
-          actionSnapshot.value.collectedSelections.set(sel.name, {
+          actionSnapshot.value.collectedPicks.set(sel.name, {
             value: choice.value,
             display: choice.display,
             skipped: false,
@@ -914,8 +931,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionSnapshot.value = {
       actionName,
       metadata: meta ? JSON.parse(JSON.stringify(meta)) : { name: actionName, selections: [] },
-      selectionSnapshots: new Map(),
-      collectedSelections: new Map(),
+      pickSnapshots: new Map(),
+      collectedPicks: new Map(),
       repeatingState: null,
       prefills: new Map(),
     };
@@ -940,7 +957,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         );
       }
 
-      actionSnapshot.value.collectedSelections.set(name, {
+      actionSnapshot.value.collectedPicks.set(name, {
         value,
         display: displayOverrides?.[name] ?? getDisplayFromValue(value),
         skipped: false,
@@ -960,7 +977,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
         // Prevent the watcher from also fetching (would cause double-fetch)
         suppressNextWatcherFetch = true;
-        await fetchChoicesForSelection(selectionToFetch.name);
+        await fetchChoicesForPick(selectionToFetch.name);
 
         // After fetching, check for auto-fill (but not for optional selections)
         if (getAutoFill() && !isExecuting.value) {
@@ -970,7 +987,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
             currentArgs.value[selectionToFetch.name] = choice.value;
 
             if (actionSnapshot.value) {
-              actionSnapshot.value.collectedSelections.set(selectionToFetch.name, {
+              actionSnapshot.value.collectedPicks.set(selectionToFetch.name, {
                 value: choice.value,
                 display: choice.display,
                 skipped: false,
@@ -980,7 +997,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
             // Fetch next selection if needed
             const nextSel = getNextSelection(selectionToFetch.name);
             if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-              await fetchChoicesForSelection(nextSel.name);
+              await fetchChoicesForPick(nextSel.name);
 
               // Don't auto-fill optional selections - user must consciously choose or skip
               if (getAutoFill() && !isExecuting.value) {
@@ -988,7 +1005,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
                 if (nextChoices.length === 1 && !nextSel.optional) {
                   currentArgs.value[nextSel.name] = nextChoices[0].value;
                   if (actionSnapshot.value) {
-                    actionSnapshot.value.collectedSelections.set(nextSel.name, {
+                    actionSnapshot.value.collectedPicks.set(nextSel.name, {
                       value: nextChoices[0].value,
                       display: nextChoices[0].display,
                       skipped: false,
@@ -1046,15 +1063,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionSnapshot.value = {
       actionName,
       metadata: JSON.parse(JSON.stringify(meta)), // Deep clone
-      selectionSnapshots: new Map(),
-      collectedSelections: new Map(),
+      pickSnapshots: new Map(),
+      collectedPicks: new Map(),
       repeatingState: null,
       prefills: new Map(Object.entries(prefillArgs)),
     };
 
     // Store display values for any initialArgs
     for (const [name, value] of Object.entries(initialArgs)) {
-      actionSnapshot.value.collectedSelections.set(name, {
+      actionSnapshot.value.collectedPicks.set(name, {
         value,
         display: getDisplayFromValue(value),
         skipped: false,
@@ -1078,7 +1095,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
         // Prevent the watcher from also fetching (would cause double-fetch)
         suppressNextWatcherFetch = true;
-        await fetchChoicesForSelection(selectionToFetch.name);
+        await fetchChoicesForPick(selectionToFetch.name);
 
         // After fetching, manually trigger auto-fill if there's exactly one choice
         // The watch may have fired before choices were fetched, so we need to check again
@@ -1091,7 +1108,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
             // Store in snapshot
             if (actionSnapshot.value) {
-              actionSnapshot.value.collectedSelections.set(selectionToFetch.name, {
+              actionSnapshot.value.collectedPicks.set(selectionToFetch.name, {
                 value: choice.value,
                 display: choice.display,
                 skipped: false,
@@ -1101,7 +1118,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
             // Recursively fetch and auto-fill the next selection if needed
             const nextSel = getNextSelection(selectionToFetch.name);
             if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-              await fetchChoicesForSelection(nextSel.name);
+              await fetchChoicesForPick(nextSel.name);
 
               // Check for auto-fill on the next selection too
               // Don't auto-fill optional selections - user must consciously choose or skip
@@ -1110,7 +1127,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
                 if (nextChoices.length === 1 && !nextSel.optional) {
                   currentArgs.value[nextSel.name] = nextChoices[0].value;
                   if (actionSnapshot.value) {
-                    actionSnapshot.value.collectedSelections.set(nextSel.name, {
+                    actionSnapshot.value.collectedPicks.set(nextSel.name, {
                       value: nextChoices[0].value,
                       display: nextChoices[0].display,
                       skipped: false,
@@ -1162,7 +1179,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Single source of truth for display values
       if (actionSnapshot.value) {
         const display = findDisplayForValue(selectionName, value);
-        actionSnapshot.value.collectedSelections.set(selectionName, {
+        actionSnapshot.value.collectedPicks.set(selectionName, {
           value,
           display,
           skipped: false,
@@ -1172,7 +1189,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Always fetch choices for the next selection (unless it's number/text)
       const nextSel = getNextSelection(selectionName);
       if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-        await fetchChoicesForSelection(nextSel.name);
+        await fetchChoicesForPick(nextSel.name);
 
         // After fetch, check for auto-fill on the next selection
         // (the watch may have fired before cache was populated)
@@ -1185,7 +1202,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
             // Also store auto-filled value in snapshot
             if (actionSnapshot.value) {
-              actionSnapshot.value.collectedSelections.set(nextSel.name, {
+              actionSnapshot.value.collectedPicks.set(nextSel.name, {
                 value: autoValue,
                 display: choices[0].display,
                 skipped: false,
@@ -1201,10 +1218,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return validation;
   }
 
-  /** Handle fill for repeating selections */
-  async function handleRepeatingFill(selection: SelectionMetadata, value: unknown): Promise<ValidationResult> {
-    if (!selectionStep || !currentAction.value) {
-      return { valid: false, error: 'selectionStep function not provided for repeating selection' };
+  /** Handle fill for repeating picks */
+  async function handleRepeatingFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
+    // Support both new and deprecated option names
+    const stepFn = options.pickStep ?? options.selectionStep;
+    if (!stepFn || !currentAction.value) {
+      return { valid: false, error: 'pickStep function not provided for repeating pick' };
     }
 
     const player = playerSeat?.value ?? 0;
@@ -1229,7 +1248,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value.awaitingServer = true;
 
     try {
-      const result = await selectionStep(
+      const result = await stepFn(
         player,
         selection.name,
         value,
@@ -1318,7 +1337,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Store skipped state in snapshot
       if (actionSnapshot.value) {
-        actionSnapshot.value.collectedSelections.set(selectionName, {
+        actionSnapshot.value.collectedPicks.set(selectionName, {
           value: null,
           display: '',
           skipped: true,
@@ -1332,7 +1351,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Remove from snapshot
     if (actionSnapshot.value) {
-      actionSnapshot.value.collectedSelections.delete(selectionName);
+      actionSnapshot.value.collectedPicks.delete(selectionName);
     }
   }
 
@@ -1359,7 +1378,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * ```
    */
   function getCollectedSelection(name: string): CollectedSelection | undefined {
-    return actionSnapshot.value?.collectedSelections.get(name);
+    return actionSnapshot.value?.collectedPicks.get(name);
   }
 
   /**
@@ -1380,7 +1399,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!actionSnapshot.value) return [];
 
     const result: Array<CollectedSelection & { name: string }> = [];
-    for (const [name, collected] of actionSnapshot.value.collectedSelections) {
+    for (const [name, collected] of actionSnapshot.value.collectedPicks) {
       result.push({ name, ...collected });
     }
     return result;
@@ -1390,14 +1409,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // State
     currentAction,
     currentArgs,
-    currentSelection,
-    validElements,  // Reactive! Use this in custom UIs
+    currentPick,             // Primary (use this)
+    currentSelection,        // Deprecated alias
+    validElements,           // Reactive! Use this in custom UIs
     isReady,
     isExecuting,
     lastError,
     isLoadingChoices,
     repeatingState,
-    pendingFollowUp,  // Use to prevent starting new actions during followUp transition
+    pendingFollowUp,         // Use to prevent starting new actions during followUp transition
 
     // Methods
     execute,
@@ -1410,13 +1430,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Utility
     getChoices,
     getCurrentChoices,
-    getValidElements,  // Non-reactive, prefer validElements computed
+    getValidElements,        // Non-reactive, prefer validElements computed
     getActionMetadata,
     clearArgs,
-    fetchChoicesForSelection,
+    fetchChoicesForPick,     // Primary (use this)
+    fetchChoicesForSelection, // Deprecated alias
 
     // Snapshot API (Pit of Success)
-    actionSnapshot,  // Readonly access to frozen action state (for followUp metadata)
+    actionSnapshot,          // Readonly access to frozen action state (for followUp metadata)
     getCollectedSelection,
     getCollectedSelections,
 
@@ -1455,10 +1476,10 @@ export function injectActionController(): UseActionControllerReturn {
 // ============================================
 
 /**
- * Type for the selection step function (repeating selections).
- * Used when a selection can repeat multiple times (e.g., discard until done).
+ * Type for the pick step function (repeating picks).
+ * Used when a pick can repeat multiple times (e.g., discard until done).
  */
-export type SelectionStepFn = (
+export type PickStepFn = (
   player: number,
   selectionName: string,
   value: unknown,
@@ -1472,25 +1493,33 @@ export type SelectionStepFn = (
   actionComplete?: boolean;
 }>;
 
+/** @deprecated Use PickStepFn instead */
+export type SelectionStepFn = PickStepFn;
+
 /**
- * Inject the selection step function for repeating selections.
+ * Inject the pick step function for repeating picks.
  * Returns undefined if not in a GameShell context (function is optional).
  *
  * @example
  * ```typescript
- * const stepFn = injectSelectionStepFn();
+ * const stepFn = injectPickStepFn();
  * if (stepFn && selection.repeat) {
  *   const result = await stepFn(playerSeat, 'card', selectedValue, 'discard');
  *   if (result.done) {
- *     // Repeating selection complete
+ *     // Repeating pick complete
  *   } else {
  *     // result.nextChoices has the next available choices
  *   }
  * }
  * ```
  */
-export function injectSelectionStepFn(): SelectionStepFn | undefined {
-  return inject<SelectionStepFn | undefined>('selectionStepFn', undefined);
+export function injectPickStepFn(): PickStepFn | undefined {
+  return inject<PickStepFn | undefined>('pickStepFn', undefined);
+}
+
+/** @deprecated Use injectPickStepFn instead */
+export function injectSelectionStepFn(): PickStepFn | undefined {
+  return inject<PickStepFn | undefined>('selectionStepFn', undefined);
 }
 
 /**
