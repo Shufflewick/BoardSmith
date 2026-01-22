@@ -26,7 +26,7 @@ The main wrapper component that provides the complete game UI structure: header,
       actionController,
       setBoardPrompt
     }">
-      <GameBoard
+      <GameTable
         :game-view="gameView"
         :player-position="playerPosition"
         :is-my-turn="isMyTurn"
@@ -49,7 +49,7 @@ The main wrapper component that provides the complete game UI structure: header,
 
 <script setup lang="ts">
 import { GameShell } from 'boardsmith/ui';
-import GameBoard from './components/GameBoard.vue';
+import GameTable from './components/GameTable.vue';
 </script>
 ```
 
@@ -338,7 +338,7 @@ import { useBoardInteraction, createBoardInteraction, provideBoardInteraction } 
 const boardInteraction = createBoardInteraction();
 provideBoardInteraction(boardInteraction);
 
-// In GameBoard or ActionPanel (inject)
+// In GameTable or ActionPanel (inject)
 const boardInteraction = useBoardInteraction();
 
 // Check element states
@@ -640,7 +640,7 @@ const canDrag = () => true;
 
 1. **Demo: Complex UI Interactions** (`packages/games/demoComplexUiInteractions/`)
 
-   A dedicated demo showing this feature with multiple simultaneous actions. The custom GameBoard:
+   A dedicated demo showing this feature with multiple simultaneous actions. The custom GameTable:
    - Shows an action status panel displaying the current action and selection step
    - Changes board color based on active action (blue for Collect, red for Discard, etc.)
    - Highlights cards with action-specific colors
@@ -739,7 +739,7 @@ const actionAnimations = useActionAnimations({
   ],
 });
 
-// Register with actionController (in GameBoard setup)
+// Register with actionController (in GameTable setup)
 function setupAnimations(actionController, gameView) {
   gameViewRef.value = gameView;
   actionController.registerBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
@@ -1268,7 +1268,7 @@ The `actionController` provides error state that your UI should handle gracefull
     </Transition>
 
     <!-- Game content -->
-    <GameBoard ... />
+    <GameTable ... />
   </div>
 </template>
 

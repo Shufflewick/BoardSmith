@@ -14,7 +14,7 @@ The main wrapper component that provides complete game UI structure.
     :player-count="2"
   >
     <template #game-board="{ gameView, actionController, isMyTurn }">
-      <MyGameBoard
+      <MyGameTable
         :game-view="gameView"
         :action-controller="actionController"
         :is-my-turn="isMyTurn"
@@ -67,35 +67,34 @@ Auto-generated action UI from game metadata.
 ```vue
 <template>
   <Die3D
-    :value="dieValue"
-    :rolling="isRolling"
-    :sides="6"
+    v-for="die in dice"
+    :key="die.id"
+    :die-id="die.id"
+    :value="die.attributes.value"
+    :roll-count="die.attributes.rollCount"
+    :sides="die.attributes.sides"
     :size="60"
-    @click="onDieClick"
   />
 </template>
 
 <script setup>
-const dieValue = ref(1);
-const isRolling = ref(false);
-
-function rollDie() {
-  isRolling.value = true;
-  // After animation completes (timing based on your preference)
-  setTimeout(() => {
-    dieValue.value = Math.floor(Math.random() * 6) + 1;
-    isRolling.value = false;
-  }, 1000);
-}
+// Dice come from gameView in a real game
+const dice = computed(() => {
+  const pool = props.gameView?.children?.find(c => c.className === 'DicePool');
+  return pool?.children?.filter(c => c.className === 'Die') || [];
+});
 </script>
 ```
 
 **Props:**
+- `dieId` - Unique identifier for animation tracking
 - `value` - Current face value (1-indexed by default)
-- `rolling` - Whether the die is currently rolling
+- `rollCount` - Increment to trigger roll animation
 - `sides` - Die type: 4, 6, 8, 10, 12, or 20
 - `size` - Size in pixels (default: 60)
 - `color` - Custom die color (optional)
+
+**Note:** Use `die.roll()` in game logic to roll dice. This increments `rollCount` automatically, triggering the animation.
 
 **Supported die types:** d4, d6, d8, d10, d12, d20
 

@@ -18,7 +18,7 @@ npm install @boardsmith/ui
     @action="handleAction"
   >
     <template #board>
-      <MyGameBoard :game="gameState.game" />
+      <MyGameTable :game="gameState.game" />
     </template>
   </GameShell>
 </template>

@@ -38,7 +38,7 @@ my-game/
 │   └── ui/                  # Vue UI components
 │       ├── App.vue          # Main app component
 │       ├── components/      # Custom components
-│       │   └── GameBoard.vue
+│       │   └── GameTable.vue
 │       └── index.ts         # UI exports
 └── tests/
     └── game.test.ts         # Game tests
@@ -263,7 +263,7 @@ The UI uses Vue 3 and the `boardsmith/ui` package:
       actionController,
       setBoardPrompt
     }">
-      <GameBoard
+      <GameTable
         :game-view="gameView"
         :player-position="playerPosition"
         :is-my-turn="isMyTurn"
