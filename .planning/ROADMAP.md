@@ -35,6 +35,12 @@ Plans:
 
 **Requirements:** UI-01, UI-02, UI-03, UI-04
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 55-01-PLAN.md — Rename GameBoard.vue files in extracted games
+- [ ] 55-02-PLAN.md — Update CLI templates and documentation
+
 **Success Criteria:**
 - No files named `GameBoard.vue` in BoardSmith or extracted games
 - All imports reference `GameTable.vue`
