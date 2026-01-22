@@ -39,7 +39,7 @@ function getPieceCount(playerSeat: number, gameView: any): number {
   for (const square of board.children) {
     if (square.className !== 'Square') continue;
     for (const piece of square.children || []) {
-      if (piece.className === 'CheckerPiece' && piece.attributes?.player?.position === playerSeat) {
+      if (piece.className === 'CheckerPiece' && piece.attributes?.player?.seat === playerSeat) {
         count++;
       }
     }
@@ -58,7 +58,7 @@ function getKingCount(playerSeat: number, gameView: any): number {
     if (square.className !== 'Square') continue;
     for (const piece of square.children || []) {
       if (piece.className === 'CheckerPiece' &&
-          piece.attributes?.player?.position === playerSeat &&
+          piece.attributes?.player?.seat === playerSeat &&
           piece.attributes?.isKing) {
         count++;
       }

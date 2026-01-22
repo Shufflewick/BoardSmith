@@ -221,7 +221,7 @@ const opponentHandElement = computed(() => {
   const hands = props.gameView?.children?.filter(
     (c: any) => c.attributes?.$type === 'hand'
   ) || [];
-  return hands.find((h: any) => h.attributes?.player?.position !== props.playerSeat);
+  return hands.find((h: any) => h.attributes?.player?.seat !== props.playerSeat);
 });
 const opponentHand = computed(() => opponentHandElement.value?.children || []);
 

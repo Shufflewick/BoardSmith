@@ -282,7 +282,7 @@ describe('GoFishGame', () => {
 
       const alice = testGame.game.getPlayer(1)! as GoFishPlayer;
       // canPlayerAct takes a player index, not a player object
-      expect(testGame.game.canPlayerAct(alice.position)).toBe(true);
+      expect(testGame.game.canPlayerAct(alice.seat)).toBe(true);
     });
 
     it('should allow asking another player for cards using simulateAction', () => {
@@ -299,7 +299,7 @@ describe('GoFishGame', () => {
 
       if (aliceRanks.length > 0) {
         const result = simulateAction(testGame, 1, 'ask', {
-          target: { value: bob.position, display: bob.name },
+          target: { value: bob.seat, display: bob.name },
           rank: aliceRanks[0],
         });
 
@@ -336,7 +336,7 @@ describe('GoFishGame', () => {
       const aliceRanks = testGame.game.getPlayerRanks(alice);
       if (aliceRanks.length > 0) {
         const result = testGame.doAction(1, 'ask', {
-          target: { value: bob.position, display: bob.name },
+          target: { value: bob.seat, display: bob.name },
           rank: aliceRanks[0],
         });
 
@@ -417,7 +417,7 @@ describe('GoFishGame', () => {
       const ranks = testGame.game.getPlayerRanks(alice);
 
       if (ranks.length > 0) {
-        testGame.doAction(1, 'ask', { target: { value: bob.position, display: bob.name }, rank: ranks[0] });
+        testGame.doAction(1, 'ask', { target: { value: bob.seat, display: bob.name }, rank: ranks[0] });
 
         const after = JSON.stringify(testGame.runner.getSnapshot());
         const diff = diffSnapshots(before, after);

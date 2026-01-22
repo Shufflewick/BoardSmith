@@ -113,7 +113,7 @@ const { flyingElements: autoFlyingCards } = useAutoAnimations({
 
     // Add opponent containers dynamically
     for (const opponent of opponents.value) {
-      const pos = opponent.position;
+      const pos = opponent.seat;
       if (opponentHandElements[pos] && opponentHandRefArray[pos]?.value) {
         list.push({
           element: opponentHandElements[pos],
@@ -162,7 +162,7 @@ const allPlayers = computed(() => {
 
 // Get opponent players (everyone except me)
 const opponents = computed(() => {
-  return allPlayers.value.filter((p: any) => p.position !== props.playerSeat);
+  return allPlayers.value.filter((p: any) => p.seat !== props.playerSeat);
 });
 
 // Get player's hand using utility
@@ -269,10 +269,10 @@ const cardBackImageUrl = computed(() => {
 
 const myCardsByRank = computed(() => getCardsByRank(myHand.value));
 
-// Get player name by position
-function getPlayerName(position: number): string {
-  const player = allPlayers.value.find((p: any) => p.position === position);
-  return player?.name || `Player ${position + 1}`;
+// Get player name by seat
+function getPlayerName(seat: number): string {
+  const player = allPlayers.value.find((p: any) => p.seat === seat);
+  return player?.name || `Player ${seat + 1}`;
 }
 
 // Check if a specific opponent's hand is selectable
@@ -536,12 +536,12 @@ watch(
 
     <!-- Opponent Sections -->
     <div class="opponents-container">
-      <div v-for="opponent in opponents" :key="opponent.position" class="opponent-section">
-        <div class="player-label">{{ getPlayerName(opponent.position) }}'s Hand</div>
+      <div v-for="opponent in opponents" :key="opponent.seat" class="opponent-section">
+        <div class="player-label">{{ getPlayerName(opponent.seat) }}'s Hand</div>
 
         <!-- Opponent's Books -->
-        <div v-if="getPlayerBooks(opponent.position).length > 0" class="books-area">
-          <div v-for="book in getPlayerBooks(opponent.position)" :key="book.id" class="book">
+        <div v-if="getPlayerBooks(opponent.seat).length > 0" class="books-area">
+          <div v-for="book in getPlayerBooks(opponent.seat)" :key="book.id" class="book">
             <div class="book-rank">{{ getRankName((book.attributes?.rank as string) || '') }}</div>
             <div class="book-cards">
               <div v-for="i in 4" :key="i" class="mini-card"></div>
@@ -551,17 +551,17 @@ watch(
 
         <!-- Opponent's Hand -->
         <div
-          :ref="(el) => setOpponentHandRef(opponent.position, el as HTMLElement | null)"
+          :ref="(el) => setOpponentHandRef(opponent.seat, el as HTMLElement | null)"
           class="hand opponent-hand"
-          :class="{ 'selectable': isOpponentHandSelectable(opponent.position), 'selected': props.actionArgs.target === opponent.position }"
-          :data-element-id="opponentHands.get(opponent.position)?.id"
-          @click="handleOpponentClick(opponent.position)"
+          :class="{ 'selectable': isOpponentHandSelectable(opponent.seat), 'selected': props.actionArgs.target === opponent.seat }"
+          :data-element-id="opponentHands.get(opponent.seat)?.id"
+          @click="handleOpponentClick(opponent.seat)"
         >
-          <div v-for="i in getElementCount(opponentHands.get(opponent.position))" :key="i" class="card card-back" :class="{ 'has-image': cardBackImageUrl }">
+          <div v-for="i in getElementCount(opponentHands.get(opponent.seat))" :key="i" class="card card-back" :class="{ 'has-image': cardBackImageUrl }">
             <img v-if="cardBackImageUrl" :src="cardBackImageUrl" class="card-image" alt="Card back" />
             <div v-else class="card-pattern"></div>
           </div>
-          <div v-if="getElementCount(opponentHands.get(opponent.position)) === 0" class="empty-hand">No cards</div>
+          <div v-if="getElementCount(opponentHands.get(opponent.seat)) === 0" class="empty-hand">No cards</div>
         </div>
       </div>
     </div>

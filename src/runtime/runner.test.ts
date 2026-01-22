@@ -30,7 +30,7 @@ class TestGame extends Game<TestGame, Player> {
     // Create hands for each player
     this.hands = [];
     for (const player of this.all(Player)) {
-      const hand = this.create(Hand, `hand-${player.position}`);
+      const hand = this.create(Hand, `hand-${player.seat}`);
       hand.player = player;
       hand.contentsVisibleToOwner();
       this.hands.push(hand);
@@ -58,8 +58,8 @@ class TestGame extends Game<TestGame, Player> {
       .execute((args, ctx) => {
         const card = this.deck.first(Card);
         if (card) {
-          // player.position is 1-indexed, hands array is 0-indexed
-          const hand = this.hands[ctx.player.position - 1];
+          // player.seat is 1-indexed, hands array is 0-indexed
+          const hand = this.hands[ctx.player.seat - 1];
           card.putInto(hand);
           ctx.game.message(`${ctx.player.name} drew a card`);
         }

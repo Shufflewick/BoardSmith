@@ -31,7 +31,7 @@ export function createPlaceStoneAction(game: HexGame): ActionDefinition {
       const cell = args.cell as Cell;
 
       // Create a stone for this player
-      const stone = cell.create(Stone, `stone-${player.position}-${player.stonesPlaced}`, {
+      const stone = cell.create(Stone, `stone-${player.seat}-${player.stonesPlaced}`, {
         player: player,
       });
 

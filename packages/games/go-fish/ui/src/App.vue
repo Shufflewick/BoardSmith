@@ -13,7 +13,7 @@ function getBookCount(playerSeat: number, gameView: any): number {
   // Find the Books space for this player
   const booksSpace = gameView.children.find((child: any) =>
     child.className === 'Books' &&
-    child.attributes?.player?.position === playerSeat
+    child.attributes?.player?.seat === playerSeat
   );
   // Each book is 4 cards
   return booksSpace ? Math.floor((booksSpace.children?.length || 0) / 4) : 0;
@@ -54,7 +54,7 @@ function getBookCount(playerSeat: number, gameView: any): number {
         <span class="stat-value">
           {{
             gameView?.children?.find((c: any) =>
-              c.className === 'Hand' && c.attributes?.player?.position === player.seat
+              c.className === 'Hand' && c.attributes?.player?.seat === player.seat
             )?.children?.length || 0
           }}
         </span>

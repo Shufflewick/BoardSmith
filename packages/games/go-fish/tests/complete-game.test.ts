@@ -172,7 +172,7 @@ describe('Complete Go Fish Game', () => {
       console.log(`Alice asks for ${goFishRank}s (Bob doesn't have any)`);
 
       const result = testGame.doAction(1, 'ask', {
-        target: { value: bob.position, display: bob.name },
+        target: { value: bob.seat, display: bob.name },
         rank: goFishRank,
       });
 
@@ -232,7 +232,7 @@ describe('Complete Go Fish Game', () => {
       console.log(`Alice asks for ${matchingRank}s (Bob has ${bobCardsOfRank})`);
 
       const result = testGame.doAction(1, 'ask', {
-        target: { value: bob.position, display: bob.name },
+        target: { value: bob.seat, display: bob.name },
         rank: matchingRank,
       });
 

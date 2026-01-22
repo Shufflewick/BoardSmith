@@ -4,10 +4,10 @@ import { GameShell, AutoUI } from '@boardsmith/ui';
 
 <template>
   <GameShell game-type="test-action-panel" display-name="Test Action Panel">
-    <template #game-board="{ state, gameView, playerPosition }">
+    <template #game-board="{ state, gameView, playerSeat }">
       <AutoUI
         :game-view="gameView || null"
-        :player-position="playerPosition"
+        :player-seat="playerSeat"
         :flow-state="state?.flowState as any"
       />
     </template>

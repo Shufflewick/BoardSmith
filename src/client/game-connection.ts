@@ -55,7 +55,7 @@ export class GameConnection {
     this.config = {
       gameId: config.gameId,
       playerId: config.playerId,
-      playerPosition: config.playerPosition ?? -1,
+      playerSeat: config.playerSeat ?? -1,
       spectator: config.spectator ?? false,
       autoReconnect: config.autoReconnect ?? true,
       maxReconnectAttempts: config.maxReconnectAttempts ?? 5,
@@ -214,8 +214,8 @@ export class GameConnection {
     const wsUrl = new URL(`${wsProtocol}//${httpUrl.host}${httpUrl.pathname}`);
 
     wsUrl.searchParams.set('playerId', this.config.playerId);
-    if (this.config.playerPosition >= 1) {
-      wsUrl.searchParams.set('player', String(this.config.playerPosition));
+    if (this.config.playerSeat >= 1) {
+      wsUrl.searchParams.set('player', String(this.config.playerSeat));
     }
     if (this.config.spectator) {
       wsUrl.searchParams.set('spectator', 'true');
@@ -267,7 +267,7 @@ export class GameConnection {
             this.lastState = {
               flowState: message.flowState,
               state: message.state,
-              playerPosition: message.playerPosition ?? this.config.playerPosition,
+              playerSeat: message.playerSeat ?? this.config.playerSeat,
               isSpectator: message.isSpectator ?? this.config.spectator,
             };
             this.notifyStateChange();

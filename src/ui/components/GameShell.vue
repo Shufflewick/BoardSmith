@@ -376,13 +376,13 @@ onMounted(async () => {
       const lobby = await client.getLobby(urlGameId);
 
       if (lobby.state === 'playing') {
-        // Game already started - find our position and go to game
+        // Game already started - find our seat and go to game
         const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
         if (mySlot) {
-          playerSeat.value = mySlot.position;
+          playerSeat.value = mySlot.seat;
           gameId.value = urlGameId;
           currentScreen.value = 'game';
-          updateUrl(urlGameId, mySlot.position);
+          updateUrl(urlGameId, mySlot.seat);
         } else {
           // Not in this game - go to lobby screen
           currentScreen.value = 'lobby';
@@ -397,7 +397,7 @@ onMounted(async () => {
       // Check if we have a claimed slot
       const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
       if (mySlot) {
-        playerSeat.value = mySlot.position;
+        playerSeat.value = mySlot.seat;
       }
 
       lobbyInfo.value = lobby;
@@ -526,7 +526,7 @@ function connectToLobby(gid: string) {
   const connection = new GameConnection(props.apiUrl, {
     gameId: gid,
     playerId: playerId.value,
-    playerPosition: playerSeat.value,
+    playerSeat: playerSeat.value,
     autoReconnect: true,
   });
 
@@ -534,7 +534,7 @@ function connectToLobby(gid: string) {
   connection.onLobbyChange((lobby) => {
     hmrLog('onLobbyChange', {
       state: lobby.state,
-      slots: lobby.slots.map(s => ({ position: s.position, status: s.status })),
+      slots: lobby.slots.map(s => ({ seat: s.seat, status: s.status })),
     });
     lobbyInfo.value = lobby;
 
@@ -542,10 +542,10 @@ function connectToLobby(gid: string) {
     if (lobby.state === 'playing') {
       disconnectFromLobby();
 
-      // Find my position from the lobby slots
+      // Find my seat from the lobby slots
       const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
       if (mySlot) {
-        playerSeat.value = mySlot.position;
+        playerSeat.value = mySlot.seat;
       }
 
       gameId.value = gid;
@@ -724,10 +724,10 @@ async function handleSetReady(ready: boolean) {
       if (result.lobby.state === 'playing') {
         disconnectFromLobby();
 
-        // Find my position from the lobby slots
+        // Find my seat from the lobby slots
         const mySlot = result.lobby.slots.find(s => s.playerId === playerId.value);
         if (mySlot) {
-          playerSeat.value = mySlot.position;
+          playerSeat.value = mySlot.seat;
         }
 
         gameId.value = createdGameId.value;

@@ -100,7 +100,7 @@ export class GameRunner<G extends Game = Game> {
       };
     }
 
-    const playerIndex = playerObj.position;
+    const playerIndex = playerObj.seat;
 
     // Check if game is awaiting input
     if (!this.game.isAwaitingInput()) {
@@ -269,8 +269,8 @@ export class GameRunner<G extends Game = Game> {
     runner.start();
     for (const action of snapshot.actionHistory) {
       const { actionName, player, args } = deserializeAction(action, runner.game);
-      // Pass player position for simultaneous actions
-      runner.game.continueFlow(actionName, args, player.position);
+      // Pass player seat for simultaneous actions
+      runner.game.continueFlow(actionName, args, player.seat);
     }
 
     return runner;
