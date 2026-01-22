@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-21)
 ## Current Position
 
 Phase: 57-selection-pick-rename (4 of 5)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-22 — Phase 56 complete
+Plan: 01 of 1 complete
+Status: Plan 01 complete
+Last activity: 2026-01-22 — Completed 57-01-PLAN.md
 
-Progress: [████████████████████████░░░░░░░░░░░░░░░░] 3/5 phases
+Progress: [████████████████████████████████░░░░░░░░] 4/5 phases
 
 ## Milestones
 
@@ -52,7 +52,7 @@ Progress: [███████████████████████
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Phase 56 complete
+Stopped at: Completed 57-01-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.0)
@@ -129,3 +129,6 @@ Resume file: None
 | All 9 extracted games use seat | Checkers, Cribbage, Go Fish, Hex, Polyhedral Potions, Floss Bitties, 3 demos | 56-04 |
 | Documentation uses seat consistently | player.seat in code, playerSeat in Vue props, getPlayerColor(playerSeat) | 56-05 |
 | CLI templates generate seat-based code | New projects via boardsmith init use seat terminology | 56-05 |
+| Selection* renamed to Pick* | "Pick" = choice player must make per nomenclature.md | 57-01 |
+| Keep selectionName parameter names | API stability - same pattern as Phase 56's playerPosition | 57-01 |
+| Deprecation aliases for backward compat | SelectionMetadata = PickMetadata, etc. ensures existing code works | 57-01 |
