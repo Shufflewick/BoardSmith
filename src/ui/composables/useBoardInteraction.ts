@@ -83,10 +83,14 @@ export interface BoardInteractionState {
   /** Currently active action name (null if no action is in progress) */
   currentAction: string | null;
 
-  /** Index of the current selection step (0-based) */
+  /** Index of the current pick step (0-based) */
+  currentPickIndex: number;
+  /** @deprecated Use currentPickIndex instead */
   currentSelectionIndex: number;
 
-  /** Name of the current selection being filled */
+  /** Name of the current pick being filled */
+  currentPickName: string | null;
+  /** @deprecated Use currentPickName instead */
   currentSelectionName: string | null;
 }
 
@@ -154,9 +158,11 @@ export interface BoardInteractionActions {
   // ---- Action State Methods ----
 
   /** Set the current action (called by ActionPanel when action starts) */
-  setCurrentAction: (actionName: string | null, selectionIndex?: number, selectionName?: string | null) => void;
+  setCurrentAction: (actionName: string | null, pickIndex?: number, pickName?: string | null) => void;
 
-  /** Update the current selection step */
+  /** Update the current pick step */
+  setCurrentPick: (pickIndex: number, pickName: string | null) => void;
+  /** @deprecated Use setCurrentPick instead */
   setCurrentSelection: (selectionIndex: number, selectionName: string | null) => void;
 
   /** Set the callback for choice selection (called by ActionPanel) */
@@ -188,8 +194,10 @@ export function createBoardInteraction(): BoardInteraction {
     hoveredDropTarget: null,
     // Action state
     currentAction: null,
-    currentSelectionIndex: 0,
-    currentSelectionName: null,
+    currentPickIndex: 0,
+    currentSelectionIndex: 0,  // Deprecated alias, kept in sync
+    currentPickName: null,
+    currentSelectionName: null,  // Deprecated alias, kept in sync
   });
 
   // Callback for when element is dropped on valid target
@@ -235,8 +243,10 @@ export function createBoardInteraction(): BoardInteraction {
       state.lastDroppedElementId = null;
       state.hoveredDropTarget = null;
       state.currentAction = null;
-      state.currentSelectionIndex = 0;
-      state.currentSelectionName = null;
+      state.currentPickIndex = 0;
+      state.currentSelectionIndex = 0;  // Deprecated alias
+      state.currentPickName = null;
+      state.currentSelectionName = null;  // Deprecated alias
       onDropCallback = null;
     },
 
@@ -337,15 +347,24 @@ export function createBoardInteraction(): BoardInteraction {
       return matchesRef(element, state.hoveredDropTarget);
     },
 
-    setCurrentAction(actionName, selectionIndex = 0, selectionName = null) {
+    setCurrentAction(actionName, pickIndex = 0, pickName = null) {
       state.currentAction = actionName;
-      state.currentSelectionIndex = selectionIndex;
-      state.currentSelectionName = selectionName;
+      state.currentPickIndex = pickIndex;
+      state.currentSelectionIndex = pickIndex;  // Deprecated alias
+      state.currentPickName = pickName;
+      state.currentSelectionName = pickName;  // Deprecated alias
     },
 
+    setCurrentPick(pickIndex, pickName) {
+      state.currentPickIndex = pickIndex;
+      state.currentSelectionIndex = pickIndex;  // Deprecated alias
+      state.currentPickName = pickName;
+      state.currentSelectionName = pickName;  // Deprecated alias
+    },
+
+    // Deprecated alias for setCurrentPick
     setCurrentSelection(selectionIndex, selectionName) {
-      state.currentSelectionIndex = selectionIndex;
-      state.currentSelectionName = selectionName;
+      this.setCurrentPick(selectionIndex, selectionName);
     },
 
     setChoiceSelectCallback(callback) {
