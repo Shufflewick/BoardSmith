@@ -193,13 +193,13 @@ class WebSocketBroadcaster implements BroadcastAdapter<SessionInfo> {
 
   getSessions(): SessionInfo[] {
     return Array.from(this.connections.keys()).map((pos) => ({
-      playerPosition: pos,
+      playerSeat: pos,
       isSpectator: false,
     }));
   }
 
   send(session: SessionInfo, message: unknown): void {
-    const ws = this.connections.get(session.playerPosition);
+    const ws = this.connections.get(session.playerSeat);
     ws?.send(JSON.stringify(message));
   }
 }

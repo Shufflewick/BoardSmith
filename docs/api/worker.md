@@ -274,7 +274,7 @@ const result = await fetch('/matchmaking/join', {
 if (result.status === 'matched') {
   // Game created!
   const ws = new WebSocket(
-    `wss://example.com/games/${result.gameId}?player=${result.playerPosition}`,
+    `wss://example.com/games/${result.gameId}?player=${result.playerSeat}`,
   );
 } else if (result.status === 'waiting') {
   // Poll for status

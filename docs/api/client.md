@@ -70,7 +70,7 @@ const { gameId } = await client.createGame({
 
 // Connect to the game
 const connection = client.connect(gameId, {
-  playerPosition: 0,
+  playerSeat: 0,
 });
 
 // Subscribe to state changes
@@ -106,7 +106,7 @@ const match = await client.findMatch('go-fish', {
 if (match.status === 'matched') {
   // Matched with other players!
   const connection = client.connect(match.gameId!, {
-    playerPosition: match.playerPosition!,
+    playerSeat: match.playerSeat!,
     playerId: 'user-123',
   });
 } else if (match.status === 'waiting') {
@@ -130,7 +130,7 @@ await client.leaveMatchmaking('user-123');
 import { MeepleClient } from 'boardsmith/client';
 
 const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
-const connection = client.connect(gameId, { playerPosition: 0 });
+const connection = client.connect(gameId, { playerSeat: 0 });
 
 // State changes
 connection.onStateChange((state) => {

@@ -166,7 +166,7 @@ wss.on('connection', (ws, req) => {
 
   // Register connection for broadcasts
   server.registerConnection(gameId!, {
-    playerPosition: player,
+    playerSeat: player,
     send: (msg) => ws.send(JSON.stringify(msg)),
   });
 
