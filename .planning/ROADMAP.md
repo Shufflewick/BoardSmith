@@ -108,6 +108,12 @@ Plans:
 
 **Requirements:** DOCS-01, DOCS-02, DOCS-03, DOCS-04
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 58-01-PLAN.md — Update code examples (position -> seat)
+- [ ] 58-02-PLAN.md — Create migration guide + add nomenclature links
+
 **Success Criteria:**
 - All docs/*.md files audited
 - Standardized terms used consistently (Table, Board, Zone, Session, etc.)
