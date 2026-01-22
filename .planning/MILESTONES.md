@@ -1,5 +1,33 @@
 # Project Milestones: BoardSmith
 
+## v2.4 Animation Event System (Shipped: 2026-01-22)
+
+**Delivered:** Infrastructure-level support for dramatic UI playback of game calculations — enabling games to animate combat sequences, card draws, and other events while game state advances immediately (soft continuation pattern).
+
+**Phases completed:** 59-63 (5 phases, 6 plans total)
+
+**Key accomplishments:**
+
+- Added `game.emitAnimationEvent(type, data, options?)` API with unique IDs and timestamps
+- Animation buffer serializes/restores with game state (checkpoint/replay safe)
+- Session layer exposes `animationEvents` array and `acknowledgeAnimations()` method
+- Created `useAnimationEvents` composable with handler registration, skip, and pause control
+- ActionPanel automatically gates on pending animations (`showActionPanel` computed)
+- Documented animation event system in ui-components.md and nomenclature.md
+
+**Stats:**
+
+- 42 files changed
+- +7,668 / -107 lines
+- 5 phases, 6 plans
+- Same day from start to ship (2026-01-22)
+
+**Git range:** `ebcb3b2` → `0e2ab7d`
+
+**What's next:** Animation infrastructure complete. Ready for game developers to implement custom animations.
+
+---
+
 ## v2.3 Nomenclature Standardization (Shipped: 2026-01-22)
 
 **Delivered:** Consistent terminology across the entire codebase, documentation, and games — standardizing on Table (not Board), Seat (not Position), and Pick (not Selection) before external adoption.

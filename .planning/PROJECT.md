@@ -8,18 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v2.4 Animation Event System
+## Previous: v2.4 Shipped
 
-**Goal:** Infrastructure-level support for dramatic UI playback of game calculations — enabling games like MERC to animate combat sequences while game state advances immediately.
+BoardSmith now includes animation event infrastructure for dramatic UI playback. Games can emit animation events during calculations while state advances immediately (soft continuation pattern).
 
-**Target features:**
-- `game.emitAnimationEvent(type, data)` API for emitting events during calculations
-- Soft continuation model (state advances, UI plays back asynchronously)
-- Animation events as parallel channel (separate from commands, not state mutations)
-- Automatic ActionPanel coordination (waits for animations before showing new decisions)
-- Event serialization with game state (checkpoint/replay safe)
-- `useAnimationEvents` composable for UI consumption
-- Integration with existing `useAutoAnimations`
+**v2.4 Delivered:** Animation Event System — `game.emitAnimationEvent()` API, session integration, `useAnimationEvents` composable, ActionPanel gating, and documentation.
 
 ## Previous: v2.3 Shipped
 
@@ -102,20 +95,21 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ `position` → `seat` in API and documentation — v2.3
 - ✓ `selection` → `pick` in API and documentation — v2.3
 - ✓ All documentation uses standardized terminology — v2.3
+- ✓ Animation events emittable via `game.emitAnimationEvent()` — v2.4
+- ✓ Animation event buffer serializes with game state — v2.4
+- ✓ `pendingAnimationEvents` getter returns unacknowledged events — v2.4
+- ✓ `acknowledgeAnimationEvents(upToId)` clears consumed events — v2.4
+- ✓ `PlayerGameState` includes `animationEvents` array — v2.4
+- ✓ `GameSession.acknowledgeAnimations()` method — v2.4
+- ✓ `useAnimationEvents` composable with handler registration — v2.4
+- ✓ `useActionController` gates ActionPanel on pending animations — v2.4
+- ✓ `useAutoAnimations` integrates custom event handlers — v2.4
+- ✓ Snapshot serialization includes animation buffer — v2.4
+- ✓ Animation event system documented — v2.4
 
 ### Active
 
-- [ ] Animation events emittable during game execution via `game.emitAnimationEvent()`
-- [ ] Animation event buffer serializes with game state
-- [ ] `pendingAnimationEvents` getter returns unacknowledged events
-- [ ] `acknowledgeAnimationEvents(upToId)` clears consumed events
-- [ ] `PlayerGameState` includes `animationEvents` array
-- [ ] `GameSession.acknowledgeAnimations()` method (not an action)
-- [ ] `useAnimationEvents` composable with handler registration
-- [ ] `useActionController` gates ActionPanel on pending animations
-- [ ] `useAutoAnimations` integrates custom event handlers
-- [ ] Snapshot serialization includes animation buffer
-- [ ] Documentation for animation event system
+(None — planning next milestone)
 
 ### Out of Scope
 
@@ -153,6 +147,11 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | Seat not Position for players | Position is overloaded (grid position); Seat is specific to players | ✓ Good |
 | Pick not Selection for choices | Selection is generic; Pick conveys intent of choosing from options | ✓ Good |
 | Deprecation aliases for renamed APIs | Allows gradual migration; old names still work | ✓ Good |
+| Soft continuation pattern for animations | Game state advances immediately, UI plays back asynchronously | ✓ Good |
+| Animation events as parallel channel | Not commands, not state mutations — UI hints only | ✓ Good |
+| acknowledgeAnimations on session not game | Avoids polluting game state with UI concerns | ✓ Good |
+| Animation buffer serializes with game state | Checkpoint/replay safety | ✓ Good |
+| ActionPanel gates on animations | New decisions wait for animation completion | ✓ Good |
 
 ## Context
 
@@ -181,4 +180,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-01-22 after starting v2.4 milestone*
+*Last updated: 2026-01-22 after v2.4 milestone*

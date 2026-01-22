@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-22)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.4 Animation Event System
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 63 of 63 (Documentation)
-Plan: 01 of 01 complete
-Status: Phase complete - v2.4 milestone complete
-Last activity: 2026-01-22 — Completed 63-01-PLAN.md (Animation Event Documentation)
+Phase: None — between milestones
+Plan: None
+Status: Ready to plan next milestone
+Last activity: 2026-01-22 — v2.4 milestone complete
 
-Progress: [██████████] 100% (5/5 phases)
+Progress: Ready for `/gsd:new-milestone`
 
 ## Milestones
 
@@ -35,47 +35,17 @@ Progress: [██████████] 100% (5/5 phases)
 - v2.1 Design-Game Skill Redesign (Phases 47-50) -- shipped 2026-01-19
 - v2.2 Game Design Aspects (Phases 51-53) -- shipped 2026-01-21
 - v2.3 Nomenclature Standardization (Phases 54-58) -- shipped 2026-01-22
-
 - v2.4 Animation Event System (Phases 59-63) -- shipped 2026-01-22
 
 **Current:**
-None - ready for next milestone
-
-## Roadmap Evolution
-
-- Milestone v2.4 created: Animation Event System, 5 phases (Phases 59-63)
-- 21 v2.4 requirements mapped to 5 phases
+None — ready for next milestone
 
 ## Session Continuity
 
-Last session: 2026-01-22T22:51:49Z
-Stopped at: Completed 63-01-PLAN.md - v2.4 milestone complete
+Last session: 2026-01-22
+Stopped at: v2.4 milestone complete
 Resume file: None
 
-## Key Decisions (v2.4)
+## Key Decisions (Accumulated)
 
-| Decision | Rationale | Phase |
-|----------|-----------|-------|
-| Soft continuation pattern | Game state advances immediately, UI plays back asynchronously | Design |
-| Animation events as parallel channel | Not commands, not state mutations - UI hints only | Design |
-| acknowledgeAnimations on session | Not a game action; avoids polluting game state | Design |
-| Events serialize with game state | Checkpoint/replay safety | Design |
-| ActionPanel gates on animations | New decisions wait for animation completion | Design |
-| Monotonic counter for event IDs | Simpler than UUID, sufficient for sequential events | 59-01 |
-| Shallow copy event data on emit | Prevents external mutation after emit | 59-01 |
-| Return array copy from pendingAnimationEvents | Prevents direct buffer modification | 59-01 |
-| Empty buffer not serialized | Avoids cluttering JSON snapshots | 59-02 |
-| Spread copy on restore | Prevents reference sharing across instances | 59-02 |
-| Optional animation fields in PlayerGameState | Only include when buffer non-empty for clean JSON | 60-01 |
-| Spectators receive animation events | Universal events - all viewers see all animations | 60-01 |
-| Broadcast on acknowledge | All clients notified when events consumed | 60-01 |
-| playerSeat param for future | Included for multi-client per-client tracking | 60-01 |
-| Track lastQueuedId separate from lastProcessedId | Prevents re-queueing when watcher fires during processing | 61-01 |
-| Handler errors logged but do not stop chain | One handler error shouldn't break entire animation sequence | 61-01 |
-| Pause/resume via Promise synchronization | Allows processQueue to await unpause without polling | 61-01 |
-| skipAll acknowledges all pending events | Prevents replay on reconnect even when animations skipped | 61-01 |
-| animationEvents option is optional | Backward compatibility - animationsPending=false, showActionPanel=isMyTurn when not provided | 62-01 |
-| showActionPanel gates on three conditions | isMyTurn AND !animationsPending AND !pendingFollowUp - comprehensive gating | 62-01 |
-| ActionPanel uses provide/inject for animationEvents | Follows established pattern, avoids prop drilling | 62-01 |
-| Animation Events section placement | After Theming, before Action Controller API for logical reading flow | 63-01 |
-| Three terminology entries | Animation Event, Animation Handler, Soft Continuation capture essential concepts | 63-01 |
+See PROJECT.md for full decision history.
