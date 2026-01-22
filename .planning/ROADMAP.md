@@ -14,6 +14,11 @@
 
 **Requirements:** DICT-01, DICT-02, DICT-03
 
+**Plans:** 1 plan
+
+Plans:
+- [ ] 54-01-PLAN.md — Create docs/nomenclature.md with all defined terms
+
 **Success Criteria:**
 - `docs/nomenclature.md` exists with all defined terms
 - Terms organized by category
@@ -94,7 +99,7 @@
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 54 | Nomenclature Dictionary | 3 | Not started |
+| 54 | Nomenclature Dictionary | 3 | Planned |
 | 55 | GameTable Rename | 4 | Not started |
 | 56 | Position → Seat | 4 | Not started |
 | 57 | Selection → Pick | 4 | Not started |
