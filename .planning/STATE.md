@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-22)
 ## Current Position
 
 Phase: 60 of 63 (Session Integration)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-01-22 — Phase 59 Core Animation Events complete
+Plan: 01 of 01 complete
+Status: Phase complete
+Last activity: 2026-01-22 — Completed 60-01-PLAN.md
 
-Progress: [██........] 20% (1/5 phases)
+Progress: [████......] 40% (2/5 phases)
 
 ## Milestones
 
@@ -46,8 +46,8 @@ Progress: [██........] 20% (1/5 phases)
 
 ## Session Continuity
 
-Last session: 2026-01-22T21:30:00Z
-Stopped at: Completed 59-02-PLAN.md
+Last session: 2026-01-22T21:54:00Z
+Stopped at: Completed 60-01-PLAN.md
 Resume file: None
 
 ## Key Decisions (v2.4)
@@ -64,3 +64,7 @@ Resume file: None
 | Return array copy from pendingAnimationEvents | Prevents direct buffer modification | 59-01 |
 | Empty buffer not serialized | Avoids cluttering JSON snapshots | 59-02 |
 | Spread copy on restore | Prevents reference sharing across instances | 59-02 |
+| Optional animation fields in PlayerGameState | Only include when buffer non-empty for clean JSON | 60-01 |
+| Spectators receive animation events | Universal events - all viewers see all animations | 60-01 |
+| Broadcast on acknowledge | All clients notified when events consumed | 60-01 |
+| playerSeat param for future | Included for multi-client per-client tracking | 60-01 |
