@@ -104,7 +104,7 @@ export function createPlaceStoneAction(game: MyGame): ActionDefinition {
 }
 ```
 
-## Custom UI Component (GameBoard.vue)
+## Custom UI Component (GameTable.vue)
 
 ```vue
 <script setup lang="ts">

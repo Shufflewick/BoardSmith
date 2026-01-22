@@ -397,7 +397,7 @@ Create minimal playable game matching interview requirements
 3. Generate flow.ts with turn structure
 4. Generate actions.ts with game actions
 5. Generate index.ts with game definition
-6. **Customize GameBoard.vue for the game type (dice/cards/board)**
+6. **Customize GameTable.vue for the game type (dice/cards/board)**
 7. Verify compilation with tsc --noEmit
 
 ## Success
@@ -458,7 +458,7 @@ For each aspect detected in Phase 2B, see the corresponding Aspect Template sect
 - Element definitions (classes to create)
 - Game setup code (what to add to constructor)
 - Action patterns (how to create actions for this aspect)
-- UI component (code for GameBoard.vue)
+- UI component (code for GameTable.vue)
 
 **Merge multiple aspects** by combining their contributions:
 - Elements: Include all element classes from all detected aspects
@@ -695,11 +695,11 @@ export const gameDefinition = {
 };
 ```
 
-### GameBoard.vue Generation (REQUIRED)
+### GameTable.vue Generation (REQUIRED)
 
 **READ FIRST:** `docs/custom-ui-guide.md` and `docs/ui-components.md`
 
-**You MUST customize GameBoard.vue to show actual game elements.** Never leave the JSON dump placeholder. The Custom UI should visually represent the game state.
+**You MUST customize GameTable.vue to show actual game elements.** Never leave the JSON dump placeholder. The Custom UI should visually represent the game state.
 
 **Use aspect templates:** The UI component from each detected aspect (read in Step 3) provides the base code. Combine UI components from multiple aspects as needed.
 
@@ -1024,12 +1024,12 @@ Based on the **detected aspects** from Phase 2B:
 4. Leave `isFinished()` returning false (we'll add win conditions later)
 5. Leave `getWinners()` returning [] (we'll add scoring later)
 
-### Step 4: Customize GameBoard.vue (REQUIRED)
+### Step 4: Customize GameTable.vue (REQUIRED)
 
 **DO NOT SKIP THIS STEP.** The scaffold creates a placeholder UI. You MUST replace it with a custom UI that shows actual game elements.
 
-1. Read the GameBoard.vue template above that matches the game type (dice/cards/board)
-2. Replace the entire content of `src/ui/components/GameBoard.vue` with the appropriate template
+1. Read the GameTable.vue template above that matches the game type (dice/cards/board)
+2. Replace the entire content of `src/ui/components/GameTable.vue` with the appropriate template
 3. Adjust the template to match your game's specific elements and actions
 
 **Verification:** After customizing, the Custom UI panel should show:
@@ -1069,7 +1069,7 @@ When building the UI, follow these rules to avoid over-engineering:
 
 ### Step 5: MANDATORY Pre-Submission Checklist (Dice Games)
 
-**BEFORE proceeding to Phase 6, you MUST verify your GameBoard.vue:**
+**BEFORE proceeding to Phase 6, you MUST verify your GameTable.vue:**
 
 Open the file you just wrote and check each item. If ANY check fails, FIX IT NOW.
 
@@ -1165,7 +1165,7 @@ export function createRollAction(game: MyGame): ActionDefinition {
 }
 ```
 
-#### Custom UI Component (GameBoard.vue)
+#### Custom UI Component (GameTable.vue)
 
 ```vue
 <script setup lang="ts">
@@ -1432,7 +1432,7 @@ export function createPlayAction(game: MyGame): ActionDefinition {
 }
 ```
 
-#### Custom UI Component (GameBoard.vue)
+#### Custom UI Component (GameTable.vue)
 
 ```vue
 <script setup lang="ts">
@@ -1748,7 +1748,7 @@ export function createPlaceStoneAction(game: MyGame): ActionDefinition {
 }
 ```
 
-#### Custom UI Component (GameBoard.vue)
+#### Custom UI Component (GameTable.vue)
 
 ```vue
 <script setup lang="ts">
@@ -2056,7 +2056,7 @@ export function createMoveAction(game: MyGame): ActionDefinition {
 }
 ```
 
-#### Custom UI Component (GameBoard.vue)
+#### Custom UI Component (GameTable.vue)
 
 ```vue
 <script setup lang="ts">
@@ -2293,7 +2293,7 @@ npx tsc --noEmit
 - Missing imports (add the import statement)
 - Type mismatches (check element class names)
 - Missing exports (add to index.ts)
-- **Vue prop errors**: GameBoard.vue must use the exact prop names from GameShell (see GameBoard.vue Generation section). Using wrong prop names like `action` or `executeAction` causes runtime errors.
+- **Vue prop errors**: GameTable.vue must use the exact prop names from GameShell (see GameTable.vue Generation section). Using wrong prop names like `action` or `executeAction` causes runtime errors.
 
 ### Step 2: Functionality Check
 
