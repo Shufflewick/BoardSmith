@@ -108,7 +108,7 @@ const playerScore = computed(() => {
 // ACTION CONTROLLER STATE
 // ============================================
 const currentAction = computed(() => props.actionController?.currentAction.value ?? null);
-const currentSelection = computed(() => props.actionController?.currentSelection.value ?? null);
+const currentPick = computed(() => props.actionController?.currentPick.value ?? null);
 
 // ============================================
 // ANIMATION COMPOSABLES
@@ -277,8 +277,8 @@ const actionInfo: Record<string, { name: string; icon: string; color: string; an
 
 // Is card selectable for current action?
 function isCardSelectable(cardId: number): boolean {
-  if (!currentAction.value || !currentSelection.value) return false;
-  if (currentSelection.value.type !== 'element') return false;
+  if (!currentAction.value || !currentPick.value) return false;
+  if (currentPick.value.type !== 'element') return false;
   const validIds = props.actionController.validElements.value.map((e: any) => e.id);
   return validIds.includes(cardId);
 }
@@ -286,15 +286,15 @@ function isCardSelectable(cardId: number): boolean {
 // Helper to determine if a card can be dragged (used with drag() pit-of-success helper)
 const canDragCard = (cardId: number) =>
   currentAction.value === 'dragDrop' &&
-  currentSelection.value?.name === 'card' &&
+  currentPick.value?.name === 'card' &&
   isCardSelectable(cardId);
 
 // Handle card click
 async function handleCardClick(card: { id: number }) {
   if (!props.actionController) return;
   if (!isCardSelectable(card.id)) return;
-  if (!currentSelection.value) return;
-  await props.actionController.fill(currentSelection.value.name, card.id);
+  if (!currentPick.value) return;
+  await props.actionController.fill(currentPick.value.name, card.id);
 }
 
 // Handle action button click
@@ -334,8 +334,8 @@ function cancelAction() {
           <div class="status-animation">
             {{ actionInfo[currentAction]?.animation }}
           </div>
-          <div v-if="currentSelection" class="status-prompt">
-            {{ currentSelection.prompt || 'Select an option...' }}
+          <div v-if="currentPick" class="status-prompt">
+            {{ currentPick.prompt || 'Select an option...' }}
           </div>
         </div>
         <button class="cancel-btn" @click="cancelAction" title="Cancel">&times;</button>

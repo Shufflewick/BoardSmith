@@ -67,15 +67,15 @@ const props = defineProps<{
 const boardInteraction = inject<BoardInteraction>('boardInteraction');
 
 // Use actionController for action state (pit of success - single source of truth)
-const { currentAction, currentSelection } = props.actionController;
+const { currentAction, currentPick } = props.actionController;
 
 // Detect when player has clicked "Ask" button and is actively filling in the action
 // This is different from availableActions.includes('ask') which just means the action CAN be taken
 const isAskingInProgress = computed(() => currentAction.value === 'ask');
 
-// Which selection step are we on? (target or rank)
-const currentSelectionStep = computed(() =>
-  isAskingInProgress.value ? currentSelection.value?.name : null
+// Which pick step are we on? (target or rank)
+const currentPickStep = computed(() =>
+  isAskingInProgress.value ? currentPick.value?.name : null
 );
 
 // Refs for animation sources/targets
@@ -276,46 +276,46 @@ function getPlayerName(seat: number): string {
 }
 
 // Check if a specific opponent's hand is selectable
-// The target selection has player choices, check if this position is a valid choice
+// The target pick has player choices, check if this position is a valid choice
 function isOpponentHandSelectable(position: number): boolean {
-  if (!currentSelection.value) return false;
-  const choices = props.actionController.getChoices(currentSelection.value);
+  if (!currentPick.value) return false;
+  const choices = props.actionController.getChoices(currentPick.value);
   return choices.some((c) => (c.value as any)?.value === position);
 }
 
 // Check if we're selecting a target player
-// The target selection is a chooseFrom (player choices), not element selection
+// The target pick is a chooseFrom (player choices), not element pick
 const isSelectingPlayer = computed(() => {
   // Must be my turn and actively in the "ask" action (not just available)
   if (!props.isMyTurn || !isAskingInProgress.value) return false;
-  // Must be on the "target" selection step
-  if (currentSelectionStep.value !== 'target') return false;
-  // Check that we have a selection with choices
-  return currentSelection.value?.type === 'choice';
+  // Must be on the "target" pick step
+  if (currentPickStep.value !== 'target') return false;
+  // Check that we have a pick with choices
+  return currentPick.value?.type === 'choice';
 });
 
 // Check if we're selecting a rank
-// The rank selection is a chooseFrom (string choices), not element selection
+// The rank pick is a chooseFrom (string choices), not element pick
 const isSelectingRank = computed(() => {
   // Must be my turn and actively in the "ask" action
   if (!props.isMyTurn || !isAskingInProgress.value) return false;
-  // Must be on the "rank" selection step
-  if (currentSelectionStep.value !== 'rank') return false;
-  // Check that we have a selection with choices
-  return currentSelection.value?.type === 'choice';
+  // Must be on the "rank" pick step
+  if (currentPickStep.value !== 'rank') return false;
+  // Check that we have a pick with choices
+  return currentPick.value?.type === 'choice';
 });
 
 // Handle clicking an opponent's hand to select them
 async function handleOpponentClick(position: number) {
   if (!isSelectingPlayer.value) return;
 
-  // The target selection is a chooseFrom with player choices { value: position, display: name }
+  // The target pick is a chooseFrom with player choices { value: position, display: name }
   // Find the choice that matches this position
-  const choices = props.actionController.getChoices(currentSelection.value!);
+  const choices = props.actionController.getChoices(currentPick.value!);
   const playerChoice = choices.find((c) => (c.value as any)?.value === position);
   if (!playerChoice) return;
 
-  // Use actionController to fill the selection with the player choice
+  // Use actionController to fill the pick with the player choice
   await props.actionController.fill('target', playerChoice.value);
 }
 
@@ -325,13 +325,13 @@ async function handleCardClick(rank: string) {
     return;
   }
 
-  // The rank selection is a chooseFrom with string choices, not element selection
+  // The rank pick is a chooseFrom with string choices, not element pick
   // Check if this rank is in the available choices
-  const choices = props.actionController.getChoices(currentSelection.value!);
+  const choices = props.actionController.getChoices(currentPick.value!);
   const isValidRank = choices.some((c) => c.value === rank);
   if (!isValidRank) return;
 
-  // Use actionController to fill the selection with the rank string
+  // Use actionController to fill the pick with the rank string
   await props.actionController.fill('rank', rank);
 }
 
@@ -468,7 +468,7 @@ watch(
     <div v-if="isAskingInProgress" class="action-indicator">
       <span class="action-indicator-label">Asking:</span>
       <span class="action-indicator-step">
-        {{ currentSelectionStep === 'target' ? 'Choose a player to ask' : 'Choose a rank from your hand' }}
+        {{ currentPickStep === 'target' ? 'Choose a player to ask' : 'Choose a rank from your hand' }}
       </span>
     </div>
 
