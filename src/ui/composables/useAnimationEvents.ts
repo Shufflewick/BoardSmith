@@ -108,6 +108,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // Track last processed ID to avoid re-processing
   let lastProcessedId = 0;
 
+  // Track highest queued ID to avoid re-queueing during processing
+  let lastQueuedId = 0;
+
   // Processing state
   let isProcessing = false;
   let skipRequested = false;
@@ -198,6 +201,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const lastEvent = queue[queue.length - 1];
       acknowledge(lastEvent.id);
       lastProcessedId = lastEvent.id;
+      lastQueuedId = lastEvent.id;
     }
 
     // Clear the queue
@@ -241,15 +245,17 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         return;
       }
 
-      // Filter to only new events (id > lastProcessedId)
-      const newEvents = events.filter((e) => e.id > lastProcessedId);
+      // Filter to only new events (id > lastQueuedId)
+      // Use lastQueuedId instead of lastProcessedId to avoid re-queueing during processing
+      const newEvents = events.filter((e) => e.id > lastQueuedId);
 
       if (newEvents.length === 0) {
         return;
       }
 
-      // Add to queue
+      // Add to queue and update lastQueuedId
       queue.push(...newEvents);
+      lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
       pendingCount.value = queue.length;
 
       // Start processing (non-blocking)
