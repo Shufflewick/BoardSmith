@@ -80,7 +80,7 @@ export function toDebugString(game: Game, options: DebugStringOptions = {}): str
     if (handCount) attrs.push(`hand(${handCount})`);
     if (boardCount) attrs.push(`board(${boardCount})`);
 
-    lines.push(`  [${player.position}] ${player.name}: ${attrs.join(', ') || '(no attributes)'}`);
+    lines.push(`  [${player.seat}] ${player.name}: ${attrs.join(', ') || '(no attributes)'}`);
   }
   lines.push('');
 

@@ -1,5 +1,33 @@
 # Project Milestones: BoardSmith
 
+## v2.3 Nomenclature Standardization (Shipped: 2026-01-22)
+
+**Delivered:** Consistent terminology across the entire codebase, documentation, and games — standardizing on Table (not Board), Seat (not Position), and Pick (not Selection) before external adoption.
+
+**Phases completed:** 54-58 (5 phases, 14 plans total)
+
+**Key accomplishments:**
+
+- Created authoritative `docs/nomenclature.md` with 33 terms across 7 categories
+- Renamed `GameBoard.vue` → `GameTable.vue` in all 4 extracted games and CLI templates
+- Renamed `Player.position` → `Player.seat` across engine, session, client, and UI layers
+- Renamed `currentSelection` → `currentPick` and `SelectionHandler` → `PickHandler` with deprecation aliases
+- Created `docs/migration-guide.md` with v2.3 API rename tables and migration steps
+- Cross-referenced nomenclature.md from all key documentation entry points
+
+**Stats:**
+
+- 174 files changed
+- +20,420 / -20,246 lines (net +174 lines of terminology changes)
+- 5 phases, 14 plans
+- 44 days from start to ship (2025-12-09 → 2026-01-22)
+
+**Git range:** `7ba2826` → `2a431ec`
+
+**What's next:** Terminology standardized. Ready for external adoption or next milestone.
+
+---
+
 ## v2.2 Game Design Aspects (Shipped: 2026-01-21)
 
 **Delivered:** Added composable aspect templates (Dice, PlayingCards, HexGrid, SquareGrid) to `/design-game` that auto-detect from interview answers and merge into generated code.

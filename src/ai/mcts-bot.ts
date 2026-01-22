@@ -1164,8 +1164,8 @@ export class MCTSBot<G extends Game = Game> {
       game.startFlow();
       for (const action of snapshot.actionHistory) {
         const { actionName, player, args } = deserializeAction(action, game);
-        // Pass the player position to continueFlow (required for simultaneous actions)
-        game.continueFlow(actionName, args, player.position);
+        // Pass the player seat to continueFlow (required for simultaneous actions)
+        game.continueFlow(actionName, args, player.seat);
       }
 
       return game;

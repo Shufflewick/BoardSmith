@@ -8,11 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State: v2.2 Shipped → v2.3 In Progress
+## Current State: v2.3 Shipped
 
 BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Games live in separate repositories at `~/BoardSmithGames/`.
 
-**v2.3 Focus:** Nomenclature standardization — consistent terminology across the entire codebase, documentation, and games before external adoption.
+**v2.3 Delivered:** Nomenclature standardization — consistent terminology (Table, Seat, Pick) across the entire codebase, documentation, and games.
 
 **Package structure:**
 - Single package: `boardsmith` (replaces 12 `@boardsmith/*` packages)
@@ -84,14 +84,15 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ Composable aspect detection from interview answers — v2.2
 - ✓ Aspect templates (Dice, PlayingCards, HexGrid, SquareGrid) — v2.2
 - ✓ Aspect-driven code generation with UI components — v2.2
+- ✓ Nomenclature dictionary created as authoritative reference — v2.3
+- ✓ `GameBoard.vue` → `GameTable.vue` across all games and templates — v2.3
+- ✓ `position` → `seat` in API and documentation — v2.3
+- ✓ `selection` → `pick` in API and documentation — v2.3
+- ✓ All documentation uses standardized terminology — v2.3
 
 ### Active
 
-- [ ] Nomenclature dictionary created as authoritative reference — v2.3
-- [ ] `GameBoard.vue` → `GameTable.vue` across all games and templates — v2.3
-- [ ] `position` → `seat` in API and documentation — v2.3
-- [ ] `selection` → `pick` in API and documentation — v2.3
-- [ ] All documentation uses standardized terminology — v2.3
+(None — v2.3 milestone complete)
 
 ### Out of Scope
 
@@ -125,6 +126,10 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | Resume without interrogation | Detect state from STATE.md, don't ask designer questions | ✓ Good |
 | Install as default action | `boardsmith claude` runs install without subcommand | ✓ Good |
 | Composable aspects over --type flag | Games have multiple component types; aspects are detected and combined | ✓ Good |
+| Table not Board for game surface | "Board" implies physical constraint; "Table" is where game happens | ✓ Good |
+| Seat not Position for players | Position is overloaded (grid position); Seat is specific to players | ✓ Good |
+| Pick not Selection for choices | Selection is generic; Pick conveys intent of choosing from options | ✓ Good |
+| Deprecation aliases for renamed APIs | Allows gradual migration; old names still work | ✓ Good |
 
 ## Context
 
@@ -150,5 +155,7 @@ Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
 
 One external team using BoardSmith — migration guide at `docs/migration-guide.md`.
 
+**Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
+
 ---
-*Last updated: 2026-01-21 after starting v2.3 milestone*
+*Last updated: 2026-01-22 after completing v2.3 milestone*
