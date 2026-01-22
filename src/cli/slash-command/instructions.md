@@ -2096,8 +2096,8 @@ const canMove = computed(() => props.availableActions.includes('move'));
 
 // Track selected piece for two-step move
 const selectedPiece = computed(() => {
-  const { currentSelection } = props.actionController;
-  if (currentSelection.value?.name === 'destination') {
+  const { currentPick } = props.actionController;
+  if (currentPick.value?.name === 'destination') {
     return props.actionController.pendingAction === 'move';
   }
   return false;
@@ -2117,7 +2117,7 @@ function handleCellClick(cell: any) {
 
   // If moving - click piece first, then destination
   if (canMove.value) {
-    const { pendingAction, currentSelection } = props.actionController;
+    const { pendingAction, currentPick } = props.actionController;
 
     if (!pendingAction) {
       // Start move by selecting a piece
@@ -2125,7 +2125,7 @@ function handleCellClick(cell: any) {
         props.actionController.start('move');
         props.actionController.fill('piece', piece.id);
       }
-    } else if (currentSelection.value?.name === 'destination') {
+    } else if (currentPick.value?.name === 'destination') {
       // Select destination
       if (!piece) {
         props.actionController.fill('destination', cell.id);
