@@ -101,7 +101,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
   private completedPlayers: Set<number> = new Set();
 
   playerCompletedAction(player: MyPlayer): void {
-    this.completedPlayers.add(player.position);
+    this.completedPlayers.add(player.seat);
   }
 
   allPlayersCompleted(): boolean {
@@ -256,7 +256,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
     super(options);
 
     for (const player of this.players) {
-      player.hand = this.create(Hand, `hand-${player.position}`);
+      player.hand = this.create(Hand, `hand-${player.seat}`);
       player.hand.player = player;
       player.hand.contentsVisibleToOwner();
     }
@@ -541,7 +541,7 @@ class Zone extends Space {
    */
   isControlledBy(player: Player): boolean {
     const controller = this.getController();
-    return controller?.position === player.position;
+    return controller?.seat === player.seat;
   }
 }
 ```

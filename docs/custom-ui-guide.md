@@ -63,7 +63,7 @@ const deck = findElement(gameView, { type: 'deck' });
 const board = findElement(gameView, { name: 'mainBoard' });
 
 // Find player's hand
-const myHand = findPlayerHand(gameView, playerPosition);
+const myHand = findPlayerHand(gameView, playerSeat);
 
 // Find by ID (recursive search)
 const card = findElementById(gameView, cardId);
@@ -82,12 +82,12 @@ import { findPlayerHand, findElement } from 'boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
 }>();
 
 // Extract hand cards
 const myCards = computed(() => {
-  const hand = findPlayerHand(props.gameView, props.playerPosition);
+  const hand = findPlayerHand(props.gameView, props.playerSeat);
   if (!hand?.children) return [];
 
   return hand.children.map(card => ({
@@ -692,7 +692,7 @@ import {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -702,7 +702,7 @@ const boardInteraction = useBoardInteraction();
 
 // Extract game state
 const myHand = computed(() => {
-  const hand = findPlayerHand(props.gameView, props.playerPosition);
+  const hand = findPlayerHand(props.gameView, props.playerSeat);
   return hand?.children || [];
 });
 

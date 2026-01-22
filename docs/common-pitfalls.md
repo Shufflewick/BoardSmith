@@ -484,12 +484,12 @@ Action.create('armsDealer')
   .chooseFrom('equipment', {
     choices: (ctx) => {
       const equipment = ctx.game.equipmentDeck.draw();
-      drawnEquipmentCache.set(`player_${ctx.player.position}`, equipment);  // Set here...
+      drawnEquipmentCache.set(`player_${ctx.player.seat}`, equipment);  // Set here...
       return [equipment, { value: 'skip', label: 'Skip' }];
     },
   })
   .execute((args, ctx) => {
-    const key = `player_${ctx.player.position}`;
+    const key = `player_${ctx.player.seat}`;
     const equipment = drawnEquipmentCache.get(key);  // ...undefined here!
     console.log('Equipment from cache:', equipment);  // "NONE"
   });
@@ -545,30 +545,49 @@ See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-te
 
 ### The Problem
 
-Storing game elements in property arrays instead of as element children causes serialization issues. The client receives element references instead of full element data:
+Storing game elements in property arrays throws an error because elements cannot be serialized to JSON:
 
 ```typescript
-// WRONG - Elements in array don't serialize properly
+// ERROR - Will throw at runtime
 class Sector extends Space {
-  stash: Equipment[] = [];  // BAD!
+  stash: Equipment[] = [];  // Throws: "Element arrays cannot be auto-synced"
 
   addToStash(equipment: Equipment): void {
-    this.stash.push(equipment);  // Just adds a reference
+    this.stash.push(equipment);  // Error thrown here
   }
 }
-
-// When serialized, the client receives:
-// stash: [{ __elementRef: "0/2/1" }, { __elementRef: "0/2/2" }]
-// NOT the full equipment data!
 ```
 
-This causes:
-- Broken images in the UI
-- Missing attributes (names, stats, descriptions)
-- Elements that "disappear" from their original location but don't appear in the stash
-- Confusing debugging because server state looks correct
+BoardSmith detects element arrays and throws a clear error with guidance:
+```
+Element arrays cannot be auto-synced: game.stash contains a GameElement.
+Use element children instead:
+  // Instead of: game.stash = []
+  // Use: stashZone = this.create(Space, 'stashZone')
+  //      stashZone.create(Equipment, 'item')
+  //      Access via: this.stashZone.all(Equipment)
+```
 
-### The Solution
+### Primitive Arrays Work Automatically
+
+Simple data arrays (numbers, strings, objects) **automatically survive HMR** without any special handling:
+
+```typescript
+// WORKS - Primitive arrays auto-sync to settings
+class MyGame extends Game {
+  scores: number[] = [];           // Auto-synced, survives HMR
+  history: string[] = [];          // Auto-synced, survives HMR
+  roundData: { round: number }[] = [];  // Auto-synced, survives HMR
+
+  recordScore(score: number): void {
+    this.scores.push(score);       // Automatically persisted
+  }
+}
+```
+
+All array mutations (push, pop, splice, sort, etc.) and reassignments are tracked automatically.
+
+### The Solution for Element Arrays
 
 Store elements as **children** in the element tree, not as property arrays:
 
@@ -604,8 +623,10 @@ Now equipment serializes with all attributes because it's part of the element tr
 | Pattern | Use For | Example |
 |---------|---------|---------|
 | **Element children** | Game pieces that need UI display | Cards in hand, pieces on board, equipment in stash |
-| **Property arrays** | Simple data, not game elements | List of action names, score history, string IDs |
+| **Property arrays** | Simple data (auto-syncs to HMR) | `scores: number[]`, `history: string[]`, `roundData: object[]` |
 | **ID arrays** | References you'll look up later | `selectedCardIds: number[]` then use `getElementById()` |
+
+> **Note:** Property arrays automatically sync to `game.settings` and survive HMR. You don't need to manually use `game.settings.myArray` anymore - just declare a regular array property.
 
 ### Migration Example
 
@@ -1487,6 +1508,53 @@ See [useDragDrop documentation](./ui-components.md#usedragdrop) for full details
 
 ---
 
+## 20. Mixing Dice Randomization Methods
+
+### The Problem
+
+Using multiple randomization approaches in the same action creates confusion and bugs:
+
+```typescript
+// WRONG - three different approaches mixed!
+game.die.roll();  // Method 1: roll() generates random value
+const rolled = Math.floor(Math.random() * 6) + 1;  // Method 2: separate random
+game.die.setValue(rolled);  // Method 3: overwrite with different value
+```
+
+This causes:
+- The die shows one value, then immediately changes to another
+- `Math.random()` breaks determinism and replay
+- The animation from `roll()` shows a different value than what ends up displayed
+
+### The Solution
+
+Use ONE approach:
+
+```typescript
+// CORRECT - roll() handles everything
+const rolled = game.die.roll();  // Returns value, triggers animation
+game.message(`Rolled ${rolled}!`);
+```
+
+### When to Use Each
+
+| Method | Use Case |
+|--------|----------|
+| `die.roll()` | Normal dice rolling (random value + animation) |
+| `die.setValue(n)` | Abilities that set specific values ("flip to opposite", "set to max") |
+| `game.random()` | Non-dice randomness (shuffle order, random events) |
+
+**Never use `Math.random()`** - it breaks determinism and replay.
+
+### Symptoms of This Bug
+
+- Die shows one value briefly, then shows another
+- Die animation doesn't match final value
+- Game replay shows different dice results
+- "Rolled X" message doesn't match displayed die
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -1511,6 +1579,7 @@ See [useDragDrop documentation](./ui-components.md#usedragdrop) for full details
 | **execute() vs start()** | `execute('retreat', {})` without params | `start('retreat')` for wizard mode |
 | **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
 | **Drag-drop not working** | No matching action for drag | Use element→element or element→choice with filterBy |
+| **Mixing dice randomization** | `die.roll()` then `die.setValue(Math.random())` | Use only `die.roll()` for normal rolling |
 
 ---
 

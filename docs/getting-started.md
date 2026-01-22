@@ -256,7 +256,7 @@ The UI uses Vue 3 and the `boardsmith/ui` package:
   >
     <template #game-board="{
       gameView,
-      playerPosition,
+      playerSeat,
       isMyTurn,
       availableActions,
       actionArgs,
@@ -265,7 +265,7 @@ The UI uses Vue 3 and the `boardsmith/ui` package:
     }">
       <GameTable
         :game-view="gameView"
-        :player-position="playerPosition"
+        :player-seat="playerSeat"
         :is-my-turn="isMyTurn"
         :available-actions="availableActions"
         :action-args="actionArgs"

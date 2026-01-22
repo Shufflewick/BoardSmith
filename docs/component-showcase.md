@@ -106,7 +106,7 @@ Automatic UI generation for prototyping.
 <template>
   <AutoUI
     :game-view="gameView"
-    :player-position="playerPosition"
+    :player-seat="playerSeat"
     :flow-state="flowState"
   />
 </template>

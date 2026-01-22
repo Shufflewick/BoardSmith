@@ -117,13 +117,11 @@ Terms related to game participants and their roles.
 
 **Definition:** A player's numbered place at the table. Seats are 1-indexed (Seat 1, Seat 2, etc.) and determine turn order.
 
-**In Code:** `player.position` property (1-indexed)
+**In Code:** `player.seat` property (1-indexed)
 **Related Terms:** Player, Turn, Active Player
 **Usage:**
 - "The player in Seat 1 goes first"
 - "Clockwise order starts from Seat 1"
-
-**Note:** Replaces "position" in external communication in v2.3. Code still uses `player.position`.
 
 ### Active Player
 

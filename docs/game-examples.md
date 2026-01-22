@@ -90,7 +90,7 @@ Action.create('placeStone')
   })
   .execute((args, ctx) => {
     const cell = args.cell as Cell;
-    cell.create(Stone, `stone-${player.position}`, { player });
+    cell.create(Stone, `stone-${player.seat}`, { player });
 
     // Check win condition
     if (game.board.checkWin(player)) {
@@ -139,7 +139,7 @@ Go Fish demonstrates card game patterns including hidden information and conditi
 constructor(options) {
   // Create player hands - hidden from other players
   for (const player of this.players) {
-    const hand = this.create(Hand, `hand-${player.position}`);
+    const hand = this.create(Hand, `hand-${player.seat}`);
     hand.player = player;
     hand.contentsVisibleToOwner();  // Only owner sees their cards
   }
@@ -524,8 +524,8 @@ constructor(options) {
 ```typescript
 export class MyPlayer extends Player<MyGame, MyPlayer> {
   hand!: Hand;
-  score: number = 0;
-  abilities: Record<string, number> = {};
+  score: number = 0;  // Auto-serialized
+  abilities: Record<string, number> = {};  // Auto-serialized
 
   constructor(position: number, name: string, game: MyGame) {
     super(position, name);
@@ -533,19 +533,11 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
     this.hand = game.create(Hand, `hand-${position}`);
     this.hand.player = this;
   }
-
-  // Required to send custom properties to the UI
-  override toJSON(): Record<string, unknown> {
-    return {
-      ...super.toJSON(),
-      score: this.score,
-      abilities: this.abilities,
-    };
-  }
+  // No toJSON override needed - simple properties are auto-serialized
 }
 ```
 
-> **Note**: Always override `toJSON()` if you have custom properties that the UI needs to display (scores, abilities, etc.). See [Core Concepts - Serialization](./core-concepts.md#playercollection-serialization-warning) for details.
+> **Note**: Simple properties (numbers, strings, plain objects) are auto-serialized. Only override `toJSON()` when using classes with their own `toJSON()` methods (like `AbilityManager`).
 
 ### 3. Win Condition Checking
 

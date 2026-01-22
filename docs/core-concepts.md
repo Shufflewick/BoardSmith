@@ -206,8 +206,8 @@ Commands are generic state mutations that happen automatically when you call ele
 ```typescript
 export class MyPlayer extends Player<MyGame, MyPlayer> {
   hand!: Hand;
-  score: number = 0;
-  abilities: Record<string, number> = { reroll: 1 };
+  score: number = 0;  // Auto-serialized to gameView
+  abilities: Record<string, number> = { reroll: 1 };  // Auto-serialized
 
   constructor(position: number, name: string, game: MyGame) {
     super(position, name);
@@ -218,19 +218,10 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
     this.hand.player = this;
     this.hand.contentsVisibleToOwner();
   }
-
-  // IMPORTANT: Override toJSON() to include custom properties in network state
-  override toJSON(): Record<string, unknown> {
-    return {
-      ...super.toJSON(),
-      score: this.score,
-      abilities: this.abilities,
-    };
-  }
 }
 ```
 
-> **Important**: If your custom Player class has properties that need to be visible to the UI (like `score`, `abilities`, custom stats), you **must** override `toJSON()` to include them. The base `Player.toJSON()` only serializes `position`, `name`, and `color`.
+> **Auto-serialization**: Public properties (like `score`, `abilities`) are automatically included in the game view sent to the UI. You do NOT need to override `toJSON()` for simple properties. Properties starting with `_` are private and not serialized.
 
 ### Player Properties
 
@@ -298,7 +289,7 @@ import { createSnapshot, createPlayerView } from 'boardsmith';
 const snapshot = createSnapshot(game, 'my-game');
 
 // Get player-specific view (with visibility applied)
-const playerView = createPlayerView(game, playerPosition);
+const playerView = createPlayerView(game, playerSeat);
 ```
 
 ### Player Views
@@ -493,7 +484,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
     // Access player configs (players are 1-indexed)
     for (const player of this.players) {
-      const config = options.playerConfigs?.[player.position - 1];  // configs array is 0-indexed
+      const config = options.playerConfigs?.[player.seat - 1];  // configs array is 0-indexed
       if (config?.color) {
         player.color = config.color;
       }

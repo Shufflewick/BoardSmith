@@ -19,7 +19,7 @@ The main wrapper component that provides the complete game UI structure: header,
     <template #game-board="{
       state,
       gameView,
-      playerPosition,
+      playerSeat,
       isMyTurn,
       availableActions,
       actionArgs,
@@ -28,7 +28,7 @@ The main wrapper component that provides the complete game UI structure: header,
     }">
       <GameTable
         :game-view="gameView"
-        :player-position="playerPosition"
+        :player-seat="playerSeat"
         :is-my-turn="isMyTurn"
         :available-actions="availableActions"
         :action-args="actionArgs"
@@ -61,7 +61,7 @@ The `#game-board` slot receives:
 |------|------|-------------|
 | `state` | `GameState` | Full game state |
 | `gameView` | `object` | Player-filtered view of game state |
-| `playerPosition` | `number` | Current player's position |
+| `playerSeat` | `number` | Current player's seat |
 | `isMyTurn` | `boolean` | Whether it's this player's turn |
 | `availableActions` | `string[]` | Actions available to the player |
 | `actionArgs` | `object` | Current action selections - **read-only for display**, use `actionController` methods to modify |
@@ -142,7 +142,7 @@ Automatic UI generation from game state. Useful for prototyping or as a referenc
 <template>
   <AutoUI
     :game-view="gameView"
-    :player-position="playerPosition"
+    :player-seat="playerSeat"
     :flow-state="flowState"
   />
 </template>
@@ -789,7 +789,7 @@ const discardRef = ref<HTMLElement | null>(null);
 
 // 2. Create computed refs for game elements
 const board = computed(() => findElement(gameView, { className: 'Board' }));
-const myHand = computed(() => findPlayerHand(gameView, playerPosition));
+const myHand = computed(() => findPlayerHand(gameView, playerSeat));
 const discardPile = computed(() => findElement(gameView, { className: 'DiscardPile' }));
 
 // 3. Set up auto-animations
@@ -808,13 +808,13 @@ const { flyingElements, isAnimating } = useAutoAnimations({
       stat: 'captured',
       containerRef: boardRef,
       selector: '[data-piece-id]',
-      player: (piece) => piece.playerPosition === 0 ? 1 : 0,
+      player: (piece) => piece.playerSeat === 0 ? 1 : 0,
     },
   ],
   getElementData: (element) => ({
     rank: element.attributes?.rank,
     suit: element.attributes?.suit,
-    playerPosition: element.attributes?.player?.position,
+    playerSeat: element.attributes?.player?.seat,
   }),
   duration: 400,
 });
@@ -876,11 +876,11 @@ const { flyingElements } = useAutoAnimations({
       containerRef: boardRef,
       selector: '[data-piece-id]',
       // Captured pieces fly to the opponent's captured stat
-      player: (piece) => piece.playerPosition === 0 ? 1 : 0,
+      player: (piece) => piece.playerSeat === 0 ? 1 : 0,
     },
   ],
   getDOMElementData: (el) => ({
-    playerPosition: el.classList.contains('player-0') ? 0 : 1,
+    playerSeat: el.classList.contains('player-0') ? 0 : 1,
   }),
   elementSize: { width: 40, height: 40 },
 });
@@ -954,7 +954,7 @@ import { usePlayerStatAnimation, flyToPlayerStat } from 'boardsmith/ui';
 // Fly a card to a player's score display
 flyToPlayerStat({
   cardElement: cardEl,
-  playerPosition: 0,
+  playerSeat: 0,
   statName: 'score',
   onComplete: () => updateScore(),
 });
@@ -979,14 +979,14 @@ import {
 const deck = findElement(gameView, { type: 'deck' });
 
 // Find player's hand
-const myHand = findPlayerHand(gameView, playerPosition);
+const myHand = findPlayerHand(gameView, playerSeat);
 
 // Get all cards in an element
 const cardsInHand = getCards(myHand);
 
 // Check ownership
 const owner = getElementOwner(card);
-const isMine = isMyElement(card, playerPosition);
+const isMine = isMyElement(card, playerSeat);
 ```
 
 ### useGameGrid
@@ -1648,7 +1648,7 @@ The framework automatically converts element IDs to actual element objects befor
 // 1. Find elements in gameView
 const myMercs = computed(() =>
   findElements(props.gameView, { className: 'Merc' })
-    .filter(m => m.attributes?.player?.position === props.playerPosition)
+    .filter(m => m.attributes?.player?.seat === props.playerSeat)
 );
 
 // 2. User clicks a merc
@@ -1702,7 +1702,7 @@ import {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -1714,7 +1714,7 @@ const containerRef = ref<HTMLElement>();
 
 // Extract data from game view
 const myHand = computed(() => {
-  const hand = findPlayerHand(props.gameView, props.playerPosition);
+  const hand = findPlayerHand(props.gameView, props.playerSeat);
   return hand ? getCards(hand) : [];
 });
 
