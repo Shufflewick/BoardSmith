@@ -68,6 +68,7 @@ import { useFlyingCards, type FlyingCardData } from './useFlyingCards.js';
 import { useAutoFlyingElements, type ElementContainerConfig, type CountBasedRoute } from './useAutoFlyingElements.js';
 import { useAutoFLIP, type AutoFLIPContainer } from './useAutoFLIP.js';
 import { useAutoFlyToStat, type StatConfig as BaseStatConfig } from './useAutoFlyToStat.js';
+import type { AnimationHandler, UseAnimationEventsReturn } from './useAnimationEvents.js';
 
 export interface ContainerConfig extends ElementContainerConfig {
   /**
@@ -151,6 +152,31 @@ export interface AutoAnimationsOptions {
    * Containers must have 'name' set to use this feature.
    */
   countBasedRoutes?: CountBasedRoute[];
+
+  /**
+   * Event handlers to register with animation events.
+   * Keys are event types, values are handler functions.
+   * Handlers are registered when composable is created.
+   *
+   * @example
+   * ```typescript
+   * eventHandlers: {
+   *   cardMove: async (event) => {
+   *     await flyCard(event.data.cardId, event.data.from, event.data.to);
+   *   },
+   *   combat: async (event) => {
+   *     await showExplosion(event.data.position);
+   *   },
+   * }
+   * ```
+   */
+  eventHandlers?: Record<string, AnimationHandler>;
+
+  /**
+   * Animation events instance. Required when using eventHandlers.
+   * Pass the instance from createAnimationEvents().
+   */
+  animationEvents?: UseAnimationEventsReturn;
 }
 
 export interface AutoAnimationsReturn {
@@ -179,7 +205,16 @@ export function useAutoAnimations(options: AutoAnimationsOptions): AutoAnimation
     elementSize = { width: 60, height: 84 },
     flip = 'never',
     countBasedRoutes = [],
+    eventHandlers,
+    animationEvents,
   } = options;
+
+  // Register animation event handlers if provided
+  if (eventHandlers && animationEvents) {
+    for (const [eventType, handler] of Object.entries(eventHandlers)) {
+      animationEvents.registerHandler(eventType, handler);
+    }
+  }
 
   // Get current containers (supports static array or dynamic function)
   const getContainers = (): ContainerConfig[] => {
