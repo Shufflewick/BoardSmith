@@ -141,3 +141,5 @@ Resume file: None
 | CLI templates use pick | boardsmith init generates currentPick-based code | 57-04 |
 | Migration guide with v2.3 API tables | Clear before/after mappings for all terminology changes | 58-02 |
 | Nomenclature cross-references | getting-started.md and core-concepts.md link to nomenclature.md | 58-02 |
+| Keep dealerPosition variable name | Game-specific property choice, only .position property access became .seat | 58-01 |
+| Constructor param vs property note | Added clarifying notes that constructor param is position but property is seat | 58-01 |
