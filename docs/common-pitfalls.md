@@ -1152,7 +1152,7 @@ BoardSmith automatically resolves element references throughout the action lifec
 1. **Action returns followUp**: Elements in `followUp.args` get JSON-serialized (keeping their `id`)
 2. **Client stores and sends back**: Args are sent to server for choices and execution
 3. **Server resolves everywhere**:
-   - In `getSelectionChoices`: Resolves args before evaluating `prompt`, `filter`, `elements()`
+   - In `getPickChoices`: Resolves args before evaluating `prompt`, `filter`, `elements()`
    - In `executeAction`: Resolves ALL args (selection args AND followUp args) before calling `execute`
 4. **Consistent element access**: `ctx.args.sectorId` is the same Element in prompt, filter, and execute
 
@@ -1365,7 +1365,7 @@ You get choices from `getChoices()` and pass the entire choice object to `fill()
 
 ```typescript
 // WRONG - passing the choice object
-const choices = actionController.getChoices(currentSelection);
+const choices = actionController.getChoices(currentPick);
 const selectedChoice = choices.find(c => c.value === sectorId);
 await actionController.fill(selection.name, selectedChoice);  // ❌
 // selectedChoice = { value: 142, display: "Wilderness" }
@@ -1491,7 +1491,7 @@ const { drag, drop } = useDragDrop();
 
 const canDragCard = (cardId) =>
   currentAction.value === 'moveCard' &&
-  currentSelection.value?.name === 'card' &&
+  currentPick.value?.name === 'card' &&
   isCardSelectable(cardId);
 </script>
 

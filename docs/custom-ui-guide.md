@@ -264,9 +264,9 @@ const props = defineProps<{
 // - Choices are fetched from server
 // - gameView updates
 const selectableCards = computed(() => {
-  const { currentSelection, validElements } = props.actionController;
+  const { currentPick, validElements } = props.actionController;
 
-  if (currentSelection.value?.type !== 'element') return [];
+  if (currentPick.value?.type !== 'element') return [];
 
   return validElements.value.map(ve => ({
     id: ve.id,
@@ -331,14 +331,14 @@ Array<{ value: unknown; display: string }>
 
 ```typescript
 // Getting choices for the current selection
-const choices = actionController.getChoices(currentSelection);
+const choices = actionController.getChoices(currentPick);
 
 // CORRECT - pass choice.value to fill()
 const selectedChoice = choices.find(c => c.value === userSelectedId);
-await actionController.fill(currentSelection.name, selectedChoice.value);
+await actionController.fill(currentPick.name, selectedChoice.value);
 
 // WRONG - don't pass the whole choice object
-await actionController.fill(currentSelection.name, selectedChoice); // ❌
+await actionController.fill(currentPick.name, selectedChoice); // ❌
 ```
 
 The `display` property is the human-readable label for rendering in your UI (buttons, lists, etc.).
@@ -368,7 +368,7 @@ boardInteraction.triggerElementSelect(element)
 
 // Check current action state
 boardInteraction.currentAction        // 'move' | null
-boardInteraction.currentSelectionName // 'destination' | null
+boardInteraction.currentPickName // 'destination' | null
 ```
 
 ### Complete Board Integration Example
@@ -719,8 +719,8 @@ function isCardPlayable(cardId: number): boolean {
   if (!props.availableActions.includes('play')) return false;
 
   // If in wizard mode, check validElements
-  const { currentSelection, validElements } = props.actionController;
-  if (currentSelection.value?.name === 'card') {
+  const { currentPick, validElements } = props.actionController;
+  if (currentPick.value?.name === 'card') {
     return validElements.value.some(ve => ve.id === cardId);
   }
 
