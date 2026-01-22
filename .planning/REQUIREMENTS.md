@@ -37,8 +37,8 @@ Requirements for the Animation Event System milestone.
 
 ### Documentation
 
-- [ ] **DOC-01**: Document animation event system in `docs/ui-components.md`
-- [ ] **DOC-02**: Add animation events to `docs/nomenclature.md`
+- [x] **DOC-01**: Document animation event system in `docs/ui-components.md`
+- [x] **DOC-02**: Add animation events to `docs/nomenclature.md`
 
 ## v2 Requirements
 
@@ -81,8 +81,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-07 | Phase 62 | Complete |
 | UI-08 | Phase 62 | Complete |
 | UI-09 | Phase 62 | Complete |
-| DOC-01 | Phase 63 | Pending |
-| DOC-02 | Phase 63 | Pending |
+| DOC-01 | Phase 63 | Complete |
+| DOC-02 | Phase 63 | Complete |
 
 **Coverage:**
 - v1 requirements: 21 total
@@ -91,4 +91,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-22*
-*Last updated: 2026-01-22 after Phase 62 completion*
+*Last updated: 2026-01-22 after Phase 63 completion*
