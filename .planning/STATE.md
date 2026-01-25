@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-22)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.5 Player Colors Refactor
+**Current focus:** v2.5 Player Colors Refactor (COMPLETE)
 
 ## Current Position
 
-Phase: 67 of 68 (Cleanup)
+Phase: 68 of 68 (Game Updates)
 Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-01-25 - Completed 67-01-PLAN.md
+Status: Phase complete - v2.5 SHIPPED
+Last activity: 2026-01-25 - Completed 68-01-PLAN.md
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -38,12 +38,12 @@ Progress: [████████░░] 80%
 - v2.4 Animation Event System (Phases 59-63) -- shipped 2026-01-22
 
 **Current:**
-v2.5 Player Colors Refactor (Phases 64-68)
+v2.5 Player Colors Refactor (Phases 64-68) -- shipped 2026-01-25
 
 ## Session Continuity
 
 Last session: 2026-01-25
-Stopped at: Completed Phase 67 (Cleanup)
+Stopped at: Completed Phase 68 (Game Updates) - v2.5 complete
 Resume file: None
 
 ## Key Decisions (Accumulated)
@@ -62,3 +62,8 @@ See PROJECT.md for full decision history.
 **Phase 67 decisions:**
 - Use JSDoc @deprecated instead of runtime warnings - editor-visible with zero runtime cost
 - Keep STANDARD_PLAYER_COLORS and createColorOption undeprecated - still useful for lobby config
+
+**Phase 68 decisions:**
+- Add colors array to Checkers boardsmith.json to preserve red/dark theme
+- Remove all fallback chains - engine guarantees player.color is set
+- Keep null safety fallbacks (#888888) for defensive coding only
