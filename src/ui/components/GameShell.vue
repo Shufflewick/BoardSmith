@@ -110,6 +110,9 @@ const lobbyConnection = ref<GameConnection | null>(null);
 // Game definition (for playerOptions)
 const gamePlayerOptions = ref<Record<string, unknown> | undefined>(undefined);
 
+// Color selection state (persists through lobby->game transition)
+const colorSelectionEnabled = ref(false);
+
 // Game state
 const gameId = ref<string | null>(null);
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
@@ -118,6 +121,13 @@ const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
 watchEffect(() => {
   console.log('[GameShell DEBUG] playerSeat.value is now:', playerSeat.value, 'type:', typeof playerSeat.value);
 });
+
+// Sync colorSelectionEnabled from lobbyInfo (persists through lobby->game transition)
+watch(lobbyInfo, (lobby) => {
+  if (lobby?.colorSelectionEnabled !== undefined) {
+    colorSelectionEnabled.value = lobby.colorSelectionEnabled;
+  }
+}, { immediate: true });
 
 // UI state
 const historyCollapsed = ref(false);
@@ -1049,6 +1059,7 @@ if ((import.meta as any).hot) {
             :players="players"
             :player-seat="playerSeat"
             :current-player-seat="state?.state.currentPlayer"
+            :color-selection-enabled="colorSelectionEnabled"
           >
             <template #player-stats="{ player }">
               <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>

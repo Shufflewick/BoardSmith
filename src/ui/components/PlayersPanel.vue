@@ -18,6 +18,8 @@ defineProps<{
   playerSeat: number;
   /** Seat of the player whose turn it is */
   currentPlayerSeat?: number;
+  /** Whether color selection is enabled (controls color indicator display) */
+  colorSelectionEnabled?: boolean;
 }>();
 
 defineSlots<{
@@ -37,7 +39,7 @@ defineSlots<{
       <div class="player-name-row">
         <span v-if="player.seat === currentPlayerSeat" class="turn-indicator-dot"></span>
         <span class="player-name">{{ player.name }}</span>
-        <span v-if="player.color" class="player-color" :style="{ backgroundColor: player.color }"></span>
+        <span v-if="colorSelectionEnabled && player.color" class="player-color" :style="{ backgroundColor: player.color }"></span>
         <span v-if="player.seat === playerSeat" class="you-badge">(You)</span>
       </div>
       <slot name="player-stats" :player="player"></slot>
