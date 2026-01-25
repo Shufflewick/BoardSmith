@@ -6,7 +6,7 @@ Refactor player colors from game-managed to engine-managed. Players get a `color
 
 ## Milestones
 
-- 🚧 **v2.5 Player Colors Refactor** - Phases 64-68 (in progress)
+- **v2.5 Player Colors Refactor** - Phases 64-68 (in progress)
 
 ## Phases
 
@@ -56,10 +56,10 @@ Plans:
   3. Color picker visually distinguishes available vs occupied colors
   4. PlayerStats component displays player color indicator when enabled
   5. PlayerStats hides color indicator when colorSelectionEnabled: false
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 66-01: TBD
+- [ ] 66-01-PLAN.md — Extend LobbyInfo with color config, add conditional color UI to WaitingRoom and PlayersPanel
 
 ### Phase 67: Cleanup
 **Goal**: Old color API removed, documentation updated
@@ -93,6 +93,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 64. Engine Layer | 1/1 | Complete | 2026-01-25 |
 | 65. Session Layer | 1/1 | Complete | 2026-01-25 |
-| 66. UI Layer | 0/? | Not started | - |
+| 66. UI Layer | 0/1 | Planned | - |
 | 67. Cleanup | 0/? | Not started | - |
 | 68. Game Updates | 0/? | Not started | - |
