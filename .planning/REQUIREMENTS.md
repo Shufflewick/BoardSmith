@@ -37,10 +37,10 @@ Requirements for v2.5 Player Colors Refactor.
 
 ### Game Updates
 
-- [ ] **GAME-01**: Update hex to use `player.color` throughout UI
-- [ ] **GAME-02**: Update checkers to use `player.color` for piece colors
-- [ ] **GAME-03**: Update MERC game to use `player.color` throughout UI
-- [ ] **GAME-04**: Update remaining BoardSmithGames as needed
+- [x] **GAME-01**: Update hex to use `player.color` throughout UI
+- [x] **GAME-02**: Update checkers to use `player.color` for piece colors
+- [x] **GAME-03**: ~~Update MERC game to use `player.color` throughout UI~~ N/A - MERC does not exist
+- [x] **GAME-04**: ~~Update remaining BoardSmithGames as needed~~ N/A - Other games don't use player colors
 
 ## v2 Requirements
 
@@ -74,10 +74,10 @@ Requirements for v2.5 Player Colors Refactor.
 | UI-05 | Phase 66 | Complete |
 | CLN-01 | Phase 67 | Complete |
 | CLN-02 | Phase 67 | Complete |
-| GAME-01 | Phase 68 | Pending |
-| GAME-02 | Phase 68 | Pending |
-| GAME-03 | Phase 68 | Pending |
-| GAME-04 | Phase 68 | Pending |
+| GAME-01 | Phase 68 | Complete |
+| GAME-02 | Phase 68 | Complete |
+| GAME-03 | Phase 68 | N/A |
+| GAME-04 | Phase 68 | N/A |
 
 **Coverage:**
 - v1 requirements: 20 total
@@ -86,4 +86,4 @@ Requirements for v2.5 Player Colors Refactor.
 
 ---
 *Requirements defined: 2026-01-25*
-*Last updated: 2026-01-25 after Phase 67 completion*
+*Last updated: 2026-01-25 after Phase 68 completion*
