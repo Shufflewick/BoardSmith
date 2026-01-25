@@ -18,9 +18,9 @@ Requirements for v2.5 Player Colors Refactor.
 
 ### Session
 
-- [ ] **SESS-01**: Player can change color to any unoccupied color
-- [ ] **SESS-02**: Color change rejected if target color is held by another player
-- [ ] **SESS-03**: Color state persists across session lifecycle
+- [x] **SESS-01**: Player can change color to any unoccupied color
+- [x] **SESS-02**: Color change rejected if target color is held by another player
+- [x] **SESS-03**: Color state persists across session lifecycle
 
 ### UI
 
@@ -64,9 +64,9 @@ Requirements for v2.5 Player Colors Refactor.
 | ENG-04 | Phase 64 | Complete |
 | ENG-05 | Phase 64 | Complete |
 | ENG-06 | Phase 64 | Complete |
-| SESS-01 | Phase 65 | Pending |
-| SESS-02 | Phase 65 | Pending |
-| SESS-03 | Phase 65 | Pending |
+| SESS-01 | Phase 65 | Complete |
+| SESS-02 | Phase 65 | Complete |
+| SESS-03 | Phase 65 | Complete |
 | UI-01 | Phase 66 | Pending |
 | UI-02 | Phase 66 | Pending |
 | UI-03 | Phase 66 | Pending |
@@ -86,4 +86,4 @@ Requirements for v2.5 Player Colors Refactor.
 
 ---
 *Requirements defined: 2026-01-25*
-*Last updated: 2026-01-25 after Phase 64 completion*
+*Last updated: 2026-01-25 after Phase 65 completion*
