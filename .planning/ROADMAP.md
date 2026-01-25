@@ -74,18 +74,18 @@ Plans:
 - [x] 67-01-PLAN.md — Deprecate DEFAULT_PLAYER_COLORS with migration guidance, update docs to show player.color API
 
 ### Phase 68: Game Updates
-**Goal**: All games migrated to use player.color
+**Goal**: Hex and Checkers migrated to use player.color (MERC game N/A - does not exist; other games N/A - don't use player colors)
 **Depends on**: Phase 67
-**Requirements**: GAME-01, GAME-02, GAME-03, GAME-04
+**Requirements**: GAME-01, GAME-02, GAME-03 (N/A), GAME-04 (N/A)
 **Success Criteria** (what must be TRUE):
   1. Hex game uses player.color for all player-specific styling
   2. Checkers game uses player.color for piece rendering
-  3. MERC game uses player.color throughout UI
-  4. All other BoardSmithGames use player.color where applicable
-**Plans**: TBD
+  3. ~~MERC game uses player.color throughout UI~~ N/A - MERC does not exist in codebase
+  4. ~~All other BoardSmithGames use player.color where applicable~~ N/A - Cribbage, Go Fish, Polyhedral Potions don't use player colors
+**Plans**: 1 plan
 
 Plans:
-- [ ] 68-01: TBD
+- [ ] 68-01-PLAN.md — Migrate Hex and Checkers to player.color API, remove deprecated imports and fallbacks
 
 ## Progress
 
@@ -95,4 +95,4 @@ Plans:
 | 65. Session Layer | 1/1 | Complete | 2026-01-25 |
 | 66. UI Layer | 1/1 | Complete | 2026-01-25 |
 | 67. Cleanup | 1/1 | Complete | 2026-01-25 |
-| 68. Game Updates | 0/? | Not started | - |
+| 68. Game Updates | 0/1 | Not started | - |
