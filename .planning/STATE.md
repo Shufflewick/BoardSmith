@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-22)
 
 ## Current Position
 
-Phase: 66 of 68 (UI Layer)
+Phase: 67 of 68 (Cleanup)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-01-25 - Completed 66-01-PLAN.md
+Last activity: 2026-01-25 - Completed 67-01-PLAN.md
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Milestones
 
@@ -43,7 +43,7 @@ v2.5 Player Colors Refactor (Phases 64-68)
 ## Session Continuity
 
 Last session: 2026-01-25
-Stopped at: Completed Phase 66 (UI Layer)
+Stopped at: Completed Phase 67 (Cleanup)
 Resume file: None
 
 ## Key Decisions (Accumulated)
@@ -58,3 +58,7 @@ See PROJECT.md for full decision history.
 **Phase 66 decisions:**
 - Use effectivePlayerOptions computed to auto-inject color option - keeps game definitions clean
 - Sync colorSelectionEnabled from lobbyInfo via watcher - persists through lobby->game transition
+
+**Phase 67 decisions:**
+- Use JSDoc @deprecated instead of runtime warnings - editor-visible with zero runtime cost
+- Keep STANDARD_PLAYER_COLORS and createColorOption undeprecated - still useful for lobby config
