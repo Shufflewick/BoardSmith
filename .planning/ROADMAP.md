@@ -68,10 +68,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. DEFAULT_PLAYER_COLORS export removed or marked deprecated with migration guidance
   2. Documentation describes new player.color API with examples
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 67-01: TBD
+- [ ] 67-01-PLAN.md — Deprecate DEFAULT_PLAYER_COLORS with migration guidance, update docs to show player.color API
 
 ### Phase 68: Game Updates
 **Goal**: All games migrated to use player.color
@@ -94,5 +94,5 @@ Plans:
 | 64. Engine Layer | 1/1 | Complete | 2026-01-25 |
 | 65. Session Layer | 1/1 | Complete | 2026-01-25 |
 | 66. UI Layer | 1/1 | Complete | 2026-01-25 |
-| 67. Cleanup | 0/? | Not started | - |
+| 67. Cleanup | 0/1 | In Progress | - |
 | 68. Game Updates | 0/? | Not started | - |
