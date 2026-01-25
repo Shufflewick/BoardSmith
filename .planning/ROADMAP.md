@@ -12,7 +12,7 @@ Refactor player colors from game-managed to engine-managed. Players get a `color
 
 - [x] **Phase 64: Engine Layer** - Player.color property and game color configuration (complete 2026-01-25)
 - [x] **Phase 65: Session Layer** - Color change API and persistence (complete 2026-01-25)
-- [ ] **Phase 66: UI Layer** - Lobby color picker and PlayerStats integration
+- [x] **Phase 66: UI Layer** - Lobby color picker and PlayerStats integration (complete 2026-01-25)
 - [ ] **Phase 67: Cleanup** - Remove old API, update documentation
 - [ ] **Phase 68: Game Updates** - Migrate all games to player.color
 
@@ -59,7 +59,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 66-01-PLAN.md — Extend LobbyInfo with color config, add conditional color UI to WaitingRoom and PlayersPanel
+- [x] 66-01-PLAN.md — Extend LobbyInfo with color config, add conditional color UI to WaitingRoom and PlayersPanel
 
 ### Phase 67: Cleanup
 **Goal**: Old color API removed, documentation updated
@@ -93,6 +93,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 64. Engine Layer | 1/1 | Complete | 2026-01-25 |
 | 65. Session Layer | 1/1 | Complete | 2026-01-25 |
-| 66. UI Layer | 0/1 | Planned | - |
+| 66. UI Layer | 1/1 | Complete | 2026-01-25 |
 | 67. Cleanup | 0/? | Not started | - |
 | 68. Game Updates | 0/? | Not started | - |

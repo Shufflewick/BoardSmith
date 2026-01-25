@@ -24,11 +24,11 @@ Requirements for v2.5 Player Colors Refactor.
 
 ### UI
 
-- [ ] **UI-01**: Lobby shows color picker when `colorSelectionEnabled` is true
-- [ ] **UI-02**: Lobby hides color picker when `colorSelectionEnabled` is false
-- [ ] **UI-03**: Color picker only shows available (unoccupied) colors as selectable
-- [ ] **UI-04**: PlayerStats shows player color when `colorSelectionEnabled` is true
-- [ ] **UI-05**: PlayerStats hides color when `colorSelectionEnabled` is false
+- [x] **UI-01**: Lobby shows color picker when `colorSelectionEnabled` is true
+- [x] **UI-02**: Lobby hides color picker when `colorSelectionEnabled` is false
+- [x] **UI-03**: Color picker only shows available (unoccupied) colors as selectable
+- [x] **UI-04**: PlayerStats shows player color when `colorSelectionEnabled` is true
+- [x] **UI-05**: PlayerStats hides color when `colorSelectionEnabled` is false
 
 ### Cleanup
 
@@ -67,11 +67,11 @@ Requirements for v2.5 Player Colors Refactor.
 | SESS-01 | Phase 65 | Complete |
 | SESS-02 | Phase 65 | Complete |
 | SESS-03 | Phase 65 | Complete |
-| UI-01 | Phase 66 | Pending |
-| UI-02 | Phase 66 | Pending |
-| UI-03 | Phase 66 | Pending |
-| UI-04 | Phase 66 | Pending |
-| UI-05 | Phase 66 | Pending |
+| UI-01 | Phase 66 | Complete |
+| UI-02 | Phase 66 | Complete |
+| UI-03 | Phase 66 | Complete |
+| UI-04 | Phase 66 | Complete |
+| UI-05 | Phase 66 | Complete |
 | CLN-01 | Phase 67 | Pending |
 | CLN-02 | Phase 67 | Pending |
 | GAME-01 | Phase 68 | Pending |
@@ -86,4 +86,4 @@ Requirements for v2.5 Player Colors Refactor.
 
 ---
 *Requirements defined: 2026-01-25*
-*Last updated: 2026-01-25 after Phase 65 completion*
+*Last updated: 2026-01-25 after Phase 66 completion*
