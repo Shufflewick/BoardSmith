@@ -28,10 +28,10 @@ Refactor player colors from game-managed to engine-managed. Players get a `color
   3. Game developer can set `colorSelectionEnabled: false` to disable player color selection
   4. Player joining seat N receives color at index N from the palette
   5. Engine throws helpful error if maxPlayers exceeds available colors
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 64-01: TBD
+- [ ] 64-01-PLAN.md — Add DEFAULT_COLOR_PALETTE, extend GameOptions, color validation and auto-assignment
 
 ### Phase 65: Session Layer
 **Goal**: Players can change colors during lobby, with proper conflict handling
@@ -91,7 +91,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 64. Engine Layer | 0/? | Not started | - |
+| 64. Engine Layer | 0/1 | Planned | - |
 | 65. Session Layer | 0/? | Not started | - |
 | 66. UI Layer | 0/? | Not started | - |
 | 67. Cleanup | 0/? | Not started | - |
