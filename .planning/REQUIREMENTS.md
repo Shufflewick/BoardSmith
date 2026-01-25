@@ -9,12 +9,12 @@ Requirements for v2.5 Player Colors Refactor.
 
 ### Engine
 
-- [ ] **ENG-01**: Player has `color` property (hex string) accessible via `player.color`
-- [ ] **ENG-02**: Game defines available colors via `colors` configuration array
-- [ ] **ENG-03**: Game defines `colorSelectionEnabled` flag (default: true)
-- [ ] **ENG-04**: Player color auto-assigned from palette based on seat index
-- [ ] **ENG-05**: Validation throws error if `maxPlayers > colors.length`
-- [ ] **ENG-06**: Default color palette provided when game doesn't specify custom colors
+- [x] **ENG-01**: Player has `color` property (hex string) accessible via `player.color`
+- [x] **ENG-02**: Game defines available colors via `colors` configuration array
+- [x] **ENG-03**: Game defines `colorSelectionEnabled` flag (default: true)
+- [x] **ENG-04**: Player color auto-assigned from palette based on seat index
+- [x] **ENG-05**: Validation throws error if `maxPlayers > colors.length`
+- [x] **ENG-06**: Default color palette provided when game doesn't specify custom colors
 
 ### Session
 
@@ -58,12 +58,12 @@ Requirements for v2.5 Player Colors Refactor.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | Phase 64 | Pending |
-| ENG-02 | Phase 64 | Pending |
-| ENG-03 | Phase 64 | Pending |
-| ENG-04 | Phase 64 | Pending |
-| ENG-05 | Phase 64 | Pending |
-| ENG-06 | Phase 64 | Pending |
+| ENG-01 | Phase 64 | Complete |
+| ENG-02 | Phase 64 | Complete |
+| ENG-03 | Phase 64 | Complete |
+| ENG-04 | Phase 64 | Complete |
+| ENG-05 | Phase 64 | Complete |
+| ENG-06 | Phase 64 | Complete |
 | SESS-01 | Phase 65 | Pending |
 | SESS-02 | Phase 65 | Pending |
 | SESS-03 | Phase 65 | Pending |
@@ -86,4 +86,4 @@ Requirements for v2.5 Player Colors Refactor.
 
 ---
 *Requirements defined: 2026-01-25*
-*Last updated: 2026-01-25 after roadmap creation*
+*Last updated: 2026-01-25 after Phase 64 completion*
