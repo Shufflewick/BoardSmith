@@ -122,6 +122,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       isReady: allReady,
       minPlayers: this.#storedState.minPlayers,
       maxPlayers: this.#storedState.maxPlayers,
+      colorSelectionEnabled: this.#storedState.colorSelectionEnabled,
+      colors: this.#storedState.colors,
     };
   }
 

@@ -312,6 +312,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       lobbyState = 'waiting';
     }
 
+    runner.start();
+
+    // Extract color settings from the game instance after creation
+    const colorSelectionEnabled = runner.game.settings.colorSelectionEnabled as boolean | undefined;
+    const colors = runner.game.settings.colors as string[] | undefined;
+
     const storedState: StoredGameState = {
       gameType,
       playerCount,
@@ -327,9 +333,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       creatorId,
       playerOptionsDefinitions,
       gameOptionsDefinitions,
+      colorSelectionEnabled,
+      colors,
     };
-
-    runner.start();
 
     const aiController = aiConfig
       ? new AIController(GameClass, gameType, playerCount, aiConfig, botAIConfig)
