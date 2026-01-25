@@ -15,6 +15,7 @@ export {
   Game,
   ElementCollection,
   PersistentMap,
+  DEFAULT_COLOR_PALETTE,
 } from './element/index.js';
 
 export type {

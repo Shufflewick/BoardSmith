@@ -109,6 +109,22 @@ export class PersistentMap<K, V> implements Map<K, V> {
 import { FlowEngine } from '../flow/engine.js';
 
 /**
+ * Default player color palette.
+ * Used when games don't specify custom colors in GameOptions.
+ * 8 colors to support up to 8 players.
+ */
+export const DEFAULT_COLOR_PALETTE: readonly string[] = [
+  '#e74c3c',  // Red
+  '#3498db',  // Blue
+  '#27ae60',  // Green
+  '#f39c12',  // Yellow/Orange
+  '#9b59b6',  // Purple
+  '#1abc9c',  // Teal
+  '#e67e22',  // Orange
+  '#2c3e50',  // Dark Blue/Black
+] as const;
+
+/**
  * Options for creating a new game
  */
 export type GameOptions = {
@@ -118,6 +134,10 @@ export type GameOptions = {
   playerNames?: string[];
   /** Random seed for deterministic gameplay */
   seed?: string;
+  /** Available color palette for players (hex strings) */
+  colors?: string[];
+  /** Whether players can change colors in lobby (default: true) */
+  colorSelectionEnabled?: boolean;
 };
 
 /**
@@ -414,12 +434,29 @@ export class Game<
       this._ctx.classRegistry.set(PlayerClassToUse.name, PlayerClassToUse as unknown as ElementClass);
     }
 
+    // Resolve color palette
+    const colorPalette = options.colors ?? DEFAULT_COLOR_PALETTE;
+
+    // Validate color count early (fail-fast)
+    if (options.playerCount > colorPalette.length) {
+      throw new Error(
+        `Cannot create ${options.playerCount} players: only ${colorPalette.length} colors available. ` +
+        `Provide more colors in gameOptions.colors or reduce playerCount.`
+      );
+    }
+
     // Create players (1-indexed: Player 1 has seat 1)
     for (let i = 0; i < options.playerCount; i++) {
       const playerName = options.playerNames?.[i] ?? `Player ${i + 1}`;
       const player = this.create(PlayerClassToUse as unknown as ElementClass<P>, playerName, { seat: i + 1 } as any);
+      // Auto-assign color from palette (seat 1 = index 0, seat 2 = index 1, etc.)
+      player.color = colorPalette[i];
       if (i === 0) player.setCurrent(true);
     }
+
+    // Store color configuration for session layer access
+    this.settings.colors = colorPalette;
+    this.settings.colorSelectionEnabled = options.colorSelectionEnabled ?? true;
 
     // Initialize action executor
     this._actionExecutor = new ActionExecutor(this);
