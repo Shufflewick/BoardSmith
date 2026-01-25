@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-22)
 
 ## Current Position
 
-Phase: 64 of 68 (Engine Layer)
+Phase: 65 of 68 (Session Layer)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-01-25 — Completed 64-01-PLAN.md
+Last activity: 2026-01-25 - Completed 65-01-PLAN.md
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 40%
 
 ## Milestones
 
@@ -43,9 +43,14 @@ v2.5 Player Colors Refactor (Phases 64-68)
 ## Session Continuity
 
 Last session: 2026-01-25
-Stopped at: Completed Phase 64 (Engine Layer)
+Stopped at: Completed Phase 65 (Session Layer)
 Resume file: None
 
 ## Key Decisions (Accumulated)
 
 See PROJECT.md for full decision history.
+
+**Phase 65 decisions:**
+- Use seat comparison (not playerId) for color conflict detection - works for AI slots
+- Include player name in error message for clear user feedback
+- Validate both updatePlayerOptions and updateSlotPlayerOptions for consistency
