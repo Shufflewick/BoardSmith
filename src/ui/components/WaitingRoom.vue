@@ -62,6 +62,8 @@ interface LobbyInfo {
   isReady: boolean;
   minPlayers?: number;
   maxPlayers?: number;
+  colorSelectionEnabled?: boolean;
+  colors?: string[];
 }
 
 // Player option types
@@ -147,11 +149,31 @@ const typedPlayerOptions = computed(() => {
   return props.playerOptions as Record<string, PlayerOptionDefinition>;
 });
 
+// Effective player options - auto-injects color option when colorSelectionEnabled is true
+const effectivePlayerOptions = computed((): Record<string, PlayerOptionDefinition> | null => {
+  const baseOptions = typedPlayerOptions.value ?? {};
+
+  // If color selection is not enabled, return base options
+  if (!props.lobby.colorSelectionEnabled) {
+    return Object.keys(baseOptions).length > 0 ? baseOptions : null;
+  }
+
+  // Auto-inject color option using lobby.colors
+  const colorOption: StandardPlayerOption = {
+    type: 'color' as const,
+    label: 'Color',
+    choices: (props.lobby.colors || []).map(c => ({ value: c, label: c })),
+  };
+
+  // Color option comes first
+  return { color: colorOption, ...baseOptions };
+});
+
 // Non-exclusive player options (for "Your Settings" panel)
 const standardPlayerOptions = computed(() => {
-  if (!typedPlayerOptions.value) return null;
+  if (!effectivePlayerOptions.value) return null;
   const filtered: Record<string, PlayerOptionDefinition> = {};
-  for (const [key, opt] of Object.entries(typedPlayerOptions.value)) {
+  for (const [key, opt] of Object.entries(effectivePlayerOptions.value)) {
     if (opt.type !== 'exclusive') {
       filtered[key] = opt;
     }
@@ -161,9 +183,9 @@ const standardPlayerOptions = computed(() => {
 
 // Exclusive player options (for display in player rows, host-controlled)
 const exclusivePlayerOptions = computed(() => {
-  if (!typedPlayerOptions.value) return null;
+  if (!effectivePlayerOptions.value) return null;
   const filtered: Record<string, ExclusivePlayerOption> = {};
-  for (const [key, opt] of Object.entries(typedPlayerOptions.value)) {
+  for (const [key, opt] of Object.entries(effectivePlayerOptions.value)) {
     if (opt.type === 'exclusive') {
       filtered[key] = opt as ExclusivePlayerOption;
     }
