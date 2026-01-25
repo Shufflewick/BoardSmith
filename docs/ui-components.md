@@ -270,30 +270,42 @@ function applyPreset(preset: GamePreset) {
 </script>
 ```
 
-### Standard Color Picker
+### Player Colors
 
-BoardSmith provides a standard color palette and utilities for player color selection.
+Players automatically receive colors from the engine's color palette. Access them via the `color` property:
 
 ```typescript
-import {
-  STANDARD_PLAYER_COLORS,
-  DEFAULT_PLAYER_COLORS,
-  createColorOption
-} from 'boardsmith/session';
+// In rules code
+const myColor = player.color;  // '#e74c3c'
 
-// Standard 8-color palette
-STANDARD_PLAYER_COLORS
-// [{ value: '#e74c3c', label: 'Red' }, { value: '#3498db', label: 'Blue' }, ...]
+// In UI via gameView
+const playerColor = gameView.players[playerSeat - 1].color;
+```
 
-// Default 2-player colors (Red, Blue)
-DEFAULT_PLAYER_COLORS
-// ['#e74c3c', '#3498db']
+#### Custom Color Palette
 
-// Create a color option for game definition
+To use a custom color palette, specify it in your game definition:
+
+```typescript
 export const gameDefinition = {
-  // ...
+  // Custom colors (optional - defaults to engine's DEFAULT_COLOR_PALETTE)
+  colors: ['#ff0000', '#0000ff', '#00ff00', '#ffff00'],
+
+  // Disable color selection in lobby (optional, default: true)
+  colorSelectionEnabled: false,
+};
+```
+
+#### Lobby Color Selection
+
+To enable players to choose colors in the lobby, use `createColorOption`:
+
+```typescript
+import { createColorOption, STANDARD_PLAYER_COLORS } from 'boardsmith/session';
+
+export const gameDefinition = {
   playerOptions: {
-    color: createColorOption(), // Uses standard colors
+    color: createColorOption(), // Uses STANDARD_PLAYER_COLORS (8 colors)
   },
 };
 
@@ -310,6 +322,19 @@ The color picker in PlayerConfigList:
 - Shows color swatches with labels
 - Disables already-selected colors with X overlay
 - Automatically applies first available color as default
+
+#### Migration from DEFAULT_PLAYER_COLORS
+
+If you're using the deprecated `DEFAULT_PLAYER_COLORS` array, migrate to `player.color`:
+
+```typescript
+// Before (deprecated)
+import { DEFAULT_PLAYER_COLORS } from 'boardsmith/session';
+const color = DEFAULT_PLAYER_COLORS[player.seat - 1];
+
+// After (recommended)
+const color = player.color;
+```
 
 ## Helper Components
 

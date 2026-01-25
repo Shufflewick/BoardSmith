@@ -246,6 +246,32 @@ ctx.player                      // Current action's player
 ctx.game.players.current        // Current player from game
 ```
 
+### Player Colors
+
+Players automatically receive a `color` property from the engine's color palette:
+
+```typescript
+// In rules code
+const myColor = player.color;  // '#e74c3c'
+
+// In UI via gameView
+const playerColor = gameView.players[playerSeat - 1].color;
+```
+
+The engine assigns colors from `DEFAULT_COLOR_PALETTE` based on seat order. To customize:
+
+```typescript
+export const gameDefinition = {
+  // Custom color palette (optional)
+  colors: ['#ff0000', '#0000ff', '#00ff00'],
+
+  // Disable color selection in lobby (optional, default: true)
+  colorSelectionEnabled: false,
+};
+```
+
+When `colorSelectionEnabled` is true (the default), players can choose their color in the lobby and the UI automatically shows a color picker.
+
 ## Game State Serialization
 
 BoardSmith automatically handles serialization for:
