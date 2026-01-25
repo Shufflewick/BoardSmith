@@ -8,6 +8,18 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
+## Current Milestone: v2.5 Player Colors Refactor
+
+**Goal:** Make player colors a first-class player property with game-level configuration, eliminating the index mismatch between seat (1-indexed) and DEFAULT_PLAYER_COLORS (0-indexed).
+
+**Target features:**
+- `player.color` property auto-assigned from game's color palette based on seat
+- Game-level `colors` configuration with sensible defaults, customizable per game
+- Game-level `colorSelectionEnabled` flag to show/hide lobby color picker
+- Exclusive color selection (can only pick colors not held by another player)
+- Validation: error if maxPlayers > colors.length
+- Deep integration into all existing games (hex, checkers, MERC, etc.)
+
 ## Previous: v2.4 Shipped
 
 BoardSmith now includes animation event infrastructure for dramatic UI playback. Games can emit animation events during calculations while state advances immediately (soft continuation pattern).
@@ -109,7 +121,17 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-(None — planning next milestone)
+- [ ] `player.color` property on Player class
+- [ ] Game-level color palette configuration
+- [ ] Game-level `colorSelectionEnabled` flag
+- [ ] Auto-assignment of colors based on seat
+- [ ] Color change API with exclusivity enforcement
+- [ ] Validation: error if maxPlayers > colors.length
+- [ ] Lobby UI: color picker when enabled
+- [ ] PlayerStats: color display when enabled
+- [ ] Remove/deprecate DEFAULT_PLAYER_COLORS global
+- [ ] Update all ~/BoardSmithGames demos to use player.color
+- [ ] Update MERC game to use player.color
 
 ### Out of Scope
 
@@ -180,4 +202,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-01-22 after v2.4 milestone*
+*Last updated: 2026-01-25 after starting v2.5 milestone*
