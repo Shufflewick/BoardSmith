@@ -8,17 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v2.5 Player Colors Refactor
+## Previous: v2.5 Shipped
 
-**Goal:** Make player colors a first-class player property with game-level configuration, eliminating the index mismatch between seat (1-indexed) and DEFAULT_PLAYER_COLORS (0-indexed).
+Player colors are now a first-class engine-managed property with game-level configuration. Players get auto-assigned colors from a configurable palette, with optional lobby color selection and conflict validation.
 
-**Target features:**
-- `player.color` property auto-assigned from game's color palette based on seat
-- Game-level `colors` configuration with sensible defaults, customizable per game
-- Game-level `colorSelectionEnabled` flag to show/hide lobby color picker
-- Exclusive color selection (can only pick colors not held by another player)
-- Validation: error if maxPlayers > colors.length
-- Deep integration into all existing games (hex, checkers, MERC, etc.)
+**v2.5 Delivered:** Player Colors Refactor — `player.color` property, `GameOptions.colors` configuration, lobby color picker with conflict detection, deprecated `DEFAULT_PLAYER_COLORS`.
 
 ## Previous: v2.4 Shipped
 
@@ -118,20 +112,21 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ `useAutoAnimations` integrates custom event handlers — v2.4
 - ✓ Snapshot serialization includes animation buffer — v2.4
 - ✓ Animation event system documented — v2.4
+- ✓ `player.color` property on Player class — v2.5
+- ✓ Game-level color palette configuration — v2.5
+- ✓ Game-level `colorSelectionEnabled` flag — v2.5
+- ✓ Auto-assignment of colors based on seat — v2.5
+- ✓ Color change API with exclusivity enforcement — v2.5
+- ✓ Validation: error if maxPlayers > colors.length — v2.5
+- ✓ Lobby UI: color picker when enabled — v2.5
+- ✓ PlayerStats: color display when enabled — v2.5
+- ✓ Deprecated DEFAULT_PLAYER_COLORS with migration guidance — v2.5
+- ✓ Hex game migrated to player.color — v2.5
+- ✓ Checkers game migrated to player.color with custom palette — v2.5
 
 ### Active
 
-- [ ] `player.color` property on Player class
-- [ ] Game-level color palette configuration
-- [ ] Game-level `colorSelectionEnabled` flag
-- [ ] Auto-assignment of colors based on seat
-- [ ] Color change API with exclusivity enforcement
-- [ ] Validation: error if maxPlayers > colors.length
-- [ ] Lobby UI: color picker when enabled
-- [ ] PlayerStats: color display when enabled
-- [ ] Remove/deprecate DEFAULT_PLAYER_COLORS global
-- [ ] Update all ~/BoardSmithGames demos to use player.color
-- [ ] Update MERC game to use player.color
+(None — milestone complete)
 
 ### Out of Scope
 
@@ -174,10 +169,15 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | acknowledgeAnimations on session not game | Avoids polluting game state with UI concerns | ✓ Good |
 | Animation buffer serializes with game state | Checkpoint/replay safety | ✓ Good |
 | ActionPanel gates on animations | New decisions wait for animation completion | ✓ Good |
+| Seat-based color conflict detection | Works for AI slots (no playerId); includes player name in error | ✓ Good |
+| Auto-inject color picker via computed | Games don't define color options; UI auto-injects when enabled | ✓ Good |
+| JSDoc @deprecated vs runtime warning | Editor-visible with zero runtime cost | ✓ Good |
+| Custom game colors in boardsmith.json | Checkers preserves red/dark theme via config, not code | ✓ Good |
+| Engine guarantees player.color | Remove fallback chains; null-safety only for defensive coding | ✓ Good |
 
 ## Context
 
-~75k LOC TypeScript/Vue in unified `src/` structure.
+~78k LOC TypeScript/Vue in unified `src/` structure.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
 528 unit tests passing (15 e2e tests require running server).
 
@@ -202,4 +202,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-01-25 after starting v2.5 milestone*
+*Last updated: 2026-01-25 after v2.5 milestone*

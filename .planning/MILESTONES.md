@@ -1,5 +1,34 @@
 # Project Milestones: BoardSmith
 
+## v2.5 Player Colors Refactor (Shipped: 2026-01-25)
+
+**Delivered:** Engine-managed player colors with `player.color` property, game-level color configuration, lobby color picker, and automatic conflict validation — eliminating the fragmented `DEFAULT_PLAYER_COLORS` pattern.
+
+**Phases completed:** 64-68 (5 phases, 5 plans total)
+
+**Key accomplishments:**
+
+- Added `player.color` property auto-assigned by engine from configurable palette
+- Game-level `colors` and `colorSelectionEnabled` configuration in GameOptions
+- Color conflict validation in lobby with clear error messages
+- Auto-injected color picker in WaitingRoom when enabled
+- Conditional player color indicators in PlayersPanel
+- Deprecated DEFAULT_PLAYER_COLORS with migration guidance
+- Migrated Hex and Checkers games to new API
+
+**Stats:**
+
+- 37 files changed
+- +4,130 / -81 lines
+- 5 phases, 5 plans
+- 47 days from start to ship (2025-12-09 → 2026-01-25)
+
+**Git range:** `fb42d3f` → `826c5ed`
+
+**What's next:** Player color system complete. Ready for next milestone.
+
+---
+
 ## v2.4 Animation Event System (Shipped: 2026-01-22)
 
 **Delivered:** Infrastructure-level support for dramatic UI playback of game calculations — enabling games to animate combat sequences, card draws, and other events while game state advances immediately (soft continuation pattern).

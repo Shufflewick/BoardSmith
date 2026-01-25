@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-22)
+See: .planning/PROJECT.md (updated 2026-01-25)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.5 Player Colors Refactor (COMPLETE)
+**Current focus:** Planning next milestone
 
 ## Current Position
 
 Phase: 68 of 68 (Game Updates)
-Plan: 1 of 1 in current phase
-Status: Phase complete - v2.5 SHIPPED
-Last activity: 2026-01-25 - Completed 68-01-PLAN.md
+Plan: Complete
+Status: v2.5 SHIPPED — ready for next milestone
+Last activity: 2026-01-25 — v2.5 milestone complete
 
 Progress: [██████████] 100%
 
@@ -36,34 +36,17 @@ Progress: [██████████] 100%
 - v2.2 Game Design Aspects (Phases 51-53) -- shipped 2026-01-21
 - v2.3 Nomenclature Standardization (Phases 54-58) -- shipped 2026-01-22
 - v2.4 Animation Event System (Phases 59-63) -- shipped 2026-01-22
+- v2.5 Player Colors Refactor (Phases 64-68) -- shipped 2026-01-25
 
 **Current:**
-v2.5 Player Colors Refactor (Phases 64-68) -- shipped 2026-01-25
+(None — awaiting next milestone)
 
 ## Session Continuity
 
 Last session: 2026-01-25
-Stopped at: Completed Phase 68 (Game Updates) - v2.5 complete
+Stopped at: Completed v2.5 milestone
 Resume file: None
 
 ## Key Decisions (Accumulated)
 
 See PROJECT.md for full decision history.
-
-**Phase 65 decisions:**
-- Use seat comparison (not playerId) for color conflict detection - works for AI slots
-- Include player name in error message for clear user feedback
-- Validate both updatePlayerOptions and updateSlotPlayerOptions for consistency
-
-**Phase 66 decisions:**
-- Use effectivePlayerOptions computed to auto-inject color option - keeps game definitions clean
-- Sync colorSelectionEnabled from lobbyInfo via watcher - persists through lobby->game transition
-
-**Phase 67 decisions:**
-- Use JSDoc @deprecated instead of runtime warnings - editor-visible with zero runtime cost
-- Keep STANDARD_PLAYER_COLORS and createColorOption undeprecated - still useful for lobby config
-
-**Phase 68 decisions:**
-- Add colors array to Checkers boardsmith.json to preserve red/dark theme
-- Remove all fallback chains - engine guarantees player.color is set
-- Keep null safety fallbacks (#888888) for defensive coding only
