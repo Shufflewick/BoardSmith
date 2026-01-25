@@ -58,32 +58,32 @@ Requirements for v2.5 Player Colors Refactor.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | TBD | Pending |
-| ENG-02 | TBD | Pending |
-| ENG-03 | TBD | Pending |
-| ENG-04 | TBD | Pending |
-| ENG-05 | TBD | Pending |
-| ENG-06 | TBD | Pending |
-| SESS-01 | TBD | Pending |
-| SESS-02 | TBD | Pending |
-| SESS-03 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
-| UI-05 | TBD | Pending |
-| CLN-01 | TBD | Pending |
-| CLN-02 | TBD | Pending |
-| GAME-01 | TBD | Pending |
-| GAME-02 | TBD | Pending |
-| GAME-03 | TBD | Pending |
-| GAME-04 | TBD | Pending |
+| ENG-01 | Phase 64 | Pending |
+| ENG-02 | Phase 64 | Pending |
+| ENG-03 | Phase 64 | Pending |
+| ENG-04 | Phase 64 | Pending |
+| ENG-05 | Phase 64 | Pending |
+| ENG-06 | Phase 64 | Pending |
+| SESS-01 | Phase 65 | Pending |
+| SESS-02 | Phase 65 | Pending |
+| SESS-03 | Phase 65 | Pending |
+| UI-01 | Phase 66 | Pending |
+| UI-02 | Phase 66 | Pending |
+| UI-03 | Phase 66 | Pending |
+| UI-04 | Phase 66 | Pending |
+| UI-05 | Phase 66 | Pending |
+| CLN-01 | Phase 67 | Pending |
+| CLN-02 | Phase 67 | Pending |
+| GAME-01 | Phase 68 | Pending |
+| GAME-02 | Phase 68 | Pending |
+| GAME-03 | Phase 68 | Pending |
+| GAME-04 | Phase 68 | Pending |
 
 **Coverage:**
 - v1 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-25*
-*Last updated: 2026-01-25 after initial definition*
+*Last updated: 2026-01-25 after roadmap creation*
