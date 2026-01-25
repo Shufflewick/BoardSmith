@@ -41,10 +41,10 @@ Plans:
   1. Player can call color change API and receive a new color
   2. Color change is rejected with clear message when target color is occupied
   3. Player's color persists through disconnection and reconnection
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 65-01: TBD
+- [ ] 65-01-PLAN.md — Add color conflict validation to updatePlayerOptions and updateSlotPlayerOptions
 
 ### Phase 66: UI Layer
 **Goal**: Lobby and PlayerStats display player colors with selection UI
@@ -92,7 +92,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 64. Engine Layer | 1/1 | Complete | 2026-01-25 |
-| 65. Session Layer | 0/? | Not started | - |
+| 65. Session Layer | 0/1 | Not started | - |
 | 66. UI Layer | 0/? | Not started | - |
 | 67. Cleanup | 0/? | Not started | - |
 | 68. Game Updates | 0/? | Not started | - |
