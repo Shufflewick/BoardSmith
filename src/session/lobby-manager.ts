@@ -707,6 +707,14 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Player not found in lobby' };
     }
 
+    // Validate color change if color is being updated
+    if (options.color !== undefined) {
+      const colorValidation = this.#validateColorChange(slot.seat, options.color as string);
+      if (!colorValidation.success) {
+        return { success: false, error: colorValidation.error };
+      }
+    }
+
     // Merge new options with existing
     slot.playerOptions = {
       ...slot.playerOptions,
@@ -758,6 +766,14 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
 
     if (slot.status === 'open') {
       return { success: false, error: 'Cannot set options for an open slot' };
+    }
+
+    // Validate color change if color is being updated
+    if (options.color !== undefined) {
+      const colorValidation = this.#validateColorChange(slot.seat, options.color as string);
+      if (!colorValidation.success) {
+        return { success: false, error: colorValidation.error };
+      }
     }
 
     // Merge new options with existing
@@ -978,5 +994,35 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       this.#storedState.lobbySlots,
       this.#storedState.playerCount
     );
+  }
+
+  /**
+   * Validate that a color change doesn't conflict with another player's color
+   *
+   * @param seat The seat of the player requesting the change
+   * @param targetColor The color they want to change to
+   * @returns Validation result with error message if color is taken
+   */
+  #validateColorChange(
+    seat: number,
+    targetColor: string
+  ): { success: boolean; error?: string } {
+    if (!this.#storedState.lobbySlots) {
+      return { success: true }; // No lobby, no validation needed
+    }
+
+    // Check if target color is already held by another player
+    const conflictingSlot = this.#storedState.lobbySlots.find(
+      s => s.seat !== seat && s.playerOptions?.color === targetColor
+    );
+
+    if (conflictingSlot) {
+      return {
+        success: false,
+        error: `Color ${targetColor} is already taken by ${conflictingSlot.name}`,
+      };
+    }
+
+    return { success: true };
   }
 }
