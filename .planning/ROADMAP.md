@@ -10,7 +10,7 @@ Refactor player colors from game-managed to engine-managed. Players get a `color
 
 ## Phases
 
-- [ ] **Phase 64: Engine Layer** - Player.color property and game color configuration
+- [x] **Phase 64: Engine Layer** - Player.color property and game color configuration (complete 2026-01-25)
 - [ ] **Phase 65: Session Layer** - Color change API and persistence
 - [ ] **Phase 66: UI Layer** - Lobby color picker and PlayerStats integration
 - [ ] **Phase 67: Cleanup** - Remove old API, update documentation
@@ -31,7 +31,7 @@ Refactor player colors from game-managed to engine-managed. Players get a `color
 **Plans**: 1 plan
 
 Plans:
-- [ ] 64-01-PLAN.md — Add DEFAULT_COLOR_PALETTE, extend GameOptions, color validation and auto-assignment
+- [x] 64-01-PLAN.md — Add DEFAULT_COLOR_PALETTE, extend GameOptions, color validation and auto-assignment
 
 ### Phase 65: Session Layer
 **Goal**: Players can change colors during lobby, with proper conflict handling
@@ -91,7 +91,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 64. Engine Layer | 0/1 | Planned | - |
+| 64. Engine Layer | 1/1 | Complete | 2026-01-25 |
 | 65. Session Layer | 0/? | Not started | - |
 | 66. UI Layer | 0/? | Not started | - |
 | 67. Cleanup | 0/? | Not started | - |
