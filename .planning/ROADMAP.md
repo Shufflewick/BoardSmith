@@ -13,7 +13,7 @@ Refactor player colors from game-managed to engine-managed. Players get a `color
 - [x] **Phase 64: Engine Layer** - Player.color property and game color configuration (complete 2026-01-25)
 - [x] **Phase 65: Session Layer** - Color change API and persistence (complete 2026-01-25)
 - [x] **Phase 66: UI Layer** - Lobby color picker and PlayerStats integration (complete 2026-01-25)
-- [ ] **Phase 67: Cleanup** - Remove old API, update documentation
+- [x] **Phase 67: Cleanup** - Remove old API, update documentation (complete 2026-01-25)
 - [ ] **Phase 68: Game Updates** - Migrate all games to player.color
 
 ## Phase Details
@@ -71,7 +71,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 67-01-PLAN.md — Deprecate DEFAULT_PLAYER_COLORS with migration guidance, update docs to show player.color API
+- [x] 67-01-PLAN.md — Deprecate DEFAULT_PLAYER_COLORS with migration guidance, update docs to show player.color API
 
 ### Phase 68: Game Updates
 **Goal**: All games migrated to use player.color
@@ -94,5 +94,5 @@ Plans:
 | 64. Engine Layer | 1/1 | Complete | 2026-01-25 |
 | 65. Session Layer | 1/1 | Complete | 2026-01-25 |
 | 66. UI Layer | 1/1 | Complete | 2026-01-25 |
-| 67. Cleanup | 0/1 | In Progress | - |
+| 67. Cleanup | 1/1 | Complete | 2026-01-25 |
 | 68. Game Updates | 0/? | Not started | - |

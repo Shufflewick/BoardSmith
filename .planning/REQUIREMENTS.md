@@ -32,8 +32,8 @@ Requirements for v2.5 Player Colors Refactor.
 
 ### Cleanup
 
-- [ ] **CLN-01**: Remove or deprecate `DEFAULT_PLAYER_COLORS` export
-- [ ] **CLN-02**: Update documentation to reflect new color API
+- [x] **CLN-01**: Remove or deprecate `DEFAULT_PLAYER_COLORS` export
+- [x] **CLN-02**: Update documentation to reflect new color API
 
 ### Game Updates
 
@@ -72,8 +72,8 @@ Requirements for v2.5 Player Colors Refactor.
 | UI-03 | Phase 66 | Complete |
 | UI-04 | Phase 66 | Complete |
 | UI-05 | Phase 66 | Complete |
-| CLN-01 | Phase 67 | Pending |
-| CLN-02 | Phase 67 | Pending |
+| CLN-01 | Phase 67 | Complete |
+| CLN-02 | Phase 67 | Complete |
 | GAME-01 | Phase 68 | Pending |
 | GAME-02 | Phase 68 | Pending |
 | GAME-03 | Phase 68 | Pending |
@@ -86,4 +86,4 @@ Requirements for v2.5 Player Colors Refactor.
 
 ---
 *Requirements defined: 2026-01-25*
-*Last updated: 2026-01-25 after Phase 66 completion*
+*Last updated: 2026-01-25 after Phase 67 completion*
