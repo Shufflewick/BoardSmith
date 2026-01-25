@@ -15,7 +15,7 @@ import type {
   CreateGameResponse,
   GameConnectionConfig,
   LobbyInfo,
-  ClaimPositionResponse,
+  ClaimSeatResponse,
   LobbyResponse,
 } from './types.js';
 
@@ -67,7 +67,7 @@ export class MeepleClient {
     return {
       matched: data.matched,
       gameId: data.gameId,
-      playerPosition: data.playerPosition,
+      playerSeat: data.playerSeat,
       players: data.players,
       position: data.position,
       queueSize: data.queueSize,
@@ -94,7 +94,7 @@ export class MeepleClient {
       gameType: data.gameType,
       playerCount: data.playerCount,
       gameId: data.gameId,
-      playerPosition: data.playerPosition,
+      playerSeat: data.playerSeat,
       players: data.players,
       position: data.position,
       queueSize: data.queueSize,
@@ -145,7 +145,7 @@ export class MeepleClient {
         return {
           matched: true,
           gameId: status.gameId,
-          playerPosition: status.playerPosition,
+          playerSeat: status.playerSeat,
           players: status.players,
         };
       }
@@ -171,7 +171,7 @@ export class MeepleClient {
     const connectionConfig: GameConnectionConfig = {
       gameId,
       playerId: this.playerId,
-      playerPosition: options?.playerPosition,
+      playerSeat: options?.playerSeat,
       spectator: options?.spectator ?? false,
       autoReconnect: options?.autoReconnect ?? this.config.autoReconnect,
       maxReconnectAttempts: options?.maxReconnectAttempts ?? this.config.maxReconnectAttempts,
@@ -198,7 +198,7 @@ export class MeepleClient {
     }
 
     const connection = this.connect(matchResult.gameId, {
-      playerPosition: matchResult.playerPosition,
+      playerSeat: matchResult.playerSeat,
     });
 
     return { connection, matchResult };
@@ -223,12 +223,12 @@ export class MeepleClient {
   /**
    * Get game state via HTTP (useful when not using WebSocket).
    */
-  async getGameState(gameId: string, playerPosition?: number): Promise<{
+  async getGameState(gameId: string, playerSeat?: number): Promise<{
     flowState: FlowState;
     state: PlayerState;
   }> {
-    const url = playerPosition !== undefined
-      ? `/games/${gameId}?player=${playerPosition}`
+    const url = playerSeat !== undefined
+      ? `/games/${gameId}?player=${playerSeat}`
       : `/games/${gameId}`;
 
     const response = await this.fetch(url);
@@ -330,13 +330,13 @@ export class MeepleClient {
   }
 
   /**
-   * Claim a position in the game lobby.
+   * Claim a seat in the game lobby.
    */
-  async claimPosition(gameId: string, position: number, name: string): Promise<ClaimPositionResponse> {
-    const response = await this.fetch(`/games/${gameId}/claim-position`, {
+  async claimSeat(gameId: string, seat: number, name: string): Promise<ClaimSeatResponse> {
+    const response = await this.fetch(`/games/${gameId}/claim-seat`, {
       method: 'POST',
       body: JSON.stringify({
-        position,
+        seat,
         name,
         playerId: this.playerId,
       }),
@@ -396,12 +396,12 @@ export class MeepleClient {
   /**
    * Remove a player slot (host only).
    */
-  async removeSlot(gameId: string, position: number): Promise<LobbyResponse> {
+  async removeSlot(gameId: string, seat: number): Promise<LobbyResponse> {
     const response = await this.fetch(`/games/${gameId}/remove-slot`, {
       method: 'POST',
       body: JSON.stringify({
         playerId: this.playerId,
-        position,
+        seat,
       }),
     });
 
@@ -411,12 +411,12 @@ export class MeepleClient {
   /**
    * Toggle slot between open and AI (host only).
    */
-  async setSlotAI(gameId: string, position: number, isAI: boolean, aiLevel?: string): Promise<LobbyResponse> {
+  async setSlotAI(gameId: string, seat: number, isAI: boolean, aiLevel?: string): Promise<LobbyResponse> {
     const response = await this.fetch(`/games/${gameId}/set-slot-ai`, {
       method: 'POST',
       body: JSON.stringify({
         playerId: this.playerId,
-        position,
+        seat,
         isAI,
         aiLevel,
       }),
@@ -442,12 +442,12 @@ export class MeepleClient {
   /**
    * Kick a player from the lobby (host only).
    */
-  async kickPlayer(gameId: string, position: number): Promise<LobbyResponse> {
+  async kickPlayer(gameId: string, seat: number): Promise<LobbyResponse> {
     const response = await this.fetch(`/games/${gameId}/kick-player`, {
       method: 'POST',
       body: JSON.stringify({
         playerId: this.playerId,
-        position,
+        seat,
       }),
     });
 
@@ -473,12 +473,12 @@ export class MeepleClient {
    * Update a specific slot's player options (host only).
    * Used for exclusive options that the host assigns to players.
    */
-  async updateSlotPlayerOptions(gameId: string, position: number, options: Record<string, unknown>): Promise<LobbyResponse> {
+  async updateSlotPlayerOptions(gameId: string, seat: number, options: Record<string, unknown>): Promise<LobbyResponse> {
     const response = await this.fetch(`/games/${gameId}/slot-player-options`, {
       method: 'POST',
       body: JSON.stringify({
         playerId: this.playerId,
-        position,
+        seat,
         options,
       }),
     });

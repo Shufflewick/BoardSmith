@@ -172,7 +172,7 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * Add specific players who can see contents (beyond zone default)
    */
   addZoneVisibleTo(...players: (P | number)[]): void {
-    const positions = players.map((p) => (typeof p === 'number' ? p : p.position));
+    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
     if (!this._zoneVisibility) {
       this._zoneVisibility = { mode: 'all', explicit: true };
     }
@@ -188,7 +188,7 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
     if (!this._zoneVisibility) {
       this._zoneVisibility = { mode: 'all', explicit: true };
     }
-    const positions = players.map((p) => (typeof p === 'number' ? p : p.position));
+    const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
     this._zoneVisibility.exceptPlayers = Array.from(
       new Set([...(this._zoneVisibility.exceptPlayers ?? []), ...positions])
     );

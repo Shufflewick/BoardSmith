@@ -120,13 +120,13 @@ import { <ElementTypes> } from './elements.js';
 // === HOOK 1: OBJECTIVES ===
 export function get<GameName>Objectives(
   game: Game,
-  playerPosition: number
+  playerSeat: number
 ): Record<string, Objective> { ... }
 
 // === HOOK 2: THREAT RESPONSE ===
 export function get<GameName>ThreatResponseMoves(
   game: Game,
-  playerPosition: number,
+  playerSeat: number,
   availableMoves: BotMove[]
 ): ThreatResponse { ... }
 
@@ -181,7 +181,7 @@ export function get<GameName>UctConstant(
 ```typescript
 'path-distance-advantage': {
   checker: () => {
-    const myPath = computeShortestPath(game, playerPosition);
+    const myPath = computeShortestPath(game, playerSeat);
     const theirPath = computeShortestPath(game, opponentPosition);
     // Handle blocked paths
     if (myPath === Infinity && theirPath === Infinity) return 0.5;
@@ -200,7 +200,7 @@ export function get<GameName>UctConstant(
 ```typescript
 'near-win-within-2': {
   checker: () => {
-    const pathLength = computeShortestPath(game, playerPosition);
+    const pathLength = computeShortestPath(game, playerSeat);
     if (pathLength === Infinity || pathLength > 2) return 0.0;
     return 1 - pathLength / 2;  // 1.0 at 0, 0.5 at 1, 0.0 at 2
   },
@@ -233,10 +233,10 @@ export function get<GameName>UctConstant(
 ```typescript
 export function getThreatResponseMoves(
   game: Game,
-  playerPosition: number,
+  playerSeat: number,
   availableMoves: BotMove[]
 ): ThreatResponse {
-  const opponentPosition = 3 - playerPosition;  // 2-player game
+  const opponentPosition = 3 - playerSeat;  // 2-player game
 
   // 1. Analyze opponent's threat level
   const opponentPath = computeShortestPath(game, opponentPosition);
@@ -529,7 +529,7 @@ After generating the code:
 1. **Gradient objectives** - Return 0.0-1.0, not boolean
 2. **Handle infinity** - Path calculations can return Infinity
 3. **Use rng()** - Playout policy MUST use weighted-random, not deterministic
-4. **playerPosition is 1-indexed** - In 2-player games: 1 or 2
+4. **playerSeat is 1-indexed** - In 2-player games: 1 or 2
 5. **Verify imports** - Check element types match actual class names
 6. **Run tsc** - Always verify TypeScript compiles
 7. **Test manually** - AI vs AI misses human exploits

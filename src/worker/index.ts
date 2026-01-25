@@ -864,7 +864,7 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         const storedState = this.#gameSession.storedState;
 
         // First check lobby slots
-        const lobbyPosition = this.#gameSession.getPositionForPlayer(playerId);
+        const lobbyPosition = this.#gameSession.getSeatForPlayer(playerId);
         if (lobbyPosition !== undefined) {
           playerPosition = lobbyPosition;
         } else if (storedState.playerIds) {
@@ -1293,8 +1293,8 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
       switch (action) {
         case 'claim-position': {
-          const { position, name, playerId } = body as { position: number; name: string; playerId: string };
-          const result = await this.#gameSession.claimPosition(position, playerId, name);
+          const { seat, name, playerId } = body as { seat: number; name: string; playerId: string };
+          const result = await this.#gameSession.claimSeat(seat, playerId, name);
           return Response.json(result, { status: result.success ? 200 : 400 });
         }
 
@@ -1317,14 +1317,14 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         }
 
         case 'remove-slot': {
-          const { playerId, position } = body as { playerId: string; position: number };
-          const result = await this.#gameSession.removeSlot(playerId, position);
+          const { playerId, seat } = body as { playerId: string; seat: number };
+          const result = await this.#gameSession.removeSlot(playerId, seat);
           return Response.json(result, { status: result.success ? 200 : 400 });
         }
 
         case 'set-slot-ai': {
-          const { playerId, position, isAI, aiLevel } = body as { playerId: string; position: number; isAI: boolean; aiLevel?: string };
-          const result = await this.#gameSession.setSlotAI(playerId, position, isAI, aiLevel);
+          const { playerId, seat, isAI, aiLevel } = body as { playerId: string; seat: number; isAI: boolean; aiLevel?: string };
+          const result = await this.#gameSession.setSlotAI(playerId, seat, isAI, aiLevel);
           return Response.json(result, { status: result.success ? 200 : 400 });
         }
 

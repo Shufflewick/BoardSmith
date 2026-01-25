@@ -858,7 +858,7 @@ const { flyingElements, isAnimating } = useAutoAnimations({
 | `stat` | `string` | Name of the stat (e.g., 'books', 'captured') |
 | `containerRef` | `Ref<HTMLElement \| null>` | Container to track removals from |
 | `selector` | `string` | CSS selector to find elements |
-| `player` | `number \| ((elementData) => number)` | Target player position |
+| `player` | `number \| ((elementData) => number)` | Target player seat |
 | `trackCount` | `() => number` | Only fly when this count increases |
 | `filter` | `(elementData) => boolean` | Filter which elements fly |
 

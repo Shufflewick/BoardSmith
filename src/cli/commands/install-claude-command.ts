@@ -9,6 +9,7 @@ import { promises as fs } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +67,7 @@ async function installCommand(
         'generate-ai': 'Generate AI for BoardSmith Game',
       };
 
+      // Simple header - BoardSmith is linked globally so no path needed
       content = `# ${titles[commandName] ?? commandName}
 
 ${instructions}`;
@@ -156,6 +158,23 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   if (!designGameInstalled && !generateAiInstalled) {
     console.error(chalk.red('Error: Failed to install slash commands.'));
     process.exit(1);
+  }
+
+  // Link BoardSmith globally so `npx boardsmith` works anywhere
+  console.log(chalk.gray('Linking BoardSmith globally...'));
+  try {
+    execSync('npm link --force', { cwd: boardsmithRoot, stdio: 'pipe' });
+    console.log(chalk.green('✓ BoardSmith linked globally'));
+  } catch (err) {
+    // Check if it's already linked by trying to run boardsmith
+    try {
+      execSync('npx boardsmith --version', { stdio: 'pipe' });
+      console.log(chalk.green('✓ BoardSmith already linked globally'));
+    } catch {
+      console.error(chalk.yellow('Warning: Could not link BoardSmith globally.'));
+      console.error(chalk.gray('You may need to run with sudo or fix npm permissions.'));
+      console.error(chalk.gray(`Manual fix: cd ${boardsmithRoot} && npm link`));
+    }
   }
 
   console.log(chalk.green('✓ Installed BoardSmith slash commands for Claude Code'));

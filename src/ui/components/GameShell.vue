@@ -112,7 +112,12 @@ const gamePlayerOptions = ref<Record<string, unknown> | undefined>(undefined);
 
 // Game state
 const gameId = ref<string | null>(null);
-const playerSeat = ref<number>(0);
+const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
+
+// DEBUG: Track playerSeat changes
+watchEffect(() => {
+  console.log('[GameShell DEBUG] playerSeat.value is now:', playerSeat.value, 'type:', typeof playerSeat.value);
+});
 
 // UI state
 const historyCollapsed = ref(false);
@@ -355,7 +360,7 @@ onMounted(async () => {
   const gameMatch = path.match(/^\/game\/([a-z0-9]+)(?:\/(\d))?$/);
   if (gameMatch) {
     const urlGameId = gameMatch[1];
-    const urlPosition = gameMatch[2] ? parseInt(gameMatch[2], 10) : 0;
+    const urlPosition = gameMatch[2] ? parseInt(gameMatch[2], 10) : 1;
 
     playerSeat.value = urlPosition;
     setTimeout(() => {
@@ -489,7 +494,7 @@ async function createGame(config?: LobbyConfig) {
 
     if (result.success && result.gameId) {
       createdGameId.value = result.gameId;
-      playerSeat.value = 0;
+      playerSeat.value = 1; // Creator defaults to seat 1
       isCreator.value = true;
 
       if (result.lobby) {
@@ -504,7 +509,7 @@ async function createGame(config?: LobbyConfig) {
         // Fallback if lobby wasn't created (shouldn't happen)
         gameId.value = result.gameId;
         currentScreen.value = 'game';
-        updateUrl(result.gameId, 0);
+        updateUrl(result.gameId, 1);
       }
     }
   } catch (err) {
@@ -613,17 +618,17 @@ async function joinGame() {
           // Auto-claim the first open slot
           // Use saved name if available, otherwise keep the slot's default name
           const playerName = getPlayerName() || firstOpenSlot.name;
-          const claimResult = await client.claimPosition(gid, firstOpenSlot.position, playerName);
+          const claimResult = await client.claimPosition(gid, firstOpenSlot.seat, playerName);
 
           if (claimResult.success && claimResult.lobby) {
             lobbyInfo.value = claimResult.lobby;
 
             // Check if game started (all slots filled)
             if (claimResult.lobby.state === 'playing') {
-              playerSeat.value = firstOpenSlot.position;
+              playerSeat.value = firstOpenSlot.seat;
               gameId.value = gid;
               currentScreen.value = 'game';
-              updateUrl(gid, firstOpenSlot.position);
+              updateUrl(gid, firstOpenSlot.seat);
               return;
             }
           } else {

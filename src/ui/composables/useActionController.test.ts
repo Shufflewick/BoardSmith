@@ -924,7 +924,7 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        playerPosition: ref(0),
+        playerSeat: ref(0),
         fetchSelectionChoices,
       });
 

@@ -274,8 +274,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     if (useLobby && playerConfigs) {
       lobbySlots = playerConfigs.map((config, i) => {
         const isAI = config.isAI ?? false;
-        const position = i + 1; // 1-indexed positions
-        const isCreator = position === 1; // Position 1 is always the creator
+        const seat = i + 1; // 1-indexed seats
+        const isCreator = seat === 1; // Seat 1 is always the creator
 
         // Extract player options (everything except name, isAI, aiLevel)
         const playerOptions: Record<string, unknown> = {};
@@ -286,9 +286,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         }
 
         return {
-          position,
+          seat,
           status: isAI ? 'ai' : (isCreator ? 'claimed' : 'open'),
-          name: config.name ?? (isAI ? 'Bot' : `Player ${position}`),
+          name: config.name ?? (isAI ? 'Bot' : `Player ${seat}`),
           playerId: isCreator ? creatorId : undefined,
           aiLevel: isAI ? (config.aiLevel ?? 'medium') : undefined,
           playerOptions: Object.keys(playerOptions).length > 0 ? playerOptions : undefined,
@@ -351,7 +351,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             storedState.aiConfig = undefined;
             session.#aiController = undefined;
           } else {
-            const aiPlayers = aiSlots.map(s => s.position);
+            const aiPlayers = aiSlots.map(s => s.seat);
             const aiLevel = aiSlots[0].aiLevel || 'medium';
             storedState.aiConfig = {
               players: aiPlayers,
@@ -430,7 +430,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             storedState.aiConfig = undefined;
             session.#aiController = undefined;
           } else {
-            const aiPlayers = aiSlots.map(s => s.position);
+            const aiPlayers = aiSlots.map(s => s.seat);
             const aiLevel = aiSlots[0].aiLevel || 'medium';
             storedState.aiConfig = {
               players: aiPlayers,

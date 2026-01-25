@@ -321,7 +321,7 @@ export class LocalServer {
 
     // Add session to broadcaster
     (broadcaster as WsBroadcastAdapter).addSession(ws, {
-      playerPosition,
+      playerSeat: playerPosition,
       isSpectator,
       playerId,
     });
@@ -359,7 +359,7 @@ export class LocalServer {
         await this.#core.handleWebSocketMessage(
           {
             ws: wsAdapter,
-            playerPosition,
+            playerSeat: playerPosition,
             isSpectator,
             playerId,
           },

@@ -580,7 +580,7 @@ export interface WebSocketMessage {
   requestId?: string;
   /** For claimSeat/kickPlayer: which seat to target */
   seat?: number;
-  /** For updateName/claimPosition: player's name */
+  /** For updateName/claimSeat: player's name */
   name?: string;
   /** For setReady: ready state */
   ready?: boolean;

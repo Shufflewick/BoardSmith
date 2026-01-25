@@ -434,7 +434,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
   private completedPlayers: Set<number> = new Set();
 
   playerCompletedAction(player: MyPlayer): void {
-    this.completedPlayers.add(player.position);
+    this.completedPlayers.add(player.seat);
   }
 
   allPlayersCompleted(): boolean {
@@ -589,7 +589,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
     super(options);
 
     for (const player of this.players) {
-      player.hand = this.create(Hand, `hand-${player.position}`);
+      player.hand = this.create(Hand, `hand-${player.seat}`);
       player.hand.player = player;
       player.hand.contentsVisibleToOwner();
     }
@@ -657,7 +657,7 @@ class CheckerPiece extends Piece {
    * Get valid move directions
    */
   getMoveDirections(): Array<{ row: number; col: number }> {
-    const forward = this.player?.position === 1 ? -1 : 1;  // Player 1 moves "up"
+    const forward = this.player?.seat === 1 ? -1 : 1;  // Player 1 moves "up"
 
     if (this.isKing) {
       return [
@@ -687,7 +687,7 @@ class CheckerPiece extends Piece {
   piece.putInto(destination);
 
   // Check for promotion (player 1 promotes at row 0, player 2 at row 7)
-  const promotionRow = piece.player?.position === 1 ? 0 : 7;
+  const promotionRow = piece.player?.seat === 1 ? 0 : 7;
   if (destination.row === promotionRow && !piece.isKing) {
     piece.promote();
     game.message(`${piece} was crowned king!`);
@@ -874,7 +874,7 @@ class Zone extends Space {
    */
   isControlledBy(player: Player): boolean {
     const controller = this.getController();
-    return controller?.position === player.position;
+    return controller?.seat === player.seat;
   }
 }
 ```
@@ -1228,7 +1228,7 @@ Action.create('placeStone')
   })
   .execute((args, ctx) => {
     const cell = args.cell as Cell;
-    cell.create(Stone, `stone-${player.position}`, { player });
+    cell.create(Stone, `stone-${player.seat}`, { player });
 
     // Check win condition
     if (game.board.checkWin(player)) {
@@ -1277,7 +1277,7 @@ Go Fish demonstrates card game patterns including hidden information and conditi
 constructor(options) {
   // Create player hands - hidden from other players
   for (const player of this.players) {
-    const hand = this.create(Hand, `hand-${player.position}`);
+    const hand = this.create(Hand, `hand-${player.seat}`);
     hand.player = player;
     hand.contentsVisibleToOwner();  // Only owner sees their cards
   }
@@ -2844,13 +2844,13 @@ const session = await GameSession.restore(
 
 ```typescript
 // Get state for a specific player (with hidden info filtered)
-const playerState = session.getState(playerPosition);
+const playerState = session.getState(playerSeat);
 
 interface PlayerGameState {
   game: any;              // Serialized game state (player's view)
   flowState: FlowState;   // Current flow state
   playerNames: string[];  // All player names
-  playerPosition: number; // This player's position
+  playerSeat: number; // This player's position
   finished: boolean;      // Is game over
   winners?: number[];     // Winning player positions
 }
@@ -2877,10 +2877,10 @@ interface ActionResult {
 
 ```typescript
 // Undo to turn start
-const result = await session.undoToTurnStart(playerPosition);
+const result = await session.undoToTurnStart(playerSeat);
 
 // Undo last action (with limits)
-const result = await session.undo(playerPosition);
+const result = await session.undo(playerSeat);
 
 interface UndoResult {
   success: boolean;
@@ -2944,7 +2944,7 @@ interface BroadcastAdapter<TSession extends SessionInfo> {
 }
 
 interface SessionInfo {
-  playerPosition: number;
+  playerSeat: number;
   isSpectator: boolean;
   playerId?: string;
 }
@@ -2987,7 +2987,7 @@ Manage pre-game player setup:
 const lobby = session.lobby;
 
 // Claim a position
-await session.claimPosition(playerId, playerPosition);
+await session.claimPosition(playerId, playerSeat);
 
 // Update player name
 await session.updatePlayerName(playerId, 'New Name');
@@ -3087,7 +3087,7 @@ import { buildPlayerState } from '@boardsmith/session';
 const playerView = buildPlayerState(
   gameRunner,
   playerNames,
-  playerPosition,
+  playerSeat,
   { includeActionMetadata: true }
 );
 ```
@@ -3099,7 +3099,7 @@ Check if it's a player's turn:
 ```typescript
 import { isPlayersTurn } from '@boardsmith/session';
 
-const canAct = isPlayersTurn(flowState, playerPosition);
+const canAct = isPlayersTurn(flowState, playerSeat);
 ```
 
 ## Type Definitions
@@ -4230,7 +4230,7 @@ const { gameId } = await client.createGame({
 
 // Connect to the game
 const connection = client.connect(gameId, {
-  playerPosition: 0,
+  playerSeat: 1,
 });
 
 // Subscribe to state changes
@@ -4266,7 +4266,7 @@ const match = await client.findMatch('go-fish', {
 if (match.status === 'matched') {
   // Matched with other players!
   const connection = client.connect(match.gameId!, {
-    playerPosition: match.playerPosition!,
+    playerSeat: match.playerSeat!,
     playerId: 'user-123',
   });
 } else if (match.status === 'waiting') {
@@ -4290,7 +4290,7 @@ await client.leaveMatchmaking('user-123');
 import { MeepleClient } from 'boardsmith/client';
 
 const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
-const connection = client.connect(gameId, { playerPosition: 0 });
+const connection = client.connect(gameId, { playerSeat: 1 });
 
 // State changes
 connection.onStateChange((state) => {
@@ -5393,7 +5393,7 @@ wss.on('connection', (ws, req) => {
 
   // Register connection for broadcasts
   server.registerConnection(gameId!, {
-    playerPosition: player,
+    playerSeat: player,
     send: (msg) => ws.send(JSON.stringify(msg)),
   });
 
@@ -5753,13 +5753,13 @@ class WebSocketBroadcaster implements BroadcastAdapter<SessionInfo> {
 
   getSessions(): SessionInfo[] {
     return Array.from(this.connections.keys()).map((pos) => ({
-      playerPosition: pos,
+      playerSeat: pos,
       isSpectator: false,
     }));
   }
 
   send(session: SessionInfo, message: unknown): void {
-    const ws = this.connections.get(session.playerPosition);
+    const ws = this.connections.get(session.playerSeat);
     ws?.send(JSON.stringify(message));
   }
 }
@@ -6563,7 +6563,7 @@ const result = await fetch('/matchmaking/join', {
 if (result.status === 'matched') {
   // Game created!
   const ws = new WebSocket(
-    `wss://example.com/games/${result.gameId}?player=${result.playerPosition}`,
+    `wss://example.com/games/${result.gameId}?player=${result.playerSeat}`,
   );
 } else if (result.status === 'waiting') {
   // Poll for status
@@ -7771,7 +7771,7 @@ const aiConfig: AIConfig = {
     controlCenter: {
       checker: (g, p) => {
         const center = g.board.cells.filter(c => c.isCentral);
-        const playerPieces = center.filter(c => c.piece?.player?.position === p);
+        const playerPieces = center.filter(c => c.piece?.player?.seat === p);
         return playerPieces.length >= 2;
       },
       weight: 0.3,
@@ -7789,8 +7789,8 @@ const aiConfig: AIConfig = {
     // Material advantage
     materialAdvantage: {
       checker: (g, p) => {
-        const myPieces = g.pieces.filter(pc => pc.player?.position === p);
-        const oppPieces = g.pieces.filter(pc => pc.player?.position !== p);
+        const myPieces = g.pieces.filter(pc => pc.player?.seat === p);
+        const oppPieces = g.pieces.filter(pc => pc.player?.seat !== p);
         return myPieces.length > oppPieces.length;
       },
       weight: 0.4,
@@ -7844,7 +7844,7 @@ export const checkersAIConfig: AIConfig = {
       checker: (g, p) => {
         const centerCells = getCenterCells(g);
         const myPiecesInCenter = centerCells.filter(
-          c => c.piece?.player?.position === p
+          c => c.piece?.player?.seat === p
         );
         return myPiecesInCenter.length >= 2;
       },
@@ -8442,12 +8442,12 @@ Action.create('armsDealer')
   .chooseFrom('equipment', {
     choices: (ctx) => {
       const equipment = ctx.game.equipmentDeck.draw();
-      drawnEquipmentCache.set(`player_${ctx.player.position}`, equipment);  // Set here...
+      drawnEquipmentCache.set(`player_${ctx.player.seat}`, equipment);  // Set here...
       return [equipment, { value: 'skip', label: 'Skip' }];
     },
   })
   .execute((args, ctx) => {
-    const key = `player_${ctx.player.position}`;
+    const key = `player_${ctx.player.seat}`;
     const equipment = drawnEquipmentCache.get(key);  // ...undefined here!
     console.log('Equipment from cache:', equipment);  // "NONE"
   });
@@ -9841,7 +9841,7 @@ import { createSnapshot, createPlayerView } from 'boardsmith';
 const snapshot = createSnapshot(game, 'my-game');
 
 // Get player-specific view (with visibility applied)
-const playerView = createPlayerView(game, playerPosition);
+const playerView = createPlayerView(game, playerSeat);
 ```
 
 ### Player Views
@@ -10036,7 +10036,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
     // Access player configs (players are 1-indexed)
     for (const player of this.players) {
-      const config = options.playerConfigs?.[player.position - 1];  // configs array is 0-indexed
+      const config = options.playerConfigs?.[player.seat - 1];  // configs array is 0-indexed
       if (config?.color) {
         player.color = config.color;
       }
@@ -10156,7 +10156,7 @@ const deck = findElement(gameView, { type: 'deck' });
 const board = findElement(gameView, { name: 'mainBoard' });
 
 // Find player's hand
-const myHand = findPlayerHand(gameView, playerPosition);
+const myHand = findPlayerHand(gameView, playerSeat);
 
 // Find by ID (recursive search)
 const card = findElementById(gameView, cardId);
@@ -10175,12 +10175,12 @@ import { findPlayerHand, findElement } from 'boardsmith/ui';
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
 }>();
 
 // Extract hand cards
 const myCards = computed(() => {
-  const hand = findPlayerHand(props.gameView, props.playerPosition);
+  const hand = findPlayerHand(props.gameView, props.playerSeat);
   if (!hand?.children) return [];
 
   return hand.children.map(card => ({
@@ -10785,7 +10785,7 @@ import {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -10795,7 +10795,7 @@ const boardInteraction = useBoardInteraction();
 
 // Extract game state
 const myHand = computed(() => {
-  const hand = findPlayerHand(props.gameView, props.playerPosition);
+  const hand = findPlayerHand(props.gameView, props.playerSeat);
   return hand?.children || [];
 });
 
@@ -12136,13 +12136,13 @@ Terms related to game participants and their roles.
 
 **Definition:** A player's numbered place at the table. Seats are 1-indexed (Seat 1, Seat 2, etc.) and determine turn order.
 
-**In Code:** `player.position` property (1-indexed)
+**In Code:** `player.seat` property (1-indexed)
 **Related Terms:** Player, Turn, Active Player
 **Usage:**
 - "The player in Seat 1 goes first"
 - "Clockwise order starts from Seat 1"
 
-**Note:** Replaces "position" in external communication in v2.3. Code still uses `player.position`.
+**Note:** Renamed from `player.position` to `player.seat` in v2.4.
 
 ### Active Player
 
@@ -12608,7 +12608,7 @@ Automatic UI generation for prototyping.
 <template>
   <AutoUI
     :game-view="gameView"
-    :player-position="playerPosition"
+    :player-seat="playerSeat"
     :flow-state="flowState"
   />
 </template>
@@ -13017,7 +13017,7 @@ The UI uses Vue 3 and the `boardsmith/ui` package:
   >
     <template #game-board="{
       gameView,
-      playerPosition,
+      playerSeat,
       isMyTurn,
       availableActions,
       actionArgs,
@@ -13026,7 +13026,7 @@ The UI uses Vue 3 and the `boardsmith/ui` package:
     }">
       <GameTable
         :game-view="gameView"
-        :player-position="playerPosition"
+        :player-seat="playerSeat"
         :is-my-turn="isMyTurn"
         :available-actions="availableActions"
         :action-args="actionArgs"
@@ -13097,7 +13097,7 @@ The main wrapper component that provides the complete game UI structure: header,
     <template #game-board="{
       state,
       gameView,
-      playerPosition,
+      playerSeat,
       isMyTurn,
       availableActions,
       actionArgs,
@@ -13106,7 +13106,7 @@ The main wrapper component that provides the complete game UI structure: header,
     }">
       <GameTable
         :game-view="gameView"
-        :player-position="playerPosition"
+        :player-seat="playerSeat"
         :is-my-turn="isMyTurn"
         :available-actions="availableActions"
         :action-args="actionArgs"
@@ -13139,7 +13139,7 @@ The `#game-board` slot receives:
 |------|------|-------------|
 | `state` | `GameState` | Full game state |
 | `gameView` | `object` | Player-filtered view of game state |
-| `playerPosition` | `number` | Current player's position |
+| `playerSeat` | `number` | Current player's seat |
 | `isMyTurn` | `boolean` | Whether it's this player's turn |
 | `availableActions` | `string[]` | Actions available to the player |
 | `actionArgs` | `object` | Current action selections - **read-only for display**, use `actionController` methods to modify |
@@ -13220,7 +13220,7 @@ Automatic UI generation from game state. Useful for prototyping or as a referenc
 <template>
   <AutoUI
     :game-view="gameView"
-    :player-position="playerPosition"
+    :player-seat="playerSeat"
     :flow-state="flowState"
   />
 </template>
@@ -13867,7 +13867,7 @@ const discardRef = ref<HTMLElement | null>(null);
 
 // 2. Create computed refs for game elements
 const board = computed(() => findElement(gameView, { className: 'Board' }));
-const myHand = computed(() => findPlayerHand(gameView, playerPosition));
+const myHand = computed(() => findPlayerHand(gameView, playerSeat));
 const discardPile = computed(() => findElement(gameView, { className: 'DiscardPile' }));
 
 // 3. Set up auto-animations
@@ -13886,13 +13886,13 @@ const { flyingElements, isAnimating } = useAutoAnimations({
       stat: 'captured',
       containerRef: boardRef,
       selector: '[data-piece-id]',
-      player: (piece) => piece.playerPosition === 0 ? 1 : 0,
+      player: (piece) => piece.playerSeat === 1 ? 2 : 1,
     },
   ],
   getElementData: (element) => ({
     rank: element.attributes?.rank,
     suit: element.attributes?.suit,
-    playerPosition: element.attributes?.player?.position,
+    playerSeat: element.attributes?.player?.seat,
   }),
   duration: 400,
 });
@@ -13954,11 +13954,11 @@ const { flyingElements } = useAutoAnimations({
       containerRef: boardRef,
       selector: '[data-piece-id]',
       // Captured pieces fly to the opponent's captured stat
-      player: (piece) => piece.playerPosition === 0 ? 1 : 0,
+      player: (piece) => piece.playerSeat === 1 ? 2 : 1,
     },
   ],
   getDOMElementData: (el) => ({
-    playerPosition: el.classList.contains('player-0') ? 0 : 1,
+    playerSeat: el.classList.contains('player-1') ? 1 : 2,
   }),
   elementSize: { width: 40, height: 40 },
 });
@@ -14032,7 +14032,7 @@ import { usePlayerStatAnimation, flyToPlayerStat } from 'boardsmith/ui';
 // Fly a card to a player's score display
 flyToPlayerStat({
   cardElement: cardEl,
-  playerPosition: 0,
+  playerSeat: 1,
   statName: 'score',
   onComplete: () => updateScore(),
 });
@@ -14057,14 +14057,14 @@ import {
 const deck = findElement(gameView, { type: 'deck' });
 
 // Find player's hand
-const myHand = findPlayerHand(gameView, playerPosition);
+const myHand = findPlayerHand(gameView, playerSeat);
 
 // Get all cards in an element
 const cardsInHand = getCards(myHand);
 
 // Check ownership
 const owner = getElementOwner(card);
-const isMine = isMyElement(card, playerPosition);
+const isMine = isMyElement(card, playerSeat);
 ```
 
 ### useGameGrid
@@ -14726,7 +14726,7 @@ The framework automatically converts element IDs to actual element objects befor
 // 1. Find elements in gameView
 const myMercs = computed(() =>
   findElements(props.gameView, { className: 'Merc' })
-    .filter(m => m.attributes?.player?.position === props.playerPosition)
+    .filter(m => m.attributes?.player?.seat === props.playerSeat)
 );
 
 // 2. User clicks a merc
@@ -14780,7 +14780,7 @@ import {
 
 const props = defineProps<{
   gameView: any;
-  playerPosition: number;
+  playerSeat: number;
   isMyTurn: boolean;
   availableActions: string[];
   actionController: UseActionControllerReturn;
@@ -14792,7 +14792,7 @@ const containerRef = ref<HTMLElement>();
 
 // Extract data from game view
 const myHand = computed(() => {
-  const hand = findPlayerHand(props.gameView, props.playerPosition);
+  const hand = findPlayerHand(props.gameView, props.playerSeat);
   return hand ? getCards(hand) : [];
 });
 

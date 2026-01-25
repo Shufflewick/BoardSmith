@@ -77,10 +77,13 @@ export function provideAnimationEvents(instance: UseAnimationEventsReturn): void
 }
 
 /**
- * Use animation events from an ancestor component
+ * Use animation events from an ancestor component.
+ * Returns undefined if not provided (no warning logged).
  */
 export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
-  return inject(ANIMATION_EVENTS_KEY);
+  // Pass undefined as default to suppress Vue's "injection not found" warning
+  // Animation events are optional - components handle undefined gracefully
+  return inject(ANIMATION_EVENTS_KEY, undefined);
 }
 
 /**

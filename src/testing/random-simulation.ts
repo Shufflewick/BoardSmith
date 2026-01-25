@@ -205,7 +205,7 @@ async function simulateSingleGame<G extends Game>(
       playerCount,
       seed,
       winners: testGame.isComplete()
-        ? testGame.getWinners().map(p => p.position)
+        ? testGame.getWinners().map(p => p.seat)
         : undefined,
     };
 

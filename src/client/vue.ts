@@ -25,8 +25,8 @@ import type {
 export interface UseGameOptions {
   /** Auto-connect when gameId is provided */
   autoConnect?: boolean;
-  /** Player position (if known) - can be a ref for reactivity */
-  playerPosition?: Ref<number | undefined> | number;
+  /** Player seat (if known) - can be a ref for reactivity */
+  playerSeat?: Ref<number | undefined> | number;
   /** Connect as spectator */
   spectator?: boolean;
 }
@@ -64,7 +64,7 @@ export function useGame(
   gameId: Ref<string | null> | string | null,
   options: UseGameOptions = {}
 ): UseGameReturn {
-  const { autoConnect = true, playerPosition, spectator = false } = options;
+  const { autoConnect = true, playerSeat, spectator = false } = options;
 
   // Reactive state
   const state = shallowRef<GameState | null>(null);
@@ -83,10 +83,10 @@ export function useGame(
     ? ref(gameId)
     : gameId;
 
-  // Normalize playerPosition to get current value
-  const getPlayerPosition = (): number | undefined => {
-    if (playerPosition === undefined) return undefined;
-    return isRef(playerPosition) ? playerPosition.value : playerPosition;
+  // Normalize playerSeat to get current value
+  const getPlayerSeat = (): number | undefined => {
+    if (playerSeat === undefined) return undefined;
+    return isRef(playerSeat) ? playerSeat.value : playerSeat;
   };
 
   // Track if we're currently setting up a connection
@@ -111,7 +111,7 @@ export function useGame(
 
     // Create new connection
     connection = client.connect(id, {
-      playerPosition: getPlayerPosition(),
+      playerSeat: getPlayerSeat(),
       spectator,
       autoReconnect: true,
     });
@@ -148,10 +148,10 @@ export function useGame(
     setupConnection(newId);
   }, { immediate: true });
 
-  // Watch for playerPosition changes if it's a ref
+  // Watch for playerSeat changes if it's a ref
   // Only reconnect if gameId is set AND we're not already setting up
-  if (isRef(playerPosition)) {
-    watch(playerPosition, () => {
+  if (isRef(playerSeat)) {
+    watch(playerSeat, () => {
       // Skip if no game or if a connection setup is already in progress
       if (!gameIdRef.value || isSettingUp) return;
 
@@ -319,7 +319,7 @@ export function useMatchmaking(
             result: {
               matched: true,
               gameId: status.gameId,
-              playerPosition: status.playerPosition,
+              playerSeat: status.playerSeat,
               players: status.players,
             },
           };
@@ -434,11 +434,11 @@ export function useGameWithMatchmaking(
   // Game ID from matchmaking
   const gameId = ref<string | null>(null);
 
-  // Get initial player position value
-  const initialPosition = options.playerPosition !== undefined
-    ? (isRef(options.playerPosition) ? options.playerPosition.value : options.playerPosition)
+  // Get initial player seat value
+  const initialSeat = options.playerSeat !== undefined
+    ? (isRef(options.playerSeat) ? options.playerSeat.value : options.playerSeat)
     : undefined;
-  const playerPositionRef = ref<number | undefined>(initialPosition);
+  const playerSeatRef = ref<number | undefined>(initialSeat);
 
   // Setup matchmaking
   const matchmaking = useMatchmaking(client, options);
@@ -446,21 +446,21 @@ export function useGameWithMatchmaking(
   // Setup game connection (will connect when gameId becomes non-null)
   const game = useGame(client, gameId, {
     ...options,
-    playerPosition: playerPositionRef,
+    playerSeat: playerSeatRef,
   });
 
   // Watch for match completion
   watch(matchmaking.matchState, (state) => {
     if (state.status === 'matched') {
       gameId.value = state.result.gameId ?? null;
-      playerPositionRef.value = state.result.playerPosition;
+      playerSeatRef.value = state.result.playerSeat;
     }
   });
 
   const cancelMatchmaking = async (): Promise<void> => {
     await matchmaking.cancel();
     gameId.value = null;
-    playerPositionRef.value = undefined;
+    playerSeatRef.value = undefined;
   };
 
   return {

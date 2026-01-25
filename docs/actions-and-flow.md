@@ -268,8 +268,8 @@ Action.create('askPlayer')
     choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
   })
   .execute((args, ctx) => {
-    // playerChoices returns { value: position; display: string } objects
-    // Position values are 1-indexed
+    // playerChoices returns { value: seat; display: string } objects
+    // Seat values are 1-indexed
     const choice = args.target as { value: number; display: string };
     const targetPlayer = game.players.get(choice.value)!;
     // ...
@@ -854,13 +854,13 @@ eachPlayer({
   do: actionStep({ actions: ['play'] }),
 })
 
-// Available presets (player positions are 1-indexed):
+// Available presets (player seats are 1-indexed):
 TurnOrder.DEFAULT           // Standard round-robin from player 1
 TurnOrder.REVERSE           // Round-robin backward
 TurnOrder.CONTINUE          // Continue from current player
 TurnOrder.ACTIVE_ONLY       // Only non-eliminated players
-TurnOrder.START_FROM(n)     // Start from position n (1-indexed)
-TurnOrder.ONLY([1, 3])      // Specific players only (positions 1 and 3)
+TurnOrder.START_FROM(n)     // Start from seat n (1-indexed)
+TurnOrder.ONLY([1, 3])      // Specific players only (seats 1 and 3)
 TurnOrder.LEFT_OF_DEALER()  // Common for card games (reads ctx.get('dealer'))
 TurnOrder.SKIP_IF(fn)       // Skip players based on condition
 TurnOrder.combine(...)      // Combine multiple configs
@@ -877,7 +877,7 @@ eachPlayer({
 Access and set variables during flow:
 
 ```typescript
-// Set variable (player positions are 1-indexed)
+// Set variable (player seats are 1-indexed)
 setVar('dealer', (ctx) => ctx.game.players.get(1))
 
 // Access in conditions

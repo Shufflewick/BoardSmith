@@ -15,7 +15,6 @@ This folder contains documentation for the BoardSmith game framework.
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
 | [LLM Overview](./llm-overview.md) | Quick-reference for LLMs |
 | [Nomenclature](./nomenclature.md) | Standard terminology reference |
-| [Migration Guide](./migration-guide.md) | Breaking changes and migration steps |
 
 ## For LLMs
 

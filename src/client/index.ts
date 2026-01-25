@@ -15,7 +15,7 @@
  * const match = await client.findMatch('go-fish', { playerCount: 3 });
  *
  * // Connect to the game
- * const game = client.connect(match.gameId!, { playerPosition: match.playerPosition });
+ * const game = client.connect(match.gameId!, { playerSeat: match.playerSeat });
  *
  * // Subscribe to state changes
  * game.onStateChange((state) => {
@@ -75,6 +75,6 @@ export type {
   SlotStatus,
   LobbySlot,
   LobbyInfo,
-  ClaimPositionRequest,
-  ClaimPositionResponse,
+  ClaimSeatRequest,
+  ClaimSeatResponse,
 } from './types.js';

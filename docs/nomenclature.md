@@ -108,7 +108,7 @@ Terms related to game participants and their roles.
 
 ### Player
 
-**Definition:** A participant in the game, either human or AI. Each player has a position, name, and game-specific properties like score or hand.
+**Definition:** A participant in the game, either human or AI. Each player has a seat, name, and game-specific properties like score or hand.
 
 **In Code:** `Player` base class; extend to `MyPlayer extends Player<MyGame, MyPlayer>`
 **Related Terms:** Seat, Active Player, Owner, Hand

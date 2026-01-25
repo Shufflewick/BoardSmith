@@ -408,9 +408,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
   }
 
   // Configure optimizeDeps based on context
-  const optimizeDepsExclude = context === 'monorepo'
-    ? ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session']
-    : ['boardsmith'];  // Exclude boardsmith in standalone to pick up local changes during dev
+  // Always exclude all boardsmith subpaths - Vite requires exact matches for deep imports
+  const optimizeDepsExclude = ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'];
 
   try {
     const vite = await createViteServer({

@@ -12,7 +12,7 @@ import { ref, computed, watch } from 'vue';
 import { useToast } from '../composables/useToast';
 
 interface LobbySlot {
-  position: number;
+  seat: number;
   status: 'open' | 'ai' | 'claimed';
   name: string;
   playerId?: string;
@@ -240,10 +240,10 @@ function handleRemoveSlot(position: number) {
 function handleToggleAI(slot: LobbySlot) {
   if (slot.status === 'ai') {
     // Convert to open
-    emit('set-slot-ai', slot.position, false);
+    emit('set-slot-ai', slot.seat, false);
   } else if (slot.status === 'open') {
     // Convert to AI
-    emit('set-slot-ai', slot.position, true, 'medium');
+    emit('set-slot-ai', slot.seat, true, 'medium');
   }
 }
 
@@ -254,7 +254,7 @@ function handleCycleAILevel(slot: LobbySlot) {
   const currentIndex = DIFFICULTY_LEVELS.indexOf(currentLevel as typeof DIFFICULTY_LEVELS[number]);
   const nextIndex = (currentIndex + 1) % DIFFICULTY_LEVELS.length;
   const nextLevel = DIFFICULTY_LEVELS[nextIndex];
-  emit('set-slot-ai', slot.position, true, nextLevel);
+  emit('set-slot-ai', slot.seat, true, nextLevel);
 }
 
 function getSlotStatusClass(slot: LobbySlot): string {
@@ -270,17 +270,17 @@ function canJoinSlot(slot: LobbySlot): boolean {
 
 function canHostManageSlot(slot: LobbySlot): boolean {
   // Host can manage open or AI slots (not claimed by humans, not position 1/host)
-  return props.isCreator && slot.position !== 1 && slot.status !== 'claimed';
+  return props.isCreator && slot.seat !== 1 && slot.status !== 'claimed';
 }
 
 function canHostRemoveSlot(slot: LobbySlot): boolean {
   // Host can remove open slots (not claimed, not position 1/host, above min players)
-  return props.isCreator && slot.position !== 1 && slot.status === 'open' && canRemoveSlots.value;
+  return props.isCreator && slot.seat !== 1 && slot.status === 'open' && canRemoveSlots.value;
 }
 
 function canHostKickPlayer(slot: LobbySlot): boolean {
   // Host can kick claimed players (not themselves at position 1, not AI)
-  return props.isCreator && slot.position !== 1 && slot.status === 'claimed';
+  return props.isCreator && slot.seat !== 1 && slot.status === 'claimed';
 }
 
 function handleKickPlayer(position: number) {
@@ -301,7 +301,7 @@ function getPlayerOptionChoices(opt: PlayerOptionDefinition): Array<{ value: str
 function getTakenValues(playerSeat: number, key: string): Set<string> {
   const takenValues = new Set<string>();
   for (const slot of props.lobby.slots) {
-    if (slot.position !== playerSeat && slot.playerOptions) {
+    if (slot.seat !== playerSeat && slot.playerOptions) {
       const val = slot.playerOptions[key];
       if (val !== undefined) {
         takenValues.add(String(val));
@@ -353,7 +353,7 @@ function slotHasExclusiveOption(slotPosition: number, key: string, opt: Exclusiv
   for (const slot of props.lobby.slots) {
     const value = slot.playerOptions?.[key];
     if (value === true) {
-      return slot.position === slotPosition;
+      return slot.seat === slotPosition;
     }
   }
 
@@ -380,14 +380,14 @@ function handleSetSlotExclusiveOption(slotPosition: number, key: string) {
 
   // Clear the exclusive option from all other slots
   for (const slot of props.lobby.slots) {
-    if (slot.position !== slotPosition && slot.playerOptions?.[key] === true) {
+    if (slot.seat !== slotPosition && slot.playerOptions?.[key] === true) {
       const clearedOptions = { ...slot.playerOptions, [key]: false };
-      emit('update-slot-player-options', slot.position, clearedOptions);
+      emit('update-slot-player-options', slot.seat, clearedOptions);
     }
   }
 
   // Set the exclusive option on the target slot
-  const targetSlot = props.lobby.slots.find(s => s.position === slotPosition);
+  const targetSlot = props.lobby.slots.find(s => s.seat === slotPosition);
   const currentOptions = targetSlot?.playerOptions ?? {};
   const updatedOptions = { ...currentOptions, [key]: true };
   emit('update-slot-player-options', slotPosition, updatedOptions);
@@ -520,29 +520,29 @@ function handleUpdateGameOption(key: string, value: unknown) {
       <div class="slots-list">
         <div
           v-for="slot in lobby.slots"
-          :key="slot.position"
+          :key="slot.seat"
           class="slot"
           :class="[
             getSlotStatusClass(slot),
             { 'is-me': slot.playerId === playerId }
           ]"
         >
-          <div class="slot-position">P{{ slot.position }}</div>
+          <div class="slot-position">P{{ slot.seat }}</div>
 
           <!-- Open slot that joiner can claim: show name input + Join button -->
           <template v-if="canJoinSlot(slot)">
             <div class="join-input-row">
               <input
-                v-model="slotNames[slot.position]"
+                v-model="slotNames[slot.seat]"
                 type="text"
                 placeholder="Your name"
                 class="join-name-input"
-                @keyup.enter="handleJoinSlot(slot.position)"
+                @keyup.enter="handleJoinSlot(slot.seat)"
               />
               <button
-                @click="handleJoinSlot(slot.position)"
+                @click="handleJoinSlot(slot.seat)"
                 class="btn join-btn"
-                :disabled="!slotNames[slot.position]?.trim()"
+                :disabled="!slotNames[slot.seat]?.trim()"
               >
                 Join
               </button>
@@ -563,7 +563,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
                 </button>
                 <button
                   v-if="canRemoveSlots"
-                  @click="handleRemoveSlot(slot.position)"
+                  @click="handleRemoveSlot(slot.seat)"
                   class="btn small control-btn danger"
                   title="Remove slot"
                 >
@@ -587,7 +587,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
               </button>
               <span v-else class="slot-badge ai-badge">AI ({{ slot.aiLevel || 'medium' }})</span>
               <span class="ready-indicator ready">Ready</span>
-              <div v-if="isCreator && slot.position !== 1" class="slot-controls">
+              <div v-if="isCreator && slot.seat !== 1" class="slot-controls">
                 <button
                   @click="handleToggleAI(slot)"
                   class="btn small control-btn"
@@ -630,7 +630,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
               </span>
               <button
                 v-if="canHostKickPlayer(slot)"
-                @click="handleKickPlayer(slot.position)"
+                @click="handleKickPlayer(slot.seat)"
                 class="btn kick-btn"
                 title="Kick player"
               >
@@ -646,7 +646,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
               :key="key"
               class="slot-exclusive-radio"
               :class="{
-                selected: slotHasExclusiveOption(slot.position, String(key), opt),
+                selected: slotHasExclusiveOption(slot.seat, String(key), opt),
                 disabled: !isCreator
               }"
               :title="isCreator ? `Assign ${opt.label} to this player` : opt.label"
@@ -654,9 +654,9 @@ function handleUpdateGameOption(key: string, value: unknown) {
               <input
                 type="radio"
                 :name="`exclusive-${key}`"
-                :checked="slotHasExclusiveOption(slot.position, String(key), opt)"
+                :checked="slotHasExclusiveOption(slot.seat, String(key), opt)"
                 :disabled="!isCreator"
-                @change="handleSetSlotExclusiveOption(slot.position, String(key))"
+                @change="handleSetSlotExclusiveOption(slot.seat, String(key))"
               />
               <span class="radio-indicator"></span>
               <span class="radio-label">{{ opt.label }}</span>
@@ -697,9 +697,9 @@ function handleUpdateGameOption(key: string, value: unknown) {
               v-for="choice in getPlayerOptionChoices(opt)"
               :key="choice.value"
               :value="choice.value"
-              :disabled="isChoiceTaken(mySlot?.position ?? -1, String(key), choice.value)"
+              :disabled="isChoiceTaken(mySlot?.seat ?? -1, String(key), choice.value)"
             >
-              {{ choice.label }}{{ isChoiceTaken(mySlot?.position ?? -1, String(key), choice.value) ? ' (taken)' : '' }}
+              {{ choice.label }}{{ isChoiceTaken(mySlot?.seat ?? -1, String(key), choice.value) ? ' (taken)' : '' }}
             </option>
           </select>
 
@@ -711,12 +711,12 @@ function handleUpdateGameOption(key: string, value: unknown) {
               class="color-swatch"
               :class="{
                 selected: getMyOptionValue(String(key), opt) === color.value,
-                taken: isChoiceTaken(mySlot?.position ?? -1, String(key), color.value)
+                taken: isChoiceTaken(mySlot?.seat ?? -1, String(key), color.value)
               }"
               :style="{ backgroundColor: color.value }"
-              :title="isChoiceTaken(mySlot?.position ?? -1, String(key), color.value) ? `${color.label} (taken)` : color.label"
-              :disabled="isChoiceTaken(mySlot?.position ?? -1, String(key), color.value)"
-              @click="!isChoiceTaken(mySlot?.position ?? -1, String(key), color.value) && handleUpdateOption(String(key), color.value)"
+              :title="isChoiceTaken(mySlot?.seat ?? -1, String(key), color.value) ? `${color.label} (taken)` : color.label"
+              :disabled="isChoiceTaken(mySlot?.seat ?? -1, String(key), color.value)"
+              @click="!isChoiceTaken(mySlot?.seat ?? -1, String(key), color.value) && handleUpdateOption(String(key), color.value)"
             />
           </div>
 

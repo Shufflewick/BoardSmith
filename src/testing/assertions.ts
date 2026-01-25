@@ -234,15 +234,15 @@ export function assertGameFinished(
 
   if (options?.winner !== undefined) {
     const winners = testGame.getWinners();
-    if (winners.length !== 1 || winners[0].position !== options.winner) {
-      const actualWinners = winners.map(w => w.position).join(', ');
+    if (winners.length !== 1 || winners[0].seat !== options.winner) {
+      const actualWinners = winners.map(w => w.seat).join(', ');
       throw new Error(`Expected player ${options.winner} to win, but winners are: [${actualWinners}]`);
     }
   }
 
   if (options?.winners !== undefined) {
     const winners = testGame.getWinners();
-    const actualPositions = winners.map(w => w.position).sort();
+    const actualPositions = winners.map(w => w.seat).sort();
     const expectedPositions = [...options.winners].sort();
 
     if (actualPositions.length !== expectedPositions.length ||
