@@ -167,6 +167,13 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGam
   { playerSeat }
 );
 
+// Sync colorSelectionEnabled from game state (for non-lobby mode like --ai where lobbyInfo is never set)
+watch(state, (s) => {
+  if (s?.state?.colorSelectionEnabled) {
+    colorSelectionEnabled.value = true;
+  }
+});
+
 // Action metadata for auto-UI (selections, choices)
 const actionMetadata = computed(() => {
   return (state.value?.state as any)?.actionMetadata;

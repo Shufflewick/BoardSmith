@@ -261,10 +261,24 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
 
+    // Extract color palette from playerOptionsDefinitions if game designer defined one
+    // This ensures the engine uses the game's custom colors (e.g., CHECKERS_COLORS)
+    // instead of falling back to DEFAULT_COLOR_PALETTE
+    let effectiveGameOptions = { playerCount, playerNames, seed: gameSeed, ...customGameOptions };
+    if (playerOptionsDefinitions?.color && !customGameOptions?.colors) {
+      const colorDef = playerOptionsDefinitions.color;
+      if (colorDef.choices && colorDef.choices.length > 0) {
+        const colorValues = colorDef.choices.map(
+          (c: string | { value: string }) => typeof c === 'string' ? c : c.value
+        );
+        effectiveGameOptions = { ...effectiveGameOptions, colors: colorValues };
+      }
+    }
+
     const runner = new GameRunner<G>({
       GameClass,
       gameType,
-      gameOptions: { playerCount, playerNames, seed: gameSeed, ...customGameOptions },
+      gameOptions: effectiveGameOptions,
     });
 
     // Build lobby slots from player configs
@@ -297,14 +311,16 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         } as LobbySlot;
       });
 
-      // Initialize default player options for the host (position 0)
+      // Initialize default player options for the host (seat 1)
+      // Merge with existing preset options so preset values (e.g., color from preset config) take precedence
       if (playerOptionsDefinitions && lobbySlots[0]?.status === 'claimed') {
-        lobbySlots[0].playerOptions = GameSession.computeDefaultPlayerOptions(
-          0,
+        const defaults = GameSession.computeDefaultPlayerOptions(
+          1,
           playerOptionsDefinitions,
           lobbySlots,
           playerCount
         );
+        lobbySlots[0].playerOptions = { ...defaults, ...lobbySlots[0].playerOptions };
       }
 
       // Always start in 'waiting' state when using lobby
@@ -317,6 +333,30 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Extract color settings from the game instance after creation
     const colorSelectionEnabled = runner.game.settings.colorSelectionEnabled as boolean | undefined;
     const colors = runner.game.settings.colors as string[] | undefined;
+
+    // Initialize default colors for all non-open slots
+    // This ensures host and pre-configured AI slots have colors from the start
+    if (colorSelectionEnabled && colors && lobbySlots) {
+      for (let i = 0; i < lobbySlots.length; i++) {
+        const slot = lobbySlots[i];
+        if (slot.status !== 'open' && !slot.playerOptions?.color) {
+          // Slot is claimed or AI without a color - initialize with default
+          const defaultColor = colors[i % colors.length];
+          slot.playerOptions = { ...slot.playerOptions, color: defaultColor };
+        }
+      }
+    }
+
+    // For non-lobby games (e.g., --ai mode), apply default colors directly to players.
+    // Lobby games apply colors later via the onGameStart callback.
+    if (!useLobby && colorSelectionEnabled && colors) {
+      for (let i = 0; i < playerCount; i++) {
+        const player = runner.game.getPlayer(i + 1);
+        if (player && !player.color) {
+          player.color = colors[i % colors.length];
+        }
+      }
+    }
 
     const storedState: StoredGameState = {
       gameType,
@@ -347,6 +387,20 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // Create a temporary session ref for the callbacks (will be replaced after construction)
       const callbacks = {
         onGameStart: () => {
+          // Apply player colors from lobby selections before game starts
+          // Players may have selected different colors than the auto-assigned ones
+          if (storedState.lobbySlots) {
+            for (const slot of storedState.lobbySlots) {
+              const selectedColor = slot.playerOptions?.color as string | undefined;
+              if (selectedColor) {
+                const player = runner.game.getPlayer(slot.seat);
+                if (player) {
+                  player.color = selectedColor;
+                }
+              }
+            }
+          }
+
           // Trigger AI check when game starts
           if (session.#aiController?.hasAIPlayers()) {
             session.#scheduleAICheck();
@@ -426,6 +480,20 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // Need session reference for callbacks, will be set after construction
       const callbacks = {
         onGameStart: () => {
+          // Apply player colors from lobby selections before game starts
+          // Players may have selected different colors than the auto-assigned ones
+          if (storedState.lobbySlots) {
+            for (const slot of storedState.lobbySlots) {
+              const selectedColor = slot.playerOptions?.color as string | undefined;
+              if (selectedColor) {
+                const player = runner.game.getPlayer(slot.seat);
+                if (player) {
+                  player.color = selectedColor;
+                }
+              }
+            }
+          }
+
           // Trigger AI check when game starts
           if (session.#aiController?.hasAIPlayers()) {
             session.#scheduleAICheck();

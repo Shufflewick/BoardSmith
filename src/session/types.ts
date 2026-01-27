@@ -422,6 +422,8 @@ export interface PlayerGameState {
   animationEvents?: AnimationEvent[];
   /** ID of the last animation event, for acknowledgment convenience. Only present when events exist. */
   lastAnimationEventId?: number;
+  /** Whether color selection is enabled for this game (from game settings) */
+  colorSelectionEnabled?: boolean;
 }
 
 // ============================================

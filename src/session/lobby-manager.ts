@@ -153,6 +153,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     playerId: string,
     name: string
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    this.#validateSeat(seat);
+
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
     }
@@ -196,6 +198,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     slot.ready = false;
 
     // Initialize player options with defaults (if definitions exist)
+    // computeDefaultPlayerOptions already handles color assignment with deduplication
     if (this.#storedState.playerOptionsDefinitions) {
       slot.playerOptions = this.#computeDefaultPlayerOptions(seat);
     }
@@ -433,6 +436,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     isAI: boolean,
     aiLevel: string = 'medium'
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo; gameStarted?: boolean }> {
+    this.#validateSeat(seat);
+
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
     }
@@ -467,6 +472,11 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       slot.aiLevel = aiLevel;
       slot.playerId = undefined;
       slot.ready = true; // AI is always ready
+
+      // Compute default player options (including color with deduplication)
+      if (this.#storedState.playerOptionsDefinitions) {
+        slot.playerOptions = this.#computeDefaultPlayerOptions(seat);
+      }
     } else {
       slot.status = 'open';
       slot.name = `Player ${slot.seat}`;
@@ -612,6 +622,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     hostPlayerId: string,
     seat: number
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    this.#validateSeat(seat);
+
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
     }
@@ -748,6 +760,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     seat: number,
     options: Record<string, unknown>
   ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo }> {
+    this.#validateSeat(seat);
+
     if (!this.#storedState.lobbySlots) {
       return { success: false, error: 'Game does not have a lobby' };
     }
@@ -919,6 +933,10 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     lobbySlots: LobbySlot[],
     playerCount: number
   ): Record<string, unknown> {
+    if (seat < 1) {
+      throw new Error(`Invalid seat ${seat}: seats are 1-indexed (minimum 1)`);
+    }
+
     const result: Record<string, unknown> = {};
 
     // Collect values already taken by other players
@@ -984,9 +1002,21 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   // ============================================
 
   /**
+   * Validate that a seat number is 1-indexed (minimum 1).
+   * Throws with an actionable error if seat < 1.
+   */
+  #validateSeat(seat: number): void {
+    if (seat < 1) {
+      throw new Error(`Invalid seat ${seat}: seats are 1-indexed (minimum 1)`);
+    }
+  }
+
+  /**
    * Compute default player options for a seat (instance method wrapper)
    */
   #computeDefaultPlayerOptions(seat: number): Record<string, unknown> {
+    this.#validateSeat(seat);
+
     const definitions = this.#storedState.playerOptionsDefinitions;
     if (!definitions || !this.#storedState.lobbySlots) return {};
 
@@ -1009,6 +1039,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     seat: number,
     targetColor: string
   ): { success: boolean; error?: string } {
+    this.#validateSeat(seat);
+
     if (!this.#storedState.lobbySlots) {
       return { success: true }; // No lobby, no validation needed
     }

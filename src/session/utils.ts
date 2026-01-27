@@ -432,6 +432,12 @@ export function buildPlayerState(
     }
   }
 
+  // Include colorSelectionEnabled from game settings so clients know to show color swatches
+  // (In lobby mode this comes from LobbyInfo, but in non-lobby mode like --ai, this is the only source)
+  if (runner.game.settings.colorSelectionEnabled) {
+    state.colorSelectionEnabled = true;
+  }
+
   // Include animation events if any are pending
   const animationEvents = runner.game.pendingAnimationEvents;
   if (animationEvents.length > 0) {

@@ -143,6 +143,58 @@ watch(() => props.lobby, (lobby) => {
   }
 }, { immediate: true });
 
+// Track which slot's color picker is expanded (null = none)
+const expandedColorSlot = ref<number | null>(null);
+
+// Get the color for a slot
+function getSlotColor(slot: LobbySlot): string {
+  return (slot.playerOptions?.color as string | undefined) ?? '#888888';
+}
+
+// Check if current user can edit a slot's color
+function canEditSlotColor(slot: LobbySlot): boolean {
+  // Host can edit any non-open slot (their own, AI, or other players)
+  if (props.isCreator && slot.status !== 'open') return true;
+  // Players can edit their own slot
+  if (slot.playerId === props.playerId) return true;
+  return false;
+}
+
+// Toggle color picker for a slot
+function toggleColorPicker(slot: LobbySlot) {
+  if (!canEditSlotColor(slot)) return;
+  if (expandedColorSlot.value === slot.seat) {
+    expandedColorSlot.value = null;
+  } else {
+    expandedColorSlot.value = slot.seat;
+  }
+}
+
+// Check if a color is taken by another slot
+function isColorTakenByOther(color: string, currentSeat: number): boolean {
+  return props.lobby.slots.some(
+    s => s.seat !== currentSeat && s.status !== 'open' && s.playerOptions?.color === color
+  );
+}
+
+// Handle color change for a slot
+function handleSlotColorChange(seat: number, color: string) {
+  const slot = props.lobby.slots.find(s => s.seat === seat);
+  if (!slot) return;
+
+  // Emit appropriate event based on who is changing
+  if (slot.playerId === props.playerId) {
+    // Player changing their own color
+    emit('update-player-options', { color });
+  } else if (props.isCreator) {
+    // Host changing another player's color (AI or other human)
+    emit('update-slot-player-options', seat, { color });
+  }
+
+  // Close the picker
+  expandedColorSlot.value = null;
+}
+
 // Type-safe player options
 const typedPlayerOptions = computed(() => {
   if (!props.playerOptions) return null;
@@ -156,6 +208,12 @@ const effectivePlayerOptions = computed((): Record<string, PlayerOptionDefinitio
   // If color selection is not enabled, return base options
   if (!props.lobby.colorSelectionEnabled) {
     return Object.keys(baseOptions).length > 0 ? baseOptions : null;
+  }
+
+  // If the game definition already provides a color option (with proper labels),
+  // don't auto-inject a generic one — the game's version takes precedence
+  if ('color' in baseOptions) {
+    return baseOptions;
   }
 
   // Auto-inject color option using lobby.colors
@@ -684,6 +742,36 @@ function handleUpdateGameOption(key: string, value: unknown) {
               <span class="radio-label">{{ opt.label }}</span>
             </label>
           </div>
+
+          <!-- Slot Color (shown for all non-open slots when color selection enabled) -->
+          <div
+            v-if="lobby.colorSelectionEnabled && slot.status !== 'open'"
+            class="slot-color-section"
+          >
+            <span
+              class="slot-color-swatch"
+              :style="{ backgroundColor: getSlotColor(slot) }"
+              :title="canEditSlotColor(slot) ? 'Click to change color' : 'Player color'"
+              :class="{ clickable: canEditSlotColor(slot), expanded: expandedColorSlot === slot.seat }"
+              @click="toggleColorPicker(slot)"
+            ></span>
+            <!-- Color picker dropdown for this slot -->
+            <div v-if="expandedColorSlot === slot.seat && canEditSlotColor(slot)" class="slot-color-picker">
+              <button
+                v-for="color in lobby.colors || []"
+                :key="color"
+                class="color-swatch"
+                :class="{
+                  selected: getSlotColor(slot) === color,
+                  taken: isColorTakenByOther(color, slot.seat)
+                }"
+                :style="{ backgroundColor: color }"
+                :disabled="isColorTakenByOther(color, slot.seat)"
+                @click.stop="handleSlotColorChange(slot.seat, color)"
+                :title="isColorTakenByOther(color, slot.seat) ? 'Color taken' : color"
+              ></button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1142,6 +1230,57 @@ function handleUpdateGameOption(key: string, value: unknown) {
   gap: 12px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.slot-color-section {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.slot-color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+.slot-color-swatch.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slot-color-swatch.clickable:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+.slot-color-swatch.expanded {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+.slot-color-picker {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--bg-color, #1a1a2e);
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  min-width: 140px;
+  max-width: 200px;
+}
+
+.slot-color-picker .color-swatch {
+  width: 28px;
+  height: 28px;
 }
 
 .slot-exclusive-radio {
