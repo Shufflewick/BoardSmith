@@ -57,7 +57,6 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest --watch",
-    "regen:llms": "npx repomix",
     "lint": "eslint packages/"
   },
   "dependencies": {
