@@ -1194,6 +1194,7 @@ if ((import.meta as any).hot) {
   overflow: auto;
   min-height: 300px;
   order: 1; /* Content first on mobile */
+  position: relative; /* Positioning context for GameOverlay */
 }
 
 .game-shell__zoom-container {
@@ -1203,6 +1204,11 @@ if ((import.meta as any).hot) {
   /* Width/height at 100% divided by zoom to reserve correct space */
   width: calc(100% / var(--zoom-level));
   min-height: calc(100% / var(--zoom-level));
+
+  /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
+     Any fixed-position elements inside will behave like absolute positioning
+     relative to this container - they cannot cover the navbar or ActionPanel. */
+  contain: layout;
 }
 
 /* Sidebar - Mobile (below content) */

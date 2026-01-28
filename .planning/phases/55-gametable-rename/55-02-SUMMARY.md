@@ -68,8 +68,7 @@ decisions:
 **Commit:** cebb348
 
 ### Task 4: Regenerate llms.txt
-- Regenerated with repomix to reflect all documentation changes
-- Verified only AutoGameBoard references remain
+- NOTE: llms.txt and repomix have been removed from the project
 
 **Commit:** d347938
 

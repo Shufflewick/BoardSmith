@@ -12,6 +12,7 @@ export { default as Toast } from './components/Toast.vue';
 // Helper components
 export {
   FlyingCardsOverlay,
+  GameOverlay,
   ZoomPreviewOverlay,
 } from './components/helpers/index.js';
 

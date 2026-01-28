@@ -24,22 +24,6 @@ If you're an AI assistant reading this codebase:
 2. **Simplest example**: `packages/games/hex/` - minimal but complete game
 3. **Complex example**: `packages/games/cribbage/` - multi-phase, simultaneous actions
 
-## Generated LLM Context
-
-The repository includes a `repomix.config.json` that generates `llms.txt` - a single file containing the entire relevant codebase optimized for LLM consumption.
-
-To regenerate:
-```bash
-npx repomix
-```
-
-This produces a ~750KB file with:
-- All documentation
-- Core engine code
-- Example game implementations
-- CLI tools
-- Excludes tests, type declarations, and node_modules
-
 ## Quick Links
 
 - **CLI**: `boardsmith init`, `boardsmith dev`, `boardsmith test`

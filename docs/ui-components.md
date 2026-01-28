@@ -327,7 +327,7 @@ The color picker in PlayerConfigList:
 
 ### FlyingCardsOverlay
 
-Overlay for card flight animations between positions.
+Overlay for card flight animations between positions. Teleports to body to render above all content.
 
 ```vue
 <template>
@@ -336,6 +336,62 @@ Overlay for card flight animations between positions.
   />
 </template>
 ```
+
+### GameOverlay
+
+Modal overlay that stays **constrained within the game content area**, keeping header and ActionPanel accessible. Unlike FlyingCardsOverlay, this does NOT teleport to body.
+
+**How it works:** GameOverlay uses `position: fixed` but renders in-place (no Teleport). When inside GameShell's zoom-container (which has `contain: layout`), the fixed positioning is trapped within that container.
+
+```vue
+<script setup>
+import { ref } from 'vue';
+import { GameOverlay } from 'boardsmith/ui';
+
+const showModal = ref(false);
+</script>
+
+<template>
+  <GameOverlay :active="showModal" @click="showModal = false">
+    <div class="my-modal" @click.stop>
+      <h2>Round Summary</h2>
+      <p>Game content here...</p>
+      <button @click="showModal = false">Continue</button>
+    </div>
+  </GameOverlay>
+</template>
+
+<style scoped>
+.my-modal {
+  /* Sticky keeps modal in viewport even if game content is taller */
+  position: sticky;
+  top: 10px;
+  margin: 0 auto;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+
+  /* Your styling */
+  background: #1a1a2e;
+  padding: 20px;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+}
+</style>
+```
+
+**Props:**
+- `active` (boolean) - Whether overlay is visible
+- `backdrop` (boolean, default: true) - Enable backdrop blur
+- `backdropOpacity` (number, default: 0.85) - Backdrop darkness 0-1
+
+**Events:**
+- `@click` - Fires when clicking the backdrop (use `@click.stop` on content to prevent)
+
+**Important:**
+- Must be rendered inside a component within GameShell's game-board slot
+- Use `@click.stop` on your modal content to prevent backdrop clicks from closing
+- Use `position: sticky` on content for tall game boards
 
 ## Composables
 
