@@ -69,16 +69,11 @@ export type {
   ClaimSeatRequest,
   ClaimSeatResponse,
   UpdateNameRequest,
-  // Pick types (new terminology)
+  // Pick types
   PickMetadata,
   PickFilter,
   PickChoicesResponse,
   PickTrace,
-  // Deprecated aliases (for backward compatibility)
-  SelectionMetadata,
-  SelectionFilter,
-  SelectionChoicesResponse,
-  SelectionTrace,
 } from './types.js';
 
 // Error codes enum (value export, not just type)
@@ -100,7 +95,6 @@ export {
 
 export {
   STANDARD_PLAYER_COLORS,
-  DEFAULT_PLAYER_COLORS,
   createColorOption,
   type ColorChoice,
   type ColorOptionDefinition,
@@ -126,4 +120,4 @@ export {
 
 export { PickHandler } from './pick-handler.js';
 
-export type { PickStepResult, SelectionStepResult } from './pending-action-manager.js';
+export type { PickStepResult } from './pending-action-manager.js';

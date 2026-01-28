@@ -40,11 +40,7 @@ export enum ErrorCode {
   // Action errors
   ACTION_NOT_FOUND = 'ACTION_NOT_FOUND',
   ACTION_NOT_AVAILABLE = 'ACTION_NOT_AVAILABLE',
-  /** @deprecated Use INVALID_PICK instead */
-  INVALID_SELECTION = 'INVALID_SELECTION',
-  /** @deprecated Use PICK_NOT_FOUND instead */
-  SELECTION_NOT_FOUND = 'SELECTION_NOT_FOUND',
-  // Pick errors (preferred terminology)
+  // Pick errors
   INVALID_PICK = 'INVALID_PICK',
   PICK_NOT_FOUND = 'PICK_NOT_FOUND',
 
@@ -71,7 +67,7 @@ export enum ErrorCode {
 }
 
 // Re-export debug tracing types from engine for convenience
-export type { ActionTrace, PickTrace, ConditionDetail, SelectionTrace } from '../engine/index.js';
+export type { ActionTrace, PickTrace, ConditionDetail } from '../engine/index.js';
 
 // Re-export repeating selection types from engine
 export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
@@ -649,15 +645,3 @@ export interface LobbyUpdate {
   lobby: LobbyInfo;
 }
 
-// ============================================
-// Deprecation Aliases (for backward compatibility)
-// ============================================
-
-/** @deprecated Use PickFilter instead */
-export type SelectionFilter = PickFilter;
-
-/** @deprecated Use PickMetadata instead */
-export type SelectionMetadata = PickMetadata;
-
-/** @deprecated Use PickChoicesResponse instead */
-export type SelectionChoicesResponse = PickChoicesResponse;

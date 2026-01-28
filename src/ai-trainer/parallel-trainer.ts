@@ -1,6 +1,6 @@
 /**
  * Parallel trainer - runs AI training using worker threads for game simulation.
- * This is the consolidated trainer that replaces both AITrainer and the parallel path in train-ai.ts.
+ * Parallel trainer - runs AI training using worker threads for game simulation.
  */
 import type { Game } from '../engine/index.js';
 import type {
@@ -157,8 +157,8 @@ export class ParallelTrainer<G extends Game = Game> {
       // Determine MCTS iterations
       const hasObjectives = learnedObjectives.length > 0;
       const mctsIters = hasObjectives
-        ? (this.config.trainedMCTSIterations ?? this.config.mctsIterations ?? 10)
-        : (this.config.oracleMCTSIterations ?? this.config.mctsIterations ?? 50);
+        ? (this.config.trainedMCTSIterations ?? 10)
+        : (this.config.oracleMCTSIterations ?? 50);
 
       // Run parallel simulations
       const simResults = await runParallelSimulations(

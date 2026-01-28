@@ -14,8 +14,6 @@ export { default as ActionPanel } from './ActionPanel.vue';
 export type {
   GameElement,
   Pick,
-  /** @deprecated Use Pick instead */
-  Selection,
   ActionMetadata,
   Player,
 } from '../../types.js';

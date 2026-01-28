@@ -26,10 +26,10 @@
  * Use `start()`, `fill()`, `skip()`, `cancel()` for guided selection:
  * ```typescript
  * actionController.start('attack');
- * // currentSelection.value now shows first selection needed
+ * // currentPick.value now shows first pick needed
  *
  * actionController.fill('attacker', 1);
- * // currentSelection.value now shows next selection
+ * // currentPick.value now shows next pick
  *
  * actionController.fill('target', 10);
  * // If autoExecute is true, action executes automatically when ready
@@ -81,8 +81,8 @@
  *   actionMetadata,
  *   isMyTurn,
  *   playerSeat,
- *   fetchSelectionChoices: async (action, selection, player, args) => {
- *     const result = await fetch('/api/selection-choices', { ... });
+ *   fetchPickChoices: async (action, selection, player, args) => {
+ *     const result = await fetch('/api/pick-choices', { ... });
  *     return result.json();
  *   },
  *   pickStep: async (player, selection, value, action, args) => {
@@ -98,25 +98,16 @@ import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode } from '
 import { createEnrichment } from './useGameViewEnrichment.js';
 
 // Re-export all types from the types module for consumers
-// New Pick* names are primary, Selection* aliases are deprecated
 export type {
   GameViewElement,
   ElementRef,
   ChoiceWithRefs,
   ValidElement,
-  // Primary types (use these)
   PickMetadata,
   PickStepResult,
   PickChoicesResult,
   PickSnapshot,
   CollectedPick,
-  // Deprecated aliases (for backward compatibility)
-  SelectionMetadata,
-  SelectionStepResult,
-  SelectionChoicesResult,
-  SelectionSnapshot,
-  CollectedSelection,
-  // Other types
   ActionMetadata,
   FollowUpAction,
   ActionResult,
@@ -157,8 +148,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     autoFill: autoFillOption = true,
     autoExecute: autoExecuteOption = true,
     externalArgs,
-    fetchSelectionChoices,
-    // Note: pickStep is primary, selectionStep is deprecated alias
     onBeforeAutoExecute: initialBeforeAutoExecute,
   } = options;
 
@@ -289,7 +278,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         choices = repeatingState.value.currentChoices;
       }
     }
-    // Primary: Use pickSnapshots (populated by fetchChoicesForSelection)
+    // Primary: Use pickSnapshots (populated by fetchChoicesForPick)
     else if (actionSnapshot.value) {
       const snapshot = actionSnapshot.value.pickSnapshots.get(selection.name);
 
@@ -469,8 +458,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Fetch choices for a pick from the server.
    */
   async function fetchChoicesForPick(selectionName: string): Promise<void> {
-    // Support both new and deprecated option names
-    const fetchFn = options.fetchPickChoices ?? options.fetchSelectionChoices;
+    const fetchFn = options.fetchPickChoices;
     if (!fetchFn) {
       return;
     }
@@ -537,8 +525,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  // Deprecated alias
-  const fetchChoicesForSelection = fetchChoicesForPick;
 
   // === Computed ===
 
@@ -575,9 +561,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     return null;
   });
-
-  // Deprecated alias for currentPick
-  const currentSelection = currentPick;
 
   const isReady = computed((): boolean => {
     if (!currentActionMeta.value) return false;
@@ -966,7 +949,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // If we have metadata with selections, fetch choices for the first unfilled selection
     if (meta && meta.selections.length > 0) {
-      let selectionToFetch: SelectionMetadata | undefined;
+      let selectionToFetch: PickMetadata | undefined;
       for (const sel of meta.selections) {
         if (initialArgs[sel.name] === undefined) {
           selectionToFetch = sel;
@@ -1023,22 +1006,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   async function start(
     actionName: string,
-    startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> } | Record<string, unknown>
+    options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
   ): Promise<void> {
-    // Support both old signature (initialArgs object) and new signature (options with args/prefill)
-    let initialArgs: Record<string, unknown> = {};
-    let prefillArgs: Record<string, unknown> = {};
-
-    if (startOptions) {
-      if ('args' in startOptions || 'prefill' in startOptions) {
-        // New signature: { args?, prefill? }
-        initialArgs = (startOptions as { args?: Record<string, unknown> }).args ?? {};
-        prefillArgs = (startOptions as { prefill?: Record<string, unknown> }).prefill ?? {};
-      } else {
-        // Old signature: plain args object (backward compatible)
-        initialArgs = startOptions as Record<string, unknown>;
-      }
-    }
+    const initialArgs = options?.args ?? {};
+    const prefillArgs = options?.prefill ?? {};
 
     if (!availableActions.value.includes(actionName)) {
       lastError.value = `Action "${actionName}" is not available`;
@@ -1083,7 +1054,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // (where we need to fetch choices for the next unfilled selection)
     if (meta.selections.length > 0) {
       // Find first selection that needs input (wasn't pre-filled)
-      let selectionToFetch: SelectionMetadata | undefined;
+      let selectionToFetch: PickMetadata | undefined;
       for (const sel of meta.selections) {
         if (initialArgs[sel.name] === undefined) {
           selectionToFetch = sel;
@@ -1220,8 +1191,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /** Handle fill for repeating picks */
   async function handleRepeatingFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
-    // Support both new and deprecated option names
-    const stepFn = options.pickStep ?? options.selectionStep;
+    const stepFn = options.pickStep;
     if (!stepFn || !currentAction.value) {
       return { valid: false, error: 'pickStep function not provided for repeating pick' };
     }
@@ -1311,7 +1281,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Get the next selection after the given one */
-  function getNextSelection(afterSelectionName: string): SelectionMetadata | null {
+  function getNextSelection(afterSelectionName: string): PickMetadata | null {
     if (!currentActionMeta.value) return null;
 
     const selections = currentActionMeta.value.selections;
@@ -1371,13 +1341,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @example
    * ```typescript
    * // Get the display for a filled selection
-   * const merc = actionController.getCollectedSelection('merc');
+   * const merc = actionController.getCollectedPick('merc');
    * if (merc) {
    *   console.log(`Selected: ${merc.display}`); // "Selected: John Smith"
    * }
    * ```
    */
-  function getCollectedSelection(name: string): CollectedSelection | undefined {
+  function getCollectedPick(name: string): CollectedPick | undefined {
     return actionSnapshot.value?.collectedPicks.get(name);
   }
 
@@ -1388,17 +1358,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @example
    * ```typescript
    * // Build a summary of selections
-   * const selections = actionController.getCollectedSelections();
-   * const summary = selections
+   * const picks = actionController.getCollectedPicks();
+   * const summary = picks
    *   .filter(s => !s.skipped)
    *   .map(s => `${s.name}: ${s.display}`)
    *   .join(', ');
    * ```
    */
-  function getCollectedSelections(): Array<CollectedSelection & { name: string }> {
+  function getCollectedPicks(): Array<CollectedPick & { name: string }> {
     if (!actionSnapshot.value) return [];
 
-    const result: Array<CollectedSelection & { name: string }> = [];
+    const result: Array<CollectedPick & { name: string }> = [];
     for (const [name, collected] of actionSnapshot.value.collectedPicks) {
       result.push({ name, ...collected });
     }
@@ -1424,8 +1394,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // State
     currentAction,
     currentArgs,
-    currentPick,             // Primary (use this)
-    currentSelection,        // Deprecated alias
+    currentPick,
     validElements,           // Reactive! Use this in custom UIs
     isReady,
     isExecuting,
@@ -1448,13 +1417,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     getValidElements,        // Non-reactive, prefer validElements computed
     getActionMetadata,
     clearArgs,
-    fetchChoicesForPick,     // Primary (use this)
-    fetchChoicesForSelection, // Deprecated alias
+    fetchChoicesForPick,
 
     // Snapshot API (Pit of Success)
     actionSnapshot,          // Readonly access to frozen action state (for followUp metadata)
-    getCollectedSelection,
-    getCollectedSelections,
+    getCollectedPick,
+    getCollectedPicks,
 
     // Hook registration (for GameShell users who can't pass options at creation)
     registerBeforeAutoExecute,
@@ -1512,9 +1480,6 @@ export type PickStepFn = (
   actionComplete?: boolean;
 }>;
 
-/** @deprecated Use PickStepFn instead */
-export type SelectionStepFn = PickStepFn;
-
 /**
  * Inject the pick step function for repeating picks.
  * Returns undefined if not in a GameShell context (function is optional).
@@ -1534,11 +1499,6 @@ export type SelectionStepFn = PickStepFn;
  */
 export function injectPickStepFn(): PickStepFn | undefined {
   return inject<PickStepFn | undefined>('pickStepFn', undefined);
-}
-
-/** @deprecated Use injectPickStepFn instead */
-export function injectSelectionStepFn(): PickStepFn | undefined {
-  return inject<PickStepFn | undefined>('selectionStepFn', undefined);
 }
 
 /**

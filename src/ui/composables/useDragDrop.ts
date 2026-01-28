@@ -98,11 +98,6 @@ export interface DragOptions {
 }
 
 /**
- * @deprecated Use DragOptions instead
- */
-export type DragDropCondition = DragOptions;
-
-/**
  * CSS classes for draggable elements.
  * Apply with :class="drag(...).classes" or :class="dragClasses(...)"
  */

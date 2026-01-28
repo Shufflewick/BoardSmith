@@ -4,7 +4,7 @@
 
 import { Player, evaluateCondition, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
-import type { PlayerGameState, ActionMetadata, SelectionMetadata } from './types.js';
+import type { PlayerGameState, ActionMetadata, PickMetadata } from './types.js';
 
 /**
  * Generate a random 8-character game ID
@@ -71,17 +71,17 @@ export function buildActionMetadata(
       }
     }
 
-    const selectionMetas: SelectionMetadata[] = [];
+    const pickMetas: PickMetadata[] = [];
 
     for (const selection of actionDef.selections) {
-      const selMeta = buildSelectionMetadata(game, player, selection);
-      selectionMetas.push(selMeta);
+      const pickMeta = buildPickMetadata(game, player, selection);
+      pickMetas.push(pickMeta);
     }
 
     metadata[actionName] = {
       name: actionName,
       prompt: actionDef.prompt,
-      selections: selectionMetas,
+      selections: pickMetas,
     };
   }
 
@@ -109,17 +109,17 @@ export function buildSingleActionMetadata(
     return undefined;
   }
 
-  const selectionMetas: SelectionMetadata[] = [];
+  const pickMetas: PickMetadata[] = [];
 
   for (const selection of actionDef.selections) {
-    const selMeta = buildSelectionMetadata(game, player, selection, knownArgs);
-    selectionMetas.push(selMeta);
+    const pickMeta = buildPickMetadata(game, player, selection, knownArgs);
+    pickMetas.push(pickMeta);
   }
 
   return {
     name: actionName,
     prompt: actionDef.prompt,
-    selections: selectionMetas,
+    selections: pickMetas,
   };
 }
 
@@ -140,12 +140,12 @@ export function buildSingleActionMetadata(
  *
  * @param knownArgs Optional args for evaluating dynamic prompts (for followUp actions with pre-filled args)
  */
-function buildSelectionMetadata(
+function buildPickMetadata(
   game: Game,
   player: Player,
   selection: Selection,
   knownArgs?: Record<string, unknown>
-): SelectionMetadata {
+): PickMetadata {
   // Create context with known args if provided (for followUp actions)
   const ctx = { game, player, args: knownArgs ?? {} };
 
@@ -154,7 +154,7 @@ function buildSelectionMetadata(
     ? selection.prompt(ctx)
     : selection.prompt;
 
-  const base: SelectionMetadata = {
+  const base: PickMetadata = {
     name: selection.name,
     type: selection.type,
     prompt: evaluatedPrompt,

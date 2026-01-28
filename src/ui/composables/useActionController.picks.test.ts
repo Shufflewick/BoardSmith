@@ -32,8 +32,8 @@ describe('useActionController picks', () => {
   });
 
   describe('repeating selections', () => {
-    it('should call selectionStep for repeating selections', async () => {
-      const selectionStep = vi.fn().mockResolvedValue({
+    it('should call pickStep for repeating selections', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
         success: true,
         done: false,
         nextChoices: [{ value: 2, display: 'Two' }],
@@ -68,17 +68,17 @@ describe('useActionController picks', () => {
         isMyTurn,
         autoExecute: false,
         playerSeat: ref(0),
-        selectionStep,
+        pickStep,
       });
 
       await controller.start('repeatAction');
       await controller.fill('items', 1);
 
-      expect(selectionStep).toHaveBeenCalledWith(0, 'items', 1, 'repeatAction', {});
+      expect(pickStep).toHaveBeenCalledWith(0, 'items', 1, 'repeatAction', {});
     });
 
     it('should accumulate values in repeatingState', async () => {
-      const selectionStep = vi.fn().mockResolvedValue({
+      const pickStep = vi.fn().mockResolvedValue({
         success: true,
         done: false,
         nextChoices: [{ value: 2, display: 'Two' }, { value: 3, display: 'Three' }],
@@ -109,7 +109,7 @@ describe('useActionController picks', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        selectionStep,
+        pickStep,
       });
 
       await controller.start('repeatAction');
@@ -126,7 +126,7 @@ describe('useActionController picks', () => {
     });
 
     it('should clear action when actionComplete is true', async () => {
-      const selectionStep = vi.fn()
+      const pickStep = vi.fn()
         .mockResolvedValueOnce({ success: true, done: false })
         .mockResolvedValueOnce({ success: true, actionComplete: true });
 
@@ -155,7 +155,7 @@ describe('useActionController picks', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        selectionStep,
+        pickStep,
       });
 
       await controller.start('repeatAction');
@@ -171,7 +171,7 @@ describe('useActionController picks', () => {
     });
 
     it('should update currentChoices from nextChoices', async () => {
-      const selectionStep = vi.fn().mockResolvedValue({
+      const pickStep = vi.fn().mockResolvedValue({
         success: true,
         done: false,
         nextChoices: [{ value: 'new1', display: 'New 1' }, { value: 'new2', display: 'New 2' }],
@@ -202,7 +202,7 @@ describe('useActionController picks', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        selectionStep,
+        pickStep,
       });
 
       await controller.start('repeatAction');
@@ -214,8 +214,8 @@ describe('useActionController picks', () => {
       ]);
     });
 
-    it('should handle selectionStep errors', async () => {
-      const selectionStep = vi.fn().mockResolvedValue({
+    it('should handle pickStep errors', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
         success: false,
         error: 'Invalid selection',
       });
@@ -245,7 +245,7 @@ describe('useActionController picks', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        selectionStep,
+        pickStep,
       });
 
       await controller.start('repeatAction');
@@ -257,7 +257,7 @@ describe('useActionController picks', () => {
     });
 
     it('should clear accumulated for hasOnEach selections', async () => {
-      const selectionStep = vi.fn().mockResolvedValue({
+      const pickStep = vi.fn().mockResolvedValue({
         success: true,
         done: false,
       });
@@ -287,7 +287,7 @@ describe('useActionController picks', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        selectionStep,
+        pickStep,
       });
 
       await controller.start('repeatAction');

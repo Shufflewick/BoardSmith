@@ -23,22 +23,22 @@ This document defines the standard terminology used throughout BoardSmith. Use t
 | Execute | Running an action's effect after selections complete |
 | Flow | The overall structure of game progression |
 | GameShell | Top-level UI wrapper component |
-| GameTable | Custom game visualization component (replaces GameBoard in v2.3) |
+| GameTable | Custom game visualization component |
 | Grid | A Space with row/column organization |
 | Hand | A player's private Space |
 | HexGrid | A Space with hexagonal cells |
 | Owner | The player who owns an element |
 | Phase | A named section of game flow |
-| Pick | A choice required for an action (replaces "selection" in v2.3) |
+| Pick | A choice required for an action |
 | Piece | A movable element (cards, tokens) |
 | Player | A participant in the game |
 | Round | One complete cycle through all players |
 | Rules | The game logic and setup (Game class) |
-| Seat | A player's place at the table (replaces "position" in v2.3) |
+| Seat | A player's place at the table |
 | Session | A single game instance |
 | Soft Continuation | Pattern where state advances immediately, UI plays back |
 | Space | A container/location for pieces |
-| Table | The visual game area where all components are displayed (replaces GameBoard in v2.3) |
+| Table | The visual game area where all components are displayed |
 | Turn | A player's opportunity to act |
 | Zone | A logical area with visibility rules |
 
@@ -52,13 +52,13 @@ Core concepts represent the foundational building blocks of any BoardSmith game.
 
 **Definition:** The visual game area where all game components are displayed and player interactions occur. The table contains the board, player hands, and all other zones.
 
-**In Code:** `GameTable.vue` component (v2.3)
+**In Code:** `GameTable.vue` component
 **Related Terms:** Board, Zone, GameShell, Space
 **Usage:**
 - "The table shows all player hands and the central play area"
 - "Configure the table layout in GameTable.vue"
 
-**Note:** Replaces "GameBoard" in v2.3. The board is a component ON the table, not the table itself.
+**Note:** The board is a component ON the table, not the table itself.
 
 ### Board
 
@@ -330,7 +330,6 @@ Terms for player decisions and their execution.
 - "Pick a card to discard"
 - "The action requires two picks: source and destination"
 
-**Note:** Replaces "selection" in user-facing communication in v2.3.
 
 ### Choice
 
@@ -398,7 +397,7 @@ Terms for the user interface layer.
 - "Implement GameTable for custom game visuals"
 - "GameTable receives gameView, actionController, and other props"
 
-**Note:** Replaces "GameBoard" component naming in v2.3. The conceptual "table" is the play area, and "GameTable" is the component that renders it.
+**Note:** The conceptual "table" is the play area, and "GameTable" is the component that renders it.
 
 ### ActionPanel
 

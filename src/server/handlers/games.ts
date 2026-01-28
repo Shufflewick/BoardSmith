@@ -997,7 +997,7 @@ export async function handleGetSelectionChoices(
     return error('Game not found', 404);
   }
 
-  const result = session.getSelectionChoices(actionName, selectionName, playerPosition, currentArgs);
+  const result = session.getPickChoices(actionName, selectionName, playerPosition, currentArgs);
 
   if (result.success) {
     return success({

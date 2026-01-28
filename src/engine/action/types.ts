@@ -381,7 +381,7 @@ export interface ActionDefinition {
    *
    * Supports two formats:
    * - **Object (preferred):** `{ 'label': predicate }` - Enables automatic debug tracing
-   * - **Function (legacy):** `(ctx) => boolean` - No debug labels
+   * - **Function:** `(ctx) => boolean` - No debug labels
    *
    * @see ConditionConfig for details and examples
    */
@@ -604,12 +604,3 @@ export interface ActionDebugInfo {
   };
 }
 
-// ============================================
-// Deprecation Aliases (for backward compatibility)
-// ============================================
-
-/** @deprecated Use PickTrace instead */
-export type SelectionTrace = PickTrace;
-
-/** @deprecated Use PickDebugInfo instead */
-export type SelectionDebugInfo = PickDebugInfo;

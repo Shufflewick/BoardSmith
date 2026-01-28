@@ -228,7 +228,7 @@ const actionController = useActionController({
   // Share actionArgs with the controller for bidirectional sync with custom UIs
   externalArgs: actionArgs,
   // Selection choices - fetched from server on-demand for each selection
-  fetchSelectionChoices: async (actionName, selectionName, player, currentArgs) => {
+  fetchPickChoices: async (actionName, selectionName, player, currentArgs) => {
     if (!gameId.value) {
       return { success: false, error: 'No game ID' };
     }
@@ -250,7 +250,7 @@ const actionController = useActionController({
     }
   },
   // Phase 3: Repeating selections - processed step by step on server
-  selectionStep: async (player, selectionName, value, actionName, initialArgs) => {
+  pickStep: async (player, selectionName, value, actionName, initialArgs) => {
     if (!gameId.value) {
       return { success: false, error: 'No game ID' };
     }

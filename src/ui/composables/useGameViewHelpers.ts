@@ -16,7 +16,7 @@
 
 import type { GameElement, ElementMatchOptions, BaseElementAttributes } from '../types.js';
 
-// Re-export for backwards compatibility
+// Re-export types
 export type { GameElement };
 export type { ElementMatchOptions as FindElementOptions };
 

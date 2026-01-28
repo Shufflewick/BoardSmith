@@ -13,7 +13,7 @@ import type {
   NumberSelection,
   ValidationResult,
   ActionTrace,
-  SelectionTrace,
+  PickTrace,
   RepeatConfig,
   PendingActionState,
   ConditionConfig,
@@ -378,21 +378,6 @@ export class ActionExecutor {
   }
 
   /**
-   * Check if a selection should be auto-skipped.
-   * Note: Auto-skip is now handled by the UI's Auto mode toggle,
-   * so this always returns skip: false.
-   * @deprecated Auto-skip is handled by UI Auto mode
-   */
-  shouldSkip(
-    _selection: Selection,
-    _player: Player,
-    _args: Record<string, unknown>
-  ): { skip: boolean; value?: unknown } {
-    // Auto-skip is now handled by the UI's Auto mode toggle
-    return { skip: false };
-  }
-
-  /**
    * Check if two values are equal (handles objects by comparing JSON)
    */
   private valuesEqual(a: unknown, b: unknown): boolean {
@@ -414,7 +399,7 @@ export class ActionExecutor {
 
   /**
    * Try to resolve a value to a valid choice using smart matching.
-   * This provides backward compatibility for custom UIs sending element IDs
+   * Handles custom UIs sending element IDs
    * when using chooseFrom with element-based choices.
    *
    * Smart matching tries (in order):
@@ -601,7 +586,7 @@ export class ActionExecutor {
           }
           return null;
         }
-        // Handle unresolved IDs (for backwards compatibility)
+        // Handle unresolved IDs (numeric element IDs)
         if (typeof elem === 'number') {
           if (!validIds.includes(elem)) {
             const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
@@ -837,7 +822,7 @@ export class ActionExecutor {
     player: Player,
     args: Record<string, unknown>,
     index: number,
-    selectionTraces: SelectionTrace[]
+    selectionTraces: PickTrace[]
   ): boolean {
     // Base case: all selections processed
     if (index >= selections.length) {
@@ -845,7 +830,7 @@ export class ActionExecutor {
     }
 
     const selection = selections[index];
-    const selTrace: SelectionTrace = {
+    const selTrace: PickTrace = {
       name: selection.name,
       type: selection.type,
       choiceCount: 0,

@@ -85,9 +85,6 @@ export interface PickMetadata {
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
 }
 
-/** @deprecated Use PickMetadata instead */
-export type SelectionMetadata = PickMetadata;
-
 export interface ActionMetadata {
   name: string;
   prompt?: string;
@@ -129,9 +126,6 @@ export interface PickStepResult {
   actionComplete?: boolean;
 }
 
-/** @deprecated Use PickStepResult instead */
-export type SelectionStepResult = PickStepResult;
-
 /** Result from fetching pick choices */
 export interface PickChoicesResult {
   success: boolean;
@@ -140,9 +134,6 @@ export interface PickChoicesResult {
   multiSelect?: { min: number; max?: number };
   error?: string;
 }
-
-/** @deprecated Use PickChoicesResult instead */
-export type SelectionChoicesResult = PickChoicesResult;
 
 // ============================================
 // Action State Snapshot Types (Pit of Success)
@@ -161,9 +152,6 @@ export interface PickSnapshot {
   multiSelect?: { min: number; max?: number };
 }
 
-/** @deprecated Use PickSnapshot instead */
-export type SelectionSnapshot = PickSnapshot;
-
 /**
  * A collected pick value with its display text.
  * Display is stored at selection time - single source of truth.
@@ -176,9 +164,6 @@ export interface CollectedPick {
   /** Whether this was explicitly skipped */
   skipped: boolean;
 }
-
-/** @deprecated Use CollectedPick instead */
-export type CollectedSelection = CollectedPick;
 
 /**
  * Complete snapshot of an in-progress action.
@@ -235,29 +220,10 @@ export interface UseActionControllerOptions {
     currentArgs: Record<string, unknown>
   ) => Promise<PickChoicesResult>;
   /**
-   * @deprecated Use fetchPickChoices instead
-   */
-  fetchSelectionChoices?: (
-    actionName: string,
-    selectionName: string,
-    player: number,
-    currentArgs: Record<string, unknown>
-  ) => Promise<PickChoicesResult>;
-  /**
    * Function to process a repeating pick step.
    * Required for picks with `repeat` config.
    */
   pickStep?: (
-    player: number,
-    selectionName: string,
-    value: unknown,
-    actionName: string,
-    initialArgs?: Record<string, unknown>
-  ) => Promise<PickStepResult>;
-  /**
-   * @deprecated Use pickStep instead
-   */
-  selectionStep?: (
     player: number,
     selectionName: string,
     value: unknown,
@@ -312,8 +278,6 @@ export interface UseActionControllerReturn {
   currentArgs: Ref<Record<string, unknown>>;
   /** Current pick that needs user input (null if all filled or no action) */
   currentPick: ComputedRef<PickMetadata | null>;
-  /** @deprecated Use currentPick instead */
-  currentSelection: ComputedRef<PickMetadata | null>;
   /**
    * Valid elements for the current selection (reactive).
    * Use this in custom UIs instead of getValidElements() for automatic reactivity.
@@ -391,16 +355,14 @@ export interface UseActionControllerReturn {
   clearArgs: () => void;
   /** Fetch choices for a pick from server (called automatically by start/fill) */
   fetchChoicesForPick: (selectionName: string) => Promise<void>;
-  /** @deprecated Use fetchChoicesForPick instead */
-  fetchChoicesForSelection: (selectionName: string) => Promise<void>;
 
   // === Snapshot API (Pit of Success) ===
   /** Frozen action state - contains metadata for followUp actions not in availableActions */
   actionSnapshot: Ref<ActionStateSnapshot | null>;
-  /** Get a collected selection by name (value + display) */
-  getCollectedSelection: (name: string) => CollectedSelection | undefined;
-  /** Get all collected selections with their names */
-  getCollectedSelections: () => Array<CollectedSelection & { name: string }>;
+  /** Get a collected pick by name (value + display) */
+  getCollectedPick: (name: string) => CollectedPick | undefined;
+  /** Get all collected picks with their names */
+  getCollectedPicks: () => Array<CollectedPick & { name: string }>;
 
   // === Hook Registration (for GameShell users) ===
   /**

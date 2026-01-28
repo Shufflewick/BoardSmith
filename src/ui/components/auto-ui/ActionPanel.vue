@@ -51,11 +51,9 @@ function clearActionState(args: Record<string, unknown>): void {
   clearReactiveObject(args);
 }
 
-// Re-export types for backwards compatibility
+// Re-export types
 export type { ChoiceWithRefs, ValidElement, ElementRef };
-/** @deprecated Use PickMetadata instead */
-export type Selection = PickMetadata;
-/** Primary type - a pick/choice the player must make */
+/** A pick/choice the player must make */
 export type Pick = PickMetadata;
 export type ActionMetadata = ControllerActionMetadata;
 
@@ -180,8 +178,7 @@ const currentActionMeta = computed(() => {
 });
 
 // Current pick - delegates to controller (required)
-// Note: currentSelection alias used for backward compatibility in template
-const currentSelection = computed(() => actionController.currentPick.value);
+const currentPick = computed(() => actionController.currentPick.value);
 
 // Note: Auto-fill is handled by the controller's internal watch
 
@@ -191,7 +188,7 @@ const currentSelection = computed(() => actionController.currentPick.value);
  * based on the current value of the dependent selection.
  */
 const currentMultiSelect = computed(() => {
-  const sel = currentSelection.value;
+  const sel = currentPick.value;
   if (!sel) return undefined;
 
   // If selection has dependsOn and multiSelectByDependentValue, resolve it
@@ -225,7 +222,7 @@ const selectedElementId = computed(() => {
 // (multiSelect shows its state via checkboxes, not chips)
 const displayableArgs = computed(() => {
   const result: Record<string, unknown> = {};
-  const currentSelName = currentSelection.value?.name;
+  const currentSelName = currentPick.value?.name;
   const isMultiSelectActive = currentMultiSelect.value !== undefined;
 
   for (const [key, value] of Object.entries(currentArgs)) {
@@ -249,7 +246,7 @@ const displayableArgs = computed(() => {
 // Filter choices based on filterBy, dependsOn, and previous selections
 // Delegates to controller for base choices, then applies ActionPanel-specific filtering
 const filteredChoices = computed(() => {
-  if (!currentSelection.value) return [];
+  if (!currentPick.value) return [];
 
   // Get base choices from controller (handles repeating, dependsOn, filterBy)
   let choices: ChoiceWithRefs[] = actionController.getCurrentChoices() as ChoiceWithRefs[];
@@ -259,7 +256,7 @@ const filteredChoices = computed(() => {
   if (currentActionMeta.value) {
     const alreadySelectedValues = new Set<unknown>();
     for (const sel of currentActionMeta.value.selections) {
-      if (sel.type === 'choice' && sel.name !== currentSelection.value.name) {
+      if (sel.type === 'choice' && sel.name !== currentPick.value.name) {
         const selectedValue = currentArgs[sel.name];
         if (selectedValue !== undefined) {
           alreadySelectedValues.add(selectedValue);
@@ -279,17 +276,17 @@ const filteredChoices = computed(() => {
 // This handles the case where an action has multiple element selections and the filter
 // depends on previous selections (e.g., "select second die, excluding the first")
 const filteredValidElements = computed(() => {
-  if (!currentSelection.value || (currentSelection.value.type !== 'element' && currentSelection.value.type !== 'elements')) return [];
+  if (!currentPick.value || (currentPick.value.type !== 'element' && currentPick.value.type !== 'elements')) return [];
 
   // Get valid elements from controller cache
-  const validElements = actionController.getValidElements(currentSelection.value);
+  const validElements = actionController.getValidElements(currentPick.value);
   if (validElements.length === 0) return [];
 
   // Get IDs of elements already selected in previous element/elements selections
   const alreadySelectedIds = new Set<number>();
   if (currentActionMeta.value) {
     for (const sel of currentActionMeta.value.selections) {
-      if ((sel.type === 'element' || sel.type === 'elements') && sel.name !== currentSelection.value.name) {
+      if ((sel.type === 'element' || sel.type === 'elements') && sel.name !== currentPick.value.name) {
         const selectedValue = currentArgs[sel.name];
         if (typeof selectedValue === 'number') {
           alreadySelectedIds.add(selectedValue);
@@ -313,9 +310,9 @@ const filteredValidElements = computed(() => {
 
 // Skip an optional selection
 function skipOptionalSelection() {
-  if (!currentSelection.value || !currentSelection.value.optional) return;
+  if (!currentPick.value || !currentPick.value.optional) return;
   // Mark as explicitly skipped by setting to null (not undefined)
-  currentArgs[currentSelection.value.name] = null;
+  currentArgs[currentPick.value.name] = null;
 
   // Auto-execute if action is now complete (all required selections filled)
   if (currentAction.value && isActionReady.value) {
@@ -325,46 +322,46 @@ function skipOptionalSelection() {
 
 // Submit number input value
 function submitNumberInput() {
-  if (!currentSelection.value || currentSelection.value.type !== 'number') return;
+  if (!currentPick.value || currentPick.value.type !== 'number') return;
   if (numberInputValue.value === null) return;
 
   // Validate against min/max
   const val = numberInputValue.value;
-  const min = currentSelection.value.min;
-  const max = currentSelection.value.max;
+  const min = currentPick.value.min;
+  const max = currentPick.value.max;
   if (min !== undefined && val < min) return;
   if (max !== undefined && val > max) return;
 
-  setSelectionValue(currentSelection.value.name, val);
+  setSelectionValue(currentPick.value.name, val);
   numberInputValue.value = null;
 }
 
 // Submit text input value
 function submitTextInput() {
-  if (!currentSelection.value || currentSelection.value.type !== 'text') return;
+  if (!currentPick.value || currentPick.value.type !== 'text') return;
   if (!textInputValue.value) return;
 
   // Validate against min/max length
   const val = textInputValue.value;
-  const minLen = currentSelection.value.minLength;
-  const maxLen = currentSelection.value.maxLength;
+  const minLen = currentPick.value.minLength;
+  const maxLen = currentPick.value.maxLength;
   if (minLen !== undefined && val.length < minLen) return;
   if (maxLen !== undefined && val.length > maxLen) return;
 
-  setSelectionValue(currentSelection.value.name, val);
+  setSelectionValue(currentPick.value.name, val);
   textInputValue.value = '';
 }
 
 // Select an element (from element selection buttons)
 function selectElement(elementId: number, ref?: ElementRef) {
-  if (!currentSelection.value || (currentSelection.value.type !== 'element' && currentSelection.value.type !== 'elements')) return;
+  if (!currentPick.value || (currentPick.value.type !== 'element' && currentPick.value.type !== 'elements')) return;
 
   // Get the selection name BEFORE calling setSelectionValue
-  // (because setSelectionValue will change currentSelection)
-  const selectionName = currentSelection.value.name;
+  // (because setSelectionValue will change currentPick)
+  const selectionName = currentPick.value.name;
 
   // Look up display from validElements
-  const validElem = currentSelection.value.validElements?.find((e: ValidElement) => e.id === elementId);
+  const validElem = currentPick.value.validElements?.find((e: ValidElement) => e.id === elementId);
   const display = validElem?.display || String(elementId);
 
   // Use setSelectionValue which handles auto-execute
@@ -417,7 +414,7 @@ function handleElementLeave() {
 // PIT OF SUCCESS: Uses controller's snapshot as single source of truth
 function getSelectionDisplay(selectionName: string, value: unknown): string {
   // Check controller's snapshot (single source of truth)
-  const collected = actionController.getCollectedSelection(selectionName);
+  const collected = actionController.getCollectedPick(selectionName);
   if (collected && !collected.skipped) {
     // Check if this is the same value (handles array values too)
     const sameValue = JSON.stringify(collected.value) === JSON.stringify(value);
@@ -443,11 +440,11 @@ function getAccumulatedDisplay(accumulated: unknown): string {
 
   // Legacy fallback: accumulated item is just a value
   const value = accumulated;
-  if (!currentSelection.value) return getDisplayLabel(value);
+  if (!currentPick.value) return getDisplayLabel(value);
 
   // For choice selections, look up display in choices
-  if (currentSelection.value.type === 'choice') {
-    const choices = repeatingState.value?.currentChoices || currentSelection.value.choices || [];
+  if (currentPick.value.type === 'choice') {
+    const choices = repeatingState.value?.currentChoices || currentPick.value.choices || [];
     const choice = choices.find((c: ChoiceWithRefs) => c.value === value);
     if (choice) return choice.display;
   }
@@ -477,8 +474,8 @@ function clearSelection(selectionName: string) {
 const isActionReady = computed(() => {
   if (!currentActionMeta.value) return false;
   // Ready when all required selections have values AND no selection needs input
-  // (currentSelection is null means all selections are filled or skipped)
-  return currentSelection.value === null;
+  // (currentPick is null means all selections are filled or skipped)
+  return currentPick.value === null;
 });
 
 // Note: Auto-execute when action becomes ready is handled by the controller
@@ -568,7 +565,7 @@ watch(isExecuting, (executing, wasExecuting) => {
 // Watch for current selection changes - update board interaction for element selections
 // and choice selections with board refs
 // Also watch filteredValidElements to update when selected elements change
-watch([currentSelection, filteredValidElements], ([selection]) => {
+watch([currentPick, filteredValidElements], ([selection]) => {
   if (!selection || !boardInteraction) {
     boardInteraction?.setValidElements([], () => {});
     boardInteraction?.setDraggableSelectedElement(null);
@@ -678,7 +675,7 @@ watch(currentAction, (action) => {
     // Set callback that allows custom UI to trigger choice selection
     boardInteraction.setChoiceSelectCallback((selectionName: string, value: unknown) => {
       // Verify we're on the right selection
-      if (currentSelection.value?.name === selectionName) {
+      if (currentPick.value?.name === selectionName) {
         setSelectionValue(selectionName, value);
       }
     });
@@ -708,7 +705,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
   if (!selected) return;
 
   // If we're configuring an action with an element/elements selection, check if triggerElementSelect will handle it
-  if (currentSelection.value && (currentSelection.value.type === 'element' || currentSelection.value.type === 'elements')) {
+  if (currentPick.value && (currentPick.value.type === 'element' || currentPick.value.type === 'elements')) {
     // If onElementSelect callback is set, triggerElementSelect will handle this selection
     // Don't duplicate by also calling setSelectionValue here
     if (boardInteraction?.onElementSelect) {
@@ -731,7 +728,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
     if (validElem) {
       // Use setSelectionValue which handles auto-execute
-      setSelectionValue(currentSelection.value.name, validElem.id);
+      setSelectionValue(currentPick.value.name, validElem.id);
     }
     return;
   }
@@ -978,8 +975,8 @@ Available actions: ${props.availableActions?.join(', ') || 'none'}`
 
 // Watch for external element selection prop
 watch(() => props.selectedElementId, (newId) => {
-  if (newId !== undefined && (currentSelection.value?.type === 'element' || currentSelection.value?.type === 'elements')) {
-    currentArgs[currentSelection.value.name] = newId;
+  if (newId !== undefined && (currentPick.value?.type === 'element' || currentPick.value?.type === 'elements')) {
+    currentArgs[currentPick.value.name] = newId;
     // Note: Display is stored via controller's fill() - direct arg setting loses display info
   }
 });
@@ -1052,7 +1049,7 @@ function isMultiSelectValueSelected(value: unknown): boolean {
  */
 function toggleMultiSelectValue(selectionName: string, value: unknown, display?: string) {
   const multiSelect = currentMultiSelect.value;
-  if (!currentSelection.value || !multiSelect) return;
+  if (!currentPick.value || !multiSelect) return;
 
   // Initialize state if needed
   if (!multiSelectState.value || multiSelectState.value.selectionName !== selectionName) {
@@ -1127,13 +1124,13 @@ function updateMultiSelectBoardHighlights() {
 // Watch for external changes from board (via preview key) when in multiSelect mode
 watch(
   () => {
-    const sel = currentSelection.value;
+    const sel = currentPick.value;
     const multiSelect = currentMultiSelect.value;
     if (!sel || !multiSelect) return undefined;
     return currentArgs[`_preview_${sel.name}`];
   },
   (previewValue) => {
-    const sel = currentSelection.value;
+    const sel = currentPick.value;
     const multiSelect = currentMultiSelect.value;
     if (!sel || !multiSelect || !Array.isArray(previewValue)) return;
 
@@ -1164,9 +1161,9 @@ watch(
  * Confirm multi-select and move to next selection or execute action
  */
 function confirmMultiSelect() {
-  if (!currentSelection.value) return;
+  if (!currentPick.value) return;
 
-  const selectionName = currentSelection.value.name;
+  const selectionName = currentPick.value.name;
   const values = multiSelectState.value?.selectedValues ? [...multiSelectState.value.selectedValues] : [];
 
   // Set the selection value as an array
@@ -1268,7 +1265,7 @@ function cancelAction() {
  * - Element selection emits
  */
 async function setSelectionValue(name: string, value: unknown, display?: string) {
-  const selection = currentSelection.value;
+  const selection = currentPick.value;
 
   // Delegate to controller for core fill logic
   // Controller stores display in collectedSelections automatically
@@ -1433,12 +1430,12 @@ function clearBoardSelection() {
       </div>
 
       <!-- Current selection input -->
-      <div v-if="currentSelection" class="selection-input">
+      <div v-if="currentPick" class="selection-input">
         <!-- Element selection with validElements (shows buttons for each valid element) -->
-        <template v-if="currentSelection.type === 'element' && filteredValidElements.length">
+        <template v-if="currentPick.type === 'element' && filteredValidElements.length">
           <div class="selection-prompt">
-            {{ currentSelection.prompt || `Select ${currentSelection.elementClassName || 'element'}` }}
-            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
+            {{ currentPick.prompt || `Select ${currentPick.elementClassName || 'element'}` }}
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons element-selection">
             <button
@@ -1452,19 +1449,19 @@ function clearBoardSelection() {
               {{ element.display || element.id }}
             </button>
             <button
-              v-if="currentSelection.optional"
+              v-if="currentPick.optional"
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentSelection.optional === 'string' ? currentSelection.optional : 'Skip' }}
+              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
             </button>
           </div>
         </template>
 
         <!-- Elements selection with multiSelect (checkboxes for multiple element selection) -->
-        <template v-else-if="currentSelection.type === 'elements' && currentMultiSelect && filteredValidElements.length">
+        <template v-else-if="currentPick.type === 'elements' && currentMultiSelect && filteredValidElements.length">
           <div class="selection-prompt">
-            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
           </div>
           <div class="choice-buttons multi-select-choices">
@@ -1479,7 +1476,7 @@ function clearBoardSelection() {
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(element.id)"
-                @change="toggleMultiSelectValue(currentSelection.name, element.id, element.display)"
+                @change="toggleMultiSelectValue(currentPick.name, element.id, element.display)"
                 :disabled="!isMultiSelectValueSelected(element.id) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max"
               />
               <span class="checkbox-label">{{ element.display || element.id }}</span>
@@ -1496,10 +1493,10 @@ function clearBoardSelection() {
         </template>
 
         <!-- Elements selection without multiSelect (buttons for single element selection) -->
-        <template v-else-if="currentSelection.type === 'elements' && filteredValidElements.length">
+        <template v-else-if="currentPick.type === 'elements' && filteredValidElements.length">
           <div class="selection-prompt">
-            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
-            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
+            {{ currentPick.prompt || `Select ${currentPick.name}` }}
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons element-selection">
             <button
@@ -1513,19 +1510,19 @@ function clearBoardSelection() {
               {{ element.display || element.id }}
             </button>
             <button
-              v-if="currentSelection.optional"
+              v-if="currentPick.optional"
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentSelection.optional === 'string' ? currentSelection.optional : 'Skip' }}
+              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
             </button>
           </div>
         </template>
 
         <!-- Multi-select choice selection (checkboxes with Done button) - MUST come before dependsOn template -->
-        <template v-else-if="currentSelection.type === 'choice' && currentMultiSelect && filteredChoices.length">
+        <template v-else-if="currentPick.type === 'choice' && currentMultiSelect && filteredChoices.length">
           <div class="selection-prompt">
-            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
           </div>
           <div class="choice-buttons multi-select-choices">
@@ -1540,7 +1537,7 @@ function clearBoardSelection() {
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
-                @change="toggleMultiSelectValue(currentSelection.name, choice.value, choice.display)"
+                @change="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
                 :disabled="!isMultiSelectValueSelected(choice.value) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max"
               />
               <span class="checkbox-label">{{ choice.display }}</span>
@@ -1558,16 +1555,16 @@ function clearBoardSelection() {
 
         <!-- Choice selection with filterBy or dependsOn (shows filtered choices, executes immediately) -->
         <!-- This comes AFTER multi-select so multiSelect+dependsOn uses multi-select template above -->
-        <template v-else-if="currentSelection.type === 'choice' && (currentSelection.filterBy || currentSelection.dependsOn)">
+        <template v-else-if="currentPick.type === 'choice' && (currentPick.filterBy || currentPick.dependsOn)">
           <div class="selection-prompt">
-            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
+            {{ currentPick.prompt || `Select ${currentPick.name}` }}
           </div>
           <div class="choice-buttons">
             <button
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn filtered-choice-btn"
-              @click="executeChoice(currentSelection.name, choice)"
+              @click="executeChoice(currentPick.name, choice)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1580,59 +1577,59 @@ function clearBoardSelection() {
         </template>
 
         <!-- Regular choice selection -->
-        <template v-else-if="currentSelection.type === 'choice' && filteredChoices.length">
+        <template v-else-if="currentPick.type === 'choice' && filteredChoices.length">
           <div class="selection-prompt">
-            {{ currentSelection.prompt || `Select ${currentSelection.name}` }}
-            <span v-if="currentSelection.optional" class="optional-label">(optional)</span>
+            {{ currentPick.prompt || `Select ${currentPick.name}` }}
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons">
             <button
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn"
-              @click="setSelectionValue(currentSelection.name, choice.value, choice.display)"
+              @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
               {{ choice.display }}
             </button>
             <button
-              v-if="currentSelection.optional"
+              v-if="currentPick.optional"
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentSelection.optional === 'string' ? currentSelection.optional : 'Skip' }}
+              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
             </button>
-            <span v-if="filteredChoices.length === 0 && !currentSelection.optional" class="no-choices">
+            <span v-if="filteredChoices.length === 0 && !currentPick.optional" class="no-choices">
               No options available
             </span>
           </div>
         </template>
 
         <!-- Loading choices indicator for element selections -->
-        <div v-else-if="(currentSelection.type === 'element' || currentSelection.type === 'elements') && isLoadingChoices" class="loading-choices">
+        <div v-else-if="(currentPick.type === 'element' || currentPick.type === 'elements') && isLoadingChoices" class="loading-choices">
           Loading choices...
         </div>
 
         <!-- Element selection (fallback when no validElements and not loading) -->
-        <div v-else-if="currentSelection.type === 'element' || currentSelection.type === 'elements'" class="element-instruction">
+        <div v-else-if="currentPick.type === 'element' || currentPick.type === 'elements'" class="element-instruction">
           <span class="instruction-text">
-            Click on a {{ currentSelection.elementClassName || 'element' }} to select it
+            Click on a {{ currentPick.elementClassName || 'element' }} to select it
           </span>
         </div>
 
         <!-- Number input -->
-        <div v-else-if="currentSelection.type === 'number'" class="number-input">
-          <span v-if="currentSelection.min !== undefined || currentSelection.max !== undefined" class="input-hint">
-            ({{ currentSelection.min ?? '?' }}-{{ currentSelection.max ?? '?' }}{{ currentSelection.integer ? ', integer' : '' }})
+        <div v-else-if="currentPick.type === 'number'" class="number-input">
+          <span v-if="currentPick.min !== undefined || currentPick.max !== undefined" class="input-hint">
+            ({{ currentPick.min ?? '?' }}-{{ currentPick.max ?? '?' }}{{ currentPick.integer ? ', integer' : '' }})
           </span>
           <div class="input-row">
             <input
               type="number"
               v-model.number="numberInputValue"
-              :min="currentSelection.min"
-              :max="currentSelection.max"
-              :step="currentSelection.integer ? 1 : 'any'"
+              :min="currentPick.min"
+              :max="currentPick.max"
+              :step="currentPick.integer ? 1 : 'any'"
               @keyup.enter="submitNumberInput"
             />
             <DoneButton @click="submitNumberInput" />
@@ -1640,17 +1637,17 @@ function clearBoardSelection() {
         </div>
 
         <!-- Text input -->
-        <div v-else-if="currentSelection.type === 'text'" class="text-input">
-          <span v-if="currentSelection.minLength !== undefined || currentSelection.maxLength !== undefined" class="input-hint">
-            ({{ currentSelection.minLength ?? '?' }}-{{ currentSelection.maxLength ?? '?' }} chars)
+        <div v-else-if="currentPick.type === 'text'" class="text-input">
+          <span v-if="currentPick.minLength !== undefined || currentPick.maxLength !== undefined" class="input-hint">
+            ({{ currentPick.minLength ?? '?' }}-{{ currentPick.maxLength ?? '?' }} chars)
           </span>
           <div class="input-row">
             <input
               type="text"
               v-model="textInputValue"
-              :minlength="currentSelection.minLength"
-              :maxlength="currentSelection.maxLength"
-              :pattern="currentSelection.pattern"
+              :minlength="currentPick.minLength"
+              :maxlength="currentPick.maxLength"
+              :pattern="currentPick.pattern"
               @keyup.enter="submitTextInput"
             />
             <DoneButton @click="submitTextInput" />

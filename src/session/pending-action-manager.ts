@@ -47,9 +47,6 @@ export interface PickStepResult {
   state?: PlayerGameState;
 }
 
-/** @deprecated Use PickStepResult instead */
-export type SelectionStepResult = PickStepResult;
-
 /**
  * Manages pending actions for players.
  *

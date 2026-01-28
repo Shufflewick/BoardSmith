@@ -9,7 +9,6 @@ import { publishCommand } from './commands/publish.js';
 import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
-import { trainAICommand } from './commands/train-ai.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
 
@@ -97,22 +96,6 @@ program
   .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
   .option('-v, --verbose', 'Show detailed progress')
   .action(evolveAIWeightsCommand);
-
-// AI Training (deprecated - kept for backwards compatibility)
-program
-  .command('train-ai')
-  .description('[DEPRECATED] Use /generate-ai for new AI, evolve-ai-weights to optimize')
-  .option('-g, --games <count>', 'Games per iteration', '200')
-  .option('-i, --iterations <count>', 'Training iterations', '5')
-  .option('-o, --output <path>', 'Output path for ai.ts')
-  .option('-m, --mcts <iterations>', 'MCTS iterations per move (higher = smarter but slower)', '15')
-  .option('--fresh', 'Ignore existing ai.ts and start fresh')
-  .option('-v, --verbose', 'Show detailed progress')
-  .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
-  .option('--evolve', 'Enable evolutionary weight optimization after correlation training')
-  .option('--generations <count>', 'Evolution generations (default: 5)')
-  .option('--population <count>', 'Evolution population size (default: 20)')
-  .action(trainAICommand);
 
 // Publishing
 program

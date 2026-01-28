@@ -229,8 +229,6 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 - `name`: Display name
 - `game`: Reference to the game instance
 
-> **Note**: The constructor parameter is still `position` for backward compatibility, but access the property via `player.seat`.
-
 ### Accessing Players
 
 ```typescript

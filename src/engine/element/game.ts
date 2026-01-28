@@ -5,7 +5,7 @@ import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
-import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, SelectionDebugInfo } from '../action/types.js';
+import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 
@@ -1355,7 +1355,7 @@ export class Game<
    * Convert an ActionTrace to human-readable ActionDebugInfo
    */
   private _formatActionDebugInfo(trace: ActionTrace): ActionDebugInfo {
-    const selections: SelectionDebugInfo[] = trace.selections.map(sel => {
+    const selections: PickDebugInfo[] = trace.selections.map(sel => {
       const passed = !!sel.optional || sel.choiceCount !== 0;
       let note: string | undefined;
 

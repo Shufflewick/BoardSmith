@@ -57,27 +57,6 @@ export const STANDARD_PLAYER_COLORS: readonly ColorChoice[] = [
 ] as const;
 
 /**
- * Default colors for 2-player games (Red vs Blue)
- *
- * @deprecated Use `player.color` instead. Colors are now auto-assigned by the engine
- * based on the game's color palette (DEFAULT_COLOR_PALETTE in engine). Remove this
- * import and access colors via:
- * - In rules: `player.color`
- * - In UI: `gameView.players[seatIndex].color`
- *
- * @example Migration
- * ```typescript
- * // Before
- * import { DEFAULT_PLAYER_COLORS } from 'boardsmith/session';
- * const color = DEFAULT_PLAYER_COLORS[player.seat - 1];
- *
- * // After
- * const color = player.color;
- * ```
- */
-export const DEFAULT_PLAYER_COLORS = ['#e74c3c', '#3498db'] as const;
-
-/**
  * Player option definition for color picker
  */
 export interface ColorOptionDefinition {

@@ -85,13 +85,9 @@ export interface BoardInteractionState {
 
   /** Index of the current pick step (0-based) */
   currentPickIndex: number;
-  /** @deprecated Use currentPickIndex instead */
-  currentSelectionIndex: number;
 
   /** Name of the current pick being filled */
   currentPickName: string | null;
-  /** @deprecated Use currentPickName instead */
-  currentSelectionName: string | null;
 }
 
 /**
@@ -162,8 +158,6 @@ export interface BoardInteractionActions {
 
   /** Update the current pick step */
   setCurrentPick: (pickIndex: number, pickName: string | null) => void;
-  /** @deprecated Use setCurrentPick instead */
-  setCurrentSelection: (selectionIndex: number, selectionName: string | null) => void;
 
   /** Set the callback for choice selection (called by ActionPanel) */
   setChoiceSelectCallback: (callback: ((selectionName: string, value: unknown) => void) | null) => void;
@@ -195,9 +189,7 @@ export function createBoardInteraction(): BoardInteraction {
     // Action state
     currentAction: null,
     currentPickIndex: 0,
-    currentSelectionIndex: 0,  // Deprecated alias, kept in sync
     currentPickName: null,
-    currentSelectionName: null,  // Deprecated alias, kept in sync
   });
 
   // Callback for when element is dropped on valid target
@@ -244,9 +236,7 @@ export function createBoardInteraction(): BoardInteraction {
       state.hoveredDropTarget = null;
       state.currentAction = null;
       state.currentPickIndex = 0;
-      state.currentSelectionIndex = 0;  // Deprecated alias
       state.currentPickName = null;
-      state.currentSelectionName = null;  // Deprecated alias
       onDropCallback = null;
     },
 
@@ -350,21 +340,12 @@ export function createBoardInteraction(): BoardInteraction {
     setCurrentAction(actionName, pickIndex = 0, pickName = null) {
       state.currentAction = actionName;
       state.currentPickIndex = pickIndex;
-      state.currentSelectionIndex = pickIndex;  // Deprecated alias
       state.currentPickName = pickName;
-      state.currentSelectionName = pickName;  // Deprecated alias
     },
 
     setCurrentPick(pickIndex, pickName) {
       state.currentPickIndex = pickIndex;
-      state.currentSelectionIndex = pickIndex;  // Deprecated alias
       state.currentPickName = pickName;
-      state.currentSelectionName = pickName;  // Deprecated alias
-    },
-
-    // Deprecated alias for setCurrentPick
-    setCurrentSelection(selectionIndex, selectionName) {
-      this.setCurrentPick(selectionIndex, selectionName);
     },
 
     setChoiceSelectCallback(callback) {

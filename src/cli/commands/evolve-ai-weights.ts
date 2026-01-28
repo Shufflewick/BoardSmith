@@ -27,7 +27,7 @@ export async function evolveAIWeightsCommand(options: EvolveAIWeightsOptions): P
   const config = JSON.parse(readFileSync(configPath, 'utf-8'));
   const gameName = config.displayName || config.name;
 
-  // Use paths.rules from config, fallback to src/rules for backwards compatibility
+  // Use paths.rules from config, fallback to src/rules
   const rulesPath = config.paths?.rules || 'src/rules';
   const aiPath = join(cwd, rulesPath, 'ai.ts');
 

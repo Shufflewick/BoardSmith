@@ -539,8 +539,6 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 
 > **Note**: Simple properties (numbers, strings, plain objects) are auto-serialized. Only override `toJSON()` when using classes with their own `toJSON()` methods (like `AbilityManager`).
 
-> **Note**: The constructor parameter is `position` for backward compatibility, but after `super()` completes, access the property via `this.seat` (or `player.seat` from outside the class).
-
 ### 3. Win Condition Checking
 
 ```typescript

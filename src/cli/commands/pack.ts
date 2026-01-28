@@ -42,14 +42,10 @@ function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
 
 /**
  * Check if a package name is a BoardSmith package.
- * Includes the new 'boardsmith' single package name for backwards compatibility.
  */
 function isBoardSmithPackage(name: string | undefined): boolean {
   if (!name) return false;
-  // New single package name after monorepo collapse
-  if (name === 'boardsmith') return true;
-  // Legacy @boardsmith/* scoped packages (for backwards compatibility)
-  return name.startsWith('@boardsmith/') || name === 'eslint-plugin-boardsmith';
+  return name === 'boardsmith' || name === 'eslint-plugin-boardsmith';
 }
 
 /**

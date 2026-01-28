@@ -47,7 +47,7 @@ import { computed, type ComputedRef } from 'vue';
 import { findElement } from './useGameViewHelpers.js';
 import type { GameElement, BaseElementAttributes } from '../types.js';
 
-// Re-export GameElement for backwards compatibility
+// Re-export GameElement
 export type { GameElement };
 
 export type HexOrientation = 'pointy' | 'flat';

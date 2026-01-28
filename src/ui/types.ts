@@ -146,9 +146,6 @@ export interface Pick {
   elementClassName?: string;
 }
 
-/** @deprecated Use Pick instead */
-export type Selection = Pick;
-
 /**
  * Metadata for an available action.
  */

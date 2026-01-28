@@ -327,11 +327,6 @@ export interface TrainingConfig {
    * @default 100
    */
   benchmarkMCTSIterations?: number;
-  /**
-   * @deprecated Use oracleMCTSIterations instead. Kept for backwards compatibility.
-   */
-  mctsIterations?: number;
-
   // ─────────────────────────────────────────────────────────────────────────────
   // Evolution Settings (µ+λ evolutionary strategy for weight optimization)
   // ─────────────────────────────────────────────────────────────────────────────

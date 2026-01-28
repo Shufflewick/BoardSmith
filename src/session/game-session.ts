@@ -181,7 +181,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#displayName = displayName;
     this.#lobbyManager = lobbyManager;
 
-    // Initialize handlers - create them if not provided (for backward compatibility during construction)
+    // Initialize handlers - create them if not provided
     // The factory methods will create and pass these in
     this.#pickHandler = pickHandler ?? new PickHandler(runner, storedState.playerCount);
     this.#pendingActionManager = pendingActionManager ?? new PendingActionManager(
@@ -732,7 +732,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       } else if (result.error?.includes('not found')) {
         errorCode = ErrorCode.ACTION_NOT_FOUND;
       } else if (result.error?.includes('Invalid selection')) {
-        errorCode = ErrorCode.INVALID_SELECTION;
+        errorCode = ErrorCode.INVALID_PICK;
       }
       return { success: false, error: result.error, errorCode };
     }
@@ -1250,18 +1250,6 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     currentArgs: Record<string, unknown> = {}
   ): PickChoicesResponse {
     return this.#pickHandler.getPickChoices(actionName, selectionName, playerPosition, currentArgs);
-  }
-
-  /**
-   * @deprecated Use getPickChoices instead
-   */
-  getSelectionChoices(
-    actionName: string,
-    selectionName: string,
-    playerPosition: number,
-    currentArgs: Record<string, unknown> = {}
-  ): PickChoicesResponse {
-    return this.getPickChoices(actionName, selectionName, playerPosition, currentArgs);
   }
 
   // ============================================

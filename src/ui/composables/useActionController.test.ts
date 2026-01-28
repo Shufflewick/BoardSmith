@@ -17,7 +17,7 @@ import { ref, reactive, nextTick } from 'vue';
 import {
   useActionController,
   injectActionController,
-  injectSelectionStepFn,
+  injectPickStepFn,
   injectBoardInteraction,
   ACTION_CONTROLLER_KEY,
   type ActionMetadata,
@@ -48,7 +48,7 @@ describe('useActionController', () => {
 
       expect(controller.currentAction.value).toBe(null);
       expect(controller.currentArgs.value).toEqual({});
-      expect(controller.currentSelection.value).toBe(null);
+      expect(controller.currentPick.value).toBe(null);
       expect(controller.isReady.value).toBe(false);
       expect(controller.isExecuting.value).toBe(false);
       expect(controller.lastError.value).toBe(null);
@@ -222,7 +222,7 @@ describe('useActionController', () => {
       controller.start('playCard');
 
       expect(controller.currentAction.value).toBe('playCard');
-      expect(controller.currentSelection.value?.name).toBe('card');
+      expect(controller.currentPick.value?.name).toBe('card');
       expect(controller.isReady.value).toBe(false);
     });
 
@@ -340,15 +340,15 @@ describe('useActionController', () => {
       await controller.start('attack');
 
       // First selection
-      expect(controller.currentSelection.value?.name).toBe('attacker');
+      expect(controller.currentPick.value?.name).toBe('attacker');
       await controller.fill('attacker', 1);
 
       // Second selection
-      expect(controller.currentSelection.value?.name).toBe('target');
+      expect(controller.currentPick.value?.name).toBe('target');
       await controller.fill('target', 10);
 
       // All filled
-      expect(controller.currentSelection.value).toBe(null);
+      expect(controller.currentPick.value).toBe(null);
       expect(controller.isReady.value).toBe(true);
     });
   });
@@ -405,7 +405,7 @@ describe('useActionController', () => {
       // Should NOT auto-fill - user must choose or skip
       expect(controller.currentArgs.value.item).toBeUndefined();
       // Should show the selection with optional skip button
-      expect(controller.currentSelection.value?.optional).toBe('Done equipping');
+      expect(controller.currentPick.value?.optional).toBe('Done equipping');
     });
 
     it('should not auto-fill optional second selection even when first auto-fills', async () => {
@@ -428,8 +428,8 @@ describe('useActionController', () => {
       // Second selection should NOT auto-fill because it's optional
       expect(controller.currentArgs.value.second).toBeUndefined();
       // Should show the optional selection
-      expect(controller.currentSelection.value?.name).toBe('second');
-      expect(controller.currentSelection.value?.optional).toBe(true);
+      expect(controller.currentPick.value?.name).toBe('second');
+      expect(controller.currentPick.value?.optional).toBe(true);
     });
   });
 
@@ -673,13 +673,13 @@ describe('useActionController', () => {
 
     it('should return undefined for optional injections outside context', () => {
       // These return undefined instead of throwing (optional)
-      expect(injectSelectionStepFn()).toBeUndefined();
+      expect(injectPickStepFn()).toBeUndefined();
       expect(injectBoardInteraction()).toBeUndefined();
     });
 
     it('should export injection helper functions', () => {
       // Verify the functions are exported and callable
-      expect(typeof injectSelectionStepFn).toBe('function');
+      expect(typeof injectPickStepFn).toBe('function');
       expect(typeof injectBoardInteraction).toBe('function');
     });
   });
@@ -844,11 +844,11 @@ describe('useActionController', () => {
         autoExecute: false,
       });
 
-      await controller.start('attack', { attacker: 1 });
+      await controller.start('attack', { args: { attacker: 1 } });
 
       expect(controller.currentArgs.value.attacker).toBe(1);
       // Should skip to second selection since first is pre-filled
-      expect(controller.currentSelection.value?.name).toBe('target');
+      expect(controller.currentPick.value?.name).toBe('target');
     });
 
     it('should clear previous args before applying initial args', async () => {
@@ -866,7 +866,7 @@ describe('useActionController', () => {
       expect(controller.currentArgs.value.card).toBe(2);
 
       // Start new action with different initial args
-      await controller.start('attack', { attacker: 1 });
+      await controller.start('attack', { args: { attacker: 1 } });
 
       // Old args should be cleared
       expect(controller.currentArgs.value.card).toBeUndefined();
@@ -883,16 +883,16 @@ describe('useActionController', () => {
         autoExecute: false,
       });
 
-      await controller.start('attack', { attacker: 1, target: 10 });
+      await controller.start('attack', { args: { attacker: 1, target: 10 } });
 
       expect(controller.isReady.value).toBe(true);
-      expect(controller.currentSelection.value).toBe(null);
+      expect(controller.currentPick.value).toBe(null);
     });
   });
 
   describe('selection choices', () => {
     it('should fetch choices when starting action', async () => {
-      const fetchSelectionChoices = vi.fn().mockResolvedValue({
+      const fetchPickChoices = vi.fn().mockResolvedValue({
         success: true,
         choices: [
           { value: 'A', display: 'Choice A' },
@@ -925,19 +925,19 @@ describe('useActionController', () => {
         isMyTurn,
         autoExecute: false,
         playerSeat: ref(0),
-        fetchSelectionChoices,
+        fetchPickChoices,
       });
 
       await controller.start('choiceAction');
 
-      expect(fetchSelectionChoices).toHaveBeenCalledWith('choiceAction', 'item', 0, {});
+      expect(fetchPickChoices).toHaveBeenCalledWith('choiceAction', 'item', 0, {});
     });
 
     it('should track isLoadingChoices state during fetch', async () => {
       let resolveFetch: (value: any) => void;
       const fetchPromise = new Promise(resolve => { resolveFetch = resolve; });
 
-      const fetchSelectionChoices = vi.fn().mockReturnValue(fetchPromise);
+      const fetchPickChoices = vi.fn().mockReturnValue(fetchPromise);
 
       const choiceMeta: Record<string, ActionMetadata> = {
         choiceAction: {
@@ -958,7 +958,7 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        fetchSelectionChoices,
+        fetchPickChoices,
       });
 
       const startPromise = controller.start('choiceAction');
@@ -974,7 +974,7 @@ describe('useActionController', () => {
     });
 
     it('should use fetched choices in getChoices()', async () => {
-      const fetchSelectionChoices = vi.fn().mockResolvedValue({
+      const fetchPickChoices = vi.fn().mockResolvedValue({
         success: true,
         choices: [
           { value: 'fetched1', display: 'Fetched 1' },
@@ -1001,7 +1001,7 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        fetchSelectionChoices,
+        fetchPickChoices,
       });
 
       await controller.start('choiceAction');
@@ -1015,7 +1015,7 @@ describe('useActionController', () => {
 
     it('should fetch choices for all selections (always-fetch approach)', async () => {
       // The mock returns choices for both selections - 'x' for both
-      const fetchSelectionChoices = vi.fn().mockResolvedValue({
+      const fetchPickChoices = vi.fn().mockResolvedValue({
         success: true,
         choices: [{ value: 'x', display: 'X' }],
       });
@@ -1049,19 +1049,19 @@ describe('useActionController', () => {
         isMyTurn,
         autoFill: false,
         autoExecute: false,
-        fetchSelectionChoices,
+        fetchPickChoices,
       });
 
       await controller.start('twoStepAction');
       // First selection fetches choices
-      expect(fetchSelectionChoices).toHaveBeenCalledWith('twoStepAction', 'first', 0, {});
+      expect(fetchPickChoices).toHaveBeenCalledWith('twoStepAction', 'first', 0, {});
 
-      fetchSelectionChoices.mockClear();
+      fetchPickChoices.mockClear();
       // Fill with 'x' which is what was fetched
       await controller.fill('first', 'x');
 
       // Should fetch for the second selection as well
-      expect(fetchSelectionChoices).toHaveBeenCalledWith('twoStepAction', 'second', 0, { first: 'x' });
+      expect(fetchPickChoices).toHaveBeenCalledWith('twoStepAction', 'second', 0, { first: 'x' });
     });
   });
 
@@ -1141,25 +1141,25 @@ describe('useActionController', () => {
     });
   });
 
-  describe('fetchChoicesForSelection()', () => {
-    it('should do nothing without fetchSelectionChoices callback', async () => {
+  describe('fetchChoicesForPick()', () => {
+    it('should do nothing without fetchPickChoices callback', async () => {
       const controller = useActionController({
         sendAction,
         availableActions,
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        // No fetchSelectionChoices provided
+        // No fetchPickChoices provided
       });
 
       await controller.start('playCard');
 
       // Should not throw
-      await controller.fetchChoicesForSelection('card');
+      await controller.fetchChoicesForPick('card');
     });
 
     it('should do nothing when no action is active', async () => {
-      const fetchSelectionChoices = vi.fn();
+      const fetchPickChoices = vi.fn();
 
       const controller = useActionController({
         sendAction,
@@ -1167,12 +1167,13 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        fetchSelectionChoices,
+        fetchPickChoices,
       });
 
-      await controller.fetchChoicesForSelection('card');
+      await controller.fetchChoicesForPick('card');
 
-      expect(fetchSelectionChoices).not.toHaveBeenCalled();
+      expect(fetchPickChoices).not.toHaveBeenCalled();
     });
   });
+
 });

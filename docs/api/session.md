@@ -36,7 +36,6 @@ import {
 ### Player Colors
 
 - `STANDARD_PLAYER_COLORS` - Full color palette (8 colors)
-- `DEFAULT_PLAYER_COLORS` - *(deprecated)* Default 2 player colors (Red, Blue). Use `player.color` instead.
 - `createColorOption()` - Create color selection option for lobby configuration
 
 ### Error Handling

@@ -323,19 +323,6 @@ The color picker in PlayerConfigList:
 - Disables already-selected colors with X overlay
 - Automatically applies first available color as default
 
-#### Migration from DEFAULT_PLAYER_COLORS
-
-If you're using the deprecated `DEFAULT_PLAYER_COLORS` array, migrate to `player.color`:
-
-```typescript
-// Before (deprecated)
-import { DEFAULT_PLAYER_COLORS } from 'boardsmith/session';
-const color = DEFAULT_PLAYER_COLORS[player.seat - 1];
-
-// After (recommended)
-const color = player.color;
-```
-
 ## Helper Components
 
 ### FlyingCardsOverlay
@@ -552,7 +539,7 @@ Or use your own class names alongside the library classes:
 | `isDragging` | `(ref) => boolean` | Check if element is being dragged |
 | `isDropTarget` | `(ref) => boolean` | Check if element is valid drop target |
 
-**DragDropCondition:**
+**DragOptions:**
 - `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are empty and `.bs-draggable` is not applied.
 
 **ElementRef:**

@@ -155,7 +155,6 @@ import {
 ### Player Colors
 
 - `STANDARD_PLAYER_COLORS` - Standard color palette (8 colors)
-- `DEFAULT_PLAYER_COLORS` - *(deprecated)* Default 2 player colors. Use `player.color` instead.
 
 ### Types
 

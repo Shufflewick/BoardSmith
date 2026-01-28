@@ -224,26 +224,6 @@ describe('Action Executor', () => {
     });
   });
 
-  describe('shouldSkip', () => {
-    it('should never skip selections (auto-select is handled by UI)', () => {
-      // skipIfOnlyOne was removed from the engine - auto-selection is now
-      // controlled by the UI's Auto toggle for a consistent experience
-      const action = Action.create('test')
-        .chooseFrom('choice', {
-          choices: ['only'],
-        })
-        .execute(() => {});
-
-      const result = executor.shouldSkip(
-        action.selections[0],
-        game.getPlayer(1)!,
-        {}
-      );
-
-      expect(result.skip).toBe(false);
-    });
-  });
-
   describe('validateSelection', () => {
     it('should validate choice is in valid choices', () => {
       const action = Action.create('test')

@@ -25,9 +25,6 @@ export type {
   // Human-readable debug types
   PickDebugInfo,
   ActionDebugInfo,
-  // Deprecated aliases (for backward compatibility)
-  SelectionTrace,
-  SelectionDebugInfo,
   // Repeating selections types
   RepeatConfig,
   RepeatingSelectionState,

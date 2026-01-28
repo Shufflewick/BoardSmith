@@ -250,8 +250,6 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
   /**
    * Override includes() to warn about element comparison issues.
    * Use contains() instead for correct element comparison by ID.
-   *
-   * @deprecated Use contains() instead - includes() uses reference equality which fails after serialization
    */
   override includes(searchElement: T, fromIndex?: number): boolean {
     devWarn(
@@ -266,8 +264,6 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
   /**
    * Override indexOf() to warn about element comparison issues.
    * Use indexOfElement() instead for correct element comparison by ID.
-   *
-   * @deprecated Use indexOfElement() instead - indexOf() uses reference equality which fails after serialization
    */
   override indexOf(searchElement: T, fromIndex?: number): number {
     devWarn(

@@ -56,7 +56,7 @@ This document provides an overview of the BoardSmith package architecture and ho
 │                     - Handlers         Workers              - build         │
 │                     - Game stores      - Durable Objects    - test          │
 │                     - Matchmaking      - KV storage         - validate      │
-│                          │                  │               - train-ai      │
+│                          │                  │               - evolve-ai     │
 │                          └────────┬─────────┘               - publish       │
 │                                   │                                         │
 │                                   ▼                                         │

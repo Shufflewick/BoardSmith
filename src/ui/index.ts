@@ -31,8 +31,6 @@ export {
   ActionPanel,
   type GameElement,
   type Pick,
-  /** @deprecated Use Pick instead */
-  type Selection,
   type ActionMetadata,
   type Player,
 } from './components/auto-ui/index.js';
@@ -62,7 +60,6 @@ export {
   type UseDragDropReturn,
   // Pit of Success types
   type DragOptions,
-  type DragDropCondition, // @deprecated use DragOptions
   type DragClasses,
   type DropClasses,
   type DragResult,
@@ -247,29 +244,14 @@ export {
   ACTION_CONTROLLER_KEY,
   // Advanced feature injection helpers
   injectPickStepFn,
-  /** @deprecated Use injectPickStepFn instead */
-  injectSelectionStepFn,
   injectBoardInteraction,
-  // Primary types (use these)
+  // Types
   type PickMetadata,
   type PickStepResult,
   type PickChoicesResult,
   type PickSnapshot,
   type CollectedPick,
   type PickStepFn,
-  // Deprecated type aliases (for backward compatibility)
-  /** @deprecated Use PickMetadata instead */
-  type SelectionMetadata,
-  /** @deprecated Use PickStepResult instead */
-  type SelectionStepResult,
-  /** @deprecated Use PickChoicesResult instead */
-  type SelectionChoicesResult,
-  /** @deprecated Use PickSnapshot instead */
-  type SelectionSnapshot,
-  /** @deprecated Use CollectedPick instead */
-  type CollectedSelection,
-  /** @deprecated Use PickStepFn instead */
-  type SelectionStepFn,
   // Other types
   type ActionMetadata as ControllerActionMetadata,
   type ActionResult as ControllerActionResult,
@@ -282,7 +264,6 @@ export {
   // Pick-related types
   type ChoiceWithRefs,
   type ValidElement,
-  type ElementRef as SelectionElementRef,
 } from './composables/useActionController.js';
 
 // Action controller helpers (for custom UI developers)
@@ -309,7 +290,6 @@ export type {
 // Re-export color utilities from session package
 export {
   STANDARD_PLAYER_COLORS,
-  DEFAULT_PLAYER_COLORS,
   type ColorChoice,
 } from '../session/index.js';
 
