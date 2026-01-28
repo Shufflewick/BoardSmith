@@ -117,11 +117,6 @@ const colorSelectionEnabled = ref(false);
 const gameId = ref<string | null>(null);
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
 
-// DEBUG: Track playerSeat changes
-watchEffect(() => {
-  console.log('[GameShell DEBUG] playerSeat.value is now:', playerSeat.value, 'type:', typeof playerSeat.value);
-});
-
 // Sync colorSelectionEnabled from lobbyInfo (persists through lobby->game transition)
 watch(lobbyInfo, (lobby) => {
   if (lobby?.colorSelectionEnabled !== undefined) {
