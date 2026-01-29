@@ -203,6 +203,23 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       slot.playerOptions = this.#computeDefaultPlayerOptions(seat);
     }
 
+    // Assign a default color from the palette if colorSelectionEnabled and no color assigned
+    // This handles cases where the game uses palette-based colors without playerOptionsDefinitions.color
+    if (this.#storedState.colorSelectionEnabled &&
+        this.#storedState.colors &&
+        !slot.playerOptions?.color) {
+      const takenColors = new Set<string>();
+      for (const s of this.#storedState.lobbySlots) {
+        if (s.playerOptions?.color) {
+          takenColors.add(s.playerOptions.color as string);
+        }
+      }
+      const availableColor = this.#storedState.colors.find(c => !takenColors.has(c));
+      if (availableColor) {
+        slot.playerOptions = { ...slot.playerOptions, color: availableColor };
+      }
+    }
+
     // Update player names in stored state (convert 1-indexed seat to array index)
     this.#storedState.playerNames[seat - 1] = name;
 
@@ -476,6 +493,22 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       // Compute default player options (including color with deduplication)
       if (this.#storedState.playerOptionsDefinitions) {
         slot.playerOptions = this.#computeDefaultPlayerOptions(seat);
+      }
+
+      // Assign a default color from the palette if colorSelectionEnabled and no color assigned
+      if (this.#storedState.colorSelectionEnabled &&
+          this.#storedState.colors &&
+          !slot.playerOptions?.color) {
+        const takenColors = new Set<string>();
+        for (const s of this.#storedState.lobbySlots) {
+          if (s.playerOptions?.color) {
+            takenColors.add(s.playerOptions.color as string);
+          }
+        }
+        const availableColor = this.#storedState.colors.find(c => !takenColors.has(c));
+        if (availableColor) {
+          slot.playerOptions = { ...slot.playerOptions, color: availableColor };
+        }
       }
     } else {
       slot.status = 'open';

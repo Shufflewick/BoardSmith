@@ -336,13 +336,26 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Initialize default colors for all non-open slots
     // This ensures host and pre-configured AI slots have colors from the start
+    // Track already-assigned colors to avoid duplicates
     if (colorSelectionEnabled && colors && lobbySlots) {
-      for (let i = 0; i < lobbySlots.length; i++) {
-        const slot = lobbySlots[i];
+      const takenColors = new Set<string>();
+
+      // First pass: collect colors already assigned (e.g., from presets)
+      for (const slot of lobbySlots) {
+        if (slot.playerOptions?.color) {
+          takenColors.add(slot.playerOptions.color as string);
+        }
+      }
+
+      // Second pass: assign colors to slots that don't have one yet
+      for (const slot of lobbySlots) {
         if (slot.status !== 'open' && !slot.playerOptions?.color) {
-          // Slot is claimed or AI without a color - initialize with default
-          const defaultColor = colors[i % colors.length];
-          slot.playerOptions = { ...slot.playerOptions, color: defaultColor };
+          // Find first available color not already taken
+          const availableColor = colors.find(c => !takenColors.has(c));
+          if (availableColor) {
+            slot.playerOptions = { ...slot.playerOptions, color: availableColor };
+            takenColors.add(availableColor);
+          }
         }
       }
     }
@@ -387,14 +400,55 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // Create a temporary session ref for the callbacks (will be replaced after construction)
       const callbacks = {
         onGameStart: () => {
-          // Apply player colors from lobby selections before game starts
-          // Players may have selected different colors than the auto-assigned ones
+          // Check if player count changed in lobby (host added/removed players)
+          const currentSlotCount = storedState.lobbySlots?.length ?? 0;
+          const enginePlayerCount = session.#runner.game.players.length;
+
+          if (currentSlotCount !== enginePlayerCount && storedState.lobbySlots) {
+            // Player count changed - recreate the game engine with correct count
+            const newPlayerNames = storedState.lobbySlots.map(s => s.name);
+            const newGameOptions = {
+              playerCount: currentSlotCount,
+              playerNames: newPlayerNames,
+              seed: storedState.seed,
+              ...storedState.gameOptions,
+            };
+
+            // Also include colors if defined
+            if (storedState.colors) {
+              newGameOptions.colors = storedState.colors;
+            }
+
+            const newRunner = new GameRunner<G>({
+              GameClass,
+              gameType,
+              gameOptions: newGameOptions,
+            });
+            newRunner.start();
+
+            // Replace the session's runner
+            session.#runner = newRunner;
+            session.#pickHandler = session.#pickHandler.updateRunner(newRunner);
+            session.#pendingActionManager.updateRunner(newRunner);
+
+            // Update storedState to reflect actual counts
+            storedState.playerCount = currentSlotCount;
+            storedState.playerNames = newPlayerNames;
+          }
+
+          // Apply player names and colors from lobby selections
+          // Players may have changed names or selected different colors than the auto-assigned ones
           if (storedState.lobbySlots) {
             for (const slot of storedState.lobbySlots) {
-              const selectedColor = slot.playerOptions?.color as string | undefined;
-              if (selectedColor) {
-                const player = runner.game.getPlayer(slot.seat);
-                if (player) {
+              const player = session.#runner.game.getPlayer(slot.seat);
+              if (player) {
+                // Sync player name from lobby slot
+                if (slot.name && player.name !== slot.name) {
+                  player.name = slot.name;
+                }
+                // Sync player color from lobby slot
+                const selectedColor = slot.playerOptions?.color as string | undefined;
+                if (selectedColor) {
                   player.color = selectedColor;
                 }
               }
@@ -420,7 +474,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             session.#aiController = new AIController(
               GameClass,
               gameType,
-              playerCount,
+              storedState.playerCount,
               storedState.aiConfig,
               botAIConfig
             );
@@ -480,14 +534,55 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // Need session reference for callbacks, will be set after construction
       const callbacks = {
         onGameStart: () => {
-          // Apply player colors from lobby selections before game starts
-          // Players may have selected different colors than the auto-assigned ones
+          // Check if player count changed in lobby (host added/removed players)
+          const currentSlotCount = storedState.lobbySlots?.length ?? 0;
+          const enginePlayerCount = session.#runner.game.players.length;
+
+          if (currentSlotCount !== enginePlayerCount && storedState.lobbySlots) {
+            // Player count changed - recreate the game engine with correct count
+            const newPlayerNames = storedState.lobbySlots.map(s => s.name);
+            const newGameOptions = {
+              playerCount: currentSlotCount,
+              playerNames: newPlayerNames,
+              seed: storedState.seed,
+              ...storedState.gameOptions,
+            };
+
+            // Also include colors if defined
+            if (storedState.colors) {
+              newGameOptions.colors = storedState.colors;
+            }
+
+            const newRunner = new GameRunner<G>({
+              GameClass,
+              gameType: storedState.gameType,
+              gameOptions: newGameOptions,
+            });
+            newRunner.start();
+
+            // Replace the session's runner
+            session.#runner = newRunner;
+            session.#pickHandler = session.#pickHandler.updateRunner(newRunner);
+            session.#pendingActionManager.updateRunner(newRunner);
+
+            // Update storedState to reflect actual counts
+            storedState.playerCount = currentSlotCount;
+            storedState.playerNames = newPlayerNames;
+          }
+
+          // Apply player names and colors from lobby selections
+          // Players may have changed names or selected different colors than the auto-assigned ones
           if (storedState.lobbySlots) {
             for (const slot of storedState.lobbySlots) {
-              const selectedColor = slot.playerOptions?.color as string | undefined;
-              if (selectedColor) {
-                const player = runner.game.getPlayer(slot.seat);
-                if (player) {
+              const player = session.#runner.game.getPlayer(slot.seat);
+              if (player) {
+                // Sync player name from lobby slot
+                if (slot.name && player.name !== slot.name) {
+                  player.name = slot.name;
+                }
+                // Sync player color from lobby slot
+                const selectedColor = slot.playerOptions?.color as string | undefined;
+                if (selectedColor) {
                   player.color = selectedColor;
                 }
               }

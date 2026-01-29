@@ -94,7 +94,12 @@ export async function handleCreateGame(
     return error(`Unknown game type: ${gameType}. Available: ${available}`);
   }
 
-  if (playerCount < definition.minPlayers || playerCount > definition.maxPlayers) {
+  // Derive player count from playerConfigs if provided, otherwise use request's playerCount
+  const effectivePlayerCount = playerConfigs && playerConfigs.length > 0
+    ? playerConfigs.length
+    : playerCount;
+
+  if (effectivePlayerCount < definition.minPlayers || effectivePlayerCount > definition.maxPlayers) {
     return error(
       `Player count must be between ${definition.minPlayers} and ${definition.maxPlayers}`
     );
@@ -110,10 +115,10 @@ export async function handleCreateGame(
     names = playerConfigs.map((config, i) =>
       config.name || (config.isAI ? 'Bot' : `Player ${i + 1}`)
     );
-    // Extract AI players from configs
+    // Extract AI players from configs (seats are 1-indexed)
     effectiveAiPlayers = playerConfigs
-      .map((config, i) => (config.isAI ? i : -1))
-      .filter((i) => i >= 0);
+      .map((config, i) => (config.isAI ? i + 1 : -1))
+      .filter((seat) => seat >= 1);
   } else {
     names = playerNames ?? Array.from({ length: playerCount }, (_, i) => `Player ${i + 1}`);
   }
@@ -137,7 +142,7 @@ export async function handleCreateGame(
 
   const session = await store.createGame(gameId, {
     gameType,
-    playerCount,
+    playerCount: effectivePlayerCount,
     playerNames: names,
     playerIds,
     seed,
