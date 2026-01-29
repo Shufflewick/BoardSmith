@@ -30,6 +30,7 @@ function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
 
 interface DevOptions {
   port: string;
+  host?: string;
   players: string;
   workerPort: string;
   ai?: string[];
@@ -193,6 +194,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const port = parseInt(options.port, 10);
   const playerCount = parseInt(options.players, 10);
   const workerPort = parseInt(options.workerPort, 10);
+  const host = options.host;
   const cwd = process.cwd();
 
   // Warn about browser-restricted ports
@@ -291,9 +293,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     server = createLocalServer({
       port: workerPort,
+      host,
       definitions: [gameDefinition],
       onReady: (p) => {
-        console.log(chalk.green(`  Game server ready on http://localhost:${p}`));
+        const displayHost = host === '0.0.0.0' ? 'localhost' : (host || 'localhost');
+        console.log(chalk.green(`  Game server ready on http://${displayHost}:${p}`));
       },
       aiConfig: aiPlayers.length > 0 ? { players: aiPlayers, level: aiLevel } : undefined,
       persist: options.persist,
@@ -332,10 +336,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
       transformIndexHtml(html) {
         // Inject API URL as global variable before any scripts run
         // This works for external packages (unlike Vite's define option)
-        return html.replace(
-          '<head>',
-          `<head>\n    <script>window.__BOARDSMITH_API_URL__ = "http://localhost:${workerPort}";</script>`
-        );
+        // When binding to 0.0.0.0, use window.location.hostname so it works from any device
+        const apiUrlScript = host === '0.0.0.0'
+          ? `<script>window.__BOARDSMITH_API_URL__ = "http://" + window.location.hostname + ":${workerPort}";</script>`
+          : `<script>window.__BOARDSMITH_API_URL__ = "http://${host || 'localhost'}:${workerPort}";</script>`;
+        return html.replace('<head>', `<head>\n    ${apiUrlScript}`);
       },
     },
   ];
@@ -417,6 +422,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       appType: 'spa', // Enable SPA fallback so /game/:id/:position routes serve index.html
       server: {
         port,
+        host,
         strictPort: true, // Fail if port unavailable instead of silently using another
         open: false,
       },
@@ -438,7 +444,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
       console.log(chalk.dim(`  (Check if the game's vite.config.ts has a hardcoded port)`));
     }
 
-    console.log(chalk.green(`  UI server running on http://localhost:${uiPort}`));
+    const displayHost = host === '0.0.0.0' ? 'localhost' : (host || 'localhost');
+    console.log(chalk.green(`  UI server running on http://${displayHost}:${uiPort}`));
+    if (host === '0.0.0.0') {
+      console.log(chalk.dim(`  Network: accessible on all interfaces`));
+    }
 
     if (options.lobby) {
       // Show any persisted games that can be resumed

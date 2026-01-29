@@ -68,6 +68,7 @@ class WsBroadcastAdapter implements BroadcastAdapter<WsSession> {
 
 export interface LocalServerOptions {
   port: number;
+  host?: string;
   definitions: GameDefinition[];
   onReady?: (port: number) => void;
   aiConfig?: AIConfig;
@@ -168,10 +169,15 @@ export class LocalServer {
 
     // Start listening and create ready promise
     this.#readyPromise = new Promise<void>((resolve) => {
-      this.#server.listen(this.#port, () => {
+      const listenCallback = () => {
         options.onReady?.(this.#port);
         resolve();
-      });
+      };
+      if (options.host) {
+        this.#server.listen(this.#port, options.host, listenCallback);
+      } else {
+        this.#server.listen(this.#port, listenCallback);
+      }
     });
   }
 
