@@ -1,25 +1,23 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { Game, Player, defineFlow, playerActions, Action, type GameOptions } from '../engine/index.js';
+import { Game, Player, defineFlow, actionStep, Action, type GameOptions } from '../engine/index.js';
 import { GameSession } from './game-session.js';
 
 // Minimal test game that can emit animation events
 class TestGame extends Game {
-  declare players: Player[];
-
   constructor(options: GameOptions) {
     super(options);
 
     // Register actions - one that emits animation events
     this.registerAction(
       Action.create('pass')
-        .execute(() => ({}))
+        .execute(() => ({ success: true }))
     );
 
     this.registerAction(
       Action.create('attack')
         .execute(() => {
           this.emitAnimationEvent('attack', { damage: 5 });
-          return {};
+          return { success: true };
         })
     );
 
@@ -27,13 +25,13 @@ class TestGame extends Game {
       Action.create('heal')
         .execute(() => {
           this.emitAnimationEvent('heal', { amount: 3 });
-          return {};
+          return { success: true };
         })
     );
 
-    // Set up minimal flow
+    // Set up minimal flow - use maxMoves: 2 to allow exactly 2 actions
     this.setFlow(defineFlow({
-      root: playerActions({ actions: ['pass', 'attack', 'heal'] }),
+      root: actionStep({ actions: ['pass', 'attack', 'heal'], maxMoves: 2 }),
     }));
   }
 }

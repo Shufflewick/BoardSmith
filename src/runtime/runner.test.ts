@@ -9,6 +9,7 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  type FlowContext,
 } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 
@@ -78,12 +79,11 @@ class TestGame extends Game<TestGame, Player> {
     // Set up flow
     const gameFlow = defineFlow({
       root: loop({
-        while: (ctx) => (ctx.get<number>('round') ?? 1) <= 2,
+        while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 2,
         maxIterations: 10,
         do: eachPlayer({
           do: actionStep({
             actions: ['draw', 'pass'],
-            prompt: (ctx) => `${ctx.player?.name}'s turn`,
           }),
         }),
       }),

@@ -391,9 +391,11 @@ export function buildPlayerState(
       };
 
       // Flatten attributes to root level so UI can access p.color, p.position directly
-      const flattened = {
+      const flattened: { name: string; seat: number; [key: string]: unknown } = {
         ...json,
         ...(json.attributes || {}),
+        // Ensure seat is set (use player.seat, which is the 1-indexed position)
+        seat: player.seat,
       };
       delete flattened.attributes;
 

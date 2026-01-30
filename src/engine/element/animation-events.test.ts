@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, AnimationEvent } from './game.js';
+import { Game, type AnimationEvent } from './game.js';
 import { Player } from '../player/player.js';
 
 class TestGame extends Game<TestGame, Player> {}

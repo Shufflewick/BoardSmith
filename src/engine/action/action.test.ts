@@ -504,15 +504,15 @@ describe('Action Executor', () => {
     });
 
     it('should pass context to execute handler', () => {
-      let receivedContext: ActionContext | null = null;
-      const action = Action.create('test').execute((args, ctx) => {
+      let receivedContext: ActionContext | undefined;
+      const action = Action.create('test').execute((_args, ctx) => {
         receivedContext = ctx;
       });
 
       executor.executeAction(action, game.getPlayer(2)!, {});
 
-      expect(receivedContext?.player).toBe(game.getPlayer(2)!);
-      expect(receivedContext?.game).toBe(game);
+      expect(receivedContext!.player).toBe(game.getPlayer(2)!);
+      expect(receivedContext!.game).toBe(game);
     });
 
     it('should fail if validation fails', () => {

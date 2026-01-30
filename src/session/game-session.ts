@@ -264,16 +264,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Extract color palette from playerOptionsDefinitions if game designer defined one
     // This ensures the engine uses the game's custom colors (e.g., CHECKERS_COLORS)
     // instead of falling back to DEFAULT_COLOR_PALETTE
-    let effectiveGameOptions = { playerCount, playerNames, seed: gameSeed, ...customGameOptions };
+    let extractedColors: string[] | undefined;
     if (playerOptionsDefinitions?.color && !customGameOptions?.colors) {
       const colorDef = playerOptionsDefinitions.color;
-      if (colorDef.choices && colorDef.choices.length > 0) {
-        const colorValues = colorDef.choices.map(
+      if ('choices' in colorDef && colorDef.choices && colorDef.choices.length > 0) {
+        extractedColors = colorDef.choices.map(
           (c: string | { value: string }) => typeof c === 'string' ? c : c.value
         );
-        effectiveGameOptions = { ...effectiveGameOptions, colors: colorValues };
       }
     }
+    const effectiveGameOptions = {
+      playerCount,
+      playerNames,
+      seed: gameSeed,
+      ...customGameOptions,
+      ...(extractedColors ? { colors: extractedColors } : {}),
+    };
 
     const runner = new GameRunner<G>({
       GameClass,
@@ -412,12 +418,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               playerNames: newPlayerNames,
               seed: storedState.seed,
               ...storedState.gameOptions,
+              ...(storedState.colors ? { colors: storedState.colors } : {}),
             };
-
-            // Also include colors if defined
-            if (storedState.colors) {
-              newGameOptions.colors = storedState.colors;
-            }
 
             const newRunner = new GameRunner<G>({
               GameClass,
@@ -546,12 +548,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               playerNames: newPlayerNames,
               seed: storedState.seed,
               ...storedState.gameOptions,
+              ...(storedState.colors ? { colors: storedState.colors } : {}),
             };
-
-            // Also include colors if defined
-            if (storedState.colors) {
-              newGameOptions.colors = storedState.colors;
-            }
 
             const newRunner = new GameRunner<G>({
               GameClass,

@@ -119,7 +119,7 @@ export class PendingActionManager<G extends Game = Game> {
     value: unknown,
     actionName?: string,
     initialArgs?: Record<string, unknown>
-  ): Promise<SelectionStepResult> {
+  ): Promise<PickStepResult> {
     let pendingState = this.#pendingActions.get(playerPosition);
 
     // Auto-create pending action if it doesn't exist and actionName is provided

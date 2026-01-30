@@ -114,7 +114,10 @@ export interface WebSocketMessage {
 }
 
 export interface WebSocketSession extends SessionInfo {
-  playerId?: string;
+  /** Player seat (1-indexed). Alias for compatibility with SessionInfo. */
+  playerSeat: number;
+  /** Player position (1-indexed). Same as playerSeat, used in worker code. */
+  playerPosition: number;
 }
 
 export interface WorkerConfig {
@@ -879,6 +882,7 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
       const sessionData: WebSocketSession = {
         playerId: playerId ?? undefined,
         playerPosition,
+        playerSeat: playerPosition,  // Alias for SessionInfo compatibility
         isSpectator,
       };
 
@@ -1330,7 +1334,7 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
         case 'leave-position': {
           const { playerId } = body as { playerId: string };
-          const result = await this.#gameSession.leavePosition(playerId);
+          const result = await this.#gameSession.leaveSeat(playerId);
           return Response.json(result, { status: result.success ? 200 : 400 });
         }
 

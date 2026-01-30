@@ -770,7 +770,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error: 'Not your turn' };
     }
 
-    if (!availableActions.value.includes(actionName)) {
+    if (!availableActions.value?.includes(actionName)) {
       return { success: false, error: `Action "${actionName}" is not available` };
     }
 
@@ -1011,7 +1011,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const initialArgs = options?.args ?? {};
     const prefillArgs = options?.prefill ?? {};
 
-    if (!availableActions.value.includes(actionName)) {
+    if (!availableActions.value?.includes(actionName)) {
       lastError.value = `Action "${actionName}" is not available`;
       return;
     }
@@ -1387,7 +1387,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // 1. It's my turn
     // 2. No animations pending
     // 3. No followUp action pending
-    return isMyTurn.value && !animationsPending.value && !pendingFollowUp.value;
+    return Boolean(isMyTurn.value) && !animationsPending.value && !pendingFollowUp.value;
   });
 
   return {

@@ -188,12 +188,12 @@ export interface ActionStateSnapshot {
 export interface UseActionControllerOptions {
   /** Function to send action to server */
   sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ActionResult>;
-  /** Available actions (from game state) */
-  availableActions: Ref<string[]>;
+  /** Available actions (from game state). Accepts Ref with potentially undefined value for test compatibility. */
+  availableActions: Ref<string[] | undefined> | Ref<string[]>;
   /** Action metadata (from game state) */
   actionMetadata: Ref<Record<string, ActionMetadata> | undefined>;
-  /** Is it this player's turn */
-  isMyTurn: Ref<boolean>;
+  /** Is it this player's turn. Accepts Ref with potentially undefined value for test compatibility. */
+  isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
   /** Game view (for enriching validElements with full element data) */
   gameView?: Ref<GameElement | null | undefined>;
   /** Player seat (needed for fetching choices/repeating features) */

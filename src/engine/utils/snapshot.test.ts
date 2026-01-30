@@ -67,7 +67,7 @@ describe('GameStateSnapshot', () => {
       expect(snapshot.seed).toBe('test');
       expect(snapshot.state).toBeDefined();
       // Players are now children of the game element tree
-      const playerChildren = snapshot.state.children?.filter((c: any) => c.className === 'Player') ?? [];
+      const playerChildren = (snapshot.state as unknown as { children?: Array<{ className: string }> }).children?.filter((c: { className: string }) => c.className === 'Player') ?? [];
       expect(playerChildren.length).toBe(2);
       expect(snapshot.commandHistory).toBeDefined();
       expect(snapshot.actionHistory).toEqual([]);

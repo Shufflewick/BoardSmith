@@ -41,7 +41,7 @@ describe('Flow Builders', () => {
   it('should create sequence node', () => {
     const node = sequence(noop(), noop());
     expect(node.type).toBe('sequence');
-    expect(node.config.steps).toHaveLength(2);
+    expect((node.config as { steps: unknown[] }).steps).toHaveLength(2);
   });
 
   it('should create loop node', () => {
@@ -76,7 +76,6 @@ describe('Flow Builders', () => {
   it('should create actionStep node', () => {
     const node = actionStep({
       actions: ['test'],
-      prompt: 'Do something',
     });
     expect(node.type).toBe('action-step');
   });
@@ -126,7 +125,7 @@ describe('Flow Builders', () => {
     });
     expect(node.type).toBe('loop');
     expect(node.config.name).toBe('action-loop');
-    expect(node.config.maxIterations).toBe(50);
+    expect((node.config as { maxIterations?: number }).maxIterations).toBe(50);
   });
 });
 
@@ -335,7 +334,7 @@ describe('FlowEngine', () => {
           collection: (ctx) => [...ctx.game.all(Card)],
           as: 'card',
           do: execute((ctx) => {
-            cardNames.push((ctx.get('card') as Card).name);
+            cardNames.push((ctx.get('card') as Card).name!);
           }),
         }),
       });
@@ -354,8 +353,8 @@ describe('FlowEngine', () => {
       const flow = defineFlow({
         root: sequence(
           setVar('counter', 0),
-          setVar('counter', (ctx) => (ctx.get('counter') as number) + 1),
-          setVar('counter', (ctx) => (ctx.get('counter') as number) + 10),
+          setVar('counter', (ctx: FlowContext) => (ctx.get('counter') as number) + 1),
+          setVar('counter', (ctx: FlowContext) => (ctx.get('counter') as number) + 10),
           execute((ctx) => {
             finalValue = ctx.get('counter') as number;
           })
@@ -456,7 +455,6 @@ describe('FlowEngine', () => {
       const flow = defineFlow({
         root: actionStep({
           actions: ['test'],
-          prompt: 'Make a choice',
         }),
       });
 
@@ -858,7 +856,7 @@ describe('Named Phases', () => {
     });
 
     game.registerAction(
-      Action.create<TestGame>('act').execute(() => {})
+      Action.create('act').execute(() => {})
     );
 
     const engine = new FlowEngine(game, flow);
@@ -944,14 +942,14 @@ describe('Move Limits', () => {
   beforeEach(() => {
     game = new TestGame({ playerCount: 2 });
     game.registerAction(
-      Action.create<TestGame>('act').execute(() => {})
+      Action.create('act').execute(() => {})
     );
   });
 
   it('should auto-complete after maxMoves', () => {
     let actionCount = 0;
     game.registerAction(
-      Action.create<TestGame>('count').execute(() => {
+      Action.create('count').execute(() => {
         actionCount++;
       })
     );
@@ -992,7 +990,7 @@ describe('Move Limits', () => {
 
   it('should track movesRequired until minMoves met', () => {
     game.registerAction(
-      Action.create<TestGame>('count').execute(() => {})
+      Action.create('count').execute(() => {})
     );
 
     const flow = defineFlow({
@@ -1021,7 +1019,7 @@ describe('Move Limits', () => {
     let actionCount = 0;
 
     game.registerAction(
-      Action.create<TestGame>('count').execute(() => {
+      Action.create('count').execute(() => {
         actionCount++;
       })
     );
@@ -1063,7 +1061,7 @@ describe('turnLoop Helper', () => {
     let actionCount = 0;
 
     game.registerAction(
-      Action.create<TestGame>('act').execute((args, ctx) => {
+      Action.create('act').execute((args, ctx) => {
         actionCount++;
         if (actionCount >= 3) {
           ctx.game.finish();
@@ -1100,7 +1098,7 @@ describe('turnLoop Helper', () => {
     let actionsRemaining = 3;
 
     game.registerAction(
-      Action.create<TestGame>('act').execute(() => {
+      Action.create('act').execute(() => {
         actionsRemaining--;
       })
     );
@@ -1132,7 +1130,7 @@ describe('turnLoop Helper', () => {
     let actionCount = 0;
 
     game.registerAction(
-      Action.create<TestGame>('act').execute(() => {
+      Action.create('act').execute(() => {
         actionCount++;
       })
     );
@@ -1158,20 +1156,20 @@ describe('turnLoop Helper', () => {
     const node = turnLoop({
       actions: ['act'],
     });
-    expect(node.config.maxIterations).toBe(100);
+    expect((node.config as { maxIterations?: number }).maxIterations).toBe(100);
   });
 
   it('should support dynamic actions list', () => {
     const actionsAvailable: string[] = ['draw', 'play'];
 
     game.registerAction(
-      Action.create<TestGame>('draw').execute(() => {})
+      Action.create('draw').execute(() => {})
     );
     game.registerAction(
-      Action.create<TestGame>('play').execute(() => {})
+      Action.create('play').execute(() => {})
     );
     game.registerAction(
-      Action.create<TestGame>('endTurn').execute((args, ctx) => {
+      Action.create('endTurn').execute((args, ctx) => {
         ctx.game.finish();
       })
     );
@@ -1195,10 +1193,10 @@ describe('turnLoop Helper', () => {
     let endedTurn = false;
 
     game.registerAction(
-      Action.create<TestGame>('act').execute(() => {})
+      Action.create('act').execute(() => {})
     );
     game.registerAction(
-      Action.create<TestGame>('endTurn').execute(() => {
+      Action.create('endTurn').execute(() => {
         turnsTaken++;
         endedTurn = true;
       })
@@ -1460,7 +1458,7 @@ describe('Action Chaining with followUp in FlowState', () => {
       root: playerActions({
         actions: ['first', 'second'],
         // Allow 2 actions total
-        repeatUntil: ({ moveCount }) => moveCount >= 2,
+        repeatUntil: (ctx) => (ctx as unknown as { moveCount: number }).moveCount >= 2,
       }),
     });
 

@@ -916,7 +916,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
-      availableActions.value = [...availableActions.value, 'choiceAction'];
+      availableActions.value = [...(availableActions.value ?? []), 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -950,7 +950,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
-      availableActions.value = [...availableActions.value, 'choiceAction'];
+      availableActions.value = [...(availableActions.value ?? []), 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -993,7 +993,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
-      availableActions.value = [...availableActions.value, 'choiceAction'];
+      availableActions.value = [...(availableActions.value ?? []), 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1040,7 +1040,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...twoStepMeta };
-      availableActions.value = [...availableActions.value, 'twoStepAction'];
+      availableActions.value = [...(availableActions.value ?? []), 'twoStepAction'];
 
       const controller = useActionController({
         sendAction,
