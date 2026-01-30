@@ -123,15 +123,16 @@ Renders the entire game state as a tree of elements. Useful for:
 
 ```vue
 <script setup>
-import { useFlyingCards, FlyingCardsOverlay } from 'boardsmith/ui';
+import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
 
-const { flyingCards, flyCard } = useFlyingCards();
+const { flyingElements, fly } = useFlyingElements();
 
 async function dealCard() {
-  await flyCard({
+  await fly({
+    id: 'deal-card',
     startRect: deckRef.value.getBoundingClientRect(),
     endRect: () => handRef.value.getBoundingClientRect(),
-    cardData: { rank: 'A', suit: 'S' },
+    elementData: { rank: 'A', suit: 'S' },
     flip: true,
     duration: 400,
   });
@@ -139,32 +140,41 @@ async function dealCard() {
 </script>
 
 <template>
-  <FlyingCardsOverlay :flying-cards="flyingCards" />
+  <FlyingCardsOverlay :flying-cards="flyingElements" />
 </template>
 ```
 
-### Auto Animations
+### Fly On Appear
+
+For declarative fly-on-appear animations when elements enter the view:
 
 ```vue
 <script setup>
-import { useAutoAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
+import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
 
-const { flyingElements } = useAutoAnimations({
-  gameView: () => props.gameView,
-  containers: [
-    { element: deck, ref: deckRef },
-    { element: hand, ref: handRef },
-    { element: discard, ref: discardRef },
-  ],
+const starterCard = computed(() => findElement(gameView.value, el =>
+  el.className === 'Card' && el.attributes?.isStarter));
+
+const { flyingElements, flyOnAppear } = useFlyingElements();
+
+const { isFlying } = flyOnAppear({
+  element: starterCard,
+  sourceRef: deckRef,
+  targetRef: starterRef,
   getElementData: (el) => ({
     rank: el.attributes?.rank,
-    suit: el.attributes?.suit,
+    suit: el.attributes?.suit
   }),
+  flip: true,
 });
 </script>
+
+<template>
+  <FlyingCardsOverlay :flying-cards="flyingElements" />
+</template>
 ```
 
-Automatically animates elements when they move between containers.
+Automatically flies elements when they appear in the view.
 
 ## Board Interaction
 

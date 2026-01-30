@@ -23,7 +23,7 @@
 import { computed, provide, ref, watch, nextTick } from 'vue';
 import AutoElement from './AutoElement.vue';
 import { prefersReducedMotion } from '../../composables/useElementAnimation.js';
-import { useFlyingCards, type FlyCardOptions } from '../../composables/useFlyingCards.js';
+import { useFlyingElements, type FlyCardOptions } from '../../composables/useFlyingElements.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
 
@@ -140,7 +140,7 @@ function handleElementClick(element: GameElement) {
 // ============================================
 // Flying Cards Animation System
 // ============================================
-const { flyingCards, flyCard } = useFlyingCards();
+const { flyingElements: flyingCards, flyCard } = useFlyingElements();
 
 // ============================================
 // FLIP Animation System with Smart Fly Detection

@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-25)
+See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** Make board game development fast and correct
 **Current focus:** Planning next milestone
@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-01-25)
 
 Phase: 68 of 68 (Game Updates)
 Plan: Complete
-Status: v2.5 SHIPPED — ready for next milestone
-Last activity: 2026-01-25 — v2.5 milestone complete
+Status: v2.6 SHIPPED — ready for next milestone
+Last activity: 2026-01-29 — v2.6 milestone complete
 
 Progress: [██████████] 100%
 
@@ -37,14 +37,15 @@ Progress: [██████████] 100%
 - v2.3 Nomenclature Standardization (Phases 54-58) -- shipped 2026-01-22
 - v2.4 Animation Event System (Phases 59-63) -- shipped 2026-01-22
 - v2.5 Player Colors Refactor (Phases 64-68) -- shipped 2026-01-25
+- v2.6 Code Consolidation (post-mortem driven) -- shipped 2026-01-29
 
 **Current:**
 (None — awaiting next milestone)
 
 ## Session Continuity
 
-Last session: 2026-01-25
-Stopped at: Completed v2.5 milestone
+Last session: 2026-01-29
+Stopped at: Completed v2.6 milestone
 Resume file: None
 
 ## Key Decisions (Accumulated)

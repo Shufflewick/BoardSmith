@@ -123,6 +123,11 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ Deprecated DEFAULT_PLAYER_COLORS with migration guidance — v2.5
 - ✓ Hex game migrated to player.color — v2.5
 - ✓ Checkers game migrated to player.color with custom palette — v2.5
+- ✓ useFLIP multi-container support restored — v2.6
+- ✓ flyOnAppear helper in useFlyingElements — v2.6
+- ✓ autoWatch for automatic cross-container flying — v2.6
+- ✓ countBasedRoutes for hidden element tracking — v2.6
+- ✓ Deprecated composables removed (7 files) — v2.6
 
 ### Active
 
@@ -174,6 +179,9 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | JSDoc @deprecated vs runtime warning | Editor-visible with zero runtime cost | ✓ Good |
 | Custom game colors in boardsmith.json | Checkers preserves red/dark theme via config, not code | ✓ Good |
 | Engine guarantees player.color | Remove fallback chains; null-safety only for defensive coding | ✓ Good |
+| Consolidated animation APIs | useFLIP + useFlyingElements replace 7 deprecated composables | ✓ Good |
+| autoWatch for cross-container flying | Declarative API replaces manual watches | ✓ Good |
+| No backward compatibility for deprecated APIs | Clean break avoids confusion about which API to use | ✓ Good |
 
 ## Context
 
@@ -202,4 +210,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-01-25 after v2.5 milestone*
+*Last updated: 2026-01-29 after v2.6 milestone*

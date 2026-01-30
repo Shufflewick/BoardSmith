@@ -1,5 +1,33 @@
 # Project Milestones: BoardSmith
 
+## v2.6 Code Consolidation (Shipped: 2026-01-29)
+
+**Delivered:** Fixed "Pit of Success" violations in animation API consolidation — restoring multi-container FLIP support, adding flyOnAppear helper, and implementing autoWatch for automatic cross-container flying animations.
+
+**Phases completed:** N/A (post-mortem driven, no formal phases)
+
+**Key accomplishments:**
+
+- Extended `useFLIP` with `containers` array for multi-container FLIP animations
+- Added `flyOnAppear()` helper to `useFlyingElements` for declarative fly-on-appear
+- Added `autoWatch` option for automatic cross-container flying (replaces useAutoAnimations)
+- Added `countBasedRoutes` for tracking hidden element movements
+- Deleted 7 deprecated composables (clean break, no backward compatibility)
+- Updated documentation with migration examples
+
+**Stats:**
+
+- 32 files changed
+- +391 / -2,610 lines (net reduction!)
+- 0 phases (direct implementation from post-mortem feedback)
+- Same day ship (2026-01-29)
+
+**Git range:** `ab2450a` → v2.6 tag
+
+**What's next:** Animation API consolidation complete. Ready for next milestone.
+
+---
+
 ## v2.5 Player Colors Refactor (Shipped: 2026-01-25)
 
 **Delivered:** Engine-managed player colors with `player.color` property, game-level color configuration, lobby color picker, and automatic conflict validation — eliminating the fragmented `DEFAULT_PLAYER_COLORS` pattern.

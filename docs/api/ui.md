@@ -14,7 +14,8 @@ import {
   AutoUI,
   ActionPanel,
   useBoardInteraction,
-  useAutoAnimations,
+  useFLIP,
+  useFlyingElements,
   useDragDrop,
 } from 'boardsmith/ui';
 ```
@@ -69,14 +70,87 @@ import {
 
 #### Animations
 
-- `useElementAnimation()` - Element animation utilities
-- `prefersReducedMotion()` - Check reduced motion preference
-- `useFlyingCards()` - Card flying animations
-- `useAutoFlyingElements()` - Automatic element flying
-- `useAutoFLIP()` - Automatic FLIP animations
-- `useAutoFlyToStat()` - Fly elements to stat displays
-- `useAutoAnimations()` - Unified animation system
-- `useFlyOnAppear()` - Animate new elements
+##### FLIP Animations (useFLIP)
+
+Unified FLIP animation API for smooth element transitions:
+
+- `useFLIP()` - FLIP animations with single or multiple container support
+- `createFLIPSnapshot()` - Create FLIP snapshot for one-off animations
+- `prefersReducedMotion` - Reactive ref for reduced motion preference
+
+```typescript
+// Single container
+const { capture, animate, isAnimating } = useFLIP({
+  containerRef,
+  selector: '[data-element-id]',
+  duration: 300,
+});
+
+// Multi-container
+const { capture, animate } = useFLIP({
+  containers: [
+    { ref: boardRef, selector: '[data-piece-id]' },
+    { ref: handRef, selector: '[data-card-id]' },
+  ],
+});
+
+// Auto mode (watches game state)
+useFLIP({
+  containerRef,
+  auto: true,
+  gameView: () => gameState.value.view,
+});
+```
+
+##### Flying Elements (useFlyingElements)
+
+Unified flying element animations for cards, pieces, and tokens:
+
+- `useFlyingElements()` - Flying animations with optional flipping
+
+```typescript
+const { fly, flyMultiple, flyOnAppear, flyingElements } = useFlyingElements();
+
+// Fly single element
+await fly({
+  id: 'card-1',
+  startRect: deck.getBoundingClientRect(),
+  endRect: () => hand.getBoundingClientRect(),
+  elementData: { rank: 'A', suit: 'S' },
+  flip: true,
+});
+
+// Declarative fly-on-appear
+const { isFlying } = flyOnAppear({
+  element: starterCard,
+  sourceRef: deckRef,
+  targetRef: starterRef,
+  getElementData: (el) => ({ rank: el.rank, suit: el.suit }),
+});
+
+// Auto-watch mode (replaces useAutoAnimations, useAutoFlyingElements)
+const { flyingElements } = useFlyingElements({
+  autoWatch: {
+    gameView: () => props.gameView,
+    containers: [
+      { ref: handRef, name: 'hand', element: () => findHand(gameView) },
+      { ref: playAreaRef, name: 'play-area' },
+      { ref: cribRef, name: 'crib' },
+    ],
+    getElementData: (el) => ({
+      rank: el.attributes?.rank,
+      suit: el.attributes?.suit,
+    }),
+    countBasedRoutes: [
+      { from: 'hand', to: 'crib' },
+    ],
+  },
+});
+```
+
+##### Other Animation Utilities
+
+- `useElementAnimation()` - Low-level element animation utilities
 - `useActionAnimations()` - Action-triggered animations
 - `useZoomPreview()` - Card/die zoom preview
 - `usePlayerStatAnimation()` - Player stat animations
@@ -132,11 +206,6 @@ import {
 - `useElementChangeTracker()` - Track element changes
 - `useCountTracker()` - Track count changes
 
-#### FLIP Animations
-
-- `useFLIPAnimation()` - Manual FLIP animations
-- `createFLIPSnapshot()` - Create FLIP snapshot
-
 #### Action Controller
 
 - `useActionController()` - Action handling for custom UIs
@@ -168,6 +237,9 @@ import {
 - `UseDragDropReturn` - Drag-drop return type
 - `AnimationOptions` - Animation options
 - `FlyingCard` - Flying card data
+- `FlyConfig` - Flying element configuration
+- `FLIPContainer` - FLIP container configuration
+- `FlyOnAppearOptions` - Fly-on-appear options
 - `HexOrientation` - Hex orientation type
 - `HexGridOptions` - Hex grid options
 - `ThemeConfig` - Theme configuration
@@ -228,22 +300,64 @@ const { drag, drop } = useDragDrop({
 </template>
 ```
 
-### Auto Animations
+### FLIP Animations
 
 ```vue
 <script setup lang="ts">
-import { useAutoAnimations } from 'boardsmith/ui';
+import { useFLIP } from 'boardsmith/ui';
 
-useAutoAnimations({
+const boardRef = ref<HTMLElement | null>(null);
+const handRef = ref<HTMLElement | null>(null);
+
+// Auto-animate when game state changes
+useFLIP({
   containers: [
-    { selector: '.hand', from: 'deck' },
-    { selector: '.discard', from: 'hand' },
+    { ref: boardRef, selector: '[data-piece-id]' },
+    { ref: handRef, selector: '[data-card-id]' },
   ],
-  flyToStats: [
-    { selector: '.score', stat: 'score' },
-  ],
+  auto: true,
+  gameView: () => gameState.value.view,
 });
 </script>
+
+<template>
+  <div ref="boardRef" class="board">
+    <div v-for="piece in pieces" :key="piece.id" :data-piece-id="piece.id">
+      {{ piece.type }}
+    </div>
+  </div>
+  <div ref="handRef" class="hand">
+    <div v-for="card in cards" :key="card.id" :data-card-id="card.id">
+      {{ card.rank }}
+    </div>
+  </div>
+</template>
+```
+
+### Flying Elements
+
+```vue
+<script setup lang="ts">
+import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
+
+const { fly, flyingElements } = useFlyingElements({ duration: 400 });
+
+async function dealCard(card: Card) {
+  await fly({
+    id: `deal-${card.id}`,
+    startRect: deckRef.value!.getBoundingClientRect(),
+    endRect: () => handRef.value!.getBoundingClientRect(),
+    elementData: { rank: card.rank, suit: card.suit, faceUp: false },
+    flip: true,
+  });
+}
+</script>
+
+<template>
+  <div ref="deckRef" class="deck" @click="dealCard(topCard)" />
+  <div ref="handRef" class="hand" />
+  <FlyingCardsOverlay :flying-cards="flyingElements" />
+</template>
 ```
 
 ## CSS Assets

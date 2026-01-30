@@ -742,34 +742,43 @@ animateToCurrentPositions(containerRef.value, {
 
 Elements must have `data-animatable="true"` and `data-element-id="..."` attributes.
 
-### useFlyingCards
+### useFlyingElements
 
-Manually trigger card/element flight animations between positions.
+Unified composable for flying element animations (cards, pieces, tokens).
 
 ```typescript
-import { useFlyingCards, FlyingCardsOverlay } from 'boardsmith/ui';
+import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
 
-const { flyingCards, flyCard, flyCards, cancelAll } = useFlyingCards();
+const { fly, flyMultiple, flyOnAppear, flyingElements, isAnimating } = useFlyingElements();
 
-// Fly a card from one element to another
-await flyCard({
+// Fly a single element
+await fly({
   id: 'draw-animation',
   startRect: deckElement.getBoundingClientRect(),
   endRect: () => handElement.getBoundingClientRect(),  // Function to track moving targets
-  cardData: { rank: 'A', suit: 'S', faceUp: false },
-  flip: true,           // Flip card during flight
+  elementData: { rank: 'A', suit: 'S', faceUp: false },
+  flip: true,           // Flip element during flight
   duration: 400,        // Animation duration in ms
-  cardSize: { width: 60, height: 84 },
+  elementSize: { width: 60, height: 84 },
 });
 
-// Fly multiple cards with stagger
-await flyCards([
-  { id: 'card-1', startRect: deck, endRect: () => hand, cardData: { rank: 'K', suit: 'H' } },
-  { id: 'card-2', startRect: deck, endRect: () => hand, cardData: { rank: 'Q', suit: 'H' } },
-], 100);  // 100ms stagger between cards
+// Fly multiple elements with stagger
+await flyMultiple([
+  { id: 'card-1', startRect: deck, endRect: () => hand, elementData: { rank: 'K', suit: 'H' } },
+  { id: 'card-2', startRect: deck, endRect: () => hand, elementData: { rank: 'Q', suit: 'H' } },
+], 100);  // 100ms stagger between elements
+
+// Declarative fly-on-appear (replaces useFlyOnAppear)
+const { isFlying } = flyOnAppear({
+  element: starterCard,  // Ref or ComputedRef that triggers when truthy
+  sourceRef: deckRef,
+  targetRef: starterRef,
+  getElementData: (el) => ({ rank: el.rank, suit: el.suit }),
+  flip: true,
+});
 
 // In template:
-// <FlyingCardsOverlay :flying-cards="flyingCards" />
+// <FlyingCardsOverlay :flying-cards="flyingElements" />
 ```
 
 ### useActionAnimations
@@ -843,188 +852,74 @@ You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they'r
 | `hideDestination` | `boolean` | auto | Hide destination during animation (auto-enabled for flip-in-place) |
 | `getElementData` | `function` | innerHTML | Extract data for rendering flying element |
 
-### useAutoAnimations
+### useFLIP
 
-**Recommended for all games.** The unified animation system that combines flying between containers, FLIP animations within containers, and flying to player stats. One composable to rule them all.
+Unified FLIP animation API with multi-container support. FLIP (First-Last-Invert-Play) animations smoothly transition elements when they move within containers.
 
 ```typescript
-import { useAutoAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
+import { useFLIP } from 'boardsmith/ui';
 
-// 1. Create refs for DOM elements
+// Single container (manual mode)
 const boardRef = ref<HTMLElement | null>(null);
-const handRef = ref<HTMLElement | null>(null);
-const discardRef = ref<HTMLElement | null>(null);
-
-// 2. Create computed refs for game elements
-const board = computed(() => findElement(gameView, { className: 'Board' }));
-const myHand = computed(() => findPlayerHand(gameView, playerSeat));
-const discardPile = computed(() => findElement(gameView, { className: 'DiscardPile' }));
-
-// 3. Set up auto-animations
-const { flyingElements, isAnimating } = useAutoAnimations({
-  gameView: () => props.gameView,
-  containers: [
-    // Elements reorder within board with FLIP animation
-    { element: board, ref: boardRef, flipWithin: '[data-piece-id]' },
-    // Cards fly between hand and discard
-    { element: myHand, ref: handRef, flipWithin: '[data-card-id]' },
-    { element: discardPile, ref: discardRef },
-  ],
-  // Optional: fly elements to player stats when removed
-  flyToStats: [
-    {
-      stat: 'captured',
-      containerRef: boardRef,
-      selector: '[data-piece-id]',
-      player: (piece) => piece.playerSeat === 0 ? 1 : 0,
-    },
-  ],
-  getElementData: (element) => ({
-    rank: element.attributes?.rank,
-    suit: element.attributes?.suit,
-    playerSeat: element.attributes?.player?.seat,
-  }),
-  duration: 400,
+const { capture, animate, isAnimating, clear } = useFLIP({
+  containerRef: boardRef,
+  selector: '[data-element-id]',
+  duration: 300,
 });
 
-// 4. Use in template
-// <FlyingCardsOverlay :flying-cards="flyingElements" />
+// Before state change
+capture();
+// ... state change ...
+await animate();
+
+// Multi-container support
+const handRef = ref<HTMLElement | null>(null);
+const { capture, animate } = useFLIP({
+  containers: [
+    { ref: boardRef, selector: '[data-piece-id]' },
+    { ref: handRef, selector: '[data-card-id]' },
+  ],
+  duration: 300,
+});
+
+// Auto mode (watches game state automatically)
+const { isAnimating } = useFLIP({
+  containerRef: boardRef,
+  selector: '[data-element-id]',
+  auto: true,
+  gameView: () => gameState.value.view,
+});
 ```
-
-**What useAutoAnimations provides:**
-
-1. **Flying between containers** - Elements moving between registered containers animate automatically
-2. **FLIP within containers** - Elements reordering within a container animate smoothly (use `flipWithin` option)
-3. **Flying to stats** - Elements removed from a container fly to player stat displays
 
 **Options:**
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `gameView` | `() => any` | Function returning current game view |
-| `containers` | `ContainerConfig[] \| () => ContainerConfig[]` | Containers to track |
-| `flyToStats` | `FlyToStatConfig[]` | Stats to fly elements to when removed |
-| `getElementData` | `(element) => FlyingCardData` | Extract display data from game elements |
-| `getDOMElementData` | `(el: Element) => Partial<FlyingCardData>` | Extract data from DOM elements (for flyToStats) |
-| `duration` | `number` | Animation duration for flying (default: 400ms) |
-| `flipDuration` | `number` | Animation duration for FLIP (default: 300ms) |
-| `elementSize` | `{ width, height }` | Element dimensions (default: 60x84) |
-
-**Container Config:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `element` | `ComputedRef<any> \| Ref<any>` | Game element for this container |
-| `ref` | `Ref<HTMLElement \| null>` | DOM element ref |
-| `flipWithin` | `string` | CSS selector for FLIP animations within this container |
-| `elementSize` | `{ width, height }` | Optional custom element size |
-
-**FlyToStat Config:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `stat` | `string` | Name of the stat (e.g., 'books', 'captured') |
-| `containerRef` | `Ref<HTMLElement \| null>` | Container to track removals from |
-| `selector` | `string` | CSS selector to find elements |
-| `player` | `number \| ((elementData) => number)` | Target player seat |
-| `trackCount` | `() => number` | Only fly when this count increases |
-| `filter` | `(elementData) => boolean` | Filter which elements fly |
-
-**Example: Checkers with piece captures**
-
-```typescript
-const { flyingElements } = useAutoAnimations({
-  gameView: () => props.gameView,
-  containers: [
-    { element: board, ref: boardRef, flipWithin: '[data-piece-id]' },
-  ],
-  flyToStats: [
-    {
-      stat: 'captured',
-      containerRef: boardRef,
-      selector: '[data-piece-id]',
-      // Captured pieces fly to the opponent's captured stat
-      player: (piece) => piece.playerSeat === 0 ? 1 : 0,
-    },
-  ],
-  getDOMElementData: (el) => ({
-    playerSeat: el.classList.contains('player-0') ? 0 : 1,
-  }),
-  elementSize: { width: 40, height: 40 },
-});
-```
-
-**Example: Cribbage with card animations**
-
-```typescript
-const { flyingElements } = useAutoAnimations({
-  gameView: () => props.gameView,
-  containers: [
-    { element: myHand, ref: handRef, flipWithin: '[data-card-id]' },
-    { element: playArea, ref: playAreaRef, flipWithin: '[data-card-id]' },
-    { element: crib, ref: cribRef },
-    { element: deck, ref: deckRef },
-  ],
-  getElementData: (el) => ({
-    rank: el.attributes?.rank,
-    suit: el.attributes?.suit,
-    faceImage: el.attributes?.$images?.face,
-    backImage: el.attributes?.$images?.back,
-  }),
-});
-```
-
-### useAutoFlyingElements
-
-Automatically animates elements (cards, pieces, tokens) when they move between registered containers. For new code, prefer `useAutoAnimations` which includes FLIP and fly-to-stat features.
-
-```typescript
-import { useAutoFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
-
-const { flyingElements } = useAutoFlyingElements({
-  gameView: () => props.gameView,
-  containers: [
-    { element: deck, ref: deckRef },
-    { element: myHand, ref: handRef },
-    { element: discardPile, ref: discardRef },
-  ],
-  getElementData: (element) => ({
-    rank: element.attributes?.rank,
-    suit: element.attributes?.suit,
-  }),
-  duration: 400,
-});
-
-// In template:
-// <FlyingCardsOverlay :flying-cards="flyingElements" />
-```
-
-### useFlyOnAppear
-
-Animate elements flying in when they appear.
-
-```typescript
-import { useFlyOnAppear } from 'boardsmith/ui';
-
-const { trackElement, getInitialPosition } = useFlyOnAppear({
-  from: 'deck',  // Element ID to fly from
-  duration: 400,
-});
-```
+| `containerRef` | `Ref<HTMLElement \| null>` | Single container (use this OR containers) |
+| `containers` | `FLIPContainer[]` | Multiple containers (use this OR containerRef) |
+| `selector` | `string` | CSS selector for elements (default: '[data-element-id]') |
+| `duration` | `number` | Animation duration in ms (default: 300) |
+| `easing` | `string` | CSS easing (default: 'ease-out') |
+| `threshold` | `number` | Minimum movement in pixels (default: 1) |
+| `auto` | `boolean` | Enable auto-mode with gameView watcher |
+| `gameView` | `() => unknown` | Required when auto: true |
 
 ### usePlayerStatAnimation
 
 Animate stat changes and fly elements to player stat displays.
 
 ```typescript
-import { usePlayerStatAnimation, flyToPlayerStat } from 'boardsmith/ui';
+import { usePlayerStatAnimation, flyToPlayerStat, useFlyingElements } from 'boardsmith/ui';
 
-// Fly a card to a player's score display
-flyToPlayerStat({
-  cardElement: cardEl,
+// Get flyCards function from useFlyingElements
+const { flyCards } = useFlyingElements();
+const { getPlayerStatElement } = usePlayerStatAnimation();
+
+// Fly cards to a player's stat display
+flyToPlayerStat(flyCards, {
+  cards: removedCards.map(c => ({ rect: c.rect, rank: c.rank, suit: c.suit })),
   playerSeat: 0,
-  statName: 'score',
-  onComplete: () => updateScore(),
+  statName: 'books',
 });
 ```
 
@@ -1152,26 +1047,23 @@ track('deckCount', deck.children.length);
 const delta = getChange('deckCount');  // e.g., -3 (deck lost 3 cards)
 ```
 
-### useFLIPAnimation
+### createFLIPSnapshot
 
-Low-level FLIP (First, Last, Invert, Play) animation utility.
+One-off FLIP animation for a single update cycle.
 
 ```typescript
-import { useFLIPAnimation, createFLIPSnapshot } from 'boardsmith/ui';
+import { createFLIPSnapshot } from 'boardsmith/ui';
 
-const { recordFirst, recordLast, play } = useFLIPAnimation({
+const containerRef = ref<HTMLElement | null>(null);
+
+// Capture positions immediately
+const snapshot = createFLIPSnapshot(containerRef, '[data-card-id]', {
   duration: 300,
   easing: 'ease-out',
 });
 
-// Before change
-recordFirst(elements);
-
-// After change
-recordLast(elements);
-
-// Animate
-play();
+// After DOM update
+await snapshot.animate();
 ```
 
 ## Theming
@@ -1331,35 +1223,31 @@ onUnmounted(() => unregister?.());
 | `skipAll()` | `() => void` | Skip remaining animations, acknowledge all |
 | `pendingCount` | `Ref<number>` | Number of pending events (for UI indicators) |
 
-### Integration with useAutoAnimations
+### Integration with useFLIP and useFlyingElements
 
-The `useAutoAnimations` composable supports declarative event handler registration via the `eventHandlers` option:
+For custom animation needs, combine `useFLIP` and `useFlyingElements` with animation events:
 
 ```typescript
-import { useAutoAnimations } from 'boardsmith/ui';
+import { useFLIP, useFlyingElements, useAnimationEvents } from 'boardsmith/ui';
 
-const { flyingElements } = useAutoAnimations({
-  gameView: () => props.gameView,
+// FLIP animations for element movements
+const { capture, animate } = useFLIP({
   containers: [
-    { element: board, ref: boardRef, flipWithin: '[data-piece-id]' },
+    { ref: boardRef, selector: '[data-piece-id]' },
   ],
+});
 
-  // Register animation event handlers declaratively
-  eventHandlers: {
-    combat: async (event) => {
-      await playCombatAnimation(event.data);
-    },
-    score: async (event) => {
-      await playScoreAnimation(event.data);
-    },
-  },
+// Flying elements for card transitions
+const { fly, flyingElements, flyOnAppear } = useFlyingElements();
 
-  // Required when using eventHandlers
-  animationEvents,
+// Animation events for custom handlers
+const animationEvents = useAnimationEvents();
+animationEvents.registerHandler('combat', async (event) => {
+  await playCombatAnimation(event.data);
 });
 ```
 
-This is the recommended approach for most games - it combines auto-animations with custom event handling in one place.
+This approach gives you full control over each animation system while maintaining clean separation of concerns.
 
 ### ActionController Integration
 

@@ -20,9 +20,9 @@
  * ## Usage in Custom UI
  *
  * ```typescript
- * import { usePlayerStatAnimation, useFlyingCards } from '@boardsmith/ui';
+ * import { usePlayerStatAnimation, useFlyingElements } from '@boardsmith/ui';
  *
- * const { flyingCards, flyCards } = useFlyingCards();
+ * const { flyingElements, flyCards } = useFlyingElements();
  * const { flyToPlayerStat, getPlayerStatElement } = usePlayerStatAnimation();
  *
  * // Fly cards to a player's stat
@@ -34,7 +34,7 @@
  * ```
  */
 
-import type { FlyCardOptions } from './useFlyingCards.js';
+import type { FlyCardOptions } from './useFlyingElements.js';
 
 export interface CardForAnimation {
   /** Bounding rect of the card's original position */
@@ -90,7 +90,7 @@ export function getPlayerStatElement(
 /**
  * Fly cards to a player's stat display in the player panel.
  *
- * @param flyCards - The flyCards function from useFlyingCards
+ * @param flyCards - The flyCards function from useFlyingElements
  * @param options - Animation options
  * @returns true if animation was started, false if target not found or no cards
  */

@@ -34,11 +34,11 @@
  * </template>
  * ```
  */
-import type { FlyingCard } from '../../composables/useFlyingCards.js';
+import type { FlyingCard } from '../../composables/useFlyingElements.js';
 import type { CSSProperties } from 'vue';
 
 const props = defineProps<{
-  /** Array of flying cards from useFlyingCards composable */
+  /** Array of flying cards from useFlyingElements composable */
   flyingCards: readonly FlyingCard[];
   /** Optional custom card renderer slot data */
   getSuitSymbol?: (suit: string) => string;

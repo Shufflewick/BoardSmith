@@ -105,7 +105,7 @@
  */
 
 import { watch, type Ref, type ComputedRef } from 'vue';
-import { useFlyingCards, type FlyingCardData, type FlyingCard } from './useFlyingCards.js';
+import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
 import type { GameElement } from '../types.js';
 
 /**
@@ -352,8 +352,8 @@ let animationCounter = 0;
 export function useActionAnimations(options: UseActionAnimationsOptions): UseActionAnimationsReturn {
   const { gameView, animations } = options;
 
-  // Use the existing flying cards system for rendering
-  const { flyingCards, flyCard, cancelAll } = useFlyingCards();
+  // Use the flying elements system for rendering
+  const { flyingElements, flyCard, cancelAll } = useFlyingElements();
 
   // State captured before action execution
   let pendingAnimation: CapturedAnimationState | null = null;
@@ -556,7 +556,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
   );
 
   return {
-    flyingElements: flyingCards,
+    flyingElements,
     onBeforeAutoExecute,
     cancelAll,
   };

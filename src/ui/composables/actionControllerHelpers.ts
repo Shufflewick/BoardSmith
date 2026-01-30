@@ -6,44 +6,10 @@
  */
 
 import type { ActionMetadata, PickMetadata } from './useActionControllerTypes.js';
+import { isDevMode, devWarn } from '../../utils/dev.js';
 
-// ============================================
-// Development Mode Detection
-// ============================================
-
-/**
- * Check if running in development mode.
- * Works in both browser (Vite) and Node.js environments.
- */
-export function isDevMode(): boolean {
-  // Browser (Vite) - check import.meta.env first
-  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-    const env = (import.meta as any).env;
-    return env.DEV === true || env.MODE !== 'production';
-  }
-  // Node.js fallback
-  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
-}
-
-// ============================================
-// Development Warnings
-// ============================================
-
-const shownWarnings = new Set<string>();
-
-/**
- * Show a warning once per unique key (development mode only).
- * Prevents spam when warnings would otherwise fire repeatedly.
- *
- * @param key - Unique key to deduplicate warnings
- * @param message - Warning message to display
- */
-export function devWarn(key: string, message: string): void {
-  if (!isDevMode()) return;
-  if (shownWarnings.has(key)) return;
-  shownWarnings.add(key);
-  console.warn(`[BoardSmith] ${message}`);
-}
+// Re-export for backwards compatibility during transition
+export { isDevMode, devWarn };
 
 // ============================================
 // Value Display Extraction

@@ -258,8 +258,8 @@ sequence(
 
 **Composables**:
 - `useBoardInteraction` - Board ↔ ActionPanel communication
-- `useElementAnimation` - FLIP animations
-- `useCardFlip`, `useFlyingCards` - Card animations
+- `useFLIP` - FLIP animations with multi-container support
+- `useFlyingElements` - Flying element animations with optional flipping
 - `useGameViewHelpers` - Query game state
 - `useGameGrid`, `useHexGrid` - Grid utilities
 - `useCardDisplay` - Card formatting

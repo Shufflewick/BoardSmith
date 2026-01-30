@@ -18,6 +18,7 @@
  * ```
  */
 import { ref } from 'vue';
+import { easeOutCubic } from '../../utils/easing.js';
 
 export interface AnimationOptions {
   /** Duration in milliseconds (default: 300) */
@@ -28,11 +29,6 @@ export interface AnimationOptions {
 
 const DEFAULT_DURATION = 300;
 const DEFAULT_SELECTOR = '[data-animatable="true"]';
-
-// Easing function (ease-out cubic)
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
-}
 
 // Check reduced motion preference (reactive, singleton)
 export const prefersReducedMotion = ref(

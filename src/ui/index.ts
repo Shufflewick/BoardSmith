@@ -14,6 +14,9 @@ export {
   FlyingCardsOverlay,
   GameOverlay,
   ZoomPreviewOverlay,
+  Button,
+  type ButtonVariant,
+  type ButtonSize,
 } from './components/helpers/index.js';
 
 // 3D Dice components (Three.js with chamfered geometry)
@@ -74,53 +77,31 @@ export {
   type AnimationOptions,
 } from './composables/useElementAnimation.js';
 
+// Consolidated FLIP animation API
 export {
-  useFlyingCards,
+  useFLIP,
+  createFLIPSnapshot,
+  type FLIPContainer,
+  type UseFLIPOptions,
+  type UseFLIPReturn,
+} from './composables/useFLIP.js';
+
+// Consolidated flying elements API (unified flying cards/elements animations)
+export {
+  useFlyingElements,
+  type FlyConfig,
+  type FlyOnAppearOptions,
   type FlyingCard,
   type FlyingCardData,
   type FlyCardOptions,
-  type FlyingCardsReturn,
-} from './composables/useFlyingCards.js';
-
-// Auto-flying elements (cards, pieces, tokens) between containers
-export {
-  useAutoFlyingElements,
-  type ElementContainerConfig,
+  type UseFlyingElementsOptions,
+  type UseFlyingElementsReturn,
+  // Auto-watch types (replaces useAutoAnimations, useAutoFlyingElements)
+  type AutoWatchOptions,
+  type AutoWatchContainer,
+  type AutoWatchGameElement,
   type CountBasedRoute,
-  type AutoFlyingElementsOptions,
-  type AutoFlyingElementsReturn,
-} from './composables/useAutoFlyingElements.js';
-
-// Automatic FLIP animations within containers
-export {
-  useAutoFLIP,
-  type AutoFLIPContainer,
-  type AutoFLIPOptions,
-  type AutoFLIPReturn,
-} from './composables/useAutoFLIP.js';
-
-// Automatic flying to player stats (book formation, captures, scoring)
-export {
-  useAutoFlyToStat,
-  type StatConfig,
-  type AutoFlyToStatOptions,
-  type AutoFlyToStatReturn,
-} from './composables/useAutoFlyToStat.js';
-
-// Unified automatic animation system (combines all auto-animation features)
-export {
-  useAutoAnimations,
-  type ContainerConfig as AnimationContainerConfig,
-  type FlyToStatConfig,
-  type AutoAnimationsOptions,
-  type AutoAnimationsReturn,
-} from './composables/useAutoAnimations.js';
-
-export {
-  useFlyOnAppear,
-  type FlyOnAppearOptions,
-  type FlyOnAppearReturn,
-} from './composables/useFlyOnAppear.js';
+} from './composables/useFlyingElements.js';
 
 // Action-triggered animations (for animating elements during action execution)
 export {
@@ -230,14 +211,6 @@ export {
   type CountTrackerReturn,
 } from './composables/useElementChangeTracker.js';
 
-// FLIP animation utilities
-export {
-  useFLIPAnimation,
-  createFLIPSnapshot,
-  type FLIPAnimationOptions,
-  type FLIPAnimationReturn,
-} from './composables/useFLIPAnimation.js';
-
 // Action controller (unified action handling for ActionPanel and custom UIs)
 export {
   useActionController,
@@ -272,6 +245,26 @@ export {
   actionNeedsWizardMode,
   type WizardModeCheck,
 } from './composables/actionControllerHelpers.js';
+
+// Hover highlight composable (for custom UI element highlighting)
+export {
+  useHoverHighlight,
+  type HoverableItem,
+  type UseHoverHighlightOptions,
+  type UseHoverHighlightReturn,
+} from './composables/useHoverHighlight.js';
+
+// Image utilities (for custom card/element rendering)
+export {
+  parseImageInfo,
+  isUrlImage,
+  isSpriteImage,
+  getImageSrc,
+  getSpriteStyle,
+  getBackgroundImageStyle,
+  type ImageInfo,
+  type SpriteData,
+} from './utils/image.js';
 
 // Theming
 export {
