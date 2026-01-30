@@ -2,32 +2,10 @@ import type { GameElement } from '../element/game-element.js';
 import type { Game } from '../element/game.js';
 import type { Player } from '../player/player.js';
 import type { ActionContext } from './types.js';
+import { isDevMode, devWarn } from '../../utils/dev.js';
 
-// ============================================
-// Development Mode Utilities
-// ============================================
-
-/**
- * Check if we're in development mode
- */
-export function isDevMode(): boolean {
-  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
-}
-
-/**
- * Set of warning keys that have already been shown (to avoid spam)
- */
-const shownWarnings = new Set<string>();
-
-/**
- * Emit a development mode warning (once per unique key)
- */
-export function devWarn(key: string, message: string): void {
-  if (!isDevMode()) return;
-  if (shownWarnings.has(key)) return;
-  shownWarnings.add(key);
-  console.warn(`[BoardSmith] ${message}`);
-}
+// Re-export for backwards compatibility during transition
+export { isDevMode, devWarn };
 
 /**
  * Wrap a filter function to provide helpful error messages when it crashes

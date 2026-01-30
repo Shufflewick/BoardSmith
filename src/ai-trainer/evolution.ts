@@ -11,33 +11,10 @@
  */
 
 import type { LearnedObjective } from './types.js';
+import { createSeededRandom } from '../utils/random.js';
 
-/**
- * Create a seeded random number generator.
- * Uses mulberry32 algorithm for deterministic sequence.
- *
- * @param seed - String seed for reproducibility
- * @returns Function that returns random float [0, 1)
- */
-export function createSeededRandom(seed: string): () => number {
-  // Convert string seed to numeric hash
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    const char = seed.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-
-  // mulberry32 PRNG
-  let state = hash >>> 0;
-  return () => {
-    state += 0x6D2B79F5;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// Re-export for backwards compatibility
+export { createSeededRandom };
 
 /**
  * Generate Gaussian random number using Box-Muller transform.

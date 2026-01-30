@@ -11,7 +11,7 @@ import type {
 import { createSnapshot, deserializeAction } from '../engine/index.js';
 import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
-import { createSeededRandom, randomChoice } from './utils.js';
+import { SeededRandom } from './utils.js';
 
 /** Game class constructor type */
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
@@ -40,7 +40,7 @@ export class MCTSBot<G extends Game = Game> {
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
   private uctConstant?: (game: Game, playerIndex: number) => number;
-  private rng: () => number;
+  private rng: SeededRandom;
   private actionHistory: SerializedAction[];
   private seed?: string;
   /** Cached UCT exploration constant (computed once per move in playSingle) */
@@ -78,7 +78,7 @@ export class MCTSBot<G extends Game = Game> {
     this.moveOrdering = aiConfig?.moveOrdering;
     this.uctConstant = aiConfig?.uctConstant;
     this.seed = this.config.seed;
-    this.rng = createSeededRandom(this.config.seed);
+    this.rng = new SeededRandom(this.config.seed ?? Math.random().toString(36).substring(2));
   }
 
   // ============================================================================
@@ -280,7 +280,7 @@ export class MCTSBot<G extends Game = Game> {
     // Select best child (most visits for robustness)
     if (root.children.length === 0) {
       // No children explored, pick random from initial moves
-      return randomChoice(moves, this.rng);
+      return this.rng.pick(moves);
     }
 
     // Debug logging for proof number analysis
@@ -567,10 +567,10 @@ export class MCTSBot<G extends Game = Game> {
 
       if (this.playoutPolicy) {
         // Use game-specific playout policy for smarter move selection
-        move = this.playoutPolicy(this.searchGame, currentPlayer, moves, this.rng);
+        move = this.playoutPolicy(this.searchGame, currentPlayer, moves, () => this.rng.next());
       } else {
         // Default to random move selection
-        move = randomChoice(moves, this.rng);
+        move = this.rng.pick(moves);
       }
 
       // Track move for RAVE update
@@ -916,7 +916,8 @@ export class MCTSBot<G extends Game = Game> {
     noSampling: boolean = false
   ): Record<string, unknown>[] {
     if (index >= actionDef.selections.length) {
-      return [{ ...currentArgs }];
+      // Serialize element objects to IDs only at the end, after all filtering is done
+      return [this.serializeArgs(currentArgs, actionDef.selections)];
     }
 
     const selection = actionDef.selections[index];
@@ -969,9 +970,8 @@ export class MCTSBot<G extends Game = Game> {
       : choices;
 
     for (const choice of finalChoices) {
-      // Serialize the choice for args
-      const serializedChoice = this.serializeChoice(choice, selection);
-      const newArgs = { ...currentArgs, [selection.name]: serializedChoice };
+      // Keep element objects during recursion so dependent filters receive proper objects
+      const newArgs = { ...currentArgs, [selection.name]: choice };
       const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs, noSampling);
       results.push(...subResults);
     }
@@ -1032,8 +1032,8 @@ export class MCTSBot<G extends Game = Game> {
     selection: Selection
   ): void {
     if (current.length === size) {
-      // Serialize each choice in the combination
-      results.push(current.map(c => this.serializeChoice(c, selection)));
+      // Keep element objects during recursion - serialization happens at the end
+      results.push([...current]);
       return;
     }
 
@@ -1072,6 +1072,34 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
+   * Serialize all args at once after enumeration is complete.
+   * This ensures element objects are available during recursion for dependent filters,
+   * and only converted to IDs when returning final results.
+   */
+  private serializeArgs(
+    args: Record<string, unknown>,
+    selections: Selection[]
+  ): Record<string, unknown> {
+    const serialized: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(args)) {
+      const selection = selections.find(s => s.name === key);
+      if (!selection) {
+        serialized[key] = value;
+        continue;
+      }
+
+      if (Array.isArray(value)) {
+        serialized[key] = value.map(v => this.serializeChoice(v, selection));
+      } else {
+        serialized[key] = this.serializeChoice(value, selection);
+      }
+    }
+
+    return serialized;
+  }
+
+  /**
    * Sample choices to limit branching
    */
   private sampleChoices<T>(choices: T[], maxCount: number): T[] {
@@ -1081,7 +1109,7 @@ export class MCTSBot<G extends Game = Game> {
     const indices = new Set<number>();
 
     while (sampled.length < maxCount) {
-      const idx = Math.floor(this.rng() * choices.length);
+      const idx = this.rng.nextInt(choices.length);
       if (!indices.has(idx)) {
         indices.add(idx);
         sampled.push(choices[idx]);

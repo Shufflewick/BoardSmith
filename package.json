@@ -51,12 +51,20 @@
       "types": "./src/worker/index.ts",
       "import": "./src/worker/index.ts"
     },
+    "./utils": {
+      "types": "./src/utils/index.ts",
+      "import": "./src/utils/index.ts"
+    },
+    "./types": {
+      "types": "./src/types/index.ts",
+      "import": "./src/types/index.ts"
+    },
     "./ui/animation/drag-drop.css": "./src/ui/animation/drag-drop.css",
     "./ui/animation/card-flip.css": "./src/ui/animation/card-flip.css"
   },
   "scripts": {
     "build:cli": "esbuild src/cli/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --packages=external",
-    "prepublishOnly": "npm run build:cli",
+    "prepack": "npm run build:cli",
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "lint": "eslint packages/"

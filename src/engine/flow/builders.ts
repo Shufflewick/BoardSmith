@@ -13,23 +13,7 @@ import type {
   FlowDefinition,
   PhaseConfig,
 } from './types.js';
-
-// ============================================
-// Development Mode Warnings
-// ============================================
-
-function isDevMode(): boolean {
-  return typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
-}
-
-const shownWarnings = new Set<string>();
-
-function devWarn(key: string, message: string): void {
-  if (!isDevMode()) return;
-  if (shownWarnings.has(key)) return;
-  shownWarnings.add(key);
-  console.warn(`[BoardSmith] ${message}`);
-}
+import { devWarn } from '../../utils/dev.js';
 
 /**
  * Create a sequence of steps executed in order

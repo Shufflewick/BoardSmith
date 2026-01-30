@@ -16,14 +16,12 @@ const compiledCommands = ['pack', 'publish'];
 const command = process.argv[2];
 
 if (isDevRepo && compiledCommands.includes(command)) {
-  // Build CLI first for pack/publish commands to avoid tsx dependency
-  if (!existsSync(distPath)) {
-    console.log('Building CLI...');
-    execSync('npm run build:cli', {
-      cwd: join(__dirname, '..'),
-      stdio: 'inherit'
-    });
-  }
+  // Always rebuild CLI for pack/publish to ensure latest source is bundled
+  console.log('Building CLI...');
+  execSync('npm run build:cli', {
+    cwd: join(__dirname, '..'),
+    stdio: 'inherit'
+  });
   await import('../dist/cli.js');
 } else if (isDevRepo) {
   // Development: use tsx to run TypeScript directly

@@ -3,6 +3,8 @@ This app is BoardSmith, a library for designing digital board games.
 Read everything in the docs folder to get started.
 
 # Hard Rules
+- **Pit of Success**: The right path is always the easy path, the wrong path is always hard. Design APIs and code so correct usage is obvious and incorrect usage is difficult.
+- **No Backward Compatibility**: Always pursue the cleanest implementation. No deprecation cycles—remove the bad thing and add the good thing. We're a library in active development, not a legacy system.
 - All UI interactions must work in a Custom UI and Action Panel in parity with shared state through useBoardInteraction
 - Don't leave a dev server running that you start.
 

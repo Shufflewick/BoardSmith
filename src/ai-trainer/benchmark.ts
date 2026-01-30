@@ -1,30 +1,8 @@
 import type { Game } from '../engine/index.js';
 import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, type AIConfig } from '../ai/index.js';
+import { SeededRandom } from '../utils/random.js';
 import type { GameClass, LearnedObjective, CandidateFeature } from './types.js';
-
-/**
- * Seeded random number generator for reproducible random player
- */
-class SeededRandom {
-  private seed: number;
-
-  constructor(seed: string) {
-    this.seed = 0;
-    for (let i = 0; i < seed.length; i++) {
-      this.seed = ((this.seed << 5) - this.seed + seed.charCodeAt(i)) | 0;
-    }
-  }
-
-  next(): number {
-    this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
-    return this.seed / 0x7fffffff;
-  }
-
-  pick<T>(array: T[]): T {
-    return array[Math.floor(this.next() * array.length)];
-  }
-}
 
 /**
  * Configuration for a single player in a benchmark game

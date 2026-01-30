@@ -1,5 +1,8 @@
 /**
  * Shared types for game hosting
+ *
+ * Note: Protocol types are also available from 'boardsmith/types' for new code.
+ * See docs/consolidation.md for migration guidance.
  */
 
 import type { FlowState, SerializedAction, Game, AnimationEvent } from '../engine/index.js';

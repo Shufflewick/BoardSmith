@@ -9,6 +9,7 @@
 
 import type { Game, GameOptions, FlowState } from '../engine/index.js';
 import { createTestGame, type TestGame, type TestGameOptions } from './test-game.js';
+import { SeededRandom } from '../utils/random.js';
 
 /**
  * Options for {@link simulateRandomGames}.
@@ -74,44 +75,6 @@ export interface SimulationResults {
   averageDuration: number;
   /** Errors encountered (deduplicated) */
   errors: string[];
-}
-
-/**
- * Simple random number generator for reproducible simulations.
- * @internal
- */
-class SeededRandom {
-  private seed: number;
-
-  constructor(seed: string) {
-    // Simple hash function
-    this.seed = 0;
-    for (let i = 0; i < seed.length; i++) {
-      this.seed = ((this.seed << 5) - this.seed + seed.charCodeAt(i)) | 0;
-    }
-  }
-
-  next(): number {
-    this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
-    return this.seed / 0x7fffffff;
-  }
-
-  nextInt(max: number): number {
-    return Math.floor(this.next() * max);
-  }
-
-  pick<T>(array: T[]): T {
-    return array[this.nextInt(array.length)];
-  }
-
-  shuffle<T>(array: T[]): T[] {
-    const result = [...array];
-    for (let i = result.length - 1; i > 0; i--) {
-      const j = this.nextInt(i + 1);
-      [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
-  }
 }
 
 /**

@@ -516,6 +516,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       slot.aiLevel = undefined;
       slot.playerId = undefined;
       slot.ready = false;
+      slot.playerOptions = undefined;
     }
 
     // Update AI config if needed
@@ -565,6 +566,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     slot.name = `Player ${slot.seat}`;
     slot.ready = false;
     slot.connected = undefined;
+    slot.playerOptions = undefined;
 
     // Update player names in stored state
     this.#storedState.playerNames[slot.seat - 1] = slot.name;
@@ -701,6 +703,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     slot.name = `Player ${slot.seat}`;
     slot.ready = false;
     slot.connected = undefined;
+    slot.playerOptions = undefined;
 
     // Update player names in stored state
     this.#storedState.playerNames[slot.seat - 1] = slot.name;

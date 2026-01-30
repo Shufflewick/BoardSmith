@@ -1,6 +1,7 @@
 import type { Game, FlowState, SerializedAction } from '../engine/index.js';
 import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, type BotConfig, type AIConfig } from '../ai/index.js';
+import { SeededRandom } from '../utils/random.js';
 import type {
   GameClass,
   CandidateFeature,
@@ -13,33 +14,6 @@ import type {
   SerializableGameStructure,
   SerializableElementTypeInfo,
 } from './types.js';
-
-/**
- * Seeded random number generator
- */
-class SeededRandom {
-  private seed: number;
-
-  constructor(seed: string) {
-    this.seed = 0;
-    for (let i = 0; i < seed.length; i++) {
-      this.seed = ((this.seed << 5) - this.seed + seed.charCodeAt(i)) | 0;
-    }
-  }
-
-  next(): number {
-    this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
-    return this.seed / 0x7fffffff;
-  }
-
-  nextInt(max: number): number {
-    return Math.floor(this.next() * max);
-  }
-
-  pick<T>(array: T[]): T {
-    return array[this.nextInt(array.length)];
-  }
-}
 
 /**
  * Options for simulation
