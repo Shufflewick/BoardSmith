@@ -101,6 +101,9 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
       gameOptionsDefinitions: definition.gameOptions,
       // Pass AI config (objectives and threat response) from game definition
       botAIConfig: definition.ai,
+      // Pass player count limits for lobby slot management
+      minPlayers: definition.minPlayers,
+      maxPlayers: definition.maxPlayers,
     });
 
     // Create and attach broadcaster

@@ -243,3 +243,87 @@ describe('GameSession lobby integration', () => {
     expect(capturedPlayerConfigs![1].customOption).toBe('value2');
   });
 });
+
+describe('LobbyManager slot limits from game definition', () => {
+  it('should enforce maxPlayers from game definition when adding slots', async () => {
+    // Create a session with explicit minPlayers/maxPlayers
+    const session = GameSession.create<TestLobbyGame>({
+      gameType: 'test-lobby',
+      GameClass: TestLobbyGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      useLobby: true,
+      creatorId: 'creator-123',
+      playerConfigs: [
+        { name: 'Alice' },
+        { name: 'Bob' },
+      ],
+      minPlayers: 2,
+      maxPlayers: 3, // Can only have 3 players max
+    });
+
+    // Currently have 2 slots, max is 3
+    // Adding one more should succeed
+    const result1 = await session.addSlot('creator-123');
+    expect(result1.success).toBe(true);
+    expect(result1.lobby?.slots).toHaveLength(3);
+
+    // Adding another should fail - would exceed maxPlayers
+    const result2 = await session.addSlot('creator-123');
+    expect(result2.success).toBe(false);
+    expect(result2.error).toContain('3');
+  });
+
+  it('should enforce minPlayers from game definition when removing slots', async () => {
+    // Create a session with explicit minPlayers/maxPlayers
+    const session = GameSession.create<TestLobbyGame>({
+      gameType: 'test-lobby',
+      GameClass: TestLobbyGame,
+      playerCount: 3,
+      playerNames: ['Alice', 'Bob', 'Charlie'],
+      useLobby: true,
+      creatorId: 'creator-123',
+      playerConfigs: [
+        { name: 'Alice' },
+        { name: 'Bob' },
+        { name: 'Charlie' },
+      ],
+      minPlayers: 2, // Must have at least 2 players
+      maxPlayers: 4,
+    });
+
+    // Currently have 3 slots, min is 2
+    // Removing one should succeed (leaves 2)
+    const result1 = await session.removeSlot('creator-123', 3);
+    expect(result1.success).toBe(true);
+    expect(result1.lobby?.slots).toHaveLength(2);
+
+    // Removing another should fail - would go below minPlayers
+    const result2 = await session.removeSlot('creator-123', 2);
+    expect(result2.success).toBe(false);
+    expect(result2.error).toContain('2');
+  });
+
+  it('should use game definition limits not hardcoded defaults', async () => {
+    // Create a session with a very restrictive maxPlayers (less than the hardcoded 10)
+    const session = GameSession.create<TestLobbyGame>({
+      gameType: 'test-lobby',
+      GameClass: TestLobbyGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      useLobby: true,
+      creatorId: 'creator-123',
+      playerConfigs: [
+        { name: 'Alice' },
+        { name: 'Bob' },
+      ],
+      minPlayers: 2,
+      maxPlayers: 2, // Only 2 players allowed
+    });
+
+    // Should NOT be able to add any slots since we're already at max
+    const result = await session.addSlot('creator-123');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('2');
+  });
+});

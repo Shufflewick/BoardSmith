@@ -81,6 +81,10 @@ export interface GameSessionOptions<G extends Game = Game> {
   gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
   /** AI configuration (objectives and threat response hooks) from game definition */
   botAIConfig?: BotAIConfig;
+  /** Minimum number of players allowed (for lobby slot management) */
+  minPlayers?: number;
+  /** Maximum number of players allowed (for lobby slot management) */
+  maxPlayers?: number;
 }
 
 /**
@@ -257,6 +261,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       playerOptionsDefinitions,
       gameOptionsDefinitions,
       botAIConfig,
+      minPlayers,
+      maxPlayers,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -394,6 +400,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       gameOptionsDefinitions,
       colorSelectionEnabled,
       colors,
+      minPlayers,
+      maxPlayers,
     };
 
     const aiController = aiConfig
