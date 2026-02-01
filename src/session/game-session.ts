@@ -406,12 +406,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // Create a temporary session ref for the callbacks (will be replaced after construction)
       const callbacks = {
         onGameStart: () => {
+          // Build playerConfigs from lobby slots for game constructor access
+          // This allows games to access player options via options.playerConfigs[seat-1]
+          const playerConfigs = storedState.lobbySlots?.map(slot => ({
+            name: slot.name,
+            isAI: slot.status === 'ai',
+            aiLevel: slot.aiLevel,
+            ...slot.playerOptions,
+          }));
+
           // Check if player count changed in lobby (host added/removed players)
           const currentSlotCount = storedState.lobbySlots?.length ?? 0;
           const enginePlayerCount = session.#runner.game.players.length;
 
-          if (currentSlotCount !== enginePlayerCount && storedState.lobbySlots) {
-            // Player count changed - recreate the game engine with correct count
+          // Always recreate the game to pass playerConfigs from lobby
+          // The game needs access to playerConfigs for per-player options like isDictator
+          if (storedState.lobbySlots) {
             const newPlayerNames = storedState.lobbySlots.map(s => s.name);
             const newGameOptions = {
               playerCount: currentSlotCount,
@@ -419,6 +429,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               seed: storedState.seed,
               ...storedState.gameOptions,
               ...(storedState.colors ? { colors: storedState.colors } : {}),
+              playerConfigs,
             };
 
             const newRunner = new GameRunner<G>({
@@ -536,12 +547,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // Need session reference for callbacks, will be set after construction
       const callbacks = {
         onGameStart: () => {
+          // Build playerConfigs from lobby slots for game constructor access
+          // This allows games to access player options via options.playerConfigs[seat-1]
+          const playerConfigs = storedState.lobbySlots?.map(slot => ({
+            name: slot.name,
+            isAI: slot.status === 'ai',
+            aiLevel: slot.aiLevel,
+            ...slot.playerOptions,
+          }));
+
           // Check if player count changed in lobby (host added/removed players)
           const currentSlotCount = storedState.lobbySlots?.length ?? 0;
           const enginePlayerCount = session.#runner.game.players.length;
 
-          if (currentSlotCount !== enginePlayerCount && storedState.lobbySlots) {
-            // Player count changed - recreate the game engine with correct count
+          // Always recreate the game to pass playerConfigs from lobby
+          // The game needs access to playerConfigs for per-player options like isDictator
+          if (storedState.lobbySlots) {
             const newPlayerNames = storedState.lobbySlots.map(s => s.name);
             const newGameOptions = {
               playerCount: currentSlotCount,
@@ -549,6 +570,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               seed: storedState.seed,
               ...storedState.gameOptions,
               ...(storedState.colors ? { colors: storedState.colors } : {}),
+              playerConfigs,
             };
 
             const newRunner = new GameRunner<G>({

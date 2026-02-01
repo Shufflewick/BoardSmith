@@ -1013,6 +1013,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
         }
       } else if (opt.type === 'exclusive') {
         // For exclusive options, check if this seat matches the default
+        // defaultIndex is 0-indexed, seat is 1-indexed, so convert seat to 0-indexed
         let defaultIndex: number;
         if (opt.default === 'first' || opt.default === undefined) {
           defaultIndex = 0;
@@ -1021,7 +1022,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
         } else {
           defaultIndex = opt.default;
         }
-        result[key] = seat === defaultIndex;
+        result[key] = (seat - 1) === defaultIndex;
       } else if (opt.type === 'text') {
         // For text, use the default if provided
         if (opt.default !== undefined) {

@@ -342,6 +342,9 @@ export class Game<
   /** Animation event sequence counter (for unique IDs) */
   private _animationEventSeq: number = 0;
 
+  /** Original constructor options (for snapshot restoration) */
+  private _constructorOptions: Record<string, unknown> = {};
+
   /** Properties that are safe and shouldn't trigger HMR warnings */
   private static readonly _safeProperties = new Set([
     // Base GameElement properties
@@ -350,7 +353,7 @@ export class Game<
     'pile', 'phase', 'random', 'messages', 'settings',
     'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
     '_flowEngine', '_debugRegistry', '_persistentMaps',
-    '_animationEvents', '_animationEventSeq',
+    '_animationEvents', '_animationEventSeq', '_constructorOptions',
   ]);
 
   static override unserializableAttributes = [
@@ -363,6 +366,7 @@ export class Game<
     '_flowDefinition',
     '_flowEngine',
     '_debugRegistry',
+    '_constructorOptions',
   ];
 
   /**
@@ -408,6 +412,10 @@ export class Game<
     this.random = random;
     this.game = this as unknown as G;
     this._ctx.game = this;
+
+    // Store all constructor options for snapshot restoration
+    // This enables MCTS clones and other restores to receive full options
+    this._constructorOptions = { ...options, seed };
 
     // Register base classes
     this._ctx.classRegistry.set('Space', Space as unknown as ElementClass);
@@ -2230,6 +2238,14 @@ export class Game<
     const winnerSeats = this.settings.winners as number[] | undefined;
     if (!winnerSeats) return [];
     return winnerSeats.map(seat => this.getPlayer(seat)).filter((p): p is P => p !== undefined);
+  }
+
+  /**
+   * Get the original constructor options.
+   * Used by snapshot/restore to preserve all options (including custom ones like playerConfigs).
+   */
+  getConstructorOptions(): Record<string, unknown> {
+    return this._constructorOptions;
   }
 
   // ============================================

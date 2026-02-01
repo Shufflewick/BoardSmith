@@ -33,6 +33,9 @@ export interface GameStateSnapshot {
 
   /** Random seed for deterministic replay */
   seed?: string;
+
+  /** Original constructor options (for full game restoration including custom options like playerConfigs) */
+  gameOptions?: Record<string, unknown>;
 }
 
 /**
@@ -84,6 +87,7 @@ export function createSnapshot(
     commandHistory: [...game.commandHistory],
     actionHistory: [...actionHistory],
     seed,
+    gameOptions: game.getConstructorOptions(),
   };
 }
 

@@ -249,14 +249,18 @@ export class GameRunner<G extends Game = Game> {
     snapshot: GameStateSnapshot,
     GameClass: new (options: GameOptions) => G
   ): GameRunner<G> {
+    // Use full gameOptions from snapshot if available, falling back to basic options
+    // This ensures custom options like playerConfigs are preserved
+    const gameOptions = snapshot.gameOptions ?? {
+      playerCount: snapshot.state.settings.playerCount as number,
+      playerNames: snapshot.state.settings.playerNames as string[],
+      seed: snapshot.seed,
+    };
+
     const runner = new GameRunner({
       GameClass,
       gameType: snapshot.gameType,
-      gameOptions: {
-        playerCount: snapshot.state.settings.playerCount as number,
-        playerNames: snapshot.state.settings.playerNames as string[],
-        seed: snapshot.seed,
-      },
+      gameOptions: gameOptions as GameOptions,
     });
 
     // Replay commands to restore state

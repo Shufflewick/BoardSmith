@@ -1179,11 +1179,15 @@ export class MCTSBot<G extends Game = Game> {
    */
   private restoreGame(snapshot: GameStateSnapshot): Game | null {
     try {
-      const game = new this.GameClass({
+      // Use full gameOptions from snapshot if available, falling back to basic options
+      // This ensures custom options like playerConfigs are preserved in MCTS clones
+      const gameOptions = snapshot.gameOptions ?? {
         playerCount: snapshot.state.settings.playerCount as number,
         playerNames: snapshot.state.settings.playerNames as string[],
         seed: snapshot.seed,
-      });
+      };
+
+      const game = new this.GameClass(gameOptions as any);
 
       // Replay commands to restore element state
       game.replayCommands(snapshot.commandHistory);
