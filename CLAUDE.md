@@ -18,6 +18,10 @@ Read everything in the docs folder to get started.
 - **eslint-plugin** - ESLint rules enforcing game design constraints (no-network, no-timers, no-nondeterministic, etc).
 - **cli** - Command-line interface for dev server, game creation, testing, and local server setup.
 
+# Example Games
+
+Example games are located in `~/BoardSmithGames/`. Reference games include Hex (simplest), Go Fish (cards), Checkers (grid + multi-step), and Cribbage (complex multi-phase).
+
 # Hard Rules
 - **Pit of Success**: The right path is always the easy path, the wrong path is always hard. Design APIs and code so correct usage is obvious and incorrect usage is difficult.
 - **No Backward Compatibility**: Always pursue the cleanest implementation. No deprecation cycles—remove the bad thing and add the good thing. We're a library in active development, not a legacy system.

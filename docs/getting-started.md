@@ -302,7 +302,7 @@ These issues cause silent failures that are hard to debug. Five minutes reading 
 
 ## Example Games
 
-BoardSmith includes several example games in `packages/games/`:
+BoardSmith includes several example games:
 
 | Game | Complexity | Key Features |
 |------|-----------|--------------|

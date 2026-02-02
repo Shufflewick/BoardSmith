@@ -521,7 +521,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 
 ## Example: Hex Game
 
-A minimal but complete example from `packages/games/hex/`:
+A minimal but complete example from Hex:
 
 ```typescript
 // game.ts

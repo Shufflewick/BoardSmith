@@ -645,7 +645,7 @@ Action.create('attack')
 
 ### Example: Go Fish Ask Action
 
-From `packages/games/go-fish/rules/src/actions.ts`:
+From Go Fish actions.ts:
 
 ```typescript
 export function createAskAction(game: GoFishGame): ActionDefinition {
@@ -889,7 +889,7 @@ loop({
 
 ### Example: Cribbage Flow
 
-Complex multi-phase flow from `packages/games/cribbage/`:
+Complex multi-phase flow from Cribbage:
 
 ```typescript
 export function createCribbageFlow(game: CribbageGame): FlowDefinition {
@@ -945,7 +945,7 @@ export function createCribbageFlow(game: CribbageGame): FlowDefinition {
 
 ### Example: Simple Turn-Based Flow (Hex)
 
-Minimal flow from `packages/games/hex/`:
+Minimal flow from Hex:
 
 ```typescript
 export function createHexFlow(game: HexGame): FlowDefinition {

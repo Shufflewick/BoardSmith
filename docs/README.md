@@ -21,11 +21,11 @@ This folder contains documentation for the BoardSmith game framework.
 If you're an AI assistant reading this codebase:
 
 1. **Start with** [`llm-overview.md`](./llm-overview.md) for a comprehensive summary
-2. **Simplest example**: `packages/games/hex/` - minimal but complete game
-3. **Complex example**: `packages/games/cribbage/` - multi-phase, simultaneous actions
+2. **Simplest example**: Hex - minimal but complete game
+3. **Complex example**: Cribbage - multi-phase, simultaneous actions
 
 ## Quick Links
 
 - **CLI**: `boardsmith init`, `boardsmith dev`, `boardsmith test`
 - **Key packages**: `boardsmith`, `boardsmith/ui`, `boardsmith/ai`
-- **Example games**: `packages/games/{hex, go-fish, checkers, cribbage}`
+- **Example games**: Hex, Go Fish, Checkers, Cribbage

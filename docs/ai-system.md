@@ -131,7 +131,7 @@ Terminal states always use actual win/loss (1.0/0.0).
 
 ## Example: Checkers AI
 
-From `packages/games/checkers/rules/src/ai.ts`:
+From Checkers ai.ts:
 
 ```typescript
 import type { AIConfig, Game } from 'boardsmith/ai';

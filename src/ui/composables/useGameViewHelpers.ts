@@ -123,7 +123,7 @@ export function findPlayerHand(
 
   return gameView.children.find((c) => {
     const attrs = getAttrs(c);
-    return attrs.$type === 'hand' && attrs.player?.position === playerSeat;
+    return attrs.$type === 'hand' && attrs.player?.seat === playerSeat;
   });
 }
 
@@ -266,7 +266,7 @@ export function getCardData(element: GameElement | null | undefined): { rank: st
  */
 export function getElementOwner(element: GameElement | null | undefined): number | undefined {
   if (!element) return undefined;
-  return getAttrs(element).player?.position;
+  return getAttrs(element).player?.seat;
 }
 
 /**

@@ -706,7 +706,7 @@ const canDrag = () => true;
 
 **Real Examples:**
 
-1. **Demo: Complex UI Interactions** (`packages/games/demoComplexUiInteractions/`)
+1. **Demo: Complex UI Interactions**
 
    A dedicated demo showing this feature with multiple simultaneous actions. The custom GameTable:
    - Shows an action status panel displaying the current action and selection step
@@ -714,7 +714,7 @@ const canDrag = () => true;
    - Highlights cards with action-specific colors
    - Includes a debug panel showing raw `boardInteraction` state
 
-2. **Go Fish** (`packages/games/go-fish/ui/src/components/GoFishBoard.vue`)
+2. **Go Fish**
 
    Uses `boardInteraction.currentAction` to:
    - Show an "Asking:" indicator banner when the player clicks the Ask button

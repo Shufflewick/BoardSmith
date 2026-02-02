@@ -91,7 +91,7 @@
  * ```
  */
 
-import { ref, computed, watch, onUnmounted, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, watch, onUnmounted, isRef, type Ref, type ComputedRef } from 'vue';
 import { prefersReducedMotion } from './useElementAnimation.js';
 import { easeOutCubic } from '../../utils/easing.js';
 
@@ -280,8 +280,9 @@ export interface AutoWatchOptions {
 
   /**
    * Container configurations for tracking element positions.
+   * Can be a plain array or a reactive ref/computed for dynamic containers.
    */
-  containers: AutoWatchContainer[];
+  containers: AutoWatchContainer[] | Ref<AutoWatchContainer[]> | ComputedRef<AutoWatchContainer[]>;
 
   /**
    * Extract element data for rendering the flying element.
@@ -757,6 +758,16 @@ export function useFlyingElements(
       staggerMs = 50,
     } = options.autoWatch;
 
+    /**
+     * Helper to unwrap containers (handles plain array, Ref, or ComputedRef)
+     */
+    function getContainers(): AutoWatchContainer[] {
+      if (isRef(containers)) {
+        return containers.value;
+      }
+      return containers;
+    }
+
     // Track element locations: elementId -> containerName
     const elementLocations = new Map<number, string>();
     // Track element data for flying animations
@@ -871,17 +882,19 @@ export function useFlyingElements(
 
         // Build container element map
         const containerElements = new Map<string, AutoWatchGameElement | null>();
-        for (const container of containers) {
-          containerElements.set(container.name, getContainerElement(container));
+        for (const container of getContainers()) {
+          const el = getContainerElement(container);
+          containerElements.set(container.name, el);
         }
 
         // Collect current element states
         const currentElements = new Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>();
         collectElements(newView, containerElements, currentElements);
 
+
         // Collect current container counts
         const currentCounts = new Map<string, number>();
-        for (const container of containers) {
+        for (const container of getContainers()) {
           const el = getContainerElement(container);
           currentCounts.set(container.name, countChildren(el));
         }
@@ -909,8 +922,8 @@ export function useFlyingElements(
 
           if (oldContainer && newContainer && oldContainer !== newContainer) {
             // Element moved between containers - trigger fly animation
-            const fromContainerConfig = containers.find((c) => c.name === oldContainer);
-            const toContainerConfig = containers.find((c) => c.name === newContainer);
+            const fromContainerConfig = getContainers().find((c) => c.name === oldContainer);
+            const toContainerConfig = getContainers().find((c) => c.name === newContainer);
 
             if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
               const shouldFlipFn = shouldFlip ?? defaultShouldFlip;
@@ -949,8 +962,8 @@ export function useFlyingElements(
 
               if (newCount > oldCount) {
                 // Destination gained children - fly from source to destination
-                const fromContainerConfig = containers.find((c) => c.name === route.from);
-                const toContainerConfig = containers.find((c) => c.name === route.to);
+                const fromContainerConfig = getContainers().find((c) => c.name === route.from);
+                const toContainerConfig = getContainers().find((c) => c.name === route.to);
 
                 if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
                   const elementData = route.getElementData?.() ??
@@ -986,8 +999,8 @@ export function useFlyingElements(
 
               if (newCount < oldCount) {
                 // Source lost children - fly from source to this element
-                const fromContainerConfig = containers.find((c) => c.name === route.from);
-                const toContainerConfig = containers.find((c) => c.name === container);
+                const fromContainerConfig = getContainers().find((c) => c.name === route.from);
+                const toContainerConfig = getContainers().find((c) => c.name === container);
 
                 if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
                   const elementData = autoWatchGetElementData(element);

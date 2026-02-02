@@ -146,6 +146,7 @@ const DEFAULT_EASING = 'ease-out';
 function getElementId(el: Element): string | null {
   return (
     el.getAttribute('data-card-id') ||
+    el.getAttribute('data-piece-id') ||
     el.getAttribute('data-element-id') ||
     el.getAttribute('id') ||
     null

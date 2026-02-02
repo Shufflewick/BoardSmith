@@ -1,21 +1,19 @@
 # Game Examples & Patterns
 
-This document analyzes the example games in `packages/games/` to demonstrate common patterns and best practices.
+This document analyzes the example games to demonstrate common patterns and best practices.
 
 ## Example Games Overview
 
-| Game | Location | Complexity | Key Patterns |
-|------|----------|-----------|--------------|
-| Hex | `packages/games/hex/` | Simple | Hex grid, path-finding, simple flow |
-| Go Fish | `packages/games/go-fish/` | Medium | Cards, hidden info, conditional turns |
-| Checkers | `packages/games/checkers/` | Medium | Square grid, multi-step actions, piece promotion |
-| Cribbage | `packages/games/cribbage/` | Complex | Multi-phase, simultaneous actions, complex scoring |
+| Game | Complexity | Key Patterns |
+|------|-----------|--------------|
+| Hex | Simple | Hex grid, path-finding, simple flow |
+| Go Fish | Medium | Cards, hidden info, conditional turns |
+| Checkers | Medium | Square grid, multi-step actions, piece promotion |
+| Cribbage | Complex | Multi-phase, simultaneous actions, complex scoring |
 
 ---
 
 ## Hex - Simplest Example
-
-**Location**: `packages/games/hex/`
 
 Hex is the simplest example, demonstrating core patterns with minimal complexity.
 
@@ -120,8 +118,6 @@ export class Cell extends HexCell {
 ---
 
 ## Go Fish - Card Game Patterns
-
-**Location**: `packages/games/go-fish/`
 
 Go Fish demonstrates card game patterns including hidden information and conditional turns.
 
@@ -231,8 +227,6 @@ checkForBooks(player: GoFishPlayer): void {
 
 ## Checkers - Grid & Multi-Step Actions
 
-**Location**: `packages/games/checkers/`
-
 Checkers demonstrates square grids, forced moves, and multi-step actions.
 
 ### Key Features
@@ -337,8 +331,6 @@ getValidMoves(player: CheckersPlayer): Move[] {
 ---
 
 ## Cribbage - Complex Multi-Phase Game
-
-**Location**: `packages/games/cribbage/`
 
 Cribbage is the most complex example, demonstrating multi-phase flow, simultaneous actions, and complex scoring.
 

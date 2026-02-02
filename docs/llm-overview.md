@@ -18,22 +18,17 @@ BoardSmith is a TypeScript framework for building turn-based multiplayer board a
 
 ```
 BoardSmith/
-├── packages/
-│   ├── engine/       # Core framework (~15k lines)
+├── src/
+│   ├── engine/       # Core framework
 │   ├── runtime/      # Game execution
 │   ├── session/      # Session management
-│   ├── ai/           # MCTS bot (~700 lines)
-│   ├── ui/           # Vue 3 components (~15k lines)
+│   ├── ai/           # MCTS bot
+│   ├── ui/           # Vue 3 components
 │   ├── client/       # Browser networking
 │   ├── server/       # Platform-agnostic server
 │   ├── worker/       # Cloudflare Workers runtime
 │   ├── cli/          # Dev tools
-│   ├── testing/      # Test utilities
-│   └── games/        # Example games
-│       ├── hex/      # Simplest example
-│       ├── go-fish/  # Card game patterns
-│       ├── checkers/ # Grid + multi-step
-│       └── cribbage/ # Complex multi-phase
+│   └── testing/      # Test utilities
 └── docs/             # Documentation
 ```
 
@@ -364,30 +359,30 @@ boardsmith publish        # Publish to boardsmith.io
 
 ## Example Games Reference
 
-| Game | File | Key Patterns |
-|------|------|--------------|
-| Hex | `packages/games/hex/rules/src/` | Simple flow, hex grid, single action |
-| Go Fish | `packages/games/go-fish/rules/src/` | Cards, hidden info, conditional turns |
-| Checkers | `packages/games/checkers/rules/src/` | Grid, multi-step jumps, promotion |
-| Cribbage | `packages/games/cribbage/rules/src/` | Multi-phase, simultaneous, scoring |
-| Polyhedral Potions | `packages/games/polyhedral-potions/rules/src/` | Dice, 3D rendering, abilities, scoring tracks |
+| Game | Key Patterns |
+|------|--------------|
+| Hex | Simple flow, hex grid, single action |
+| Go Fish | Cards, hidden info, conditional turns |
+| Checkers | Grid, multi-step jumps, promotion |
+| Cribbage | Multi-phase, simultaneous, scoring |
+| Polyhedral Potions | Dice, 3D rendering, abilities, scoring tracks |
 
 ## Key Files to Understand
 
-1. **Engine core**: `packages/engine/src/`
+1. **Engine core**: `src/engine/`
    - `game.ts` - Game base class
    - `element/` - Element system
    - `action/` - Action builder
    - `flow/` - Flow system
    - `command/` - Command types
 
-2. **Example game**: `packages/games/hex/rules/src/`
+2. **Example game**: Hex
    - `game.ts` - Minimal game class
    - `elements.ts` - Custom elements
    - `actions.ts` - Action definitions
    - `flow.ts` - Simple flow
 
-3. **UI**: `packages/ui/src/`
+3. **UI**: `src/ui/`
    - `components/GameShell.vue` - Main wrapper
    - `composables/` - Reusable logic
 
