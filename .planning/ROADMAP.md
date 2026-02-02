@@ -43,10 +43,10 @@ Plans:
   3. `client/types.ts` re-exports lobby types from `types/protocol.ts` (no duplicate definitions)
   4. All imports across codebase resolve to the canonical source
   5. All tests pass after type consolidation
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 70-01: [TBD]
+- [ ] 70-01-PLAN.md — Consolidate lobby types to types/protocol.ts with re-exports
 
 ### Phase 71: Deprecated API Removal
 **Goal**: Deprecated flying APIs are removed after all internal callers migrate to new APIs
@@ -114,7 +114,7 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 69. Config & Vestigial Cleanup | 1/1 | ✓ Complete | 2026-02-01 |
-| 70. Type Consolidation | 0/TBD | Not started | - |
+| 70. Type Consolidation | 0/1 | Not started | - |
 | 71. Deprecated API Removal | 0/TBD | Not started | - |
 | 72. Code Duplication Fixes | 0/TBD | Not started | - |
 | 73. Code Smell Refactors | 0/TBD | Not started | - |
