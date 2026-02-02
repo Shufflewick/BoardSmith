@@ -14,12 +14,12 @@ Requirements for dead code and code smell cleanup.
 
 ### Deprecated API Removal
 
-- [ ] **DEP-01**: Remove `flyCard()` method from useFlyingElements
-- [ ] **DEP-02**: Remove `flyCards()` method from useFlyingElements
-- [ ] **DEP-03**: Remove `FlyCardOptions` interface from useFlyingElements
-- [ ] **DEP-04**: Migrate usePlayerStatAnimation.ts to `fly()`/`flyMultiple()`/`FlyConfig`
-- [ ] **DEP-05**: Migrate AutoGameBoard.vue to `fly()`/`flyMultiple()`/`FlyConfig`
-- [ ] **DEP-06**: Migrate useActionAnimations.ts to `fly()`/`flyMultiple()`/`FlyConfig`
+- [x] **DEP-01**: Remove `flyCard()` method from useFlyingElements
+- [x] **DEP-02**: Remove `flyCards()` method from useFlyingElements
+- [x] **DEP-03**: Remove `FlyCardOptions` interface from useFlyingElements
+- [x] **DEP-04**: Migrate usePlayerStatAnimation.ts to `fly()`/`flyMultiple()`/`FlyConfig`
+- [x] **DEP-05**: Migrate AutoGameBoard.vue to `fly()`/`flyMultiple()`/`FlyConfig`
+- [x] **DEP-06**: Migrate useActionAnimations.ts to `fly()`/`flyMultiple()`/`FlyConfig`
 
 ### Type Consolidation
 
@@ -69,12 +69,12 @@ Requirements for dead code and code smell cleanup.
 | TYPE-04 | Phase 70 | Complete |
 | TYPE-05 | Phase 70 | Complete |
 | TYPE-06 | Phase 70 | Complete |
-| DEP-04 | Phase 71 | Pending |
-| DEP-05 | Phase 71 | Pending |
-| DEP-06 | Phase 71 | Pending |
-| DEP-01 | Phase 71 | Pending |
-| DEP-02 | Phase 71 | Pending |
-| DEP-03 | Phase 71 | Pending |
+| DEP-04 | Phase 71 | Complete |
+| DEP-05 | Phase 71 | Complete |
+| DEP-06 | Phase 71 | Complete |
+| DEP-01 | Phase 71 | Complete |
+| DEP-02 | Phase 71 | Complete |
+| DEP-03 | Phase 71 | Complete |
 | DUP-01 | Phase 72 | Pending |
 | DUP-02 | Phase 72 | Pending |
 | SMELL-01 | Phase 73 | Pending |
@@ -88,4 +88,4 @@ Requirements for dead code and code smell cleanup.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-01 after roadmap creation*
+*Last updated: 2026-02-01 after Phase 71 completion*
