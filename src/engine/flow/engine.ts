@@ -179,47 +179,9 @@ export class FlowEngine<G extends Game = Game> {
     this.actionError = undefined;
     this.awaitingInput = false;
 
-    // Handle action step completion logic
-    if (currentFrame?.node.type === 'action-step') {
-      const config = currentFrame.node.config as ActionStepConfig;
-
-      // If action returned a followUp, don't complete the step or count the move yet.
-      // The followUp chain must complete first. Only when the final action in the chain
-      // completes (no followUp) do we count it as a move and check completion.
-      // This prevents followUp chains from counting against parent loop's maxIterations.
-      if (result.followUp) {
-        // Stay in the same actionStep, waiting for the followUp to be executed
-        return this.run();
-      }
-
-      // Increment move count (only when action chain is complete - no followUp)
-      const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
-      const newMoveCount = currentMoveCount + 1;
-      currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };
-
-      // Check if maxMoves reached - auto-complete
-      if (config.maxMoves && newMoveCount >= config.maxMoves) {
-        currentFrame.completed = true;
-        this.currentActionConfig = undefined;
-        this.moveCount = 0;
-      }
-      // Check repeatUntil - only complete if minMoves is met
-      else if (config.repeatUntil) {
-        const minMovesMet = !config.minMoves || newMoveCount >= config.minMoves;
-        if (config.repeatUntil(this.createContext()) && minMovesMet) {
-          currentFrame.completed = true;
-          this.currentActionConfig = undefined;
-          this.moveCount = 0;
-        }
-      }
-      // No repeatUntil and no maxMoves - complete after single action (unless minMoves/maxMoves configured)
-      else if (!config.minMoves && !config.maxMoves) {
-        currentFrame.completed = true;
-        this.currentActionConfig = undefined;
-        this.moveCount = 0;
-      }
-      // Has minMoves but no maxMoves and no repeatUntil - keep going
-      // The executeActionStep will check minMoves when re-entered
+    // Handle action step completion - returns true if should run() immediately (followUp)
+    if (this.handleActionStepCompletion(result)) {
+      return this.run();
     }
 
     return this.run();
@@ -245,46 +207,9 @@ export class FlowEngine<G extends Game = Game> {
     // Clear awaiting state
     this.awaitingInput = false;
 
-    // Handle action step completion logic
-    const currentFrame = this.stack[this.stack.length - 1];
-    if (currentFrame?.node.type === 'action-step') {
-      const config = currentFrame.node.config as ActionStepConfig;
-
-      // If action returned a followUp, don't complete the step or count the move yet.
-      // The followUp chain must complete first. Only when the final action in the chain
-      // completes (no followUp) do we count it as a move and check completion.
-      // This prevents followUp chains from counting against parent loop's maxIterations.
-      if (result.followUp) {
-        // Stay in the same actionStep, waiting for the followUp to be executed
-        return this.run();
-      }
-
-      // Increment move count (only when action chain is complete - no followUp)
-      const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
-      const newMoveCount = currentMoveCount + 1;
-      currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };
-
-      // Check if maxMoves reached - auto-complete
-      if (config.maxMoves && newMoveCount >= config.maxMoves) {
-        currentFrame.completed = true;
-        this.currentActionConfig = undefined;
-        this.moveCount = 0;
-      }
-      // Check repeatUntil - only complete if minMoves is met
-      else if (config.repeatUntil) {
-        const minMovesMet = !config.minMoves || newMoveCount >= config.minMoves;
-        if (config.repeatUntil(this.createContext()) && minMovesMet) {
-          currentFrame.completed = true;
-          this.currentActionConfig = undefined;
-          this.moveCount = 0;
-        }
-      }
-      // No repeatUntil and no maxMoves - complete after single action (unless minMoves/maxMoves configured)
-      else if (!config.minMoves && !config.maxMoves) {
-        currentFrame.completed = true;
-        this.currentActionConfig = undefined;
-        this.moveCount = 0;
-      }
+    // Handle action step completion - returns true if should run() immediately (followUp)
+    if (this.handleActionStepCompletion(result)) {
+      return this.run();
     }
 
     return this.run();
@@ -294,6 +219,61 @@ export class FlowEngine<G extends Game = Game> {
   // SECTION: Resume Handling
   // Purpose: Private methods for handling different resume scenarios
   // ============================================================================
+
+  /**
+   * Handle action step completion after a successful action.
+   * Updates move count, checks completion conditions, and marks frame complete if appropriate.
+   *
+   * @param result - The action result (used to check for followUp)
+   * @returns true if the step should run() immediately (followUp case), false otherwise
+   */
+  private handleActionStepCompletion(result: ActionResult): boolean {
+    const currentFrame = this.stack[this.stack.length - 1];
+    if (currentFrame?.node.type !== 'action-step') {
+      return false;
+    }
+
+    const config = currentFrame.node.config as ActionStepConfig;
+
+    // If action returned a followUp, don't complete the step or count the move yet.
+    // The followUp chain must complete first. Only when the final action in the chain
+    // completes (no followUp) do we count it as a move and check completion.
+    // This prevents followUp chains from counting against parent loop's maxIterations.
+    if (result.followUp) {
+      return true; // Caller should run() immediately
+    }
+
+    // Increment move count (only when action chain is complete - no followUp)
+    const currentMoveCount = (currentFrame.data?.moveCount as number) ?? 0;
+    const newMoveCount = currentMoveCount + 1;
+    currentFrame.data = { ...currentFrame.data, moveCount: newMoveCount };
+
+    // Check completion conditions
+    if (config.maxMoves && newMoveCount >= config.maxMoves) {
+      this.completeActionStep(currentFrame);
+    } else if (config.repeatUntil) {
+      const minMovesMet = !config.minMoves || newMoveCount >= config.minMoves;
+      if (config.repeatUntil(this.createContext()) && minMovesMet) {
+        this.completeActionStep(currentFrame);
+      }
+    } else if (!config.minMoves && !config.maxMoves) {
+      // No repeatUntil and no maxMoves - complete after single action
+      this.completeActionStep(currentFrame);
+    }
+    // Has minMoves but no maxMoves and no repeatUntil - keep going
+    // The executeActionStep will check minMoves when re-entered
+
+    return false;
+  }
+
+  /**
+   * Mark an action step frame as completed and reset tracking state.
+   */
+  private completeActionStep(frame: ExecutionFrame): void {
+    frame.completed = true;
+    this.currentActionConfig = undefined;
+    this.moveCount = 0;
+  }
 
   /**
    * Resume a simultaneous action step after a player's action.
