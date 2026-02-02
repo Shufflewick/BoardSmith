@@ -455,6 +455,57 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Attempt to auto-fill a selection if it has exactly one non-optional choice.
+   * Updates both currentArgs and collectedPicks in actionSnapshot.
+   *
+   * @param selection - The selection metadata to check for auto-fill
+   * @returns true if auto-fill was applied, false otherwise
+   */
+  function tryAutoFillSelection(selection: PickMetadata): boolean {
+    if (!getAutoFill() || isExecuting.value) return false;
+
+    const choices = getChoices(selection);
+    if (choices.length !== 1 || selection.optional) return false;
+
+    const choice = choices[0];
+    currentArgs.value[selection.name] = choice.value;
+
+    if (actionSnapshot.value) {
+      actionSnapshot.value.collectedPicks.set(selection.name, {
+        value: choice.value,
+        display: choice.display,
+        skipped: false,
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Fetch choices for a selection and attempt auto-fill.
+   * Recursively handles next selection if current is auto-filled.
+   *
+   * @param selection - The selection to fetch and potentially auto-fill
+   */
+  async function fetchAndAutoFill(selection: PickMetadata): Promise<void> {
+    // Only fetch for types that have choices
+    if (selection.type !== 'choice' && selection.type !== 'element' && selection.type !== 'elements') {
+      return;
+    }
+
+    suppressNextWatcherFetch = true;
+    await fetchChoicesForPick(selection.name);
+
+    if (tryAutoFillSelection(selection)) {
+      // Recursively handle next selection
+      const nextSel = getNextSelection(selection.name);
+      if (nextSel) {
+        await fetchAndAutoFill(nextSel);
+      }
+    }
+  }
+
+  /**
    * Fetch choices for a pick from the server.
    */
   async function fetchChoicesForPick(selectionName: string): Promise<void> {
@@ -652,23 +703,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Now attempt auto-fill if enabled
     // Don't auto-fill optional selections - user must consciously choose or skip
-    if (getAutoFill()) {
-      const choices = getChoices(sel);
-      if (choices.length === 1 && !sel.optional) {
-        // Auto-fill
-        const choice = choices[0];
-        currentArgs.value[sel.name] = choice.value;
-
-        // Also update collectedPicks so UI reflects the selection
-        if (actionSnapshot.value) {
-          actionSnapshot.value.collectedPicks.set(sel.name, {
-            value: choice.value,
-            display: choice.display,
-            skipped: false,
-          });
-        }
-      }
-    }
+    tryAutoFillSelection(sel);
   }, { immediate: true });
 
   // === Auto-execute Watch ===
@@ -957,51 +992,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         }
       }
 
-      if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
-        // Prevent the watcher from also fetching (would cause double-fetch)
-        suppressNextWatcherFetch = true;
-        await fetchChoicesForPick(selectionToFetch.name);
-
-        // After fetching, check for auto-fill (but not for optional selections)
-        if (getAutoFill() && !isExecuting.value) {
-          const choices = getChoices(selectionToFetch);
-          if (choices.length === 1 && !selectionToFetch.optional) {
-            const choice = choices[0];
-            currentArgs.value[selectionToFetch.name] = choice.value;
-
-            if (actionSnapshot.value) {
-              actionSnapshot.value.collectedPicks.set(selectionToFetch.name, {
-                value: choice.value,
-                display: choice.display,
-                skipped: false,
-              });
-            }
-
-            // Fetch next selection if needed
-            const nextSel = getNextSelection(selectionToFetch.name);
-            if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-              await fetchChoicesForPick(nextSel.name);
-
-              // Don't auto-fill optional selections - user must consciously choose or skip
-              if (getAutoFill() && !isExecuting.value) {
-                const nextChoices = getChoices(nextSel);
-                if (nextChoices.length === 1 && !nextSel.optional) {
-                  currentArgs.value[nextSel.name] = nextChoices[0].value;
-                  if (actionSnapshot.value) {
-                    actionSnapshot.value.collectedPicks.set(nextSel.name, {
-                      value: nextChoices[0].value,
-                      display: nextChoices[0].display,
-                      skipped: false,
-                    });
-                  }
-                }
-              }
-            }
-          }
-        }
+      if (selectionToFetch) {
+        await fetchAndAutoFill(selectionToFetch);
       }
     }
-
   }
 
   async function start(
@@ -1062,53 +1056,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         }
       }
 
-      // Fetch choices for the selection that actually needs input
-      if (selectionToFetch && (selectionToFetch.type === 'choice' || selectionToFetch.type === 'element' || selectionToFetch.type === 'elements')) {
-        // Prevent the watcher from also fetching (would cause double-fetch)
-        suppressNextWatcherFetch = true;
-        await fetchChoicesForPick(selectionToFetch.name);
-
-        // After fetching, manually trigger auto-fill if there's exactly one choice
-        // The watch may have fired before choices were fetched, so we need to check again
-        // Don't auto-fill optional selections - user must consciously choose or skip
-        if (getAutoFill() && !isExecuting.value) {
-          const choices = getChoices(selectionToFetch);
-          if (choices.length === 1 && !selectionToFetch.optional) {
-            const choice = choices[0];
-            currentArgs.value[selectionToFetch.name] = choice.value;
-
-            // Store in snapshot
-            if (actionSnapshot.value) {
-              actionSnapshot.value.collectedPicks.set(selectionToFetch.name, {
-                value: choice.value,
-                display: choice.display,
-                skipped: false,
-              });
-            }
-
-            // Recursively fetch and auto-fill the next selection if needed
-            const nextSel = getNextSelection(selectionToFetch.name);
-            if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-              await fetchChoicesForPick(nextSel.name);
-
-              // Check for auto-fill on the next selection too
-              // Don't auto-fill optional selections - user must consciously choose or skip
-              if (getAutoFill() && !isExecuting.value) {
-                const nextChoices = getChoices(nextSel);
-                if (nextChoices.length === 1 && !nextSel.optional) {
-                  currentArgs.value[nextSel.name] = nextChoices[0].value;
-                  if (actionSnapshot.value) {
-                    actionSnapshot.value.collectedPicks.set(nextSel.name, {
-                      value: nextChoices[0].value,
-                      display: nextChoices[0].display,
-                      skipped: false,
-                    });
-                  }
-                }
-              }
-            }
-          }
-        }
+      if (selectionToFetch) {
+        await fetchAndAutoFill(selectionToFetch);
       }
     }
   }
