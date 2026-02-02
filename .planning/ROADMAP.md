@@ -60,10 +60,10 @@ Plans:
   5. `flyCards()` method no longer exists in useFlyingElements
   6. `FlyCardOptions` interface no longer exists in useFlyingElements
   7. All tests pass after API removal
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 71-01: [TBD]
+- [ ] 71-01-PLAN.md — Migrate internal callers and remove deprecated flying APIs
 
 ### Phase 72: Code Duplication Fixes
 **Goal**: Repeated code patterns are extracted into shared helpers
@@ -115,7 +115,7 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 |-------|----------------|--------|-----------|
 | 69. Config & Vestigial Cleanup | 1/1 | ✓ Complete | 2026-02-01 |
 | 70. Type Consolidation | 1/1 | ✓ Complete | 2026-02-01 |
-| 71. Deprecated API Removal | 0/TBD | Not started | - |
+| 71. Deprecated API Removal | 0/1 | Not started | - |
 | 72. Code Duplication Fixes | 0/TBD | Not started | - |
 | 73. Code Smell Refactors | 0/TBD | Not started | - |
 | 74. Documentation | 0/TBD | Not started | - |
