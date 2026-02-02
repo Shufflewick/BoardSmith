@@ -1113,7 +1113,7 @@ export class ActionExecutor {
 
     // Get repeat config based on selection type
     let repeatConfig: RepeatConfig<unknown> | undefined;
-    let repeatUntil: unknown | undefined;
+    let repeatUntil: unknown;
     const isElementSelection = selection.type === 'element' || selection.type === 'elements';
 
     if (selection.type === 'choice') {
