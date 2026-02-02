@@ -101,10 +101,10 @@ Plans:
   2. All removed APIs from v2.7 are documented with migration paths
   3. Document references the consolidated type locations
   4. All tests pass (final verification)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 74-01: [TBD]
+- [ ] 74-01-PLAN.md — Create BREAKING.md with v2.7 breaking changes documentation
 
 ## Progress
 
@@ -118,4 +118,4 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 | 71. Deprecated API Removal | 1/1 | ✓ Complete | 2026-02-01 |
 | 72. Code Duplication Fixes | 1/1 | ✓ Complete | 2026-02-01 |
 | 73. Code Smell Refactors | 1/1 | ✓ Complete | 2026-02-01 |
-| 74. Documentation | 0/TBD | Not started | - |
+| 74. Documentation | 0/1 | Not started | - |
