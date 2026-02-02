@@ -11,7 +11,7 @@ import type {
 import { createSnapshot, deserializeAction } from '../engine/index.js';
 import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
-import { SeededRandom } from './utils.js';
+import { SeededRandom } from '../utils/random.js';
 
 /** Game class constructor type */
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
