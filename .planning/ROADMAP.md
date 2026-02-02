@@ -10,7 +10,7 @@ v2.7 cleans up all identified dead code, type duplication, and code smells disco
 - Integer phases (69, 70, 71...): Planned milestone work
 - Decimal phases (69.1, 69.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 69: Config & Vestigial Cleanup** - Fix stale config paths and remove single-export utils file
+- [x] **Phase 69: Config & Vestigial Cleanup** - Fix stale config paths and remove single-export utils file
 - [ ] **Phase 70: Type Consolidation** - Consolidate duplicated lobby types to types/protocol.ts
 - [ ] **Phase 71: Deprecated API Removal** - Migrate internal callers then remove deprecated flying APIs
 - [ ] **Phase 72: Code Duplication Fixes** - Extract shared logic in FlowEngine and useActionController
@@ -31,7 +31,7 @@ v2.7 cleans up all identified dead code, type duplication, and code smells disco
 **Plans**: 1 plan
 
 Plans:
-- [ ] 69-01-PLAN.md — Fix stale config paths and remove utils.ts re-export file
+- [x] 69-01-PLAN.md — Fix stale config paths and remove utils.ts re-export file
 
 ### Phase 70: Type Consolidation
 **Goal**: Lobby-related types have a single canonical source in types/protocol.ts
@@ -113,7 +113,7 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 69. Config & Vestigial Cleanup | 0/1 | Ready | - |
+| 69. Config & Vestigial Cleanup | 1/1 | ✓ Complete | 2026-02-01 |
 | 70. Type Consolidation | 0/TBD | Not started | - |
 | 71. Deprecated API Removal | 0/TBD | Not started | - |
 | 72. Code Duplication Fixes | 0/TBD | Not started | - |

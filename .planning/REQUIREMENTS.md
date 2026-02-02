@@ -9,8 +9,8 @@ Requirements for dead code and code smell cleanup.
 
 ### Config Cleanup
 
-- [ ] **CFG-01**: Fix vitest.config.ts stale path references (packages/games/ no longer exists)
-- [ ] **CFG-02**: Fix eslint.config.mjs stale path references (packages/**/*.ts should be src/**/*.ts)
+- [x] **CFG-01**: Fix vitest.config.ts stale path references (packages/games/ no longer exists)
+- [x] **CFG-02**: Fix eslint.config.mjs stale path references (packages/**/*.ts should be src/**/*.ts)
 
 ### Deprecated API Removal
 
@@ -42,7 +42,7 @@ Requirements for dead code and code smell cleanup.
 
 ### Vestigial Files
 
-- [ ] **VEST-01**: Remove src/ai/utils.ts single re-export file
+- [x] **VEST-01**: Remove src/ai/utils.ts single re-export file
 
 ### Documentation
 
@@ -60,9 +60,9 @@ Requirements for dead code and code smell cleanup.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CFG-01 | Phase 69 | Pending |
-| CFG-02 | Phase 69 | Pending |
-| VEST-01 | Phase 69 | Pending |
+| CFG-01 | Phase 69 | Complete |
+| CFG-02 | Phase 69 | Complete |
+| VEST-01 | Phase 69 | Complete |
 | TYPE-01 | Phase 70 | Pending |
 | TYPE-02 | Phase 70 | Pending |
 | TYPE-03 | Phase 70 | Pending |
