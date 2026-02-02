@@ -37,8 +37,8 @@ Requirements for dead code and code smell cleanup.
 
 ### Code Smells
 
-- [ ] **SMELL-01**: Refactor `suppressNextWatcherFetch` module-level flag into proper coordination pattern
-- [ ] **SMELL-02**: Fix redundant `unknown | undefined` return type in `injectBoardInteraction()`
+- [x] **SMELL-01**: Refactor `suppressNextWatcherFetch` module-level flag into proper coordination pattern
+- [x] **SMELL-02**: Fix redundant `unknown | undefined` return type in `injectBoardInteraction()`
 
 ### Vestigial Files
 
@@ -75,10 +75,10 @@ Requirements for dead code and code smell cleanup.
 | DEP-01 | Phase 71 | Complete |
 | DEP-02 | Phase 71 | Complete |
 | DEP-03 | Phase 71 | Complete |
-| DUP-01 | Phase 72 | Pending |
-| DUP-02 | Phase 72 | Pending |
-| SMELL-01 | Phase 73 | Pending |
-| SMELL-02 | Phase 73 | Pending |
+| DUP-01 | Phase 72 | Complete |
+| DUP-02 | Phase 72 | Complete |
+| SMELL-01 | Phase 73 | Complete |
+| SMELL-02 | Phase 73 | Complete |
 | DOC-01 | Phase 74 | Pending |
 
 **Coverage:**
@@ -88,4 +88,4 @@ Requirements for dead code and code smell cleanup.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-01 after Phase 71 completion*
+*Last updated: 2026-02-01 after Phase 73 completion*

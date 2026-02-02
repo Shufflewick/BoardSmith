@@ -14,7 +14,7 @@ v2.7 cleans up all identified dead code, type duplication, and code smells disco
 - [x] **Phase 70: Type Consolidation** - Consolidate duplicated lobby types to types/protocol.ts
 - [x] **Phase 71: Deprecated API Removal** - Migrate internal callers then remove deprecated flying APIs
 - [x] **Phase 72: Code Duplication Fixes** - Extract shared logic in FlowEngine and useActionController
-- [ ] **Phase 73: Code Smell Refactors** - Fix coordination pattern and redundant type annotation
+- [x] **Phase 73: Code Smell Refactors** - Fix coordination pattern and redundant type annotation
 - [ ] **Phase 74: Documentation** - Create BREAKING.md documenting all API changes
 
 ## Phase Details
@@ -90,7 +90,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 73-01-PLAN.md — Replace module-level flag with fetchedSelections Set and fix redundant type
+- [x] 73-01-PLAN.md — Replace module-level flag with fetchedSelections Set and fix redundant type
 
 ### Phase 74: Documentation
 **Goal**: Breaking changes are documented for external users
@@ -117,5 +117,5 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 | 70. Type Consolidation | 1/1 | ✓ Complete | 2026-02-01 |
 | 71. Deprecated API Removal | 1/1 | ✓ Complete | 2026-02-01 |
 | 72. Code Duplication Fixes | 1/1 | ✓ Complete | 2026-02-01 |
-| 73. Code Smell Refactors | 0/1 | Not started | - |
+| 73. Code Smell Refactors | 1/1 | ✓ Complete | 2026-02-01 |
 | 74. Documentation | 0/TBD | Not started | - |
