@@ -353,7 +353,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
   const { gameView, animations } = options;
 
   // Use the flying elements system for rendering
-  const { flyingElements, flyCard, cancelAll } = useFlyingElements();
+  const { flyingElements, fly, cancelAll } = useFlyingElements();
 
   // State captured before action execution
   let pendingAnimation: CapturedAnimationState | null = null;
@@ -508,13 +508,13 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
 
       try {
         // Trigger the flying animation
-        await flyCard({
+        await fly({
           id: animationId,
           startRect,
           endRect: () => destinationElement!.getBoundingClientRect(),
-          cardData: elementData,
+          elementData,
           duration: config.duration ?? 400,
-          cardSize: config.elementSize,
+          elementSize: config.elementSize,
           flip: shouldFlip,
           zIndex: config.zIndex ?? 1000,
           holdDuration: crossfadeDuration,

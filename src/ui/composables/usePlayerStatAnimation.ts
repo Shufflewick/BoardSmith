@@ -22,11 +22,11 @@
  * ```typescript
  * import { usePlayerStatAnimation, useFlyingElements } from '@boardsmith/ui';
  *
- * const { flyingElements, flyCards } = useFlyingElements();
+ * const { flyingElements, flyMultiple } = useFlyingElements();
  * const { flyToPlayerStat, getPlayerStatElement } = usePlayerStatAnimation();
  *
  * // Fly cards to a player's stat
- * flyToPlayerStat(flyCards, {
+ * flyToPlayerStat(flyMultiple, {
  *   cards: removedCards.map(c => ({ rect: c.rect, rank: c.rank, suit: c.suit })),
  *   playerSeat: 0,
  *   statName: 'books',
@@ -34,7 +34,7 @@
  * ```
  */
 
-import type { FlyCardOptions } from './useFlyingElements.js';
+import type { FlyConfig } from './useFlyingElements.js';
 
 export interface CardForAnimation {
   /** Bounding rect of the card's original position */
@@ -90,12 +90,12 @@ export function getPlayerStatElement(
 /**
  * Fly cards to a player's stat display in the player panel.
  *
- * @param flyCards - The flyCards function from useFlyingElements
+ * @param flyMultiple - The flyMultiple function from useFlyingElements
  * @param options - Animation options
  * @returns true if animation was started, false if target not found or no cards
  */
 export function flyToPlayerStat(
-  flyCards: (options: FlyCardOptions[], staggerMs?: number) => Promise<void>,
+  flyMultiple: (configs: FlyConfig[], staggerMs?: number) => Promise<void>,
   options: FlyToStatOptions
 ): boolean {
   const {
@@ -124,12 +124,12 @@ export function flyToPlayerStat(
     return false;
   }
 
-  flyCards(
+  flyMultiple(
     cards.map((card, i) => ({
       id: `fly-stat-${statName}-${playerSeat}-${Date.now()}-${i}`,
       startRect: card.rect,
       endRect: () => targetEl.getBoundingClientRect(),
-      cardData: {
+      elementData: {
         rank: card.rank || '',
         suit: card.suit || '',
         faceUp: card.faceUp ?? true,
@@ -142,7 +142,7 @@ export function flyToPlayerStat(
       },
       flip,
       duration,
-      cardSize,
+      elementSize: cardSize,
     })),
     stagger
   );

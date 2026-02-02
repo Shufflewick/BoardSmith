@@ -23,7 +23,7 @@
 import { computed, provide, ref, watch, nextTick } from 'vue';
 import AutoElement from './AutoElement.vue';
 import { prefersReducedMotion } from '../../composables/useElementAnimation.js';
-import { useFlyingElements, type FlyCardOptions } from '../../composables/useFlyingElements.js';
+import { useFlyingElements } from '../../composables/useFlyingElements.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
 
@@ -140,7 +140,7 @@ function handleElementClick(element: GameElement) {
 // ============================================
 // Flying Cards Animation System
 // ============================================
-const { flyingElements: flyingCards, flyCard } = useFlyingElements();
+const { flyingElements: flyingCards, fly } = useFlyingElements();
 
 // ============================================
 // FLIP Animation System with Smart Fly Detection
@@ -312,12 +312,12 @@ async function animateMovements(
         if (targetElement) {
           animatedIds.add(id);
           flyPromises.push(
-            flyCard({
+            fly({
               id: `fly-${id}-${Date.now()}`,
               startRect: oldRect,
               // Track the target container in real-time
               endRect: () => targetElement.getBoundingClientRect(),
-              cardData: { ...cardData, faceUp: true },
+              elementData: { ...cardData, faceUp: true },
               flip: true,
               duration: 400,
             })
@@ -351,15 +351,15 @@ async function animateMovements(
           const targetRect = cardElement.getBoundingClientRect();
           animatedIds.add(id);
           flyPromises.push(
-            flyCard({
+            fly({
               id: `fly-appear-${id}-${Date.now()}`,
               startRect: sourceRect,
               endRect: () => cardElement.getBoundingClientRect(),
-              cardData: { ...cardData, faceUp: false }, // Start face down
+              elementData: { ...cardData, faceUp: false }, // Start face down
               flip: true, // Flip to face up
               duration: 400,
               // Use target card dimensions, not source (deck) dimensions
-              cardSize: { width: targetRect.width, height: targetRect.height },
+              elementSize: { width: targetRect.width, height: targetRect.height },
             })
           );
         }
