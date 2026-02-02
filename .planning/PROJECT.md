@@ -8,21 +8,15 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v2.7 Dead Code & Code Smell Cleanup
+## Current State: v2.7 Shipped
 
-**Goal:** Clean up all identified dead code, type duplication, and code smells to achieve a pristine codebase with Pit of Success APIs.
+Codebase is pristine with all dead code, type duplication, and code smells cleaned up.
 
-**Target cleanup:**
-- Fix stale config references (vitest.config.ts, eslint.config.mjs)
-- Remove deprecated flying APIs (`flyCard`, `flyCards`, `FlyCardOptions`) and migrate internal callers
-- Consolidate duplicated types to single source (`types/protocol.ts`)
-- Extract shared logic in FlowEngine resume methods
-- Extract auto-fill pattern in useActionController
-- Refactor `suppressNextWatcherFetch` coordination pattern
-- Remove vestigial files (`ai/utils.ts`)
-- Create BREAKING.md documenting all API changes
+## Previous: v2.7 Shipped
 
-**Philosophy:** Clean break, no vestigial code — as if the old patterns never existed.
+Dead Code & Code Smell Cleanup — fixed stale config paths, consolidated lobby types, removed deprecated flying APIs, extracted shared helpers, created BREAKING.md.
+
+**v2.7 Delivered:** Pristine codebase with Pit of Success APIs — removed deprecated code, consolidated types, extracted helpers, documented breaking changes.
 
 ## Previous: v2.6 Shipped
 
@@ -150,19 +144,20 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ autoWatch for automatic cross-container flying — v2.6
 - ✓ countBasedRoutes for hidden element tracking — v2.6
 - ✓ Deprecated composables removed (7 files) — v2.6
+- ✓ Fixed stale config path references (vitest.config.ts, eslint.config.mjs) — v2.7
+- ✓ Removed deprecated `flyCard()`, `flyCards()`, `FlyCardOptions` — v2.7
+- ✓ Migrated internal callers to `fly()`, `flyMultiple()`, `FlyConfig` — v2.7
+- ✓ Consolidated lobby types to `types/protocol.ts` — v2.7
+- ✓ Extracted shared completion logic from FlowEngine — v2.7
+- ✓ Extracted auto-fill pattern helper in useActionController — v2.7
+- ✓ Refactored `suppressNextWatcherFetch` to scoped fetchedSelections Set — v2.7
+- ✓ Fixed redundant `unknown | undefined` type — v2.7
+- ✓ Removed vestigial `src/ai/utils.ts` — v2.7
+- ✓ Created BREAKING.md documenting all API changes — v2.7
 
 ### Active
 
-- [ ] Fix stale config path references (vitest.config.ts, eslint.config.mjs) — v2.7
-- [ ] Remove deprecated `flyCard()`, `flyCards()`, `FlyCardOptions` — v2.7
-- [ ] Migrate internal callers to `fly()`, `flyMultiple()`, `FlyConfig` — v2.7
-- [ ] Consolidate `LobbyState`, `SlotStatus`, `LobbySlot`, `LobbyInfo` to `types/protocol.ts` — v2.7
-- [ ] Extract shared completion logic from FlowEngine `resume()` and `resumeAfterExternalAction()` — v2.7
-- [ ] Extract auto-fill pattern helper in useActionController — v2.7
-- [ ] Refactor `suppressNextWatcherFetch` coordination pattern — v2.7
-- [ ] Fix redundant `unknown | undefined` type — v2.7
-- [ ] Remove vestigial `src/ai/utils.ts` — v2.7
-- [ ] Create BREAKING.md documenting all API changes — v2.7
+(No active requirements — define in next milestone)
 
 ### Out of Scope
 
@@ -241,4 +236,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-02-01 after starting v2.7 milestone*
+*Last updated: 2026-02-02 after v2.7 milestone*

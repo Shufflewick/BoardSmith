@@ -1,5 +1,33 @@
 # Project Milestones: BoardSmith
 
+## v2.7 Dead Code & Code Smell Cleanup (Shipped: 2026-02-02)
+
+**Delivered:** Eliminated all identified dead code, type duplication, and code smells — fixing stale config paths, consolidating lobby types, removing deprecated flying APIs, extracting shared helpers, and documenting breaking changes.
+
+**Phases completed:** 69-74 (6 phases, 6 plans total)
+
+**Key accomplishments:**
+
+- Fixed stale config paths in vitest.config.ts and eslint.config.mjs
+- Consolidated 4 duplicated lobby types (LobbyState, SlotStatus, LobbySlot, LobbyInfo) to types/protocol.ts
+- Removed deprecated flyCard/flyCards/FlyCardOptions APIs after migrating internal callers
+- Extracted shared helpers from FlowEngine and useActionController (~130 lines deduplication)
+- Replaced module-level suppressNextWatcherFetch flag with scoped fetchedSelections Set
+- Created BREAKING.md with v2.7 migration guide for external users
+
+**Stats:**
+
+- 418 files changed
+- +10,259 / -62,541 lines (massive cleanup!)
+- 6 phases, 6 plans
+- Same day ship (2026-02-01 → 2026-02-02)
+
+**Git range:** `826c5ed` → v2.7 tag
+
+**What's next:** Codebase pristine. Ready for next milestone.
+
+---
+
 ## v2.6 Code Consolidation (Shipped: 2026-01-29)
 
 **Delivered:** Fixed "Pit of Success" violations in animation API consolidation — restoring multi-container FLIP support, adding flyOnAppear helper, and implementing autoWatch for automatic cross-container flying animations.

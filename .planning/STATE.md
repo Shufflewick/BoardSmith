@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-01)
+See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** v2.7 Dead Code & Code Smell Cleanup
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 74 of 74 (Documentation)
-Plan: 01 of 01 complete
-Status: Milestone complete
-Last activity: 2026-02-02 - Completed 74-01-PLAN.md
+Phase: None (between milestones)
+Plan: N/A
+Status: Ready for next milestone
+Last activity: 2026-02-02 - v2.7 milestone complete
 
-Progress: [██████████] 100% (6/6 plans in v2.7)
+Progress: v2.7 shipped — pristine codebase
 
 ## Milestones
 
@@ -38,60 +38,27 @@ Progress: [██████████] 100% (6/6 plans in v2.7)
 - v2.4 Animation Event System (Phases 59-63) -- shipped 2026-01-22
 - v2.5 Player Colors Refactor (Phases 64-68) -- shipped 2026-01-25
 - v2.6 Code Consolidation (post-mortem driven) -- shipped 2026-01-29
-
-**Current:**
 - v2.7 Dead Code & Code Smell Cleanup (Phases 69-74) -- shipped 2026-02-02
 
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 6
-- Average duration: 3min
-- Total execution time: 18min
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 69 | 1 | 4min | 4min |
-| 70 | 1 | 3min | 3min |
-| 71 | 1 | 3min | 3min |
-| 72 | 1 | 4min | 4min |
-| 73 | 1 | 2min | 2min |
-| 74 | 1 | 2min | 2min |
-
-**Recent Trend:**
-- Last 5 plans: 70-01 (3min), 71-01 (3min), 72-01 (4min), 73-01 (2min), 74-01 (2min)
-- Trend: Stable at ~3min/plan
-
-*Updated after each plan completion*
+**Current:**
+None - ready for `/gsd:new-milestone`
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Direct imports to canonical locations preferred over re-export proxy files (69-01)
-- Lobby types canonical source: types/protocol.ts with re-exports for backwards compatibility (70-01)
-- Removed deprecated APIs without deprecation period since internal-only usage (71-01)
-- FlowEngine helper returns boolean to signal caller behavior for followUp (72-01)
-- useActionController helpers split into sync (tryAutoFillSelection) and async (fetchAndAutoFill) (72-01)
-- fetchedSelections Set added to ActionStateSnapshot for per-action scoped coordination (73-01)
-- Mark selection as fetched BEFORE async fetch to prevent race conditions (73-01)
-- BREAKING.md in project root as standard location for breaking change documentation (74-01)
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-None yet.
+None.
 
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 74-01-PLAN.md (Documentation) - v2.7 Milestone Complete
+Stopped at: v2.7 milestone complete
 Resume file: None
