@@ -2,6 +2,8 @@
  * BoardSmith Client SDK Types
  */
 
+import type { LobbyState, SlotStatus, LobbySlot, LobbyInfo } from '../types/protocol.js';
+
 // ============================================
 // Client Configuration
 // ============================================
@@ -294,55 +296,8 @@ export interface CreateGameResponse {
 // Lobby Types
 // ============================================
 
-/** Lobby lifecycle state */
-export type LobbyState = 'waiting' | 'playing' | 'finished';
-
-/** Status of a player slot in the lobby */
-export type SlotStatus = 'open' | 'ai' | 'claimed';
-
-/** Information about a player slot in the lobby */
-export interface LobbySlot {
-  /** Seat number (1-based) */
-  seat: number;
-  /** Current status of this slot */
-  status: SlotStatus;
-  /** Player name */
-  name: string;
-  /** Player ID who claimed this slot (for humans) */
-  playerId?: string;
-  /** AI level if this is an AI slot */
-  aiLevel?: string;
-  /** Custom player options (color, role, etc.) */
-  playerOptions?: Record<string, unknown>;
-  /** Whether this player is ready to start (AI slots are always ready) */
-  ready: boolean;
-  /** Whether this player is currently connected via WebSocket (for humans) */
-  connected?: boolean;
-}
-
-/** Full lobby information */
-export interface LobbyInfo {
-  /** Current lobby state */
-  state: LobbyState;
-  /** Game type */
-  gameType: string;
-  /** Display name of the game */
-  displayName?: string;
-  /** All player slots */
-  slots: LobbySlot[];
-  /** Game options that were configured */
-  gameOptions?: Record<string, unknown>;
-  /** Creator's player ID */
-  creatorId?: string;
-  /** Number of human slots still open */
-  openSlots: number;
-  /** Whether all slots are filled AND all humans are ready */
-  isReady: boolean;
-  /** Min players for this game type */
-  minPlayers?: number;
-  /** Max players for this game type */
-  maxPlayers?: number;
-}
+// Re-export lobby types from canonical source
+export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 
 /** Request to claim a seat in the lobby */
 export interface ClaimSeatRequest {
