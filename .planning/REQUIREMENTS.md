@@ -23,12 +23,12 @@ Requirements for dead code and code smell cleanup.
 
 ### Type Consolidation
 
-- [ ] **TYPE-01**: Consolidate `LobbyState` to types/protocol.ts as canonical source
-- [ ] **TYPE-02**: Consolidate `SlotStatus` to types/protocol.ts as canonical source
-- [ ] **TYPE-03**: Consolidate `LobbySlot` to types/protocol.ts as canonical source
-- [ ] **TYPE-04**: Consolidate `LobbyInfo` to types/protocol.ts as canonical source
-- [ ] **TYPE-05**: Update session/types.ts to re-export from types/protocol.ts
-- [ ] **TYPE-06**: Update client/types.ts to re-export from types/protocol.ts
+- [x] **TYPE-01**: Consolidate `LobbyState` to types/protocol.ts as canonical source
+- [x] **TYPE-02**: Consolidate `SlotStatus` to types/protocol.ts as canonical source
+- [x] **TYPE-03**: Consolidate `LobbySlot` to types/protocol.ts as canonical source
+- [x] **TYPE-04**: Consolidate `LobbyInfo` to types/protocol.ts as canonical source
+- [x] **TYPE-05**: Update session/types.ts to re-export from types/protocol.ts
+- [x] **TYPE-06**: Update client/types.ts to re-export from types/protocol.ts
 
 ### Code Duplication
 
@@ -63,12 +63,12 @@ Requirements for dead code and code smell cleanup.
 | CFG-01 | Phase 69 | Complete |
 | CFG-02 | Phase 69 | Complete |
 | VEST-01 | Phase 69 | Complete |
-| TYPE-01 | Phase 70 | Pending |
-| TYPE-02 | Phase 70 | Pending |
-| TYPE-03 | Phase 70 | Pending |
-| TYPE-04 | Phase 70 | Pending |
-| TYPE-05 | Phase 70 | Pending |
-| TYPE-06 | Phase 70 | Pending |
+| TYPE-01 | Phase 70 | Complete |
+| TYPE-02 | Phase 70 | Complete |
+| TYPE-03 | Phase 70 | Complete |
+| TYPE-04 | Phase 70 | Complete |
+| TYPE-05 | Phase 70 | Complete |
+| TYPE-06 | Phase 70 | Complete |
 | DEP-04 | Phase 71 | Pending |
 | DEP-05 | Phase 71 | Pending |
 | DEP-06 | Phase 71 | Pending |
