@@ -1466,8 +1466,8 @@ export function injectPickStepFn(): PickStepFn | undefined {
  * }
  * ```
  */
-export function injectBoardInteraction(): unknown | undefined {
-  return inject<unknown | undefined>('boardInteraction', undefined);
+export function injectBoardInteraction(): unknown {
+  return inject('boardInteraction', undefined);
 }
 
 export default useActionController;
