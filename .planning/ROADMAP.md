@@ -28,10 +28,10 @@ v2.7 cleans up all identified dead code, type duplication, and code smells disco
   2. `eslint.config.mjs` references only paths that exist in the codebase
   3. `src/ai/utils.ts` no longer exists (exports moved to consumers or removed)
   4. All tests pass after config changes
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 69-01: [TBD]
+- [ ] 69-01-PLAN.md — Fix stale config paths and remove utils.ts re-export file
 
 ### Phase 70: Type Consolidation
 **Goal**: Lobby-related types have a single canonical source in types/protocol.ts
@@ -113,7 +113,7 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 69. Config & Vestigial Cleanup | 0/TBD | Not started | - |
+| 69. Config & Vestigial Cleanup | 0/1 | Ready | - |
 | 70. Type Consolidation | 0/TBD | Not started | - |
 | 71. Deprecated API Removal | 0/TBD | Not started | - |
 | 72. Code Duplication Fixes | 0/TBD | Not started | - |
