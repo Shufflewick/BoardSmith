@@ -205,9 +205,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // pickSnapshots stores fetched choices - single source of truth
   const actionSnapshot = ref<ActionStateSnapshot | null>(null);
 
-  // Flag to prevent double-fetch when startFollowUp/start already fetched choices
-  // The currentSelection watcher would otherwise also trigger a fetch
-  let suppressNextWatcherFetch = false;
 
   // Version counter for selection snapshots - increments when choices are fetched
   // This enables reactive computeds that depend on snapshot data (Maps aren't reactive)
@@ -493,7 +490,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
-    suppressNextWatcherFetch = true;
+    // Mark as fetched BEFORE the await to prevent the watcher from racing ahead
+    actionSnapshot.value?.fetchedSelections.add(selection.name);
     await fetchChoicesForPick(selection.name);
 
     if (tryAutoFillSelection(selection)) {
@@ -649,17 +647,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   watch(currentPick, async (sel) => {
     if (!sel || isExecuting.value) return;
 
-    // Skip fetch if start/startFollowUp already handled it (prevents double-fetch)
-    // But still continue to handle prefills and auto-fill below
-    const shouldSkipFetch = suppressNextWatcherFetch;
-    if (shouldSkipFetch) {
-      suppressNextWatcherFetch = false;
-    }
+    // Check if this selection was already fetched (by start/startFollowUp/fetchAndAutoFill)
+    const alreadyFetched = actionSnapshot.value?.fetchedSelections.has(sel.name) ?? false;
 
-    // Fetch choices if not in snapshot yet (handles case where board sets args directly)
-    if (!shouldSkipFetch) {
+    // Fetch choices if not already fetched and not in snapshot yet
+    if (!alreadyFetched) {
       const snapshot = actionSnapshot.value?.pickSnapshots.get(sel.name);
       if (!snapshot && (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')) {
+        // Mark as fetched BEFORE the await to prevent duplicate fetches
+        actionSnapshot.value?.fetchedSelections.add(sel.name);
         await fetchChoicesForPick(sel.name);
       }
     }
@@ -953,6 +949,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       collectedPicks: new Map(),
       repeatingState: null,
       prefills: new Map(),
+      fetchedSelections: new Set(),
     };
 
     // Store display values for any initialArgs
@@ -1032,6 +1029,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       collectedPicks: new Map(),
       repeatingState: null,
       prefills: new Map(Object.entries(prefillArgs)),
+      fetchedSelections: new Set(),
     };
 
     // Store display values for any initialArgs

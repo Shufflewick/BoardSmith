@@ -183,6 +183,8 @@ export interface ActionStateSnapshot {
   repeatingState: RepeatingState | null;
   /** Queued fills for future picks - applied when pick becomes active */
   prefills: Map<string, unknown>;
+  /** Set of selection names that have been fetched (prevents double-fetch) */
+  fetchedSelections: Set<string>;
 }
 
 export interface UseActionControllerOptions {
