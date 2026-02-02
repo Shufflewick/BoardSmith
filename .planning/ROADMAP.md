@@ -74,10 +74,10 @@ Plans:
   2. useActionController auto-fill pattern is extracted and used in all 3 places (start, startFollowUp, currentPick watcher)
   3. No duplication of the extracted patterns remains
   4. All tests pass after refactoring
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 72-01: [TBD]
+- [ ] 72-01-PLAN.md — Extract shared helpers for FlowEngine completion and useActionController auto-fill
 
 ### Phase 73: Code Smell Refactors
 **Goal**: Code smells are fixed with proper patterns
@@ -116,6 +116,6 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 | 69. Config & Vestigial Cleanup | 1/1 | ✓ Complete | 2026-02-01 |
 | 70. Type Consolidation | 1/1 | ✓ Complete | 2026-02-01 |
 | 71. Deprecated API Removal | 1/1 | ✓ Complete | 2026-02-01 |
-| 72. Code Duplication Fixes | 0/TBD | Not started | - |
+| 72. Code Duplication Fixes | 0/1 | Not started | - |
 | 73. Code Smell Refactors | 0/TBD | Not started | - |
 | 74. Documentation | 0/TBD | Not started | - |
