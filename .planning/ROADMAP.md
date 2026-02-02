@@ -13,7 +13,7 @@ v2.7 cleans up all identified dead code, type duplication, and code smells disco
 - [x] **Phase 69: Config & Vestigial Cleanup** - Fix stale config paths and remove single-export utils file
 - [x] **Phase 70: Type Consolidation** - Consolidate duplicated lobby types to types/protocol.ts
 - [x] **Phase 71: Deprecated API Removal** - Migrate internal callers then remove deprecated flying APIs
-- [ ] **Phase 72: Code Duplication Fixes** - Extract shared logic in FlowEngine and useActionController
+- [x] **Phase 72: Code Duplication Fixes** - Extract shared logic in FlowEngine and useActionController
 - [ ] **Phase 73: Code Smell Refactors** - Fix coordination pattern and redundant type annotation
 - [ ] **Phase 74: Documentation** - Create BREAKING.md documenting all API changes
 
@@ -77,7 +77,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 72-01-PLAN.md — Extract shared helpers for FlowEngine completion and useActionController auto-fill
+- [x] 72-01-PLAN.md — Extract shared helpers for FlowEngine completion and useActionController auto-fill
 
 ### Phase 73: Code Smell Refactors
 **Goal**: Code smells are fixed with proper patterns
@@ -116,6 +116,6 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 | 69. Config & Vestigial Cleanup | 1/1 | ✓ Complete | 2026-02-01 |
 | 70. Type Consolidation | 1/1 | ✓ Complete | 2026-02-01 |
 | 71. Deprecated API Removal | 1/1 | ✓ Complete | 2026-02-01 |
-| 72. Code Duplication Fixes | 0/1 | Not started | - |
+| 72. Code Duplication Fixes | 1/1 | ✓ Complete | 2026-02-01 |
 | 73. Code Smell Refactors | 0/TBD | Not started | - |
 | 74. Documentation | 0/TBD | Not started | - |

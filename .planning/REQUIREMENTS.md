@@ -32,8 +32,8 @@ Requirements for dead code and code smell cleanup.
 
 ### Code Duplication
 
-- [ ] **DUP-01**: Extract shared completion logic from FlowEngine `resume()` and `resumeAfterExternalAction()` (~40 lines duplicated)
-- [ ] **DUP-02**: Extract auto-fill pattern helper in useActionController (repeated in 3 places: start, startFollowUp, currentPick watcher)
+- [x] **DUP-01**: Extract shared completion logic from FlowEngine `resume()` and `resumeAfterExternalAction()` (~40 lines duplicated)
+- [x] **DUP-02**: Extract auto-fill pattern helper in useActionController (repeated in 3 places: start, startFollowUp, currentPick watcher)
 
 ### Code Smells
 
