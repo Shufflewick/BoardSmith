@@ -67,7 +67,7 @@
     "prepack": "npm run build:cli",
     "test": "vitest run",
     "test:watch": "vitest --watch",
-    "lint": "eslint packages/"
+    "lint": "eslint src/"
   },
   "files": [
     "dist",

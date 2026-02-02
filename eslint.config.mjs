@@ -14,7 +14,7 @@ export default [
   },
   // TypeScript files config
   {
-    files: ['packages/**/*.ts'],
+    files: ['src/**/*.ts'],
     languageOptions: {
       parser,
       parserOptions: {
