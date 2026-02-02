@@ -7,6 +7,7 @@
 
 import type { FlowState, SerializedAction, Game, AnimationEvent } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
+import type { LobbyState, SlotStatus, LobbySlot, LobbyInfo } from '../types/protocol.js';
 
 // ============================================
 // Error Codes
@@ -429,69 +430,8 @@ export interface PlayerGameState {
 // Lobby Types
 // ============================================
 
-/**
- * Lobby lifecycle state
- */
-export type LobbyState = 'waiting' | 'playing' | 'finished';
-
-/**
- * Status of a player slot in the lobby
- */
-export type SlotStatus = 'open' | 'ai' | 'claimed';
-
-/**
- * Information about a player slot in the lobby
- */
-export interface LobbySlot {
-  /** Seat number (1-indexed) */
-  seat: number;
-  /** Current status of this slot */
-  status: SlotStatus;
-  /** Player name (set by creator for AI, by joiner for humans) */
-  name: string;
-  /** Player ID who claimed this slot (for humans) */
-  playerId?: string;
-  /** AI level if this is an AI slot */
-  aiLevel?: string;
-  /** Custom player options (color, role, etc.) */
-  playerOptions?: Record<string, unknown>;
-  /** Whether this player is ready to start (AI slots are always ready) */
-  ready: boolean;
-  /** Whether this player is currently connected via WebSocket (for humans) */
-  connected?: boolean;
-}
-
-/**
- * Full lobby information for clients
- */
-export interface LobbyInfo {
-  /** Current lobby state */
-  state: LobbyState;
-  /** Game type */
-  gameType: string;
-  /** Display name of the game */
-  displayName?: string;
-  /** All player slots */
-  slots: LobbySlot[];
-  /** Game options that were configured */
-  gameOptions?: Record<string, unknown>;
-  /** Game options definitions (for host to modify) */
-  gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
-  /** Creator's player ID */
-  creatorId?: string;
-  /** Number of human slots still open */
-  openSlots: number;
-  /** Whether all slots are filled AND all humans are ready */
-  isReady: boolean;
-  /** Min players for this game type */
-  minPlayers?: number;
-  /** Max players for this game type */
-  maxPlayers?: number;
-  /** Whether players can select colors in the lobby */
-  colorSelectionEnabled?: boolean;
-  /** Available color palette (hex strings) */
-  colors?: string[];
-}
+// Re-export lobby types from canonical source
+export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 
 // ============================================
 // Session Types
