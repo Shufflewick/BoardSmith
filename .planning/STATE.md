@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-29)
+See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Make board game development fast and correct
-**Current focus:** Planning next milestone
+**Current focus:** v2.7 Dead Code & Code Smell Cleanup
 
 ## Current Position
 
-Phase: 68 of 68 (Game Updates)
-Plan: Complete
-Status: v2.6 SHIPPED — ready for next milestone
-Last activity: 2026-01-29 — v2.6 milestone complete
+Phase: 69 of 74 (Config & Vestigial Cleanup)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-01 — Roadmap created for v2.7
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Milestones
 
@@ -40,14 +40,46 @@ Progress: [██████████] 100%
 - v2.6 Code Consolidation (post-mortem driven) -- shipped 2026-01-29
 
 **Current:**
-(None — awaiting next milestone)
+- v2.7 Dead Code & Code Smell Cleanup (Phases 69-74)
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0
+- Average duration: N/A
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+**Recent Trend:**
+- Last 5 plans: N/A
+- Trend: Starting
+
+*Updated after each plan completion*
+
+## Accumulated Context
+
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- None yet for v2.7
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-29
-Stopped at: Completed v2.6 milestone
+Last session: 2026-02-01
+Stopped at: Roadmap created for v2.7 milestone
 Resume file: None
-
-## Key Decisions (Accumulated)
-
-See PROJECT.md for full decision history.

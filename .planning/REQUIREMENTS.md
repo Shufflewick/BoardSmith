@@ -60,32 +60,32 @@ Requirements for dead code and code smell cleanup.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CFG-01 | Pending | Pending |
-| CFG-02 | Pending | Pending |
-| DEP-01 | Pending | Pending |
-| DEP-02 | Pending | Pending |
-| DEP-03 | Pending | Pending |
-| DEP-04 | Pending | Pending |
-| DEP-05 | Pending | Pending |
-| DEP-06 | Pending | Pending |
-| TYPE-01 | Pending | Pending |
-| TYPE-02 | Pending | Pending |
-| TYPE-03 | Pending | Pending |
-| TYPE-04 | Pending | Pending |
-| TYPE-05 | Pending | Pending |
-| TYPE-06 | Pending | Pending |
-| DUP-01 | Pending | Pending |
-| DUP-02 | Pending | Pending |
-| SMELL-01 | Pending | Pending |
-| SMELL-02 | Pending | Pending |
-| VEST-01 | Pending | Pending |
-| DOC-01 | Pending | Pending |
+| CFG-01 | Phase 69 | Pending |
+| CFG-02 | Phase 69 | Pending |
+| VEST-01 | Phase 69 | Pending |
+| TYPE-01 | Phase 70 | Pending |
+| TYPE-02 | Phase 70 | Pending |
+| TYPE-03 | Phase 70 | Pending |
+| TYPE-04 | Phase 70 | Pending |
+| TYPE-05 | Phase 70 | Pending |
+| TYPE-06 | Phase 70 | Pending |
+| DEP-04 | Phase 71 | Pending |
+| DEP-05 | Phase 71 | Pending |
+| DEP-06 | Phase 71 | Pending |
+| DEP-01 | Phase 71 | Pending |
+| DEP-02 | Phase 71 | Pending |
+| DEP-03 | Phase 71 | Pending |
+| DUP-01 | Phase 72 | Pending |
+| DUP-02 | Phase 72 | Pending |
+| SMELL-01 | Phase 73 | Pending |
+| SMELL-02 | Phase 73 | Pending |
+| DOC-01 | Phase 74 | Pending |
 
 **Coverage:**
 - v2.7 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-01 after initial definition*
+*Last updated: 2026-02-01 after roadmap creation*
