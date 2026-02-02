@@ -93,7 +93,6 @@ export {
   type FlyOnAppearOptions,
   type FlyingCard,
   type FlyingCardData,
-  type FlyCardOptions,
   type UseFlyingElementsOptions,
   type UseFlyingElementsReturn,
   // Auto-watch types (replaces useAutoAnimations, useAutoFlyingElements)

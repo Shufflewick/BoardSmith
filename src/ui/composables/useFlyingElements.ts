@@ -196,24 +196,6 @@ export interface FlyConfig {
 }
 
 /**
- * Legacy FlyCardOptions type for backwards compatibility
- * @deprecated Use FlyConfig instead
- */
-export interface FlyCardOptions {
-  id: string;
-  startRect: DOMRect | HTMLElement;
-  endRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
-  cardData: FlyingCardData;
-  flip?: boolean;
-  duration?: number;
-  zIndex?: number;
-  cardSize?: { width: number; height: number };
-  holdDuration?: number;
-  onPositionComplete?: () => void;
-  skipFadeOut?: boolean;
-}
-
-/**
  * Options for the flyOnAppear helper
  */
 export interface FlyOnAppearOptions<T> {
@@ -376,18 +358,6 @@ export interface UseFlyingElementsReturn {
   /** Currently active flying elements (for rendering in overlay) */
   flyingElements: ComputedRef<FlyingCard[]>;
 
-  /**
-   * Legacy flyCard method for backwards compatibility
-   * @deprecated Use fly() instead
-   */
-  flyCard: (options: FlyCardOptions) => Promise<void>;
-
-  /**
-   * Legacy flyCards method for backwards compatibility
-   * @deprecated Use flyMultiple() instead
-   */
-  flyCards: (options: FlyCardOptions[], staggerMs?: number) => Promise<void>;
-
   /** Cancel all active flying animations */
   cancelAll: () => void;
 }
@@ -450,9 +420,26 @@ export function useFlyingElements(
   const isAnimating = ref(false);
 
   /**
+   * Internal options type for the core animation implementation
+   */
+  interface InternalFlyOptions {
+    id: string;
+    startRect: DOMRect | HTMLElement;
+    endRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
+    cardData: FlyingCardData;
+    flip?: boolean;
+    duration?: number;
+    zIndex?: number;
+    cardSize?: { width: number; height: number };
+    holdDuration?: number;
+    onPositionComplete?: () => void;
+    skipFadeOut?: boolean;
+  }
+
+  /**
    * Core flying animation implementation
    */
-  async function flyCardInternal(flyOptions: FlyCardOptions): Promise<void> {
+  async function flyCardInternal(flyOptions: InternalFlyOptions): Promise<void> {
     // Skip animation if reduced motion preferred
     if (prefersReducedMotion.value) {
       return;
@@ -741,33 +728,6 @@ export function useFlyingElements(
     );
 
     return { isFlying };
-  }
-
-  /**
-   * Legacy flyCard method for backwards compatibility
-   */
-  async function flyCard(options: FlyCardOptions): Promise<void> {
-    return flyCardInternal(options);
-  }
-
-  /**
-   * Legacy flyCards method for backwards compatibility
-   */
-  async function flyCards(options: FlyCardOptions[], staggerMs = 50): Promise<void> {
-    if (prefersReducedMotion.value) {
-      return;
-    }
-
-    const promises: Promise<void>[] = [];
-
-    for (let i = 0; i < options.length; i++) {
-      if (staggerMs > 0 && i > 0) {
-        await new Promise((r) => setTimeout(r, staggerMs));
-      }
-      promises.push(flyCardInternal(options[i]));
-    }
-
-    await Promise.all(promises);
   }
 
   /**
@@ -1076,9 +1036,6 @@ export function useFlyingElements(
     flyOnAppear,
     isAnimating,
     flyingElements: computed(() => flyingCards.value),
-    // Legacy methods
-    flyCard,
-    flyCards,
     cancelAll,
   };
 }

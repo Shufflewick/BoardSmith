@@ -911,12 +911,12 @@ Animate stat changes and fly elements to player stat displays.
 ```typescript
 import { usePlayerStatAnimation, flyToPlayerStat, useFlyingElements } from 'boardsmith/ui';
 
-// Get flyCards function from useFlyingElements
-const { flyCards } = useFlyingElements();
+// Get flyMultiple function from useFlyingElements
+const { flyMultiple } = useFlyingElements();
 const { getPlayerStatElement } = usePlayerStatAnimation();
 
 // Fly cards to a player's stat display
-flyToPlayerStat(flyCards, {
+flyToPlayerStat(flyMultiple, {
   cards: removedCards.map(c => ({ rect: c.rect, rank: c.rank, suit: c.suit })),
   playerSeat: 0,
   statName: 'books',
