@@ -87,10 +87,10 @@ Plans:
   1. `suppressNextWatcherFetch` module-level flag is replaced with proper coordination pattern
   2. `injectBoardInteraction()` return type is `unknown` (not redundant `unknown | undefined`)
   3. All tests pass after refactoring
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 73-01: [TBD]
+- [ ] 73-01-PLAN.md — Replace module-level flag with fetchedSelections Set and fix redundant type
 
 ### Phase 74: Documentation
 **Goal**: Breaking changes are documented for external users
@@ -117,5 +117,5 @@ Phases execute in numeric order: 69 -> 70 -> 71 -> 72 -> 73 -> 74
 | 70. Type Consolidation | 1/1 | ✓ Complete | 2026-02-01 |
 | 71. Deprecated API Removal | 1/1 | ✓ Complete | 2026-02-01 |
 | 72. Code Duplication Fixes | 1/1 | ✓ Complete | 2026-02-01 |
-| 73. Code Smell Refactors | 0/TBD | Not started | - |
+| 73. Code Smell Refactors | 0/1 | Not started | - |
 | 74. Documentation | 0/TBD | Not started | - |
