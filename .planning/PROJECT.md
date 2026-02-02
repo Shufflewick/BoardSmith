@@ -8,6 +8,28 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
+## Current Milestone: v2.7 Dead Code & Code Smell Cleanup
+
+**Goal:** Clean up all identified dead code, type duplication, and code smells to achieve a pristine codebase with Pit of Success APIs.
+
+**Target cleanup:**
+- Fix stale config references (vitest.config.ts, eslint.config.mjs)
+- Remove deprecated flying APIs (`flyCard`, `flyCards`, `FlyCardOptions`) and migrate internal callers
+- Consolidate duplicated types to single source (`types/protocol.ts`)
+- Extract shared logic in FlowEngine resume methods
+- Extract auto-fill pattern in useActionController
+- Refactor `suppressNextWatcherFetch` coordination pattern
+- Remove vestigial files (`ai/utils.ts`)
+- Create BREAKING.md documenting all API changes
+
+**Philosophy:** Clean break, no vestigial code — as if the old patterns never existed.
+
+## Previous: v2.6 Shipped
+
+Animation API consolidation — extended `useFLIP` with multi-container support, added `flyOnAppear`/`autoWatch`/`countBasedRoutes` to `useFlyingElements`, removed 7 deprecated composables.
+
+**v2.6 Delivered:** Consolidated animation APIs — `useFLIP` + `useFlyingElements` replace deprecated composables with clean break.
+
 ## Previous: v2.5 Shipped
 
 Player colors are now a first-class engine-managed property with game-level configuration. Players get auto-assigned colors from a configurable palette, with optional lobby color selection and conflict validation.
@@ -131,7 +153,16 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-(None — milestone complete)
+- [ ] Fix stale config path references (vitest.config.ts, eslint.config.mjs) — v2.7
+- [ ] Remove deprecated `flyCard()`, `flyCards()`, `FlyCardOptions` — v2.7
+- [ ] Migrate internal callers to `fly()`, `flyMultiple()`, `FlyConfig` — v2.7
+- [ ] Consolidate `LobbyState`, `SlotStatus`, `LobbySlot`, `LobbyInfo` to `types/protocol.ts` — v2.7
+- [ ] Extract shared completion logic from FlowEngine `resume()` and `resumeAfterExternalAction()` — v2.7
+- [ ] Extract auto-fill pattern helper in useActionController — v2.7
+- [ ] Refactor `suppressNextWatcherFetch` coordination pattern — v2.7
+- [ ] Fix redundant `unknown | undefined` type — v2.7
+- [ ] Remove vestigial `src/ai/utils.ts` — v2.7
+- [ ] Create BREAKING.md documenting all API changes — v2.7
 
 ### Out of Scope
 
@@ -210,4 +241,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-01-29 after v2.6 milestone*
+*Last updated: 2026-02-01 after starting v2.7 milestone*
