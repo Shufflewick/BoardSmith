@@ -10,79 +10,24 @@
  */
 import { ref, computed, watch } from 'vue';
 import { useToast } from '../composables/useToast';
+import type {
+  LobbySlot,
+  LobbyInfo,
+  NumberOption,
+  SelectOption,
+  BooleanOption,
+  GameOptionDefinition,
+} from '../../types/protocol.js';
+import type {
+  StandardPlayerOption,
+  ExclusivePlayerOption,
+  PlayerOptionDefinition,
+} from '../../session/types.js';
 
-interface LobbySlot {
-  seat: number;
-  status: 'open' | 'ai' | 'claimed';
-  name: string;
-  playerId?: string;
-  aiLevel?: string;
-  playerOptions?: Record<string, unknown>;
-  ready: boolean;
-  connected?: boolean;
-}
-
-// Game option types (must be defined before LobbyInfo)
-interface NumberGameOption {
-  type: 'number';
-  label: string;
-  description?: string;
-  default?: number;
-  min?: number;
-  max?: number;
-  step?: number;
-}
-
-interface SelectGameOption {
-  type: 'select';
-  label: string;
-  description?: string;
-  default?: string | number;
-  choices: Array<{ value: string | number; label: string }>;
-}
-
-interface BooleanGameOption {
-  type: 'boolean';
-  label: string;
-  description?: string;
-  default?: boolean;
-}
-
-type GameOptionDefinition = NumberGameOption | SelectGameOption | BooleanGameOption;
-
-interface LobbyInfo {
-  state: 'waiting' | 'playing' | 'finished';
-  gameType: string;
-  displayName?: string;
-  slots: LobbySlot[];
-  gameOptions?: Record<string, unknown>;
-  gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
-  creatorId?: string;
-  openSlots: number;
-  isReady: boolean;
-  minPlayers?: number;
-  maxPlayers?: number;
-  colorSelectionEnabled?: boolean;
-  colors?: string[];
-}
-
-// Player option types
-interface StandardPlayerOption {
-  type: 'select' | 'color' | 'text';
-  label: string;
-  description?: string;
-  default?: string;
-  choices?: Array<{ value: string; label: string }> | string[];
-}
-
-interface ExclusivePlayerOption {
-  type: 'exclusive';
-  label: string;
-  description?: string;
-  default?: 'first' | 'last' | number;
-}
-
-type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption;
+// Local aliases for template usage (Vue template needs these names)
+type NumberGameOption = NumberOption;
+type SelectGameOption = SelectOption;
+type BooleanGameOption = BooleanOption;
 
 const props = defineProps<{
   /** The game ID/code to share */
