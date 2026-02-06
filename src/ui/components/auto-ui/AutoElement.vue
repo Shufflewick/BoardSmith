@@ -232,6 +232,15 @@ const isActionSelectable = computed(() => {
   return false;
 });
 
+const isDisabledForAction = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement({
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value || undefined,
+  });
+});
+
 // Get display label for element
 const displayLabel = computed(() => {
   // Use element name or className
@@ -904,8 +913,10 @@ const cardBackPreviewData = computed(() => {
         'is-board-selected': isBoardSelected,
         'is-valid-target': isValidTarget,
         'is-debug-highlighted': isDebugHighlighted,
+        'bs-element-disabled': !!isDisabledForAction,
       }
     ]"
+    :title="(typeof isDisabledForAction === 'string' && isDisabledForAction) || undefined"
     @click="handleClick"
   >
     <!-- CARD RENDERING -->
@@ -1990,6 +2001,24 @@ const cardBackPreviewData = computed(() => {
 /* HIDDEN ELEMENT STYLES */
 .is-hidden {
   opacity: 0.5;
+}
+
+/* Disabled for current action (visible but not selectable) */
+.bs-element-disabled {
+  opacity: 0.5;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+/* Disabled overrides action-selectable */
+.bs-element-disabled .card-container.action-selectable,
+.bs-element-disabled .die-container.action-selectable,
+.bs-element-disabled .grid-cell.action-selectable,
+.bs-element-disabled .hex-cell.action-selectable,
+.bs-element-disabled .hex-polygon.action-selectable {
+  cursor: not-allowed;
+  animation: none;
+  outline-color: rgba(128, 128, 128, 0.4);
 }
 
 /* BOARD INTERACTION STATES */
