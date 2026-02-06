@@ -8,7 +8,7 @@ Add a `disabled` state to element and choice selections so items remain visible 
 
 - [x] **Phase 75: Engine Core** - Builder methods accept `disabled`, getChoices returns annotated choices, validation enforces disabled state
 - [x] **Phase 76: Session Wire** - Wire types carry disabled status, PickHandler threads disabled from engine to protocol
-- [ ] **Phase 77: UI Integration** - ActionPanel, board interaction, custom UI composables, and fill/auto-fill respect disabled state
+- [x] **Phase 77: UI Integration** - ActionPanel, board interaction, custom UI composables, and fill/auto-fill respect disabled state
 - [ ] **Phase 78: Documentation** - BREAKING.md and migration guide document the getChoices return type change
 
 ## Phase Details
@@ -54,9 +54,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 77-01-PLAN.md -- Add disabled?: string to UI-layer types, isDisabledElement() and triggerElementSelect guard in board interaction
-- [ ] 77-02-PLAN.md -- Add disabled rendering to all ActionPanel button templates and AutoElement bs-element-disabled CSS class
-- [ ] 77-03-PLAN.md -- Add disabled validation/auto-fill filtering to useActionController, tests
+- [x] 77-01-PLAN.md -- Add disabled?: string to UI-layer types, isDisabledElement() and triggerElementSelect guard in board interaction
+- [x] 77-02-PLAN.md -- Add disabled rendering to all ActionPanel button templates and AutoElement bs-element-disabled CSS class
+- [x] 77-03-PLAN.md -- Add disabled validation/auto-fill filtering to useActionController, tests
 
 ### Phase 78: Documentation
 **Goal**: External teams can migrate to v2.8 without surprises by reading the breaking changes and migration guide
@@ -79,5 +79,5 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 |-------|----------------|--------|-----------|
 | 75. Engine Core | 2/2 | Verified ✓ | 2026-02-06 |
 | 76. Session Wire | 1/1 | Verified ✓ | 2026-02-06 |
-| 77. UI Integration | 0/3 | Planned | - |
+| 77. UI Integration | 3/3 | Verified ✓ | 2026-02-06 |
 | 78. Documentation | 0/0 | Not started | - |

@@ -22,15 +22,15 @@
 
 ### UI
 
-- [ ] **UI-01**: ActionPanel renders disabled element buttons with `:disabled` and title tooltip
-- [ ] **UI-02**: ActionPanel renders disabled choice buttons with `:disabled` and title tooltip
-- [ ] **UI-03**: `useBoardInteraction` gains `isDisabledElement(element)` returning `string | false`
-- [ ] **UI-04**: `useBoardInteraction.triggerElementSelect()` ignores clicks on disabled elements
-- [ ] **UI-05**: Disabled board elements get CSS class `bs-element-disabled`
-- [ ] **UI-06**: `validElements` computed carries `disabled?: string` for custom UI consumption
-- [ ] **UI-07**: `getChoices()` / `getCurrentChoices()` carry `disabled?: string` for custom UI consumption
-- [ ] **UI-08**: `fill()` rejects disabled values client-side with reason surfaced to user
-- [ ] **UI-09**: Auto-fill skips disabled items (exactly 1 enabled = auto-fill)
+- [x] **UI-01**: ActionPanel renders disabled element buttons with `:disabled` and title tooltip
+- [x] **UI-02**: ActionPanel renders disabled choice buttons with `:disabled` and title tooltip
+- [x] **UI-03**: `useBoardInteraction` gains `isDisabledElement(element)` returning `string | false`
+- [x] **UI-04**: `useBoardInteraction.triggerElementSelect()` ignores clicks on disabled elements
+- [x] **UI-05**: Disabled board elements get CSS class `bs-element-disabled`
+- [x] **UI-06**: `validElements` computed carries `disabled?: string` for custom UI consumption
+- [x] **UI-07**: `getChoices()` / `getCurrentChoices()` carry `disabled?: string` for custom UI consumption
+- [x] **UI-08**: `fill()` rejects disabled values client-side with reason surfaced to user
+- [x] **UI-09**: Auto-fill skips disabled items (exactly 1 enabled = auto-fill)
 
 ### Documentation
 
@@ -62,15 +62,15 @@ None -- this is a focused feature milestone.
 | SES-01 | Phase 76 | Complete |
 | SES-02 | Phase 76 | Complete |
 | SES-03 | Phase 76 | Complete |
-| UI-01 | Phase 77 | Pending |
-| UI-02 | Phase 77 | Pending |
-| UI-03 | Phase 77 | Pending |
-| UI-04 | Phase 77 | Pending |
-| UI-05 | Phase 77 | Pending |
-| UI-06 | Phase 77 | Pending |
-| UI-07 | Phase 77 | Pending |
-| UI-08 | Phase 77 | Pending |
-| UI-09 | Phase 77 | Pending |
+| UI-01 | Phase 77 | Complete |
+| UI-02 | Phase 77 | Complete |
+| UI-03 | Phase 77 | Complete |
+| UI-04 | Phase 77 | Complete |
+| UI-05 | Phase 77 | Complete |
+| UI-06 | Phase 77 | Complete |
+| UI-07 | Phase 77 | Complete |
+| UI-08 | Phase 77 | Complete |
+| UI-09 | Phase 77 | Complete |
 | DOC-01 | Phase 78 | Pending |
 | DOC-02 | Phase 78 | Pending |
 
@@ -81,4 +81,4 @@ None -- this is a focused feature milestone.
 
 ---
 *Requirements defined: 2026-02-05*
-*Last updated: 2026-02-06 after Phase 76 completion*
+*Last updated: 2026-02-06 after Phase 77 completion*
