@@ -1176,4 +1176,279 @@ describe('useActionController', () => {
     });
   });
 
+  describe('disabled selections', () => {
+    it('should reject disabled choice value with reason string', async () => {
+      const disabledMeta: Record<string, ActionMetadata> = {
+        selectCard: {
+          name: 'selectCard',
+          prompt: 'Select a card',
+          selections: [
+            {
+              name: 'card',
+              type: 'choice',
+              prompt: 'Pick a card',
+              choices: [
+                { value: 1, display: 'Ace of Spades' },
+                { value: 2, display: 'King of Hearts', disabled: 'Already played' },
+                { value: 3, display: 'Queen of Diamonds' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...disabledMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'selectCard'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('selectCard');
+      const result = await controller.fill('card', 2);
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('Selection disabled: Already played');
+      expect(controller.currentArgs.value.card).toBeUndefined();
+    });
+
+    it('should reject disabled value in multiSelect array', async () => {
+      const disabledMultiMeta: Record<string, ActionMetadata> = {
+        selectCards: {
+          name: 'selectCards',
+          prompt: 'Select cards',
+          selections: [
+            {
+              name: 'cards',
+              type: 'choice',
+              prompt: 'Pick cards',
+              multiSelect: { min: 1, max: 3 },
+              choices: [
+                { value: 1, display: 'Card A' },
+                { value: 2, display: 'Card B', disabled: 'In use' },
+                { value: 3, display: 'Card C' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...disabledMultiMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'selectCards'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('selectCards');
+      const result = await controller.fill('cards', [1, 2]);
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('Selection disabled: In use');
+    });
+
+    it('should auto-fill the single enabled choice when others are disabled', async () => {
+      const disabledAutoFillMeta: Record<string, ActionMetadata> = {
+        forcedSelect: {
+          name: 'forcedSelect',
+          prompt: 'Select item',
+          selections: [
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Pick an item',
+              choices: [
+                { value: 'a', display: 'Item A', disabled: 'Exhausted' },
+                { value: 'b', display: 'Item B' },
+                { value: 'c', display: 'Item C', disabled: 'Locked' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...disabledAutoFillMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'forcedSelect'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+      });
+
+      await controller.start('forcedSelect');
+      await nextTick();
+
+      // Should auto-fill with the only enabled choice
+      expect(controller.currentArgs.value.item).toBe('b');
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    it('should NOT auto-fill when all choices are disabled', async () => {
+      const allDisabledMeta: Record<string, ActionMetadata> = {
+        allDisabled: {
+          name: 'allDisabled',
+          prompt: 'All disabled',
+          selections: [
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Pick an item',
+              choices: [
+                { value: 'a', display: 'Item A', disabled: 'Exhausted' },
+                { value: 'b', display: 'Item B', disabled: 'Locked' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...allDisabledMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'allDisabled'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+      });
+
+      await controller.start('allDisabled');
+      await nextTick();
+
+      // Should NOT auto-fill - no enabled choices
+      expect(controller.currentArgs.value.item).toBeUndefined();
+      expect(controller.currentPick.value?.name).toBe('item');
+      expect(controller.isReady.value).toBe(false);
+    });
+
+    it('should include disabled field in getChoices() return values', async () => {
+      const disabledChoicesMeta: Record<string, ActionMetadata> = {
+        withDisabled: {
+          name: 'withDisabled',
+          prompt: 'Action with disabled choices',
+          selections: [
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Pick an item',
+              choices: [
+                { value: 1, display: 'Enabled Item' },
+                { value: 2, display: 'Disabled Item', disabled: 'Out of stock' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...disabledChoicesMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'withDisabled'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      await controller.start('withDisabled');
+
+      const choices = controller.getCurrentChoices();
+
+      expect(choices).toHaveLength(2);
+      expect(choices[0].disabled).toBeUndefined();
+      expect(choices[1].disabled).toBe('Out of stock');
+    });
+
+    it('should allow filling enabled choices when disabled ones exist', async () => {
+      const mixedMeta: Record<string, ActionMetadata> = {
+        mixedChoices: {
+          name: 'mixedChoices',
+          prompt: 'Mixed choices',
+          selections: [
+            {
+              name: 'card',
+              type: 'choice',
+              prompt: 'Pick a card',
+              choices: [
+                { value: 1, display: 'Ace', disabled: 'Not allowed' },
+                { value: 2, display: 'King' },
+                { value: 3, display: 'Queen' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...mixedMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'mixedChoices'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('mixedChoices');
+
+      // Enabled choice should be accepted
+      const result = await controller.fill('card', 2);
+      expect(result.valid).toBe(true);
+      expect(controller.currentArgs.value.card).toBe(2);
+    });
+
+    it('should reject disabled value via execute() validation', async () => {
+      const disabledExecMeta: Record<string, ActionMetadata> = {
+        execDisabled: {
+          name: 'execDisabled',
+          prompt: 'Execute with disabled',
+          selections: [
+            {
+              name: 'target',
+              type: 'choice',
+              prompt: 'Pick target',
+              choices: [
+                { value: 'a', display: 'Target A', disabled: 'Shielded' },
+                { value: 'b', display: 'Target B' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...disabledExecMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'execDisabled'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      const result = await controller.execute('execDisabled', { target: 'a' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Selection disabled: Shielded');
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+  });
+
 });
