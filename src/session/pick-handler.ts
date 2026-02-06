@@ -158,6 +158,14 @@ export class PickHandler<G extends Game = Game> {
             }
           }
 
+          // Thread disabled status from engine callback
+          if (choiceSel.disabled) {
+            const disabledReason = choiceSel.disabled(rawValue, ctx);
+            if (disabledReason) {
+              choice.disabled = disabledReason;
+            }
+          }
+
           return choice;
         });
 
@@ -345,6 +353,14 @@ export class PickHandler<G extends Game = Game> {
         validElem.ref = { id: element.id };
         if (element.notation) {
           validElem.ref.notation = element.notation;
+        }
+      }
+
+      // Thread disabled status from engine callback
+      if (elemSel.disabled) {
+        const disabledReason = elemSel.disabled(element, ctx);
+        if (disabledReason) {
+          validElem.disabled = disabledReason;
         }
       }
 

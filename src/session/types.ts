@@ -284,6 +284,8 @@ export interface ChoiceWithRefs {
   sourceRef?: ElementRef;
   /** Element reference for target highlighting (e.g., destination square) */
   targetRef?: ElementRef;
+  /** Disabled reason string, present only when choice is disabled */
+  disabled?: string;
 }
 
 /**
@@ -295,6 +297,8 @@ export interface ValidElement {
   display?: string;
   /** Element reference for board highlighting */
   ref?: ElementRef;
+  /** Disabled reason string, present only when element is disabled */
+  disabled?: string;
 }
 
 /**
