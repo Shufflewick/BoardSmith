@@ -1,5 +1,34 @@
 # Project Milestones: BoardSmith
 
+## v2.8 Disabled Selections (Shipped: 2026-02-06)
+
+**Delivered:** Added `disabled` state to element and choice selections with mandatory reason strings, threaded through engine, session, and UI layers with defense-in-depth enforcement.
+
+**Phases completed:** 75-79 (5 phases, 8 plans total)
+
+**Key accomplishments:**
+
+- `AnnotatedChoice<T>` type system with `disabled: string | false` enforcing reason strings (pit of success)
+- Disabled callbacks on `chooseElement`, `fromElements`, `chooseFrom` with filter/disabled separation
+- Session wire threading — `ValidElement` and `ChoiceWithRefs` carry `disabled?: string` through PickHandler
+- Full UI rendering — ActionPanel disabled buttons with tooltips, `bs-element-disabled` CSS, custom UI API
+- Defense in depth — disabled enforced at engine validation, client fill() rejection, and board click guard
+- Gap closure — Phase 79 fixed element-type picks dropping disabled in `getChoices()`, caught by audit
+
+**Stats:**
+
+- 18 source files modified (51 total with planning)
+- +1,126 / -116 lines TypeScript/Vue
+- 5 phases, 8 plans, 15 tasks
+- 2 days from start to ship (2026-02-05 → 2026-02-06)
+- 27 disabled-specific tests added
+
+**Git range:** `feat(75-01)` → `fix(79-01)`
+
+**What's next:** Feature complete. Ready for next milestone.
+
+---
+
 ## v2.7 Dead Code & Code Smell Cleanup (Shipped: 2026-02-02)
 
 **Delivered:** Eliminated all identified dead code, type duplication, and code smells — fixing stale config paths, consolidating lobby types, removing deprecated flying APIs, extracting shared helpers, and documenting breaking changes.

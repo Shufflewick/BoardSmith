@@ -8,18 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v2.8 Disabled Selections
+## Previous: v2.8 Shipped
 
-**Goal:** Add a `disabled` state to element and choice selections so items can be shown as visible but unselectable, with a reason string explaining why.
+Disabled Selections — added `disabled` state to element and choice selections with mandatory reason strings, `AnnotatedChoice<T>` return type, defense-in-depth enforcement at engine/client/UI layers.
 
-**Target features:**
-- `disabled` option on `chooseElement`, `fromElements`, and `chooseFrom` builder methods
-- Engine returns `AnnotatedChoice<T>[]` from `getChoices()` with disabled status
-- Session threads `disabled?: string` on `ValidElement` and `ChoiceWithRefs` wire types
-- ActionPanel renders disabled items greyed out with tooltip reason
-- Board interaction adds `isDisabledElement()` for custom UIs
-- `validateSelection()` rejects disabled items with reason in error message
-- Auto-fill skips disabled items; `fill()` rejects with surfaced reason
+**v2.8 Delivered:** Disabled selections with `AnnotatedChoice<T>` type, reason-required callbacks, wire threading, ActionPanel/board rendering, auto-fill filtering, and 27 new tests.
 
 ## Previous: v2.7 Shipped
 
@@ -163,19 +156,20 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ Fixed redundant `unknown | undefined` type — v2.7
 - ✓ Removed vestigial `src/ai/utils.ts` — v2.7
 - ✓ Created BREAKING.md documenting all API changes — v2.7
+- ✓ `disabled` option on `chooseElement`, `fromElements`, `chooseFrom` with reason-required callbacks — v2.8
+- ✓ `AnnotatedChoice<T>` type with `{ value, disabled }` returned from `getChoices()` — v2.8
+- ✓ `hasValidSelectionPath()` only counts enabled items (optional selections still available) — v2.8
+- ✓ `validateSelection()` rejects disabled items with reason in error message — v2.8
+- ✓ `ValidElement` and `ChoiceWithRefs` gain `disabled?: string` on the wire — v2.8
+- ✓ ActionPanel renders disabled items greyed out with tooltip reason — v2.8
+- ✓ `useBoardInteraction` gains `isDisabledElement()` method — v2.8
+- ✓ Custom UIs read `item.disabled` from `validElements` and `getChoices()` — v2.8
+- ✓ Auto-fill skips disabled items; `fill()` rejects disabled with surfaced reason — v2.8
+- ✓ Documentation updated (migration guide, BREAKING.md) — v2.8
 
 ### Active
 
-- [ ] `disabled` option on `chooseElement`, `fromElements`, and `chooseFrom` with `(item, ctx) => string | false` signature
-- [ ] `AnnotatedChoice<T>` type with `{ value, disabled }` returned from `getChoices()`
-- [ ] `hasValidSelectionPath()` only counts enabled items (optional selections still available)
-- [ ] `validateSelection()` rejects disabled items with reason in error message
-- [ ] `ValidElement` and `ChoiceWithRefs` gain `disabled?: string` on the wire
-- [ ] ActionPanel renders disabled items greyed out with tooltip reason
-- [ ] `useBoardInteraction` gains `isDisabledElement()` method
-- [ ] Custom UIs read `item.disabled` from `validElements` and `getChoices()`
-- [ ] Auto-fill skips disabled items; `fill()` rejects disabled with surfaced reason
-- [ ] Documentation updated (migration guide, BREAKING.md)
+(None — define in next milestone)
 
 ### Out of Scope
 
@@ -226,16 +220,17 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | Consolidated animation APIs | useFLIP + useFlyingElements replace 7 deprecated composables | ✓ Good |
 | autoWatch for cross-container flying | Declarative API replaces manual watches | ✓ Good |
 | No backward compatibility for deprecated APIs | Clean break avoids confusion about which API to use | ✓ Good |
-| `disabled` runs only on filter-passed items | Clean separation: filter = visibility, disabled = selectability | — Pending |
-| `disabled` returns `string \| false` (no bare `true`) | Forces developers to provide a reason — pit of success | — Pending |
-| `AnnotatedChoice<T>` has `value` + `disabled` only | Display is layered on by session/UI, not engine concern | — Pending |
-| `disabled?: string` on wire (optional, not `string \| false`) | No need to send `false` for every selectable item | — Pending |
+| `disabled` runs only on filter-passed items | Clean separation: filter = visibility, disabled = selectability | ✓ Good |
+| `disabled` returns `string \| false` (no bare `true`) | Forces developers to provide a reason — pit of success | ✓ Good |
+| `AnnotatedChoice<T>` has `value` + `disabled` only | Display is layered on by session/UI, not engine concern | ✓ Good |
+| `disabled?: string` on wire (optional, not `string \| false`) | No need to send `false` for every selectable item | ✓ Good |
 
 ## Context
 
-~78k LOC TypeScript/Vue in unified `src/` structure.
+~79k LOC TypeScript/Vue in unified `src/` structure.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
-528 unit tests passing (15 e2e tests require running server).
+555 unit tests passing (15 e2e tests require running server).
+Shipped v2.8 with disabled selections feature — 27 disabled-specific tests added.
 
 **Current structure:**
 - `src/engine/` — Core game logic
@@ -258,4 +253,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-02-05 after v2.8 milestone start*
+*Last updated: 2026-02-06 after v2.8 milestone*
