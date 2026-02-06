@@ -10,7 +10,7 @@ Add a `disabled` state to element and choice selections so items remain visible 
 - [x] **Phase 76: Session Wire** - Wire types carry disabled status, PickHandler threads disabled from engine to protocol
 - [x] **Phase 77: UI Integration** - ActionPanel, board interaction, custom UI composables, and fill/auto-fill respect disabled state
 - [x] **Phase 78: Documentation** - BREAKING.md and migration guide document the getChoices return type change
-- [ ] **Phase 79: Fix element-type disabled in getChoices** - Thread disabled field through element-to-choice mapping in useActionController
+- [x] **Phase 79: Fix element-type disabled in getChoices** - Thread disabled field through element-to-choice mapping in useActionController
 
 ## Phase Details
 
