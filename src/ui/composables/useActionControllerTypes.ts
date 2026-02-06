@@ -350,9 +350,9 @@ export interface UseActionControllerReturn {
 
   // === Utility ===
   /** Get available choices for a pick (handles filterBy, dependsOn) */
-  getChoices: (pick: PickMetadata) => Array<{ value: unknown; display: string }>;
+  getChoices: (pick: PickMetadata) => Array<{ value: unknown; display: string; disabled?: string }>;
   /** Get filtered choices for current pick (convenience method) */
-  getCurrentChoices: () => Array<{ value: unknown; display: string }>;
+  getCurrentChoices: () => Array<{ value: unknown; display: string; disabled?: string }>;
   /** Get valid elements for an element/elements pick from cache */
   getValidElements: (pick: PickMetadata) => ValidElement[];
   /** Get metadata for an action */

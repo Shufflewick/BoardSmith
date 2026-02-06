@@ -266,8 +266,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Get available choices for a pick.
    * Priority: pickSnapshots > static metadata (for execute() and tests)
    */
-  function getChoices(selection: PickMetadata): Array<{ value: unknown; display: string }> {
-    let choices: Array<{ value: unknown; display: string }> = [];
+  function getChoices(selection: PickMetadata): Array<{ value: unknown; display: string; disabled?: string }> {
+    let choices: Array<{ value: unknown; display: string; disabled?: string }> = [];
 
     // For repeating selections with dynamic choices from server
     if (selection.repeat && repeatingState.value?.selectionName === selection.name) {
@@ -339,7 +339,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Get choices for the current pick (convenience method) */
-  function getCurrentChoices(): Array<{ value: unknown; display: string }> {
+  function getCurrentChoices(): Array<{ value: unknown; display: string; disabled?: string }> {
     const sel = currentPick.value;
     if (!sel) return [];
     return getChoices(sel);
@@ -378,9 +378,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Check if value is in valid choices
     const choices = getChoices(selection);
     if (choices.length > 0) {
-      // Helper to check if a single value matches any choice
-      const valueMatchesChoice = (v: unknown): boolean => {
-        return choices.some(c => {
+      // Helper to find the matching choice for a single value
+      const findMatchingChoice = (v: unknown) => {
+        return choices.find(c => {
           // Handle both direct match and value property match
           if (c.value === v) return true;
           if (typeof c.value === 'object' && c.value !== null) {
@@ -391,18 +391,27 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         });
       };
 
-      // Handle arrays (multiSelect) - check each element is valid
+      // Handle arrays (multiSelect) - check each element is valid and not disabled
       if (Array.isArray(value)) {
-        const allValid = value.every(v => valueMatchesChoice(v));
-        if (!allValid) {
-          return { valid: false, error: `Invalid selection for "${selection.name}"` };
+        for (const v of value) {
+          const matched = findMatchingChoice(v);
+          if (matched && matched.disabled) {
+            return { valid: false, error: `Selection disabled: ${matched.disabled}` };
+          }
+          if (!matched) {
+            return { valid: false, error: `Invalid selection for "${selection.name}"` };
+          }
         }
       } else {
-        // Single value
-        if (!valueMatchesChoice(value)) {
+        // Single value - check disabled BEFORE containment for specific error message
+        const matchedChoice = findMatchingChoice(value);
+        if (matchedChoice && matchedChoice.disabled) {
+          return { valid: false, error: `Selection disabled: ${matchedChoice.disabled}` };
+        }
+        if (!matchedChoice) {
           // PIT OF SUCCESS: Check if they passed an object with a .value that would have matched
           // This helps catch cases where auto-unwrap didn't trigger (e.g., object has value but not display)
-          if (hasValue(value) && valueMatchesChoice((value as { value: unknown }).value)) {
+          if (hasValue(value) && findMatchingChoice((value as { value: unknown }).value)) {
             return {
               valid: false,
               error: `Invalid selection for "${selection.name}". Did you mean to pass choice.value (${JSON.stringify((value as { value: unknown }).value)}) instead of the choice object?`
@@ -462,9 +471,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!getAutoFill() || isExecuting.value) return false;
 
     const choices = getChoices(selection);
-    if (choices.length !== 1 || selection.optional) return false;
+    const enabledChoices = choices.filter(c => !c.disabled);
+    if (enabledChoices.length !== 1 || selection.optional) return false;
 
-    const choice = choices[0];
+    const choice = enabledChoices[0];
     currentArgs.value[selection.name] = choice.value;
 
     if (actionSnapshot.value) {
@@ -851,8 +861,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Try auto-fill (but not for optional selections - user must consciously choose or skip)
         if (getAutoFill()) {
           const choices = getChoices(selection);
-          if (choices.length === 1 && !selection.optional) {
-            finalArgs[selection.name] = choices[0].value;
+          const enabledChoices = choices.filter(c => !c.disabled);
+          if (enabledChoices.length === 1 && !selection.optional) {
+            finalArgs[selection.name] = enabledChoices[0].value;
             continue;
           }
         }
@@ -1114,15 +1125,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Don't auto-fill optional selections - user must consciously choose or skip
         if (getAutoFill() && !isExecuting.value) {
           const choices = getChoices(nextSel);
-          if (choices.length === 1 && !nextSel.optional) {
-            const autoValue = choices[0].value;
+          const enabledChoices = choices.filter(c => !c.disabled);
+          if (enabledChoices.length === 1 && !nextSel.optional) {
+            const autoValue = enabledChoices[0].value;
             currentArgs.value[nextSel.name] = autoValue;
 
             // Also store auto-filled value in snapshot
             if (actionSnapshot.value) {
               actionSnapshot.value.collectedPicks.set(nextSel.name, {
                 value: autoValue,
-                display: choices[0].display,
+                display: enabledChoices[0].display,
                 skipped: false,
               });
             }
