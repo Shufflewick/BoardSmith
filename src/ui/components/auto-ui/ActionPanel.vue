@@ -586,7 +586,8 @@ watch([currentPick, filteredValidElements], ([selection]) => {
     // Use filteredValidElements which excludes already-selected elements
     validElems = filteredValidElements.value.map(ve => ({
       id: ve.id,
-      ref: ve.ref || { id: ve.id }
+      ref: ve.ref || { id: ve.id },
+      disabled: ve.disabled,
     }));
 
     onSelect = (elementId: number) => {
@@ -612,25 +613,26 @@ watch([currentPick, filteredValidElements], ([selection]) => {
     const choicesWithRefs = choices.filter((c: any) => c.sourceRef || c.targetRef);
 
     if (choicesWithRefs.length > 0) {
-      const refToChoice = new Map<number, { value: any; ref: any }>();
+      const refToChoice = new Map<number, { value: any; ref: any; disabled?: string }>();
 
       choicesWithRefs.forEach((choice: any) => {
         // Use targetRef for clickable elements (destinations)
         // sourceRef is only for highlighting the source
         const ref = choice.targetRef || choice.sourceRef;
         if (ref?.id !== undefined) {
-          refToChoice.set(ref.id, { value: choice.value, ref });
+          refToChoice.set(ref.id, { value: choice.value, ref, disabled: choice.disabled });
         }
       });
 
-      validElems = Array.from(refToChoice.entries()).map(([id, { ref }]) => ({
+      validElems = Array.from(refToChoice.entries()).map(([id, { ref, disabled }]) => ({
         id,
-        ref  // Include full ref with notation
+        ref,  // Include full ref with notation
+        disabled,
       }));
 
       onSelect = (elementId: number) => {
         const entry = refToChoice.get(elementId);
-        if (entry !== undefined) {
+        if (entry !== undefined && !entry.disabled) {
           // For multiSelect, toggle the value instead of setting it
           const multiSelect = currentMultiSelect.value;
           if (multiSelect) {
@@ -1442,6 +1444,8 @@ function clearBoardSelection() {
               v-for="element in filteredValidElements"
               :key="element.id"
               class="choice-btn element-btn"
+              :disabled="!!element.disabled"
+              :title="element.disabled || undefined"
               @click="selectElement(element.id, element.ref)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
@@ -1470,6 +1474,7 @@ function clearBoardSelection() {
               :key="element.id"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(element.id) }"
+              :title="element.disabled || undefined"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
@@ -1477,7 +1482,7 @@ function clearBoardSelection() {
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(element.id)"
                 @change="toggleMultiSelectValue(currentPick.name, element.id, element.display)"
-                :disabled="!isMultiSelectValueSelected(element.id) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max"
+                :disabled="!!element.disabled || (!isMultiSelectValueSelected(element.id) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max)"
               />
               <span class="checkbox-label">{{ element.display || element.id }}</span>
             </label>
@@ -1503,6 +1508,8 @@ function clearBoardSelection() {
               v-for="element in filteredValidElements"
               :key="element.id"
               class="choice-btn element-btn"
+              :disabled="!!element.disabled"
+              :title="element.disabled || undefined"
               @click="selectElement(element.id, element.ref)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
@@ -1531,6 +1538,7 @@ function clearBoardSelection() {
               :key="String(choice.value)"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(choice.value) }"
+              :title="choice.disabled || undefined"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
@@ -1538,7 +1546,7 @@ function clearBoardSelection() {
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
                 @change="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
-                :disabled="!isMultiSelectValueSelected(choice.value) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max"
+                :disabled="!!choice.disabled || (!isMultiSelectValueSelected(choice.value) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max)"
               />
               <span class="checkbox-label">{{ choice.display }}</span>
             </label>
@@ -1564,6 +1572,8 @@ function clearBoardSelection() {
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn filtered-choice-btn"
+              :disabled="!!choice.disabled"
+              :title="choice.disabled || undefined"
               @click="executeChoice(currentPick.name, choice)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
@@ -1587,6 +1597,8 @@ function clearBoardSelection() {
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn"
+              :disabled="!!choice.disabled"
+              :title="choice.disabled || undefined"
               @click="setSelectionValue(currentPick.name, choice.value, choice.display)"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
