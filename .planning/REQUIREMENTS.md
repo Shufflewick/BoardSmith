@@ -1,7 +1,7 @@
 # Requirements: BoardSmith v2.8
 
 **Defined:** 2026-02-05
-**Core Value:** Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
+**Core Value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
 ## v1 Requirements
 
@@ -39,46 +39,46 @@
 
 ## v2 Requirements
 
-None — this is a focused feature milestone.
+None -- this is a focused feature milestone.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| `disabled` on number/text picks | No use case — disabled only makes sense for discrete choices |
-| Animated disabled state transitions | Over-engineering — static disabled state is sufficient |
+| `disabled` on number/text picks | No use case -- disabled only makes sense for discrete choices |
+| Animated disabled state transitions | Over-engineering -- static disabled state is sufficient |
 | Server-push of disabled state changes | Disabled is evaluated per-fetch, not reactive |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | TBD | Pending |
-| ENG-02 | TBD | Pending |
-| ENG-03 | TBD | Pending |
-| ENG-04 | TBD | Pending |
-| ENG-05 | TBD | Pending |
-| ENG-06 | TBD | Pending |
-| SES-01 | TBD | Pending |
-| SES-02 | TBD | Pending |
-| SES-03 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
-| UI-05 | TBD | Pending |
-| UI-06 | TBD | Pending |
-| UI-07 | TBD | Pending |
-| UI-08 | TBD | Pending |
-| UI-09 | TBD | Pending |
-| DOC-01 | TBD | Pending |
-| DOC-02 | TBD | Pending |
+| ENG-01 | Phase 75 | Pending |
+| ENG-02 | Phase 75 | Pending |
+| ENG-03 | Phase 75 | Pending |
+| ENG-04 | Phase 75 | Pending |
+| ENG-05 | Phase 75 | Pending |
+| ENG-06 | Phase 75 | Pending |
+| SES-01 | Phase 76 | Pending |
+| SES-02 | Phase 76 | Pending |
+| SES-03 | Phase 76 | Pending |
+| UI-01 | Phase 77 | Pending |
+| UI-02 | Phase 77 | Pending |
+| UI-03 | Phase 77 | Pending |
+| UI-04 | Phase 77 | Pending |
+| UI-05 | Phase 77 | Pending |
+| UI-06 | Phase 77 | Pending |
+| UI-07 | Phase 77 | Pending |
+| UI-08 | Phase 77 | Pending |
+| UI-09 | Phase 77 | Pending |
+| DOC-01 | Phase 78 | Pending |
+| DOC-02 | Phase 78 | Pending |
 
 **Coverage:**
 - v1 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-05*
-*Last updated: 2026-02-05 after initial definition*
+*Last updated: 2026-02-05 after roadmap creation*

@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-02)
+See: .planning/PROJECT.md (updated 2026-02-05)
 
-**Core value:** Make board game development fast and correct
-**Current focus:** Planning next milestone
+**Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
+**Current focus:** Phase 75 - Engine Core (disabled selections)
 
 ## Current Position
 
-Phase: None (between milestones)
-Plan: N/A
-Status: Ready for next milestone
-Last activity: 2026-02-02 - v2.7 milestone complete
+Phase: 75 of 78 (Engine Core)
+Plan: 0 of 0 in current phase
+Status: Ready to plan
+Last activity: 2026-02-05 -- Roadmap created for v2.8 Disabled Selections
 
-Progress: v2.7 shipped — pristine codebase
+Progress: [░░░░░░░░░░] 0%
 
 ## Milestones
 
@@ -41,13 +41,19 @@ Progress: v2.7 shipped — pristine codebase
 - v2.7 Dead Code & Code Smell Cleanup (Phases 69-74) -- shipped 2026-02-02
 
 **Current:**
-None - ready for `/gsd:new-milestone`
+- v2.8 Disabled Selections (Phases 75-78) -- in progress
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- `disabled` runs only on filter-passed items (filter = visibility, disabled = selectability)
+- `disabled` returns `string | false` (no bare `true`) -- forces reason string
+- `AnnotatedChoice<T>` has `value` + `disabled` only -- display layered by session/UI
+- `disabled?: string` on wire (optional, not `string | false`)
 
 ### Pending Todos
 
@@ -59,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-02
-Stopped at: v2.7 milestone complete
+Last session: 2026-02-05
+Stopped at: Roadmap created, ready to plan Phase 75
 Resume file: None
