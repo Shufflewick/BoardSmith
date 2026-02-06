@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-05)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 77 verified, ready for Phase 78
+**Current focus:** Phase 78 complete -- v2.8 Disabled Selections milestone finished
 
 ## Current Position
 
-Phase: 77 of 78 (UI Integration)
-Plan: 3 of 3 in current phase
-Status: Phase verified and complete
-Last activity: 2026-02-06 -- Phase 77 verified (5/5 must-haves passed)
+Phase: 78 of 78 (Documentation)
+Plan: 1 of 1 in current phase
+Status: Phase complete
+Last activity: 2026-02-06 -- Completed 78-01-PLAN.md (documentation)
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -41,7 +41,7 @@ Progress: [█████████░] 90%
 - v2.7 Dead Code & Code Smell Cleanup (Phases 69-74) -- shipped 2026-02-02
 
 **Current:**
-- v2.8 Disabled Selections (Phases 75-78) -- in progress
+- v2.8 Disabled Selections (Phases 75-78) -- shipped 2026-02-06
 
 ## Accumulated Context
 
@@ -79,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Phase 77 verified and complete, ready for Phase 78
+Stopped at: Completed 78-01-PLAN.md -- Phase 78 and v2.8 milestone complete
 Resume file: None
