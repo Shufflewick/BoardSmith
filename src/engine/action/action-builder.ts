@@ -182,6 +182,8 @@ export class Action {
        * Can be a static config or dynamic function evaluated per context.
        */
       multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+      /** Check if choice should be disabled. Returns reason string or false. */
+      disabled?: (choice: T, context: ActionContext) => string | false;
     }
   ): this {
     const selection: ChoiceSelection<T> = {
@@ -198,6 +200,7 @@ export class Action {
       repeat: options.repeat,
       repeatUntil: options.repeatUntil,
       multiSelect: options.multiSelect,
+      disabled: options.disabled,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -260,6 +263,8 @@ export class Action {
        * choice from the dependency leads to valid choices for this selection.
        */
       dependsOn?: string;
+      /** Check if element should be disabled. Returns reason string or false. */
+      disabled?: (element: T, context: ActionContext) => string | false;
     } = {}
   ): this {
     const selection: ElementSelection<T> = {
@@ -274,6 +279,7 @@ export class Action {
       display: options.display as ElementSelection<T>['display'],
       boardRef: options.boardRef as ElementSelection<T>['boardRef'],
       dependsOn: options.dependsOn,
+      disabled: options.disabled,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -340,6 +346,8 @@ export class Action {
        * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
        */
       repeatUntil?: T;
+      /** Check if element should be disabled. Returns reason string or false. */
+      disabled?: (element: T, context: ActionContext) => string | false;
     }
   ): this {
     // For single-select (no multiSelect), use 'element' type to leverage existing code paths
@@ -358,6 +366,7 @@ export class Action {
         dependsOn: options.dependsOn,
         repeat: options.repeat,
         repeatUntil: options.repeatUntil,
+        disabled: options.disabled,
       };
       this.definition.selections.push(selection as Selection);
     } else {
@@ -374,6 +383,7 @@ export class Action {
         dependsOn: options.dependsOn,
         repeat: options.repeat,
         repeatUntil: options.repeatUntil,
+        disabled: options.disabled,
       };
       this.definition.selections.push(selection as Selection);
     }
