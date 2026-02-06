@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-05)
 
 ## Current Position
 
-Phase: 76 of 78 (Session Wire)
-Plan: 1 of 1 in current phase
-Status: Phase verified and complete
-Last activity: 2026-02-06 -- Phase 76 verified (3/3 must-haves passed)
+Phase: 77 of 78 (UI Integration)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-06 -- Completed 77-01-PLAN.md (UI-layer types and board interaction disabled)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 60%
 
 ## Milestones
 
@@ -59,6 +59,8 @@ Recent decisions affecting current work:
 - hasValidSelectionPath filters to enabled for required, skips for optional
 - Sparse wire disabled: field absent (not undefined) on enabled items for clean JSON
 - PickHandler evaluates disabled callback directly (no delegation to executor.getChoices())
+- Board interaction ValidElement separate from controller ValidElement; both carry disabled?: string independently
+- isDisabledElement returns false (not undefined) for non-disabled elements
 
 ### Pending Todos
 
@@ -71,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Phase 76 verified and complete, ready for Phase 77
+Stopped at: Completed 77-01-PLAN.md, ready for 77-02-PLAN.md
 Resume file: None
