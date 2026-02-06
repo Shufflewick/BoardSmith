@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-05)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 75 - Engine Core (disabled selections)
+**Current focus:** Phase 76 - Session Wire (disabled selections)
 
 ## Current Position
 
 Phase: 75 of 78 (Engine Core)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-06 -- Completed 75-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-06 -- Completed 75-02-PLAN.md
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ## Milestones
 
@@ -54,6 +54,9 @@ Recent decisions affecting current work:
 - `disabled` returns `string | false` (no bare `true`) -- forces reason string
 - `AnnotatedChoice<T>` has `value` + `disabled` only -- display layered by session/UI
 - `disabled?: string` on wire (optional, not `string | false`)
+- Disabled check runs before containment check in validateSelection for specific error messages
+- AI bot preserves unknown[] contract by filtering disabled internally
+- hasValidSelectionPath filters to enabled for required, skips for optional
 
 ### Pending Todos
 
@@ -66,5 +69,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 75-01-PLAN.md
+Stopped at: Completed 75-02-PLAN.md (Phase 75 complete)
 Resume file: None
