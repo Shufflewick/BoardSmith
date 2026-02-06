@@ -16,9 +16,9 @@
 
 ### Session
 
-- [ ] **SES-01**: `ValidElement` gains `disabled?: string` field
-- [ ] **SES-02**: `ChoiceWithRefs` gains `disabled?: string` field
-- [ ] **SES-03**: `PickHandler.getPickChoices()` threads disabled status from engine to wire types
+- [x] **SES-01**: `ValidElement` gains `disabled?: string` field
+- [x] **SES-02**: `ChoiceWithRefs` gains `disabled?: string` field
+- [x] **SES-03**: `PickHandler.getPickChoices()` threads disabled status from engine to wire types
 
 ### UI
 
@@ -59,9 +59,9 @@ None -- this is a focused feature milestone.
 | ENG-04 | Phase 75 | Complete |
 | ENG-05 | Phase 75 | Complete |
 | ENG-06 | Phase 75 | Complete |
-| SES-01 | Phase 76 | Pending |
-| SES-02 | Phase 76 | Pending |
-| SES-03 | Phase 76 | Pending |
+| SES-01 | Phase 76 | Complete |
+| SES-02 | Phase 76 | Complete |
+| SES-03 | Phase 76 | Complete |
 | UI-01 | Phase 77 | Pending |
 | UI-02 | Phase 77 | Pending |
 | UI-03 | Phase 77 | Pending |
@@ -81,4 +81,4 @@ None -- this is a focused feature milestone.
 
 ---
 *Requirements defined: 2026-02-05*
-*Last updated: 2026-02-06 after Phase 75 completion*
+*Last updated: 2026-02-06 after Phase 76 completion*
