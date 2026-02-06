@@ -271,6 +271,7 @@ const selectableCards = computed(() => {
   return validElements.value.map(ve => ({
     id: ve.id,
     display: ve.display,
+    disabled: ve.disabled, // reason string or undefined
     // Full element data is included:
     image: ve.element?.attributes?.image,
     rank: ve.element?.attributes?.rank,
@@ -322,7 +323,7 @@ async function onCardClick(card: { id: number }) {
 When building custom UIs, you'll often need to get the available choices for a selection. The `getChoices()` method returns choices in a consistent format:
 
 ```typescript
-Array<{ value: unknown; display: string }>
+Array<{ value: unknown; display: string; disabled?: string }>
 ```
 
 **Important:** The `value` property contains what you should pass to `fill()`:
@@ -342,6 +343,22 @@ await actionController.fill(currentPick.name, selectedChoice); // ❌
 ```
 
 The `display` property is the human-readable label for rendering in your UI (buttons, lists, etc.).
+
+The `disabled` property is present only on items that are disabled (absent on selectable items). When present, it contains a reason string explaining why the item cannot be selected. Custom UIs can use this to render disabled state however they want -- grey out the item, show a tooltip with the reason, add a lock icon, etc.
+
+```typescript
+const choices = actionController.getChoices(currentPick);
+
+// Render with disabled state
+for (const choice of choices) {
+  if (choice.disabled) {
+    // Show greyed out with reason tooltip
+    renderDisabled(choice.display, choice.disabled);
+  } else {
+    renderSelectable(choice.display, choice.value);
+  }
+}
+```
 
 **Note:** If you do accidentally pass a choice object to `fill()`, BoardSmith will auto-unwrap it in development mode and show a warning. However, passing `choice.value` directly is clearer and recommended.
 

@@ -1383,9 +1383,10 @@ await actionController.fill(selection.name, selectedChoice.value);  // ✓
 
 ### Why This Matters
 
-`getChoices()` returns `{ value, display }` objects for UI rendering:
+`getChoices()` returns `{ value, display, disabled? }` objects for UI rendering:
 - `value`: What the server expects (element ID, choice value, etc.)
 - `display`: Human-readable label for buttons/lists
+- `disabled`: Optional reason string if this choice is disabled (absent if selectable)
 
 The `fill()` function expects the raw value, not the wrapper object.
 
