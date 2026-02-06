@@ -9,6 +9,20 @@ import type { ElementClass } from '../element/types.js';
 export type SelectionType = 'element' | 'choice' | 'elements' | 'text' | 'number';
 
 /**
+ * A choice annotated with its disabled status.
+ * Returned by getChoices() for all selection types.
+ */
+export type AnnotatedChoice<T> = {
+  /** The actual choice value */
+  value: T;
+  /**
+   * Disabled reason string, or false if selectable.
+   * No bare `true` -- forces a reason string for good UX.
+   */
+  disabled: string | false;
+};
+
+/**
  * Base selection configuration
  */
 export interface BaseSelection<T = unknown> {
@@ -174,6 +188,12 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
    * }
    */
   multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+  /**
+   * Check if a choice should be disabled (visible but not selectable).
+   * Returns a reason string if disabled, or false if selectable.
+   * Only runs on items that passed filter (filter = visibility, disabled = selectability).
+   */
+  disabled?: (choice: T, context: ActionContext) => string | false;
 }
 
 /**
@@ -214,6 +234,12 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
    * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
    */
   repeatUntil?: T;
+  /**
+   * Check if an element should be disabled (visible but not selectable).
+   * Returns a reason string if disabled, or false if selectable.
+   * Only runs on elements that passed filter (filter = visibility, disabled = selectability).
+   */
+  disabled?: (element: T, context: ActionContext) => string | false;
 }
 
 /**
@@ -276,6 +302,11 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
    * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
    */
   repeatUntil?: T;
+  /**
+   * Check if an element should be disabled (visible but not selectable).
+   * Returns a reason string if disabled, or false if selectable.
+   */
+  disabled?: (element: T, context: ActionContext) => string | false;
 }
 
 /**

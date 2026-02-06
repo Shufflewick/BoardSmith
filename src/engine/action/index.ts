@@ -1,6 +1,7 @@
 export { Action } from './action-builder.js';
 export { ActionExecutor, evaluateCondition } from './action.js';
 export type {
+  AnnotatedChoice,
   SelectionType,
   Selection,
   BaseSelection,

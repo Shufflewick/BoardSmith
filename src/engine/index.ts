@@ -117,6 +117,7 @@ export {
 export { actionTempState, type ActionTempState } from './action/index.js';
 
 export type {
+  AnnotatedChoice,
   SelectionType,
   Selection,
   BaseSelection,
