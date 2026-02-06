@@ -84,7 +84,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 79-01-PLAN.md -- Fix 3 element-to-choice map calls to carry disabled field, add element-type disabled tests
+- [x] 79-01-PLAN.md -- Fix 3 element-to-choice map calls to carry disabled field, add element-type disabled tests
 
 
 ## Progress
@@ -98,4 +98,4 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78 -> 79
 | 76. Session Wire | 1/1 | Verified ✓ | 2026-02-06 |
 | 77. UI Integration | 3/3 | Verified ✓ | 2026-02-06 |
 | 78. Documentation | 1/1 | Verified ✓ | 2026-02-06 |
-| 79. Fix element-type disabled | 0/1 | Planning complete | — |
+| 79. Fix element-type disabled | 1/1 | Verified ✓ | 2026-02-06 |
