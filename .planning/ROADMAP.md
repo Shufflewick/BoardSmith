@@ -36,10 +36,10 @@ Plans:
   1. `ValidElement` includes `disabled?: string` field, present only when the element is disabled (not sent as `undefined` for enabled items)
   2. `ChoiceWithRefs` includes `disabled?: string` field with the same sparse representation
   3. `PickHandler.getPickChoices()` correctly maps engine `AnnotatedChoice` disabled status onto the wire types for both element and choice selections
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 76-01: TBD
+- [ ] 76-01-PLAN.md -- Add disabled?: string to wire types, thread disabled in PickHandler, add tests
 
 ### Phase 77: UI Integration
 **Goal**: Players see disabled items greyed out with reason tooltips in both ActionPanel and custom UIs, cannot select disabled items through any interaction path, and auto-fill correctly skips disabled items
@@ -77,6 +77,6 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 75. Engine Core | 2/2 | Verified ✓ | 2026-02-06 |
-| 76. Session Wire | 0/0 | Not started | - |
+| 76. Session Wire | 0/1 | Not started | - |
 | 77. UI Integration | 0/0 | Not started | - |
 | 78. Documentation | 0/0 | Not started | - |
