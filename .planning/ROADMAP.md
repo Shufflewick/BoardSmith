@@ -22,11 +22,11 @@ Add a `disabled` state to element and choice selections so items remain visible 
   2. `getChoices()` returns `AnnotatedChoice<T>[]` where each item carries `{ value, disabled }` and disabled items appear in the list (not filtered out)
   3. `hasValidSelectionPath()` treats all-disabled as unavailable for required selections, but optional selections remain available when all items are disabled
   4. `validateSelection()` rejects a disabled item with error message `"Selection disabled: <reason>"` containing the specific reason string
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 75-01: TBD
-- [ ] 75-02: TBD
+- [ ] 75-01-PLAN.md -- Add AnnotatedChoice type, disabled to selection interfaces, disabled option to builder methods
+- [ ] 75-02-PLAN.md -- Update getChoices to return AnnotatedChoice[], validation, path checking, internal callers, AI bot, tests
 
 ### Phase 76: Session Wire
 **Goal**: Disabled status survives the engine-to-UI boundary so the UI layer can render and enforce disabled state without re-evaluating engine logic
@@ -76,7 +76,7 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 75. Engine Core | 0/0 | Not started | - |
+| 75. Engine Core | 0/2 | Planned | - |
 | 76. Session Wire | 0/0 | Not started | - |
 | 77. UI Integration | 0/0 | Not started | - |
 | 78. Documentation | 0/0 | Not started | - |
