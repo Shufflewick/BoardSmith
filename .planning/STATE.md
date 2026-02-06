@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-05)
 ## Current Position
 
 Phase: 77 of 78 (UI Integration)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-06 -- Completed 77-02-PLAN.md (disabled rendering in ActionPanel and AutoElement)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-06 -- Completed 77-03-PLAN.md (action controller disabled validation and auto-fill filtering)
 
-Progress: [███████░░░] 70%
+Progress: [█████████░] 90%
 
 ## Milestones
 
@@ -64,6 +64,9 @@ Recent decisions affecting current work:
 - HTML disabled attribute prevents clicks natively -- no custom guards needed in button handlers
 - Multi-select checkbox disabled is compound: element.disabled OR max-reached
 - bs-element-disabled CSS overrides action-selectable green highlighting
+- getChoices/getCurrentChoices return type includes disabled?: string (no as any casts needed)
+- findMatchingChoice pattern: find() then check disabled before containment in validateSelection
+- Auto-fill filters to enabled choices before counting across all 3 code paths
 
 ### Pending Todos
 
@@ -76,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 77-02-PLAN.md, ready for 77-03-PLAN.md
+Stopped at: Completed 77-03-PLAN.md, Phase 77 complete
 Resume file: None
