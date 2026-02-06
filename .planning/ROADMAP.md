@@ -25,7 +25,7 @@ Add a `disabled` state to element and choice selections so items remain visible 
 **Plans**: 2 plans
 
 Plans:
-- [ ] 75-01-PLAN.md -- Add AnnotatedChoice type, disabled to selection interfaces, disabled option to builder methods
+- [x] 75-01-PLAN.md -- Add AnnotatedChoice type, disabled to selection interfaces, disabled option to builder methods
 - [ ] 75-02-PLAN.md -- Update getChoices to return AnnotatedChoice[], validation, path checking, internal callers, AI bot, tests
 
 ### Phase 76: Session Wire
@@ -76,7 +76,7 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 75. Engine Core | 0/2 | Planned | - |
+| 75. Engine Core | 1/2 | In progress | - |
 | 76. Session Wire | 0/0 | Not started | - |
 | 77. UI Integration | 0/0 | Not started | - |
 | 78. Documentation | 0/0 | Not started | - |
