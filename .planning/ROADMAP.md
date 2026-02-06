@@ -81,10 +81,11 @@ Plans:
   2. Client-side `fill()` for element-type picks rejects disabled elements with reason surfaced
   3. Auto-fill for element-type picks skips disabled elements (exactly 1 enabled = auto-fill)
   4. Tests exist for element-type disabled in `useActionController.test.ts` covering all 3 code paths
-**Plans**: 0 plans
+**Plans**: 1 plan
 
 Plans:
-(none yet)
+- [ ] 79-01-PLAN.md -- Fix 3 element-to-choice map calls to carry disabled field, add element-type disabled tests
+
 
 ## Progress
 
@@ -97,4 +98,4 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78 -> 79
 | 76. Session Wire | 1/1 | Verified ✓ | 2026-02-06 |
 | 77. UI Integration | 3/3 | Verified ✓ | 2026-02-06 |
 | 78. Documentation | 1/1 | Verified ✓ | 2026-02-06 |
-| 79. Fix element-type disabled | 0/0 | Not started | — |
+| 79. Fix element-type disabled | 0/1 | Planning complete | — |
