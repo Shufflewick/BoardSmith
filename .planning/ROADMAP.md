@@ -10,6 +10,7 @@ Add a `disabled` state to element and choice selections so items remain visible 
 - [x] **Phase 76: Session Wire** - Wire types carry disabled status, PickHandler threads disabled from engine to protocol
 - [x] **Phase 77: UI Integration** - ActionPanel, board interaction, custom UI composables, and fill/auto-fill respect disabled state
 - [x] **Phase 78: Documentation** - BREAKING.md and migration guide document the getChoices return type change
+- [ ] **Phase 79: Fix element-type disabled in getChoices** - Thread disabled field through element-to-choice mapping in useActionController
 
 ## Phase Details
 
@@ -70,10 +71,25 @@ Plans:
 Plans:
 - [x] 78-01-PLAN.md -- Add v2.8 section to BREAKING.md and update existing docs for disabled field
 
+### Phase 79: Fix element-type disabled in getChoices
+**Goal**: `getChoices()`/`getCurrentChoices()` for element-type picks carry `disabled` field, `fill()` checks disabled for element picks, and auto-fill filters disabled elements — closing the integration gap found by milestone audit
+**Depends on**: Phase 77
+**Requirements**: UI-07 (partial fix), UI-08 (partial fix), UI-09 (partial fix)
+**Gap Closure**: Closes integration gap from v2.8-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. `getChoices()` and `getCurrentChoices()` for element-type picks (`type: 'element'` and `type: 'elements'`) include `disabled?: string` on each choice item
+  2. Client-side `fill()` for element-type picks rejects disabled elements with reason surfaced
+  3. Auto-fill for element-type picks skips disabled elements (exactly 1 enabled = auto-fill)
+  4. Tests exist for element-type disabled in `useActionController.test.ts` covering all 3 code paths
+**Plans**: 0 plans
+
+Plans:
+(none yet)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 75 -> 76 -> 77 -> 78
+Phases execute in numeric order: 75 -> 76 -> 77 -> 78 -> 79
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -81,3 +97,4 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 | 76. Session Wire | 1/1 | Verified ✓ | 2026-02-06 |
 | 77. UI Integration | 3/3 | Verified ✓ | 2026-02-06 |
 | 78. Documentation | 1/1 | Verified ✓ | 2026-02-06 |
+| 79. Fix element-type disabled | 0/0 | Not started | — |

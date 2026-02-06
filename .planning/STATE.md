@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-05)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 78 verified — all phases complete, milestone ready for audit
+**Current focus:** Phase 79 — fix element-type disabled in getChoices (gap closure from audit)
 
 ## Current Position
 
-Phase: 78 of 78 (Documentation)
-Plan: 1 of 1 in current phase
-Status: Phase verified and complete
-Last activity: 2026-02-06 -- Phase 78 verified (4/4 must-haves passed)
+Phase: 79 of 79 (Fix element-type disabled in getChoices)
+Plan: 0 of 0 in current phase (not yet planned)
+Status: Phase added from audit gap closure
+Last activity: 2026-02-06 -- Phase 79 added to close audit gaps
 
-Progress: [██████████] 100%
+Progress: [█████████░] 95%
 
 ## Milestones
 
@@ -41,7 +41,7 @@ Progress: [██████████] 100%
 - v2.7 Dead Code & Code Smell Cleanup (Phases 69-74) -- shipped 2026-02-02
 
 **Current:**
-- v2.8 Disabled Selections (Phases 75-78) -- shipped 2026-02-06
+- v2.8 Disabled Selections (Phases 75-79) -- in progress
 
 ## Accumulated Context
 
@@ -79,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Phase 78 verified — all 4 phases complete, milestone ready for audit
+Stopped at: Phase 79 added from audit gap closure, needs planning
 Resume file: None
