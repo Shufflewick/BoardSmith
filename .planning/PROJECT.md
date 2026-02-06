@@ -8,9 +8,18 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State: v2.7 Shipped
+## Current Milestone: v2.8 Disabled Selections
 
-Codebase is pristine with all dead code, type duplication, and code smells cleaned up.
+**Goal:** Add a `disabled` state to element and choice selections so items can be shown as visible but unselectable, with a reason string explaining why.
+
+**Target features:**
+- `disabled` option on `chooseElement`, `fromElements`, and `chooseFrom` builder methods
+- Engine returns `AnnotatedChoice<T>[]` from `getChoices()` with disabled status
+- Session threads `disabled?: string` on `ValidElement` and `ChoiceWithRefs` wire types
+- ActionPanel renders disabled items greyed out with tooltip reason
+- Board interaction adds `isDisabledElement()` for custom UIs
+- `validateSelection()` rejects disabled items with reason in error message
+- Auto-fill skips disabled items; `fill()` rejects with surfaced reason
 
 ## Previous: v2.7 Shipped
 
@@ -157,7 +166,16 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-(No active requirements — define in next milestone)
+- [ ] `disabled` option on `chooseElement`, `fromElements`, and `chooseFrom` with `(item, ctx) => string | false` signature
+- [ ] `AnnotatedChoice<T>` type with `{ value, disabled }` returned from `getChoices()`
+- [ ] `hasValidSelectionPath()` only counts enabled items (optional selections still available)
+- [ ] `validateSelection()` rejects disabled items with reason in error message
+- [ ] `ValidElement` and `ChoiceWithRefs` gain `disabled?: string` on the wire
+- [ ] ActionPanel renders disabled items greyed out with tooltip reason
+- [ ] `useBoardInteraction` gains `isDisabledElement()` method
+- [ ] Custom UIs read `item.disabled` from `validElements` and `getChoices()`
+- [ ] Auto-fill skips disabled items; `fill()` rejects disabled with surfaced reason
+- [ ] Documentation updated (migration guide, BREAKING.md)
 
 ### Out of Scope
 
@@ -208,6 +226,10 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | Consolidated animation APIs | useFLIP + useFlyingElements replace 7 deprecated composables | ✓ Good |
 | autoWatch for cross-container flying | Declarative API replaces manual watches | ✓ Good |
 | No backward compatibility for deprecated APIs | Clean break avoids confusion about which API to use | ✓ Good |
+| `disabled` runs only on filter-passed items | Clean separation: filter = visibility, disabled = selectability | — Pending |
+| `disabled` returns `string \| false` (no bare `true`) | Forces developers to provide a reason — pit of success | — Pending |
+| `AnnotatedChoice<T>` has `value` + `disabled` only | Display is layered on by session/UI, not engine concern | — Pending |
+| `disabled?: string` on wire (optional, not `string \| false`) | No need to send `false` for every selectable item | — Pending |
 
 ## Context
 
@@ -236,4 +258,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-02-02 after v2.7 milestone*
+*Last updated: 2026-02-05 after v2.8 milestone start*
