@@ -7,12 +7,12 @@
 
 ### Engine
 
-- [ ] **ENG-01**: `chooseElement` accepts `disabled` option with signature `(element, ctx) => string | false`
-- [ ] **ENG-02**: `fromElements` accepts `disabled` option with signature `(element, ctx) => string | false`
-- [ ] **ENG-03**: `chooseFrom` accepts `disabled` option with signature `(choice, ctx) => string | false`
-- [ ] **ENG-04**: `getChoices()` returns `AnnotatedChoice<T>[]` with `{ value: T, disabled: string | false }`
-- [ ] **ENG-05**: `hasValidSelectionPath()` only counts items where `disabled === false` (optional selections still available when all disabled)
-- [ ] **ENG-06**: `validateSelection()` rejects disabled items with `"Selection disabled: <reason>"` error
+- [x] **ENG-01**: `chooseElement` accepts `disabled` option with signature `(element, ctx) => string | false`
+- [x] **ENG-02**: `fromElements` accepts `disabled` option with signature `(element, ctx) => string | false`
+- [x] **ENG-03**: `chooseFrom` accepts `disabled` option with signature `(choice, ctx) => string | false`
+- [x] **ENG-04**: `getChoices()` returns `AnnotatedChoice<T>[]` with `{ value: T, disabled: string | false }`
+- [x] **ENG-05**: `hasValidSelectionPath()` only counts items where `disabled === false` (optional selections still available when all disabled)
+- [x] **ENG-06**: `validateSelection()` rejects disabled items with `"Selection disabled: <reason>"` error
 
 ### Session
 
@@ -53,12 +53,12 @@ None -- this is a focused feature milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | Phase 75 | Pending |
-| ENG-02 | Phase 75 | Pending |
-| ENG-03 | Phase 75 | Pending |
-| ENG-04 | Phase 75 | Pending |
-| ENG-05 | Phase 75 | Pending |
-| ENG-06 | Phase 75 | Pending |
+| ENG-01 | Phase 75 | Complete |
+| ENG-02 | Phase 75 | Complete |
+| ENG-03 | Phase 75 | Complete |
+| ENG-04 | Phase 75 | Complete |
+| ENG-05 | Phase 75 | Complete |
+| ENG-06 | Phase 75 | Complete |
 | SES-01 | Phase 76 | Pending |
 | SES-02 | Phase 76 | Pending |
 | SES-03 | Phase 76 | Pending |
@@ -81,4 +81,4 @@ None -- this is a focused feature milestone.
 
 ---
 *Requirements defined: 2026-02-05*
-*Last updated: 2026-02-05 after roadmap creation*
+*Last updated: 2026-02-06 after Phase 75 completion*
