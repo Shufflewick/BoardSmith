@@ -51,11 +51,12 @@ Plans:
   3. Custom UIs can read `disabled?: string` from both `validElements` and `getChoices()`/`getCurrentChoices()` to implement their own disabled rendering
   4. `fill()` rejects disabled values client-side and surfaces the reason string to the user
   5. Auto-fill triggers only when exactly 1 enabled item remains (skips disabled items); if all items are disabled and selection is required, the pick shows as unavailable
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 77-01: TBD
-- [ ] 77-02: TBD
+- [ ] 77-01-PLAN.md -- Add disabled?: string to UI-layer types, isDisabledElement() and triggerElementSelect guard in board interaction
+- [ ] 77-02-PLAN.md -- Add disabled rendering to all ActionPanel button templates and AutoElement bs-element-disabled CSS class
+- [ ] 77-03-PLAN.md -- Add disabled validation/auto-fill filtering to useActionController, tests
 
 ### Phase 78: Documentation
 **Goal**: External teams can migrate to v2.8 without surprises by reading the breaking changes and migration guide
@@ -78,5 +79,5 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 |-------|----------------|--------|-----------|
 | 75. Engine Core | 2/2 | Verified ✓ | 2026-02-06 |
 | 76. Session Wire | 1/1 | Verified ✓ | 2026-02-06 |
-| 77. UI Integration | 0/0 | Not started | - |
+| 77. UI Integration | 0/3 | Planned | - |
 | 78. Documentation | 0/0 | Not started | - |
