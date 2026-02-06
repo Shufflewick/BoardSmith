@@ -286,6 +286,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           choices = snapshot.validElements.map(el => ({
             value: el.id,
             display: el.display || `Element ${el.id}`,
+            ...(el.disabled && { disabled: el.disabled }),
           }));
         }
       }
@@ -310,6 +311,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           choices = elements.map(el => ({
             value: el.id,
             display: el.display || `Element ${el.id}`,
+            ...(el.disabled && { disabled: el.disabled }),
           }));
         }
       }
@@ -320,6 +322,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         choices = selection.validElements.map(el => ({
           value: el.id,
           display: el.display || `Element ${el.id}`,
+          ...(el.disabled && { disabled: el.disabled }),
         }));
       }
     }
