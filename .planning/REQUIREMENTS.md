@@ -34,8 +34,8 @@
 
 ### Documentation
 
-- [ ] **DOC-01**: BREAKING.md v2.8 section documents `getChoices()` return type change
-- [ ] **DOC-02**: Migration guide updated for v2.8
+- [x] **DOC-01**: BREAKING.md v2.8 section documents `getChoices()` return type change
+- [x] **DOC-02**: Migration guide updated for v2.8
 
 ## v2 Requirements
 
@@ -71,8 +71,8 @@ None -- this is a focused feature milestone.
 | UI-07 | Phase 77 | Complete |
 | UI-08 | Phase 77 | Complete |
 | UI-09 | Phase 77 | Complete |
-| DOC-01 | Phase 78 | Pending |
-| DOC-02 | Phase 78 | Pending |
+| DOC-01 | Phase 78 | Complete |
+| DOC-02 | Phase 78 | Complete |
 
 **Coverage:**
 - v1 requirements: 20 total
@@ -81,4 +81,4 @@ None -- this is a focused feature milestone.
 
 ---
 *Requirements defined: 2026-02-05*
-*Last updated: 2026-02-06 after Phase 77 completion*
+*Last updated: 2026-02-06 after Phase 78 completion*

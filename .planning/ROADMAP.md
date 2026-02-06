@@ -9,7 +9,7 @@ Add a `disabled` state to element and choice selections so items remain visible 
 - [x] **Phase 75: Engine Core** - Builder methods accept `disabled`, getChoices returns annotated choices, validation enforces disabled state
 - [x] **Phase 76: Session Wire** - Wire types carry disabled status, PickHandler threads disabled from engine to protocol
 - [x] **Phase 77: UI Integration** - ActionPanel, board interaction, custom UI composables, and fill/auto-fill respect disabled state
-- [ ] **Phase 78: Documentation** - BREAKING.md and migration guide document the getChoices return type change
+- [x] **Phase 78: Documentation** - BREAKING.md and migration guide document the getChoices return type change
 
 ## Phase Details
 
@@ -68,7 +68,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 78-01-PLAN.md -- Add v2.8 section to BREAKING.md and update existing docs for disabled field
+- [x] 78-01-PLAN.md -- Add v2.8 section to BREAKING.md and update existing docs for disabled field
 
 ## Progress
 
@@ -80,4 +80,4 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 | 75. Engine Core | 2/2 | Verified ✓ | 2026-02-06 |
 | 76. Session Wire | 1/1 | Verified ✓ | 2026-02-06 |
 | 77. UI Integration | 3/3 | Verified ✓ | 2026-02-06 |
-| 78. Documentation | 0/1 | Not started | - |
+| 78. Documentation | 1/1 | Verified ✓ | 2026-02-06 |
