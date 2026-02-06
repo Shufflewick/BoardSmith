@@ -65,10 +65,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. BREAKING.md v2.8 section documents that `getChoices()` now returns `AnnotatedChoice<T>[]` instead of `T[]`, with before/after code examples
   2. Migration guide covers the return type change and shows how to update existing `getChoices()` call sites (accessing `.value` on each item)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 78-01: TBD
+- [ ] 78-01-PLAN.md -- Add v2.8 section to BREAKING.md and update existing docs for disabled field
 
 ## Progress
 
@@ -80,4 +80,4 @@ Phases execute in numeric order: 75 -> 76 -> 77 -> 78
 | 75. Engine Core | 2/2 | Verified ✓ | 2026-02-06 |
 | 76. Session Wire | 1/1 | Verified ✓ | 2026-02-06 |
 | 77. UI Integration | 3/3 | Verified ✓ | 2026-02-06 |
-| 78. Documentation | 0/0 | Not started | - |
+| 78. Documentation | 0/1 | Not started | - |
