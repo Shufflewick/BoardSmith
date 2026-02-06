@@ -146,7 +146,11 @@ describe('Action Executor', () => {
         {}
       );
 
-      expect(choices).toEqual(['red', 'blue', 'green']);
+      expect(choices).toEqual([
+        { value: 'red', disabled: false },
+        { value: 'blue', disabled: false },
+        { value: 'green', disabled: false },
+      ]);
     });
 
     it('should return dynamic choices', () => {
@@ -163,7 +167,7 @@ describe('Action Executor', () => {
         {}
       );
 
-      expect(choices).toEqual([4]);
+      expect(choices).toEqual([{ value: 4, disabled: false }]);
     });
 
     it('should get player choices from playerChoices helper', () => {
@@ -628,8 +632,8 @@ describe('Dependent Selection Filtering (filterBy)', () => {
     );
     expect(destsForPiece1).toHaveLength(2);
     expect(destsForPiece1).toEqual([
-      { pieceId: 1, dest: 'A' },
-      { pieceId: 1, dest: 'B' },
+      { value: { pieceId: 1, dest: 'A' }, disabled: false },
+      { value: { pieceId: 1, dest: 'B' }, disabled: false },
     ]);
 
     // With piece 2 selected, only C should be available
@@ -639,7 +643,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
       { piece: { pieceId: 2 } }
     );
     expect(destsForPiece2).toHaveLength(1);
-    expect(destsForPiece2[0]).toEqual({ pieceId: 2, dest: 'C' });
+    expect(destsForPiece2[0]).toEqual({ value: { pieceId: 2, dest: 'C' }, disabled: false });
   });
 
   it('should handle primitive filter values', () => {
@@ -661,7 +665,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
       { category: 'A' }
     );
     expect(itemsForA).toHaveLength(2);
-    expect(itemsForA.map((i: any) => i.name)).toEqual(['Apple', 'Apricot']);
+    expect(itemsForA.map((i: any) => i.value.name)).toEqual(['Apple', 'Apricot']);
   });
 
   it('should hide action when no valid selection path exists', () => {
@@ -731,7 +735,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
       { category: { categoryId: 1 }, item: { categoryId: 1, itemId: 10 } }
     );
     expect(actionsForItem10).toHaveLength(2);
-    expect(actionsForItem10.map((a: any) => a.action)).toEqual(['buy', 'sell']);
+    expect(actionsForItem10.map((a: any) => a.value.action)).toEqual(['buy', 'sell']);
   });
 });
 
@@ -1093,7 +1097,10 @@ describe('Game Action Integration', () => {
       game.getPlayer(1)!
     );
 
-    expect(choices).toEqual(['red', 'blue']);
+    expect(choices).toEqual([
+      { value: 'red', disabled: false },
+      { value: 'blue', disabled: false },
+    ]);
   });
 
   it('should perform action successfully', () => {
@@ -1331,5 +1338,160 @@ describe('actionTempState helper', () => {
     temp.set('data', { nested: true });
 
     expect(temp.get<{ nested: boolean }>('data')).toEqual({ nested: true });
+  });
+});
+
+describe('Disabled Selections', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 3 });
+    executor = new ActionExecutor(game);
+
+    // Create cards for element selection tests
+    const deck = game.create(Deck, 'deck');
+    deck.createMany(5, Card, 'card', (i) => ({
+      suit: 'H',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+  });
+
+  it('should mark choices as disabled via disabled callback in getChoices', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue', 'green'],
+        disabled: (choice) => choice === 'red' ? 'Red is unavailable' : false,
+      })
+      .execute(() => {});
+
+    const choices = executor.getChoices(action.selections[0], game.getPlayer(1)!, {});
+    expect(choices).toEqual([
+      { value: 'red', disabled: 'Red is unavailable' },
+      { value: 'blue', disabled: false },
+      { value: 'green', disabled: false },
+    ]);
+  });
+
+  it('should mark disabled elements in getChoices but keep them in list', () => {
+    const action = Action.create('test')
+      .chooseElement('card', {
+        elementClass: Card,
+        disabled: (el) => (el as Card).value < 3 ? 'Too weak' : false,
+      })
+      .execute(() => {});
+
+    const choices = executor.getChoices(action.selections[0], game.getPlayer(1)!, {});
+    // All 5 cards present, low-value ones marked disabled
+    expect(choices).toHaveLength(5);
+    const disabledCount = choices.filter(c => c.disabled !== false).length;
+    expect(disabledCount).toBe(2); // values 1 and 2
+    const enabledCount = choices.filter(c => c.disabled === false).length;
+    expect(enabledCount).toBe(3); // values 3, 4, 5
+  });
+
+  it('should mark disabled fromElements in getChoices but keep them in list', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .fromElements('card', {
+        elements: () => cards,
+        disabled: (el) => (el as Card).suit === 'H' ? 'Hearts blocked' : false,
+      })
+      .execute(() => {});
+
+    const choices = executor.getChoices(action.selections[0], game.getPlayer(1)!, {});
+    expect(choices).toHaveLength(cards.length);
+    // All cards are hearts, so all should be disabled
+    const disabled = choices.filter(c => c.disabled !== false);
+    expect(disabled).toHaveLength(cards.length);
+    for (const d of disabled) {
+      expect(d.disabled).toBe('Hearts blocked');
+    }
+  });
+
+  it('should reject disabled choice in validateSelection with reason', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        disabled: (c) => c === 'red' ? 'Red is banned' : false,
+      })
+      .execute(() => {});
+
+    const result = executor.validateSelection(action.selections[0], 'red', game.getPlayer(1)!, {});
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toBe('Selection disabled: Red is banned');
+  });
+
+  it('should accept enabled choice in validateSelection', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        disabled: (c) => c === 'red' ? 'Red is banned' : false,
+      })
+      .execute(() => {});
+
+    const result = executor.validateSelection(action.selections[0], 'blue', game.getPlayer(1)!, {});
+    expect(result.valid).toBe(true);
+  });
+
+  it('should return false from isActionAvailable when all choices disabled (required)', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        disabled: () => 'All disabled',
+      })
+      .execute(() => {});
+
+    expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(false);
+  });
+
+  it('should return true from isActionAvailable when at least one choice enabled', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        disabled: (c) => c === 'red' ? 'Disabled' : false,
+      })
+      .execute(() => {});
+
+    expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(true);
+  });
+
+  it('should keep optional selection available when all items disabled', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        disabled: () => 'All disabled',
+        optional: true,
+      })
+      .execute(() => {});
+
+    expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(true);
+  });
+
+  it('should use context for dynamic disabled evaluation', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        disabled: (choice, ctx) => ctx.player.seat === 1 && choice === 'red'
+          ? 'Player 1 cannot pick red'
+          : false,
+      })
+      .execute(() => {});
+
+    const player1Choices = executor.getChoices(action.selections[0], game.getPlayer(1)!, {});
+    expect(player1Choices[0].disabled).toBe('Player 1 cannot pick red');
+
+    const player2Choices = executor.getChoices(action.selections[0], game.getPlayer(2)!, {});
+    expect(player2Choices[0].disabled).toBe(false);
+  });
+
+  it('should treat all items as enabled when no disabled callback provided', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', { choices: ['red', 'blue'] })
+      .execute(() => {});
+
+    const choices = executor.getChoices(action.selections[0], game.getPlayer(1)!, {});
+    expect(choices.every(c => c.disabled === false)).toBe(true);
   });
 });
