@@ -1449,6 +1449,186 @@ describe('useActionController', () => {
       expect(result.error).toBe('Selection disabled: Shielded');
       expect(sendAction).not.toHaveBeenCalled();
     });
+
+    describe('disabled element-type selections', () => {
+      it('should include disabled field in getChoices() for element-type selections', () => {
+        const disabledElementMeta: Record<string, ActionMetadata> = {
+          moveWithDisabled: {
+            name: 'moveWithDisabled',
+            prompt: 'Move piece',
+            selections: [
+              {
+                name: 'piece',
+                type: 'element',
+                prompt: 'Select piece',
+                validElements: [
+                  { id: 100, display: 'Pawn A' },
+                  { id: 101, display: 'Pawn B', disabled: 'Pinned' },
+                ],
+              },
+            ],
+          },
+        };
+
+        actionMetadata.value = { ...createTestMetadata(), ...disabledElementMeta };
+        availableActions.value = [...(availableActions.value ?? []), 'moveWithDisabled'];
+
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoFill: false,
+          autoExecute: false,
+        });
+
+        controller.start('moveWithDisabled');
+
+        const selection = actionMetadata.value!.moveWithDisabled.selections[0];
+        const choices = controller.getChoices(selection);
+
+        expect(choices).toHaveLength(2);
+        expect(choices[0].disabled).toBeUndefined();
+        expect(choices[1].disabled).toBe('Pinned');
+
+        // getCurrentChoices() should return the same disabled values
+        const currentChoices = controller.getCurrentChoices();
+        expect(currentChoices).toHaveLength(2);
+        expect(currentChoices[0].disabled).toBeUndefined();
+        expect(currentChoices[1].disabled).toBe('Pinned');
+      });
+
+      it('should reject disabled element value via fill()', async () => {
+        const disabledElementMeta: Record<string, ActionMetadata> = {
+          moveWithDisabled: {
+            name: 'moveWithDisabled',
+            prompt: 'Move piece',
+            selections: [
+              {
+                name: 'piece',
+                type: 'element',
+                prompt: 'Select piece',
+                validElements: [
+                  { id: 100, display: 'Pawn A' },
+                  { id: 101, display: 'Pawn B', disabled: 'Pinned' },
+                ],
+              },
+            ],
+          },
+        };
+
+        actionMetadata.value = { ...createTestMetadata(), ...disabledElementMeta };
+        availableActions.value = [...(availableActions.value ?? []), 'moveWithDisabled'];
+
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoExecute: false,
+        });
+
+        await controller.start('moveWithDisabled');
+
+        // Disabled element should be rejected
+        const result = await controller.fill('piece', 101);
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('Selection disabled: Pinned');
+
+        // Enabled element should be accepted
+        const ok = await controller.fill('piece', 100);
+        expect(ok.valid).toBe(true);
+      });
+
+      it('should auto-fill single enabled element when others are disabled', async () => {
+        const autoFillElementMeta: Record<string, ActionMetadata> = {
+          forcedElement: {
+            name: 'forcedElement',
+            prompt: 'Select piece',
+            selections: [
+              {
+                name: 'piece',
+                type: 'element',
+                prompt: 'Select piece',
+                validElements: [
+                  { id: 100, display: 'Pawn A', disabled: 'Blocked' },
+                  { id: 101, display: 'Pawn B' },
+                ],
+              },
+            ],
+          },
+        };
+
+        actionMetadata.value = { ...createTestMetadata(), ...autoFillElementMeta };
+        availableActions.value = [...(availableActions.value ?? []), 'forcedElement'];
+
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoFill: true,
+          autoExecute: false,
+        });
+
+        await controller.start('forcedElement');
+        await nextTick();
+
+        expect(controller.currentArgs.value.piece).toBe(101);
+        expect(controller.isReady.value).toBe(true);
+      });
+
+      it('should include disabled in getChoices() for elementsByDependentValue', async () => {
+        const depElementMeta: Record<string, ActionMetadata> = {
+          depElementAction: {
+            name: 'depElementAction',
+            prompt: 'Select with depends',
+            selections: [
+              {
+                name: 'zone',
+                type: 'choice',
+                prompt: 'Select zone',
+                choices: [{ value: 'north', display: 'North' }],
+              },
+              {
+                name: 'unit',
+                type: 'element',
+                prompt: 'Select unit',
+                dependsOn: 'zone',
+                elementsByDependentValue: {
+                  north: [
+                    { id: 1, display: 'Soldier' },
+                    { id: 2, display: 'Medic', disabled: 'Exhausted' },
+                  ],
+                },
+              },
+            ],
+          },
+        };
+
+        actionMetadata.value = { ...createTestMetadata(), ...depElementMeta };
+        availableActions.value = [...(availableActions.value ?? []), 'depElementAction'];
+
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoFill: true,
+          autoExecute: false,
+        });
+
+        await controller.start('depElementAction');
+        await nextTick(); // zone auto-fills to 'north'
+
+        const unitSel = depElementMeta.depElementAction.selections[1];
+        const choices = controller.getChoices(unitSel);
+
+        expect(choices).toHaveLength(2);
+        expect(choices[0].disabled).toBeUndefined();
+        expect(choices[1].disabled).toBe('Exhausted');
+      });
+    });
   });
 
 });
