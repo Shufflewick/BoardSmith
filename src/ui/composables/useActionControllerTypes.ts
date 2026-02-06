@@ -28,6 +28,8 @@ export interface ChoiceWithRefs {
   sourceRef?: ElementRef;
   /** Target element reference (for move destination highlighting) */
   targetRef?: ElementRef;
+  /** Disabled reason string, present only when choice is disabled */
+  disabled?: string;
 }
 
 /** Valid element for element selections */
@@ -38,6 +40,8 @@ export interface ValidElement {
   ref?: ElementRef;
   /** Full element data from gameView (auto-enriched by actionController) */
   element?: GameElement;
+  /** Disabled reason string, present only when element is disabled */
+  disabled?: string;
 }
 
 // Types for action metadata (from server)
@@ -129,7 +133,7 @@ export interface PickStepResult {
 /** Result from fetching pick choices */
 export interface PickChoicesResult {
   success: boolean;
-  choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown }>;
+  choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown; disabled?: string }>;
   validElements?: ValidElement[];
   multiSelect?: { min: number; max?: number };
   error?: string;
@@ -145,7 +149,7 @@ export interface PickChoicesResult {
  */
 export interface PickSnapshot {
   /** Choices for choice picks */
-  choices?: Array<{ value: unknown; display: string; sourceRef?: ElementRef; targetRef?: ElementRef }>;
+  choices?: Array<{ value: unknown; display: string; sourceRef?: ElementRef; targetRef?: ElementRef; disabled?: string }>;
   /** Valid elements for element picks */
   validElements?: ValidElement[];
   /** MultiSelect config (evaluated when fetched) */

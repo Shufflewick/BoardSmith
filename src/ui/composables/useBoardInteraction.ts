@@ -39,6 +39,8 @@ export interface HighlightableChoice {
 export interface ValidElement {
   id: number;
   ref: ElementRef;
+  /** Disabled reason string, present only when element is disabled */
+  disabled?: string;
 }
 
 /**
@@ -117,6 +119,9 @@ export interface BoardInteractionActions {
 
   /** Check if an element is selectable for the current action */
   isSelectableElement: (element: { id?: number; name?: string; notation?: string }) => boolean;
+
+  /** Check if a board element is disabled for the current action selection. Returns reason string or false. */
+  isDisabledElement: (element: { id?: number; name?: string; notation?: string }) => string | false;
 
   /** Trigger element selection (called by board when clicking a valid element) */
   triggerElementSelect: (element: { id?: number; name?: string; notation?: string }) => void;
@@ -262,10 +267,16 @@ export function createBoardInteraction(): BoardInteraction {
       return state.validElements.some(ve => matchesRef(element, ve.ref));
     },
 
-    triggerElementSelect(element) {
-      // Find the matching valid element and trigger the callback
+    isDisabledElement(element) {
       const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
-      if (validElem && state.onElementSelect) {
+      if (!validElem) return false;
+      return validElem.disabled || false;
+    },
+
+    triggerElementSelect(element) {
+      // Find the matching valid element and trigger the callback (skip disabled elements)
+      const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
+      if (validElem && !validElem.disabled && state.onElementSelect) {
         state.onElementSelect(validElem.id);
       }
     },
