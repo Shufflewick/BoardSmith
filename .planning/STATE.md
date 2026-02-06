@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-05)
 
 ## Current Position
 
-Phase: 75 of 78 (Engine Core)
-Plan: 2 of 2 in current phase
-Status: Phase verified and complete
-Last activity: 2026-02-06 -- Phase 75 verified (4/4 must-haves passed)
+Phase: 76 of 78 (Session Wire)
+Plan: 1 of 1 in current phase
+Status: Phase complete
+Last activity: 2026-02-06 -- Completed 76-01-PLAN.md
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Milestones
 
@@ -57,6 +57,8 @@ Recent decisions affecting current work:
 - Disabled check runs before containment check in validateSelection for specific error messages
 - AI bot preserves unknown[] contract by filtering disabled internally
 - hasValidSelectionPath filters to enabled for required, skips for optional
+- Sparse wire disabled: field absent (not undefined) on enabled items for clean JSON
+- PickHandler evaluates disabled callback directly (no delegation to executor.getChoices())
 
 ### Pending Todos
 
@@ -69,5 +71,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Phase 75 verified and complete, ready for Phase 76
+Stopped at: Completed 76-01-PLAN.md, Phase 76 complete
 Resume file: None
