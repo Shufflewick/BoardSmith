@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-05)
 ## Current Position
 
 Phase: 77 of 78 (UI Integration)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-06 -- Completed 77-01-PLAN.md (UI-layer types and board interaction disabled)
+Last activity: 2026-02-06 -- Completed 77-02-PLAN.md (disabled rendering in ActionPanel and AutoElement)
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Milestones
 
@@ -61,6 +61,9 @@ Recent decisions affecting current work:
 - PickHandler evaluates disabled callback directly (no delegation to executor.getChoices())
 - Board interaction ValidElement separate from controller ValidElement; both carry disabled?: string independently
 - isDisabledElement returns false (not undefined) for non-disabled elements
+- HTML disabled attribute prevents clicks natively -- no custom guards needed in button handlers
+- Multi-select checkbox disabled is compound: element.disabled OR max-reached
+- bs-element-disabled CSS overrides action-selectable green highlighting
 
 ### Pending Todos
 
@@ -73,5 +76,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 77-01-PLAN.md, ready for 77-02-PLAN.md
+Stopped at: Completed 77-02-PLAN.md, ready for 77-03-PLAN.md
 Resume file: None
