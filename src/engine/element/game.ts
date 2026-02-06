@@ -5,7 +5,7 @@ import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
-import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo } from '../action/types.js';
+import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 
@@ -1018,14 +1018,15 @@ export class Game<
   }
 
   /**
-   * Get the choices for a selection (for UI)
+   * Get the choices for a selection (for UI).
+   * Returns AnnotatedChoice[] with each item annotated with disabled status.
    */
   getSelectionChoices(
     actionName: string,
     selectionName: string,
     player: P,
     args: Record<string, unknown> = {}
-  ): unknown[] {
+  ): AnnotatedChoice<unknown>[] {
     const action = this._actions.get(actionName);
     if (!action) return [];
 

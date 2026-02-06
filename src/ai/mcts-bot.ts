@@ -1045,7 +1045,8 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Get valid choices for a selection
+   * Get valid choices for a selection.
+   * Filters out disabled choices (AI should never select disabled items) and extracts raw values.
    */
   private getChoicesForSelection(
     game: Game,
@@ -1054,7 +1055,11 @@ export class MCTSBot<G extends Game = Game> {
     player: Player,
     currentArgs: Record<string, unknown>
   ): unknown[] {
-    return game.getSelectionChoices(actionName, selection.name, player as any, currentArgs);
+    const annotated = game.getSelectionChoices(actionName, selection.name, player as any, currentArgs);
+    // Filter out disabled choices and extract raw values
+    return annotated
+      .filter(c => c.disabled === false)
+      .map(c => c.value);
   }
 
   /**

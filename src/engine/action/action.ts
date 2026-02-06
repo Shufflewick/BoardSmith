@@ -18,6 +18,7 @@ import type {
   PendingActionState,
   ConditionConfig,
   ConditionDetail,
+  AnnotatedChoice,
 } from './types.js';
 import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
 import { Action } from './action-builder.js';
@@ -265,13 +266,14 @@ export class ActionExecutor {
   }
 
   /**
-   * Get available choices for a selection given current args
+   * Get available choices for a selection given current args.
+   * Returns AnnotatedChoice[] with each item annotated with disabled status.
    */
   getChoices(
     selection: Selection,
     player: Player,
     args: Record<string, unknown>
-  ): unknown[] {
+  ): AnnotatedChoice<unknown>[] {
     const context: ActionContext = {
       game: this.game,
       player,
@@ -312,7 +314,10 @@ export class ActionExecutor {
           }
         }
 
-        return choices;
+        return choices.map(choice => ({
+          value: choice,
+          disabled: choiceSel.disabled ? choiceSel.disabled(choice, context) : false,
+        }));
       }
 
       case 'element': {
@@ -354,7 +359,12 @@ export class ActionExecutor {
           }
         }
 
-        return elements;
+        return elements.map(el => ({
+          value: el,
+          disabled: elementSel.disabled
+            ? elementSel.disabled(el as any, context)
+            : false,
+        }));
       }
 
       case 'elements': {
@@ -364,7 +374,12 @@ export class ActionExecutor {
           ? elementsSel.elements(context)
           : [...elementsSel.elements];
 
-        return elements;
+        return elements.map(el => ({
+          value: el,
+          disabled: elementsSel.disabled
+            ? elementsSel.disabled(el as any, context)
+            : false,
+        }));
       }
 
       case 'text':
@@ -398,6 +413,13 @@ export class ActionExecutor {
   }
 
   /**
+   * Check if a value exists in annotated choices (compares against .value)
+   */
+  private annotatedChoicesContain(choices: AnnotatedChoice<unknown>[], value: unknown): boolean {
+    return choices.some(choice => this.valuesEqual(choice.value, value));
+  }
+
+  /**
    * Try to resolve a value to a valid choice using smart matching.
    * Handles custom UIs sending element IDs
    * when using chooseFrom with element-based choices.
@@ -408,17 +430,18 @@ export class ActionExecutor {
    *
    * @returns true if the value can be resolved to a valid choice
    */
-  private trySmartResolveChoice(value: unknown, choices: unknown[]): boolean {
+  private trySmartResolveChoice(value: unknown, choices: AnnotatedChoice<unknown>[]): boolean {
     // Try element ID match or value match for numbers
     if (typeof value === 'number') {
       for (const choice of choices) {
-        if (choice && typeof choice === 'object') {
+        const actual = choice.value;
+        if (actual && typeof actual === 'object') {
           // Check if choice is an element with matching ID
-          if ('id' in choice && (choice as { id: number }).id === value) {
+          if ('id' in actual && (actual as { id: number }).id === value) {
             return true;
           }
           // Check if choice has matching 'value' property (for playerChoices pattern)
-          if ('value' in choice && (choice as { value: number }).value === value) {
+          if ('value' in actual && (actual as { value: number }).value === value) {
             return true;
           }
         }
@@ -429,8 +452,9 @@ export class ActionExecutor {
     if (typeof value === 'string') {
       const lowerValue = value.toLowerCase();
       for (const choice of choices) {
-        if (choice && typeof choice === 'object') {
-          const obj = choice as Record<string, unknown>;
+        const actual = choice.value;
+        if (actual && typeof actual === 'object') {
+          const obj = actual as Record<string, unknown>;
           // Check value property first (for {value, display} pattern), then display, name, label
           // Both exact match and case-insensitive match are tried
           const propsToCheck = ['value', 'display', 'name', 'label'];
@@ -447,7 +471,7 @@ export class ActionExecutor {
               }
             }
           }
-        } else if (typeof choice === 'string' && choice.toLowerCase() === lowerValue) {
+        } else if (typeof actual === 'string' && actual.toLowerCase() === lowerValue) {
           return true;
         }
       }
@@ -462,13 +486,14 @@ export class ActionExecutor {
    *
    * @returns The resolved choice value, or the original value if no match found
    */
-  private smartResolveChoiceValue(value: unknown, choices: unknown[]): unknown {
+  private smartResolveChoiceValue(value: unknown, choices: AnnotatedChoice<unknown>[]): unknown {
     // Try element ID match
     if (typeof value === 'number') {
       for (const choice of choices) {
-        if (choice && typeof choice === 'object' && 'id' in choice) {
-          if ((choice as { id: number }).id === value) {
-            return choice;
+        const actual = choice.value;
+        if (actual && typeof actual === 'object' && 'id' in actual) {
+          if ((actual as { id: number }).id === value) {
+            return actual;
           }
         }
       }
@@ -478,8 +503,9 @@ export class ActionExecutor {
     if (typeof value === 'string') {
       const lowerValue = value.toLowerCase();
       for (const choice of choices) {
-        if (choice && typeof choice === 'object') {
-          const obj = choice as Record<string, unknown>;
+        const actual = choice.value;
+        if (actual && typeof actual === 'object') {
+          const obj = actual as Record<string, unknown>;
           // Check value property first (for {value, display} pattern), then display, name, label
           const propsToCheck = ['value', 'display', 'name', 'label'];
           for (const prop of propsToCheck) {
@@ -487,16 +513,16 @@ export class ActionExecutor {
             if (propValue !== undefined) {
               // Exact match (for value property especially)
               if (propValue === value) {
-                return choice;
+                return actual;
               }
               // Case-insensitive string match
               if (typeof propValue === 'string' && propValue.toLowerCase() === lowerValue) {
-                return choice;
+                return actual;
               }
             }
           }
-        } else if (typeof choice === 'string' && choice.toLowerCase() === lowerValue) {
-          return choice;
+        } else if (typeof actual === 'string' && actual.toLowerCase() === lowerValue) {
+          return actual;
         }
       }
     }
@@ -507,18 +533,19 @@ export class ActionExecutor {
   /**
    * Format valid choices for error messages
    */
-  private formatValidChoices(choices: unknown[]): string {
+  private formatValidChoices(choices: AnnotatedChoice<unknown>[]): string {
     const maxShow = 5;
     const formatted = choices.slice(0, maxShow).map(choice => {
-      if (choice && typeof choice === 'object') {
-        const obj = choice as Record<string, unknown>;
+      const actual = choice.value;
+      if (actual && typeof actual === 'object') {
+        const obj = actual as Record<string, unknown>;
         // Try to get a readable representation
         if (obj.display) return String(obj.display);
         if (obj.name) return String(obj.name);
         if (obj.label) return String(obj.label);
         if ('id' in obj) return `(id: ${obj.id})`;
       }
-      return JSON.stringify(choice);
+      return JSON.stringify(actual);
     });
 
     if (choices.length > maxShow) {
@@ -551,7 +578,13 @@ export class ActionExecutor {
       // Handle multiSelect arrays - validate each value in the array
       if (Array.isArray(value)) {
         for (const v of value) {
-          if (!this.choicesContain(choices, v)) {
+          // Check if this specific array item is disabled
+          const disabledItem = choices.find(c => this.valuesEqual(c.value, v) && c.disabled !== false);
+          if (disabledItem) {
+            errors.push(`Selection disabled: ${disabledItem.disabled}`);
+            continue;
+          }
+          if (!this.annotatedChoicesContain(choices, v)) {
             // Try smart resolution for choice selections
             if (selection.type === 'choice' && !this.trySmartResolveChoice(v, choices)) {
               const validChoicesStr = this.formatValidChoices(choices);
@@ -559,13 +592,19 @@ export class ActionExecutor {
             }
           }
         }
-      } else if (!this.choicesContain(choices, value)) {
-        // Try smart resolution for choice selections
-        if (selection.type === 'choice' && !this.trySmartResolveChoice(value, choices)) {
-          const validChoicesStr = this.formatValidChoices(choices);
-          errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${validChoicesStr}`);
-        } else if (selection.type === 'element') {
-          errors.push(`Invalid selection for ${selection.name}`);
+      } else {
+        // Check disabled FIRST -- if value matches a disabled item, reject with reason
+        const disabledMatch = choices.find(c => this.valuesEqual(c.value, value) && c.disabled !== false);
+        if (disabledMatch) {
+          errors.push(`Selection disabled: ${disabledMatch.disabled}`);
+        } else if (!this.annotatedChoicesContain(choices, value)) {
+          // Try smart resolution for choice selections
+          if (selection.type === 'choice' && !this.trySmartResolveChoice(value, choices)) {
+            const validChoicesStr = this.formatValidChoices(choices);
+            errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${validChoicesStr}`);
+          } else if (selection.type === 'element') {
+            errors.push(`Invalid selection for ${selection.name}`);
+          }
         }
       }
     }
@@ -573,13 +612,21 @@ export class ActionExecutor {
     // Validate elements selection (new "pit of success" type)
     // After resolveArgs, values are GameElement objects (not raw IDs)
     if (selection.type === 'elements') {
-      const validElements = this.getChoices(selection, player, args) as GameElement[];
+      const annotatedElements = this.getChoices(selection, player, args);
+      const validElements = annotatedElements.map(c => c.value) as GameElement[];
       const validIds = validElements.map(e => e.id);
 
       const validateElement = (elem: unknown): string | null => {
         // Handle resolved GameElement objects
         if (elem && typeof elem === 'object' && 'id' in elem) {
           const id = (elem as { id: number }).id;
+          // Check disabled first
+          const disabledMatch = annotatedElements.find(
+            c => c.value && typeof c.value === 'object' && 'id' in c.value && (c.value as { id: number }).id === id && c.disabled !== false
+          );
+          if (disabledMatch) {
+            return `Selection disabled: ${disabledMatch.disabled}`;
+          }
           if (!validIds.includes(id)) {
             const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
             return `Element ID ${id} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
@@ -588,6 +635,13 @@ export class ActionExecutor {
         }
         // Handle unresolved IDs (numeric element IDs)
         if (typeof elem === 'number') {
+          // Check disabled first
+          const disabledMatch = annotatedElements.find(
+            c => c.value && typeof c.value === 'object' && 'id' in c.value && (c.value as { id: number }).id === elem && c.disabled !== false
+          );
+          if (disabledMatch) {
+            return `Selection disabled: ${disabledMatch.disabled}`;
+          }
           if (!validIds.includes(elem)) {
             const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
             return `Element ID ${elem} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
@@ -868,10 +922,12 @@ export class ActionExecutor {
 
     // Get choices for this selection
     const choices = this.getChoices(selection, player, args);
-    selTrace.choiceCount = choices.length;
+    selTrace.choiceCount = choices.length; // Total including disabled
     selectionTraces.push(selTrace);
 
-    if (choices.length === 0) {
+    // Only enabled choices count for availability
+    const enabledChoices = choices.filter(c => c.disabled === false);
+    if (enabledChoices.length === 0) {
       // Development mode warning: suggest dependsOn if there are prior selections
       if (index > 0 && !selTrace.dependentOn) {
         const priorSelections = selections.slice(0, index).map(s => s.name);
@@ -959,19 +1015,20 @@ export class ActionExecutor {
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
-    // For element selections, check if they have choices
+    // For element selections, check if they have enabled choices
     // If a later selection depends on this one, do full path validation
     if (selection.type === 'element') {
-      const choices = this.getChoices(selection, player, args);
-      if (choices.length === 0) {
+      const annotatedChoices = this.getChoices(selection, player, args);
+      const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
+      if (enabledChoices.length === 0) {
         return false;
       }
       // Check if any later selection depends on this one
       const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
       if (hasDependent) {
-        // Need to verify at least one choice leads to a valid path
-        for (const choice of choices) {
-          const newArgs = { ...args, [selection.name]: choice };
+        // Need to verify at least one enabled choice leads to a valid path
+        for (const choice of enabledChoices) {
+          const newArgs = { ...args, [selection.name]: choice.value };
           if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
             return true;
           }
@@ -981,19 +1038,20 @@ export class ActionExecutor {
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
-    // For elements selections (fromElements), check if they have elements
+    // For elements selections (fromElements), check if they have enabled elements
     // If a later selection depends on this one, do full path validation
     if (selection.type === 'elements') {
-      const elements = this.getChoices(selection, player, args);
-      if (elements.length === 0) {
+      const annotatedElements = this.getChoices(selection, player, args);
+      const enabledElements = annotatedElements.filter(c => c.disabled === false);
+      if (enabledElements.length === 0) {
         return false;
       }
       // Check if any later selection depends on this one
       const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
       if (hasDependent) {
-        // Need to verify at least one element leads to a valid path
-        for (const element of elements) {
-          const newArgs = { ...args, [selection.name]: element };
+        // Need to verify at least one enabled element leads to a valid path
+        for (const element of enabledElements) {
+          const newArgs = { ...args, [selection.name]: element.value };
           if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
             return true;
           }
@@ -1008,16 +1066,17 @@ export class ActionExecutor {
     if (selection.type === 'choice') {
       const choiceSel = selection as ChoiceSelection;
       if (typeof choiceSel.choices === 'function') {
-        const choices = this.getChoices(selection, player, args);
-        if (choices.length === 0) {
+        const annotatedChoices = this.getChoices(selection, player, args);
+        const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
+        if (enabledChoices.length === 0) {
           return false;
         }
         // Check if any later selection depends on this one
         const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
         if (hasDependent) {
-          // Need to verify at least one choice leads to a valid path
-          for (const choice of choices) {
-            const newArgs = { ...args, [selection.name]: choice };
+          // Need to verify at least one enabled choice leads to a valid path
+          for (const choice of enabledChoices) {
+            const newArgs = { ...args, [selection.name]: choice.value };
             if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
               return true;
             }
@@ -1029,8 +1088,9 @@ export class ActionExecutor {
     }
 
     // Get choices for this selection (static choices only at this point)
-    const choices = this.getChoices(selection, player, args);
-    if (choices.length === 0) {
+    const annotatedChoices = this.getChoices(selection, player, args);
+    const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
+    if (enabledChoices.length === 0) {
       return false;
     }
 
@@ -1042,11 +1102,11 @@ export class ActionExecutor {
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
-    // Has dependent selections - need to check if at least one choice
+    // Has dependent selections - need to check if at least one enabled choice
     // leads to a valid path through subsequent selections
-    for (const choice of choices) {
-      // Build new args with this choice
-      const newArgs = { ...args, [selection.name]: choice };
+    for (const choice of enabledChoices) {
+      // Build new args with this choice's value
+      const newArgs = { ...args, [selection.name]: choice.value };
 
       // Check if this choice leads to a valid path
       if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
@@ -1165,14 +1225,27 @@ export class ActionExecutor {
     // For element selections, value is an element ID - validate it exists in choices
     if (isElementSelection) {
       const elementId = value as number;
-      const validIds = currentChoices.map((el: any) => el.id);
+      const validIds = currentChoices.map((c) => (c.value as any).id);
       if (!validIds.includes(elementId)) {
         // Format choices as {value, display} for UI
-        const formattedChoices = this.formatElementChoices(currentChoices as GameElement[]);
+        const formattedChoices = this.formatElementChoices(currentChoices.map(c => c.value) as GameElement[]);
         return { done: false, error: `Invalid element ID: ${elementId}`, nextChoices: formattedChoices };
       }
-    } else if (!this.choicesContain(currentChoices, value)) {
-      return { done: false, error: `Invalid choice: ${JSON.stringify(value)}`, nextChoices: currentChoices };
+      // Check if the selected element is disabled
+      const disabledMatch = currentChoices.find(
+        c => (c.value as any).id === elementId && c.disabled !== false
+      );
+      if (disabledMatch) {
+        return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
+      }
+    } else if (!this.annotatedChoicesContain(currentChoices, value)) {
+      return { done: false, error: `Invalid choice: ${JSON.stringify(value)}`, nextChoices: currentChoices.map(c => c.value) };
+    } else {
+      // Check disabled for non-element choices
+      const disabledMatch = currentChoices.find(c => this.valuesEqual(c.value, value) && c.disabled !== false);
+      if (disabledMatch) {
+        return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
+      }
     }
 
     // Add to accumulated values
@@ -1238,10 +1311,11 @@ export class ActionExecutor {
         [selection.name]: pendingState.repeating.accumulated,
       },
     };
-    const nextChoices = this.getChoices(selection, player, nextContext.args);
+    const nextAnnotated = this.getChoices(selection, player, nextContext.args);
+    const nextEnabled = nextAnnotated.filter(c => c.disabled === false);
 
-    // If no more choices available, terminate
-    if (nextChoices.length === 0) {
+    // If no more enabled choices available, terminate
+    if (nextEnabled.length === 0) {
       pendingState.collectedArgs[selection.name] = pendingState.repeating.accumulated;
       pendingState.repeating = undefined;
       pendingState.currentSelectionIndex++;
@@ -1249,9 +1323,10 @@ export class ActionExecutor {
     }
 
     // Format choices for UI - element selections need {value: id, display: name}
+    const nextChoicesRaw = nextAnnotated.map(c => c.value);
     const formattedChoices = isElementSelection
-      ? this.formatElementChoices(nextChoices as GameElement[], selection, nextContext)
-      : nextChoices;
+      ? this.formatElementChoices(nextChoicesRaw as GameElement[], selection, nextContext)
+      : nextChoicesRaw;
 
     return { done: false, nextChoices: formattedChoices };
   }
