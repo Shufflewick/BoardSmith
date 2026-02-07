@@ -46,7 +46,7 @@ game.animate('combat', {
 1. **Find all calls:** Search your game code for `emitAnimationEvent`.
 2. **Wrap mutations in callback:** Move any state changes that correspond to the event inside the `game.animate()` callback. The callback executes synchronously -- state is applied immediately, just like before.
 3. **Handle pure UI signals:** If the event has no corresponding state changes, use an empty callback (see below).
-4. **Remove group option:** If you used `{ group: groupId }`, remove it. Use the event `type` field with a naming convention instead (e.g., `'attack-start'`, `'attack-damage'`, `'attack-end'`).
+4. **Update group option:** If you used `{ group: groupId }` on `emitAnimationEvent`, pass it as a 4th argument to `animate()`: `game.animate(type, data, callback, { group: groupId })`.
 5. **Run `tsc --noEmit`:** TypeScript will flag any remaining references to the removed method.
 6. **Run your tests:** Verify animation events still flow correctly.
 
@@ -120,6 +120,10 @@ interface AnimationEvent {
 
 ### Removed types
 
-`EmitAnimationEventOptions` has been removed from all exports. This type provided the `{ group?: string }` option for `emitAnimationEvent()`. Since `game.animate()` does not accept a group option, the type is no longer needed.
+`EmitAnimationEventOptions` has been removed from all exports. The `group` option it provided is now available as a 4th argument to `game.animate()`:
 
-If you imported `EmitAnimationEventOptions` from `boardsmith` or `boardsmith/ui`, remove the import. If you need to group related events, use a naming convention in the event `type` field (e.g., `'attack-start'`, `'attack-damage'`, `'attack-end'`).
+```typescript
+game.animate('attack', data, () => { /* mutations */ }, { group: 'combat-round-1' });
+```
+
+If you imported `EmitAnimationEventOptions` from `boardsmith` or `boardsmith/ui`, remove the import.
