@@ -15,7 +15,7 @@ Requirements for v2.9 release. Each maps to roadmap phases.
 - [x] **ENG-04**: Theatre state maintained at engine level — reflects only acknowledged events' mutations applied to a base snapshot
 - [x] **ENG-05**: Per-event acknowledgment applies that event's captured mutations to advance the theatre state
 - [x] **ENG-06**: Theatre state serializes and restores with game state (checkpoint/replay safe)
-- [ ] **ENG-07**: `emitAnimationEvent()` removed — `game.animate()` is the only animation API
+- [x] **ENG-07**: `emitAnimationEvent()` removed — `game.animate()` is the only animation API
 - [x] **ENG-08**: Monotonically increasing event IDs preserved across `animate()` (same guarantee as current system)
 
 ### Session
@@ -35,10 +35,10 @@ Requirements for v2.9 release. Each maps to roadmap phases.
 
 ### Migration
 
-- [ ] **MIG-01**: Demo animation game migrated to `game.animate()` API
-- [ ] **MIG-02**: Cribbage game migrated to `game.animate()` API
-- [ ] **MIG-03**: BREAKING.md updated with v2.9 migration guide (emitAnimationEvent → animate)
-- [ ] **MIG-04**: Documentation updated (ui-components.md, nomenclature.md)
+- [x] **MIG-01**: Demo animation game migrated to `game.animate()` API
+- [x] **MIG-02**: Cribbage game migrated to `game.animate()` API
+- [x] **MIG-03**: BREAKING.md updated with v2.9 migration guide (emitAnimationEvent → animate)
+- [x] **MIG-04**: Documentation updated (ui-components.md, nomenclature.md)
 
 ## v2 Requirements
 
@@ -74,7 +74,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENG-04 | Phase 81: Theatre State Engine | Complete |
 | ENG-05 | Phase 81: Theatre State Engine | Complete |
 | ENG-06 | Phase 81: Theatre State Engine | Complete |
-| ENG-07 | Phase 84: Clean Break and Migration | Pending |
+| ENG-07 | Phase 84: Clean Break and Migration | Complete |
 | ENG-08 | Phase 80: Mutation Capture | Complete |
 | SES-01 | Phase 82: Session Integration | Complete |
 | SES-02 | Phase 82: Session Integration | Complete |
@@ -85,10 +85,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-03 | Phase 83: UI Composables | Complete |
 | UI-04 | Phase 83: UI Composables | Complete |
 | UI-05 | Phase 83: UI Composables | Complete |
-| MIG-01 | Phase 84: Clean Break and Migration | Pending |
-| MIG-02 | Phase 84: Clean Break and Migration | Pending |
-| MIG-03 | Phase 84: Clean Break and Migration | Pending |
-| MIG-04 | Phase 84: Clean Break and Migration | Pending |
+| MIG-01 | Phase 84: Clean Break and Migration | Complete |
+| MIG-02 | Phase 84: Clean Break and Migration | Complete |
+| MIG-03 | Phase 84: Clean Break and Migration | Complete |
+| MIG-04 | Phase 84: Clean Break and Migration | Complete |
 
 **Coverage:**
 - v1 requirements: 21 total
@@ -97,4 +97,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-07 after Phase 83 completion*
+*Last updated: 2026-02-07 after Phase 84 completion*

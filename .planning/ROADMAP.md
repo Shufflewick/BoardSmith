@@ -10,7 +10,7 @@ Replace fire-and-forget animation events with a scoped callback API (`game.anima
 - [x] **Phase 81: Theatre State Engine** - Engine-level theatre state that advances per-event as animations are acknowledged
 - [x] **Phase 82: Session Integration** - Session layer threads theatre view to all clients with current view as opt-in
 - [x] **Phase 83: UI Composables** - UI renders from theatre view by default with skip and current-view opt-in
-- [ ] **Phase 84: Clean Break and Migration** - Remove old API, migrate games, update documentation
+- [x] **Phase 84: Clean Break and Migration** - Remove old API, migrate games, update documentation
 
 ## Phase Details
 
@@ -89,9 +89,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 84-01-PLAN.md -- Remove emitAnimationEvent API, clean exports, migrate all library tests to game.animate()
-- [ ] 84-02-PLAN.md -- Migrate demo-animation and cribbage games to game.animate(), verify in browser
-- [ ] 84-03-PLAN.md -- Create BREAKING.md migration guide, update ui-components.md and nomenclature.md
+- [x] 84-01-PLAN.md -- Remove emitAnimationEvent API, clean exports, migrate all library tests to game.animate()
+- [x] 84-02-PLAN.md -- Migrate demo-animation and cribbage games to game.animate(), verify in browser
+- [x] 84-03-PLAN.md -- Create BREAKING.md migration guide, update ui-components.md and nomenclature.md
 
 ## Progress
 
@@ -104,4 +104,4 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 | 81. Theatre State Engine | 2/2 | Complete | 2026-02-07 |
 | 82. Session Integration | 2/2 | Complete | 2026-02-07 |
 | 83. UI Composables | 2/2 | Complete | 2026-02-07 |
-| 84. Clean Break and Migration | 0/3 | Not started | - |
+| 84. Clean Break and Migration | 3/3 | Complete | 2026-02-07 |
