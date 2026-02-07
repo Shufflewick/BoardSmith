@@ -29,7 +29,12 @@ Replace the v2.9 theatre view and mutation capture system with a client-side ani
   3. `acknowledgeAnimations` WebSocket message handler and `GameSession.acknowledgeAnimations()` are gone
   4. All theatre-related tests are removed; all remaining tests pass (no regressions in non-theatre functionality)
   5. BREAKING.md exists documenting every removed API with a "before (v2.9) / after (v3.0)" migration pattern
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 85-01-PLAN.md -- Engine core erasure (delete theatre files, strip Game class, clean exports)
+- [ ] 85-02-PLAN.md -- Session + server erasure (remove acknowledgeAnimations, simplify buildPlayerState)
+- [ ] 85-03-PLAN.md -- Client + UI erasure (remove acknowledge wiring, delete useCurrentView)
+- [ ] 85-04-PLAN.md -- BREAKING.md creation and full verification
 
 ### Phase 86: Simplified Animation Events
 **Goal**: Game developers call `game.animate(type, data)` to emit pure data events that land on the command stack -- no mutation capture, no theatre snapshot
@@ -95,7 +100,7 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 85. Theatre Erasure | 0/TBD | Not started | - |
+| 85. Theatre Erasure | 0/4 | Planned | - |
 | 86. Simplified Animation Events | 0/TBD | Not started | - |
 | 87. Session Simplification | 0/TBD | Not started | - |
 | 88. Client Animation Queue | 0/TBD | Not started | - |
