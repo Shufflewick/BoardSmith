@@ -18,6 +18,8 @@ import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
+import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
+import { CURRENT_VIEW_KEY } from '../composables/useCurrentView';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
@@ -156,11 +158,18 @@ audioService.init({
 });
 
 // Use game composable
-const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGame(
+const { state, connectionStatus, isConnected, isMyTurn, error, action, acknowledgeAnimations } = useGame(
   client,
   gameId,
   { playerSeat }
 );
+
+// Animation events - wire createAnimationEvents to WebSocket acknowledge
+const animationEvents = createAnimationEvents({
+  events: () => (state.value?.state as any)?.animationEvents,
+  acknowledge: (upToId) => acknowledgeAnimations(upToId),
+});
+provideAnimationEvents(animationEvents);
 
 // Sync colorSelectionEnabled from game state (for non-lobby mode like --ai where lobbyInfo is never set)
 watch(state, (s) => {
@@ -201,6 +210,16 @@ const gameView = computed(() => {
   return state.value?.state.view as any;
 });
 
+// Current (truth) game view for opt-in access (AI controller, post-game)
+// When time traveling, both theatre and truth should show historical state
+const currentGameView = computed(() => {
+  if (timeTravelState.value) {
+    return timeTravelState.value.view as any;
+  }
+  return ((state.value?.state as any)?.currentView ?? state.value?.state.view) as any;
+});
+provide(CURRENT_VIEW_KEY, currentGameView);
+
 // Shared action args - bidirectional sync between ActionPanel and custom game boards
 const actionArgs = reactive<Record<string, unknown>>({});
 
@@ -222,6 +241,8 @@ const actionController = useActionController({
   autoExecute: true, // Always auto-execute once all selections are manually filled
   // Share actionArgs with the controller for bidirectional sync with custom UIs
   externalArgs: actionArgs,
+  // Animation events for gating (shows "Playing animations..." during playback)
+  animationEvents,
   // Selection choices - fetched from server on-demand for each selection
   fetchPickChoices: async (actionName, selectionName, player, currentArgs) => {
     if (!gameId.value) {
