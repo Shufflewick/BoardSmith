@@ -8,7 +8,7 @@ Replace fire-and-forget animation events with a scoped callback API (`game.anima
 
 - [x] **Phase 80: Mutation Capture** - `game.animate()` scoped callback API that captures element and property mutations per event
 - [x] **Phase 81: Theatre State Engine** - Engine-level theatre state that advances per-event as animations are acknowledged
-- [ ] **Phase 82: Session Integration** - Session layer threads theatre view to all clients with current view as opt-in
+- [x] **Phase 82: Session Integration** - Session layer threads theatre view to all clients with current view as opt-in
 - [ ] **Phase 83: UI Composables** - UI renders from theatre view by default with skip and current-view opt-in
 - [ ] **Phase 84: Clean Break and Migration** - Remove old API, migrate games, update documentation
 
@@ -70,11 +70,11 @@ Plans:
   3. Components that need truth (AI controller, post-game) can call an explicit opt-in API (e.g. `useCurrentView()`) to get current state
   4. When flow yields for player input mid-animation, ActionPanel renders decisions against theatre state so players see choices that make sense with what they have seen so far
   5. Skip button acknowledges all pending events at once and immediately shows current view
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 83-01: TBD
-- [ ] 83-02: TBD
+- [ ] 83-01-PLAN.md -- Client SDK acknowledgeAnimations transport, useCurrentView composable, per-event acknowledge in processQueue
+- [ ] 83-02-PLAN.md -- GameShell wiring (createAnimationEvents, currentGameView provide, animationEvents to controller), tests
 
 ### Phase 84: Clean Break and Migration
 **Goal**: Old animation API removed, existing games migrated to `game.animate()`, documentation complete -- the v2.9 release is shippable
@@ -102,5 +102,5 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 | 80. Mutation Capture | 2/2 | Complete | 2026-02-07 |
 | 81. Theatre State Engine | 2/2 | Complete | 2026-02-07 |
 | 82. Session Integration | 2/2 | Complete | 2026-02-07 |
-| 83. UI Composables | 0/TBD | Not started | - |
+| 83. UI Composables | 0/2 | Not started | - |
 | 84. Clean Break and Migration | 0/TBD | Not started | - |
