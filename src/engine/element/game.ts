@@ -8,6 +8,7 @@ import { createInverseCommand } from '../command/inverse.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
+import type { CapturedMutation, MutationCaptureContext, SetPropertyMutation } from './mutation-capture.js';
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -157,6 +158,8 @@ export interface AnimationEvent {
   timestamp: number;
   /** Optional group ID for batching related events */
   group?: string;
+  /** Mutations captured during an animate() callback. Undefined for emitAnimationEvent(). */
+  mutations?: CapturedMutation[];
 }
 
 /**
@@ -338,6 +341,10 @@ export class Game<
   /** Animation event sequence counter (for unique IDs) */
   private _animationEventSeq: number = 0;
 
+  /** Active mutation capture context. Non-null only inside animate() callbacks.
+   *  Public (underscore-prefixed) so element classes can record mutations. */
+  _captureContext: MutationCaptureContext | null = null;
+
   /** Original constructor options (for snapshot restoration) */
   private _constructorOptions: Record<string, unknown> = {};
 
@@ -350,6 +357,7 @@ export class Game<
     'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
     '_flowEngine', '_debugRegistry', '_persistentMaps',
     '_animationEvents', '_animationEventSeq', '_constructorOptions',
+    '_captureContext',
   ]);
 
   static override unserializableAttributes = [
@@ -363,6 +371,7 @@ export class Game<
     '_flowEngine',
     '_debugRegistry',
     '_constructorOptions',
+    '_captureContext',
   ];
 
   /**
@@ -2383,6 +2392,119 @@ export class Game<
     };
     this._animationEvents.push(event);
     return event;
+  }
+
+  /**
+   * Execute a callback while capturing all mutations, associating them with
+   * an animation event. Mutations apply immediately to game state -- capture
+   * is purely observational for the theatre view system.
+   *
+   * @param type - Event type identifier (e.g., 'combat', 'score', 'death')
+   * @param data - Event-specific data payload (must be JSON-serializable)
+   * @param callback - Synchronous callback containing mutations to capture
+   * @returns The animation event with captured mutations
+   *
+   * @example
+   * ```typescript
+   * game.animate('death', { pieceId: piece.id }, () => {
+   *   piece.remove();
+   *   game.score += 10;
+   * });
+   * ```
+   */
+  animate(
+    type: string,
+    data: Record<string, unknown>,
+    callback: () => void
+  ): AnimationEvent {
+    if (this._captureContext) {
+      throw new Error(
+        `Cannot call game.animate() inside another animate() callback. ` +
+        `Nested animation scopes are not supported. ` +
+        `Move the inner animate() call outside the outer callback.`
+      );
+    }
+
+    // Snapshot custom game properties before callback
+    const propertySnapshot = this._snapshotCustomProperties();
+
+    // Activate capture context
+    const ctx: MutationCaptureContext = { mutations: [] };
+    this._captureContext = ctx;
+
+    try {
+      callback();
+    } finally {
+      this._captureContext = null;
+    }
+
+    // Diff custom properties after clearing context
+    const propertyMutations = this._diffCustomProperties(propertySnapshot);
+    ctx.mutations.push(...propertyMutations);
+
+    const event: AnimationEvent = {
+      id: ++this._animationEventSeq,
+      type,
+      data: { ...data },
+      timestamp: Date.now(),
+      mutations: ctx.mutations,
+    };
+    this._animationEvents.push(event);
+    return event;
+  }
+
+  /**
+   * Snapshot all custom game properties (non-system, non-element).
+   * Used by animate() to detect property changes via before/after diff.
+   */
+  private _snapshotCustomProperties(): Record<string, unknown> {
+    const snapshot: Record<string, unknown> = {};
+    const unserializable = new Set(
+      (this.constructor as typeof Game).unserializableAttributes
+    );
+    const safeProps = (this.constructor as typeof Game)._safeProperties;
+
+    for (const key of Object.keys(this)) {
+      if (unserializable.has(key) || safeProps.has(key) || key.startsWith('_')) continue;
+      const value = (this as Record<string, unknown>)[key];
+      // Skip element references (they have _t) -- tracked via element mutations
+      if (value && typeof value === 'object' && '_t' in value) continue;
+      // Skip PersistentMap instances -- tracked via settings
+      if (value instanceof PersistentMap) continue;
+      try {
+        snapshot[key] = structuredClone(value);
+      } catch {
+        // Skip values that can't be cloned (functions, symbols, etc.)
+      }
+    }
+    return snapshot;
+  }
+
+  /**
+   * Diff current custom game properties against a previous snapshot.
+   * Returns SET_PROPERTY mutations for any changed properties.
+   */
+  private _diffCustomProperties(
+    before: Record<string, unknown>
+  ): SetPropertyMutation[] {
+    const mutations: SetPropertyMutation[] = [];
+    const after = this._snapshotCustomProperties();
+    const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+
+    for (const key of allKeys) {
+      const oldVal = before[key];
+      const newVal = after[key];
+      // Use JSON.stringify for deep comparison (game properties are JSON-serializable by design)
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        mutations.push({
+          type: 'SET_PROPERTY',
+          property: key,
+          oldValue: oldVal,
+          newValue: newVal,
+        });
+      }
+    }
+    return mutations;
   }
 
   /**
