@@ -27,11 +27,11 @@ Requirements for v2.9 release. Each maps to roadmap phases.
 
 ### UI
 
-- [ ] **UI-01**: `useAnimationEvents` composable updated for `animate()` event flow with same handler registration pattern
-- [ ] **UI-02**: Components render from theatre view by default (what `gameView` provides)
-- [ ] **UI-03**: Explicit opt-in API for current view (truth) — e.g., `useCurrentView()` or similar
-- [ ] **UI-04**: ActionPanel renders decisions from theatre state when flow yields mid-animation sequence
-- [ ] **UI-05**: Skip functionality acknowledges all pending events and immediately shows current view
+- [x] **UI-01**: `useAnimationEvents` composable updated for `animate()` event flow with same handler registration pattern
+- [x] **UI-02**: Components render from theatre view by default (what `gameView` provides)
+- [x] **UI-03**: Explicit opt-in API for current view (truth) — e.g., `useCurrentView()` or similar
+- [x] **UI-04**: ActionPanel renders decisions from theatre state when flow yields mid-animation sequence
+- [x] **UI-05**: Skip functionality acknowledges all pending events and immediately shows current view
 
 ### Migration
 
@@ -80,11 +80,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SES-02 | Phase 82: Session Integration | Complete |
 | SES-03 | Phase 82: Session Integration | Complete |
 | SES-04 | Phase 82: Session Integration | Complete |
-| UI-01 | Phase 83: UI Composables | Pending |
-| UI-02 | Phase 83: UI Composables | Pending |
-| UI-03 | Phase 83: UI Composables | Pending |
-| UI-04 | Phase 83: UI Composables | Pending |
-| UI-05 | Phase 83: UI Composables | Pending |
+| UI-01 | Phase 83: UI Composables | Complete |
+| UI-02 | Phase 83: UI Composables | Complete |
+| UI-03 | Phase 83: UI Composables | Complete |
+| UI-04 | Phase 83: UI Composables | Complete |
+| UI-05 | Phase 83: UI Composables | Complete |
 | MIG-01 | Phase 84: Clean Break and Migration | Pending |
 | MIG-02 | Phase 84: Clean Break and Migration | Pending |
 | MIG-03 | Phase 84: Clean Break and Migration | Pending |
@@ -97,4 +97,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-07 after Phase 82 completion*
+*Last updated: 2026-02-07 after Phase 83 completion*

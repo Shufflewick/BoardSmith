@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v2.9 Theatre View -- Phase 83: UI Composables
+**Current focus:** v2.9 Theatre View -- Phase 84: Clean Break and Migration
 
 ## Current Position
 
-Phase: 83 of 84 (UI Composables)
-Plan: 2 of 3 complete
-Status: In progress
-Last activity: 2026-02-07 -- Completed 83-02-PLAN.md (GameShell Wiring & Tests)
+Phase: 84 of 84 (Clean Break and Migration)
+Plan: Not started
+Status: Phase complete (83), ready for next phase
+Last activity: 2026-02-07 -- Completed Phase 83 (UI Composables)
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 80%
 
 ## Milestones
 
@@ -72,8 +72,8 @@ Recent decisions affecting current work:
 - Per-event acknowledge inside processQueue while loop (not batch at end)
 - useCurrentView uses string injection key 'currentGameView' for GameShell provide compatibility
 - Record<string, unknown> view type for useCurrentView (matches loosely-typed gameView pattern)
-- (state as any)?.animationEvents pattern for accessing server fields not on client PlayerState type
-- app.runWithContext() for testing Vue provide/inject composables without DOM dependency
+- GameShell provides currentGameView via CURRENT_VIEW_KEY for truth opt-in
+- animationEvents passed to useActionController for ActionPanel gating
 
 ### Pending Todos
 
@@ -86,5 +86,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 83-02-PLAN.md, ready for 83-03
+Stopped at: Completed Phase 83 (UI Composables), ready for Phase 84
 Resume file: None
