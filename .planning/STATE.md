@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 84 of 84 (Clean Break and Migration)
-Plan: 1 of 3
-Status: In progress
-Last activity: 2026-02-07 -- Completed 84-01-PLAN.md (Clean Break)
+Plan: 3 of 3
+Status: Phase complete
+Last activity: 2026-02-07 -- Completed 84-03-PLAN.md (Documentation and Migration Guide)
 
-Progress: [█████████░] 98%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -76,6 +76,8 @@ Recent decisions affecting current work:
 - animationEvents passed to useActionController for ActionPanel gating
 - emitAnimationEvent removed entirely -- animate() is sole animation API
 - animate() has optional 4th options param { group?: string } for batched event playback
+- BREAKING.md created as migration guide format with before/after code examples
+- Theatre View, Current View, Mutation Capture added as first-class nomenclature entries
 
 ### Pending Todos
 
@@ -88,5 +90,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 84-01-PLAN.md (Clean Break)
+Stopped at: Completed 84-03-PLAN.md (Documentation and Migration Guide) -- Phase 84 complete
 Resume file: None
