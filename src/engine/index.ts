@@ -39,7 +39,6 @@ export type {
   LayoutAlignment,
   DieSides,
   AnimationEvent,
-  EmitAnimationEventOptions,
 } from './element/index.js';
 
 export type {

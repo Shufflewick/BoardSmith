@@ -292,4 +292,4 @@ export {
 } from '../session/index.js';
 
 // Re-export animation event types from engine for convenience
-export type { AnimationEvent, EmitAnimationEventOptions } from '../engine/index.js';
+export type { AnimationEvent } from '../engine/index.js';

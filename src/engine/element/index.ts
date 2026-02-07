@@ -22,7 +22,7 @@ export type {
   ImageRef,
 } from './types.js';
 
-export type { GameOptions, GamePhase, PlayerViewFunction, AnimationEvent, EmitAnimationEventOptions } from './game.js';
+export type { GameOptions, GamePhase, PlayerViewFunction, AnimationEvent } from './game.js';
 export type { CapturedMutation, CreateMutation, MoveMutation, SetAttributeMutation, SetPropertyMutation, MutationCaptureContext } from './mutation-capture.js';
 export { applyMutation, applyMutations, findElementById, removeElementFromParent } from './theatre-state.js';
 export type { ElementLayout } from './grid.js';
