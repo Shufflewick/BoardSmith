@@ -2619,6 +2619,155 @@ export class Game<
   }
 
   /**
+   * Get the theatre state filtered for a specific player's visibility.
+   *
+   * When no animations are pending (`_theatreSnapshot` is null), delegates
+   * directly to `toJSONForPlayer()` for zero overhead.
+   *
+   * When animations are pending, applies visibility filtering to the theatre
+   * snapshot using element ID-based lookups. This avoids the parallel tree
+   * traversal used by `toJSONForPlayer()` (which breaks when theatre and
+   * truth have elements in different positions).
+   *
+   * @param player - Player, player seat, or null for spectator view
+   */
+  theatreStateForPlayer(player: P | number | null): ElementJSON {
+    // When no theatre snapshot exists, theatre = truth
+    if (!this._theatreSnapshot) {
+      return this.toJSONForPlayer(player);
+    }
+
+    const playerSeat = player === null ? null : (typeof player === 'number' ? player : player.seat);
+    // For visibility checks, spectators use -1 (no special access)
+    const visibilityPosition = playerSeat ?? -1;
+
+    // Deep clone the theatre snapshot so filtering doesn't mutate it
+    const theatreJson = structuredClone(this._theatreSnapshot) as ElementJSON;
+
+    const filterNode = (json: ElementJSON): ElementJSON => {
+      // Look up the live element by ID to check its visibility state.
+      // getElementById checks both the main tree AND the pile, which handles
+      // elements removed in truth but still present in the theatre snapshot.
+      const liveElement = this.getElementById(json.id);
+
+      if (!liveElement) {
+        // Element created during animate() but then destroyed -- rare edge case.
+        // We can't determine visibility without a live object, so return as-is.
+        if (json.children) {
+          return { ...json, children: json.children.map(c => filterNode(c)) };
+        }
+        return json;
+      }
+
+      const visibility = liveElement.getEffectiveVisibility();
+
+      // Handle count-only mode: show count but not contents
+      if (visibility.mode === 'count-only' && !liveElement.isVisibleTo(visibilityPosition)) {
+        const systemAttrs: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(json.attributes ?? {})) {
+          if (key.startsWith('$')) {
+            systemAttrs[key] = value;
+          }
+        }
+        return {
+          className: json.className,
+          id: json.id,
+          name: json.name,
+          attributes: systemAttrs,
+          childCount: json.children?.length ?? 0,
+        };
+      }
+
+      // Check if element is visible to this player
+      if (!liveElement.isVisibleTo(visibilityPosition)) {
+        return {
+          className: json.className,
+          id: json.id,
+          attributes: { __hidden: true },
+        };
+      }
+
+      // Check zone visibility for children (if this is a Space)
+      const zoneVisibility = (liveElement as any).getZoneVisibility?.();
+
+      if (zoneVisibility) {
+        if (zoneVisibility.mode === 'hidden' || zoneVisibility.mode === 'count-only') {
+          // Hidden and count-only modes: create anonymized placeholders for children
+          const hiddenChildren: ElementJSON[] = [];
+          if (json.children) {
+            // Use the live element's _t.id for generating negative IDs to prevent correlation
+            const liveId = liveElement._t.id;
+            for (let i = 0; i < json.children.length; i++) {
+              const childJson = json.children[i];
+              const systemAttrs: Record<string, unknown> = { __hidden: true };
+              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
+                if (key.startsWith('$')) {
+                  systemAttrs[key] = value;
+                }
+              }
+              hiddenChildren.push({
+                className: childJson.className,
+                id: -(liveId * 1000 + i),
+                attributes: systemAttrs,
+              });
+            }
+          }
+          return {
+            ...json,
+            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+            childCount: json.children?.length ?? 0,
+          };
+        } else if (zoneVisibility.mode === 'owner' && liveElement.player?.seat !== visibilityPosition) {
+          // Owner-only zone and this player doesn't own it - show hidden placeholders
+          const hiddenChildren: ElementJSON[] = [];
+          if (json.children) {
+            for (const childJson of json.children) {
+              const systemAttrs: Record<string, unknown> = { __hidden: true };
+              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
+                if (key.startsWith('$')) {
+                  systemAttrs[key] = value;
+                }
+              }
+              hiddenChildren.push({
+                className: childJson.className,
+                id: childJson.id,
+                attributes: systemAttrs,
+              });
+            }
+          }
+          return {
+            ...json,
+            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+          };
+        }
+      }
+
+      // Filter children recursively
+      const filteredChildren: ElementJSON[] = [];
+      if (json.children) {
+        for (const child of json.children) {
+          filteredChildren.push(filterNode(child));
+        }
+      }
+
+      return {
+        ...json,
+        children: filteredChildren.length > 0 ? filteredChildren : undefined,
+      };
+    };
+
+    let filtered = filterNode(theatreJson);
+
+    // Apply static playerView transformation if defined
+    const GameClass = this.constructor as typeof Game;
+    if (GameClass.playerView) {
+      filtered = GameClass.playerView(filtered, playerSeat, this);
+    }
+
+    return filtered;
+  }
+
+  /**
    * Acknowledge animation events up to (and including) the given ID.
    *
    * Call this after UI has finished playing back events. Events with ID <= upToId
