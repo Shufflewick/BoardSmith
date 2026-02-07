@@ -1,3 +1,5 @@
+/// <reference path="./global.d.ts" />
+
 // Core components
 export { default as GameShell } from './components/GameShell.vue';
 export { default as DebugPanel } from './components/DebugPanel.vue';

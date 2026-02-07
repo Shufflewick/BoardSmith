@@ -1874,7 +1874,15 @@ function clearBoardSelection() {
   transition: all 0.2s;
 }
 
-.choice-btn:hover {
+.choice-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+  border-color: rgba(128, 128, 128, 0.3);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.choice-btn:hover:not(:disabled) {
   border-color: #00d9ff;
   background: rgba(0, 217, 255, 0.2);
 }
@@ -2000,7 +2008,15 @@ function clearBoardSelection() {
   transition: all 0.2s;
 }
 
-.multi-select-choice:hover {
+.multi-select-choice:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+  border-color: rgba(128, 128, 128, 0.3);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.multi-select-choice:hover:not(:has(input:disabled)) {
   border-color: #00d9ff;
   background: rgba(0, 217, 255, 0.2);
 }

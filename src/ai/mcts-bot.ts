@@ -269,7 +269,10 @@ export class MCTSBot<G extends Game = Game> {
 
       // Yield to event loop in async mode (every iteration for responsiveness)
       if (this.config.async) {
-        await new Promise(resolve => setImmediate(resolve));
+        const schedule = typeof setImmediate !== 'undefined'
+          ? setImmediate
+          : (fn: () => void) => setTimeout(fn, 0);
+        await new Promise(resolve => schedule(resolve));
       }
     }
 

@@ -1,3 +1,6 @@
+/// <reference path="../types/node-globals.d.ts" />
+/// <reference path="../ui/global.d.ts" />
+
 // Element system
 export {
   GameElement,

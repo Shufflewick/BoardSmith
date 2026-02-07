@@ -9,8 +9,10 @@
  * Player reference commonly found in element attributes.
  */
 export interface PlayerRef {
-  position: number;
-  name: string;
+  __playerRef: number;
+  seat: number;
+  color?: string;
+  name?: string;
 }
 
 /**

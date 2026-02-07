@@ -1,5 +1,6 @@
 import { Space } from './space.js';
 import { Die, type DieSides } from './die.js';
+import { ElementCollection } from './element-collection.js';
 import type { ElementContext } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
@@ -44,8 +45,8 @@ export class DicePool<G extends Game = any, P extends Player = any> extends Spac
   /**
    * Get all dice in the pool
    */
-  getDice(): Die[] {
-    return this.all(Die) as unknown as Die[];
+  getDice(): ElementCollection<Die> {
+    return this.all(Die);
   }
 
   /**

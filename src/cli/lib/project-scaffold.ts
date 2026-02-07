@@ -248,7 +248,9 @@ export const gameDefinition = {
  * Generate src/ui/index.ts
  */
 export function generateUiIndexTs(): string {
-  return `import App from './App.vue';
+  return `export type { UseActionControllerReturn } from 'boardsmith/ui';
+
+import App from './App.vue';
 export { App };
 export { default as GameTable } from './components/GameTable.vue';
 `;

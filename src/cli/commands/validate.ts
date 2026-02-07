@@ -144,15 +144,21 @@ async function validateTypeScript(cwd: string): Promise<ValidationResult> {
           message: '',
         });
       } else {
-        const errors = output.split('\n').filter(line =>
+        const allErrors = output.split('\n').filter(line =>
           line.includes('error TS')
-        ).slice(0, 5);
+        );
+        const maxShown = 20;
+        const shown = allErrors.slice(0, maxShown);
+        const remaining = allErrors.length - shown.length;
+        if (remaining > 0) {
+          shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx tsc --noEmit\` for full output.`);
+        }
 
         resolve({
           name: 'TypeScript',
           passed: false,
           message: 'TypeScript compilation failed',
-          details: errors.length > 0 ? errors : ['Run `npx tsc --noEmit` for details'],
+          details: shown.length > 0 ? shown : ['Run `npx tsc --noEmit` for details'],
         });
       }
     });

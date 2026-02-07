@@ -2,6 +2,41 @@ This app is BoardSmith, a library for designing digital board games.
 
 Read everything in the docs folder to get started.
 
+## Motto: The Pit of Success
+
+> Make the easy path the right path, and the wrong path the hard path.
+
+Every design decision should guide developers and users toward correct behavior by default. When someone takes the path of least resistance, they should end up doing the right thing. Mistakes should require deliberate effort.
+
+### What This Means in Practice
+
+**API Design**
+- Secure defaults, not opt-in security
+- Required parameters for dangerous operations
+- Impossible to represent invalid states in types
+
+**Architecture**
+- Single source of truth for each piece of data
+- Idempotent operations where possible
+- Explicit state machines over implicit transitions
+
+**Error Handling**
+- Fail fast and loud, not silently
+- Error messages should be as descriptive as possible for users
+- Never leak implementation details (line numbers, stack traces, internal paths)
+- Clear error messages with actionable next steps
+- Graceful degradation that's visible, not hidden
+
+**Testing**
+- If it's hard to test, the design is probably wrong
+- Integration tests for the happy path
+- Property-based tests for invariants
+- Local dev: `wrangler` (Cloudflare) + `convex dev` (Convex) running together
+- Stripe test mode for all payment testing
+- Seed data scripts for common scenarios
+
+---
+
 # Modules
 
 - **engine** - Core game rules: elements (cards, pieces, dice, grids), commands, flow control, actions, and event-sourced state.
