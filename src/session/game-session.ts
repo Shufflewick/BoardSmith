@@ -165,6 +165,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #debugController: DebugController<G>;
   /** Checkpoint manager for fast HMR recovery (dev only) */
   #checkpointManager?: CheckpointManager<G>;
+  /** Circuit breaker: consecutive AI failures before giving up */
+  #aiConsecutiveFailures = 0;
 
   private constructor(
     runner: GameRunner<G>,
@@ -1489,30 +1491,53 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Check if AI should play and execute move
+   * Check if AI should play and execute move.
+   * Uses a circuit breaker to stop retrying after repeated failures,
+   * preventing infinite loops when the AI can't clone the game state.
    */
   async #checkAITurn(): Promise<void> {
     if (!this.#aiController) return;
 
-    const move = await this.#aiController.checkAndPlay(
-      this.#runner,
-      this.#storedState.actionHistory,
-      async (action, player, args) => {
-        const result = this.#runner.performAction(action, player, args);
-        if (result.success) {
-          this.#storedState.actionHistory = this.#runner.actionHistory;
-          if (this.#storage) {
-            await this.#storage.save(this.#storedState);
-          }
-          this.broadcast();
-          return true;
-        }
-        return false;
-      }
-    );
+    let move: { action: string; player: number; args: Record<string, unknown> } | null = null;
 
-    // If AI made a move, check again (might be multi-step or next AI player)
+    try {
+      move = await this.#aiController.checkAndPlay(
+        this.#runner,
+        this.#storedState.actionHistory,
+        async (action, player, args) => {
+          const result = this.#runner.performAction(action, player, args);
+          if (result.success) {
+            this.#storedState.actionHistory = this.#runner.actionHistory;
+            if (this.#storage) {
+              await this.#storage.save(this.#storedState);
+            }
+            this.broadcast();
+            return true;
+          }
+          return false;
+        }
+      );
+    } catch (error) {
+      // AI threw (e.g., failed to clone game for MCTS search)
+      const flowState = this.#runner.getFlowState();
+      if (flowState?.awaitingInput && !flowState.complete) {
+        this.#aiConsecutiveFailures++;
+        if (this.#aiConsecutiveFailures >= 3) {
+          console.error(
+            `[AI] Giving up after ${this.#aiConsecutiveFailures} consecutive failures. ` +
+            `The game may have non-deterministic flow logic (e.g., an execute block that ` +
+            `completes the game during replay). Last error: ${error instanceof Error ? error.message : error}`
+          );
+          return;
+        }
+        this.#scheduleAICheck();
+      }
+      return;
+    }
+
+    // If AI made a move, reset failure counter and check again
     if (move) {
+      this.#aiConsecutiveFailures = 0;
       this.#scheduleAICheck();
     } else {
       // Even if no move was made (e.g., turn changed during delay, or blocked by #thinking),

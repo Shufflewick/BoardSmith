@@ -224,11 +224,24 @@ export class MCTSBot<G extends Game = Game> {
     // Initialize incremental state management:
     // Clone game once and track root command count for undo
     this.rootSnapshot = this.captureSnapshot();
-    const clonedGame = this.restoreGame(this.rootSnapshot);
-    if (!clonedGame) {
-      throw new Error('Failed to clone game for MCTS search');
+    const clonedGame = this.restoreGame(this.rootSnapshot) as G;
+
+    // Validate the clone is still playable. If flow completed or stopped
+    // awaiting input during replay, the game has non-deterministic flow logic
+    // (e.g., an execute block that ends the game based on state accumulated
+    // during replay). The MCTS search cannot proceed.
+    const clonedFlowState = clonedGame.getFlowState()!;
+    if (clonedFlowState.complete || !clonedFlowState.awaitingInput) {
+      throw new Error(
+        'Failed to clone game for MCTS search: flow diverged during replay. ' +
+        'This usually means the game has non-deterministic flow logic (e.g., an execute ' +
+        'block that completes the game based on state that differs between the original ' +
+        'and replayed game). Check that all game-ending logic is deterministic given the ' +
+        'same action history and seed.'
+      );
     }
-    this.searchGame = clonedGame as G;
+
+    this.searchGame = clonedGame;
     this.rootCommandCount = this.searchGame.commandHistory.length;
 
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
@@ -1182,38 +1195,40 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Restore a game from snapshot
-   * Returns null if restoration fails (e.g., due to complex phase transitions)
+   * Restore a game from snapshot by replaying command history and actions.
+   * Handles games where flow completes or stops awaiting input mid-replay
+   * (e.g., execute blocks that end the game). In such cases, remaining
+   * actions are stale and replay stops early.
    */
-  private restoreGame(snapshot: GameStateSnapshot): Game | null {
-    try {
-      // Use full gameOptions from snapshot if available, falling back to basic options
-      // This ensures custom options like playerConfigs are preserved in MCTS clones
-      const gameOptions = snapshot.gameOptions ?? {
-        playerCount: snapshot.state.settings.playerCount as number,
-        playerNames: snapshot.state.settings.playerNames as string[],
-        seed: snapshot.seed,
-      };
+  private restoreGame(snapshot: GameStateSnapshot): Game {
+    // Use full gameOptions from snapshot if available, falling back to basic options
+    // This ensures custom options like playerConfigs are preserved in MCTS clones
+    const gameOptions = snapshot.gameOptions ?? {
+      playerCount: snapshot.state.settings.playerCount as number,
+      playerNames: snapshot.state.settings.playerNames as string[],
+      seed: snapshot.seed,
+    };
 
-      const game = new this.GameClass(gameOptions as any);
+    const game = new this.GameClass(gameOptions as any);
 
-      // Replay commands to restore element state
-      game.replayCommands(snapshot.commandHistory);
+    // Replay commands to restore element state
+    game.replayCommands(snapshot.commandHistory);
 
-      // Start flow and replay actions
-      game.startFlow();
-      for (const action of snapshot.actionHistory) {
-        const { actionName, player, args } = deserializeAction(action, game);
-        // Pass the player seat to continueFlow (required for simultaneous actions)
-        game.continueFlow(actionName, args, player.seat);
+    // Start flow and replay actions
+    game.startFlow();
+    for (const action of snapshot.actionHistory) {
+      const { actionName, player, args } = deserializeAction(action, game);
+      // Pass the player seat to continueFlow (required for simultaneous actions)
+      const flowState = game.continueFlow(actionName, args, player.seat);
+
+      // If the flow completed or stopped awaiting input during replay
+      // (e.g., an execute block ended the game), remaining history is stale
+      if (flowState.complete || !flowState.awaitingInput) {
+        break;
       }
-
-      return game;
-    } catch (error) {
-      // Restoration failed - this can happen with complex game state transitions
-      console.error('[MCTS] Game restoration failed:', error);
-      return null;
     }
+
+    return game;
   }
 
   /**
@@ -1223,11 +1238,8 @@ export class MCTSBot<G extends Game = Game> {
   private recoverFromUndoFailure(): void {
     if (!this.rootSnapshot) return;
 
-    const game = this.restoreGame(this.rootSnapshot);
-    if (game) {
-      this.searchGame = game as G;
-      this.rootCommandCount = this.searchGame.commandHistory.length;
-    }
+    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
+    this.rootCommandCount = this.searchGame.commandHistory.length;
   }
 
   /**

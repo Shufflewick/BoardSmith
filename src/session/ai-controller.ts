@@ -161,6 +161,7 @@ export class AIController<G extends Game = Game> {
       }
     } catch (error) {
       console.error(`AI error for player ${aiPlayer}:`, error);
+      throw error;
     } finally {
       this.#thinking = false;
     }
