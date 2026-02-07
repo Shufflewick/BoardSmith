@@ -7,8 +7,10 @@ This document defines the standard terminology used throughout BoardSmith. Use t
 | Term | Definition |
 |------|------------|
 | Action | A player operation with prompt, selections, and effects |
-| Animation Event | A UI hint for asynchronous animation playback |
+| Animation Event | A structured event capturing mutations for theatre view playback |
 | Animation Handler | A function that plays back a specific event type |
+| Current View | The real, up-to-date game state (opt-in for truth-needing components) |
+| Mutation Capture | System recording element operations inside `game.animate()` callbacks |
 | Active Player | The player whose turn it is |
 | AutoUI | Auto-generated game interface |
 | Board | A Space containing the main game area |
@@ -39,6 +41,7 @@ This document defines the standard terminology used throughout BoardSmith. Use t
 | Soft Continuation | Pattern where state advances immediately, UI plays back |
 | Space | A container/location for pieces |
 | Table | The visual game area where all components are displayed |
+| Theatre View | Frozen snapshot of game state shown during animation playback |
 | Turn | A player's opportunity to act |
 | Zone | A logical area with visibility rules |
 
@@ -427,13 +430,13 @@ Terms related to the animation event system for asynchronous UI playback.
 
 ### Animation Event
 
-**Definition:** A UI hint emitted during game execution that flows to UI consumers for asynchronous playback. Animation events do NOT mutate game state - the game continues immediately while UI plays back events (soft continuation pattern).
+**Definition:** A structured event emitted during game execution via `game.animate()` that captures state mutations and flows to UI consumers for asynchronous playback. Mutations inside the callback are recorded on the event and drive the theatre view advancement system. Game state advances immediately (soft continuation pattern) while the theatre view replays events one at a time.
 
-**In Code:** `AnimationEvent` interface; `game.emitAnimationEvent()` method
-**Related Terms:** Soft Continuation, Animation Handler, ActionPanel
+**In Code:** `AnimationEvent` interface; `game.animate()` method
+**Related Terms:** Soft Continuation, Animation Handler, ActionPanel, Theatre View, Current View, Mutation Capture
 **Usage:**
 - "Emit an animation event when combat resolves"
-- "The UI plays back animation events while state already advanced"
+- "The UI plays back animation events while the theatre state advances per-event"
 
 ### Animation Handler
 
@@ -447,13 +450,47 @@ Terms related to the animation event system for asynchronous UI playback.
 
 ### Soft Continuation
 
-**Definition:** Design pattern where game state advances immediately and UI plays back asynchronously. The UI "catches up" to the current state through animation playback, rather than blocking state advancement.
+**Definition:** Design pattern where game state advances immediately and UI plays back asynchronously. The UI "catches up" to the current state through animation playback, rather than blocking state advancement. The theatre view renders the pre-animation state while the truth has already advanced.
 
 **In Code:** Architecture pattern (not a specific type)
-**Related Terms:** Animation Event, ActionPanel
+**Related Terms:** Animation Event, ActionPanel, Theatre View
 **Usage:**
-- "BoardSmith uses soft continuation - state doesn't wait for animations"
+- "BoardSmith uses soft continuation -- state doesn't wait for animations"
 - "The ActionPanel gates on animation completion to prevent premature decisions"
+- "The theatre view shows the pre-animation snapshot while truth has already advanced"
+
+### Theatre View
+
+**Definition:** The frozen snapshot of game state shown to players during animation playback. Starts as a copy of game state when the first `game.animate()` call occurs, then advances one event at a time as animations are acknowledged. When all events are acknowledged, the theatre view equals the truth and the snapshot is cleared (zero overhead when not animating).
+
+**In Code:** `game.theatreState` getter; `game.acknowledgeAnimationEvents(upToId)` method
+**Related Terms:** Current View, Animation Event, Mutation Capture, Soft Continuation
+**Usage:**
+- "The theatre view shows the state before unacknowledged animations"
+- "Players see the theatre view by default -- it advances as animations complete"
+- "When all events are acknowledged, theatreState falls through to the real state"
+
+### Current View
+
+**Definition:** The real, up-to-date game state available as an opt-in for components that need truth. While the theatre view shows "what the player has seen so far," the current view shows "what actually happened." Useful for AI controllers, post-game summaries, and non-animated UI elements that should always show the latest state.
+
+**In Code:** `useCurrentView()` composable; `currentView` field in `PlayerGameState`
+**Related Terms:** Theatre View, Animation Event
+**Usage:**
+- "The AI controller reads from current view to make decisions based on actual state"
+- "Use `useCurrentView()` for components that should not wait for animations"
+- "currentView is only sent when it differs from the theatre view (bandwidth optimization)"
+
+### Mutation Capture
+
+**Definition:** The system that automatically records element operations (moves, creates, removals) and property changes made inside a `game.animate()` callback. Captured mutations are stored on the `AnimationEvent` and drive the theatre view advancement -- when a client acknowledges an event, the theatre snapshot replays that event's mutations to produce the next visible state.
+
+**In Code:** `CapturedMutation` type; `MutationCaptureContext` on `Game`
+**Related Terms:** Theatre View, Animation Event
+**Usage:**
+- "Mutation capture records putInto, create, and property changes during animate()"
+- "Each AnimationEvent has a mutations array from the capture context"
+- "The theatre view replays captured mutations to advance one event at a time"
 
 ---
 

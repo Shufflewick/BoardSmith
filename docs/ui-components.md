@@ -1093,33 +1093,32 @@ BoardSmith's animation event system enables game UIs to play back animations asy
 
 ### Key Concepts
 
-**Animation events are UI hints, NOT commands or state mutations.** The game state has already changed by the time the UI receives the animation event. The UI "catches up" visually while the game has moved on. This parallel channel approach means:
+**Animation events capture mutations for the theatre view system.** When you call `game.animate()`, mutations made inside the callback are recorded on the event and applied immediately. The game state advances right away (soft continuation), but the **theatre state** holds a pre-animation snapshot. As clients acknowledge events, the theatre state advances one event at a time, so UI components never show "the future" while animations play.
 
 - Game logic remains clean and synchronous
 - UI can skip or speed through animations without affecting game correctness
 - Reconnecting players see current state immediately (with optional animation replay)
+- The theatre view ensures players see state consistent with the last acknowledged animation
 
 ### Engine-Side: Emitting Events
 
-Use `game.emitAnimationEvent(type, data, options?)` to emit animation hints during action execution:
+Use `game.animate(type, data, callback)` to emit animation events during action execution. State mutations go inside the callback -- they execute synchronously and are captured for the theatre view:
 
 ```typescript
 // In action execute() or game logic
 execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
   const damage = attacker.attack - target.defense;
-  target.health -= damage;
 
-  // Emit animation event - game state already changed!
-  this.emitAnimationEvent('combat', {
+  game.animate('combat', {
     attackerId: attacker.id,
     targetId: target.id,
     damage,
-    outcome: target.health <= 0 ? 'kill' : 'hit',
+  }, () => {
+    target.health -= damage;
+    if (target.health <= 0) {
+      target.putInto(this.graveyard);
+    }
   });
-
-  if (target.health <= 0) {
-    target.putInto(this.graveyard);
-  }
 }
 ```
 
@@ -1128,25 +1127,36 @@ execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `type` | `string` | Event type identifier (e.g., 'combat', 'score', 'cardFlip') |
-| `data` | `Record<string, unknown>` | Event-specific payload (must be JSON-serializable - use element IDs, not references) |
-| `options` | `{ group?: string }` | Optional group ID for batching related events |
+| `data` | `Record<string, unknown>` | Event-specific payload (must be JSON-serializable -- use element IDs, not references) |
+| `callback` | `() => void` | Synchronous callback -- mutations inside are captured for the theatre view |
 
-**Grouped events** for complex sequences:
+**Mutation capture:** Element operations (`putInto`, `create`, property changes) made inside the callback are automatically recorded as `CapturedMutation[]` on the `AnimationEvent`. These mutations drive the theatre view advancement system -- when a client acknowledges an event, the theatre snapshot replays that event's mutations to produce the next visible state.
+
+**Theatre view:** After `animate()` runs, the game state has already advanced (mutations applied immediately), but the theatre state holds a pre-animation snapshot. Clients see this frozen snapshot while animations play. As each event is acknowledged, the theatre state advances by replaying that event's captured mutations. This means the UI shows a consistent view that matches the animation currently playing.
+
+**Empty callbacks for pure UI signals:**
+
+Some events exist purely to signal the UI (e.g., score reveals, phase transitions). Use an empty callback:
 
 ```typescript
-execute({ attacker, targets }: { attacker: Combatant; targets: Combatant[] }) {
-  const groupId = `attack-${this.turnCount}`;
+game.animate('score-reveal', { playerId: player.id, total: 42 }, () => {
+  // Pure UI signal -- no state changes
+});
+```
 
-  this.emitAnimationEvent('attack-start', { attackerId: attacker.id }, { group: groupId });
+**No nesting:** `animate()` throws if called inside another `animate()` callback. Each animation event must be a separate call:
 
-  for (const target of targets) {
-    const damage = calculateDamage(attacker, target);
-    target.health -= damage;
-    this.emitAnimationEvent('damage', { targetId: target.id, damage }, { group: groupId });
-  }
+```typescript
+// WRONG: nested animate() calls
+game.animate('attack-start', { attackerId: attacker.id }, () => {
+  game.animate('damage', { damage }, () => { ... }); // throws!
+});
 
-  this.emitAnimationEvent('attack-end', { attackerId: attacker.id }, { group: groupId });
-}
+// RIGHT: sequential animate() calls
+game.animate('attack-start', { attackerId: attacker.id }, () => {});
+game.animate('damage', { targetId: target.id, damage }, () => {
+  target.health -= damage;
+});
 ```
 
 ### UI-Side: Consuming Events
