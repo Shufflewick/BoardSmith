@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 82 of 84 (Session Integration)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-07 -- Completed 82-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-07 -- Completed 82-02-PLAN.md
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -66,6 +66,9 @@ Recent decisions affecting current work:
 - getElementById() for theatre visibility filtering (checks main tree + pile for removed elements)
 - structuredClone for theatre snapshot deep copy before per-player filtering
 - Theatre childCount uses json.children?.length (theatre count, not truth count)
+- currentView optional (undefined when theatre equals truth) for bandwidth optimization
+- Theatre view as primary view field in buildPlayerState() -- semantic change from truth to theatre as default
+- WebSocket acknowledgeAnimations handler validates spectator, game, and upToId
 
 ### Pending Todos
 
@@ -78,5 +81,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 82-01-PLAN.md
+Stopped at: Completed 82-02-PLAN.md (Phase 82 complete)
 Resume file: None

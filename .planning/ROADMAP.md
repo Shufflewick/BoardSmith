@@ -58,7 +58,7 @@ Plans:
 
 Plans:
 - [x] 82-01-PLAN.md -- theatreStateForPlayer() method on Game class with ID-based visibility filtering, unit tests
-- [ ] 82-02-PLAN.md -- Wire session layer (buildPlayerState theatre view, currentView opt-in, WebSocket handler), integration tests
+- [x] 82-02-PLAN.md -- Wire session layer (buildPlayerState theatre view, currentView opt-in, WebSocket handler), integration tests
 
 ### Phase 83: UI Composables
 **Goal**: Vue components render from theatre view by default, with explicit opt-in for current view and skip functionality
@@ -101,6 +101,6 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 |-------|----------------|--------|-----------|
 | 80. Mutation Capture | 2/2 | Complete | 2026-02-07 |
 | 81. Theatre State Engine | 2/2 | Complete | 2026-02-07 |
-| 82. Session Integration | 1/2 | In progress | - |
+| 82. Session Integration | 2/2 | Complete | 2026-02-07 |
 | 83. UI Composables | 0/TBD | Not started | - |
 | 84. Clean Break and Migration | 0/TBD | Not started | - |
