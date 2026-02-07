@@ -771,3 +771,286 @@ describe('Theatre state edge cases', () => {
     expect(p1Final?.attributes.hp).toBe(1);
   });
 });
+
+// ===========================================================================
+// theatreStateForPlayer() tests
+// ===========================================================================
+
+class VisibilityPiece extends Piece {
+  value = 0;
+  $type = 'card';
+}
+
+class VisibilityGame extends Game {
+  score = 0;
+
+  static override playerView = (state: ElementJSON, playerSeat: number | null, _game: Game): ElementJSON => {
+    // Add a marker attribute so tests can verify playerView was applied
+    return {
+      ...state,
+      attributes: {
+        ...state.attributes,
+        __playerViewApplied: true,
+        __viewSeat: playerSeat,
+      },
+    };
+  };
+}
+
+function createVisibilityGame() {
+  const game = new VisibilityGame({ playerCount: 2, seed: 'visibility-test' });
+  const reg = game._ctx.classRegistry as Map<string, any>;
+  reg.set('VisibilityPiece', VisibilityPiece);
+  reg.set('VisibilityGame', VisibilityGame);
+  reg.set('Space', Space);
+  reg.set('Player', Player);
+
+  const board = game.create(Space, 'board');
+  const hand1 = game.create(Space, 'hand1', { player: game.getPlayer(1) });
+  hand1.contentsVisibleToOwner();
+  const hand2 = game.create(Space, 'hand2', { player: game.getPlayer(2) });
+  hand2.contentsVisibleToOwner();
+  const countOnly = game.create(Space, 'countOnly');
+  countOnly.contentsCountOnly();
+  const hiddenZone = game.create(Space, 'hiddenZone');
+  hiddenZone.contentsHidden();
+
+  const boardPiece = board.create(VisibilityPiece, 'bp', { value: 10 });
+  const h1piece = hand1.create(VisibilityPiece, 'h1p', { value: 20 });
+  const h2piece = hand2.create(VisibilityPiece, 'h2p', { value: 30 });
+  const countPiece1 = countOnly.create(VisibilityPiece, 'cp1', { value: 40 });
+  const countPiece2 = countOnly.create(VisibilityPiece, 'cp2', { value: 50 });
+  const hiddenPiece = hiddenZone.create(VisibilityPiece, 'hp', { value: 60 });
+
+  game.phase = 'started';
+
+  return { game, board, hand1, hand2, countOnly, hiddenZone, boardPiece, h1piece, h2piece, countPiece1, countPiece2, hiddenPiece };
+}
+
+// Use a separate game class without playerView for non-playerView tests
+class PlainVisibilityGame extends Game {
+  score = 0;
+}
+
+function createPlainVisibilityGame() {
+  const game = new PlainVisibilityGame({ playerCount: 2, seed: 'plain-vis-test' });
+  const reg = game._ctx.classRegistry as Map<string, any>;
+  reg.set('VisibilityPiece', VisibilityPiece);
+  reg.set('PlainVisibilityGame', PlainVisibilityGame);
+  reg.set('Space', Space);
+  reg.set('Player', Player);
+
+  const board = game.create(Space, 'board');
+  const hand1 = game.create(Space, 'hand1', { player: game.getPlayer(1) });
+  hand1.contentsVisibleToOwner();
+  const hand2 = game.create(Space, 'hand2', { player: game.getPlayer(2) });
+  hand2.contentsVisibleToOwner();
+  const countOnly = game.create(Space, 'countOnly');
+  countOnly.contentsCountOnly();
+  const hiddenZone = game.create(Space, 'hiddenZone');
+  hiddenZone.contentsHidden();
+
+  const boardPiece = board.create(VisibilityPiece, 'bp', { value: 10 });
+  const h1piece = hand1.create(VisibilityPiece, 'h1p', { value: 20 });
+  const h2piece = hand2.create(VisibilityPiece, 'h2p', { value: 30 });
+  const countPiece1 = countOnly.create(VisibilityPiece, 'cp1', { value: 40 });
+  const countPiece2 = countOnly.create(VisibilityPiece, 'cp2', { value: 50 });
+  const hiddenPiece = hiddenZone.create(VisibilityPiece, 'hp', { value: 60 });
+
+  game.phase = 'started';
+
+  return { game, board, hand1, hand2, countOnly, hiddenZone, boardPiece, h1piece, h2piece, countPiece1, countPiece2, hiddenPiece };
+}
+
+describe('theatreStateForPlayer()', () => {
+  test('falls through to toJSONForPlayer when no theatre snapshot', () => {
+    const { game } = createPlainVisibilityGame();
+
+    // No animate() call, so _theatreSnapshot is null
+    const theatreResult = game.theatreStateForPlayer(1);
+    const directResult = game.toJSONForPlayer(1);
+
+    // Should be deeply equal
+    expect(theatreResult).toEqual(directResult);
+  });
+
+  test('returns theatre snapshot with visibility filtering when animations pending', () => {
+    const { game, board, boardPiece } = createPlainVisibilityGame();
+    const pieceId = boardPiece._t.id;
+    const discard = game.create(Space, 'discard');
+
+    // Move piece from board to discard inside animate()
+    game.animate('move', { pieceId }, () => {
+      boardPiece.putInto(discard);
+    });
+
+    // In truth, piece is in discard. In theatre, piece should still be on board.
+    const theatreView = game.theatreStateForPlayer(1);
+    const boardInTheatre = theatreView.children?.find(c => c.name === 'board');
+    expect(boardInTheatre?.children?.some(c => c.id === pieceId)).toBe(true);
+
+    // Verify it's NOT in discard in the theatre view
+    const discardInTheatre = theatreView.children?.find(c => c.name === 'discard');
+    expect(discardInTheatre?.children?.some(c => c.id === pieceId)).toBeFalsy();
+  });
+
+  test('hides elements from non-owners in theatre view', () => {
+    const { game, hand1, h1piece } = createPlainVisibilityGame();
+    const h1pieceId = h1piece._t.id;
+
+    // Trigger animate to create theatre snapshot
+    game.animate('flash', {}, () => {
+      game.score = 1;
+    });
+
+    // Player 1 owns hand1 -- should see h1piece
+    const p1View = game.theatreStateForPlayer(1);
+    const hand1InP1 = p1View.children?.find(c => c.name === 'hand1');
+    const h1pInP1 = hand1InP1?.children?.find(c => c.id === h1pieceId);
+    expect(h1pInP1).toBeDefined();
+    expect(h1pInP1?.attributes.__hidden).toBeUndefined();
+
+    // Player 2 does NOT own hand1 -- should see hidden placeholder
+    const p2View = game.theatreStateForPlayer(2);
+    const hand1InP2 = p2View.children?.find(c => c.name === 'hand1');
+    const h1pInP2 = hand1InP2?.children?.find(c => c.id === h1pieceId);
+    expect(h1pInP2).toBeDefined();
+    expect(h1pInP2?.attributes.__hidden).toBe(true);
+  });
+
+  test('count-only zones show childCount in theatre view', () => {
+    const { game, countOnly, countPiece1, countPiece2 } = createPlainVisibilityGame();
+
+    // Trigger animate to create theatre snapshot
+    game.animate('flash', {}, () => {
+      game.score = 1;
+    });
+
+    const view = game.theatreStateForPlayer(1);
+    const countOnlyInView = view.children?.find(c => c.name === 'countOnly');
+
+    // count-only zone should show childCount matching theatre's children count
+    expect(countOnlyInView?.childCount).toBe(2);
+
+    // Children should be anonymized (hidden placeholders with negative IDs)
+    expect(countOnlyInView?.children).toBeDefined();
+    for (const child of countOnlyInView?.children ?? []) {
+      expect(child.attributes.__hidden).toBe(true);
+      expect(child.id).toBeLessThan(0); // Negative ID to prevent correlation
+    }
+  });
+
+  test('applies static playerView transformation', () => {
+    const { game } = createVisibilityGame();
+
+    // Trigger animate to create theatre snapshot
+    game.animate('flash', {}, () => {
+      game.score = 1;
+    });
+
+    const view = game.theatreStateForPlayer(1);
+    expect(view.attributes.__playerViewApplied).toBe(true);
+    expect(view.attributes.__viewSeat).toBe(1);
+
+    const view2 = game.theatreStateForPlayer(2);
+    expect(view2.attributes.__playerViewApplied).toBe(true);
+    expect(view2.attributes.__viewSeat).toBe(2);
+  });
+
+  test('does not mutate shared theatre snapshot', () => {
+    const { game } = createPlainVisibilityGame();
+
+    // Trigger animate to create theatre snapshot
+    game.animate('flash', {}, () => {
+      game.score = 1;
+    });
+
+    // Capture the raw snapshot
+    const snapshotBefore = JSON.stringify((game as any)._theatreSnapshot);
+
+    // Call theatreStateForPlayer multiple times
+    game.theatreStateForPlayer(1);
+    game.theatreStateForPlayer(2);
+    game.theatreStateForPlayer(null); // spectator
+
+    // The raw snapshot should not be modified
+    const snapshotAfter = JSON.stringify((game as any)._theatreSnapshot);
+    expect(snapshotAfter).toBe(snapshotBefore);
+  });
+
+  test('handles elements in pile (removed in truth, present in theatre)', () => {
+    const { game, board, boardPiece } = createPlainVisibilityGame();
+    const pieceId = boardPiece._t.id;
+
+    // Remove piece inside animate() -- piece goes to pile in truth
+    game.animate('death', { pieceId }, () => {
+      boardPiece.remove();
+    });
+
+    // In truth, piece is in pile. In theatre, piece is still on board.
+    // theatreStateForPlayer should show the piece in its theatre position
+    // because board is visible to everyone.
+    const view = game.theatreStateForPlayer(1);
+    const boardInView = view.children?.find(c => c.name === 'board');
+    expect(boardInView?.children?.some(c => c.id === pieceId)).toBe(true);
+
+    // Verify the piece is actually in the pile in truth
+    expect(game.pile.atId(pieceId)).toBeDefined();
+  });
+
+  test('hidden zone children are anonymized in theatre view', () => {
+    const { game, hiddenZone, hiddenPiece } = createPlainVisibilityGame();
+
+    // Trigger animate to create theatre snapshot
+    game.animate('flash', {}, () => {
+      game.score = 1;
+    });
+
+    const view = game.theatreStateForPlayer(1);
+    const hiddenZoneInView = view.children?.find(c => c.name === 'hiddenZone');
+
+    // Hidden zone children should be anonymized placeholders
+    expect(hiddenZoneInView?.children).toBeDefined();
+    expect(hiddenZoneInView?.childCount).toBe(1);
+    for (const child of hiddenZoneInView?.children ?? []) {
+      expect(child.attributes.__hidden).toBe(true);
+      expect(child.id).toBeLessThan(0); // Negative ID
+    }
+  });
+
+  test('spectator view hides owner-only content in theatre view', () => {
+    const { game, hand1, h1piece } = createPlainVisibilityGame();
+    const h1pieceId = h1piece._t.id;
+
+    // Trigger animate to create theatre snapshot
+    game.animate('flash', {}, () => {
+      game.score = 1;
+    });
+
+    // Spectator (null) should see hidden placeholders for owner-only zones
+    const spectatorView = game.theatreStateForPlayer(null);
+    const hand1InSpectator = spectatorView.children?.find(c => c.name === 'hand1');
+    const h1pInSpectator = hand1InSpectator?.children?.find(c => c.id === h1pieceId);
+    expect(h1pInSpectator).toBeDefined();
+    expect(h1pInSpectator?.attributes.__hidden).toBe(true);
+  });
+
+  test('visible elements on board show full attributes in theatre view', () => {
+    const { game, boardPiece } = createPlainVisibilityGame();
+    const pieceId = boardPiece._t.id;
+
+    // Trigger animate to create theatre snapshot
+    game.animate('flash', {}, () => {
+      game.score = 1;
+    });
+
+    const view = game.theatreStateForPlayer(1);
+    const boardInView = view.children?.find(c => c.name === 'board');
+    const pieceInView = boardInView?.children?.find(c => c.id === pieceId);
+
+    // Visible piece should have its full attributes
+    expect(pieceInView).toBeDefined();
+    expect(pieceInView?.attributes.value).toBe(10);
+    expect(pieceInView?.attributes.__hidden).toBeUndefined();
+  });
+});
