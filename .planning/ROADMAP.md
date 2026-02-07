@@ -54,11 +54,11 @@ Plans:
   2. `PlayerGameState` includes a current-view field that components can opt into for truth (AI decisions, post-game summary)
   3. `acknowledgeAnimations()` advances the theatre state and triggers rebroadcast so all clients see the updated theatre view
   4. In a multiplayer game, all connected clients receive the same theatre view -- no client sees spoilers ahead of animations
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 82-01: TBD
-- [ ] 82-02: TBD
+- [ ] 82-01-PLAN.md -- theatreStateForPlayer() method on Game class with ID-based visibility filtering, unit tests
+- [ ] 82-02-PLAN.md -- Wire session layer (buildPlayerState theatre view, currentView opt-in, WebSocket handler), integration tests
 
 ### Phase 83: UI Composables
 **Goal**: Vue components render from theatre view by default, with explicit opt-in for current view and skip functionality
@@ -101,6 +101,6 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 |-------|----------------|--------|-----------|
 | 80. Mutation Capture | 2/2 | Complete | 2026-02-07 |
 | 81. Theatre State Engine | 2/2 | Complete | 2026-02-07 |
-| 82. Session Integration | 0/TBD | Not started | - |
+| 82. Session Integration | 0/2 | Not started | - |
 | 83. UI Composables | 0/TBD | Not started | - |
 | 84. Clean Break and Migration | 0/TBD | Not started | - |
