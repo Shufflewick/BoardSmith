@@ -94,6 +94,7 @@
 import { ref, computed, watch, onUnmounted, isRef, type Ref, type ComputedRef } from 'vue';
 import { prefersReducedMotion } from './useElementAnimation.js';
 import { easeOutCubic } from '../../utils/easing.js';
+import { useBoardInteraction } from './useBoardInteraction.js';
 
 /**
  * Game element type for auto-watch mode
@@ -419,6 +420,7 @@ export function useFlyingElements(
   const flyingCards = ref<FlyingCard[]>([]);
   const activeAnimations = new Map<string, { cancel: () => void }>();
   const isAnimating = ref(false);
+  const boardInteraction = useBoardInteraction();
 
   /**
    * Internal options type for the core animation implementation
@@ -921,6 +923,10 @@ export function useFlyingElements(
           const oldContainer = elementLocations.get(id);
 
           if (oldContainer && newContainer && oldContainer !== newContainer) {
+            // Skip animation for elements that were just drag-dropped
+            // (the drag gesture already moved them visually)
+            if (boardInteraction?.lastDroppedElementId === id) continue;
+
             // Element moved between containers - trigger fly animation
             const fromContainerConfig = getContainers().find((c) => c.name === oldContainer);
             const toContainerConfig = getContainers().find((c) => c.name === newContainer);
