@@ -52,6 +52,8 @@ export interface UseGameReturn {
   reconnect: () => void;
   /** Request fresh state */
   refreshState: () => void;
+  /** Acknowledge animation events up to the given ID */
+  acknowledgeAnimations: (upToId: number) => void;
 }
 
 // Helper to check if value is a ref
@@ -208,6 +210,10 @@ export function useGame(
     connection?.requestState();
   };
 
+  const acknowledgeAnimations = (upToId: number): void => {
+    connection?.acknowledgeAnimations(upToId);
+  };
+
   return {
     state,
     connectionStatus,
@@ -219,6 +225,7 @@ export function useGame(
     disconnect,
     reconnect,
     refreshState,
+    acknowledgeAnimations,
   };
 }
 

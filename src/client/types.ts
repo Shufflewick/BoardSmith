@@ -208,11 +208,13 @@ export type ConnectionCallback = (status: ConnectionStatus) => void;
 // ============================================
 
 export interface WebSocketOutgoingMessage {
-  type: 'action' | 'ping' | 'getState';
+  type: 'action' | 'ping' | 'getState' | 'acknowledgeAnimations';
   action?: string;
   args?: Record<string, unknown>;
   /** Request ID for action request/response correlation */
   requestId?: string;
+  /** For acknowledgeAnimations: acknowledge events up to this ID */
+  upToId?: number;
 }
 
 export interface WebSocketIncomingMessage {
