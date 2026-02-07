@@ -713,7 +713,7 @@ describe('useAnimationEvents', () => {
   });
 
   describe('acknowledgment', () => {
-    it('calls acknowledge after processing batch', async () => {
+    it('calls acknowledge after each event (per-event advancement)', async () => {
       const events = ref<AnimationEvent[]>([]);
       const acknowledge = vi.fn();
 
@@ -734,10 +734,14 @@ describe('useAnimationEvents', () => {
       await nextTick();
       await waitForIdle(instance);
 
-      expect(acknowledge).toHaveBeenCalledWith(3);
+      // Per-event: 3 events = 3 acknowledge calls
+      expect(acknowledge).toHaveBeenCalledTimes(3);
+      expect(acknowledge).toHaveBeenNthCalledWith(1, 1);
+      expect(acknowledge).toHaveBeenNthCalledWith(2, 2);
+      expect(acknowledge).toHaveBeenNthCalledWith(3, 3);
     });
 
-    it('passes correct upToId (last processed)', async () => {
+    it('passes correct event ID per call (non-sequential IDs)', async () => {
       const events = ref<AnimationEvent[]>([]);
       const acknowledge = vi.fn();
 
@@ -754,10 +758,12 @@ describe('useAnimationEvents', () => {
       await nextTick();
       await waitForIdle(instance);
 
-      expect(acknowledge).toHaveBeenCalledWith(10);
+      expect(acknowledge).toHaveBeenCalledTimes(2);
+      expect(acknowledge).toHaveBeenNthCalledWith(1, 5);
+      expect(acknowledge).toHaveBeenNthCalledWith(2, 10);
     });
 
-    it('skipAll acknowledges remaining events', async () => {
+    it('skipAll acknowledges remaining events with single call to last ID', async () => {
       const events = ref<AnimationEvent[]>([]);
       const acknowledge = vi.fn();
 
@@ -778,7 +784,8 @@ describe('useAnimationEvents', () => {
 
       instance.skipAll();
 
-      // Should acknowledge up to the last event
+      // skipAll sends a single acknowledge with the last event ID
+      expect(acknowledge).toHaveBeenCalledTimes(1);
       expect(acknowledge).toHaveBeenCalledWith(10);
     });
 
@@ -797,6 +804,43 @@ describe('useAnimationEvents', () => {
       await new Promise((r) => setTimeout(r, 50));
 
       expect(acknowledge).not.toHaveBeenCalled();
+    });
+
+    it('acknowledge is called between handler completions (not batched)', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+      const timeline: Array<{ event: string; id: number }> = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge: (id) => {
+          timeline.push({ event: 'ack', id });
+          acknowledge(id);
+        },
+      });
+
+      instance.registerHandler('test', async (event) => {
+        timeline.push({ event: 'handler-start', id: event.id });
+        await new Promise((r) => setTimeout(r, 10));
+        timeline.push({ event: 'handler-end', id: event.id });
+      });
+
+      events.value = [
+        createEvent(1, 'test'),
+        createEvent(2, 'test'),
+      ];
+      await nextTick();
+      await waitForIdle(instance);
+
+      // Each acknowledge happens AFTER its handler completes, BEFORE next handler starts
+      expect(timeline).toEqual([
+        { event: 'handler-start', id: 1 },
+        { event: 'handler-end', id: 1 },
+        { event: 'ack', id: 1 },
+        { event: 'handler-start', id: 2 },
+        { event: 'handler-end', id: 2 },
+        { event: 'ack', id: 2 },
+      ]);
     });
   });
 
