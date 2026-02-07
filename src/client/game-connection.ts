@@ -160,16 +160,6 @@ export class GameConnection {
     }
   }
 
-  acknowledgeAnimations(upToId: number): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const message: WebSocketOutgoingMessage = {
-        type: 'acknowledgeAnimations',
-        upToId,
-      };
-      this.ws.send(JSON.stringify(message));
-    }
-  }
-
   // ============================================
   // Event Subscriptions
   // ============================================

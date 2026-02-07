@@ -120,11 +120,6 @@ export interface PlayerState {
   /** Player's view of the game state (filtered for hidden information) */
   view: unknown;
 
-  /** Current (truth) game state. Only present when theatre state diverges from truth
-   *  (i.e., animations are pending). Components that need truth (AI decisions, post-game
-   *  summary) should read this field. When undefined, view IS the truth. */
-  currentView?: unknown;
-
   /** Animation events pending playback. Only present when events exist. */
   animationEvents?: AnimationEvent[];
 
@@ -229,13 +224,11 @@ export type ConnectionCallback = (status: ConnectionStatus) => void;
 // ============================================
 
 export interface WebSocketOutgoingMessage {
-  type: 'action' | 'ping' | 'getState' | 'acknowledgeAnimations';
+  type: 'action' | 'ping' | 'getState';
   action?: string;
   args?: Record<string, unknown>;
   /** Request ID for action request/response correlation */
   requestId?: string;
-  /** For acknowledgeAnimations: acknowledge events up to this ID */
-  upToId?: number;
 }
 
 export interface WebSocketIncomingMessage {
