@@ -8,6 +8,49 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
+## Current Milestone: v3.0 Animation Timeline
+
+**Goal:** Replace the theatre view and mutation capture system with a client-side animation timeline — animation events become a pure data channel, playback is 100% client-owned, and the server never waits on animation state.
+
+**Motivation:** The MERC team's combat animation flow is non-deterministic under v2.9's theatre system. CombatPanel opens late, never opens, never closes, and health bars don't update. Root cause is architectural: server-side theatre snapshots, mutation capture, acknowledgment protocols, and component mounting are fundamentally misaligned for games that interleave animations with server decisions.
+
+**Design principles:**
+- State management unchanged — truth advances immediately, element system untouched
+- Animation events are a pure data channel — type + data payload, no mutations, no theatre
+- Playback is 100% client-side — server sends truth + events, client owns the visual timeline
+- Animation-driven components render from event data payloads, not from game state
+- Events go on the command stack — for future replay/rewind capability
+- Keyframe headers — each animation segment starts with a mount event so any segment is independently renderable (handles reconnection)
+- Wait-for-handler — system pauses for handlers to register, timeout with console warning (no silent failures, no fire-and-forget)
+- Server never waits on playback — resolves to next decision point and is immediately ready for input
+
+**What gets removed (complete erasure, no vestigial code):**
+- Theatre snapshot system (`_theatreSnapshot`, `theatreState`, `theatreStateForPlayer()`)
+- Mutation capture system (`MutationCaptureContext`, property/element diffing in animate)
+- Server-side acknowledgment (`acknowledgeAnimationEvents()`, `acknowledgeAnimations()`)
+- Client acknowledgment protocol (`acknowledgeAnimations` WebSocket message)
+- `useCurrentView()` composable and `CURRENT_VIEW_KEY`
+- Theatre/current view split in `buildPlayerState()`
+
+**What gets added/changed:**
+- `game.animate(type, data)` simplified — optional callback for truth advancement only, no mutation capture
+- Animation events as command stack entries for replay capability
+- Client-side animation queue with wait-for-handler semantics and configurable timeout
+- `buildPlayerState()` sends truth + pending animation events (single view, no split)
+- BREAKING.md documenting all API changes for MERC team and example games
+
+**Target features:**
+- Client-side animation timeline with FIFO queue processing
+- Wait-for-handler mechanism with configurable timeout and console warnings
+- Animation events on command stack
+- Keyframe header pattern for reconnection-safe segments
+- ActionPanel gating on pending animations (preserved from v2.9)
+- Skip animations support (preserved from v2.9)
+- Complete removal of theatre view, mutation capture, and acknowledgment systems
+- BREAKING.md migration guide
+- Example game migration (demo-animation, cribbage)
+- Documentation updates (ui-components.md, nomenclature.md)
+
 ## Previous: v2.9 Shipped
 
 Theatre View — replaced fire-and-forget animation events with `game.animate()` scoped callbacks, mutation capture, engine-level theatre state, session/UI integration, and clean migration. Components never show "the future" while animations play.
@@ -186,7 +229,18 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-(No active requirements — ready for next milestone)
+- [ ] `game.animate(type, data)` sends pure data events — no mutation capture, no theatre snapshot
+- [ ] Animation events recorded on command stack for future replay/rewind
+- [ ] Client-side animation queue with FIFO processing and wait-for-handler semantics
+- [ ] Configurable handler timeout with console warning on skip (no silent failures)
+- [ ] Keyframe header pattern — each animation segment starts with mount event for reconnection safety
+- [ ] `buildPlayerState()` sends truth + animation events (single view, no theatre/current split)
+- [ ] ActionPanel gates on pending animation events (preserved behavior)
+- [ ] Skip animations clears client queue (preserved behavior)
+- [ ] Complete removal of theatre snapshot, mutation capture, acknowledgment protocol, `useCurrentView()`
+- [ ] BREAKING.md documents all removed/changed APIs with migration guidance
+- [ ] Example games migrated (demo-animation, cribbage)
+- [ ] Documentation updated (ui-components.md, nomenclature.md, migration-guide.md)
 
 ### Out of Scope
 
@@ -241,10 +295,17 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | `disabled` returns `string \| false` (no bare `true`) | Forces developers to provide a reason — pit of success | ✓ Good |
 | `AnnotatedChoice<T>` has `value` + `disabled` only | Display is layered on by session/UI, not engine concern | ✓ Good |
 | `disabled?: string` on wire (optional, not `string \| false`) | No need to send `false` for every selectable item | ✓ Good |
-| Scoped callback `game.animate()` over fire-and-forget `emitAnimationEvent` | Ties mutations to events — framework can track what changed per event | ✓ Good |
-| Theatre view as default, current view opt-in | Pit of success — correct behavior is the easy path | ✓ Good |
-| Per-event advancement over per-batch | Finer control — theatre view steps through narrative one event at a time | ✓ Good |
+| Scoped callback `game.animate()` over fire-and-forget `emitAnimationEvent` | Ties mutations to events — framework can track what changed per event | ⚠️ Revisit |
+| Theatre view as default, current view opt-in | Pit of success — correct behavior is the easy path | ⚠️ Revisit |
+| Per-event advancement over per-batch | Finer control — theatre view steps through narrative one event at a time | ⚠️ Revisit |
 | Replace `emitAnimationEvent` entirely (no backward compat) | Clean break — one API, no confusion about which to use | ✓ Good |
+| Client-side animation timeline over server-side theatre | Server-side theatre creates chicken-and-egg with component mounting, shared snapshot breaks multiplayer, mutation capture is fragile | — Pending |
+| Animation events as pure data channel | Decouples animation from state management — no mutation capture, no acknowledgment, no theatre snapshot | — Pending |
+| Playback 100% client-owned | Server never waits on animation, no per-player tracking, reconnection just gets truth | — Pending |
+| Animation-driven components render from event data, not state | Eliminates state/animation sync bugs — CombatPanel uses healthBefore/healthAfter from event payload | — Pending |
+| Events on command stack | Future replay/rewind capability without separate event storage or lifecycle | — Pending |
+| Keyframe headers for reconnection | Each segment independently renderable — no fragile state fallbacks for late-joining clients | — Pending |
+| Wait-for-handler with timeout | Prevents fire-and-forget silent consumption — system pauses for component mount, timeout warns on console | — Pending |
 
 ## Context
 
@@ -274,4 +335,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-02-07 after v2.9 Theatre View milestone*
+*Last updated: 2026-02-07 after v3.0 Animation Timeline milestone start*
