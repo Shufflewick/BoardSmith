@@ -24,6 +24,7 @@ export type {
 
 export type { GameOptions, GamePhase, PlayerViewFunction, AnimationEvent, EmitAnimationEventOptions } from './game.js';
 export type { CapturedMutation, CreateMutation, MoveMutation, SetAttributeMutation, SetPropertyMutation, MutationCaptureContext } from './mutation-capture.js';
+export { applyMutation, applyMutations, findElementById, removeElementFromParent } from './theatre-state.js';
 export type { ElementLayout } from './grid.js';
 export type { HexOrientation, HexCoordSystem } from './hex-grid.js';
 export type { LayoutDirection, LayoutAlignment } from './space.js';

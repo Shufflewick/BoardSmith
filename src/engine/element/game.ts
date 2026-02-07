@@ -9,6 +9,7 @@ import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, Act
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 import type { CapturedMutation, MutationCaptureContext, SetPropertyMutation, SetAttributeMutation } from './mutation-capture.js';
+import { applyMutations } from './theatre-state.js';
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -341,6 +342,10 @@ export class Game<
   /** Animation event sequence counter (for unique IDs) */
   private _animationEventSeq: number = 0;
 
+  /** Theatre state snapshot. Null when no pending animate() events.
+   *  Initialized lazily before first animate() callback, advanced by acknowledgeAnimationEvents(). */
+  private _theatreSnapshot: ReturnType<Game['toJSON']> | null = null;
+
   /** Active mutation capture context. Non-null only inside animate() callbacks.
    *  Public (underscore-prefixed) so element classes can record mutations. */
   _captureContext: MutationCaptureContext | null = null;
@@ -357,7 +362,7 @@ export class Game<
     'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
     '_flowEngine', '_debugRegistry', '_persistentMaps',
     '_animationEvents', '_animationEventSeq', '_constructorOptions',
-    '_captureContext',
+    '_captureContext', '_theatreSnapshot',
   ]);
 
   static override unserializableAttributes = [
@@ -372,6 +377,7 @@ export class Game<
     '_debugRegistry',
     '_constructorOptions',
     '_captureContext',
+    '_theatreSnapshot',
   ];
 
   /**
@@ -2425,6 +2431,11 @@ export class Game<
       );
     }
 
+    // Lazy-init theatre snapshot before first animate() mutations
+    if (!this._theatreSnapshot) {
+      this._theatreSnapshot = this.toJSON();
+    }
+
     // Snapshot before callback
     const propertySnapshot = this._snapshotCustomProperties();
     const elementAttrSnapshot = this._snapshotElementAttributes();
@@ -2598,6 +2609,16 @@ export class Game<
   }
 
   /**
+   * Get the theatre state -- the "narrative" view reflecting only acknowledged events.
+   * Returns the theatre snapshot if animations are pending, or current toJSON() if in sync.
+   *
+   * Phase 82 will use this for buildPlayerState() default view.
+   */
+  get theatreState(): ReturnType<Game['toJSON']> {
+    return this._theatreSnapshot ?? this.toJSON();
+  }
+
+  /**
    * Acknowledge animation events up to (and including) the given ID.
    *
    * Call this after UI has finished playing back events. Events with ID <= upToId
@@ -2617,7 +2638,26 @@ export class Game<
    * ```
    */
   acknowledgeAnimationEvents(upToId: number): void {
+    // Apply mutations to theatre snapshot for acknowledged events
+    if (this._theatreSnapshot) {
+      const eventsToAck = this._animationEvents
+        .filter(e => e.id <= upToId)
+        .sort((a, b) => a.id - b.id);
+
+      for (const event of eventsToAck) {
+        if (event.mutations) {
+          applyMutations(this._theatreSnapshot, event.mutations);
+        }
+      }
+    }
+
+    // Remove acknowledged events from buffer (existing behavior)
     this._animationEvents = this._animationEvents.filter(e => e.id > upToId);
+
+    // Clear theatre snapshot when all events acknowledged (truth and theatre in sync)
+    if (this._animationEvents.length === 0) {
+      this._theatreSnapshot = null;
+    }
   }
 
   // ============================================
@@ -2634,6 +2674,7 @@ export class Game<
     settings: Record<string, unknown>;
     animationEvents?: AnimationEvent[];
     animationEventSeq?: number;
+    theatreSnapshot?: ReturnType<Game['toJSON']>;
   } {
     return {
       ...super.toJSON(),
@@ -2645,6 +2686,10 @@ export class Game<
       ...(this._animationEvents.length > 0 && {
         animationEvents: this._animationEvents,
         animationEventSeq: this._animationEventSeq,
+      }),
+      // Include theatre snapshot when pending animate() events exist
+      ...(this._theatreSnapshot && {
+        theatreSnapshot: this._theatreSnapshot,
       }),
     };
   }
@@ -2814,6 +2859,11 @@ export class Game<
       const jsonWithEvents = json as { animationEvents: AnimationEvent[]; animationEventSeq?: number };
       game._animationEvents = [...jsonWithEvents.animationEvents];
       game._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
+    }
+
+    // Restore theatre snapshot if present
+    if ((json as { theatreSnapshot?: ReturnType<Game['toJSON']> }).theatreSnapshot) {
+      game._theatreSnapshot = (json as { theatreSnapshot: ReturnType<Game['toJSON']> }).theatreSnapshot;
     }
 
     // Clear auto-created children and restore from JSON
