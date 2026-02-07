@@ -350,7 +350,15 @@ export function buildPlayerState(
   options?: { includeActionMetadata?: boolean; includeDebugData?: boolean }
 ): PlayerGameState {
   const flowState = runner.getFlowState();
-  const view = runner.getPlayerView(playerPosition);
+
+  // Theatre view as primary (narrative state reflecting only acknowledged events)
+  const theatreView = runner.game.theatreStateForPlayer(playerPosition);
+
+  // Current view (truth) only when animations are pending (bandwidth optimization)
+  const hasPendingAnimations = runner.game.pendingAnimationEvents.length > 0;
+  const currentView = hasPendingAnimations
+    ? runner.getPlayerView(playerPosition).state
+    : undefined;
 
   // Get available actions - check awaitingPlayers first (for simultaneous actions)
   let availableActions: string[];
@@ -411,7 +419,8 @@ export function buildPlayerState(
     currentPlayer: flowState?.currentPlayer,
     availableActions,
     isMyTurn,
-    view: view.state,
+    view: theatreView,           // Theatre state (default for rendering)
+    ...(currentView !== undefined && { currentView }),  // Truth (opt-in, only when divergent)
     canUndo,
     actionsThisTurn: isMyTurn ? actionsThisTurn : 0,
     turnStartActionIndex: isMyTurn ? turnStartActionIndex : undefined,
