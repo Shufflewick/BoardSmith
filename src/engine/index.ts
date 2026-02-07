@@ -42,6 +42,15 @@ export type {
   EmitAnimationEventOptions,
 } from './element/index.js';
 
+export type {
+  CapturedMutation,
+  CreateMutation,
+  MoveMutation,
+  SetAttributeMutation,
+  SetPropertyMutation,
+  MutationCaptureContext,
+} from './element/index.js';
+
 // Player system
 export {
   Player,
