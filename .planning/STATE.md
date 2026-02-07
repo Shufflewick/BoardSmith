@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v2.9 Theatre View -- Phase 80: Mutation Capture
+**Current focus:** v2.9 Theatre View -- Phase 81: Theatre State Engine
 
 ## Current Position
 
-Phase: 80 of 84 (Mutation Capture)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-07 -- Completed 80-02-PLAN.md
+Phase: 81 of 84 (Theatre State Engine)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-07 -- Phase 80 verified and complete
 
 Progress: [██░░░░░░░░] 20%
 
@@ -71,5 +71,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 80-02-PLAN.md (Phase 80 complete)
+Stopped at: Phase 80 verified, ready for Phase 81
 Resume file: None
