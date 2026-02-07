@@ -39,11 +39,11 @@ Plans:
   2. Acknowledging an event by ID applies exactly that event's captured mutations to the theatre state, advancing it one step
   3. Theatre state serializes with game state and restores correctly (checkpoint round-trip preserves pending events and theatre position)
   4. Multiple animate calls produce a theatre state that can be stepped through event-by-event in order
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 81-01: TBD
-- [ ] 81-02: TBD
+- [ ] 81-01-PLAN.md -- Theatre state types, mutation applicators (apply MOVE/CREATE/SET_ATTRIBUTE/SET_PROPERTY to ElementJSON), unit tests
+- [ ] 81-02-PLAN.md -- Wire theatre state into Game class (lazy init, acknowledgment advancement, serialization, getter), integration tests
 
 ### Phase 82: Session Integration
 **Goal**: The session layer builds and broadcasts theatre view to all connected clients, with current view available as an opt-in field
@@ -100,7 +100,7 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 80. Mutation Capture | 2/2 | Complete | 2026-02-07 |
-| 81. Theatre State Engine | 0/TBD | Not started | - |
+| 81. Theatre State Engine | 0/2 | Not started | - |
 | 82. Session Integration | 0/TBD | Not started | - |
 | 83. UI Composables | 0/TBD | Not started | - |
 | 84. Clean Break and Migration | 0/TBD | Not started | - |
