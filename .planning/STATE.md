@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 80 of 84 (Mutation Capture)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-07 -- Completed 80-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-07 -- Completed 80-02-PLAN.md
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ## Milestones
 
@@ -57,6 +57,8 @@ Recent decisions affecting current work:
 - Replace `emitAnimationEvent` entirely (no backward compat)
 - AnimationEvent.mutations is optional (not required) for backward compat with emitAnimationEvent
 - Capture context pattern: nullable _captureContext on Game, set during animate() callback
+- Element operations check game._captureContext to record mutations (putInto records MOVE, create records CREATE)
+- Game root excluded from element attribute snapshot (tracked via property diff instead)
 
 ### Pending Todos
 
@@ -69,5 +71,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 80-01-PLAN.md
+Stopped at: Completed 80-02-PLAN.md (Phase 80 complete)
 Resume file: None

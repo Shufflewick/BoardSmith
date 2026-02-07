@@ -6,7 +6,7 @@ Replace fire-and-forget animation events with a scoped callback API (`game.anima
 
 ## Phases
 
-- [ ] **Phase 80: Mutation Capture** - `game.animate()` scoped callback API that captures element and property mutations per event
+- [x] **Phase 80: Mutation Capture** - `game.animate()` scoped callback API that captures element and property mutations per event
 - [ ] **Phase 81: Theatre State Engine** - Engine-level theatre state that advances per-event as animations are acknowledged
 - [ ] **Phase 82: Session Integration** - Session layer threads theatre view to all clients with current view as opt-in
 - [ ] **Phase 83: UI Composables** - UI renders from theatre view by default with skip and current-view opt-in
@@ -28,7 +28,7 @@ Replace fire-and-forget animation events with a scoped callback API (`game.anima
 
 Plans:
 - [x] 80-01-PLAN.md -- Mutation capture types, game.animate() method, property snapshot/diff, barrel exports
-- [ ] 80-02-PLAN.md -- Element interception (putInto, create, attribute snapshot/diff), integration tests
+- [x] 80-02-PLAN.md -- Element interception (putInto, create, attribute snapshot/diff), integration tests
 
 ### Phase 81: Theatre State Engine
 **Goal**: The engine maintains a theatre state -- a snapshot that reflects only acknowledged events' mutations -- so consumers can render the "narrative" state rather than truth
@@ -99,7 +99,7 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 80. Mutation Capture | 1/2 | In progress | - |
+| 80. Mutation Capture | 2/2 | Complete | 2026-02-07 |
 | 81. Theatre State Engine | 0/TBD | Not started | - |
 | 82. Session Integration | 0/TBD | Not started | - |
 | 83. UI Composables | 0/TBD | Not started | - |
