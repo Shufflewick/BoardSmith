@@ -148,8 +148,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     isAnimating.value = true;
     skipRequested = false;
 
-    let lastId = lastProcessedId;
-
     while (queue.length > 0 && !skipRequested) {
       // If paused, wait for resume
       if (paused.value) {
@@ -178,17 +176,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       }
       // No handler and no default duration - skip immediately
 
-      lastId = event.id;
+      // Acknowledge THIS event immediately (per-event advancement)
+      // This tells the server to advance the theatre snapshot by one step
+      acknowledge(event.id);
       lastProcessedId = event.id;
-    }
-
-    // Acknowledge processed events (if any were processed)
-    if (lastId > 0 && lastId !== lastProcessedId - 1) {
-      // We processed at least one event
-      acknowledge(lastId);
-    } else if (lastId > 0) {
-      // Edge case: we're at the end of processing
-      acknowledge(lastId);
     }
 
     isProcessing = false;
