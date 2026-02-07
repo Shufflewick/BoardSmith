@@ -19,7 +19,6 @@ import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
-import { CURRENT_VIEW_KEY } from '../composables/useCurrentView';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
@@ -159,7 +158,7 @@ audioService.init({
 });
 
 // Use game composable
-const { state, connectionStatus, isConnected, isMyTurn, error, action, acknowledgeAnimations } = useGame(
+const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGame(
   client,
   gameId,
   { playerSeat }
@@ -168,7 +167,7 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action, acknowled
 // Animation events - wire createAnimationEvents to WebSocket acknowledge
 const animationEvents = createAnimationEvents({
   events: () => state.value?.state?.animationEvents,
-  acknowledge: (upToId) => acknowledgeAnimations(upToId),
+  acknowledge: () => {},
 });
 provideAnimationEvents(animationEvents);
 
@@ -210,16 +209,6 @@ const gameView = computed(() => {
   }
   return state.value?.state.view as any;
 });
-
-// Current (truth) game view for opt-in access (AI controller, post-game)
-// When time traveling, both theatre and truth should show historical state
-const currentGameView = computed(() => {
-  if (timeTravelState.value) {
-    return timeTravelState.value.view as any;
-  }
-  return (state.value?.state?.currentView ?? state.value?.state.view) as Record<string, unknown>;
-});
-provide(CURRENT_VIEW_KEY, currentGameView);
 
 // Shared action args - bidirectional sync between ActionPanel and custom game boards
 const actionArgs = reactive<Record<string, unknown>>({});

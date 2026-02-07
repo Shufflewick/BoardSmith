@@ -113,9 +113,6 @@ export {
   type UseActionAnimationsReturn,
 } from './composables/useActionAnimations.js';
 
-// Current view composable (truth opt-in for components that need latest state)
-export { useCurrentView, CURRENT_VIEW_KEY } from './composables/useCurrentView.js';
-
 // Animation event playback (sequential handler-based playback)
 export {
   createAnimationEvents,
