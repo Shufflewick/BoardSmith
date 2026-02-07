@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 84 of 84 (Clean Break and Migration)
-Plan: Not started
-Status: Phase complete (83), ready for next phase
-Last activity: 2026-02-07 -- Completed Phase 83 (UI Composables)
+Plan: 1 of 3
+Status: In progress
+Last activity: 2026-02-07 -- Completed 84-01-PLAN.md (Clean Break)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 98%
 
 ## Milestones
 
@@ -74,6 +74,8 @@ Recent decisions affecting current work:
 - Record<string, unknown> view type for useCurrentView (matches loosely-typed gameView pattern)
 - GameShell provides currentGameView via CURRENT_VIEW_KEY for truth opt-in
 - animationEvents passed to useActionController for ActionPanel gating
+- emitAnimationEvent removed entirely -- animate() is sole animation API
+- animate() has optional 4th options param { group?: string } for batched event playback
 
 ### Pending Todos
 
@@ -86,5 +88,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed Phase 83 (UI Composables), ready for Phase 84
+Stopped at: Completed 84-01-PLAN.md (Clean Break)
 Resume file: None
