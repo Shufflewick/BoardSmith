@@ -531,26 +531,26 @@ describe('Per-event acknowledgment (ENG-05)', () => {
     expect(game.theatreState.attributes.score).toBe(42);
   });
 
-  test('acknowledging event without mutations (emitAnimationEvent) is a no-op on theatre state', () => {
+  test('acknowledging event without mutations is a no-op on theatre state', () => {
     const { game, p1 } = createTestGame();
     const p1Id = p1._t.id;
 
-    // emitAnimationEvent creates event without mutations
-    const emitEvent = game.emitAnimationEvent('flash', { color: 'red' });
+    // animate with empty callback creates event with empty mutations array
+    const emptyEvent = game.animate('flash', { color: 'red' }, () => {});
 
     // Then animate with real mutations
     const animateEvent = game.animate('death', { pieceId: p1Id }, () => {
       p1.remove();
     });
 
-    // Acknowledge the emitAnimationEvent -- should not change theatre state
-    game.acknowledgeAnimationEvents(emitEvent.id);
+    // Acknowledge the empty-callback event -- should not change theatre state (no mutations)
+    game.acknowledgeAnimationEvents(emptyEvent.id);
 
-    // Theatre state should still have the piece (emitAnimationEvent had no mutations)
+    // Theatre state should still have the piece (empty event had no mutations)
     const theatreState = game.theatreState;
     expect(findElementById(theatreState, p1Id)).toBeDefined();
 
-    // Now acknowledge the animate event
+    // Now acknowledge the animate event with real mutations
     game.acknowledgeAnimationEvents(animateEvent.id);
 
     // All events acknowledged, snapshot cleared, theatreState = toJSON()

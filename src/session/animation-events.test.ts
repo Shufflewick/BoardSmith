@@ -16,7 +16,7 @@ class TestGame extends Game {
     this.registerAction(
       Action.create('attack')
         .execute(() => {
-          this.emitAnimationEvent('attack', { damage: 5 });
+          this.animate('attack', { damage: 5 }, () => {});
           return { success: true };
         })
     );
@@ -24,7 +24,7 @@ class TestGame extends Game {
     this.registerAction(
       Action.create('heal')
         .execute(() => {
-          this.emitAnimationEvent('heal', { amount: 3 });
+          this.animate('heal', { amount: 3 }, () => {});
           return { success: true };
         })
     );
@@ -56,8 +56,8 @@ describe('Session Animation Events', () => {
     });
 
     test('animationEvents contains pending events', () => {
-      session.runner.game.emitAnimationEvent('attack', { damage: 5 });
-      session.runner.game.emitAnimationEvent('heal', { amount: 3 });
+      session.runner.game.animate('attack', { damage: 5 }, () => {});
+      session.runner.game.animate('heal', { amount: 3 }, () => {});
 
       const state = session.buildPlayerState(1);
       expect(state.animationEvents).toHaveLength(2);
@@ -66,15 +66,15 @@ describe('Session Animation Events', () => {
     });
 
     test('lastAnimationEventId is ID of final event', () => {
-      session.runner.game.emitAnimationEvent('attack', { damage: 5 });
-      const event2 = session.runner.game.emitAnimationEvent('heal', { amount: 3 });
+      session.runner.game.animate('attack', { damage: 5 }, () => {});
+      const event2 = session.runner.game.animate('heal', { amount: 3 }, () => {});
 
       const state = session.buildPlayerState(1);
       expect(state.lastAnimationEventId).toBe(event2.id);
     });
 
     test('spectators receive animation events', () => {
-      session.runner.game.emitAnimationEvent('attack', { damage: 5 });
+      session.runner.game.animate('attack', { damage: 5 }, () => {});
 
       const spectatorState = session.buildPlayerState(0);
       expect(spectatorState.animationEvents).toHaveLength(1);
@@ -84,8 +84,8 @@ describe('Session Animation Events', () => {
 
   describe('acknowledgeAnimations', () => {
     test('clears acknowledged events from state', () => {
-      const event1 = session.runner.game.emitAnimationEvent('attack', { damage: 5 });
-      session.runner.game.emitAnimationEvent('heal', { amount: 3 });
+      const event1 = session.runner.game.animate('attack', { damage: 5 }, () => {});
+      session.runner.game.animate('heal', { amount: 3 }, () => {});
 
       // Acknowledge first event only
       session.acknowledgeAnimations(1, event1.id);
@@ -96,8 +96,8 @@ describe('Session Animation Events', () => {
     });
 
     test('acknowledging all events clears buffer', () => {
-      session.runner.game.emitAnimationEvent('attack', { damage: 5 });
-      const event2 = session.runner.game.emitAnimationEvent('heal', { amount: 3 });
+      session.runner.game.animate('attack', { damage: 5 }, () => {});
+      const event2 = session.runner.game.animate('heal', { amount: 3 }, () => {});
 
       session.acknowledgeAnimations(1, event2.id);
 
@@ -107,7 +107,7 @@ describe('Session Animation Events', () => {
     });
 
     test('idempotent - repeated acknowledgment is safe', () => {
-      const event = session.runner.game.emitAnimationEvent('attack', { damage: 5 });
+      const event = session.runner.game.animate('attack', { damage: 5 }, () => {});
 
       session.acknowledgeAnimations(1, event.id);
       session.acknowledgeAnimations(1, event.id); // Second call

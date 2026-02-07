@@ -11,9 +11,9 @@ describe('Animation Events', () => {
     game = new TestGame({ playerCount: 2, seed: 'test' });
   });
 
-  describe('emitAnimationEvent', () => {
+  describe('animate', () => {
     it('should emit an event with unique ID', () => {
-      const event = game.emitAnimationEvent('combat', { damage: 5 });
+      const event = game.animate('combat', { damage: 5 }, () => {});
 
       expect(event.id).toBe(1);
       expect(event.type).toBe('combat');
@@ -22,9 +22,9 @@ describe('Animation Events', () => {
     });
 
     it('should assign monotonically increasing IDs', () => {
-      const event1 = game.emitAnimationEvent('combat', {});
-      const event2 = game.emitAnimationEvent('score', {});
-      const event3 = game.emitAnimationEvent('move', {});
+      const event1 = game.animate('combat', {}, () => {});
+      const event2 = game.animate('score', {}, () => {});
+      const event3 = game.animate('move', {}, () => {});
 
       expect(event1.id).toBe(1);
       expect(event2.id).toBe(2);
@@ -32,23 +32,29 @@ describe('Animation Events', () => {
     });
 
     it('should include optional group', () => {
-      const event = game.emitAnimationEvent('combat', { damage: 5 }, { group: 'turn-1' });
+      const event = game.animate('combat', { damage: 5 }, () => {}, { group: 'turn-1' });
 
       expect(event.group).toBe('turn-1');
     });
 
     it('should not include group when not provided', () => {
-      const event = game.emitAnimationEvent('combat', { damage: 5 });
+      const event = game.animate('combat', { damage: 5 }, () => {});
 
       expect(event.group).toBeUndefined();
     });
 
     it('should shallow copy data to prevent external mutation', () => {
       const data = { value: 1 };
-      const event = game.emitAnimationEvent('test', data);
+      const event = game.animate('test', data, () => {});
 
       data.value = 999;
       expect(event.data.value).toBe(1);
+    });
+
+    it('should always have mutations array', () => {
+      const event = game.animate('test', {}, () => {});
+
+      expect(event.mutations).toEqual([]);
     });
   });
 
@@ -58,9 +64,9 @@ describe('Animation Events', () => {
     });
 
     it('should return all emitted events', () => {
-      game.emitAnimationEvent('a', {});
-      game.emitAnimationEvent('b', {});
-      game.emitAnimationEvent('c', {});
+      game.animate('a', {}, () => {});
+      game.animate('b', {}, () => {});
+      game.animate('c', {}, () => {});
 
       const pending = game.pendingAnimationEvents;
       expect(pending).toHaveLength(3);
@@ -68,7 +74,7 @@ describe('Animation Events', () => {
     });
 
     it('should return a copy (not affect internal buffer)', () => {
-      game.emitAnimationEvent('test', {});
+      game.animate('test', {}, () => {});
 
       const pending = game.pendingAnimationEvents;
       pending.push({ id: 999, type: 'fake', data: {}, timestamp: 0 });
@@ -79,9 +85,9 @@ describe('Animation Events', () => {
 
   describe('acknowledgeAnimationEvents', () => {
     it('should clear events up to given ID', () => {
-      game.emitAnimationEvent('a', {});
-      game.emitAnimationEvent('b', {});
-      game.emitAnimationEvent('c', {});
+      game.animate('a', {}, () => {});
+      game.animate('b', {}, () => {});
+      game.animate('c', {}, () => {});
 
       game.acknowledgeAnimationEvents(2);
 
@@ -91,8 +97,8 @@ describe('Animation Events', () => {
     });
 
     it('should be safe with ID higher than any event', () => {
-      game.emitAnimationEvent('a', {});
-      game.emitAnimationEvent('b', {});
+      game.animate('a', {}, () => {});
+      game.animate('b', {}, () => {});
 
       game.acknowledgeAnimationEvents(999);
 
@@ -100,8 +106,8 @@ describe('Animation Events', () => {
     });
 
     it('should be safe with ID of zero (no-op)', () => {
-      game.emitAnimationEvent('a', {});
-      game.emitAnimationEvent('b', {});
+      game.animate('a', {}, () => {});
+      game.animate('b', {}, () => {});
 
       game.acknowledgeAnimationEvents(0);
 
@@ -109,8 +115,8 @@ describe('Animation Events', () => {
     });
 
     it('should be idempotent', () => {
-      game.emitAnimationEvent('a', {});
-      game.emitAnimationEvent('b', {});
+      game.animate('a', {}, () => {});
+      game.animate('b', {}, () => {});
 
       game.acknowledgeAnimationEvents(1);
       game.acknowledgeAnimationEvents(1);
@@ -122,8 +128,8 @@ describe('Animation Events', () => {
 
   describe('serialization', () => {
     it('should serialize animation events in toJSON', () => {
-      game.emitAnimationEvent('combat', { damage: 5 });
-      game.emitAnimationEvent('score', { points: 10 }, { group: 'turn-1' });
+      game.animate('combat', { damage: 5 }, () => {});
+      game.animate('score', { points: 10 }, () => {}, { group: 'turn-1' });
 
       const json = game.toJSON();
 
@@ -141,8 +147,8 @@ describe('Animation Events', () => {
     });
 
     it('should restore animation events from JSON', () => {
-      game.emitAnimationEvent('combat', { damage: 5 });
-      game.emitAnimationEvent('score', { points: 10 });
+      game.animate('combat', { damage: 5 }, () => {});
+      game.animate('score', { points: 10 }, () => {});
 
       const json = game.toJSON();
       const restored = Game.restoreGame(json, TestGame, new Map());
@@ -154,14 +160,14 @@ describe('Animation Events', () => {
     });
 
     it('should restore sequence counter (no duplicate IDs after restore)', () => {
-      game.emitAnimationEvent('a', {});
-      game.emitAnimationEvent('b', {});
+      game.animate('a', {}, () => {});
+      game.animate('b', {}, () => {});
 
       const json = game.toJSON();
       const restored = Game.restoreGame(json, TestGame, new Map());
 
       // New events should continue from where we left off
-      const newEvent = restored.emitAnimationEvent('c', {});
+      const newEvent = restored.animate('c', {}, () => {});
       expect(newEvent.id).toBe(3);
     });
 
@@ -172,14 +178,14 @@ describe('Animation Events', () => {
       expect(restored.pendingAnimationEvents).toEqual([]);
 
       // Should start fresh
-      const event = restored.emitAnimationEvent('test', {});
+      const event = restored.animate('test', {}, () => {});
       expect(event.id).toBe(1);
     });
 
     it('should preserve events after partial acknowledgment and restore', () => {
-      game.emitAnimationEvent('a', {});
-      game.emitAnimationEvent('b', {});
-      game.emitAnimationEvent('c', {});
+      game.animate('a', {}, () => {});
+      game.animate('b', {}, () => {});
+      game.animate('c', {}, () => {});
       game.acknowledgeAnimationEvents(1);
 
       const json = game.toJSON();

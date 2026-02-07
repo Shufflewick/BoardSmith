@@ -51,18 +51,6 @@ describe('Mutation Capture - animate()', () => {
       expect(event3.id).toBe(3);
     });
 
-    it('assigns monotonically increasing IDs interleaved with emitAnimationEvent', () => {
-      const event1 = game.emitAnimationEvent('a', {});
-      const event2 = game.animate('b', {}, () => {});
-      const event3 = game.emitAnimationEvent('c', {});
-      const event4 = game.animate('d', {}, () => {});
-
-      expect(event1.id).toBe(1);
-      expect(event2.id).toBe(2);
-      expect(event3.id).toBe(3);
-      expect(event4.id).toBe(4);
-    });
-
     it('adds the returned event to pendingAnimationEvents', () => {
       const event = game.animate('test', {}, () => {});
       const pending = game.pendingAnimationEvents;
@@ -245,42 +233,6 @@ describe('Mutation Capture - animate()', () => {
       });
       expect(event.type).toBe('after');
       expect(event.mutations).toHaveLength(1);
-    });
-  });
-
-  // =============================================
-  // emitAnimationEvent compatibility
-  // =============================================
-
-  describe('emitAnimationEvent compatibility', () => {
-    it('emitAnimationEvent still works and returns event without mutations field', () => {
-      const event = game.emitAnimationEvent('combat', { damage: 5 });
-
-      expect(event.type).toBe('combat');
-      expect(event.data).toEqual({ damage: 5 });
-      expect(event.mutations).toBeUndefined();
-    });
-
-    it('animate() and emitAnimationEvent share the same ID counter', () => {
-      const e1 = game.emitAnimationEvent('a', {});
-      const e2 = game.animate('b', {}, () => {});
-      const e3 = game.emitAnimationEvent('c', {});
-
-      expect(e1.id).toBe(1);
-      expect(e2.id).toBe(2);
-      expect(e3.id).toBe(3);
-    });
-
-    it('acknowledgment works for events from both APIs', () => {
-      game.emitAnimationEvent('a', {});
-      game.animate('b', {}, () => {});
-      game.emitAnimationEvent('c', {});
-
-      game.acknowledgeAnimationEvents(2);
-
-      const pending = game.pendingAnimationEvents;
-      expect(pending).toHaveLength(1);
-      expect(pending[0].type).toBe('c');
     });
   });
 
@@ -577,12 +529,14 @@ describe('Mutation Capture - element interception', () => {
       expect(game.pendingAnimationEvents).toHaveLength(0);
     });
 
-    it('mixed animate() and emitAnimationEvent() maintain monotonic IDs', () => {
+    it('multiple animate() calls maintain monotonic IDs', () => {
       const e1 = game.animate('a', {}, () => { piece.putInto(hand); });
-      const e2 = game.emitAnimationEvent('b', {});
       piece.putInto(board); // move back for next animate
+      const e2 = game.animate('b', {}, () => { piece.putInto(hand); });
+      piece.putInto(board); // move back
       const e3 = game.animate('c', {}, () => { piece.putInto(hand); });
-      const e4 = game.emitAnimationEvent('d', {});
+      piece.putInto(board); // move back
+      const e4 = game.animate('d', {}, () => { piece.putInto(hand); });
 
       expect(e1.id).toBe(1);
       expect(e2.id).toBe(2);

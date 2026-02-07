@@ -2356,6 +2356,7 @@ export class Game<
    * @param type - Event type identifier (e.g., 'combat', 'score', 'death')
    * @param data - Event-specific data payload (must be JSON-serializable)
    * @param callback - Synchronous callback containing mutations to capture
+   * @param options - Optional configuration (e.g., group ID for batching related events)
    * @returns The animation event with captured mutations
    *
    * @example
@@ -2364,12 +2365,17 @@ export class Game<
    *   piece.remove();
    *   game.score += 10;
    * });
+   *
+   * // Group related events for batched playback
+   * game.animate('attack', { ... }, () => { ... }, { group: `combat-${turn}` });
+   * game.animate('damage', { ... }, () => { ... }, { group: `combat-${turn}` });
    * ```
    */
   animate(
     type: string,
     data: Record<string, unknown>,
-    callback: () => void
+    callback: () => void,
+    options?: { group?: string }
   ): AnimationEvent {
     if (this._captureContext) {
       throw new Error(
@@ -2409,6 +2415,7 @@ export class Game<
       data: { ...data },
       timestamp: Date.now(),
       mutations: ctx.mutations,
+      ...(options?.group && { group: options.group }),
     };
     this._animationEvents.push(event);
     return event;
