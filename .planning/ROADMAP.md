@@ -42,7 +42,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 81-01-PLAN.md -- Theatre state types, mutation applicators (apply MOVE/CREATE/SET_ATTRIBUTE/SET_PROPERTY to ElementJSON), unit tests
+- [x] 81-01-PLAN.md -- Theatre state types, mutation applicators (apply MOVE/CREATE/SET_ATTRIBUTE/SET_PROPERTY to ElementJSON), unit tests
 - [ ] 81-02-PLAN.md -- Wire theatre state into Game class (lazy init, acknowledgment advancement, serialization, getter), integration tests
 
 ### Phase 82: Session Integration
@@ -100,7 +100,7 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 80. Mutation Capture | 2/2 | Complete | 2026-02-07 |
-| 81. Theatre State Engine | 0/2 | Not started | - |
+| 81. Theatre State Engine | 1/2 | In progress | - |
 | 82. Session Integration | 0/TBD | Not started | - |
 | 83. UI Composables | 0/TBD | Not started | - |
 | 84. Clean Break and Migration | 0/TBD | Not started | - |

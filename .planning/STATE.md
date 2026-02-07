@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 81 of 84 (Theatre State Engine)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-07 -- Phase 80 verified and complete
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-07 -- Completed 81-01-PLAN.md
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Milestones
 
@@ -59,6 +59,8 @@ Recent decisions affecting current work:
 - Capture context pattern: nullable _captureContext on Game, set during animate() callback
 - Element operations check game._captureContext to record mutations (putInto records MOVE, create records CREATE)
 - Game root excluded from element attribute snapshot (tracked via property diff instead)
+- SET_PROPERTY targets snapshot.attributes (where GameElement.toJSON() puts custom properties)
+- MOVE to non-existent destination = removal (pile pattern)
 
 ### Pending Todos
 
@@ -71,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Phase 80 verified, ready for Phase 81
+Stopped at: Completed 81-01-PLAN.md
 Resume file: None
