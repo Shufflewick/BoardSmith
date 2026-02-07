@@ -767,25 +767,6 @@ export class GameServerCore {
         // Success: broadcast happens automatically
         break;
 
-      case 'acknowledgeAnimations':
-        if (session.isSpectator) {
-          session.ws.send({ type: 'error', error: 'Spectators cannot acknowledge animations' });
-          return;
-        }
-
-        if (!gameSession) {
-          session.ws.send({ type: 'error', error: 'Game not found' });
-          return;
-        }
-
-        if (message.upToId === undefined) {
-          session.ws.send({ type: 'error', error: 'upToId is required for acknowledgeAnimations' });
-          return;
-        }
-
-        gameSession.acknowledgeAnimations(session.playerSeat, message.upToId);
-        // Success: broadcast happens automatically in GameSession.acknowledgeAnimations()
-        break;
     }
   }
 

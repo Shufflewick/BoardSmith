@@ -806,32 +806,6 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   // ============================================
-  // Animation Methods
-  // ============================================
-
-  /**
-   * Acknowledge animation events for a player up to a given ID.
-   *
-   * This is NOT a game action - it doesn't modify game state or action history.
-   * It's session-level bookkeeping for UI playback tracking.
-   *
-   * The playerSeat parameter is included for future multi-client support
-   * (tracking per-client acknowledgment), but currently all clients share
-   * the same game buffer.
-   *
-   * @param playerSeat - Player seat acknowledging events (1-indexed)
-   * @param upToId - Acknowledge all events with ID <= this value
-   */
-  acknowledgeAnimations(playerSeat: number, upToId: number): void {
-    // Delegate to game's acknowledge method
-    this.#runner.game.acknowledgeAnimationEvents(upToId);
-
-    // Broadcast updated state to all clients
-    // This ensures all clients see the events have been consumed
-    this.broadcast();
-  }
-
-  // ============================================
   // Action Methods
   // ============================================
 

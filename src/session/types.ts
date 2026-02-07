@@ -412,10 +412,6 @@ export interface PlayerGameState {
   availableActions?: string[];
   isMyTurn: boolean;
   view: unknown;
-  /** Current (truth) game state. Only present when theatre state diverges from truth
-   *  (i.e., animations are pending). Components that need truth (AI decisions, post-game
-   *  summary) should read this field. When undefined, view IS the truth. */
-  currentView?: unknown;
   /** Action metadata for auto-UI generation (optional) */
   actionMetadata?: Record<string, ActionMetadata>;
   /** Whether the player can undo (has made actions this turn) */
@@ -531,7 +527,7 @@ export interface ActionRequest {
  * WebSocket message from client
  */
 export interface WebSocketMessage {
-  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimSeat' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leaveSeat' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions' | 'acknowledgeAnimations';
+  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimSeat' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leaveSeat' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
   action?: string;
   args?: Record<string, unknown>;
   /** Request ID for action request/response correlation */
@@ -550,8 +546,6 @@ export interface WebSocketMessage {
   playerOptions?: Record<string, unknown>;
   /** For updateGameOptions: the game options to set (host only) */
   gameOptions?: Record<string, unknown>;
-  /** For acknowledgeAnimations: acknowledge events up to this ID */
-  upToId?: number;
 }
 
 // ============================================
