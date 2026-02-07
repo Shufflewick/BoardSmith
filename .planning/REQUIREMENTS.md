@@ -20,10 +20,10 @@ Requirements for v2.9 release. Each maps to roadmap phases.
 
 ### Session
 
-- [ ] **SES-01**: `buildPlayerState()` produces theatre view (default) with per-player visibility filtering
-- [ ] **SES-02**: `PlayerGameState` carries current view as opt-in field alongside theatre view
-- [ ] **SES-03**: `acknowledgeAnimations()` advances theatre state and rebroadcasts to all clients
-- [ ] **SES-04**: All connected clients receive theatre view — multiplayer sync without spoilers
+- [x] **SES-01**: `buildPlayerState()` produces theatre view (default) with per-player visibility filtering
+- [x] **SES-02**: `PlayerGameState` carries current view as opt-in field alongside theatre view
+- [x] **SES-03**: `acknowledgeAnimations()` advances theatre state and rebroadcasts to all clients
+- [x] **SES-04**: All connected clients receive theatre view — multiplayer sync without spoilers
 
 ### UI
 
@@ -76,10 +76,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENG-06 | Phase 81: Theatre State Engine | Complete |
 | ENG-07 | Phase 84: Clean Break and Migration | Pending |
 | ENG-08 | Phase 80: Mutation Capture | Complete |
-| SES-01 | Phase 82: Session Integration | Pending |
-| SES-02 | Phase 82: Session Integration | Pending |
-| SES-03 | Phase 82: Session Integration | Pending |
-| SES-04 | Phase 82: Session Integration | Pending |
+| SES-01 | Phase 82: Session Integration | Complete |
+| SES-02 | Phase 82: Session Integration | Complete |
+| SES-03 | Phase 82: Session Integration | Complete |
+| SES-04 | Phase 82: Session Integration | Complete |
 | UI-01 | Phase 83: UI Composables | Pending |
 | UI-02 | Phase 83: UI Composables | Pending |
 | UI-03 | Phase 83: UI Composables | Pending |
@@ -97,4 +97,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-07 after Phase 81 completion*
+*Last updated: 2026-02-07 after Phase 82 completion*
