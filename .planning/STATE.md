@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v2.9 Theatre View -- Phase 81: Theatre State Engine
+**Current focus:** v2.9 Theatre View -- Phase 82: Session Integration
 
 ## Current Position
 
-Phase: 81 of 84 (Theatre State Engine)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-07 -- Completed 81-01-PLAN.md
+Phase: 82 of 84 (Session Integration)
+Plan: Not started
+Status: Phase complete (81), ready for next phase
+Last activity: 2026-02-07 -- Completed 81-02-PLAN.md (Phase 81 complete)
 
-Progress: [███░░░░░░░] 30%
+Progress: [████░░░░░░] 40%
 
 ## Milestones
 
@@ -61,6 +61,8 @@ Recent decisions affecting current work:
 - Game root excluded from element attribute snapshot (tracked via property diff instead)
 - SET_PROPERTY targets snapshot.attributes (where GameElement.toJSON() puts custom properties)
 - MOVE to non-existent destination = removal (pile pattern)
+- Theatre snapshot lazy-init in animate() (not on Game construction) -- zero overhead for non-animated games
+- Snapshot cleared to null when all events acknowledged -- theatreState getter falls through to toJSON()
 
 ### Pending Todos
 
@@ -73,5 +75,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 81-01-PLAN.md
+Stopped at: Completed 81-02-PLAN.md (Phase 81 complete)
 Resume file: None
