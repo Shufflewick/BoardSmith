@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 83 of 84 (UI Composables)
-Plan: Not started
-Status: Phase complete (82), ready for next phase
-Last activity: 2026-02-07 -- Completed Phase 82 (Session Integration)
+Plan: 1 of 3 complete
+Status: In progress
+Last activity: 2026-02-07 -- Completed 83-01-PLAN.md (Client SDK & Composable Foundations)
 
 Progress: [██████░░░░] 60%
 
@@ -69,6 +69,9 @@ Recent decisions affecting current work:
 - currentView optional (undefined when theatre equals truth) for bandwidth optimization
 - Theatre view as primary view field in buildPlayerState() -- semantic change from truth to theatre as default
 - WebSocket acknowledgeAnimations handler validates spectator, game, and upToId
+- Per-event acknowledge inside processQueue while loop (not batch at end)
+- useCurrentView uses string injection key 'currentGameView' for GameShell provide compatibility
+- Record<string, unknown> view type for useCurrentView (matches loosely-typed gameView pattern)
 
 ### Pending Todos
 
@@ -81,5 +84,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed Phase 82 (Session Integration), ready for Phase 83
+Stopped at: Completed 83-01-PLAN.md, ready for 83-02
 Resume file: None
