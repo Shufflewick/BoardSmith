@@ -8,7 +8,7 @@ import { createInverseCommand } from '../command/inverse.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
-import type { CapturedMutation, MutationCaptureContext, SetPropertyMutation } from './mutation-capture.js';
+import type { CapturedMutation, MutationCaptureContext, SetPropertyMutation, SetAttributeMutation } from './mutation-capture.js';
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -2425,8 +2425,9 @@ export class Game<
       );
     }
 
-    // Snapshot custom game properties before callback
+    // Snapshot before callback
     const propertySnapshot = this._snapshotCustomProperties();
+    const elementAttrSnapshot = this._snapshotElementAttributes();
 
     // Activate capture context
     const ctx: MutationCaptureContext = { mutations: [] };
@@ -2438,9 +2439,10 @@ export class Game<
       this._captureContext = null;
     }
 
-    // Diff custom properties after clearing context
+    // Diff properties and element attributes after callback
     const propertyMutations = this._diffCustomProperties(propertySnapshot);
-    ctx.mutations.push(...propertyMutations);
+    const attrMutations = this._diffElementAttributes(elementAttrSnapshot);
+    ctx.mutations.push(...propertyMutations, ...attrMutations);
 
     const event: AnimationEvent = {
       id: ++this._animationEventSeq,
@@ -2504,6 +2506,82 @@ export class Game<
         });
       }
     }
+    return mutations;
+  }
+
+  /**
+   * Snapshot serializable attributes of all elements in the tree.
+   * Used to detect attribute changes during animate() callbacks.
+   * Returns Map<elementId, Record<attrName, value>>
+   */
+  private _snapshotElementAttributes(): Map<number, Record<string, unknown>> {
+    const snapshot = new Map<number, Record<string, unknown>>();
+
+    const walkTree = (element: GameElement): void => {
+      const attrs: Record<string, unknown> = {};
+      const unserializable = new Set(
+        (element.constructor as typeof GameElement).unserializableAttributes
+      );
+
+      for (const key of Object.keys(element)) {
+        if (unserializable.has(key) || key.startsWith('_')) continue;
+        const value = (element as unknown as Record<string, unknown>)[key];
+        if (value === undefined) continue;
+        // Skip element references (they have _t)
+        if (value && typeof value === 'object' && '_t' in value) continue;
+        try {
+          attrs[key] = structuredClone(value);
+        } catch {
+          // Skip non-cloneable values
+        }
+      }
+      snapshot.set(element._t.id, attrs);
+
+      for (const child of element._t.children) {
+        walkTree(child);
+      }
+    };
+
+    // Walk children only -- Game's own properties are tracked via _snapshotCustomProperties
+    for (const child of this._t.children) {
+      walkTree(child);
+    }
+
+    return snapshot;
+  }
+
+  /**
+   * Compare element attribute snapshots and produce SET_ATTRIBUTE mutations.
+   */
+  private _diffElementAttributes(
+    before: Map<number, Record<string, unknown>>
+  ): SetAttributeMutation[] {
+    const mutations: SetAttributeMutation[] = [];
+    const after = this._snapshotElementAttributes();
+
+    // Check elements that existed before
+    for (const [elementId, beforeAttrs] of before) {
+      const afterAttrs = after.get(elementId);
+      if (!afterAttrs) continue; // Element was removed -- tracked as MOVE, not attribute change
+
+      const allKeys = new Set([...Object.keys(beforeAttrs), ...Object.keys(afterAttrs)]);
+      for (const key of allKeys) {
+        const oldVal = beforeAttrs[key];
+        const newVal = afterAttrs[key];
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+          mutations.push({
+            type: 'SET_ATTRIBUTE',
+            elementId,
+            attribute: key,
+            oldValue: oldVal,
+            newValue: newVal,
+          });
+        }
+      }
+    }
+
+    // Elements created during callback are tracked via CREATE mutations, not attribute diffs
+
     return mutations;
   }
 
