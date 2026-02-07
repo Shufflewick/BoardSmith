@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeEach } from 'vitest';
 import type { ElementJSON } from './types.js';
 import type {
   MoveMutation,
@@ -16,6 +16,10 @@ import {
   applyMutation,
   applyMutations,
 } from './theatre-state.js';
+import { Game } from './game.js';
+import { Space } from './space.js';
+import { Piece } from './piece.js';
+import { Player } from '../player/player.js';
 
 /**
  * Create a fresh ElementJSON snapshot for testing.
@@ -364,5 +368,406 @@ describe('edge cases', () => {
       type: 'CREATE', className: 'Token', name: 'x', parentId: 999, elementId: 50,
     });
     expect(JSON.stringify(snapshot)).toBe(before);
+  });
+});
+
+// ===========================================================================
+// Integration tests: Theatre state wired into Game class
+// ===========================================================================
+
+class TestPiece extends Piece {
+  hp = 5;
+}
+
+class Board extends Space {}
+
+class TestGame extends Game {
+  score = 0;
+  round = 1;
+}
+
+function createTestGame() {
+  const game = new TestGame({ playerCount: 2, seed: 'theatre-test' });
+  const reg = game._ctx.classRegistry as Map<string, any>;
+  reg.set('TestPiece', TestPiece);
+  reg.set('Board', Board);
+  reg.set('TestGame', TestGame);
+  reg.set('Space', Space);
+  reg.set('Player', Player);
+  const board = game.create(Board, 'board');
+  const p1 = board.create(TestPiece, 'warrior', { hp: 5 });
+  const p2 = board.create(TestPiece, 'mage', { hp: 5 });
+  const discard = game.create(Space, 'discard');
+  game.phase = 'started';
+  return { game, board, p1, p2, discard };
+}
+
+// ---------------------------------------------------------------------------
+// Theatre state lifecycle
+// ---------------------------------------------------------------------------
+
+describe('Theatre state lifecycle', () => {
+  test('_theatreSnapshot is null before any animate() call', () => {
+    const { game } = createTestGame();
+    expect((game as any)._theatreSnapshot).toBeNull();
+  });
+
+  test('animate() creates theatre snapshot before callback runs', () => {
+    const { game, p1 } = createTestGame();
+
+    game.animate('death', { pieceId: p1._t.id }, () => {
+      p1.remove();
+    });
+
+    // Theatre snapshot should exist after animate()
+    expect((game as any)._theatreSnapshot).not.toBeNull();
+  });
+
+  test('theatre snapshot captures pre-mutation state', () => {
+    const { game, board, p1 } = createTestGame();
+    const p1Id = p1._t.id;
+    const boardId = board._t.id;
+
+    game.animate('death', { pieceId: p1Id }, () => {
+      p1.remove();
+    });
+
+    const theatreSnapshot = (game as any)._theatreSnapshot;
+    // The theatre snapshot should still have the piece (pre-mutation)
+    const boardInSnapshot = findElementById(theatreSnapshot, boardId);
+    const pieceInSnapshot = findElementById(theatreSnapshot, p1Id);
+    expect(pieceInSnapshot).toBeDefined();
+    expect(boardInSnapshot?.children?.some((c: ElementJSON) => c.id === p1Id)).toBe(true);
+  });
+
+  test('theatreState getter returns toJSON() when no animations pending', () => {
+    const { game } = createTestGame();
+    const theatreState = game.theatreState;
+    const truth = game.toJSON();
+
+    // Should be deeply equal (both are fresh toJSON snapshots)
+    expect(theatreState.phase).toBe(truth.phase);
+    expect(theatreState.attributes.score).toBe(truth.attributes.score);
+    expect(theatreState.children?.length).toBe(truth.children?.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-event acknowledgment (ENG-05)
+// ---------------------------------------------------------------------------
+
+describe('Per-event acknowledgment (ENG-05)', () => {
+  test('acknowledging event advances theatre state', () => {
+    const { game, p1 } = createTestGame();
+    const p1Id = p1._t.id;
+
+    const event = game.animate('death', { pieceId: p1Id }, () => {
+      p1.remove();
+    });
+
+    // Before ack: theatre state still has the piece
+    const beforeAck = game.theatreState;
+    expect(findElementById(beforeAck, p1Id)).toBeDefined();
+
+    // After ack: theatre state should NOT have the piece (it was removed to pile which is not in snapshot)
+    game.acknowledgeAnimationEvents(event.id);
+
+    // All events acknowledged, so theatre snapshot is cleared and theatreState returns toJSON()
+    // The piece was removed to pile, so truth doesn't have it on the board
+    const afterAck = game.theatreState;
+    const boardInAfter = afterAck.children?.find(c => c.name === 'board');
+    expect(boardInAfter?.children?.some((c: ElementJSON) => c.id === p1Id)).toBe(false);
+  });
+
+  test('acknowledging one of two events advances theatre state by exactly one step', () => {
+    const { game, p1, p2 } = createTestGame();
+    const p1Id = p1._t.id;
+    const p2Id = p2._t.id;
+
+    // Event 1: remove piece1
+    const event1 = game.animate('death', { pieceId: p1Id }, () => {
+      p1.remove();
+    });
+
+    // Event 2: remove piece2
+    const event2 = game.animate('death', { pieceId: p2Id }, () => {
+      p2.remove();
+    });
+
+    // Acknowledge only event 1
+    game.acknowledgeAnimationEvents(event1.id);
+
+    // Theatre state should show piece1 gone but piece2 still present
+    const theatreState = game.theatreState;
+    const boardInTheatre = theatreState.children?.find((c: ElementJSON) => c.name === 'board');
+    expect(boardInTheatre?.children?.some((c: ElementJSON) => c.id === p1Id)).toBe(false);
+    expect(boardInTheatre?.children?.some((c: ElementJSON) => c.id === p2Id)).toBe(true);
+  });
+
+  test('acknowledging all events clears theatre snapshot', () => {
+    const { game, p1 } = createTestGame();
+    const p1Id = p1._t.id;
+
+    const event = game.animate('death', { pieceId: p1Id }, () => {
+      p1.remove();
+    });
+
+    game.acknowledgeAnimationEvents(event.id);
+    expect((game as any)._theatreSnapshot).toBeNull();
+  });
+
+  test('acknowledging event with property mutation updates theatre state', () => {
+    const { game } = createTestGame();
+
+    const event = game.animate('score', { points: 42 }, () => {
+      game.score = 42;
+    });
+
+    // Before ack: theatre state should have score = 0
+    expect(game.theatreState.attributes.score).toBe(0);
+
+    // After ack: theatre state should have score = 42
+    game.acknowledgeAnimationEvents(event.id);
+    expect(game.theatreState.attributes.score).toBe(42);
+  });
+
+  test('acknowledging event without mutations (emitAnimationEvent) is a no-op on theatre state', () => {
+    const { game, p1 } = createTestGame();
+    const p1Id = p1._t.id;
+
+    // emitAnimationEvent creates event without mutations
+    const emitEvent = game.emitAnimationEvent('flash', { color: 'red' });
+
+    // Then animate with real mutations
+    const animateEvent = game.animate('death', { pieceId: p1Id }, () => {
+      p1.remove();
+    });
+
+    // Acknowledge the emitAnimationEvent -- should not change theatre state
+    game.acknowledgeAnimationEvents(emitEvent.id);
+
+    // Theatre state should still have the piece (emitAnimationEvent had no mutations)
+    const theatreState = game.theatreState;
+    expect(findElementById(theatreState, p1Id)).toBeDefined();
+
+    // Now acknowledge the animate event
+    game.acknowledgeAnimationEvents(animateEvent.id);
+
+    // All events acknowledged, snapshot cleared, theatreState = toJSON()
+    expect((game as any)._theatreSnapshot).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multiple animate calls (roadmap success criteria #4)
+// ---------------------------------------------------------------------------
+
+describe('Multiple animate calls', () => {
+  test('multiple animate calls reuse the same snapshot baseline', () => {
+    const { game, p1, p2 } = createTestGame();
+    const p1Id = p1._t.id;
+    const p2Id = p2._t.id;
+
+    // First animate
+    game.animate('hit', { pieceId: p1Id }, () => {
+      p1.hp = 3;
+    });
+
+    const snapshotAfterFirst = (game as any)._theatreSnapshot;
+    // The snapshot should have the original hp=5 for p1 (pre-first-animate)
+    const p1InSnapshot = findElementById(snapshotAfterFirst, p1Id);
+    expect(p1InSnapshot?.attributes.hp).toBe(5);
+
+    // Second animate
+    game.animate('hit', { pieceId: p2Id }, () => {
+      p2.hp = 1;
+    });
+
+    // The snapshot should NOT have been re-initialized (still same baseline)
+    const snapshotAfterSecond = (game as any)._theatreSnapshot;
+    expect(snapshotAfterSecond).toBe(snapshotAfterFirst); // Same object reference
+  });
+
+  test('stepping through events one by one reaches truth', () => {
+    const { game, p1, p2 } = createTestGame();
+
+    // Three animate calls with different mutations
+    const event1 = game.animate('scoreUp', {}, () => {
+      game.score = 10;
+    });
+    const event2 = game.animate('hit', {}, () => {
+      p1.hp = 3;
+    });
+    const event3 = game.animate('hit', {}, () => {
+      p2.hp = 1;
+    });
+
+    // Step 1: acknowledge first event
+    game.acknowledgeAnimationEvents(event1.id);
+    expect(game.theatreState.attributes.score).toBe(10);
+    const p1After1 = findElementById(game.theatreState, p1._t.id);
+    expect(p1After1?.attributes.hp).toBe(5); // Not yet acknowledged
+
+    // Step 2: acknowledge second event
+    game.acknowledgeAnimationEvents(event2.id);
+    const p1After2 = findElementById(game.theatreState, p1._t.id);
+    expect(p1After2?.attributes.hp).toBe(3);
+    const p2After2 = findElementById(game.theatreState, p2._t.id);
+    expect(p2After2?.attributes.hp).toBe(5); // Not yet acknowledged
+
+    // Step 3: acknowledge third event -- all done, snapshot cleared
+    game.acknowledgeAnimationEvents(event3.id);
+    expect((game as any)._theatreSnapshot).toBeNull();
+    // theatreState now returns toJSON() which is the truth
+    expect(game.theatreState.attributes.score).toBe(10);
+    const p1Final = findElementById(game.theatreState, p1._t.id);
+    const p2Final = findElementById(game.theatreState, p2._t.id);
+    expect(p1Final?.attributes.hp).toBe(3);
+    expect(p2Final?.attributes.hp).toBe(1);
+  });
+
+  test('theatre snapshot not re-initialized between animate calls', () => {
+    const { game } = createTestGame();
+
+    game.animate('a', {}, () => {
+      game.score = 5;
+    });
+
+    const snapshotRef = (game as any)._theatreSnapshot;
+    expect(snapshotRef).not.toBeNull();
+
+    game.animate('b', {}, () => {
+      game.score = 10;
+    });
+
+    // Same object reference (not re-initialized)
+    expect((game as any)._theatreSnapshot).toBe(snapshotRef);
+    // Still shows pre-first-animate score
+    expect(snapshotRef.attributes.score).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Serialization round-trip (ENG-06)
+// ---------------------------------------------------------------------------
+
+describe('Serialization round-trip (ENG-06)', () => {
+  test('toJSON includes theatreSnapshot when pending events exist', () => {
+    const { game, p1 } = createTestGame();
+
+    game.animate('death', { pieceId: p1._t.id }, () => {
+      p1.remove();
+    });
+
+    const json = game.toJSON();
+    expect(json.theatreSnapshot).toBeDefined();
+    expect(json.theatreSnapshot).not.toBeNull();
+  });
+
+  test('toJSON omits theatreSnapshot when no pending events', () => {
+    const { game } = createTestGame();
+
+    const json = game.toJSON();
+    expect(json.theatreSnapshot).toBeUndefined();
+  });
+
+  test('restoreGame preserves theatre snapshot and pending events', () => {
+    const { game, p1, p2 } = createTestGame();
+    const p1Id = p1._t.id;
+    const p2Id = p2._t.id;
+
+    // Create two animate events
+    const event1 = game.animate('hit', {}, () => {
+      p1.hp = 2;
+    });
+    game.animate('hit', {}, () => {
+      p2.hp = 1;
+    });
+
+    // Acknowledge first event to advance theatre state
+    game.acknowledgeAnimationEvents(event1.id);
+
+    // Serialize
+    const json = game.toJSON();
+    expect(json.theatreSnapshot).toBeDefined();
+
+    // Restore
+    const classRegistry = new Map<string, any>();
+    classRegistry.set('TestPiece', TestPiece);
+    classRegistry.set('Board', Board);
+    classRegistry.set('TestGame', TestGame);
+    classRegistry.set('Space', Space);
+    classRegistry.set('Player', Player);
+    const restored = Game.restoreGame(json, TestGame, classRegistry);
+
+    // Restored game should have same theatre state
+    expect((restored as any)._theatreSnapshot).toBeDefined();
+    expect((restored as any)._theatreSnapshot).not.toBeNull();
+
+    // Restored game should have one pending event (event2)
+    expect(restored.pendingAnimationEvents).toHaveLength(1);
+
+    // Acknowledging the remaining event on the restored game should work
+    const pending = restored.pendingAnimationEvents;
+    restored.acknowledgeAnimationEvents(pending[0].id);
+    expect((restored as any)._theatreSnapshot).toBeNull();
+
+    // Theatre state matches truth after all acknowledged
+    const restoredP2 = findElementById(restored.theatreState, p2Id);
+    expect(restoredP2?.attributes.hp).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+describe('Theatre state edge cases', () => {
+  test('theatreState getter returns toJSON when all events acknowledged', () => {
+    const { game, p1 } = createTestGame();
+
+    const event = game.animate('hit', {}, () => {
+      p1.hp = 2;
+    });
+
+    game.acknowledgeAnimationEvents(event.id);
+
+    // theatreState should now match toJSON()
+    const theatreState = game.theatreState;
+    const truth = game.toJSON();
+    expect(theatreState.attributes.score).toBe(truth.attributes.score);
+    expect(theatreState.phase).toBe(truth.phase);
+    const p1InTheatre = findElementById(theatreState, p1._t.id);
+    const p1InTruth = findElementById(truth, p1._t.id);
+    expect(p1InTheatre?.attributes.hp).toBe(p1InTruth?.attributes.hp);
+  });
+
+  test('animate after full acknowledgment creates new snapshot', () => {
+    const { game, p1 } = createTestGame();
+
+    // First animate + acknowledge all
+    const event1 = game.animate('hit', {}, () => {
+      p1.hp = 3;
+    });
+    game.acknowledgeAnimationEvents(event1.id);
+    expect((game as any)._theatreSnapshot).toBeNull();
+
+    // Second animate -- should create new snapshot from current truth
+    const event2 = game.animate('hit', {}, () => {
+      p1.hp = 1;
+    });
+    expect((game as any)._theatreSnapshot).not.toBeNull();
+
+    // New snapshot should reflect current truth (hp=3 from after first round)
+    const newSnapshot = (game as any)._theatreSnapshot;
+    const p1InNewSnapshot = findElementById(newSnapshot, p1._t.id);
+    expect(p1InNewSnapshot?.attributes.hp).toBe(3);
+
+    // Acknowledge second event
+    game.acknowledgeAnimationEvents(event2.id);
+    expect((game as any)._theatreSnapshot).toBeNull();
+    // Truth: hp=1
+    const p1Final = findElementById(game.theatreState, p1._t.id);
+    expect(p1Final?.attributes.hp).toBe(1);
   });
 });
