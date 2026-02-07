@@ -12,9 +12,9 @@ Requirements for v2.9 release. Each maps to roadmap phases.
 - [x] **ENG-01**: `game.animate(type, data, callback)` scoped callback API — mutations inside callback are captured and associated with the animation event
 - [x] **ENG-02**: Mutation capture tracks element tree changes (create, move, remove, attribute changes) during animate callbacks
 - [x] **ENG-03**: Mutation capture tracks custom game property changes during animate callbacks
-- [ ] **ENG-04**: Theatre state maintained at engine level — reflects only acknowledged events' mutations applied to a base snapshot
-- [ ] **ENG-05**: Per-event acknowledgment applies that event's captured mutations to advance the theatre state
-- [ ] **ENG-06**: Theatre state serializes and restores with game state (checkpoint/replay safe)
+- [x] **ENG-04**: Theatre state maintained at engine level — reflects only acknowledged events' mutations applied to a base snapshot
+- [x] **ENG-05**: Per-event acknowledgment applies that event's captured mutations to advance the theatre state
+- [x] **ENG-06**: Theatre state serializes and restores with game state (checkpoint/replay safe)
 - [ ] **ENG-07**: `emitAnimationEvent()` removed — `game.animate()` is the only animation API
 - [x] **ENG-08**: Monotonically increasing event IDs preserved across `animate()` (same guarantee as current system)
 
@@ -71,9 +71,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENG-01 | Phase 80: Mutation Capture | Complete |
 | ENG-02 | Phase 80: Mutation Capture | Complete |
 | ENG-03 | Phase 80: Mutation Capture | Complete |
-| ENG-04 | Phase 81: Theatre State Engine | Pending |
-| ENG-05 | Phase 81: Theatre State Engine | Pending |
-| ENG-06 | Phase 81: Theatre State Engine | Pending |
+| ENG-04 | Phase 81: Theatre State Engine | Complete |
+| ENG-05 | Phase 81: Theatre State Engine | Complete |
+| ENG-06 | Phase 81: Theatre State Engine | Complete |
 | ENG-07 | Phase 84: Clean Break and Migration | Pending |
 | ENG-08 | Phase 80: Mutation Capture | Complete |
 | SES-01 | Phase 82: Session Integration | Pending |
@@ -97,4 +97,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-07 after Phase 80 completion*
+*Last updated: 2026-02-07 after Phase 81 completion*
