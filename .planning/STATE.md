@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Planning next milestone
+**Current focus:** v3.0 Animation Timeline -- Phase 85 Theatre Erasure
 
 ## Current Position
 
-Phase: None (between milestones)
-Plan: N/A
-Status: v2.9 complete, ready for next milestone
-Last activity: 2026-02-07 -- v2.9 Theatre View milestone shipped
+Phase: 85 of 90 (Theatre Erasure)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-07 -- v3.0 roadmap created
 
-Progress: N/A
+Progress: [░░░░░░░░░░] 0%
 
 ## Milestones
 
@@ -42,11 +42,20 @@ Progress: N/A
 - v2.8 Disabled Selections (Phases 75-79) -- shipped 2026-02-06
 - v2.9 Theatre View (Phases 80-84) -- shipped 2026-02-07
 
+**In Progress:**
+- v3.0 Animation Timeline (Phases 85-90)
+
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- Client-side animation timeline over server-side theatre (server-side theatre creates chicken-and-egg with component mounting)
+- Animation events as pure data channel (no mutation capture, no acknowledgment, no theatre snapshot)
+- Playback 100% client-owned (server never waits on animation)
+- Wait-for-handler with timeout (prevents fire-and-forget silent consumption)
 
 ### Pending Todos
 
@@ -59,5 +68,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: v2.9 milestone complete
+Stopped at: v3.0 roadmap created, ready to plan Phase 85
 Resume file: None

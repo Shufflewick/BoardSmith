@@ -79,46 +79,46 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | - | Pending |
-| ENG-02 | - | Pending |
-| ENG-03 | - | Pending |
-| ENG-04 | - | Pending |
-| REM-01 | - | Pending |
-| REM-02 | - | Pending |
-| REM-03 | - | Pending |
-| REM-04 | - | Pending |
-| REM-05 | - | Pending |
-| REM-06 | - | Pending |
-| SES-01 | - | Pending |
-| SES-02 | - | Pending |
-| SES-03 | - | Pending |
-| SES-04 | - | Pending |
-| CLI-01 | - | Pending |
-| CLI-02 | - | Pending |
-| CLI-03 | - | Pending |
-| CLI-04 | - | Pending |
-| CLI-05 | - | Pending |
-| CLI-06 | - | Pending |
-| CLI-07 | - | Pending |
-| CLI-08 | - | Pending |
-| CLI-09 | - | Pending |
-| CLI-10 | - | Pending |
-| CLI-11 | - | Pending |
-| UI-01 | - | Pending |
-| UI-02 | - | Pending |
-| UI-03 | - | Pending |
-| DOC-01 | - | Pending |
-| DOC-02 | - | Pending |
-| DOC-03 | - | Pending |
-| DOC-04 | - | Pending |
-| DOC-05 | - | Pending |
-| DOC-06 | - | Pending |
+| ENG-01 | Phase 86 | Pending |
+| ENG-02 | Phase 86 | Pending |
+| ENG-03 | Phase 86 | Pending |
+| ENG-04 | Phase 86 | Pending |
+| REM-01 | Phase 85 | Pending |
+| REM-02 | Phase 85 | Pending |
+| REM-03 | Phase 85 | Pending |
+| REM-04 | Phase 85 | Pending |
+| REM-05 | Phase 85 | Pending |
+| REM-06 | Phase 85 | Pending |
+| SES-01 | Phase 87 | Pending |
+| SES-02 | Phase 87 | Pending |
+| SES-03 | Phase 87 | Pending |
+| SES-04 | Phase 87 | Pending |
+| CLI-01 | Phase 88 | Pending |
+| CLI-02 | Phase 88 | Pending |
+| CLI-03 | Phase 88 | Pending |
+| CLI-04 | Phase 88 | Pending |
+| CLI-05 | Phase 88 | Pending |
+| CLI-06 | Phase 88 | Pending |
+| CLI-07 | Phase 88 | Pending |
+| CLI-08 | Phase 88 | Pending |
+| CLI-09 | Phase 88 | Pending |
+| CLI-10 | Phase 89 | Pending |
+| CLI-11 | Phase 89 | Pending |
+| UI-01 | Phase 89 | Pending |
+| UI-02 | Phase 89 | Pending |
+| UI-03 | Phase 89 | Pending |
+| DOC-01 | Phase 85 | Pending |
+| DOC-02 | Phase 90 | Pending |
+| DOC-03 | Phase 90 | Pending |
+| DOC-04 | Phase 90 | Pending |
+| DOC-05 | Phase 90 | Pending |
+| DOC-06 | Phase 90 | Pending |
 
 **Coverage:**
 - v1 requirements: 34 total
-- Mapped to phases: 0
-- Unmapped: 34
+- Mapped to phases: 34
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-07 after initial definition*
+*Last updated: 2026-02-07 after roadmap creation (phase mapping complete)*
