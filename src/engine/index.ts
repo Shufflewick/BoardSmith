@@ -41,16 +41,6 @@ export type {
   AnimationEvent,
 } from './element/index.js';
 
-export type {
-  CapturedMutation,
-  CreateMutation,
-  MoveMutation,
-  SetAttributeMutation,
-  SetPropertyMutation,
-  MutationCaptureContext,
-} from './element/index.js';
-
-export { applyMutation, applyMutations, findElementById, removeElementFromParent } from './element/index.js';
 
 // Player system
 export {
