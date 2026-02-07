@@ -100,7 +100,7 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 85. Theatre Erasure | 0/4 | Planned | - |
+| 85. Theatre Erasure | 1/4 | In progress | - |
 | 86. Simplified Animation Events | 0/TBD | Not started | - |
 | 87. Session Simplification | 0/TBD | Not started | - |
 | 88. Client Animation Queue | 0/TBD | Not started | - |
