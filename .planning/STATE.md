@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 82 of 84 (Session Integration)
-Plan: Not started
-Status: Phase complete (81), ready for next phase
-Last activity: 2026-02-07 -- Completed 81-02-PLAN.md (Phase 81 complete)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-07 -- Completed 82-01-PLAN.md
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 50%
 
 ## Milestones
 
@@ -63,6 +63,9 @@ Recent decisions affecting current work:
 - MOVE to non-existent destination = removal (pile pattern)
 - Theatre snapshot lazy-init in animate() (not on Game construction) -- zero overhead for non-animated games
 - Snapshot cleared to null when all events acknowledged -- theatreState getter falls through to toJSON()
+- getElementById() for theatre visibility filtering (checks main tree + pile for removed elements)
+- structuredClone for theatre snapshot deep copy before per-player filtering
+- Theatre childCount uses json.children?.length (theatre count, not truth count)
 
 ### Pending Todos
 
@@ -75,5 +78,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 81-02-PLAN.md (Phase 81 complete)
+Stopped at: Completed 82-01-PLAN.md
 Resume file: None
