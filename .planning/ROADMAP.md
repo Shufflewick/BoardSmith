@@ -24,11 +24,11 @@ Replace fire-and-forget animation events with a scoped callback API (`game.anima
   3. Custom game property changes inside animate callbacks are tracked and retrievable per event
   4. Animation event IDs are monotonically increasing across multiple `animate()` calls within the same action
   5. All existing tests continue to pass (mutations still apply to game state immediately)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 80-01: TBD
-- [ ] 80-02: TBD
+- [ ] 80-01-PLAN.md -- Mutation capture types, game.animate() method, property snapshot/diff, barrel exports
+- [ ] 80-02-PLAN.md -- Element interception (putInto, create, attribute snapshot/diff), integration tests
 
 ### Phase 81: Theatre State Engine
 **Goal**: The engine maintains a theatre state -- a snapshot that reflects only acknowledged events' mutations -- so consumers can render the "narrative" state rather than truth
@@ -99,7 +99,7 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 80. Mutation Capture | 0/TBD | Not started | - |
+| 80. Mutation Capture | 0/2 | Planned | - |
 | 81. Theatre State Engine | 0/TBD | Not started | - |
 | 82. Session Integration | 0/TBD | Not started | - |
 | 83. UI Composables | 0/TBD | Not started | - |
