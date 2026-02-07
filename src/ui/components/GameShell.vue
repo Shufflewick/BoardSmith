@@ -23,6 +23,7 @@ import { CURRENT_VIEW_KEY } from '../composables/useCurrentView';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
+import type { ActionMetadata } from '../composables/useActionControllerTypes';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 
 // Generate or retrieve persistent player ID
@@ -166,7 +167,7 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action, acknowled
 
 // Animation events - wire createAnimationEvents to WebSocket acknowledge
 const animationEvents = createAnimationEvents({
-  events: () => (state.value?.state as any)?.animationEvents,
+  events: () => state.value?.state?.animationEvents,
   acknowledge: (upToId) => acknowledgeAnimations(upToId),
 });
 provideAnimationEvents(animationEvents);
@@ -180,7 +181,7 @@ watch(state, (s) => {
 
 // Action metadata for auto-UI (selections, choices)
 const actionMetadata = computed(() => {
-  return (state.value?.state as any)?.actionMetadata;
+  return state.value?.state?.actionMetadata as Record<string, ActionMetadata> | undefined;
 });
 
 // Available actions (from flow state)
@@ -216,7 +217,7 @@ const currentGameView = computed(() => {
   if (timeTravelState.value) {
     return timeTravelState.value.view as any;
   }
-  return ((state.value?.state as any)?.currentView ?? state.value?.state.view) as any;
+  return (state.value?.state?.currentView ?? state.value?.state.view) as Record<string, unknown>;
 });
 provide(CURRENT_VIEW_KEY, currentGameView);
 
@@ -310,7 +311,7 @@ const currentPlayerName = computed(() => {
 
 // Can undo - from PlayerGameState.canUndo
 const canUndo = computed(() => {
-  return (state.value?.state as any)?.canUndo ?? false;
+  return state.value?.state?.canUndo ?? false;
 });
 
 // Board-provided prompt (for dynamic prompts based on UI state)

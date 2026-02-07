@@ -3,6 +3,7 @@
  */
 
 import type { LobbyState, SlotStatus, LobbySlot, LobbyInfo } from '../types/protocol.js';
+import type { AnimationEvent } from '../engine/index.js';
 
 // ============================================
 // Client Configuration
@@ -118,6 +119,26 @@ export interface PlayerState {
 
   /** Player's view of the game state (filtered for hidden information) */
   view: unknown;
+
+  /** Current (truth) game state. Only present when theatre state diverges from truth
+   *  (i.e., animations are pending). Components that need truth (AI decisions, post-game
+   *  summary) should read this field. When undefined, view IS the truth. */
+  currentView?: unknown;
+
+  /** Animation events pending playback. Only present when events exist. */
+  animationEvents?: AnimationEvent[];
+
+  /** ID of the last animation event, for acknowledgment convenience. Only present when events exist. */
+  lastAnimationEventId?: number;
+
+  /** Action metadata for auto-UI generation (optional) */
+  actionMetadata?: Record<string, unknown>;
+
+  /** Whether the player can undo (has made actions this turn) */
+  canUndo?: boolean;
+
+  /** Whether color selection is enabled for this game */
+  colorSelectionEnabled?: boolean;
 }
 
 export interface GameState {
