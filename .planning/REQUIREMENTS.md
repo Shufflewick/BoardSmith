@@ -68,33 +68,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | TBD | Pending |
-| ENG-02 | TBD | Pending |
-| ENG-03 | TBD | Pending |
-| ENG-04 | TBD | Pending |
-| ENG-05 | TBD | Pending |
-| ENG-06 | TBD | Pending |
-| ENG-07 | TBD | Pending |
-| ENG-08 | TBD | Pending |
-| SES-01 | TBD | Pending |
-| SES-02 | TBD | Pending |
-| SES-03 | TBD | Pending |
-| SES-04 | TBD | Pending |
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
-| UI-05 | TBD | Pending |
-| MIG-01 | TBD | Pending |
-| MIG-02 | TBD | Pending |
-| MIG-03 | TBD | Pending |
-| MIG-04 | TBD | Pending |
+| ENG-01 | Phase 80: Mutation Capture | Pending |
+| ENG-02 | Phase 80: Mutation Capture | Pending |
+| ENG-03 | Phase 80: Mutation Capture | Pending |
+| ENG-04 | Phase 81: Theatre State Engine | Pending |
+| ENG-05 | Phase 81: Theatre State Engine | Pending |
+| ENG-06 | Phase 81: Theatre State Engine | Pending |
+| ENG-07 | Phase 84: Clean Break and Migration | Pending |
+| ENG-08 | Phase 80: Mutation Capture | Pending |
+| SES-01 | Phase 82: Session Integration | Pending |
+| SES-02 | Phase 82: Session Integration | Pending |
+| SES-03 | Phase 82: Session Integration | Pending |
+| SES-04 | Phase 82: Session Integration | Pending |
+| UI-01 | Phase 83: UI Composables | Pending |
+| UI-02 | Phase 83: UI Composables | Pending |
+| UI-03 | Phase 83: UI Composables | Pending |
+| UI-04 | Phase 83: UI Composables | Pending |
+| UI-05 | Phase 83: UI Composables | Pending |
+| MIG-01 | Phase 84: Clean Break and Migration | Pending |
+| MIG-02 | Phase 84: Clean Break and Migration | Pending |
+| MIG-03 | Phase 84: Clean Break and Migration | Pending |
+| MIG-04 | Phase 84: Clean Break and Migration | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-06 after initial definition*
+*Last updated: 2026-02-06 after roadmap creation*

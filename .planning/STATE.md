@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Planning next milestone
+**Current focus:** v2.9 Theatre View -- Phase 80: Mutation Capture
 
 ## Current Position
 
-Phase: Ready for next milestone
+Phase: 80 of 84 (Mutation Capture)
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-02-06 -- v2.8 milestone complete
+Last activity: 2026-02-06 -- Roadmap created for v2.9 Theatre View
 
-Progress: [██████████] v2.8 shipped
+Progress: [░░░░░░░░░░] 0%
 
 ## Milestones
 
@@ -41,11 +41,20 @@ Progress: [██████████] v2.8 shipped
 - v2.7 Dead Code & Code Smell Cleanup (Phases 69-74) -- shipped 2026-02-02
 - v2.8 Disabled Selections (Phases 75-79) -- shipped 2026-02-06
 
+**In Progress:**
+- v2.9 Theatre View (Phases 80-84) -- 5 phases, 21 requirements
+
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- Scoped callback `game.animate()` over fire-and-forget `emitAnimationEvent`
+- Theatre view as default, current view opt-in
+- Per-event advancement over per-batch
+- Replace `emitAnimationEvent` entirely (no backward compat)
 
 ### Pending Todos
 
@@ -58,5 +67,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: v2.8 milestone archived
+Stopped at: v2.9 roadmap created
 Resume file: None
