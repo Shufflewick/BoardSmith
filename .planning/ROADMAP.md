@@ -86,11 +86,12 @@ Plans:
   3. Cribbage game uses `game.animate()` and its scoring/pegging animations play correctly in the browser
   4. BREAKING.md documents the `emitAnimationEvent` to `animate()` migration with before/after examples
   5. Documentation (ui-components.md, nomenclature.md) reflects the new API and theatre view concepts
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 84-01: TBD
-- [ ] 84-02: TBD
+- [ ] 84-01-PLAN.md -- Remove emitAnimationEvent API, clean exports, migrate all library tests to game.animate()
+- [ ] 84-02-PLAN.md -- Migrate demo-animation and cribbage games to game.animate(), verify in browser
+- [ ] 84-03-PLAN.md -- Create BREAKING.md migration guide, update ui-components.md and nomenclature.md
 
 ## Progress
 
@@ -103,4 +104,4 @@ Phases execute in numeric order: 80 -> 81 -> 82 -> 83 -> 84
 | 81. Theatre State Engine | 2/2 | Complete | 2026-02-07 |
 | 82. Session Integration | 2/2 | Complete | 2026-02-07 |
 | 83. UI Composables | 2/2 | Complete | 2026-02-07 |
-| 84. Clean Break and Migration | 0/TBD | Not started | - |
+| 84. Clean Break and Migration | 0/3 | Not started | - |
