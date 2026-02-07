@@ -8,8 +8,6 @@ import { createInverseCommand } from '../command/inverse.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
-import type { CapturedMutation, MutationCaptureContext, SetPropertyMutation, SetAttributeMutation } from './mutation-capture.js';
-import { applyMutations } from './theatre-state.js';
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -159,8 +157,6 @@ export interface AnimationEvent {
   timestamp: number;
   /** Optional group ID for batching related events */
   group?: string;
-  /** Mutations captured during the animate() callback */
-  mutations?: CapturedMutation[];
 }
 
 /**
@@ -334,14 +330,6 @@ export class Game<
   /** Animation event sequence counter (for unique IDs) */
   private _animationEventSeq: number = 0;
 
-  /** Theatre state snapshot. Null when no pending animate() events.
-   *  Initialized lazily before first animate() callback, advanced by acknowledgeAnimationEvents(). */
-  private _theatreSnapshot: ReturnType<Game['toJSON']> | null = null;
-
-  /** Active mutation capture context. Non-null only inside animate() callbacks.
-   *  Public (underscore-prefixed) so element classes can record mutations. */
-  _captureContext: MutationCaptureContext | null = null;
-
   /** Original constructor options (for snapshot restoration) */
   private _constructorOptions: Record<string, unknown> = {};
 
@@ -354,7 +342,6 @@ export class Game<
     'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
     '_flowEngine', '_debugRegistry', '_persistentMaps',
     '_animationEvents', '_animationEventSeq', '_constructorOptions',
-    '_captureContext', '_theatreSnapshot',
   ]);
 
   static override unserializableAttributes = [
@@ -368,8 +355,6 @@ export class Game<
     '_flowEngine',
     '_debugRegistry',
     '_constructorOptions',
-    '_captureContext',
-    '_theatreSnapshot',
   ];
 
   /**
@@ -2348,208 +2333,6 @@ export class Game<
   // Animation Events
   // ============================================
 
-  /**
-   * Execute a callback while capturing all mutations, associating them with
-   * an animation event. Mutations apply immediately to game state -- capture
-   * is purely observational for the theatre view system.
-   *
-   * @param type - Event type identifier (e.g., 'combat', 'score', 'death')
-   * @param data - Event-specific data payload (must be JSON-serializable)
-   * @param callback - Synchronous callback containing mutations to capture
-   * @param options - Optional configuration (e.g., group ID for batching related events)
-   * @returns The animation event with captured mutations
-   *
-   * @example
-   * ```typescript
-   * game.animate('death', { pieceId: piece.id }, () => {
-   *   piece.remove();
-   *   game.score += 10;
-   * });
-   *
-   * // Group related events for batched playback
-   * game.animate('attack', { ... }, () => { ... }, { group: `combat-${turn}` });
-   * game.animate('damage', { ... }, () => { ... }, { group: `combat-${turn}` });
-   * ```
-   */
-  animate(
-    type: string,
-    data: Record<string, unknown>,
-    callback: () => void,
-    options?: { group?: string }
-  ): AnimationEvent {
-    if (this._captureContext) {
-      throw new Error(
-        `Cannot call game.animate() inside another animate() callback. ` +
-        `Nested animation scopes are not supported. ` +
-        `Move the inner animate() call outside the outer callback.`
-      );
-    }
-
-    // Lazy-init theatre snapshot before first animate() mutations
-    if (!this._theatreSnapshot) {
-      this._theatreSnapshot = this.toJSON();
-    }
-
-    // Snapshot before callback
-    const propertySnapshot = this._snapshotCustomProperties();
-    const elementAttrSnapshot = this._snapshotElementAttributes();
-
-    // Activate capture context
-    const ctx: MutationCaptureContext = { mutations: [] };
-    this._captureContext = ctx;
-
-    try {
-      callback();
-    } finally {
-      this._captureContext = null;
-    }
-
-    // Diff properties and element attributes after callback
-    const propertyMutations = this._diffCustomProperties(propertySnapshot);
-    const attrMutations = this._diffElementAttributes(elementAttrSnapshot);
-    ctx.mutations.push(...propertyMutations, ...attrMutations);
-
-    const event: AnimationEvent = {
-      id: ++this._animationEventSeq,
-      type,
-      data: { ...data },
-      timestamp: Date.now(),
-      mutations: ctx.mutations,
-      ...(options?.group && { group: options.group }),
-    };
-    this._animationEvents.push(event);
-    return event;
-  }
-
-  /**
-   * Snapshot all custom game properties (non-system, non-element).
-   * Used by animate() to detect property changes via before/after diff.
-   */
-  private _snapshotCustomProperties(): Record<string, unknown> {
-    const snapshot: Record<string, unknown> = {};
-    const unserializable = new Set(
-      (this.constructor as typeof Game).unserializableAttributes
-    );
-    const safeProps = (this.constructor as typeof Game)._safeProperties;
-
-    for (const key of Object.keys(this)) {
-      if (unserializable.has(key) || safeProps.has(key) || key.startsWith('_')) continue;
-      const value = (this as Record<string, unknown>)[key];
-      // Skip element references (they have _t) -- tracked via element mutations
-      if (value && typeof value === 'object' && '_t' in value) continue;
-      // Skip PersistentMap instances -- tracked via settings
-      if (value instanceof PersistentMap) continue;
-      try {
-        snapshot[key] = structuredClone(value);
-      } catch {
-        // Skip values that can't be cloned (functions, symbols, etc.)
-      }
-    }
-    return snapshot;
-  }
-
-  /**
-   * Diff current custom game properties against a previous snapshot.
-   * Returns SET_PROPERTY mutations for any changed properties.
-   */
-  private _diffCustomProperties(
-    before: Record<string, unknown>
-  ): SetPropertyMutation[] {
-    const mutations: SetPropertyMutation[] = [];
-    const after = this._snapshotCustomProperties();
-    const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
-
-    for (const key of allKeys) {
-      const oldVal = before[key];
-      const newVal = after[key];
-      // Use JSON.stringify for deep comparison (game properties are JSON-serializable by design)
-      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        mutations.push({
-          type: 'SET_PROPERTY',
-          property: key,
-          oldValue: oldVal,
-          newValue: newVal,
-        });
-      }
-    }
-    return mutations;
-  }
-
-  /**
-   * Snapshot serializable attributes of all elements in the tree.
-   * Used to detect attribute changes during animate() callbacks.
-   * Returns Map<elementId, Record<attrName, value>>
-   */
-  private _snapshotElementAttributes(): Map<number, Record<string, unknown>> {
-    const snapshot = new Map<number, Record<string, unknown>>();
-
-    const walkTree = (element: GameElement): void => {
-      const attrs: Record<string, unknown> = {};
-      const unserializable = new Set(
-        (element.constructor as typeof GameElement).unserializableAttributes
-      );
-
-      for (const key of Object.keys(element)) {
-        if (unserializable.has(key) || key.startsWith('_')) continue;
-        const value = (element as unknown as Record<string, unknown>)[key];
-        if (value === undefined) continue;
-        // Skip element references (they have _t)
-        if (value && typeof value === 'object' && '_t' in value) continue;
-        try {
-          attrs[key] = structuredClone(value);
-        } catch {
-          // Skip non-cloneable values
-        }
-      }
-      snapshot.set(element._t.id, attrs);
-
-      for (const child of element._t.children) {
-        walkTree(child);
-      }
-    };
-
-    // Walk children only -- Game's own properties are tracked via _snapshotCustomProperties
-    for (const child of this._t.children) {
-      walkTree(child);
-    }
-
-    return snapshot;
-  }
-
-  /**
-   * Compare element attribute snapshots and produce SET_ATTRIBUTE mutations.
-   */
-  private _diffElementAttributes(
-    before: Map<number, Record<string, unknown>>
-  ): SetAttributeMutation[] {
-    const mutations: SetAttributeMutation[] = [];
-    const after = this._snapshotElementAttributes();
-
-    // Check elements that existed before
-    for (const [elementId, beforeAttrs] of before) {
-      const afterAttrs = after.get(elementId);
-      if (!afterAttrs) continue; // Element was removed -- tracked as MOVE, not attribute change
-
-      const allKeys = new Set([...Object.keys(beforeAttrs), ...Object.keys(afterAttrs)]);
-      for (const key of allKeys) {
-        const oldVal = beforeAttrs[key];
-        const newVal = afterAttrs[key];
-        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-          mutations.push({
-            type: 'SET_ATTRIBUTE',
-            elementId,
-            attribute: key,
-            oldValue: oldVal,
-            newValue: newVal,
-          });
-        }
-      }
-    }
-
-    // Elements created during callback are tracked via CREATE mutations, not attribute diffs
-
-    return mutations;
-  }
 
   /**
    * Get animation events that have not yet been acknowledged.
@@ -2563,164 +2346,6 @@ export class Game<
     return [...this._animationEvents];
   }
 
-  /**
-   * Get the theatre state -- the "narrative" view reflecting only acknowledged events.
-   * Returns the theatre snapshot if animations are pending, or current toJSON() if in sync.
-   *
-   * Phase 82 will use this for buildPlayerState() default view.
-   */
-  get theatreState(): ReturnType<Game['toJSON']> {
-    return this._theatreSnapshot ?? this.toJSON();
-  }
-
-  /**
-   * Get the theatre state filtered for a specific player's visibility.
-   *
-   * When no animations are pending (`_theatreSnapshot` is null), delegates
-   * directly to `toJSONForPlayer()` for zero overhead.
-   *
-   * When animations are pending, applies visibility filtering to the theatre
-   * snapshot using element ID-based lookups. This avoids the parallel tree
-   * traversal used by `toJSONForPlayer()` (which breaks when theatre and
-   * truth have elements in different positions).
-   *
-   * @param player - Player, player seat, or null for spectator view
-   */
-  theatreStateForPlayer(player: P | number | null): ElementJSON {
-    // When no theatre snapshot exists, theatre = truth
-    if (!this._theatreSnapshot) {
-      return this.toJSONForPlayer(player);
-    }
-
-    const playerSeat = player === null ? null : (typeof player === 'number' ? player : player.seat);
-    // For visibility checks, spectators use -1 (no special access)
-    const visibilityPosition = playerSeat ?? -1;
-
-    // Deep clone the theatre snapshot so filtering doesn't mutate it
-    const theatreJson = structuredClone(this._theatreSnapshot) as ElementJSON;
-
-    const filterNode = (json: ElementJSON): ElementJSON => {
-      // Look up the live element by ID to check its visibility state.
-      // getElementById checks both the main tree AND the pile, which handles
-      // elements removed in truth but still present in the theatre snapshot.
-      const liveElement = this.getElementById(json.id);
-
-      if (!liveElement) {
-        // Element created during animate() but then destroyed -- rare edge case.
-        // We can't determine visibility without a live object, so return as-is.
-        if (json.children) {
-          return { ...json, children: json.children.map(c => filterNode(c)) };
-        }
-        return json;
-      }
-
-      const visibility = liveElement.getEffectiveVisibility();
-
-      // Handle count-only mode: show count but not contents
-      if (visibility.mode === 'count-only' && !liveElement.isVisibleTo(visibilityPosition)) {
-        const systemAttrs: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(json.attributes ?? {})) {
-          if (key.startsWith('$')) {
-            systemAttrs[key] = value;
-          }
-        }
-        return {
-          className: json.className,
-          id: json.id,
-          name: json.name,
-          attributes: systemAttrs,
-          childCount: json.children?.length ?? 0,
-        };
-      }
-
-      // Check if element is visible to this player
-      if (!liveElement.isVisibleTo(visibilityPosition)) {
-        return {
-          className: json.className,
-          id: json.id,
-          attributes: { __hidden: true },
-        };
-      }
-
-      // Check zone visibility for children (if this is a Space)
-      const zoneVisibility = (liveElement as any).getZoneVisibility?.();
-
-      if (zoneVisibility) {
-        if (zoneVisibility.mode === 'hidden' || zoneVisibility.mode === 'count-only') {
-          // Hidden and count-only modes: create anonymized placeholders for children
-          const hiddenChildren: ElementJSON[] = [];
-          if (json.children) {
-            // Use the live element's _t.id for generating negative IDs to prevent correlation
-            const liveId = liveElement._t.id;
-            for (let i = 0; i < json.children.length; i++) {
-              const childJson = json.children[i];
-              const systemAttrs: Record<string, unknown> = { __hidden: true };
-              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
-                if (key.startsWith('$')) {
-                  systemAttrs[key] = value;
-                }
-              }
-              hiddenChildren.push({
-                className: childJson.className,
-                id: -(liveId * 1000 + i),
-                attributes: systemAttrs,
-              });
-            }
-          }
-          return {
-            ...json,
-            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
-            childCount: json.children?.length ?? 0,
-          };
-        } else if (zoneVisibility.mode === 'owner' && liveElement.player?.seat !== visibilityPosition) {
-          // Owner-only zone and this player doesn't own it - show hidden placeholders
-          const hiddenChildren: ElementJSON[] = [];
-          if (json.children) {
-            for (const childJson of json.children) {
-              const systemAttrs: Record<string, unknown> = { __hidden: true };
-              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
-                if (key.startsWith('$')) {
-                  systemAttrs[key] = value;
-                }
-              }
-              hiddenChildren.push({
-                className: childJson.className,
-                id: childJson.id,
-                attributes: systemAttrs,
-              });
-            }
-          }
-          return {
-            ...json,
-            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
-          };
-        }
-      }
-
-      // Filter children recursively
-      const filteredChildren: ElementJSON[] = [];
-      if (json.children) {
-        for (const child of json.children) {
-          filteredChildren.push(filterNode(child));
-        }
-      }
-
-      return {
-        ...json,
-        children: filteredChildren.length > 0 ? filteredChildren : undefined,
-      };
-    };
-
-    let filtered = filterNode(theatreJson);
-
-    // Apply static playerView transformation if defined
-    const GameClass = this.constructor as typeof Game;
-    if (GameClass.playerView) {
-      filtered = GameClass.playerView(filtered, playerSeat, this);
-    }
-
-    return filtered;
-  }
 
   /**
    * Acknowledge animation events up to (and including) the given ID.
@@ -2742,26 +2367,7 @@ export class Game<
    * ```
    */
   acknowledgeAnimationEvents(upToId: number): void {
-    // Apply mutations to theatre snapshot for acknowledged events
-    if (this._theatreSnapshot) {
-      const eventsToAck = this._animationEvents
-        .filter(e => e.id <= upToId)
-        .sort((a, b) => a.id - b.id);
-
-      for (const event of eventsToAck) {
-        if (event.mutations) {
-          applyMutations(this._theatreSnapshot, event.mutations);
-        }
-      }
-    }
-
-    // Remove acknowledged events from buffer (existing behavior)
     this._animationEvents = this._animationEvents.filter(e => e.id > upToId);
-
-    // Clear theatre snapshot when all events acknowledged (truth and theatre in sync)
-    if (this._animationEvents.length === 0) {
-      this._theatreSnapshot = null;
-    }
   }
 
   // ============================================
@@ -2778,7 +2384,6 @@ export class Game<
     settings: Record<string, unknown>;
     animationEvents?: AnimationEvent[];
     animationEventSeq?: number;
-    theatreSnapshot?: ReturnType<Game['toJSON']>;
   } {
     return {
       ...super.toJSON(),
@@ -2790,10 +2395,6 @@ export class Game<
       ...(this._animationEvents.length > 0 && {
         animationEvents: this._animationEvents,
         animationEventSeq: this._animationEventSeq,
-      }),
-      // Include theatre snapshot when pending animate() events exist
-      ...(this._theatreSnapshot && {
-        theatreSnapshot: this._theatreSnapshot,
       }),
     };
   }
@@ -2963,11 +2564,6 @@ export class Game<
       const jsonWithEvents = json as { animationEvents: AnimationEvent[]; animationEventSeq?: number };
       game._animationEvents = [...jsonWithEvents.animationEvents];
       game._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
-    }
-
-    // Restore theatre snapshot if present
-    if ((json as { theatreSnapshot?: ReturnType<Game['toJSON']> }).theatreSnapshot) {
-      game._theatreSnapshot = (json as { theatreSnapshot: ReturnType<Game['toJSON']> }).theatreSnapshot;
     }
 
     // Clear auto-created children and restore from JSON

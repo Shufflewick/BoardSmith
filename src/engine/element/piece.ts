@@ -71,16 +71,6 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
    * ```
    */
   putInto(destination: GameElement, options?: { position?: 'first' | 'last' }): void {
-    // Record MOVE mutation if inside animate() callback
-    if (this.game._captureContext) {
-      this.game._captureContext.mutations.push({
-        type: 'MOVE',
-        elementId: this._t.id,
-        fromParentId: this._t.parent?._t.id ?? -1,
-        toParentId: destination._t.id,
-        position: options?.position,
-      });
-    }
     this.moveToInternal(destination, options?.position);
   }
 

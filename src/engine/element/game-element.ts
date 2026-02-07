@@ -244,34 +244,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     name: string,
     attributes?: ElementAttributes<T>
   ): T {
-    const element = this.createInternal(elementClass, name, attributes);
-
-    // Record CREATE mutation if inside animate() callback
-    if (this.game._captureContext) {
-      // Snapshot the serializable attributes of the new element
-      const attrSnapshot: Record<string, unknown> = {};
-      if (attributes) {
-        const unserializable = new Set(
-          (elementClass as unknown as typeof GameElement).unserializableAttributes
-        );
-        for (const [key, value] of Object.entries(attributes)) {
-          if (!unserializable.has(key) && !key.startsWith('_')) {
-            attrSnapshot[key] = value;
-          }
-        }
-      }
-
-      this.game._captureContext.mutations.push({
-        type: 'CREATE',
-        className: elementClass.name,
-        name,
-        parentId: this._t.id,
-        elementId: element._t.id,
-        ...(Object.keys(attrSnapshot).length > 0 && { attributes: attrSnapshot }),
-      });
-    }
-
-    return element;
+    return this.createInternal(elementClass, name, attributes);
   }
 
   /**
