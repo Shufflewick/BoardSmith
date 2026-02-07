@@ -1,5 +1,34 @@
 # Project Milestones: BoardSmith
 
+## v2.9 Theatre View (Shipped: 2026-02-07)
+
+**Delivered:** Replaced fire-and-forget animation events with scoped `game.animate()` callbacks that capture mutations per event, maintain a theatre view (pre-animation state advancing per-acknowledgment), and thread that view through session and UI so components never show "the future" while animations play.
+
+**Phases completed:** 80-84 (5 phases, 11 plans total)
+
+**Key accomplishments:**
+
+- `game.animate(type, data, callback)` scoped callback API with mutation capture — element tree changes and custom property changes tracked per animation event
+- Theatre state engine with lazy snapshot, per-event advancement, and serialization round-trip safety
+- Session integration — theatre view as default in `buildPlayerState()`, bandwidth-optimized `currentView` opt-in, WebSocket `acknowledgeAnimations` handler
+- UI composables — `useCurrentView()` truth opt-in, per-event acknowledge in `processQueue`, GameShell wired with ActionPanel gating
+- Clean break — `emitAnimationEvent()` removed entirely, demo-animation and cribbage games migrated to `game.animate()`
+- Client type alignment — `PlayerState` type updated to match server `PlayerGameState`, eliminating `as any` casts
+
+**Stats:**
+
+- 25 source files modified
+- +2,841 / -135 lines TypeScript/Vue
+- 5 phases, 11 plans, 49 commits
+- 1 day from start to ship (2026-02-06 → 2026-02-07)
+- 100 new tests + 119 migrated, 633 total passing
+
+**Git range:** `docs(80)` → `fix: align client PlayerState type`
+
+**What's next:** Animation pipeline complete. Ready for next milestone.
+
+---
+
 ## v2.8 Disabled Selections (Shipped: 2026-02-06)
 
 **Delivered:** Added `disabled` state to element and choice selections with mandatory reason strings, threaded through engine, session, and UI layers with defense-in-depth enforcement.

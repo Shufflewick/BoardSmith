@@ -8,23 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v2.9 Theatre View
+## Previous: v2.9 Shipped
 
-**Goal:** Replace fire-and-forget animation events with animation-gated state that keeps UI rendering in sync with the animation narrative, so components never show "the future" while animations play.
+Theatre View — replaced fire-and-forget animation events with `game.animate()` scoped callbacks, mutation capture, engine-level theatre state, session/UI integration, and clean migration. Components never show "the future" while animations play.
 
-**Target features:**
-- `game.animate(type, data, callback)` API — scoped callbacks tie state mutations to animation events
-- Theatre view as default game view — components render from the animation-synchronized state, not truth
-- Per-event advancement — as each animation event is acknowledged, its captured mutations apply to the theatre view
-- Mid-flow decision support — when flow yields for player input during animations, ActionPanel renders theatre state
-- All-player broadcast — every client gets the theatre view, no one sees spoilers
-- Current view opt-in — components that need truth (AI, post-game summary) explicitly request it
-
-**What this eliminates for game developers:**
-- Manual death/removal coordinators (elements stay in theatre view until their death event plays)
-- Manual display health tracking (theatre view shows pre-damage state, advances per event)
-- Cached state workarounds (theatre view maintains pre-clearing state while animations play)
-- Cross-component timing hacks (framework owns the coordination)
+**v2.9 Delivered:** Theatre View with `game.animate()` API, mutation capture, per-event theatre advancement, session broadcasting, `useCurrentView()` opt-in, ActionPanel gating, skip functionality, and full game migration.
 
 ## Previous: v2.8 Shipped
 
@@ -184,24 +172,21 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ Custom UIs read `item.disabled` from `validElements` and `getChoices()` — v2.8
 - ✓ Auto-fill skips disabled items; `fill()` rejects disabled with surfaced reason — v2.8
 - ✓ Documentation updated (migration guide, BREAKING.md) — v2.8
+- ✓ `game.animate(type, data, callback)` scoped callback API with mutation capture — v2.9
+- ✓ Theatre view maintained at engine/session layer with per-event advancement — v2.9
+- ✓ Theatre view as default client view, current view via `useCurrentView()` opt-in — v2.9
+- ✓ `PlayerGameState` carries theatre view (default) and current view (opt-in) — v2.9
+- ✓ `useAnimationEvents` composable updated for `animate()` event flow — v2.9
+- ✓ ActionPanel renders from theatre state when flow yields mid-animation — v2.9
+- ✓ All players receive theatre view — multiplayer sync without spoilers — v2.9
+- ✓ Theatre view serializes/restores with game state (checkpoint/replay safe) — v2.9
+- ✓ `emitAnimationEvent` removed — `game.animate()` is sole animation API — v2.9
+- ✓ Documentation updated (BREAKING.md, ui-components.md, nomenclature.md) — v2.9
+- ✓ Demo animation and cribbage games migrated to `game.animate()` — v2.9
 
 ### Active
 
-- [ ] `game.animate(type, data, callback)` replaces `emitAnimationEvent` — mutations inside callback are captured and tied to the event
-- [ ] Mutation capture during animate callbacks — element tree changes and custom property changes tracked per event
-- [ ] Theatre view maintained at engine/session layer — serialized state reflecting only acknowledged events
-- [ ] Per-event theatre advancement — acknowledging an event applies its captured mutations to the theatre view
-- [ ] Theatre view is the default view sent to clients — components render from theatre by default
-- [ ] Current view available via opt-in — explicit API for components that need truth
-- [ ] `PlayerGameState` carries theatre view (default) and current view (opt-in)
-- [ ] `useAnimationEvents` composable updated for new `animate()` event flow
-- [ ] ActionPanel renders from theatre state when flow yields mid-animation
-- [ ] All players receive theatre view — multiplayer sync without spoilers
-- [ ] Theatre view serializes/restores with game state (checkpoint/replay safe)
-- [ ] MCTS/AI interaction — bots use current view (truth) for decision-making
-- [ ] Existing `emitAnimationEvent` removed — clean break, no backward compatibility
-- [ ] Documentation updated (migration guide, BREAKING.md, nomenclature)
-- [ ] Demo animation game and cribbage migrated to `game.animate()`
+(No active requirements — ready for next milestone)
 
 ### Out of Scope
 
@@ -256,17 +241,17 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 | `disabled` returns `string \| false` (no bare `true`) | Forces developers to provide a reason — pit of success | ✓ Good |
 | `AnnotatedChoice<T>` has `value` + `disabled` only | Display is layered on by session/UI, not engine concern | ✓ Good |
 | `disabled?: string` on wire (optional, not `string \| false`) | No need to send `false` for every selectable item | ✓ Good |
-| Scoped callback `game.animate()` over fire-and-forget `emitAnimationEvent` | Ties mutations to events — framework can track what changed per event | — Pending |
-| Theatre view as default, current view opt-in | Pit of success — correct behavior is the easy path | — Pending |
-| Per-event advancement over per-batch | Finer control — theatre view steps through narrative one event at a time | — Pending |
-| Replace `emitAnimationEvent` entirely (no backward compat) | Clean break — one API, no confusion about which to use | — Pending |
+| Scoped callback `game.animate()` over fire-and-forget `emitAnimationEvent` | Ties mutations to events — framework can track what changed per event | ✓ Good |
+| Theatre view as default, current view opt-in | Pit of success — correct behavior is the easy path | ✓ Good |
+| Per-event advancement over per-batch | Finer control — theatre view steps through narrative one event at a time | ✓ Good |
+| Replace `emitAnimationEvent` entirely (no backward compat) | Clean break — one API, no confusion about which to use | ✓ Good |
 
 ## Context
 
 ~79k LOC TypeScript/Vue in unified `src/` structure.
 Tech stack: TypeScript 5.7, Vue 3.5, Vitest, npm.
-555 unit tests passing (15 e2e tests require running server).
-Shipped v2.8 with disabled selections feature — 27 disabled-specific tests added.
+633 unit tests passing (15 e2e tests require running server).
+Shipped v2.9 with theatre view — 100 new tests added, 119 migrated to `game.animate()`.
 
 **Current structure:**
 - `src/engine/` — Core game logic
@@ -289,4 +274,4 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
 ---
-*Last updated: 2026-02-06 after starting v2.9 Theatre View milestone*
+*Last updated: 2026-02-07 after v2.9 Theatre View milestone*

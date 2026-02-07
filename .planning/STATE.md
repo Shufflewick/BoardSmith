@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-06)
+See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v2.9 Theatre View -- All phases complete, ready for milestone audit
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 84 of 84 (Clean Break and Migration)
-Plan: 3 of 3
-Status: All phases complete, milestone ready for audit
-Last activity: 2026-02-07 -- Completed Phase 84 (Clean Break and Migration), verified 5/5 must-haves
+Phase: None (between milestones)
+Plan: N/A
+Status: v2.9 complete, ready for next milestone
+Last activity: 2026-02-07 -- v2.9 Theatre View milestone shipped
 
-Progress: [██████████] 100%
+Progress: N/A
 
 ## Milestones
 
@@ -40,44 +40,13 @@ Progress: [██████████] 100%
 - v2.6 Code Consolidation (post-mortem driven) -- shipped 2026-01-29
 - v2.7 Dead Code & Code Smell Cleanup (Phases 69-74) -- shipped 2026-02-02
 - v2.8 Disabled Selections (Phases 75-79) -- shipped 2026-02-06
-
-**In Progress:**
-- v2.9 Theatre View (Phases 80-84) -- 5 phases, 21 requirements
+- v2.9 Theatre View (Phases 80-84) -- shipped 2026-02-07
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Scoped callback `game.animate()` over fire-and-forget `emitAnimationEvent`
-- Theatre view as default, current view opt-in
-- Per-event advancement over per-batch
-- Replace `emitAnimationEvent` entirely (no backward compat)
-- AnimationEvent.mutations is optional (not required) for backward compat with emitAnimationEvent
-- Capture context pattern: nullable _captureContext on Game, set during animate() callback
-- Element operations check game._captureContext to record mutations (putInto records MOVE, create records CREATE)
-- Game root excluded from element attribute snapshot (tracked via property diff instead)
-- SET_PROPERTY targets snapshot.attributes (where GameElement.toJSON() puts custom properties)
-- MOVE to non-existent destination = removal (pile pattern)
-- Theatre snapshot lazy-init in animate() (not on Game construction) -- zero overhead for non-animated games
-- Snapshot cleared to null when all events acknowledged -- theatreState getter falls through to toJSON()
-- getElementById() for theatre visibility filtering (checks main tree + pile for removed elements)
-- structuredClone for theatre snapshot deep copy before per-player filtering
-- Theatre childCount uses json.children?.length (theatre count, not truth count)
-- currentView optional (undefined when theatre equals truth) for bandwidth optimization
-- Theatre view as primary view field in buildPlayerState() -- semantic change from truth to theatre as default
-- WebSocket acknowledgeAnimations handler validates spectator, game, and upToId
-- Per-event acknowledge inside processQueue while loop (not batch at end)
-- useCurrentView uses string injection key 'currentGameView' for GameShell provide compatibility
-- Record<string, unknown> view type for useCurrentView (matches loosely-typed gameView pattern)
-- GameShell provides currentGameView via CURRENT_VIEW_KEY for truth opt-in
-- animationEvents passed to useActionController for ActionPanel gating
-- emitAnimationEvent removed entirely -- animate() is sole animation API
-- animate() has optional 4th options param { group?: string } for batched event playback
-- BREAKING.md created as migration guide format with before/after code examples
-- Theatre View, Current View, Mutation Capture added as first-class nomenclature entries
 
 ### Pending Todos
 
@@ -90,5 +59,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: All phases complete -- milestone ready for audit
+Stopped at: v2.9 milestone complete
 Resume file: None
