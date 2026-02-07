@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 83 of 84 (UI Composables)
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: In progress
-Last activity: 2026-02-07 -- Completed 83-01-PLAN.md (Client SDK & Composable Foundations)
+Last activity: 2026-02-07 -- Completed 83-02-PLAN.md (GameShell Wiring & Tests)
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Milestones
 
@@ -72,6 +72,8 @@ Recent decisions affecting current work:
 - Per-event acknowledge inside processQueue while loop (not batch at end)
 - useCurrentView uses string injection key 'currentGameView' for GameShell provide compatibility
 - Record<string, unknown> view type for useCurrentView (matches loosely-typed gameView pattern)
+- (state as any)?.animationEvents pattern for accessing server fields not on client PlayerState type
+- app.runWithContext() for testing Vue provide/inject composables without DOM dependency
 
 ### Pending Todos
 
@@ -84,5 +86,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 83-01-PLAN.md, ready for 83-02
+Stopped at: Completed 83-02-PLAN.md, ready for 83-03
 Resume file: None
