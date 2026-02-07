@@ -39,6 +39,11 @@ export class PersistentMap<K, V> implements Map<K, V> {
     this.#game.settings[this.#key] = data;
   }
 
+  #toMap(): Map<K, V> {
+    const data = this.#getData();
+    return new Map(Object.entries(data).map(([k, v]) => [k as unknown as K, v as V]));
+  }
+
   get size(): number {
     return Object.keys(this.#getData()).length;
   }
@@ -77,28 +82,19 @@ export class PersistentMap<K, V> implements Map<K, V> {
     }
   }
 
-  *entries(): IterableIterator<[K, V]> {
-    const data = this.#getData();
-    for (const [k, v] of Object.entries(data)) {
-      yield [k as unknown as K, v as V];
-    }
+  entries() {
+    return this.#toMap().entries();
   }
 
-  *keys(): IterableIterator<K> {
-    const data = this.#getData();
-    for (const k of Object.keys(data)) {
-      yield k as unknown as K;
-    }
+  keys() {
+    return this.#toMap().keys();
   }
 
-  *values(): IterableIterator<V> {
-    const data = this.#getData();
-    for (const v of Object.values(data)) {
-      yield v as V;
-    }
+  values() {
+    return this.#toMap().values();
   }
 
-  [Symbol.iterator](): IterableIterator<[K, V]> {
+  [Symbol.iterator]() {
     return this.entries();
   }
 
