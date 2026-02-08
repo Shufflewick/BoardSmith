@@ -12,7 +12,7 @@ Replace the v2.9 theatre view and mutation capture system with a client-side ani
 
 - [x] **Phase 85: Theatre Erasure** - Remove all theatre, mutation capture, and acknowledgment code; start BREAKING.md
 - [x] **Phase 86: Simplified Animation Events** - Build the new `game.animate(type, data)` API with command stack entries
-- [ ] **Phase 87: Session Simplification** - Single-view broadcasting with animation events, remove acknowledgment protocol
+- [x] **Phase 87: Session Simplification** - Single-view broadcasting with animation events, remove acknowledgment protocol
 - [ ] **Phase 88: Client Animation Queue** - FIFO queue with wait-for-handler, timeout, skip, and reactive state
 - [ ] **Phase 89: UI Integration** - Wire GameShell and ActionPanel to new animation system, remove old composables
 - [ ] **Phase 90: Documentation & Migration** - Update docs, migrate example games, complete BREAKING.md
@@ -58,7 +58,9 @@ Plans:
   2. `buildPlayerState()` includes the current flow step's animation events in the player state payload
   3. `acknowledgeAnimations()` method no longer exists on GameSession -- the server never tracks animation playback
   4. The `acknowledgeAnimations` WebSocket message type is rejected or ignored by the server
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 87-01-PLAN.md -- Verification tests, stale JSDoc cleanup, documentation updates
 
 ### Phase 88: Client Animation Queue
 **Goal**: The client-side animation system processes events through a FIFO queue with wait-for-handler semantics, configurable timeouts, and skip support
@@ -104,7 +106,7 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 |-------|----------------|--------|-----------|
 | 85. Theatre Erasure | 4/4 | Complete | 2026-02-08 |
 | 86. Simplified Animation Events | 1/1 | Complete | 2026-02-08 |
-| 87. Session Simplification | 0/TBD | Not started | - |
+| 87. Session Simplification | 0/1 | In progress | - |
 | 88. Client Animation Queue | 0/TBD | Not started | - |
 | 89. UI Integration | 0/TBD | Not started | - |
 | 90. Documentation & Migration | 0/TBD | Not started | - |
