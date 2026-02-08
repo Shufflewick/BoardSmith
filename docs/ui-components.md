@@ -1089,26 +1089,56 @@ applyTheme(customTheme);
 
 ## Animation Events
 
-BoardSmith's animation event system enables game UIs to play back animations asynchronously while game state advances immediately. This is called the **soft continuation pattern** - the game doesn't wait for animations to complete before proceeding.
+BoardSmith's animation event system enables game UIs to play back animations asynchronously while game state advances immediately. Animation events are pure data signals emitted via `game.animate()` -- the server broadcasts truth and moves on, never waiting on animation playback. This is called the **soft continuation pattern**.
 
 ### Key Concepts
 
-**Animation events capture mutations for the theatre view system.** When you call `game.animate()`, mutations made inside the callback are recorded on the event and applied immediately. The game state advances right away (soft continuation), but the **theatre state** holds a pre-animation snapshot. As clients acknowledge events, the theatre state advances one event at a time, so UI components never show "the future" while animations play.
+**Animation events are pure data.** Each event carries a `type` string and a JSON-serializable `data` payload. No mutations are attached to the event -- it simply describes what happened so the UI can visualize it.
+
+**Game state advances immediately (soft continuation).** When `game.animate()` is called, the event is emitted and game execution continues. The game never pauses for animations.
+
+**The client owns playback entirely.** The server broadcasts truth and moves on. The client processes events through a FIFO queue, playing animations sequentially via registered handlers. The server has no knowledge of animation playback state.
+
+**Wait-for-handler.** When the queue encounters an event type with no registered handler, it pauses (up to a configurable `handlerWaitTimeout`, default 3s) to allow lazily-mounted components to register their handlers. If a handler registers during the wait, processing resumes immediately. If the timeout expires, the event is skipped with a console warning.
 
 - Game logic remains clean and synchronous
 - UI can skip or speed through animations without affecting game correctness
 - Reconnecting players see current state immediately (with optional animation replay)
-- The theatre view ensures players see state consistent with the last acknowledged animation
+- Players always see truth -- animations are visual overlays on the current state
 
 ### Engine-Side: Emitting Events
 
-Use `game.animate(type, data, callback)` to emit animation events during action execution. State mutations go inside the callback -- they execute synchronously and are captured for the theatre view:
+Use `game.animate(type, data)` to emit pure data animation events during action execution. An optional callback can co-locate game logic with the event for convenience.
+
+**Pure data form (preferred for signals):**
 
 ```typescript
 // In action execute() or game logic
 execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
   const damage = attacker.attack - target.defense;
 
+  // Emit the animation event as pure data
+  game.animate('combat', {
+    attackerId: attacker.id,
+    targetId: target.id,
+    damage,
+  });
+
+  // Game state advances via normal code
+  target.health -= damage;
+  if (target.health <= 0) {
+    target.putInto(this.graveyard);
+  }
+}
+```
+
+**Callback convenience form (co-locates game logic with the event):**
+
+```typescript
+execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
+  const damage = attacker.attack - target.defense;
+
+  // Callback runs immediately as normal game code
   game.animate('combat', {
     attackerId: attacker.id,
     targetId: target.id,
@@ -1128,20 +1158,14 @@ execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
 |-----------|------|-------------|
 | `type` | `string` | Event type identifier (e.g., 'combat', 'score', 'cardFlip') |
 | `data` | `Record<string, unknown>` | Event-specific payload (must be JSON-serializable -- use element IDs, not references) |
-| `callback` | `() => void` | Synchronous callback -- mutations inside are captured for the theatre view |
+| `callback` | `() => void` | Optional. Runs immediately as normal game code. Convenience for co-locating game logic with the event it describes. Mutations are NOT captured on the event. |
 
-**Mutation capture:** Element operations (`putInto`, `create`, property changes) made inside the callback are automatically recorded as `CapturedMutation[]` on the `AnimationEvent`. These mutations drive the theatre view advancement system -- when a client acknowledges an event, the theatre snapshot replays that event's mutations to produce the next visible state.
+**Pure signal events:**
 
-**Theatre view:** After `animate()` runs, the game state has already advanced (mutations applied immediately), but the theatre state holds a pre-animation snapshot. Clients see this frozen snapshot while animations play. As each event is acknowledged, the theatre state advances by replaying that event's captured mutations. This means the UI shows a consistent view that matches the animation currently playing.
-
-**Empty callbacks for pure UI signals:**
-
-Some events exist purely to signal the UI (e.g., score reveals, phase transitions). Use an empty callback:
+Many events exist purely to signal the UI (e.g., score reveals, phase transitions). Use the pure data form with no callback:
 
 ```typescript
-game.animate('score-reveal', { playerId: player.id, total: 42 }, () => {
-  // Pure UI signal -- no state changes
-});
+game.animate('score-reveal', { playerId: player.id, total: 42 });
 ```
 
 **No nesting:** `animate()` throws if called inside another `animate()` callback. Each animation event must be a separate call:
@@ -1153,7 +1177,7 @@ game.animate('attack-start', { attackerId: attacker.id }, () => {
 });
 
 // RIGHT: sequential animate() calls
-game.animate('attack-start', { attackerId: attacker.id }, () => {});
+game.animate('attack-start', { attackerId: attacker.id });
 game.animate('damage', { targetId: target.id, damage }, () => {
   target.health -= damage;
 });
@@ -1172,13 +1196,11 @@ const animationEvents = createAnimationEvents({
   // Get events from player state (reactive getter)
   events: () => state.value?.animationEvents,
 
-  // Acknowledge events when played back
-  acknowledge: (upToId) => {
-    session.acknowledgeAnimations(playerSeat, upToId);
-  },
+  // Optional: delay for events without handlers (ms, default: 0)
+  defaultDuration: 0,
 
-  // Optional: delay for events without handlers (useful for debugging)
-  defaultDuration: 0, // ms
+  // Optional: time to wait for handler registration before skipping (ms, default: 3000)
+  handlerWaitTimeout: 3000,
 });
 
 // Provide to component tree
@@ -1230,7 +1252,7 @@ onUnmounted(() => unregister?.());
 | `registerHandler(type, handler)` | `(string, (event) => Promise<void>) => () => void` | Register handler, returns cleanup function |
 | `isAnimating` | `Ref<boolean>` | Whether animations are currently playing |
 | `paused` | `Ref<boolean>` | Pause/resume control |
-| `skipAll()` | `() => void` | Skip remaining animations, acknowledge all |
+| `skipAll()` | `() => void` | Skip remaining animations |
 | `pendingCount` | `Ref<number>` | Number of pending events (for UI indicators) |
 
 ### Integration with useFLIP and useFlyingElements
@@ -1284,25 +1306,25 @@ This ensures players don't make decisions before seeing the results of previous 
 
 ### Common Pitfalls
 
-**1. Forgetting to acknowledge events**
-
-Events accumulate in the buffer and replay on every state update if not acknowledged. Always pass the `acknowledge` callback to `createAnimationEvents()`.
-
-**2. Mutating event data in handlers**
+**1. Mutating event data in handlers**
 
 Event data is a shallow copy - nested objects share references. Don't modify `event.data` directly in handlers.
 
-**3. Not handling handler errors gracefully**
+**2. Not handling handler errors gracefully**
 
 Handler errors are logged but don't stop the processing chain. Design handlers defensively - one broken handler shouldn't break all animations.
 
-**4. Blocking entire UI on animations**
+**3. Blocking entire UI on animations**
 
 Only gate decision-making (ActionPanel). Let players inspect the board, view history, etc. during animations.
 
-**5. Checking isMyTurn instead of showActionPanel**
+**4. Checking isMyTurn instead of showActionPanel**
 
 Custom UIs should use `showActionPanel` (which includes animation gating), not just `isMyTurn`. Otherwise, actions may be shown during animation playback.
+
+**5. Forgetting handlerWaitTimeout for lazily-mounted components**
+
+If a component registers handlers in `onMounted` and events arrive before mounting, the wait-for-handler mechanism pauses the queue. The default 3s timeout handles most cases, but games with slow-mounting components may need a longer timeout via the `handlerWaitTimeout` option in `createAnimationEvents()`.
 
 See [Nomenclature](./nomenclature.md) for animation event terminology definitions.
 
