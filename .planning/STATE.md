@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-07)
+See: .planning/PROJECT.md (updated 2026-02-08)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v3.0 Animation Timeline -- Complete
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 90 of 90 (Documentation & Migration)
-Plan: 2 of 2 in current phase
-Status: Milestone complete
-Last activity: 2026-02-08 -- Completed 90-02-PLAN.md (phase 90 complete, milestone complete)
+Phase: 90 of 90 (last phase of v3.0)
+Plan: Complete
+Status: Ready to plan next milestone
+Last activity: 2026-02-08 -- v3.0 milestone complete
 
 Progress: [██████████] 100%
 
@@ -41,27 +41,16 @@ Progress: [██████████] 100%
 - v2.7 Dead Code & Code Smell Cleanup (Phases 69-74) -- shipped 2026-02-02
 - v2.8 Disabled Selections (Phases 75-79) -- shipped 2026-02-06
 - v2.9 Theatre View (Phases 80-84) -- shipped 2026-02-07
+- v3.0 Animation Timeline (Phases 85-90) -- shipped 2026-02-08
 
 **In Progress:**
 - (none)
-
-**Just Completed:**
-- v3.0 Animation Timeline (Phases 85-90) -- shipped 2026-02-08
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Client-side animation timeline over server-side theatre (server-side theatre creates chicken-and-egg with component mounting)
-- Animation events as pure data channel (no mutation capture, no acknowledgment, no theatre snapshot)
-- Playback 100% client-owned (server never waits on animation)
-- Wait-for-handler with timeout (prevents fire-and-forget silent consumption)
-- AnimateCommand is not invertible (like MESSAGE) -- MCTS uses full state restore fallback
-- Buffer cleared at performAction() boundaries only, not at flow execute blocks
-- handlerWaitTimeout supersedes defaultDuration for no-handler case (defaultDuration kept for backward compat)
 
 ### Pending Todos
 
@@ -74,5 +63,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: v3.0 milestone complete -- all 6 phases (85-90) shipped
+Stopped at: v3.0 milestone archived
 Resume file: None

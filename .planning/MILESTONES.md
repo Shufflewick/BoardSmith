@@ -1,5 +1,34 @@
 # Project Milestones: BoardSmith
 
+## v3.0 Animation Timeline (Shipped: 2026-02-08)
+
+**Delivered:** Replaced v2.9 theatre view and mutation capture with a client-side animation timeline -- animation events are a pure data channel, playback is 100% client-owned, and the server never waits on animation state.
+
+**Phases completed:** 85-90 (6 phases, 10 plans total)
+
+**Key accomplishments:**
+
+- Complete theatre erasure -- removed all theatre state, mutation capture, and acknowledgment code across engine, session, client, and UI layers
+- Pure data animation API -- `game.animate(type, data)` emits data events with optional callback, no mutation capture
+- Command stack integration -- animation events recorded as `AnimateCommand` entries for future replay/rewind
+- Client-side animation queue -- FIFO processing with wait-for-handler semantics, configurable timeout, and reactive state
+- AbortSignal support -- `skipAll()` aborts in-flight animation handlers via cooperative cancellation
+- Documentation and migration -- updated docs, created migration-guide.md, migrated demo-animation and cribbage games
+
+**Stats:**
+
+- 63 files modified
+- +6,435 / -3,315 lines TypeScript/Vue
+- 6 phases, 10 plans, 47 commits
+- 1 day from start to ship (2026-02-07 to 2026-02-08)
+- 61 new animation tests, 540 total passing
+
+**Git range:** `feat(85-01)` to `chore: remove orphaned acknowledgeAnimationEvents`
+
+**What's next:** Animation system complete. Ready for next milestone.
+
+---
+
 ## v2.9 Theatre View (Shipped: 2026-02-07)
 
 **Delivered:** Replaced fire-and-forget animation events with scoped `game.animate()` callbacks that capture mutations per event, maintain a theatre view (pre-animation state advancing per-acknowledgment), and thread that view through session and UI so components never show "the future" while animations play.
