@@ -97,6 +97,7 @@ export type {
   SetOrderCommand,
   TrackAddCommand,
   TrackRemoveLastCommand,
+  AnimateCommand,
   TrackOwner,
   VisibilityConfig,
   VisibilityMode,

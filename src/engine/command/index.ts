@@ -19,6 +19,7 @@ export type {
   VisibilityConfig,
   TrackAddCommand,
   TrackRemoveLastCommand,
+  AnimateCommand,
 } from './types.js';
 
 export {

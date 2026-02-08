@@ -17,6 +17,7 @@ import type {
   ReorderChildCommand,
   TrackAddCommand,
   TrackRemoveLastCommand,
+  AnimateCommand,
   VisibilityConfig,
 } from './types.js';
 import type { Track } from '../scoring/track.js';
@@ -66,6 +67,8 @@ export function executeCommand(game: Game, command: GameCommand): CommandResult 
         return executeTrackAdd(game, command);
       case 'TRACK_REMOVE_LAST':
         return executeTrackRemoveLast(game, command);
+      case 'ANIMATE':
+        return executeAnimate(game, command);
       default:
         return { success: false, error: `Unknown command type: ${(command as any).type}` };
     }
@@ -300,6 +303,11 @@ function executeTrackRemoveLast(game: Game, command: TrackRemoveLastCommand): Co
   }
 
   track.removeLastInternal();
+  return { success: true };
+}
+
+function executeAnimate(game: Game, command: AnimateCommand): CommandResult {
+  game.pushAnimationEvent(command.eventType, command.data);
   return { success: true };
 }
 

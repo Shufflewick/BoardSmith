@@ -219,6 +219,19 @@ export interface TrackRemoveLastCommand extends BaseCommand {
 }
 
 /**
+ * Emit an animation event for UI playback.
+ * Animation events are pure data signals -- they do NOT capture mutations
+ * or affect game state. The UI layer registers handlers to play them back.
+ */
+export interface AnimateCommand extends BaseCommand {
+  type: 'ANIMATE';
+  /** Animation event type (e.g., 'combat', 'score-item') */
+  eventType: string;
+  /** Event-specific data payload (must be JSON-serializable) */
+  data: Record<string, unknown>;
+}
+
+/**
  * Union of all command types
  */
 export type GameCommand =
@@ -237,7 +250,8 @@ export type GameCommand =
   | SetOrderCommand
   | ReorderChildCommand
   | TrackAddCommand
-  | TrackRemoveLastCommand;
+  | TrackRemoveLastCommand
+  | AnimateCommand;
 
 /**
  * Result of executing a command

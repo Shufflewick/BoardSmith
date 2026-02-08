@@ -85,6 +85,10 @@ export function createInverseCommand(game: Game, command: GameCommand): GameComm
       // Messages don't affect game state meaningfully
       return null;
 
+    case 'ANIMATE':
+      // Animation events are UI hints, not invertible
+      return null;
+
     case 'START_GAME':
       return createStartGameInverse(game, command);
 
