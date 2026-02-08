@@ -177,7 +177,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       // No handler and no default duration - skip immediately
 
       // Acknowledge THIS event immediately (per-event advancement)
-      // This tells the server to advance the theatre snapshot by one step
       acknowledge(event.id);
       lastProcessedId = event.id;
     }
