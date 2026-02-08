@@ -7,6 +7,12 @@
  *
  * Uses provide/inject for component tree access (following useBoardInteraction pattern).
  *
+ * When the queue encounters an event type with no registered handler, it pauses
+ * (up to a configurable timeout, default 3s) to allow lazily-mounted components
+ * to register their handlers. If a handler registers during the wait, processing
+ * resumes immediately. If the timeout expires, a console warning is logged with
+ * the event type and ID, the event is skipped, and the queue continues.
+ *
  * @example
  * ```typescript
  * // In GameShell setup (root component)
@@ -46,6 +52,11 @@ export interface UseAnimationEventsOptions {
   acknowledge: (upToId: number) => void;
   /** Default delay for events without handlers (ms, default: 0) */
   defaultDuration?: number;
+  /**
+   * Time to wait for a handler to register before skipping an unhandled event (ms, default: 3000).
+   * Set to 0 to skip immediately (no wait).
+   */
+  handlerWaitTimeout?: number;
 }
 
 /**
@@ -95,7 +106,7 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
  * @returns Animation events controller
  */
 export function createAnimationEvents(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
-  const { events: getEvents, acknowledge, defaultDuration = 0 } = options;
+  const { events: getEvents, acknowledge, defaultDuration = 0, handlerWaitTimeout = 3000 } = options;
 
   // Handler registry
   const handlers = new Map<string, AnimationHandler>();
@@ -121,12 +132,36 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // Pause/resume synchronization
   let unpauseResolve: (() => void) | null = null;
 
+  // Wait-for-handler synchronization
+  let waitingForType: string | null = null;
+  let waitResolve: ((handler: AnimationHandler | null) => void) | null = null;
+  let waitTimer: ReturnType<typeof setTimeout> | null = null;
+
   /**
    * Wait for pause to be lifted
    */
   function waitForUnpause(): Promise<void> {
     return new Promise<void>((resolve) => {
       unpauseResolve = resolve;
+    });
+  }
+
+  /**
+   * Wait for a handler to register for the given event type, or timeout.
+   * Returns the handler if one registers, or null if timeout expires.
+   */
+  function waitForHandler(type: string, timeout: number): Promise<AnimationHandler | null> {
+    return new Promise((resolve) => {
+      waitingForType = type;
+      waitResolve = resolve;
+      waitTimer = setTimeout(() => {
+        if (waitingForType === type) {
+          waitResolve = null;
+          waitingForType = null;
+          waitTimer = null;
+          resolve(null); // timeout -- no handler arrived
+        }
+      }, timeout);
     });
   }
 
@@ -161,7 +196,22 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const event = queue.shift()!;
       pendingCount.value = queue.length;
 
-      const handler = handlers.get(event.type);
+      let handler: AnimationHandler | null | undefined = handlers.get(event.type);
+
+      if (!handler && handlerWaitTimeout > 0) {
+        // Wait for handler registration or timeout
+        handler = await waitForHandler(event.type, handlerWaitTimeout);
+
+        if (!handler) {
+          // Timeout expired -- warn and skip
+          console.warn(
+            `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
+          );
+          acknowledge(event.id);
+          lastProcessedId = event.id;
+          continue;
+        }
+      }
 
       if (handler) {
         try {
@@ -170,11 +220,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           // Log error but continue processing - don't let one handler break the chain
           console.error(`Animation handler error for event type '${event.type}':`, error);
         }
-      } else if (defaultDuration > 0) {
-        // No handler, but default duration configured - wait
-        await new Promise<void>((resolve) => setTimeout(resolve, defaultDuration));
       }
-      // No handler and no default duration - skip immediately
+      // No handler and handlerWaitTimeout is 0 -- skip immediately (backward compat)
 
       // Acknowledge THIS event immediately (per-event advancement)
       acknowledge(event.id);
@@ -208,6 +255,18 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       unpauseResolve = null;
     }
 
+    // If waiting for a handler, cancel the wait
+    if (waitResolve) {
+      const resolve = waitResolve;
+      waitResolve = null;
+      waitingForType = null;
+      if (waitTimer !== null) {
+        clearTimeout(waitTimer);
+        waitTimer = null;
+      }
+      resolve(null); // unblock processQueue
+    }
+
     // Reset animating state immediately
     isAnimating.value = false;
   }
@@ -217,6 +276,19 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
    */
   function registerHandler(eventType: string, handler: AnimationHandler): () => void {
     handlers.set(eventType, handler);
+
+    // If the queue is waiting for this type, resume processing immediately
+    if (waitingForType === eventType && waitResolve) {
+      const resolve = waitResolve;
+      waitResolve = null;
+      waitingForType = null;
+      if (waitTimer !== null) {
+        clearTimeout(waitTimer);
+        waitTimer = null;
+      }
+      resolve(handler);
+    }
+
     return () => {
       handlers.delete(eventType);
     };
