@@ -1032,6 +1032,9 @@ export class Game<
     player: P,
     args: Record<string, unknown>
   ): ActionResult {
+    // Clear previous animation events -- new action starts a new batch
+    this._animationEvents = [];
+
     const action = this._actions.get(actionName);
     if (!action) {
       return { success: false, error: `Unknown action: ${actionName}` };
@@ -2333,6 +2336,50 @@ export class Game<
   // Animation Events
   // ============================================
 
+  /**
+   * Emit an animation event for UI playback.
+   *
+   * Animation events are pure data signals -- they do NOT capture mutations
+   * or affect game state. The UI layer registers handlers to play them back.
+   *
+   * @param type - Event type identifier (e.g., 'combat', 'score-item')
+   * @param data - Event-specific data payload (must be JSON-serializable)
+   * @param callback - Optional callback to advance truth (convenience).
+   *   Runs immediately as normal game code. Its mutations are NOT captured
+   *   as event metadata -- they generate their own commands on the stack.
+   *
+   * @example
+   * ```typescript
+   * // Pure data event
+   * game.animate('score', { player: player.name, points: 15 });
+   *
+   * // With truth-advancing callback
+   * game.animate('combat', { attacker: a.id, defender: d.id, damage: 5 }, () => {
+   *   defender.hp -= 5;
+   *   if (defender.hp <= 0) defender.remove();
+   * });
+   * ```
+   */
+  animate(type: string, data: Record<string, unknown>, callback?: () => void): void {
+    this.execute({ type: 'ANIMATE', eventType: type, data });
+    if (callback) {
+      callback();
+    }
+  }
+
+  /**
+   * Push an animation event to the buffer.
+   * @internal Called by command executor -- do not call directly from game code.
+   */
+  pushAnimationEvent(eventType: string, data: Record<string, unknown>): void {
+    this._animationEventSeq++;
+    this._animationEvents.push({
+      id: this._animationEventSeq,
+      type: eventType,
+      data,
+      timestamp: Date.now(),
+    });
+  }
 
   /**
    * Get animation events that have not yet been acknowledged.
