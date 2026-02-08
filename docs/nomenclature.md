@@ -7,11 +7,10 @@ This document defines the standard terminology used throughout BoardSmith. Use t
 | Term | Definition |
 |------|------------|
 | Action | A player operation with prompt, selections, and effects |
-| Animation Event | A structured event capturing mutations for theatre view playback |
-| Animation Handler | A function that plays back a specific event type |
-| Current View | The real, up-to-date game state (opt-in for truth-needing components) |
-| Mutation Capture | System recording element operations inside `game.animate()` callbacks |
 | Active Player | The player whose turn it is |
+| Animation Event | A pure data signal emitted via `game.animate()` for UI animation playback |
+| Animation Handler | A function that plays back a specific event type |
+| Animation Timeline | Client-side FIFO queue processing animation events with wait-for-handler semantics |
 | AutoUI | Auto-generated game interface |
 | Board | A Space containing the main game area |
 | Card | A Piece with rank, suit, and face-up state |
@@ -41,8 +40,8 @@ This document defines the standard terminology used throughout BoardSmith. Use t
 | Soft Continuation | Pattern where state advances immediately, UI plays back |
 | Space | A container/location for pieces |
 | Table | The visual game area where all components are displayed |
-| Theatre View | Frozen snapshot of game state shown during animation playback |
 | Turn | A player's opportunity to act |
+| Wait-for-Handler | Queue behavior that pauses for lazily-mounted handler registration (configurable timeout) |
 | Zone | A logical area with visibility rules |
 
 ---
@@ -430,13 +429,13 @@ Terms related to the animation event system for asynchronous UI playback.
 
 ### Animation Event
 
-**Definition:** A structured event emitted during game execution via `game.animate()` that captures state mutations and flows to UI consumers for asynchronous playback. Mutations inside the callback are recorded on the event and drive the theatre view advancement system. Game state advances immediately (soft continuation pattern) while the theatre view replays events one at a time.
+**Definition:** A pure data event emitted during game execution via `game.animate()` that signals the UI to play an animation. Events carry a type and JSON-serializable data payload. Game state advances immediately (soft continuation); animations are visual overlays on truth.
 
 **In Code:** `AnimationEvent` interface; `game.animate()` method
-**Related Terms:** Soft Continuation, Animation Handler, ActionPanel, Theatre View, Current View, Mutation Capture
+**Related Terms:** Soft Continuation, Animation Handler, ActionPanel, Animation Timeline, Wait-for-Handler
 **Usage:**
 - "Emit an animation event when combat resolves"
-- "The UI plays back animation events while the theatre state advances per-event"
+- "Animation events carry pure data -- the UI decides how to visualize them"
 
 ### Animation Handler
 
@@ -450,47 +449,34 @@ Terms related to the animation event system for asynchronous UI playback.
 
 ### Soft Continuation
 
-**Definition:** Design pattern where game state advances immediately and UI plays back asynchronously. The UI "catches up" to the current state through animation playback, rather than blocking state advancement. The theatre view renders the pre-animation state while the truth has already advanced.
+**Definition:** Design pattern where game state advances immediately and UI plays back asynchronously. The UI shows truth at all times; animation events are visual overlays that "catch up" to show what happened. The ActionPanel gates on animation completion to prevent premature decisions.
 
 **In Code:** Architecture pattern (not a specific type)
-**Related Terms:** Animation Event, ActionPanel, Theatre View
+**Related Terms:** Animation Event, ActionPanel, Animation Timeline
 **Usage:**
 - "BoardSmith uses soft continuation -- state doesn't wait for animations"
 - "The ActionPanel gates on animation completion to prevent premature decisions"
-- "The theatre view shows the pre-animation snapshot while truth has already advanced"
+- "Players always see truth; animations show what happened between state changes"
 
-### Theatre View
+### Animation Timeline
 
-**Definition:** The frozen snapshot of game state shown to players during animation playback. Starts as a copy of game state when the first `game.animate()` call occurs, then advances one event at a time as animations are acknowledged. When all events are acknowledged, the theatre view equals the truth and the snapshot is cleared (zero overhead when not animating).
+**Definition:** The client-side playback system that processes animation events sequentially through a FIFO queue. When an event arrives with no registered handler, the queue pauses (up to `handlerWaitTimeout`, default 3s) to allow lazily-mounted components to register. If the timeout expires, the event is skipped with a console warning.
 
-**In Code:** `game.theatreState` getter; `game.acknowledgeAnimationEvents(upToId)` method
-**Related Terms:** Current View, Animation Event, Mutation Capture, Soft Continuation
+**In Code:** `createAnimationEvents()` composable
+**Related Terms:** Animation Event, Wait-for-Handler, Animation Handler
 **Usage:**
-- "The theatre view shows the state before unacknowledged animations"
-- "Players see the theatre view by default -- it advances as animations complete"
-- "When all events are acknowledged, theatreState falls through to the real state"
+- "The animation timeline processes events in order"
+- "Configure the timeline's wait timeout for slow-mounting components"
 
-### Current View
+### Wait-for-Handler
 
-**Definition:** The real, up-to-date game state available as an opt-in for components that need truth. While the theatre view shows "what the player has seen so far," the current view shows "what actually happened." Useful for AI controllers, post-game summaries, and non-animated UI elements that should always show the latest state.
+**Definition:** Queue behavior where processing pauses when encountering an event type with no registered handler. This allows components that register handlers during `onMounted` to claim their events even if the events arrive before the component mounts. Configurable via `handlerWaitTimeout` (default 3s).
 
-**In Code:** `useCurrentView()` composable; `currentView` field in `PlayerGameState`
-**Related Terms:** Theatre View, Animation Event
+**In Code:** `handlerWaitTimeout` option in `createAnimationEvents()`
+**Related Terms:** Animation Timeline, Animation Handler
 **Usage:**
-- "The AI controller reads from current view to make decisions based on actual state"
-- "Use `useCurrentView()` for components that should not wait for animations"
-- "currentView is only sent when it differs from the theatre view (bandwidth optimization)"
-
-### Mutation Capture
-
-**Definition:** The system that automatically records element operations (moves, creates, removals) and property changes made inside a `game.animate()` callback. Captured mutations are stored on the `AnimationEvent` and drive the theatre view advancement -- when a client acknowledges an event, the theatre snapshot replays that event's mutations to produce the next visible state.
-
-**In Code:** `CapturedMutation` type; `MutationCaptureContext` on `Game`
-**Related Terms:** Theatre View, Animation Event
-**Usage:**
-- "Mutation capture records putInto, create, and property changes during animate()"
-- "Each AnimationEvent has a mutations array from the capture context"
-- "The theatre view replays captured mutations to advance one event at a time"
+- "Wait-for-handler prevents fire-and-forget silent event consumption"
+- "Increase handlerWaitTimeout for components with heavy initialization"
 
 ---
 
