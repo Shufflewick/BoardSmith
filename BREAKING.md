@@ -14,7 +14,7 @@ Animation playback is now 100% client-owned. The server broadcasts truth immedia
 |-----|--------|-------------|
 | `game.theatreState` | engine | Use `game.toJSON()` -- truth is the only view |
 | `game.theatreStateForPlayer(seat)` | engine | Use `game.toJSONForPlayer(seat)` |
-| `game.acknowledgeAnimationEvents(id)` | engine | No replacement -- client manages playback locally |
+| `game.acknowledgeAnimationEvents(id)` | engine | Removed -- client manages playback locally |
 | `game._captureContext` | engine | Removed -- no mutation capture |
 | `game.animate()` | engine | Rebuilt in v3.0 as `game.animate(type, data)` pure data emitter |
 | `GameSession.acknowledgeAnimations()` | session | Removed -- server does not track animation playback |
@@ -109,7 +109,7 @@ const events = state.animationEvents;
 
 The following have been removed across the stack:
 
-- **Engine:** `game.acknowledgeAnimationEvents()` no longer applies mutations (simplified to buffer clearing)
+- **Engine:** `game.acknowledgeAnimationEvents()` removed entirely
 - **Session:** `GameSession.acknowledgeAnimations()` method deleted
 - **Server:** `acknowledgeAnimations` case in WebSocket message handler deleted
 - **Client:** `GameConnection.acknowledgeAnimations()` method deleted

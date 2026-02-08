@@ -2385,7 +2385,7 @@ export class Game<
    * Get animation events that have not yet been acknowledged.
    *
    * UI consumers read this to get events to play back. Events remain in the
-   * buffer until explicitly acknowledged via `acknowledgeAnimationEvents()`.
+   * buffer until cleared at the start of the next `performAction()` call.
    *
    * @returns Array of pending animation events (copy - modifications don't affect buffer)
    */
@@ -2393,29 +2393,6 @@ export class Game<
     return [...this._animationEvents];
   }
 
-
-  /**
-   * Acknowledge animation events up to (and including) the given ID.
-   *
-   * Call this after UI has finished playing back events. Events with ID <= upToId
-   * are removed from the buffer. Safe to call with any ID value - events that
-   * don't exist or have already been acknowledged are simply ignored.
-   *
-   * @param upToId - Acknowledge all events with ID <= this value
-   *
-   * @example
-   * ```typescript
-   * // After playing back events
-   * const events = game.pendingAnimationEvents;
-   * await playAnimations(events);
-   * if (events.length > 0) {
-   *   game.acknowledgeAnimationEvents(events[events.length - 1].id);
-   * }
-   * ```
-   */
-  acknowledgeAnimationEvents(upToId: number): void {
-    this._animationEvents = this._animationEvents.filter(e => e.id > upToId);
-  }
 
   // ============================================
   // Serialization
