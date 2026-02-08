@@ -164,10 +164,9 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGam
   { playerSeat }
 );
 
-// Animation events - wire createAnimationEvents to WebSocket acknowledge
+// Animation events - wire createAnimationEvents to server state
 const animationEvents = createAnimationEvents({
   events: () => state.value?.state?.animationEvents,
-  acknowledge: () => {},
 });
 provideAnimationEvents(animationEvents);
 

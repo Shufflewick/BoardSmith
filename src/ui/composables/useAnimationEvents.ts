@@ -18,7 +18,6 @@
  * // In GameShell setup (root component)
  * const animationEvents = createAnimationEvents({
  *   events: () => state.value?.animationEvents,
- *   acknowledge: (upToId) => notifyServer(upToId),
  * });
  * provideAnimationEvents(animationEvents);
  *
@@ -48,8 +47,6 @@ export interface AnimationHandler {
 export interface UseAnimationEventsOptions {
   /** Getter that returns animation events from PlayerGameState */
   events: () => AnimationEvent[] | undefined;
-  /** Callback to acknowledge processed events */
-  acknowledge: (upToId: number) => void;
   /** Default delay for events without handlers (ms, default: 0) */
   defaultDuration?: number;
   /**
@@ -106,7 +103,7 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
  * @returns Animation events controller
  */
 export function createAnimationEvents(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
-  const { events: getEvents, acknowledge, defaultDuration = 0, handlerWaitTimeout = 3000 } = options;
+  const { events: getEvents, defaultDuration = 0, handlerWaitTimeout = 3000 } = options;
 
   // Handler registry
   const handlers = new Map<string, AnimationHandler>();
@@ -211,7 +208,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           console.warn(
             `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
           );
-          acknowledge(event.id);
           lastProcessedId = event.id;
           continue;
         }
@@ -227,8 +223,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       }
       // No handler and handlerWaitTimeout is 0 -- skip immediately (backward compat)
 
-      // Acknowledge THIS event immediately (per-event advancement)
-      acknowledge(event.id);
       lastProcessedId = event.id;
     }
 
@@ -240,10 +234,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
    * Skip all remaining animations
    */
   function skipAll(): void {
-    // If we have queued events, acknowledge them all
     if (queue.length > 0) {
       const lastEvent = queue[queue.length - 1];
-      acknowledge(lastEvent.id);
       lastProcessedId = lastEvent.id;
       lastQueuedId = lastEvent.id;
     }
