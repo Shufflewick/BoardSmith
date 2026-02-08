@@ -30,15 +30,15 @@
 
 ### Client -- Animation Timeline
 
-- [ ] **CLI-01**: Client-side animation queue processes events FIFO
-- [ ] **CLI-02**: Wait-for-handler: queue pauses when no handler registered for current event type
-- [ ] **CLI-03**: Configurable timeout for handler wait (default 3 seconds)
-- [ ] **CLI-04**: Timeout logs console warning with event type, ID, and elapsed time
-- [ ] **CLI-05**: After timeout, event is skipped and queue continues
-- [ ] **CLI-06**: `registerHandler()` API for components to claim event types
-- [ ] **CLI-07**: When handler registers while queue is waiting, processing resumes immediately
-- [ ] **CLI-08**: `skipAll()` clears client queue (UI already shows truth)
-- [ ] **CLI-09**: `isAnimating` and `pendingCount` reactive state preserved
+- [x] **CLI-01**: Client-side animation queue processes events FIFO
+- [x] **CLI-02**: Wait-for-handler: queue pauses when no handler registered for current event type
+- [x] **CLI-03**: Configurable timeout for handler wait (default 3 seconds)
+- [x] **CLI-04**: Timeout logs console warning with event type, ID, and elapsed time
+- [x] **CLI-05**: After timeout, event is skipped and queue continues
+- [x] **CLI-06**: `registerHandler()` API for components to claim event types
+- [x] **CLI-07**: When handler registers while queue is waiting, processing resumes immediately
+- [x] **CLI-08**: `skipAll()` clears client queue (UI already shows truth)
+- [x] **CLI-09**: `isAnimating` and `pendingCount` reactive state preserved
 - [ ] **CLI-10**: Remove acknowledgment callback from `createAnimationEvents()`
 - [ ] **CLI-11**: Remove `useCurrentView()` composable and `CURRENT_VIEW_KEY`
 
@@ -93,15 +93,15 @@
 | SES-02 | Phase 87 | Complete |
 | SES-03 | Phase 87 | Complete |
 | SES-04 | Phase 87 | Complete |
-| CLI-01 | Phase 88 | Pending |
-| CLI-02 | Phase 88 | Pending |
-| CLI-03 | Phase 88 | Pending |
-| CLI-04 | Phase 88 | Pending |
-| CLI-05 | Phase 88 | Pending |
-| CLI-06 | Phase 88 | Pending |
-| CLI-07 | Phase 88 | Pending |
-| CLI-08 | Phase 88 | Pending |
-| CLI-09 | Phase 88 | Pending |
+| CLI-01 | Phase 88 | Complete |
+| CLI-02 | Phase 88 | Complete |
+| CLI-03 | Phase 88 | Complete |
+| CLI-04 | Phase 88 | Complete |
+| CLI-05 | Phase 88 | Complete |
+| CLI-06 | Phase 88 | Complete |
+| CLI-07 | Phase 88 | Complete |
+| CLI-08 | Phase 88 | Complete |
+| CLI-09 | Phase 88 | Complete |
 | CLI-10 | Phase 89 | Pending |
 | CLI-11 | Phase 89 | Pending |
 | UI-01 | Phase 89 | Pending |
@@ -121,4 +121,4 @@
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-08 after Phase 87 completion (SES requirements complete)*
+*Last updated: 2026-02-08 after Phase 88 completion (CLI-01 through CLI-09 complete)*
