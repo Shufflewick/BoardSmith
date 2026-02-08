@@ -14,12 +14,12 @@
 
 ### Engine -- Removal
 
-- [ ] **REM-01**: Remove `_theatreSnapshot` and all theatre state management from Game
-- [ ] **REM-02**: Remove `MutationCaptureContext`, property diffing, element attribute diffing from animate()
-- [ ] **REM-03**: Remove `acknowledgeAnimationEvents()` from Game
-- [ ] **REM-04**: Remove `theatreStateForPlayer()` and `theatreState` getter from Game
-- [ ] **REM-05**: Remove `theatre-state.ts` and `mutation-capture.ts` source files
-- [ ] **REM-06**: Remove all theatre-related tests and migrate to new system tests
+- [x] **REM-01**: Remove `_theatreSnapshot` and all theatre state management from Game
+- [x] **REM-02**: Remove `MutationCaptureContext`, property diffing, element attribute diffing from animate()
+- [x] **REM-03**: Remove `acknowledgeAnimationEvents()` from Game
+- [x] **REM-04**: Remove `theatreStateForPlayer()` and `theatreState` getter from Game
+- [x] **REM-05**: Remove `theatre-state.ts` and `mutation-capture.ts` source files
+- [x] **REM-06**: Remove all theatre-related tests and migrate to new system tests
 
 ### Session -- Simplified State Broadcasting
 
@@ -50,7 +50,7 @@
 
 ### Documentation & Migration
 
-- [ ] **DOC-01**: BREAKING.md documents all removed APIs with migration paths
+- [x] **DOC-01**: BREAKING.md documents all removed APIs with migration paths
 - [ ] **DOC-02**: Update ui-components.md animation events section
 - [ ] **DOC-03**: Update nomenclature.md -- revise Theatre View and Current View definitions
 - [ ] **DOC-04**: Update migration-guide.md for v3.0

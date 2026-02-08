@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v3.0 Animation Timeline -- Phase 85 Theatre Erasure complete, ready for Phase 86
+**Current focus:** v3.0 Animation Timeline -- Phase 86 Simplified Animation Events
 
 ## Current Position
 
-Phase: 85 of 90 (Theatre Erasure)
-Plan: 4 of 4 in current phase
-Status: Phase complete
-Last activity: 2026-02-08 -- Completed 85-04-PLAN.md
+Phase: 86 of 90 (Simplified Animation Events)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-08 -- Phase 85 Theatre Erasure complete and verified
 
 Progress: [██░░░░░░░░] 17%
 
@@ -68,5 +68,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 85-04-PLAN.md -- Phase 85 complete
+Stopped at: Phase 85 complete and verified, ready to plan Phase 86
 Resume file: None
