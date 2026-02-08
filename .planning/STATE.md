@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 86 of 90 (Simplified Animation Events)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-08 -- Phase 85 Theatre Erasure complete and verified
+Plan: 1 of TBD in current phase
+Status: In progress
+Last activity: 2026-02-08 -- Completed 86-01-PLAN.md
 
 Progress: [██░░░░░░░░] 17%
 
@@ -56,6 +56,8 @@ Recent decisions affecting current work:
 - Animation events as pure data channel (no mutation capture, no acknowledgment, no theatre snapshot)
 - Playback 100% client-owned (server never waits on animation)
 - Wait-for-handler with timeout (prevents fire-and-forget silent consumption)
+- AnimateCommand is not invertible (like MESSAGE) -- MCTS uses full state restore fallback
+- Buffer cleared at performAction() boundaries only, not at flow execute blocks
 
 ### Pending Todos
 
@@ -68,5 +70,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Phase 85 complete and verified, ready to plan Phase 86
+Stopped at: Completed 86-01-PLAN.md (animate API and command stack)
 Resume file: None
