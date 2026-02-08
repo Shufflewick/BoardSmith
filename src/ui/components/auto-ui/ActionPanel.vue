@@ -137,7 +137,7 @@ const actionsWithMetadata = computed(() => {
     return props.availableActions.map(name => ({
       name,
       prompt: formatActionName(name),
-      selections: [] as Selection[],
+      selections: [] as PickMetadata[],
     }));
   }
   // Map available actions to their metadata, falling back to a basic entry
@@ -149,7 +149,7 @@ const actionsWithMetadata = computed(() => {
     return {
       name,
       prompt: formatActionName(name),
-      selections: [] as Selection[],
+      selections: [] as PickMetadata[],
     };
   });
 });

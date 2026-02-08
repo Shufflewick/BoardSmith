@@ -169,6 +169,29 @@ export const TreeNode = defineComponent({
     };
   },
 });
+
+export interface ElementDiff {
+  added: number[];
+  removed: number[];
+  changed: number[];
+  fromIndex: number;
+  toIndex: number;
+}
+
+export interface DebugPanelProps {
+  /** Current game state (raw) */
+  state: any;
+  /** Current player seat */
+  playerSeat: number;
+  /** Total number of players */
+  playerCount: number;
+  /** Game ID */
+  gameId: string | null;
+  /** API base URL */
+  apiUrl?: string;
+  /** Whether panel is expanded */
+  expanded?: boolean;
+}
 </script>
 
 <script setup lang="ts">
@@ -179,14 +202,6 @@ interface SerializedAction {
   player: number;
   args: Record<string, unknown>;
   timestamp?: number;
-}
-
-interface ElementDiff {
-  added: number[];
-  removed: number[];
-  changed: number[];
-  fromIndex: number;
-  toIndex: number;
 }
 
 interface ActionTrace {
@@ -209,21 +224,6 @@ interface ActionTrace {
     filterApplied?: boolean;
     dependentOn?: string;
   }>;
-}
-
-interface DebugPanelProps {
-  /** Current game state (raw) */
-  state: any;
-  /** Current player seat */
-  playerSeat: number;
-  /** Total number of players */
-  playerCount: number;
-  /** Game ID */
-  gameId: string | null;
-  /** API base URL */
-  apiUrl?: string;
-  /** Whether panel is expanded */
-  expanded?: boolean;
 }
 
 const props = withDefaults(defineProps<DebugPanelProps>(), {
