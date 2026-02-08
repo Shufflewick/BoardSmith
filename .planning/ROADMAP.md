@@ -99,7 +99,10 @@ Plans:
   3. migration-guide.md has a v3.0 section documenting the full migration path from theatre view to animation timeline
   4. demo-animation game runs correctly with the new animation system (verified in browser)
   5. cribbage game animations (if using animate) work correctly with the new system (verified in browser)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 90-01-PLAN.md -- Update ui-components.md, nomenclature.md, and create migration-guide.md
+- [ ] 90-02-PLAN.md -- Migrate demo-animation and cribbage example games, verify in browser
 
 ## Progress
 
@@ -113,4 +116,4 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 | 87. Session Simplification | 1/1 | Complete | 2026-02-08 |
 | 88. Client Animation Queue | 1/1 | Complete | 2026-02-08 |
 | 89. UI Integration | 1/1 | Complete | 2026-02-08 |
-| 90. Documentation & Migration | 0/TBD | Not started | - |
+| 90. Documentation & Migration | 0/2 | Not started | - |
