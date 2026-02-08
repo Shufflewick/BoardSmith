@@ -1,7 +1,7 @@
 /**
  * Tests for useAnimationEvents composable
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import {
   createAnimationEvents,
@@ -70,6 +70,7 @@ describe('useAnimationEvents', () => {
       const instance = createAnimationEvents({
         events: () => events.value,
         acknowledge,
+        handlerWaitTimeout: 0,
       });
 
       const unregister = instance.registerHandler('test', async (event) => {
@@ -215,7 +216,7 @@ describe('useAnimationEvents', () => {
       consoleError.mockRestore();
     });
 
-    it('events without handlers are skipped (with optional delay)', async () => {
+    it('events without handlers are skipped when handlerWaitTimeout is 0', async () => {
       const events = ref<AnimationEvent[]>([]);
       const acknowledge = vi.fn();
       const handled: number[] = [];
@@ -223,26 +224,24 @@ describe('useAnimationEvents', () => {
       const instance = createAnimationEvents({
         events: () => events.value,
         acknowledge,
-        defaultDuration: 10,
+        handlerWaitTimeout: 0,
       });
 
       instance.registerHandler('handled', async (event) => {
         handled.push(event.id);
       });
 
-      const start = Date.now();
       events.value = [
-        createEvent(1, 'unhandled'), // Should use default delay
+        createEvent(1, 'unhandled'), // Should skip immediately
         createEvent(2, 'handled'),
-        createEvent(3, 'unhandled'), // Should use default delay
+        createEvent(3, 'unhandled'), // Should skip immediately
       ];
       await nextTick();
       await waitForIdle(instance);
-      const elapsed = Date.now() - start;
 
-      // Should have 2 unhandled events with 10ms delay each = ~20ms
-      expect(elapsed).toBeGreaterThanOrEqual(15);
+      // Only handled event should be processed
       expect(handled).toEqual([2]);
+      // All events acknowledged
       expect(acknowledge).toHaveBeenCalledWith(3);
     });
   });
@@ -841,6 +840,286 @@ describe('useAnimationEvents', () => {
         { event: 'handler-end', id: 2 },
         { event: 'ack', id: 2 },
       ]);
+    });
+  });
+
+  describe('wait-for-handler', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('event with no handler pauses queue, handler registration resumes processing', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+      const handled: AnimationEvent[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+      });
+
+      // Push event with no handler registered
+      events.value = [createEvent(1, 'combat')];
+      await nextTick();
+
+      // Queue is processing (waiting for handler)
+      expect(instance.isAnimating.value).toBe(true);
+
+      // Register handler while waiting
+      instance.registerHandler('combat', async (event) => {
+        handled.push(event);
+      });
+
+      await waitForIdle(instance);
+
+      // Handler was called with the event
+      expect(handled).toHaveLength(1);
+      expect(handled[0].id).toBe(1);
+      expect(handled[0].type).toBe('combat');
+    });
+
+    it('timeout expires and event is skipped with console warning', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+      });
+
+      events.value = [createEvent(42, 'unknownType')];
+      await nextTick();
+
+      // Advance past timeout
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(consoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('unknownType')
+      );
+      expect(consoleWarn).toHaveBeenCalledWith(
+        expect.stringContaining('42')
+      );
+      expect(instance.isAnimating.value).toBe(false);
+      expect(acknowledge).toHaveBeenCalledWith(42);
+
+      consoleWarn.mockRestore();
+    });
+
+    it('after timeout, processing continues to next event', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+      const handled: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+      });
+
+      instance.registerHandler('handled', async (event) => {
+        handled.push(event.id);
+      });
+
+      events.value = [
+        createEvent(1, 'unhandled'),
+        createEvent(2, 'handled'),
+      ];
+      await nextTick();
+
+      // Advance past timeout for unhandled event
+      await vi.advanceTimersByTimeAsync(3000);
+
+      // Allow handled event to process
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(consoleWarn).toHaveBeenCalledTimes(1);
+      expect(handled).toEqual([2]);
+
+      consoleWarn.mockRestore();
+    });
+
+    it('handler registered during wait resumes immediately (no timeout)', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+      const handled: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+      });
+
+      events.value = [createEvent(1, 'lazy')];
+      await nextTick();
+
+      // Waiting for handler
+      expect(instance.isAnimating.value).toBe(true);
+
+      // Do NOT advance timers to 3000ms
+      // Register handler while waiting
+      instance.registerHandler('lazy', async (event) => {
+        handled.push(event.id);
+      });
+
+      // Flush microtasks
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(handled).toEqual([1]);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      consoleWarn.mockRestore();
+    });
+
+    it('skipAll during handler wait cancels the wait and clears queue', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+      });
+
+      events.value = [
+        createEvent(1, 'unhandled'),
+        createEvent(2, 'unhandled'),
+      ];
+      await nextTick();
+
+      // Waiting for handler
+      expect(instance.isAnimating.value).toBe(true);
+
+      // Skip all
+      instance.skipAll();
+
+      // Allow microtasks to flush
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(instance.isAnimating.value).toBe(false);
+      expect(instance.pendingCount.value).toBe(0);
+
+      // Advance timers well past timeout -- verify no console.warn fires (timer was cleaned up)
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      consoleWarn.mockRestore();
+    });
+
+    it('custom timeout value works', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+        handlerWaitTimeout: 500,
+      });
+
+      events.value = [createEvent(1, 'unhandled')];
+      await nextTick();
+
+      // At 499ms, still waiting
+      await vi.advanceTimersByTimeAsync(499);
+      expect(instance.isAnimating.value).toBe(true);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      // At 500ms, timeout fires
+      await vi.advanceTimersByTimeAsync(1);
+      expect(consoleWarn).toHaveBeenCalled();
+
+      consoleWarn.mockRestore();
+    });
+
+    it('handlerWaitTimeout: 0 skips immediately (backward compat)', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+        handlerWaitTimeout: 0,
+      });
+
+      events.value = [createEvent(1, 'unhandled')];
+      await nextTick();
+      await waitForIdle(instance);
+
+      // Event was skipped without waiting and without warning
+      expect(consoleWarn).not.toHaveBeenCalled();
+      expect(acknowledge).toHaveBeenCalledWith(1);
+
+      consoleWarn.mockRestore();
+    });
+
+    it('multiple unhandled events each get their own wait', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+      const handled: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+      });
+
+      instance.registerHandler('known', async (event) => {
+        handled.push(event.id);
+      });
+
+      events.value = [
+        createEvent(1, 'unknown-a'),
+        createEvent(2, 'known'),
+        createEvent(3, 'unknown-b'),
+      ];
+      await nextTick();
+
+      // Advance past first timeout (unknown-a)
+      await vi.advanceTimersByTimeAsync(3000);
+
+      // Allow known event to process, then advance past second timeout (unknown-b)
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(consoleWarn).toHaveBeenCalledTimes(2);
+      expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('unknown-a'));
+      expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining('unknown-b'));
+      expect(handled).toEqual([2]);
+
+      consoleWarn.mockRestore();
+    });
+
+    it('handler already registered before event -- no wait needed', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const acknowledge = vi.fn();
+      const handled: number[] = [];
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+        acknowledge,
+      });
+
+      // Register handler BEFORE event arrives
+      instance.registerHandler('preregistered', async (event) => {
+        handled.push(event.id);
+      });
+
+      events.value = [createEvent(1, 'preregistered')];
+      await nextTick();
+      await waitForIdle(instance);
+
+      expect(handled).toEqual([1]);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      consoleWarn.mockRestore();
     });
   });
 

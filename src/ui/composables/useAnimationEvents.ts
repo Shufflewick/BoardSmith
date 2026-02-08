@@ -203,6 +203,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         handler = await waitForHandler(event.type, handlerWaitTimeout);
 
         if (!handler) {
+          // skipAll may have resolved the wait -- check before warning
+          if (skipRequested) {
+            break;
+          }
           // Timeout expired -- warn and skip
           console.warn(
             `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
