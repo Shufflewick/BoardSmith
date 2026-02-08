@@ -7,10 +7,10 @@
 
 ### Engine -- Animation Event System
 
-- [ ] **ENG-01**: `game.animate(type, data)` emits pure data events with no mutation capture
-- [ ] **ENG-02**: `game.animate()` accepts optional callback for truth advancement (convenience, not capture)
-- [ ] **ENG-03**: Animation events recorded as entries on the command stack
-- [ ] **ENG-04**: Animation event buffer persists across flow steps until next batch replaces it
+- [x] **ENG-01**: `game.animate(type, data)` emits pure data events with no mutation capture
+- [x] **ENG-02**: `game.animate()` accepts optional callback for truth advancement (convenience, not capture)
+- [x] **ENG-03**: Animation events recorded as entries on the command stack
+- [x] **ENG-04**: Animation event buffer persists across flow steps until next batch replaces it
 
 ### Engine -- Removal
 
@@ -79,16 +79,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | Phase 86 | Pending |
-| ENG-02 | Phase 86 | Pending |
-| ENG-03 | Phase 86 | Pending |
-| ENG-04 | Phase 86 | Pending |
-| REM-01 | Phase 85 | Pending |
-| REM-02 | Phase 85 | Pending |
-| REM-03 | Phase 85 | Pending |
-| REM-04 | Phase 85 | Pending |
-| REM-05 | Phase 85 | Pending |
-| REM-06 | Phase 85 | Pending |
+| ENG-01 | Phase 86 | Complete |
+| ENG-02 | Phase 86 | Complete |
+| ENG-03 | Phase 86 | Complete |
+| ENG-04 | Phase 86 | Complete |
+| REM-01 | Phase 85 | Complete |
+| REM-02 | Phase 85 | Complete |
+| REM-03 | Phase 85 | Complete |
+| REM-04 | Phase 85 | Complete |
+| REM-05 | Phase 85 | Complete |
+| REM-06 | Phase 85 | Complete |
 | SES-01 | Phase 87 | Pending |
 | SES-02 | Phase 87 | Pending |
 | SES-03 | Phase 87 | Pending |
@@ -107,7 +107,7 @@
 | UI-01 | Phase 89 | Pending |
 | UI-02 | Phase 89 | Pending |
 | UI-03 | Phase 89 | Pending |
-| DOC-01 | Phase 85 | Pending |
+| DOC-01 | Phase 85 | Complete |
 | DOC-02 | Phase 90 | Pending |
 | DOC-03 | Phase 90 | Pending |
 | DOC-04 | Phase 90 | Pending |
@@ -121,4 +121,4 @@
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-07 after roadmap creation (phase mapping complete)*
+*Last updated: 2026-02-08 after Phase 86 completion (ENG requirements complete)*

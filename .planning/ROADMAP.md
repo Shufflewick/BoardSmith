@@ -11,7 +11,7 @@ Replace the v2.9 theatre view and mutation capture system with a client-side ani
 ## Phases
 
 - [x] **Phase 85: Theatre Erasure** - Remove all theatre, mutation capture, and acknowledgment code; start BREAKING.md
-- [ ] **Phase 86: Simplified Animation Events** - Build the new `game.animate(type, data)` API with command stack entries
+- [x] **Phase 86: Simplified Animation Events** - Build the new `game.animate(type, data)` API with command stack entries
 - [ ] **Phase 87: Session Simplification** - Single-view broadcasting with animation events, remove acknowledgment protocol
 - [ ] **Phase 88: Client Animation Queue** - FIFO queue with wait-for-handler, timeout, skip, and reactive state
 - [ ] **Phase 89: UI Integration** - Wire GameShell and ActionPanel to new animation system, remove old composables
@@ -47,7 +47,7 @@ Plans:
   4. The animation event buffer persists across flow steps and is replaced when the next batch of events arrives (not accumulated indefinitely)
 **Plans:** 1 plan
 Plans:
-- [ ] 86-01-PLAN.md -- AnimateCommand in command system, game.animate() API, buffer lifecycle, tests
+- [x] 86-01-PLAN.md -- AnimateCommand in command system, game.animate() API, buffer lifecycle, tests
 
 ### Phase 87: Session Simplification
 **Goal**: The session layer broadcasts a single truth view with animation events -- no theatre/currentView split, no acknowledgment protocol
@@ -103,7 +103,7 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 85. Theatre Erasure | 4/4 | Complete | 2026-02-08 |
-| 86. Simplified Animation Events | 0/1 | Not started | - |
+| 86. Simplified Animation Events | 1/1 | Complete | 2026-02-08 |
 | 87. Session Simplification | 0/TBD | Not started | - |
 | 88. Client Animation Queue | 0/TBD | Not started | - |
 | 89. UI Integration | 0/TBD | Not started | - |

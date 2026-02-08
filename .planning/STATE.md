@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v3.0 Animation Timeline -- Phase 86 Simplified Animation Events
+**Current focus:** v3.0 Animation Timeline -- Phase 87 Session Simplification
 
 ## Current Position
 
-Phase: 86 of 90 (Simplified Animation Events)
-Plan: 1 of TBD in current phase
-Status: In progress
-Last activity: 2026-02-08 -- Completed 86-01-PLAN.md
+Phase: 87 of 90 (Session Simplification)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-08 -- Phase 86 Simplified Animation Events complete and verified
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 33%
 
 ## Milestones
 
@@ -70,5 +70,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 86-01-PLAN.md (animate API and command stack)
+Stopped at: Phase 86 complete and verified, ready to plan Phase 87
 Resume file: None
