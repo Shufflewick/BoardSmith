@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 88 of 90 (Client Animation Queue)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-08 -- Phase 87 Session Simplification complete and verified
+Plan: 1 of 1 in current phase
+Status: Phase complete
+Last activity: 2026-02-08 -- Completed 88-01-PLAN.md
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 80%
 
 ## Milestones
 
@@ -58,6 +58,7 @@ Recent decisions affecting current work:
 - Wait-for-handler with timeout (prevents fire-and-forget silent consumption)
 - AnimateCommand is not invertible (like MESSAGE) -- MCTS uses full state restore fallback
 - Buffer cleared at performAction() boundaries only, not at flow execute blocks
+- handlerWaitTimeout supersedes defaultDuration for no-handler case (defaultDuration kept for backward compat)
 
 ### Pending Todos
 
@@ -70,5 +71,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Phase 87 complete and verified, ready to plan Phase 88
+Stopped at: Phase 88 complete, ready for Phase 89 UI Integration
 Resume file: None

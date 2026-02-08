@@ -74,7 +74,7 @@ Plans:
   5. `skipAll()` clears the queue instantly (UI already shows truth), and `isAnimating` / `pendingCount` remain reactive throughout
 **Plans:** 1 plan
 Plans:
-- [ ] 88-01-PLAN.md -- Wait-for-handler mechanism, timeout, skipAll cleanup, comprehensive tests
+- [x] 88-01-PLAN.md -- Wait-for-handler mechanism, timeout, skipAll cleanup, comprehensive tests
 
 ### Phase 89: UI Integration
 **Goal**: GameShell and ActionPanel work with the new animation system -- old composables removed, single game view provided
@@ -109,6 +109,6 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 | 85. Theatre Erasure | 4/4 | Complete | 2026-02-08 |
 | 86. Simplified Animation Events | 1/1 | Complete | 2026-02-08 |
 | 87. Session Simplification | 1/1 | Complete | 2026-02-08 |
-| 88. Client Animation Queue | 0/1 | Not started | - |
+| 88. Client Animation Queue | 1/1 | Complete | 2026-02-08 |
 | 89. UI Integration | 0/TBD | Not started | - |
 | 90. Documentation & Migration | 0/TBD | Not started | - |
