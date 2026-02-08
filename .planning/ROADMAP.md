@@ -85,7 +85,9 @@ Plans:
   2. `useCurrentView()` composable and `CURRENT_VIEW_KEY` are deleted -- components use the single truth view
   3. GameShell provides a single `gameView` (truth) to all child components -- no `currentGameView` alternative
   4. ActionPanel gates on pending animation events before showing new decisions (preserved behavior from v2.9)
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 89-01-PLAN.md -- Remove acknowledge from animation events composable, update tests, verify UI chain
 
 ### Phase 90: Documentation & Migration
 **Goal**: Documentation reflects the v3.0 animation system, example games are migrated, and external teams have a complete migration guide
@@ -110,5 +112,5 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 | 86. Simplified Animation Events | 1/1 | Complete | 2026-02-08 |
 | 87. Session Simplification | 1/1 | Complete | 2026-02-08 |
 | 88. Client Animation Queue | 1/1 | Complete | 2026-02-08 |
-| 89. UI Integration | 0/TBD | Not started | - |
+| 89. UI Integration | 0/1 | Not started | - |
 | 90. Documentation & Migration | 0/TBD | Not started | - |
