@@ -43,12 +43,10 @@ describe('useAnimationEvents', () => {
   describe('handler registration', () => {
     it('registers handler for event type', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -64,12 +62,10 @@ describe('useAnimationEvents', () => {
 
     it('returns unregister function that removes handler', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
         handlerWaitTimeout: 0,
       });
 
@@ -95,12 +91,10 @@ describe('useAnimationEvents', () => {
 
     it('multiple handlers for different types work independently', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: Array<{ type: string; id: number }> = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('typeA', async (event) => {
@@ -130,12 +124,10 @@ describe('useAnimationEvents', () => {
   describe('sequential processing', () => {
     it('processes events in order', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const order: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -156,12 +148,10 @@ describe('useAnimationEvents', () => {
 
     it('waits for handler Promise before next event', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const timeline: Array<{ event: string; id: number }> = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -185,13 +175,11 @@ describe('useAnimationEvents', () => {
 
     it('handler errors do not stop subsequent events', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -218,12 +206,10 @@ describe('useAnimationEvents', () => {
 
     it('events without handlers are skipped when handlerWaitTimeout is 0', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
         handlerWaitTimeout: 0,
       });
 
@@ -241,19 +227,15 @@ describe('useAnimationEvents', () => {
 
       // Only handled event should be processed
       expect(handled).toEqual([2]);
-      // All events acknowledged
-      expect(acknowledge).toHaveBeenCalledWith(3);
     });
   });
 
   describe('isAnimating state', () => {
     it('is false when no events', () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       expect(instance.isAnimating.value).toBe(false);
@@ -261,12 +243,10 @@ describe('useAnimationEvents', () => {
 
     it('is true during processing', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       let wasAnimatingDuringHandler = false;
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async () => {
@@ -287,11 +267,9 @@ describe('useAnimationEvents', () => {
 
     it('is false after all events processed', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async () => {
@@ -309,12 +287,10 @@ describe('useAnimationEvents', () => {
   describe('skipAll', () => {
     it('clears pending events', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -339,43 +315,12 @@ describe('useAnimationEvents', () => {
       expect(instance.pendingCount.value).toBe(0);
     });
 
-    it('acknowledges all pending event IDs', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        acknowledge,
-      });
-
-      instance.registerHandler('test', async (event) => {
-        if (event.id === 1) {
-          // Skip during first handler
-          instance.skipAll();
-        }
-        await new Promise((r) => setTimeout(r, 10));
-      });
-
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(2, 'test'),
-        createEvent(3, 'test'),
-      ];
-      await nextTick();
-      await waitForIdle(instance);
-
-      // Should acknowledge up to event 3 (the last pending)
-      expect(acknowledge).toHaveBeenCalledWith(3);
-    });
-
     it('stops processing immediately', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handlerStarts: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -399,12 +344,10 @@ describe('useAnimationEvents', () => {
 
     it('works when paused (resumes and clears)', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -435,19 +378,16 @@ describe('useAnimationEvents', () => {
 
       // Only first event handled, rest skipped
       expect(handled).toEqual([1]);
-      expect(acknowledge).toHaveBeenCalledWith(3);
     });
   });
 
   describe('paused state', () => {
     it('pausing stops processing at current event', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -473,12 +413,10 @@ describe('useAnimationEvents', () => {
 
     it('resuming continues from where it stopped', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -509,12 +447,10 @@ describe('useAnimationEvents', () => {
 
     it('events still queue while paused', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -548,11 +484,9 @@ describe('useAnimationEvents', () => {
   describe('pendingCount', () => {
     it('updates as events are added', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       // Pause so events queue up
@@ -570,12 +504,10 @@ describe('useAnimationEvents', () => {
 
     it('decrements as events are processed', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const counts: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async () => {
@@ -597,11 +529,9 @@ describe('useAnimationEvents', () => {
 
     it('is zero after skipAll', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       // Pause to queue events
@@ -625,12 +555,10 @@ describe('useAnimationEvents', () => {
   describe('event deduplication', () => {
     it('does not re-process events with same ID', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -653,12 +581,10 @@ describe('useAnimationEvents', () => {
 
     it('only queues events with id > lastProcessedId', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -685,12 +611,10 @@ describe('useAnimationEvents', () => {
 
     it('handles events arriving during processing', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('test', async (event) => {
@@ -711,138 +635,6 @@ describe('useAnimationEvents', () => {
     });
   });
 
-  describe('acknowledgment', () => {
-    it('calls acknowledge after each event (per-event advancement)', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        acknowledge,
-      });
-
-      instance.registerHandler('test', async () => {
-        await new Promise((r) => setTimeout(r, 10));
-      });
-
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(2, 'test'),
-        createEvent(3, 'test'),
-      ];
-      await nextTick();
-      await waitForIdle(instance);
-
-      // Per-event: 3 events = 3 acknowledge calls
-      expect(acknowledge).toHaveBeenCalledTimes(3);
-      expect(acknowledge).toHaveBeenNthCalledWith(1, 1);
-      expect(acknowledge).toHaveBeenNthCalledWith(2, 2);
-      expect(acknowledge).toHaveBeenNthCalledWith(3, 3);
-    });
-
-    it('passes correct event ID per call (non-sequential IDs)', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        acknowledge,
-      });
-
-      instance.registerHandler('test', async () => {
-        await new Promise((r) => setTimeout(r, 5));
-      });
-
-      events.value = [createEvent(5, 'test'), createEvent(10, 'test')];
-      await nextTick();
-      await waitForIdle(instance);
-
-      expect(acknowledge).toHaveBeenCalledTimes(2);
-      expect(acknowledge).toHaveBeenNthCalledWith(1, 5);
-      expect(acknowledge).toHaveBeenNthCalledWith(2, 10);
-    });
-
-    it('skipAll acknowledges remaining events with single call to last ID', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        acknowledge,
-      });
-
-      // Pause so events queue
-      instance.paused.value = true;
-
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(5, 'test'),
-        createEvent(10, 'test'),
-      ];
-      await nextTick();
-
-      instance.skipAll();
-
-      // skipAll sends a single acknowledge with the last event ID
-      expect(acknowledge).toHaveBeenCalledTimes(1);
-      expect(acknowledge).toHaveBeenCalledWith(10);
-    });
-
-    it('does not acknowledge if no events processed', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
-
-      createAnimationEvents({
-        events: () => events.value,
-        acknowledge,
-      });
-
-      // Empty events array
-      events.value = [];
-      await nextTick();
-      await new Promise((r) => setTimeout(r, 50));
-
-      expect(acknowledge).not.toHaveBeenCalled();
-    });
-
-    it('acknowledge is called between handler completions (not batched)', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
-      const timeline: Array<{ event: string; id: number }> = [];
-
-      const instance = createAnimationEvents({
-        events: () => events.value,
-        acknowledge: (id) => {
-          timeline.push({ event: 'ack', id });
-          acknowledge(id);
-        },
-      });
-
-      instance.registerHandler('test', async (event) => {
-        timeline.push({ event: 'handler-start', id: event.id });
-        await new Promise((r) => setTimeout(r, 10));
-        timeline.push({ event: 'handler-end', id: event.id });
-      });
-
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(2, 'test'),
-      ];
-      await nextTick();
-      await waitForIdle(instance);
-
-      // Each acknowledge happens AFTER its handler completes, BEFORE next handler starts
-      expect(timeline).toEqual([
-        { event: 'handler-start', id: 1 },
-        { event: 'handler-end', id: 1 },
-        { event: 'ack', id: 1 },
-        { event: 'handler-start', id: 2 },
-        { event: 'handler-end', id: 2 },
-        { event: 'ack', id: 2 },
-      ]);
-    });
-  });
-
   describe('wait-for-handler', () => {
     afterEach(() => {
       vi.useRealTimers();
@@ -850,12 +642,10 @@ describe('useAnimationEvents', () => {
 
     it('event with no handler pauses queue, handler registration resumes processing', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: AnimationEvent[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       // Push event with no handler registered
@@ -882,11 +672,9 @@ describe('useAnimationEvents', () => {
       vi.useFakeTimers();
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       events.value = [createEvent(42, 'unknownType')];
@@ -902,7 +690,6 @@ describe('useAnimationEvents', () => {
         expect.stringContaining('42')
       );
       expect(instance.isAnimating.value).toBe(false);
-      expect(acknowledge).toHaveBeenCalledWith(42);
 
       consoleWarn.mockRestore();
     });
@@ -911,12 +698,10 @@ describe('useAnimationEvents', () => {
       vi.useFakeTimers();
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('handled', async (event) => {
@@ -945,12 +730,10 @@ describe('useAnimationEvents', () => {
       vi.useFakeTimers();
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       events.value = [createEvent(1, 'lazy')];
@@ -978,11 +761,9 @@ describe('useAnimationEvents', () => {
       vi.useFakeTimers();
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       events.value = [
@@ -1014,11 +795,9 @@ describe('useAnimationEvents', () => {
       vi.useFakeTimers();
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
         handlerWaitTimeout: 500,
       });
 
@@ -1039,12 +818,10 @@ describe('useAnimationEvents', () => {
 
     it('handlerWaitTimeout: 0 skips immediately (backward compat)', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
         handlerWaitTimeout: 0,
       });
 
@@ -1054,7 +831,6 @@ describe('useAnimationEvents', () => {
 
       // Event was skipped without waiting and without warning
       expect(consoleWarn).not.toHaveBeenCalled();
-      expect(acknowledge).toHaveBeenCalledWith(1);
 
       consoleWarn.mockRestore();
     });
@@ -1063,12 +839,10 @@ describe('useAnimationEvents', () => {
       vi.useFakeTimers();
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       instance.registerHandler('known', async (event) => {
@@ -1098,13 +872,11 @@ describe('useAnimationEvents', () => {
 
     it('handler already registered before event -- no wait needed', async () => {
       const events = ref<AnimationEvent[]>([]);
-      const acknowledge = vi.fn();
       const handled: number[] = [];
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const instance = createAnimationEvents({
         events: () => events.value,
-        acknowledge,
       });
 
       // Register handler BEFORE event arrives
