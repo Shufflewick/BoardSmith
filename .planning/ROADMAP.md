@@ -10,7 +10,7 @@ Replace the v2.9 theatre view and mutation capture system with a client-side ani
 
 ## Phases
 
-- [ ] **Phase 85: Theatre Erasure** - Remove all theatre, mutation capture, and acknowledgment code; start BREAKING.md
+- [x] **Phase 85: Theatre Erasure** - Remove all theatre, mutation capture, and acknowledgment code; start BREAKING.md
 - [ ] **Phase 86: Simplified Animation Events** - Build the new `game.animate(type, data)` API with command stack entries
 - [ ] **Phase 87: Session Simplification** - Single-view broadcasting with animation events, remove acknowledgment protocol
 - [ ] **Phase 88: Client Animation Queue** - FIFO queue with wait-for-handler, timeout, skip, and reactive state
@@ -100,7 +100,7 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 85. Theatre Erasure | 3/4 | In progress | - |
+| 85. Theatre Erasure | 4/4 | Complete | 2026-02-08 |
 | 86. Simplified Animation Events | 0/TBD | Not started | - |
 | 87. Session Simplification | 0/TBD | Not started | - |
 | 88. Client Animation Queue | 0/TBD | Not started | - |
