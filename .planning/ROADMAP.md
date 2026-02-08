@@ -14,7 +14,7 @@ Replace the v2.9 theatre view and mutation capture system with a client-side ani
 - [x] **Phase 86: Simplified Animation Events** - Build the new `game.animate(type, data)` API with command stack entries
 - [x] **Phase 87: Session Simplification** - Single-view broadcasting with animation events, remove acknowledgment protocol
 - [x] **Phase 88: Client Animation Queue** - FIFO queue with wait-for-handler, timeout, skip, and reactive state
-- [ ] **Phase 89: UI Integration** - Wire GameShell and ActionPanel to new animation system, remove old composables
+- [x] **Phase 89: UI Integration** - Wire GameShell and ActionPanel to new animation system, remove old composables
 - [ ] **Phase 90: Documentation & Migration** - Update docs, migrate example games, complete BREAKING.md
 
 ## Phase Details
@@ -87,7 +87,7 @@ Plans:
   4. ActionPanel gates on pending animation events before showing new decisions (preserved behavior from v2.9)
 **Plans:** 1 plan
 Plans:
-- [ ] 89-01-PLAN.md -- Remove acknowledge from animation events composable, update tests, verify UI chain
+- [x] 89-01-PLAN.md -- Remove acknowledge from animation events composable, update tests, verify UI chain
 
 ### Phase 90: Documentation & Migration
 **Goal**: Documentation reflects the v3.0 animation system, example games are migrated, and external teams have a complete migration guide
@@ -112,5 +112,5 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 | 86. Simplified Animation Events | 1/1 | Complete | 2026-02-08 |
 | 87. Session Simplification | 1/1 | Complete | 2026-02-08 |
 | 88. Client Animation Queue | 1/1 | Complete | 2026-02-08 |
-| 89. UI Integration | 0/1 | Not started | - |
+| 89. UI Integration | 1/1 | Complete | 2026-02-08 |
 | 90. Documentation & Migration | 0/TBD | Not started | - |

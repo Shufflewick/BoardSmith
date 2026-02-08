@@ -39,14 +39,14 @@
 - [x] **CLI-07**: When handler registers while queue is waiting, processing resumes immediately
 - [x] **CLI-08**: `skipAll()` clears client queue (UI already shows truth)
 - [x] **CLI-09**: `isAnimating` and `pendingCount` reactive state preserved
-- [ ] **CLI-10**: Remove acknowledgment callback from `createAnimationEvents()`
-- [ ] **CLI-11**: Remove `useCurrentView()` composable and `CURRENT_VIEW_KEY`
+- [x] **CLI-10**: Remove acknowledgment callback from `createAnimationEvents()`
+- [x] **CLI-11**: Remove `useCurrentView()` composable and `CURRENT_VIEW_KEY`
 
 ### UI -- Animation Integration
 
-- [ ] **UI-01**: ActionPanel gates on pending animation events (preserved behavior)
-- [ ] **UI-02**: GameShell wires `createAnimationEvents` without acknowledge callback
-- [ ] **UI-03**: GameShell provides single `gameView` (truth) -- no `currentGameView`
+- [x] **UI-01**: ActionPanel gates on pending animation events (preserved behavior)
+- [x] **UI-02**: GameShell wires `createAnimationEvents` without acknowledge callback
+- [x] **UI-03**: GameShell provides single `gameView` (truth) -- no `currentGameView`
 
 ### Documentation & Migration
 
@@ -102,11 +102,11 @@
 | CLI-07 | Phase 88 | Complete |
 | CLI-08 | Phase 88 | Complete |
 | CLI-09 | Phase 88 | Complete |
-| CLI-10 | Phase 89 | Pending |
-| CLI-11 | Phase 89 | Pending |
-| UI-01 | Phase 89 | Pending |
-| UI-02 | Phase 89 | Pending |
-| UI-03 | Phase 89 | Pending |
+| CLI-10 | Phase 89 | Complete |
+| CLI-11 | Phase 89 | Complete |
+| UI-01 | Phase 89 | Complete |
+| UI-02 | Phase 89 | Complete |
+| UI-03 | Phase 89 | Complete |
 | DOC-01 | Phase 85 | Complete |
 | DOC-02 | Phase 90 | Pending |
 | DOC-03 | Phase 90 | Pending |
@@ -121,4 +121,4 @@
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-08 after Phase 88 completion (CLI-01 through CLI-09 complete)*
+*Last updated: 2026-02-08 after Phase 89 completion (CLI-10, CLI-11, UI-01, UI-02, UI-03 complete)*
