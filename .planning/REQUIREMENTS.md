@@ -51,11 +51,11 @@
 ### Documentation & Migration
 
 - [x] **DOC-01**: BREAKING.md documents all removed APIs with migration paths
-- [ ] **DOC-02**: Update ui-components.md animation events section
-- [ ] **DOC-03**: Update nomenclature.md -- revise Theatre View and Current View definitions
-- [ ] **DOC-04**: Update migration-guide.md for v3.0
-- [ ] **DOC-05**: Migrate demo-animation game to new system
-- [ ] **DOC-06**: Migrate cribbage game to new system (if it uses animate)
+- [x] **DOC-02**: Update ui-components.md animation events section
+- [x] **DOC-03**: Update nomenclature.md -- revise Theatre View and Current View definitions
+- [x] **DOC-04**: Update migration-guide.md for v3.0
+- [x] **DOC-05**: Migrate demo-animation game to new system
+- [x] **DOC-06**: Migrate cribbage game to new system (if it uses animate)
 
 ## v2 Requirements
 
@@ -108,11 +108,11 @@
 | UI-02 | Phase 89 | Complete |
 | UI-03 | Phase 89 | Complete |
 | DOC-01 | Phase 85 | Complete |
-| DOC-02 | Phase 90 | Pending |
-| DOC-03 | Phase 90 | Pending |
-| DOC-04 | Phase 90 | Pending |
-| DOC-05 | Phase 90 | Pending |
-| DOC-06 | Phase 90 | Pending |
+| DOC-02 | Phase 90 | Complete |
+| DOC-03 | Phase 90 | Complete |
+| DOC-04 | Phase 90 | Complete |
+| DOC-05 | Phase 90 | Complete |
+| DOC-06 | Phase 90 | Complete |
 
 **Coverage:**
 - v1 requirements: 34 total
@@ -121,4 +121,4 @@
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-08 after Phase 89 completion (CLI-10, CLI-11, UI-01, UI-02, UI-03 complete)*
+*Last updated: 2026-02-08 after Phase 90 completion (DOC-02 through DOC-06 complete -- all v1 requirements satisfied)*

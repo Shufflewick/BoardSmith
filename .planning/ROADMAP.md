@@ -1,6 +1,6 @@
 # Milestone v3.0: Animation Timeline
 
-**Status:** In progress
+**Status:** Complete
 **Phases:** 85-90
 **Total Plans:** TBD
 
@@ -15,7 +15,7 @@ Replace the v2.9 theatre view and mutation capture system with a client-side ani
 - [x] **Phase 87: Session Simplification** - Single-view broadcasting with animation events, remove acknowledgment protocol
 - [x] **Phase 88: Client Animation Queue** - FIFO queue with wait-for-handler, timeout, skip, and reactive state
 - [x] **Phase 89: UI Integration** - Wire GameShell and ActionPanel to new animation system, remove old composables
-- [ ] **Phase 90: Documentation & Migration** - Update docs, migrate example games, complete BREAKING.md
+- [x] **Phase 90: Documentation & Migration** - Update docs, migrate example games, complete BREAKING.md
 
 ## Phase Details
 
@@ -101,8 +101,8 @@ Plans:
   5. cribbage game animations (if using animate) work correctly with the new system (verified in browser)
 **Plans:** 2 plans
 Plans:
-- [ ] 90-01-PLAN.md -- Update ui-components.md, nomenclature.md, and create migration-guide.md
-- [ ] 90-02-PLAN.md -- Migrate demo-animation and cribbage example games, verify in browser
+- [x] 90-01-PLAN.md -- Update ui-components.md, nomenclature.md, and create migration-guide.md
+- [x] 90-02-PLAN.md -- Migrate demo-animation and cribbage example games, verify in browser
 
 ## Progress
 
@@ -116,4 +116,4 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 | 87. Session Simplification | 1/1 | Complete | 2026-02-08 |
 | 88. Client Animation Queue | 1/1 | Complete | 2026-02-08 |
 | 89. UI Integration | 1/1 | Complete | 2026-02-08 |
-| 90. Documentation & Migration | 0/2 | Not started | - |
+| 90. Documentation & Migration | 2/2 | Complete | 2026-02-08 |

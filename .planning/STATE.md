@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v3.0 Animation Timeline -- Phase 90 Documentation & Migration
+**Current focus:** v3.0 Animation Timeline -- Complete
 
 ## Current Position
 
 Phase: 90 of 90 (Documentation & Migration)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-08 -- Completed 90-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Milestone complete
+Last activity: 2026-02-08 -- Completed 90-02-PLAN.md (phase 90 complete, milestone complete)
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -43,7 +43,10 @@ Progress: [█████████░] 92%
 - v2.9 Theatre View (Phases 80-84) -- shipped 2026-02-07
 
 **In Progress:**
-- v3.0 Animation Timeline (Phases 85-90)
+- (none)
+
+**Just Completed:**
+- v3.0 Animation Timeline (Phases 85-90) -- shipped 2026-02-08
 
 ## Accumulated Context
 
@@ -71,5 +74,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 90-01-PLAN.md
+Stopped at: v3.0 milestone complete -- all 6 phases (85-90) shipped
 Resume file: None
