@@ -24,8 +24,10 @@
  * // In child components
  * const animations = useAnimationEvents();
  * if (animations) {
- *   animations.registerHandler('combat', async (event) => {
+ *   animations.registerHandler('combat', async (event, { signal }) => {
  *     await playExplosionAnimation(event.data);
+ *     if (signal.aborted) return; // skip was pressed
+ *     await playAftermath(event.data);
  *   });
  * }
  * ```
@@ -34,11 +36,20 @@ import { ref, watch, type Ref, type InjectionKey, provide, inject } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
 
 /**
+ * Context passed to animation handlers as the second argument.
+ */
+export interface AnimationHandlerContext {
+  /** AbortSignal that fires when skipAll() is called during this handler's execution. */
+  signal: AbortSignal;
+}
+
+/**
  * Handler function for animation events.
  * Must return a Promise that resolves when the animation is complete.
+ * The optional second argument provides a signal for cooperative skip support.
  */
 export interface AnimationHandler {
-  (event: AnimationEvent): Promise<void>;
+  (event: AnimationEvent, context: AnimationHandlerContext): Promise<void>;
 }
 
 /**
@@ -125,6 +136,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // Processing state
   let isProcessing = false;
   let skipRequested = false;
+
+  // Abort controller for the currently-running handler
+  let currentHandlerAbort: AbortController | null = null;
 
   // Pause/resume synchronization
   let unpauseResolve: (() => void) | null = null;
@@ -214,12 +228,25 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       }
 
       if (handler) {
+        const abort = new AbortController();
+        currentHandlerAbort = abort;
         try {
-          await handler(event);
+          // Race handler against abort so skipAll() unblocks the queue immediately
+          await Promise.race([
+            handler(event, { signal: abort.signal }),
+            new Promise<void>((resolve) => {
+              if (abort.signal.aborted) { resolve(); return; }
+              abort.signal.addEventListener('abort', () => resolve(), { once: true });
+            }),
+          ]);
         } catch (error) {
-          // Log error but continue processing - don't let one handler break the chain
-          console.error(`Animation handler error for event type '${event.type}':`, error);
+          // Suppress errors from aborted handlers
+          if (!abort.signal.aborted) {
+            // Log error but continue processing - don't let one handler break the chain
+            console.error(`Animation handler error for event type '${event.type}':`, error);
+          }
         }
+        currentHandlerAbort = null;
       }
       // No handler and handlerWaitTimeout is 0 -- skip immediately (backward compat)
 
@@ -244,6 +271,12 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     queue.length = 0;
     pendingCount.value = 0;
     skipRequested = true;
+
+    // Abort the currently-running handler so the queue unblocks immediately
+    if (currentHandlerAbort) {
+      currentHandlerAbort.abort();
+      currentHandlerAbort = null;
+    }
 
     // If paused, resolve the unpause promise to exit the wait
     if (unpauseResolve) {

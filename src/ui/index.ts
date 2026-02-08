@@ -120,6 +120,7 @@ export {
   useAnimationEvents,
   ANIMATION_EVENTS_KEY,
   type AnimationHandler,
+  type AnimationHandlerContext,
   type UseAnimationEventsOptions,
   type UseAnimationEventsReturn,
 } from './composables/useAnimationEvents.js';

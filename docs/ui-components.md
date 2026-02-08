@@ -1215,7 +1215,8 @@ import { useAnimationEvents } from 'boardsmith/ui';
 const animations = useAnimationEvents();
 
 // Register handler - returns cleanup function
-const unregister = animations?.registerHandler('combat', async (event) => {
+// The second argument provides a signal for cooperative skip support
+const unregister = animations?.registerHandler('combat', async (event, { signal }) => {
   const { attackerId, targetId, damage, outcome } = event.data;
 
   // Find DOM elements
@@ -1224,9 +1225,11 @@ const unregister = animations?.registerHandler('combat', async (event) => {
 
   // Play attack animation
   await playAttackAnimation(attackerEl, targetEl);
+  if (signal.aborted) return; // User pressed skip
 
   // Show damage number
   await showDamageNumber(targetEl, damage);
+  if (signal.aborted) return;
 
   if (outcome === 'kill') {
     await playDeathAnimation(targetEl);
@@ -1249,7 +1252,7 @@ onUnmounted(() => unregister?.());
 
 | Property/Method | Type | Description |
 |-----------------|------|-------------|
-| `registerHandler(type, handler)` | `(string, (event) => Promise<void>) => () => void` | Register handler, returns cleanup function |
+| `registerHandler(type, handler)` | `(string, (event, { signal }) => Promise<void>) => () => void` | Register handler, returns cleanup function. `signal` is an `AbortSignal` that fires on skip. |
 | `isAnimating` | `Ref<boolean>` | Whether animations are currently playing |
 | `paused` | `Ref<boolean>` | Pause/resume control |
 | `skipAll()` | `() => void` | Skip remaining animations |
@@ -1274,8 +1277,9 @@ const { fly, flyingElements, flyOnAppear } = useFlyingElements();
 
 // Animation events for custom handlers
 const animationEvents = useAnimationEvents();
-animationEvents.registerHandler('combat', async (event) => {
+animationEvents.registerHandler('combat', async (event, { signal }) => {
   await playCombatAnimation(event.data);
+  if (signal.aborted) return; // skip support
 });
 ```
 

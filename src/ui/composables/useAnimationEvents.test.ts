@@ -379,6 +379,97 @@ describe('useAnimationEvents', () => {
       // Only first event handled, rest skipped
       expect(handled).toEqual([1]);
     });
+
+    it('aborts in-flight handler via signal so queue unblocks immediately', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const timeline: string[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('slow', async (_event, { signal }) => {
+        timeline.push('handler-start');
+        // Long-running handler that cooperates with skip
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => { timeline.push('handler-timeout'); resolve(); }, 5000);
+          signal.addEventListener('abort', () => { clearTimeout(timer); timeline.push('handler-aborted'); resolve(); }, { once: true });
+        });
+        timeline.push('handler-end');
+      });
+
+      events.value = [createEvent(1, 'slow')];
+      await nextTick();
+
+      // Handler should be running
+      expect(instance.isAnimating.value).toBe(true);
+      expect(timeline).toEqual(['handler-start']);
+
+      // Skip — should abort the handler and unblock the queue immediately
+      instance.skipAll();
+
+      // Give microtasks a chance to settle
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(timeline).toContain('handler-aborted');
+      expect(timeline).toContain('handler-end');
+      expect(timeline).not.toContain('handler-timeout');
+      expect(instance.isAnimating.value).toBe(false);
+    });
+
+    it('provides signal to handler that is not aborted during normal playback', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      let signalAborted: boolean | undefined;
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('test', async (_event, { signal }) => {
+        signalAborted = signal.aborted;
+      });
+
+      events.value = [createEvent(1, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+
+      expect(signalAborted).toBe(false);
+    });
+
+    it('skipAll unblocks queue even when handler does not check signal', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const handled: number[] = [];
+      let handlerFinished = false;
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      // Non-cooperative handler — ignores signal
+      instance.registerHandler('test', async (event) => {
+        handled.push(event.id);
+        await new Promise((r) => setTimeout(r, 5000));
+        handlerFinished = true;
+      });
+
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
+      await nextTick();
+
+      expect(instance.isAnimating.value).toBe(true);
+
+      // Skip should unblock the queue via abort race, even though handler ignores signal
+      instance.skipAll();
+
+      // Give microtasks a chance
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Queue unblocked — isAnimating is false
+      expect(instance.isAnimating.value).toBe(false);
+      // Only first handler started (second was cleared from queue)
+      expect(handled).toEqual([1]);
+      // Handler is still running in background (hasn't finished its 5s timeout)
+      expect(handlerFinished).toBe(false);
+    });
   });
 
   describe('paused state', () => {
