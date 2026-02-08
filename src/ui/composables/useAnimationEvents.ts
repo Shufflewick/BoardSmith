@@ -12,7 +12,7 @@
  * // In GameShell setup (root component)
  * const animationEvents = createAnimationEvents({
  *   events: () => state.value?.animationEvents,
- *   acknowledge: (upToId) => session.acknowledgeAnimations(upToId),
+ *   acknowledge: (upToId) => notifyServer(upToId),
  * });
  * provideAnimationEvents(animationEvents);
  *
@@ -42,7 +42,7 @@ export interface AnimationHandler {
 export interface UseAnimationEventsOptions {
   /** Getter that returns animation events from PlayerGameState */
   events: () => AnimationEvent[] | undefined;
-  /** Callback to acknowledge events (calls session.acknowledgeAnimations) */
+  /** Callback to acknowledge processed events */
   acknowledge: (upToId: number) => void;
   /** Default delay for events without handlers (ms, default: 0) */
   defaultDuration?: number;

@@ -23,10 +23,10 @@
 
 ### Session -- Simplified State Broadcasting
 
-- [ ] **SES-01**: `buildPlayerState()` sends truth as single `view` (no theatre/currentView split)
-- [ ] **SES-02**: `buildPlayerState()` includes animation events from current flow step
-- [ ] **SES-03**: Remove `acknowledgeAnimations()` from GameSession
-- [ ] **SES-04**: Remove `acknowledgeAnimations` WebSocket message handler from server
+- [x] **SES-01**: `buildPlayerState()` sends truth as single `view` (no theatre/currentView split)
+- [x] **SES-02**: `buildPlayerState()` includes animation events from current flow step
+- [x] **SES-03**: Remove `acknowledgeAnimations()` from GameSession
+- [x] **SES-04**: Remove `acknowledgeAnimations` WebSocket message handler from server
 
 ### Client -- Animation Timeline
 
@@ -89,10 +89,10 @@
 | REM-04 | Phase 85 | Complete |
 | REM-05 | Phase 85 | Complete |
 | REM-06 | Phase 85 | Complete |
-| SES-01 | Phase 87 | Pending |
-| SES-02 | Phase 87 | Pending |
-| SES-03 | Phase 87 | Pending |
-| SES-04 | Phase 87 | Pending |
+| SES-01 | Phase 87 | Complete |
+| SES-02 | Phase 87 | Complete |
+| SES-03 | Phase 87 | Complete |
+| SES-04 | Phase 87 | Complete |
 | CLI-01 | Phase 88 | Pending |
 | CLI-02 | Phase 88 | Pending |
 | CLI-03 | Phase 88 | Pending |
@@ -121,4 +121,4 @@
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-08 after Phase 86 completion (ENG requirements complete)*
+*Last updated: 2026-02-08 after Phase 87 completion (SES requirements complete)*

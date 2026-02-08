@@ -60,7 +60,7 @@ Plans:
   4. The `acknowledgeAnimations` WebSocket message type is rejected or ignored by the server
 **Plans:** 1 plan
 Plans:
-- [ ] 87-01-PLAN.md -- Verification tests, stale JSDoc cleanup, documentation updates
+- [x] 87-01-PLAN.md -- Verification tests, stale JSDoc cleanup, documentation updates
 
 ### Phase 88: Client Animation Queue
 **Goal**: The client-side animation system processes events through a FIFO queue with wait-for-handler semantics, configurable timeouts, and skip support
@@ -106,7 +106,7 @@ Phases execute in numeric order: 85 -> 86 -> 87 -> 88 -> 89 -> 90
 |-------|----------------|--------|-----------|
 | 85. Theatre Erasure | 4/4 | Complete | 2026-02-08 |
 | 86. Simplified Animation Events | 1/1 | Complete | 2026-02-08 |
-| 87. Session Simplification | 0/1 | In progress | - |
+| 87. Session Simplification | 1/1 | Complete | 2026-02-08 |
 | 88. Client Animation Queue | 0/TBD | Not started | - |
 | 89. UI Integration | 0/TBD | Not started | - |
 | 90. Documentation & Migration | 0/TBD | Not started | - |
