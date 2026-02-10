@@ -134,6 +134,9 @@ export interface PlayerState {
 
   /** Whether color selection is enabled for this game */
   colorSelectionEnabled?: boolean;
+
+  /** Formatted game messages visible to this player */
+  messages?: Array<{ text: string }>;
 }
 
 export interface GameState {
