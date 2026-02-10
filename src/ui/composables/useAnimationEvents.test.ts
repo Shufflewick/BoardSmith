@@ -51,7 +51,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('test', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test')];
       await nextTick();
@@ -71,7 +71,7 @@ describe('useAnimationEvents', () => {
 
       const unregister = instance.registerHandler('test', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       // First event should be handled
       events.value = [createEvent(1, 'test')];
@@ -99,11 +99,11 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('typeA', async (event) => {
         handled.push({ type: 'A', id: event.id });
-      });
+      }, { skip: 'drop' });
 
       instance.registerHandler('typeB', async (event) => {
         handled.push({ type: 'B', id: event.id });
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'typeA'),
@@ -133,7 +133,7 @@ describe('useAnimationEvents', () => {
       instance.registerHandler('test', async (event) => {
         await new Promise((r) => setTimeout(r, 10));
         order.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -158,7 +158,7 @@ describe('useAnimationEvents', () => {
         timeline.push({ event: 'start', id: event.id });
         await new Promise((r) => setTimeout(r, 30));
         timeline.push({ event: 'end', id: event.id });
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
       await nextTick();
@@ -187,7 +187,7 @@ describe('useAnimationEvents', () => {
           throw new Error('Handler error');
         }
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -215,7 +215,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('handled', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'unhandled'), // Should skip immediately
@@ -252,7 +252,7 @@ describe('useAnimationEvents', () => {
       instance.registerHandler('test', async () => {
         wasAnimatingDuringHandler = instance.isAnimating.value;
         await new Promise((r) => setTimeout(r, 20));
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test')];
       await nextTick();
@@ -274,7 +274,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('test', async () => {
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test')];
       await nextTick();
@@ -300,7 +300,7 @@ describe('useAnimationEvents', () => {
           instance.skipAll();
         }
         await new Promise((r) => setTimeout(r, 20));
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -329,7 +329,7 @@ describe('useAnimationEvents', () => {
           instance.skipAll();
         }
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -357,7 +357,7 @@ describe('useAnimationEvents', () => {
           instance.paused.value = true;
         }
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -396,7 +396,7 @@ describe('useAnimationEvents', () => {
           signal.addEventListener('abort', () => { clearTimeout(timer); timeline.push('handler-aborted'); resolve(); }, { once: true });
         });
         timeline.push('handler-end');
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'slow')];
       await nextTick();
@@ -427,7 +427,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('test', async (_event, { signal }) => {
         signalAborted = signal.aborted;
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test')];
       await nextTick();
@@ -450,7 +450,7 @@ describe('useAnimationEvents', () => {
         handled.push(event.id);
         await new Promise((r) => setTimeout(r, 5000));
         handlerFinished = true;
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
       await nextTick();
@@ -487,7 +487,7 @@ describe('useAnimationEvents', () => {
           instance.paused.value = true;
         }
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -516,7 +516,7 @@ describe('useAnimationEvents', () => {
           instance.paused.value = true;
         }
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -550,7 +550,7 @@ describe('useAnimationEvents', () => {
           instance.paused.value = true;
         }
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test')];
       await nextTick();
@@ -604,7 +604,7 @@ describe('useAnimationEvents', () => {
       instance.registerHandler('test', async () => {
         counts.push(instance.pendingCount.value);
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'test'),
@@ -654,7 +654,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('test', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       // First batch
       events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
@@ -680,7 +680,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('test', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       // First batch
       events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
@@ -715,7 +715,7 @@ describe('useAnimationEvents', () => {
           events.value = [...events.value, createEvent(3, 'test')];
         }
         await new Promise((r) => setTimeout(r, 10));
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
       await nextTick();
@@ -749,7 +749,7 @@ describe('useAnimationEvents', () => {
       // Register handler while waiting
       instance.registerHandler('combat', async (event) => {
         handled.push(event);
-      });
+      }, { skip: 'drop' });
 
       await waitForIdle(instance);
 
@@ -797,7 +797,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('handled', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'unhandled'),
@@ -837,7 +837,7 @@ describe('useAnimationEvents', () => {
       // Register handler while waiting
       instance.registerHandler('lazy', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       // Flush microtasks
       await vi.advanceTimersByTimeAsync(0);
@@ -938,7 +938,7 @@ describe('useAnimationEvents', () => {
 
       instance.registerHandler('known', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       events.value = [
         createEvent(1, 'unknown-a'),
@@ -973,7 +973,7 @@ describe('useAnimationEvents', () => {
       // Register handler BEFORE event arrives
       instance.registerHandler('preregistered', async (event) => {
         handled.push(event.id);
-      });
+      }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'preregistered')];
       await nextTick();
@@ -983,6 +983,193 @@ describe('useAnimationEvents', () => {
       expect(consoleWarn).not.toHaveBeenCalled();
 
       consoleWarn.mockRestore();
+    });
+  });
+
+  describe('skip behavior (run vs drop)', () => {
+    it('skip: run handlers called during skipAll with pre-aborted signal', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const runCalls: Array<{ id: number; aborted: boolean }> = [];
+      const dropCalls: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('sync-type', async (event, { signal }) => {
+        runCalls.push({ id: event.id, aborted: signal.aborted });
+      }, { skip: 'run' });
+
+      instance.registerHandler('cosmetic-type', async (event) => {
+        dropCalls.push(event.id);
+      }, { skip: 'drop' });
+
+      // Pause so events queue up without processing
+      instance.paused.value = true;
+
+      events.value = [
+        createEvent(1, 'sync-type'),
+        createEvent(2, 'cosmetic-type'),
+        createEvent(3, 'sync-type'),
+      ];
+      await nextTick();
+
+      instance.skipAll();
+      // Let fire-and-forget promises settle
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(runCalls).toEqual([
+        { id: 1, aborted: true },
+        { id: 3, aborted: true },
+      ]);
+      expect(dropCalls).toEqual([]);
+    });
+
+    it('skip: run handler can skip delays via signal.aborted', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const timeline: string[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('sync-work', async (_event, { signal }) => {
+        timeline.push('start');
+        if (!signal.aborted) {
+          await new Promise((r) => setTimeout(r, 5000));
+          timeline.push('delayed');
+        }
+        timeline.push('cleanup');
+      }, { skip: 'run' });
+
+      instance.paused.value = true;
+      events.value = [createEvent(1, 'sync-work')];
+      await nextTick();
+
+      instance.skipAll();
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(timeline).toEqual(['start', 'cleanup']);
+    });
+
+    it('skip: drop handlers NOT called during skipAll', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const calls: number[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('cosmetic', async (event) => {
+        calls.push(event.id);
+      }, { skip: 'drop' });
+
+      instance.paused.value = true;
+      events.value = [createEvent(1, 'cosmetic'), createEvent(2, 'cosmetic')];
+      await nextTick();
+
+      instance.skipAll();
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(calls).toEqual([]);
+    });
+
+    it('skip: run handler error does not break other skip: run handlers', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const secondCalled = { value: false };
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('boom', async () => {
+        throw new Error('sync explosion');
+      }, { skip: 'run' });
+
+      instance.registerHandler('safe', async () => {
+        secondCalled.value = true;
+      }, { skip: 'run' });
+
+      instance.paused.value = true;
+      events.value = [createEvent(1, 'boom'), createEvent(2, 'safe')];
+      await nextTick();
+
+      instance.skipAll();
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(secondCalled.value).toBe(true);
+      expect(consoleError).toHaveBeenCalled();
+      consoleError.mockRestore();
+    });
+
+    it('in-flight skip: run handler is aborted normally (same as drop)', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const timeline: string[] = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('slow-sync', async (_event, { signal }) => {
+        timeline.push('start');
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => { timeline.push('timeout'); resolve(); }, 5000);
+          signal.addEventListener('abort', () => { clearTimeout(timer); timeline.push('aborted'); resolve(); }, { once: true });
+        });
+        timeline.push('end');
+      }, { skip: 'run' });
+
+      events.value = [createEvent(1, 'slow-sync')];
+      await nextTick();
+
+      // Handler is running
+      expect(timeline).toEqual(['start']);
+
+      instance.skipAll();
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(timeline).toContain('aborted');
+      expect(timeline).not.toContain('timeout');
+    });
+
+    it('mixed queue: only skip: run events processed during skipAll', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const processed: Array<{ type: string; id: number }> = [];
+
+      const instance = createAnimationEvents({
+        events: () => events.value,
+      });
+
+      instance.registerHandler('sync', async (event) => {
+        processed.push({ type: 'sync', id: event.id });
+      }, { skip: 'run' });
+
+      instance.registerHandler('cosmetic', async (event) => {
+        processed.push({ type: 'cosmetic', id: event.id });
+      }, { skip: 'drop' });
+
+      instance.registerHandler('sync2', async (event) => {
+        processed.push({ type: 'sync2', id: event.id });
+      }, { skip: 'run' });
+
+      instance.paused.value = true;
+      events.value = [
+        createEvent(1, 'cosmetic'),
+        createEvent(2, 'sync'),
+        createEvent(3, 'cosmetic'),
+        createEvent(4, 'sync2'),
+        createEvent(5, 'cosmetic'),
+      ];
+      await nextTick();
+
+      instance.skipAll();
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(processed).toEqual([
+        { type: 'sync', id: 2 },
+        { type: 'sync2', id: 4 },
+      ]);
     });
   });
 

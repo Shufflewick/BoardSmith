@@ -28,7 +28,7 @@
  *     await playExplosionAnimation(event.data);
  *     if (signal.aborted) return; // skip was pressed
  *     await playAftermath(event.data);
- *   });
+ *   }, { skip: 'drop' });
  * }
  * ```
  */
@@ -53,6 +53,21 @@ export interface AnimationHandler {
 }
 
 /**
+ * Options for registering an animation handler.
+ *
+ * Every handler must declare its skip behavior — there is no default.
+ * This forces developers to consider what happens when a user skips animations.
+ */
+export interface AnimationHandlerOptions {
+  /**
+   * What happens to this handler when skipAll() is called:
+   * - `'run'`: Handler is called with a pre-aborted signal (skips delays, runs cleanup/sync logic).
+   * - `'drop'`: Handler is not called — the event is silently discarded.
+   */
+  skip: 'run' | 'drop';
+}
+
+/**
  * Options for creating an animation events instance
  */
 export interface UseAnimationEventsOptions {
@@ -72,7 +87,7 @@ export interface UseAnimationEventsOptions {
  */
 export interface UseAnimationEventsReturn {
   /** Register a handler for an event type. Returns unregister function. */
-  registerHandler: (eventType: string, handler: AnimationHandler) => () => void;
+  registerHandler: (eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions) => () => void;
   /** Whether animations are currently playing */
   isAnimating: Ref<boolean>;
   /** Whether playback is paused */
@@ -117,7 +132,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const { events: getEvents, defaultDuration = 0, handlerWaitTimeout = 3000 } = options;
 
   // Handler registry
-  const handlers = new Map<string, AnimationHandler>();
+  const handlers = new Map<string, { handler: AnimationHandler; skip: 'run' | 'drop' }>();
 
   // Internal queue of events to process
   const queue: AnimationEvent[] = [];
@@ -207,7 +222,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const event = queue.shift()!;
       pendingCount.value = queue.length;
 
-      let handler: AnimationHandler | null | undefined = handlers.get(event.type);
+      let handler: AnimationHandler | null | undefined = handlers.get(event.type)?.handler;
 
       if (!handler && handlerWaitTimeout > 0) {
         // Wait for handler registration or timeout
@@ -261,6 +276,13 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
    * Skip all remaining animations
    */
   function skipAll(): void {
+    // Collect 'run' events from the queue before clearing
+    const runOnSkipEvents: AnimationEvent[] = [];
+    for (const event of queue) {
+      const entry = handlers.get(event.type);
+      if (entry?.skip === 'run') runOnSkipEvents.push(event);
+    }
+
     if (queue.length > 0) {
       const lastEvent = queue[queue.length - 1];
       lastProcessedId = lastEvent.id;
@@ -296,6 +318,21 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       resolve(null); // unblock processQueue
     }
 
+    // Execute 'run' handlers with pre-aborted signal (fire-and-forget)
+    const abortedSignal = AbortSignal.abort();
+    for (const event of runOnSkipEvents) {
+      const entry = handlers.get(event.type);
+      if (entry) {
+        try {
+          void entry.handler(event, { signal: abortedSignal }).catch((err) => {
+            console.error(`Handler error during skipAll for '${event.type}':`, err);
+          });
+        } catch (error) {
+          console.error(`Handler error during skipAll for '${event.type}':`, error);
+        }
+      }
+    }
+
     // Reset animating state immediately
     isAnimating.value = false;
   }
@@ -303,8 +340,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   /**
    * Register a handler for an event type
    */
-  function registerHandler(eventType: string, handler: AnimationHandler): () => void {
-    handlers.set(eventType, handler);
+  function registerHandler(eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions): () => void {
+    handlers.set(eventType, { handler, skip: options.skip });
 
     // If the queue is waiting for this type, resume processing immediately
     if (waitingForType === eventType && waitResolve) {
