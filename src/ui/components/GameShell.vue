@@ -279,8 +279,9 @@ const actionController = useActionController({
   },
 });
 
-// Extract messages from game state
+// Extract messages from game state (prefer formatted messages from session, fall back to view)
 const gameMessages = computed(() => {
+  if (state.value?.state?.messages?.length) return state.value.state.messages;
   if (!state.value?.state?.view) return [];
   const view = state.value.state.view as any;
   return view.messages || [];
@@ -1141,6 +1142,7 @@ if ((import.meta as any).hot) {
           :can-undo="canUndo && !isViewingHistory"
           :auto-end-turn="autoEndTurn"
           :show-undo="showUndo"
+          :messages="gameMessages"
           @undo="handleUndo"
         />
         <!-- Time travel banner -->

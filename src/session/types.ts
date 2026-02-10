@@ -428,6 +428,8 @@ export interface PlayerGameState {
   lastAnimationEventId?: number;
   /** Whether color selection is enabled for this game (from game settings) */
   colorSelectionEnabled?: boolean;
+  /** Formatted game messages visible to this player */
+  messages?: Array<{ text: string }>;
 }
 
 // ============================================

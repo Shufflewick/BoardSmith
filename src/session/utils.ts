@@ -352,7 +352,8 @@ export function buildPlayerState(
   const flowState = runner.getFlowState();
 
   // Truth view -- always the current game state
-  const truthView = runner.getPlayerView(playerPosition).state;
+  const playerView = runner.getPlayerView(playerPosition);
+  const truthView = playerView.state;
 
   // Get available actions - check awaitingPlayers first (for simultaneous actions)
   let availableActions: string[];
@@ -417,6 +418,7 @@ export function buildPlayerState(
     canUndo,
     actionsThisTurn: isMyTurn ? actionsThisTurn : 0,
     turnStartActionIndex: isMyTurn ? turnStartActionIndex : undefined,
+    messages: playerView.messages.length > 0 ? playerView.messages : undefined,
   };
 
   // Optionally include action metadata for auto-UI
