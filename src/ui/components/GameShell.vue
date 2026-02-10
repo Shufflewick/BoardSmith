@@ -1143,6 +1143,7 @@ if ((import.meta as any).hot) {
           :auto-end-turn="autoEndTurn"
           :show-undo="showUndo"
           :messages="gameMessages"
+          :current-player-name="currentPlayerName"
           @undo="handleUndo"
         />
         <!-- Time travel banner -->

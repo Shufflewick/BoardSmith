@@ -13,7 +13,7 @@
  * Requires: ActionPanel must be used inside a GameShell context where the
  * action controller is provided via inject('actionController').
  */
-import { ref, computed, watch, inject, reactive, nextTick } from 'vue';
+import { ref, computed, watch, inject, reactive } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import type {
@@ -75,6 +75,8 @@ const props = defineProps<{
   showUndo?: boolean;
   /** Game messages to display while waiting */
   messages?: Array<{ text: string }>;
+  /** Name of the player whose turn it is */
+  currentPlayerName?: string;
 }>();
 
 const emit = defineEmits<{
@@ -83,17 +85,11 @@ const emit = defineEmits<{
   (e: 'undo'): void;
 }>();
 
-// Waiting messages scroll container
-const waitingMessagesEl = ref<HTMLElement>();
-
-// Auto-scroll waiting messages when new ones arrive
-watch(() => props.messages?.length, () => {
-  if (!waitingMessagesEl.value) return;
-  nextTick(() => {
-    if (waitingMessagesEl.value) {
-      waitingMessagesEl.value.scrollTop = waitingMessagesEl.value.scrollHeight;
-    }
-  });
+// Latest game message to show as status while waiting
+const latestMessage = computed(() => {
+  if (!props.messages?.length) return null;
+  const last = props.messages[props.messages.length - 1];
+  return typeof last === 'string' ? last : last.text;
 });
 
 // Board interaction for hover/selection sync
@@ -1685,13 +1681,8 @@ function clearBoardSelection() {
   </div>
 
   <!-- Not my turn -->
-  <div v-else class="waiting-state">
-    <div class="waiting-header">Waiting for other player...</div>
-    <div v-if="messages?.length" ref="waitingMessagesEl" class="waiting-messages">
-      <div v-for="(msg, i) in messages" :key="i" class="waiting-msg">
-        {{ typeof msg === 'string' ? msg : msg.text }}
-      </div>
-    </div>
+  <div v-else class="waiting-message">
+    {{ latestMessage || `It is ${currentPlayerName || 'the other player'}'s turn` }}
   </div>
 </template>
 
@@ -1991,36 +1982,13 @@ function clearBoardSelection() {
   align-items: center;
 }
 
-.waiting-state {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  gap: 8px;
-}
-
-.waiting-header {
+.waiting-message {
   padding: 10px 20px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   text-align: center;
   color: #888;
   font-size: 0.9rem;
-}
-
-.waiting-messages {
-  max-height: 200px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 4px;
-}
-
-.waiting-msg {
-  font-size: 0.8rem;
-  color: #999;
-  padding: 2px 8px;
-  border-left: 2px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Multi-select styles */
