@@ -77,6 +77,8 @@ const props = defineProps<{
   messages?: Array<{ text: string }>;
   /** Name of the player whose turn it is */
   currentPlayerName?: string;
+  /** Color of the player whose turn it is */
+  currentPlayerColor?: string;
 }>();
 
 const emit = defineEmits<{
@@ -1682,7 +1684,13 @@ function clearBoardSelection() {
 
   <!-- Not my turn -->
   <div v-else class="waiting-message">
-    {{ latestMessage || `It is ${currentPlayerName || 'the other player'}'s turn` }}
+    <template v-if="latestMessage">
+      <span v-if="currentPlayerName" class="player-name-prefix" :style="currentPlayerColor ? { color: currentPlayerColor } : undefined">{{ currentPlayerName }}:</span>
+      {{ latestMessage }}
+    </template>
+    <template v-else>
+      It is <span v-if="currentPlayerName" :style="currentPlayerColor ? { color: currentPlayerColor } : undefined">{{ currentPlayerName }}</span><span v-else>the other player</span>'s turn
+    </template>
   </div>
 </template>
 
@@ -1989,6 +1997,10 @@ function clearBoardSelection() {
   text-align: center;
   color: #888;
   font-size: 0.9rem;
+}
+
+.player-name-prefix {
+  font-weight: 600;
 }
 
 /* Multi-select styles */

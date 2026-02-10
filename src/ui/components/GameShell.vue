@@ -297,6 +297,13 @@ const currentPlayerName = computed(() => {
   const player = players.value.find(p => p.seat === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
+const currentPlayerColor = computed((): string | undefined => {
+  const currentPos = state.value?.state?.currentPlayer;
+  if (currentPos === undefined) return undefined;
+  const player = players.value.find(p => p.seat === currentPos) as Record<string, unknown> | undefined;
+  if (!player) return undefined;
+  return typeof player.color === 'string' ? player.color : undefined;
+});
 
 // Can undo - from PlayerGameState.canUndo
 const canUndo = computed(() => {
@@ -1144,6 +1151,7 @@ if ((import.meta as any).hot) {
           :show-undo="showUndo"
           :messages="gameMessages"
           :current-player-name="currentPlayerName"
+          :current-player-color="currentPlayerColor"
           @undo="handleUndo"
         />
         <!-- Time travel banner -->
