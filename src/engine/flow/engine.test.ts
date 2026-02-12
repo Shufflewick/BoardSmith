@@ -537,6 +537,85 @@ describe('FlowEngine', () => {
 
       // Should continue until repeatUntil evaluates
     });
+
+    it('should not leak player override to sibling action steps', () => {
+      const playerA = game.getPlayer(1)!;
+      const playerB = game.getPlayer(2)!;
+
+      const flow = defineFlow({
+        root: eachPlayer({
+          filter: (p) => p === playerA,
+          do: sequence(
+            // Step 1: override player to B
+            actionStep({
+              name: 'decision-for-b',
+              player: () => playerB,
+              actions: ['test'],
+            }),
+            // Step 2: no override — should use Player A from eachPlayer
+            actionStep({
+              name: 'player-a-action',
+              actions: ['test'],
+            }),
+          ),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      let state = engine.start();
+
+      // Step 1 should be for Player B (override)
+      expect(state.awaitingInput).toBe(true);
+      expect(state.currentPlayer).toBe(playerB.seat);
+
+      state = engine.resume('test', { choice: 'a' });
+
+      // Step 2 should be for Player A (from eachPlayer), not Player B
+      expect(state.awaitingInput).toBe(true);
+      expect(state.currentPlayer).toBe(playerA.seat);
+    });
+
+    it('should not leak player override across eachPlayer iterations', () => {
+      const playerA = game.getPlayer(1)!;
+      const playerB = game.getPlayer(2)!;
+      const playerC = game.getPlayer(3)!;
+
+      const flow = defineFlow({
+        root: eachPlayer({
+          do: sequence(
+            // Override to player C for every player's turn
+            actionStep({
+              name: 'ask-c',
+              player: () => playerC,
+              actions: ['test'],
+            }),
+            // Should use the eachPlayer's current player, not C
+            actionStep({
+              name: 'own-action',
+              actions: ['test'],
+            }),
+          ),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      let state = engine.start();
+
+      // Player A's turn: step 1 overrides to C
+      expect(state.currentPlayer).toBe(playerC.seat);
+      state = engine.resume('test', { choice: 'a' });
+
+      // Player A's turn: step 2 should be A
+      expect(state.currentPlayer).toBe(playerA.seat);
+      state = engine.resume('test', { choice: 'a' });
+
+      // Player B's turn: step 1 overrides to C
+      expect(state.currentPlayer).toBe(playerC.seat);
+      state = engine.resume('test', { choice: 'a' });
+
+      // Player B's turn: step 2 should be B
+      expect(state.currentPlayer).toBe(playerB.seat);
+    });
   });
 
   describe('State Serialization', () => {

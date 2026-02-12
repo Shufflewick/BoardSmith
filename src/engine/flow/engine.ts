@@ -270,9 +270,20 @@ export class FlowEngine<G extends Game = Game> {
    * Mark an action step frame as completed and reset tracking state.
    */
   private completeActionStep(frame: ExecutionFrame): void {
+    this.restorePlayerFromActionStep(frame);
     frame.completed = true;
     this.currentActionConfig = undefined;
     this.moveCount = 0;
+  }
+
+  /**
+   * Restore currentPlayer after a player: override completes.
+   * Only restores if this frame saved a previous player (i.e., had a player: override).
+   */
+  private restorePlayerFromActionStep(frame: ExecutionFrame): void {
+    if (frame.data?.playerSaved) {
+      this.currentPlayer = frame.data.previousPlayer as Player | undefined;
+    }
   }
 
   /**
@@ -960,8 +971,15 @@ export class FlowEngine<G extends Game = Game> {
     }
     const moveCount = frame.data.moveCount as number;
 
+    // Save previous player on first entry so we can restore after a player: override completes.
+    // This prevents a player override from leaking into subsequent sibling steps.
+    if (config.player && !frame.data?.playerSaved) {
+      frame.data = { ...frame.data, playerSaved: true, previousPlayer: this.currentPlayer };
+    }
+
     // Check if maxMoves reached
     if (config.maxMoves && moveCount >= config.maxMoves) {
+      this.restorePlayerFromActionStep(frame);
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
@@ -971,6 +989,7 @@ export class FlowEngine<G extends Game = Game> {
     // Check repeat-until (if we have a last action result and minMoves is met)
     const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
     if (this.lastActionResult && config.repeatUntil?.(context) && minMovesMet) {
+      this.restorePlayerFromActionStep(frame);
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
@@ -1009,6 +1028,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // If no available actions and minMoves met, complete
     if (available.length === 0 && minMovesMet) {
+      this.restorePlayerFromActionStep(frame);
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
