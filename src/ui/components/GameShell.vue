@@ -254,6 +254,19 @@ const actionController = useActionController({
       return { success: false, error: err instanceof Error ? err.message : 'Failed to fetch selection choices' };
     }
   },
+  // Cancel pending action on server (for onSelect-routed actions)
+  cancelPendingAction: async (player) => {
+    if (!gameId.value) return;
+    try {
+      await fetch(`${props.apiUrl}/games/${gameId.value}/cancel-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player }),
+      });
+    } catch (err) {
+      console.error('Cancel pending action error:', err);
+    }
+  },
   // Phase 3: Repeating selections - processed step by step on server
   pickStep: async (player, selectionName, value, actionName, initialArgs) => {
     if (!gameId.value) {

@@ -714,6 +714,289 @@ describe('useActionController picks', () => {
     });
   });
 
+  describe('onSelect routing (hasOnSelect)', () => {
+    it('should route fill through pickStep when selection has hasOnSelect', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
+        success: true,
+        actionComplete: false,
+      });
+
+      const onSelectMeta: Record<string, ActionMetadata> = {
+        moveWithCallback: {
+          name: 'moveWithCallback',
+          prompt: 'Move a piece',
+          selections: [
+            {
+              name: 'piece',
+              type: 'choice',
+              prompt: 'Select a piece',
+              hasOnSelect: true,
+              choices: [
+                { value: 1, display: 'Pawn' },
+                { value: 2, display: 'Knight' },
+              ],
+            },
+            {
+              name: 'destination',
+              type: 'choice',
+              prompt: 'Select destination',
+              choices: [
+                { value: 'a1', display: 'A1' },
+                { value: 'b2', display: 'B2' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'moveWithCallback'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        playerSeat: ref(1),
+        pickStep,
+      });
+
+      await controller.start('moveWithCallback');
+      await controller.fill('piece', 1);
+
+      expect(pickStep).toHaveBeenCalledWith(1, 'piece', 1, 'moveWithCallback', {});
+    });
+
+    it('should clear state when pickStep returns actionComplete', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
+        success: true,
+        actionComplete: true,
+      });
+
+      const onSelectMeta: Record<string, ActionMetadata> = {
+        singleStepOnSelect: {
+          name: 'singleStepOnSelect',
+          prompt: 'Quick action',
+          selections: [
+            {
+              name: 'target',
+              type: 'choice',
+              prompt: 'Pick target',
+              hasOnSelect: true,
+              choices: [
+                { value: 'a', display: 'Alpha' },
+                { value: 'b', display: 'Beta' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'singleStepOnSelect'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        playerSeat: ref(1),
+        pickStep,
+      });
+
+      await controller.start('singleStepOnSelect');
+      const result = await controller.fill('target', 'a');
+
+      expect(result.valid).toBe(true);
+      expect(controller.currentAction.value).toBeNull();
+    });
+
+    it('should route subsequent selections through pickStep when pendingOnServer', async () => {
+      let callCount = 0;
+      const pickStep = vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { success: true, actionComplete: false };
+        }
+        return { success: true, actionComplete: true };
+      });
+
+      const onSelectMeta: Record<string, ActionMetadata> = {
+        twoStepOnSelect: {
+          name: 'twoStepOnSelect',
+          prompt: 'Two steps',
+          selections: [
+            {
+              name: 'first',
+              type: 'choice',
+              prompt: 'First pick',
+              hasOnSelect: true,
+              choices: [
+                { value: 1, display: 'One' },
+                { value: 2, display: 'Two' },
+              ],
+            },
+            {
+              name: 'second',
+              type: 'choice',
+              prompt: 'Second pick',
+              choices: [
+                { value: 'x', display: 'X' },
+                { value: 'y', display: 'Y' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'twoStepOnSelect'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        playerSeat: ref(1),
+        pickStep,
+      });
+
+      await controller.start('twoStepOnSelect');
+      await controller.fill('first', 1);
+
+      // First selection routed via hasOnSelect
+      expect(pickStep).toHaveBeenCalledTimes(1);
+
+      // Second selection should also route via pickStep because pendingOnServer is true
+      await controller.fill('second', 'x');
+      expect(pickStep).toHaveBeenCalledTimes(2);
+      expect(pickStep).toHaveBeenLastCalledWith(1, 'second', 'x', 'twoStepOnSelect', { first: 1 });
+    });
+
+    it('should not auto-execute when pendingOnServer is true', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
+        success: true,
+        actionComplete: false,
+      });
+
+      const onSelectMeta: Record<string, ActionMetadata> = {
+        autoExecTest: {
+          name: 'autoExecTest',
+          prompt: 'Test auto-exec guard',
+          selections: [
+            {
+              name: 'step1',
+              type: 'choice',
+              prompt: 'First',
+              hasOnSelect: true,
+              choices: [
+                { value: 1, display: 'One' },
+                { value: 2, display: 'Two' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'autoExecTest'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        playerSeat: ref(1),
+        pickStep,
+      });
+
+      await controller.start('autoExecTest');
+      await controller.fill('step1', 1);
+
+      // sendAction should NOT have been called — server handles execution
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('should call cancelPendingAction on cancel when pendingOnServer', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
+        success: true,
+        actionComplete: false,
+      });
+      const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
+
+      const onSelectMeta: Record<string, ActionMetadata> = {
+        cancelTest: {
+          name: 'cancelTest',
+          prompt: 'Cancel test',
+          selections: [
+            {
+              name: 'step1',
+              type: 'choice',
+              prompt: 'First',
+              hasOnSelect: true,
+              choices: [
+                { value: 1, display: 'One' },
+                { value: 2, display: 'Two' },
+              ],
+            },
+            {
+              name: 'step2',
+              type: 'choice',
+              prompt: 'Second',
+              choices: [
+                { value: 'a', display: 'A' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'cancelTest'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        playerSeat: ref(1),
+        pickStep,
+        cancelPendingAction,
+      });
+
+      await controller.start('cancelTest');
+      await controller.fill('step1', 1);
+
+      // Now cancel — should call cancelPendingAction
+      controller.cancel();
+      expect(cancelPendingAction).toHaveBeenCalledWith(1);
+      expect(controller.currentAction.value).toBeNull();
+    });
+
+    it('should not call cancelPendingAction on cancel when NOT pendingOnServer', async () => {
+      const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        cancelPendingAction,
+      });
+
+      await controller.start('playCard');
+      controller.cancel();
+
+      expect(cancelPendingAction).not.toHaveBeenCalled();
+    });
+  });
+
   describe('multiSelect validation', () => {
     // Note: Current implementation validates array elements individually,
     // which means multiSelect arrays pass if any element matches a choice.

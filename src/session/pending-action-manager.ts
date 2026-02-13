@@ -285,6 +285,9 @@ export class PendingActionManager<G extends Game = Game> {
       };
     }
 
+    // Broadcast state updates to all clients (e.g. animation events from onSelect)
+    this.#callbacks.broadcast();
+
     // More selections needed
     return {
       success: true,

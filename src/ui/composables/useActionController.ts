@@ -200,6 +200,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Repeating selections state
   const repeatingState = ref<RepeatingState | null>(null);
 
+  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing)
+  const pendingOnServer = ref(false);
+
   // Pit of Success: Client-owned action state snapshot
   // When start() is called, we clone the metadata so we don't depend on server broadcasts
   // pickSnapshots stores fetched choices - single source of truth
@@ -230,6 +233,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   function clearAdvancedState(): void {
     repeatingState.value = null;
     actionSnapshot.value = null;
+    pendingOnServer.value = false;
   }
 
   function getActionMetadata(actionName: string): ActionMetadata | undefined {
@@ -719,8 +723,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // === Auto-execute Watch ===
   // When all selections are filled, auto-execute
+  // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
-    if (ready && getAutoExecute() && currentAction.value && !isExecuting.value) {
+    if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value) {
       // Call hook before executing - allows capturing element positions for animations
       if (beforeAutoExecuteHook.value) {
         await beforeAutoExecuteHook.value(currentAction.value, buildServerArgs());
@@ -1104,6 +1109,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return await handleRepeatingFill(selection, value);
     }
 
+    // Route through server when selection has onSelect callback or action is already pending on server
+    if (selection.hasOnSelect || pendingOnServer.value) {
+      return await handleOnSelectFill(selection, value);
+    }
+
     // Normal fill
     const validation = validateSelection(selection, value);
     if (validation.valid) {
@@ -1244,6 +1254,83 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /**
+   * Handle fill for selections with onSelect callbacks.
+   * Routes through pickStep so the server fires onSelect per-step (with correct timing).
+   */
+  async function handleOnSelectFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
+    const stepFn = options.pickStep;
+    if (!stepFn || !currentAction.value) {
+      return { valid: false, error: 'pickStep function not provided for onSelect routing' };
+    }
+
+    const player = playerSeat?.value ?? 0;
+
+    // Build initialArgs from all previously collected args
+    const initialArgs = buildServerArgs();
+
+    try {
+      const result = await stepFn(
+        player,
+        selection.name,
+        value,
+        currentAction.value,
+        initialArgs
+      );
+
+      if (!result.success) {
+        const error = result.error || 'Selection step failed';
+        lastError.value = error;
+        return { valid: false, error };
+      }
+
+      // Mark that we now have server-side pending state
+      pendingOnServer.value = true;
+
+      if (result.actionComplete) {
+        // Server executed the action — clear local state
+        currentAction.value = null;
+        clearArgs();
+        clearAdvancedState();
+        return { valid: true };
+      }
+
+      // Action continues — store value locally and advance to next selection
+      currentArgs.value[selection.name] = value;
+
+      if (actionSnapshot.value) {
+        const display = findDisplayForValue(selection.name, value);
+        actionSnapshot.value.collectedPicks.set(selection.name, {
+          value,
+          display,
+          skipped: false,
+        });
+      }
+
+      // Fetch choices for the next selection
+      const nextSel = getNextSelection(selection.name);
+      if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
+        await fetchChoicesForPick(nextSel.name);
+
+        // Auto-fill if only one choice
+        if (getAutoFill() && !isExecuting.value) {
+          const choices = getChoices(nextSel);
+          const enabledChoices = choices.filter(c => !c.disabled);
+          if (enabledChoices.length === 1 && !nextSel.optional) {
+            // Auto-fill the next selection through onSelect path too
+            return await handleOnSelectFill(nextSel, enabledChoices[0].value);
+          }
+        }
+      }
+
+      return { valid: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Selection step failed';
+      lastError.value = error;
+      return { valid: false, error };
+    }
+  }
+
   /** Get the next selection after the given one */
   function getNextSelection(afterSelectionName: string): PickMetadata | null {
     if (!currentActionMeta.value) return null;
@@ -1290,6 +1377,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   function cancel(): void {
+    // If action is pending on server, cancel it there too
+    if (pendingOnServer.value && options.cancelPendingAction) {
+      const player = playerSeat?.value ?? 0;
+      options.cancelPendingAction(player).catch(err => {
+        console.error('[ActionController] Failed to cancel pending action on server:', err);
+      });
+    }
+
     currentAction.value = null;
     clearArgs();
     clearAdvancedState();

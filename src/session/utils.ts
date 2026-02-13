@@ -161,6 +161,11 @@ function buildPickMetadata(
     optional: selection.optional,
   };
 
+  // onSelect callback flag - client needs this to route through server per-step
+  if ((selection as any).onSelect) {
+    base.hasOnSelect = true;
+  }
+
   // Type-specific properties (static metadata only)
   switch (selection.type) {
     case 'choice': {

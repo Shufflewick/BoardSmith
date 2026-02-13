@@ -365,6 +365,8 @@ export interface PickMetadata {
    * Value is the multiSelect config for that dependent value, or undefined if single-select.
    */
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
+  /** Whether this selection has an onSelect callback (requires server round-trip per step) */
+  hasOnSelect?: boolean;
   /** For multi-select choice picks: min/max selection configuration */
   multiSelect?: {
     /** Minimum selections required (default: 1) */

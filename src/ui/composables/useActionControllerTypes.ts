@@ -71,6 +71,8 @@ export interface PickMetadata {
   elementsByDependentValue?: Record<string, ValidElement[]>;
   /** Pick can repeat until terminator */
   repeat?: { hasOnEach: boolean; terminator?: unknown };
+  /** Whether this selection has an onSelect callback (requires server round-trip per step) */
+  hasOnSelect?: boolean;
   /** For number inputs: minimum value */
   min?: number;
   /** For number inputs: maximum value */
@@ -259,6 +261,11 @@ export interface UseActionControllerOptions {
     actionName: string,
     args: Record<string, unknown>
   ) => void | Promise<void>;
+  /**
+   * Function to cancel a pending action on the server.
+   * Called when user cancels an action that has been partially submitted via pickStep.
+   */
+  cancelPendingAction?: (player: number) => Promise<void>;
   /**
    * Animation events instance for animation-gated action panel.
    * When provided, animationsPending and showActionPanel become functional.
