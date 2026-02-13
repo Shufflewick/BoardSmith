@@ -1502,19 +1502,22 @@ export class ActionExecutor {
       return { success: !result.error, error: result.error };
     }
 
+    // Resolve raw values (e.g. element IDs → GameElement objects) before validation.
+    // Clients send element IDs over the wire; validation compares against GameElement objects.
+    const resolvedValue = this.resolveSelectionValue(selection, value, player);
+
     // Validate the selection
-    const validationResult = this.validateSelection(selection, value, player, pendingState.collectedArgs);
+    const validationResult = this.validateSelection(selection, resolvedValue, player, pendingState.collectedArgs);
     if (!validationResult.valid) {
       return { success: false, error: validationResult.errors.join('; ') };
     }
 
-    // Store the value
-    pendingState.collectedArgs[selectionName] = value;
+    // Store the resolved value so downstream dependsOn filters see GameElements, not raw IDs
+    pendingState.collectedArgs[selectionName] = resolvedValue;
 
     // Fire onSelect if defined
     if (selection.onSelect) {
       try {
-        const resolvedValue = this.resolveSelectionValue(selection, value, player);
         const ctx = this.createOnSelectContext();
         (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx);
 
