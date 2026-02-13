@@ -305,7 +305,16 @@ export class PendingActionManager<G extends Game = Game> {
    * Cancel a pending action for a player.
    */
   cancelPendingAction(playerPosition: number): void {
-    this.#pendingActions.delete(playerPosition);
+    const pendingState = this.#pendingActions.get(playerPosition);
+    if (pendingState) {
+      // Fire onCancel for selections where onSelect had fired
+      const action = this.#runner.game.getAction(pendingState.actionName);
+      if (action) {
+        const executor = this.#runner.game.getActionExecutor();
+        executor.fireOnCancelCallbacks(action, pendingState);
+      }
+      this.#pendingActions.delete(playerPosition);
+    }
   }
 
   /**
