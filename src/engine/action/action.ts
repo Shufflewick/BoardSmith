@@ -1522,6 +1522,22 @@ export class ActionExecutor {
   }
 
   /**
+   * Fire onCancel callbacks for selections where onSelect had fired.
+   * Called when a pending action is cancelled.
+   */
+  fireOnCancelCallbacks(action: ActionDefinition, pendingState: PendingActionState): void {
+    if (!pendingState.onSelectFired || pendingState.onSelectFired.size === 0) return;
+
+    const ctx = this.createOnSelectContext();
+    for (const index of pendingState.onSelectFired) {
+      const selection = action.selections[index];
+      if (selection?.onCancel) {
+        selection.onCancel(ctx);
+      }
+    }
+  }
+
+  /**
    * Check if a pending action is complete (all selections processed).
    */
   isPendingActionComplete(action: ActionDefinition, pendingState: PendingActionState): boolean {

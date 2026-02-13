@@ -1789,6 +1789,93 @@ describe('onSelect in processRepeatingStep', () => {
   });
 });
 
+describe('onCancel callbacks', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('fires onCancel for selections where onSelect fired', () => {
+    const cancelCalls: string[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: () => {},
+        onCancel: (ctx) => {
+          cancelCalls.push('color');
+          ctx.animate('color-cancelled', {});
+        },
+      })
+      .chooseFrom('size', {
+        choices: ['S', 'M', 'L'],
+        onSelect: () => {},
+        onCancel: (ctx) => { cancelCalls.push('size'); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+
+    // Complete first selection (onSelect fires)
+    executor.processSelectionStep(action, player, pendingState, 'color', 'red');
+
+    // Cancel before second selection
+    executor.fireOnCancelCallbacks(action, pendingState);
+
+    expect(cancelCalls).toEqual(['color']); // Only color's onCancel fired
+    expect(game.pendingAnimationEvents.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not fire onCancel if onSelect never fired', () => {
+    const cancelCalls: string[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onCancel: () => { cancelCalls.push('color'); },
+      })
+      .execute(() => {});
+
+    const pendingState = executor.createPendingActionState('test', 1);
+    executor.fireOnCancelCallbacks(action, pendingState);
+
+    expect(cancelCalls).toHaveLength(0);
+  });
+
+  it('fires onCancel for multiple selections where onSelect fired', () => {
+    const cancelCalls: string[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: () => {},
+        onCancel: () => { cancelCalls.push('color'); },
+      })
+      .chooseFrom('size', {
+        choices: ['S', 'M', 'L'],
+        onSelect: () => {},
+        onCancel: () => { cancelCalls.push('size'); },
+      })
+      .chooseFrom('qty', {
+        choices: [1, 2, 3],
+        onSelect: () => {},
+        onCancel: () => { cancelCalls.push('qty'); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+
+    executor.processSelectionStep(action, player, pendingState, 'color', 'red');
+    executor.processSelectionStep(action, player, pendingState, 'size', 'M');
+
+    executor.fireOnCancelCallbacks(action, pendingState);
+
+    expect(cancelCalls).toEqual(['color', 'size']); // qty not fired
+  });
+});
+
 describe('onSelect in executeAction', () => {
   let game: TestGame;
   let executor: ActionExecutor;
