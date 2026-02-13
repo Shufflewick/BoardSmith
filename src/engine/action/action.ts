@@ -837,7 +837,7 @@ export class ActionExecutor {
     const onSelectCtx = this.createOnSelectContext();
     for (const selection of action.selections) {
       if (selection.onSelect && resolvedArgs[selection.name] !== undefined) {
-        selection.onSelect(resolvedArgs[selection.name], onSelectCtx);
+        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx);
       }
     }
 
@@ -1317,7 +1317,7 @@ export class ActionExecutor {
         ? (this.game.getElementById(value as number) ?? value)
         : value;
       const ctx = this.createOnSelectContext();
-      selection.onSelect(resolvedForHook, ctx);
+      (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedForHook, ctx);
 
       if (!pendingState.onSelectFired) {
         pendingState.onSelectFired = new Set();
@@ -1507,7 +1507,7 @@ export class ActionExecutor {
     if (selection.onSelect) {
       const resolvedValue = this.resolveSelectionValue(selection, value, player);
       const ctx = this.createOnSelectContext();
-      selection.onSelect(resolvedValue, ctx);
+      (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx);
 
       // Track that onSelect fired for this selection (for onCancel)
       if (!pendingState.onSelectFired) {
