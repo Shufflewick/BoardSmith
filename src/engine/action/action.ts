@@ -19,6 +19,7 @@ import type {
   ConditionConfig,
   ConditionDetail,
   AnnotatedChoice,
+  OnSelectContext,
 } from './types.js';
 import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
 import { Action } from './action-builder.js';
@@ -88,6 +89,51 @@ export class ActionExecutor {
 
   constructor(game: Game) {
     this.game = game;
+  }
+
+  /**
+   * Create the restricted OnSelectContext for onSelect/onCancel callbacks.
+   * Only exposes animate() without the callback parameter.
+   * @internal
+   */
+  createOnSelectContext(): OnSelectContext {
+    const game = this.game;
+    return {
+      animate(type: string, data?: Record<string, unknown>): void {
+        game.animate(type, data ?? {});
+      },
+    };
+  }
+
+  /**
+   * Resolve a single selection's raw value to its resolved form.
+   * Element IDs become Element objects, choice values get smart-resolved, etc.
+   * @internal
+   */
+  resolveSelectionValue(selection: Selection, value: unknown, player: Player): unknown {
+    switch (selection.type) {
+      case 'element':
+      case 'elements': {
+        if (typeof value === 'number') {
+          return this.game.getElementById(value) ?? value;
+        }
+        if (this.looksLikeSerializedElement(value)) {
+          return this.game.getElementById((value as { id: number }).id) ?? value;
+        }
+        return value;
+      }
+      case 'choice': {
+        if (this.isSerializedElement(value)) {
+          return this.game.getElementById((value as { id: number }).id) ?? value;
+        }
+        const choices = this.getChoices(selection, player, {});
+        let resolved = this.smartResolveChoiceValue(value, choices);
+        resolved = this.extractChoiceValue(resolved);
+        return resolved !== value ? resolved : value;
+      }
+      default:
+        return value;
+    }
   }
 
   /**

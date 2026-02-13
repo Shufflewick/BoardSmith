@@ -1595,3 +1595,42 @@ describe('onSelect / onCancel builder', () => {
     expect(action.selections[0].onSelect).toBe(handler);
   });
 });
+
+describe('onSelect context', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('createOnSelectContext.animate() calls game.animate without callback', () => {
+    const animateCalls: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const originalAnimate = game.animate.bind(game);
+    game.animate = (type: string, data: Record<string, unknown>, callback?: () => void) => {
+      animateCalls.push({ type, data });
+      originalAnimate(type, data, callback);
+    };
+
+    const ctx = (executor as any).createOnSelectContext();
+    ctx.animate('test-event', { foo: 'bar' });
+
+    expect(animateCalls).toHaveLength(1);
+    expect(animateCalls[0]).toEqual({ type: 'test-event', data: { foo: 'bar' } });
+  });
+
+  it('createOnSelectContext.animate() defaults data to empty object', () => {
+    const animateCalls: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const originalAnimate = game.animate.bind(game);
+    game.animate = (type: string, data: Record<string, unknown>, callback?: () => void) => {
+      animateCalls.push({ type, data });
+      originalAnimate(type, data, callback);
+    };
+
+    const ctx = (executor as any).createOnSelectContext();
+    ctx.animate('test-event');
+
+    expect(animateCalls[0].data).toEqual({});
+  });
+});
