@@ -833,6 +833,14 @@ export class ActionExecutor {
       };
     }
 
+    // Fire onSelect for each selection that has it (before execute)
+    const onSelectCtx = this.createOnSelectContext();
+    for (const selection of action.selections) {
+      if (selection.onSelect && resolvedArgs[selection.name] !== undefined) {
+        selection.onSelect(resolvedArgs[selection.name], onSelectCtx);
+      }
+    }
+
     const context: ActionContext = {
       game: this.game,
       player,

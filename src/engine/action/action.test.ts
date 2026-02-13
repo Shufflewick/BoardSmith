@@ -1788,3 +1788,84 @@ describe('onSelect in processRepeatingStep', () => {
     expect(pendingState.onSelectFired!.has(0)).toBe(true);
   });
 });
+
+describe('onSelect in executeAction', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('fires onSelect for each selection before execute()', () => {
+    const callOrder: string[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: (value) => { callOrder.push(`onSelect:color:${value}`); },
+      })
+      .chooseFrom('size', {
+        choices: ['S', 'M', 'L'],
+        onSelect: (value) => { callOrder.push(`onSelect:size:${value}`); },
+      })
+      .execute(() => { callOrder.push('execute'); });
+
+    const player = game.getPlayer(1)!;
+    const result = executor.executeAction(action, player, { color: 'red', size: 'M' });
+
+    expect(result.success).toBe(true);
+    expect(callOrder).toEqual(['onSelect:color:red', 'onSelect:size:M', 'execute']);
+  });
+
+  it('does not fire onSelect if validation fails', () => {
+    const onSelectCalls: unknown[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: (value) => { onSelectCalls.push(value); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const result = executor.executeAction(action, player, { color: 'invalid' });
+
+    expect(result.success).toBe(false);
+    expect(onSelectCalls).toHaveLength(0);
+  });
+
+  it('fires onSelect with resolved element values', () => {
+    const space = game.create(Space, 'board');
+    const piece = space.create(Piece, 'warrior');
+    const onSelectCalls: unknown[] = [];
+
+    const action = Action.create('test')
+      .chooseElement('target', {
+        elementClass: Piece,
+        onSelect: (value) => { onSelectCalls.push(value); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    executor.executeAction(action, player, { target: piece.id });
+
+    expect(onSelectCalls).toHaveLength(1);
+    expect(onSelectCalls[0]).toBe(piece);
+  });
+
+  it('skips selections without onSelect', () => {
+    const onSelectCalls: string[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', { choices: ['red', 'blue'] })
+      .chooseFrom('size', {
+        choices: ['S', 'M', 'L'],
+        onSelect: (value) => { onSelectCalls.push(value as string); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    executor.executeAction(action, player, { color: 'red', size: 'M' });
+
+    expect(onSelectCalls).toEqual(['M']);
+  });
+});
