@@ -1634,3 +1634,106 @@ describe('onSelect context', () => {
     expect(animateCalls[0].data).toEqual({});
   });
 });
+
+describe('onSelect in processSelectionStep', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('fires onSelect after validation passes with resolved value', () => {
+    const onSelectCalls: Array<{ value: unknown }> = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue', 'green'],
+        onSelect: (value, ctx) => {
+          onSelectCalls.push({ value });
+          ctx.animate('color-picked', { color: value });
+        },
+      })
+      .chooseFrom('size', { choices: ['S', 'M', 'L'] })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+    const result = executor.processSelectionStep(action, player, pendingState, 'color', 'red');
+
+    expect(result.success).toBe(true);
+    expect(onSelectCalls).toHaveLength(1);
+    expect(onSelectCalls[0].value).toBe('red');
+    expect(game.pendingAnimationEvents).toHaveLength(1);
+    expect(game.pendingAnimationEvents[0].type).toBe('color-picked');
+  });
+
+  it('does not fire onSelect if validation fails', () => {
+    const onSelectCalls: unknown[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue', 'green'],
+        onSelect: (value) => { onSelectCalls.push(value); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+    const result = executor.processSelectionStep(action, player, pendingState, 'color', 'invalid');
+
+    expect(result.success).toBe(false);
+    expect(onSelectCalls).toHaveLength(0);
+  });
+
+  it('tracks onSelectFired in pendingState', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: () => {},
+      })
+      .chooseFrom('size', { choices: ['S', 'M', 'L'] })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+    executor.processSelectionStep(action, player, pendingState, 'color', 'red');
+
+    expect(pendingState.onSelectFired).toBeDefined();
+    expect(pendingState.onSelectFired!.has(0)).toBe(true);
+    expect(pendingState.onSelectFired!.has(1)).toBe(false);
+  });
+
+  it('resolves element values before passing to onSelect', () => {
+    const space = game.create(Space, 'board');
+    const piece = space.create(Piece, 'warrior');
+    const onSelectCalls: unknown[] = [];
+
+    const action = Action.create('test')
+      .chooseElement('target', {
+        elementClass: Piece,
+        onSelect: (value) => { onSelectCalls.push(value); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+    // processSelectionStep receives element objects (validation requires them)
+    executor.processSelectionStep(action, player, pendingState, 'target', piece);
+
+    expect(onSelectCalls).toHaveLength(1);
+    expect(onSelectCalls[0]).toBe(piece); // Element passed through
+  });
+
+  it('skips onSelect if selection has no onSelect defined', () => {
+    const action = Action.create('test')
+      .chooseFrom('color', { choices: ['red', 'blue'] })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+    const result = executor.processSelectionStep(action, player, pendingState, 'color', 'red');
+
+    expect(result.success).toBe(true);
+    expect(pendingState.onSelectFired).toBeUndefined();
+  });
+});

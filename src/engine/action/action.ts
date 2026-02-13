@@ -1475,8 +1475,22 @@ export class ActionExecutor {
       return { success: false, error: validationResult.errors.join('; ') };
     }
 
-    // Store the value and move to next selection
+    // Store the value
     pendingState.collectedArgs[selectionName] = value;
+
+    // Fire onSelect if defined
+    if (selection.onSelect) {
+      const resolvedValue = this.resolveSelectionValue(selection, value, player);
+      const ctx = this.createOnSelectContext();
+      selection.onSelect(resolvedValue, ctx);
+
+      // Track that onSelect fired for this selection (for onCancel)
+      if (!pendingState.onSelectFired) {
+        pendingState.onSelectFired = new Set();
+      }
+      pendingState.onSelectFired.add(selectionIndex);
+    }
+
     pendingState.currentSelectionIndex++;
 
     return { success: true };
