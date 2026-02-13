@@ -1539,3 +1539,59 @@ describe('Disabled Selections', () => {
     expect(choices.every(c => c.disabled === false)).toBe(true);
   });
 });
+
+describe('onSelect / onCancel builder', () => {
+  it('should store onSelect on chooseFrom selection', () => {
+    const handler = () => {};
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: handler,
+      })
+      .execute(() => {});
+    expect(action.selections[0].onSelect).toBe(handler);
+  });
+
+  it('should store onCancel on chooseFrom selection', () => {
+    const handler = () => {};
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onCancel: handler,
+      })
+      .execute(() => {});
+    expect(action.selections[0].onCancel).toBe(handler);
+  });
+
+  it('should store onSelect on chooseElement selection', () => {
+    const handler = () => {};
+    const action = Action.create('test')
+      .chooseElement('card', { onSelect: handler })
+      .execute(() => {});
+    expect(action.selections[0].onSelect).toBe(handler);
+  });
+
+  it('should store onSelect on fromElements selection', () => {
+    const handler = () => {};
+    const action = Action.create('test')
+      .fromElements('target', { elements: [], onSelect: handler })
+      .execute(() => {});
+    expect(action.selections[0].onSelect).toBe(handler);
+  });
+
+  it('should store onSelect on enterText selection', () => {
+    const handler = () => {};
+    const action = Action.create('test')
+      .enterText('name', { onSelect: handler })
+      .execute(() => {});
+    expect(action.selections[0].onSelect).toBe(handler);
+  });
+
+  it('should store onSelect on enterNumber selection', () => {
+    const handler = () => {};
+    const action = Action.create('test')
+      .enterNumber('amount', { onSelect: handler })
+      .execute(() => {});
+    expect(action.selections[0].onSelect).toBe(handler);
+  });
+});

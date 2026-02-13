@@ -15,6 +15,7 @@ import type {
   RepeatConfig,
   MultiSelectConfig,
   ConditionConfig,
+  OnSelectContext,
 } from './types.js';
 
 /**
@@ -184,6 +185,10 @@ export class Action {
       multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
       /** Check if choice should be disabled. Returns reason string or false. */
       disabled?: (choice: T, context: ActionContext) => string | false;
+      /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+      onSelect?: (value: T, context: OnSelectContext) => void;
+      /** Called if the action is cancelled after onSelect fired but before execute(). */
+      onCancel?: (context: OnSelectContext) => void;
     }
   ): this {
     const selection: ChoiceSelection<T> = {
@@ -201,6 +206,8 @@ export class Action {
       repeatUntil: options.repeatUntil,
       multiSelect: options.multiSelect,
       disabled: options.disabled,
+      onSelect: options.onSelect,
+      onCancel: options.onCancel,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -265,6 +272,10 @@ export class Action {
       dependsOn?: string;
       /** Check if element should be disabled. Returns reason string or false. */
       disabled?: (element: T, context: ActionContext) => string | false;
+      /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+      onSelect?: (value: T, context: OnSelectContext) => void;
+      /** Called if the action is cancelled after onSelect fired but before execute(). */
+      onCancel?: (context: OnSelectContext) => void;
     } = {}
   ): this {
     const selection: ElementSelection<T> = {
@@ -280,6 +291,8 @@ export class Action {
       boardRef: options.boardRef as ElementSelection<T>['boardRef'],
       dependsOn: options.dependsOn,
       disabled: options.disabled,
+      onSelect: options.onSelect,
+      onCancel: options.onCancel,
     };
     this.definition.selections.push(selection as Selection);
     return this;
@@ -348,6 +361,10 @@ export class Action {
       repeatUntil?: T;
       /** Check if element should be disabled. Returns reason string or false. */
       disabled?: (element: T, context: ActionContext) => string | false;
+      /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+      onSelect?: (value: T, context: OnSelectContext) => void;
+      /** Called if the action is cancelled after onSelect fired but before execute(). */
+      onCancel?: (context: OnSelectContext) => void;
     }
   ): this {
     // For single-select (no multiSelect), use 'element' type to leverage existing code paths
@@ -367,6 +384,8 @@ export class Action {
         repeat: options.repeat,
         repeatUntil: options.repeatUntil,
         disabled: options.disabled,
+        onSelect: options.onSelect,
+        onCancel: options.onCancel,
       };
       this.definition.selections.push(selection as Selection);
     } else {
@@ -384,6 +403,8 @@ export class Action {
         repeat: options.repeat,
         repeatUntil: options.repeatUntil,
         disabled: options.disabled,
+        onSelect: options.onSelect,
+        onCancel: options.onCancel,
       };
       this.definition.selections.push(selection as Selection);
     }
@@ -426,6 +447,10 @@ export class Action {
       maxLength?: number;
       optional?: boolean;
       validate?: (value: string, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+      onSelect?: (value: string, context: OnSelectContext) => void;
+      /** Called if the action is cancelled after onSelect fired but before execute(). */
+      onCancel?: (context: OnSelectContext) => void;
     } = {}
   ): this {
     const selection: TextSelection = {
@@ -437,6 +462,8 @@ export class Action {
       maxLength: options.maxLength,
       optional: options.optional,
       validate: options.validate,
+      onSelect: options.onSelect,
+      onCancel: options.onCancel,
     };
     this.definition.selections.push(selection);
     return this;
@@ -479,6 +506,10 @@ export class Action {
       integer?: boolean;
       optional?: boolean;
       validate?: (value: number, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+      onSelect?: (value: number, context: OnSelectContext) => void;
+      /** Called if the action is cancelled after onSelect fired but before execute(). */
+      onCancel?: (context: OnSelectContext) => void;
     } = {}
   ): this {
     const selection: NumberSelection = {
@@ -490,6 +521,8 @@ export class Action {
       integer: options.integer,
       optional: options.optional,
       validate: options.validate,
+      onSelect: options.onSelect,
+      onCancel: options.onCancel,
     };
     this.definition.selections.push(selection);
     return this;
