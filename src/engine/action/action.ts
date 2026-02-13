@@ -1253,6 +1253,9 @@ export class ActionExecutor {
       };
     }
 
+    // Capture before accumulation — onSelect fires on first iteration only
+    const isFirstIteration = pendingState.repeating.iterationCount === 0;
+
     // Resolve element/player IDs to actual objects before validating choices
     // This is needed because choices functions (e.g., equipment) may depend on
     // previously selected elements (e.g., actingMerc)
@@ -1299,6 +1302,20 @@ export class ActionExecutor {
     // Add to accumulated values
     pendingState.repeating.accumulated.push(value);
     pendingState.repeating.iterationCount++;
+
+    // Fire onSelect on first iteration only (after validation passes)
+    if (isFirstIteration && selection.onSelect) {
+      const resolvedForHook = isElementSelection
+        ? (this.game.getElementById(value as number) ?? value)
+        : value;
+      const ctx = this.createOnSelectContext();
+      selection.onSelect(resolvedForHook, ctx);
+
+      if (!pendingState.onSelectFired) {
+        pendingState.onSelectFired = new Set();
+      }
+      pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
+    }
 
     // Update context with new accumulated value
     context.args[selection.name] = pendingState.repeating.accumulated;

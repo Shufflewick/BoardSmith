@@ -1737,3 +1737,54 @@ describe('onSelect in processSelectionStep', () => {
     expect(pendingState.onSelectFired).toBeUndefined();
   });
 });
+
+describe('onSelect in processRepeatingStep', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('fires onSelect on first iteration only', () => {
+    const onSelectCalls: unknown[] = [];
+    const action = Action.create('test')
+      .chooseFrom('items', {
+        choices: ['a', 'b', 'c', 'done'],
+        repeatUntil: 'done',
+        onSelect: (value) => { onSelectCalls.push(value); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+
+    executor.processRepeatingStep(action, player, pendingState, 'a');
+    expect(onSelectCalls).toHaveLength(1);
+    expect(onSelectCalls[0]).toBe('a');
+
+    executor.processRepeatingStep(action, player, pendingState, 'b');
+    expect(onSelectCalls).toHaveLength(1); // Still 1
+
+    executor.processRepeatingStep(action, player, pendingState, 'done');
+    expect(onSelectCalls).toHaveLength(1); // Still 1
+  });
+
+  it('tracks onSelectFired for repeating selections', () => {
+    const action = Action.create('test')
+      .chooseFrom('items', {
+        choices: ['a', 'b', 'done'],
+        repeatUntil: 'done',
+        onSelect: () => {},
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+    executor.processRepeatingStep(action, player, pendingState, 'a');
+
+    expect(pendingState.onSelectFired).toBeDefined();
+    expect(pendingState.onSelectFired!.has(0)).toBe(true);
+  });
+});
