@@ -23,6 +23,15 @@ export type AnnotatedChoice<T> = {
 };
 
 /**
+ * Restricted context passed to onSelect/onCancel callbacks.
+ * Only exposes animate() with no callback parameter — state mutation is impossible.
+ */
+export interface OnSelectContext {
+  /** Emit a UI-only animation event. No callback — no state mutation allowed. */
+  animate(type: string, data?: Record<string, unknown>): void;
+}
+
+/**
  * Base selection configuration
  */
 export interface BaseSelection<T = unknown> {
@@ -37,6 +46,10 @@ export interface BaseSelection<T = unknown> {
   optional?: boolean | string;
   /** Validation function */
   validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+  /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+  onSelect?: (value: T, context: OnSelectContext) => void;
+  /** Called if the action is cancelled after onSelect fired but before execute(). */
+  onCancel?: (context: OnSelectContext) => void;
 }
 
 /**
@@ -125,6 +138,8 @@ export interface PendingActionState {
   repeating?: RepeatingSelectionState;
   /** Index of current selection in action.selections */
   currentSelectionIndex: number;
+  /** Indices of selections whose onSelect callback has fired */
+  onSelectFired?: Set<number>;
 }
 
 /**

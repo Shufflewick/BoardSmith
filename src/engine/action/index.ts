@@ -30,6 +30,7 @@ export type {
   RepeatConfig,
   RepeatingSelectionState,
   PendingActionState,
+  OnSelectContext,
 } from './types.js';
 
 // Filter helpers for multi-step selections
