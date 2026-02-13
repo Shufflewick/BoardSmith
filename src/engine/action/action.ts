@@ -836,8 +836,12 @@ export class ActionExecutor {
     // Fire onSelect for each selection that has it (before execute)
     const onSelectCtx = this.createOnSelectContext();
     for (const selection of action.selections) {
-      if (selection.onSelect && resolvedArgs[selection.name] !== undefined) {
-        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx);
+      if (selection.onSelect && resolvedArgs[selection.name] != null) {
+        try {
+          (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx);
+        } catch (error) {
+          console.error(`[BoardSmith] onSelect for '${selection.name}' in action '${action.name}' threw:`, error);
+        }
       }
     }
 
@@ -1313,16 +1317,20 @@ export class ActionExecutor {
 
     // Fire onSelect on first iteration only (after validation passes)
     if (isFirstIteration && selection.onSelect) {
-      const resolvedForHook = isElementSelection
-        ? (this.game.getElementById(value as number) ?? value)
-        : value;
-      const ctx = this.createOnSelectContext();
-      (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedForHook, ctx);
+      try {
+        const resolvedForHook = isElementSelection
+          ? (this.game.getElementById(value as number) ?? value)
+          : value;
+        const ctx = this.createOnSelectContext();
+        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedForHook, ctx);
 
-      if (!pendingState.onSelectFired) {
-        pendingState.onSelectFired = new Set();
+        if (!pendingState.onSelectFired) {
+          pendingState.onSelectFired = new Set();
+        }
+        pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
+      } catch (error) {
+        console.error(`[BoardSmith] onSelect for '${selection.name}' threw:`, error);
       }
-      pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
     }
 
     // Update context with new accumulated value
@@ -1505,15 +1513,19 @@ export class ActionExecutor {
 
     // Fire onSelect if defined
     if (selection.onSelect) {
-      const resolvedValue = this.resolveSelectionValue(selection, value, player);
-      const ctx = this.createOnSelectContext();
-      (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx);
+      try {
+        const resolvedValue = this.resolveSelectionValue(selection, value, player);
+        const ctx = this.createOnSelectContext();
+        (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx);
 
-      // Track that onSelect fired for this selection (for onCancel)
-      if (!pendingState.onSelectFired) {
-        pendingState.onSelectFired = new Set();
+        // Track that onSelect fired for this selection (for onCancel)
+        if (!pendingState.onSelectFired) {
+          pendingState.onSelectFired = new Set();
+        }
+        pendingState.onSelectFired.add(selectionIndex);
+      } catch (error) {
+        console.error(`[BoardSmith] onSelect for '${selection.name}' threw:`, error);
       }
-      pendingState.onSelectFired.add(selectionIndex);
     }
 
     pendingState.currentSelectionIndex++;
@@ -1532,7 +1544,11 @@ export class ActionExecutor {
     for (const index of pendingState.onSelectFired) {
       const selection = action.selections[index];
       if (selection?.onCancel) {
-        selection.onCancel(ctx);
+        try {
+          selection.onCancel(ctx);
+        } catch (error) {
+          console.error(`[BoardSmith] onCancel for '${selection.name}' threw:`, error);
+        }
       }
     }
   }
