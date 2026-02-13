@@ -801,6 +801,7 @@ export async function handleSelectionStep(
       actionComplete: result.actionComplete,
       actionResult: result.actionResult,
       state: result.state,
+      followUp: result.followUp,
     });
   } else {
     return error(result.error ?? 'Failed to process selection step');

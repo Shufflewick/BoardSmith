@@ -5,7 +5,7 @@
  * Handles the step-by-step processing of actions with repeating selections.
  */
 
-import type { FlowState, PendingActionState, Game } from '../engine/index.js';
+import type { FlowState, PendingActionState, Game, FollowUpAction } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -45,6 +45,7 @@ export interface PickStepResult {
     state?: PlayerGameState;
   };
   state?: PlayerGameState;
+  followUp?: FollowUpAction;
 }
 
 /**
@@ -214,6 +215,7 @@ export class PendingActionManager<G extends Game = Game> {
           this.#callbacks.scheduleAICheck();
         }
 
+        const flowState = this.#runner.getFlowState();
         return {
           success: actionResult.success,
           error: actionResult.error,
@@ -222,10 +224,11 @@ export class PendingActionManager<G extends Game = Game> {
           actionResult: {
             success: actionResult.success,
             error: actionResult.error,
-            flowState: this.#runner.getFlowState(),
+            flowState,
             state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
           },
           state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+          followUp: flowState?.followUp,
         };
       }
 
@@ -270,6 +273,7 @@ export class PendingActionManager<G extends Game = Game> {
         this.#callbacks.scheduleAICheck();
       }
 
+      const flowState = this.#runner.getFlowState();
       return {
         success: actionResult.success,
         error: actionResult.error,
@@ -278,10 +282,11 @@ export class PendingActionManager<G extends Game = Game> {
         actionResult: {
           success: actionResult.success,
           error: actionResult.error,
-          flowState: this.#runner.getFlowState(),
+          flowState,
           state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
         },
         state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+        followUp: flowState?.followUp,
       };
     }
 

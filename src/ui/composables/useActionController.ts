@@ -1216,10 +1216,29 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
+        // Set pendingFollowUp BEFORE clearing state to prevent race condition
+        if (result.followUp) {
+          pendingFollowUp.value = true;
+        }
+
         // Action completed - clear everything
         repeatingState.value = null;
         currentAction.value = null;
         clearArgs();
+        clearAdvancedState();
+
+        // Handle followUp: chain to next action (same pattern as executeCurrentAction)
+        if (result.followUp) {
+          const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
+          setTimeout(async () => {
+            try {
+              await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
+            } finally {
+              pendingFollowUp.value = false;
+            }
+          }, 0);
+        }
+
         return { valid: true };
       }
 
@@ -1288,10 +1307,28 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       pendingOnServer.value = true;
 
       if (result.actionComplete) {
+        // Set pendingFollowUp BEFORE clearing state to prevent race condition
+        if (result.followUp) {
+          pendingFollowUp.value = true;
+        }
+
         // Server executed the action — clear local state
         currentAction.value = null;
         clearArgs();
         clearAdvancedState();
+
+        // Handle followUp: chain to next action (same pattern as executeCurrentAction)
+        if (result.followUp) {
+          const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
+          setTimeout(async () => {
+            try {
+              await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
+            } finally {
+              pendingFollowUp.value = false;
+            }
+          }, 0);
+        }
+
         return { valid: true };
       }
 

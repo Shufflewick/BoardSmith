@@ -16,7 +16,7 @@
  * - AI scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction } from '../engine/index.js';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -1388,8 +1388,24 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     actionComplete?: boolean;
     actionResult?: ActionResult;
     state?: PlayerGameState;
+    followUp?: FollowUpAction & { metadata?: ReturnType<typeof buildSingleActionMetadata> };
   }> {
-    return this.#pendingActionManager.processSelectionStep(playerPosition, selectionName, value, actionName, initialArgs);
+    const result = await this.#pendingActionManager.processSelectionStep(playerPosition, selectionName, value, actionName, initialArgs);
+
+    // Build followUp with metadata if present (same pattern as executeAction)
+    if (result.followUp) {
+      const playerObj = this.#runner.game.getPlayer(playerPosition);
+      const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, result.followUp.action, result.followUp.args) : undefined;
+      return {
+        ...result,
+        followUp: {
+          ...result.followUp,
+          metadata: followUpMetadata,
+        },
+      };
+    }
+
+    return result;
   }
 
   /**

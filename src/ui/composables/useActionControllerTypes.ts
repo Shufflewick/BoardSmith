@@ -130,6 +130,12 @@ export interface PickStepResult {
   done?: boolean;
   nextChoices?: unknown[];
   actionComplete?: boolean;
+  followUp?: {
+    action: string;
+    args?: Record<string, unknown>;
+    metadata?: ActionMetadata;
+    display?: Record<string, string>;
+  };
 }
 
 /** Result from fetching pick choices */
