@@ -109,7 +109,7 @@ export class ActionExecutor {
     // First pass: resolve selection args based on their type
     for (const selection of action.selections) {
       const value = args[selection.name];
-      if (value === undefined) continue;
+      if (value === undefined || value === null) continue;
 
       switch (selection.type) {
         case 'element': {
@@ -747,8 +747,10 @@ export class ActionExecutor {
     for (const selection of action.selections) {
       const value = args[selection.name];
 
-      // Handle optional selections
-      if (value === undefined) {
+      // Handle missing or skipped selections
+      // undefined = not provided (key absent from args)
+      // null = explicitly skipped (from direct API/bot calls; UI strips skipped via buildServerArgs)
+      if (value === undefined || value === null) {
         if (!selection.optional) {
           allErrors.push(`Missing required selection: ${selection.name}`);
         }

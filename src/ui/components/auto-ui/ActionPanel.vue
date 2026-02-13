@@ -324,13 +324,9 @@ const filteredValidElements = computed(() => {
 // Skip an optional selection
 function skipOptionalSelection() {
   if (!currentPick.value || !currentPick.value.optional) return;
-  // Mark as explicitly skipped by setting to null (not undefined)
-  currentArgs[currentPick.value.name] = null;
-
-  // Auto-execute if action is now complete (all required selections filled)
-  if (currentAction.value && isActionReady.value) {
-    executeAction(currentAction.value, { ...currentArgs });
-  }
+  // Delegate to controller — updates both currentArgs and collectedPicks (source of truth).
+  // The controller's auto-execute watch handles execution when all selections are filled.
+  actionController.skip(currentPick.value.name);
 }
 
 // Submit number input value

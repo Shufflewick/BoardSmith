@@ -436,8 +436,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const args: Record<string, unknown> = {};
 
     // Use collectedPicks as the source of truth
+    // Exclude skipped selections — server expects undefined (missing key) for skipped optional args
     if (actionSnapshot.value) {
       for (const [name, collected] of actionSnapshot.value.collectedPicks) {
+        if (collected.skipped) continue;
         args[name] = collected.value;
       }
     }
@@ -721,7 +723,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value) {
       // Call hook before executing - allows capturing element positions for animations
       if (beforeAutoExecuteHook.value) {
-        await beforeAutoExecuteHook.value(currentAction.value, { ...currentArgs.value });
+        await beforeAutoExecuteHook.value(currentAction.value, buildServerArgs());
       }
       executeCurrentAction();
     }
@@ -762,7 +764,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const actionName = currentAction.value;
-    const args = { ...currentArgs.value };
+    const args = buildServerArgs();
 
     isExecuting.value = true;
     lastError.value = null;

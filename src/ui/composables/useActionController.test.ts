@@ -1631,4 +1631,124 @@ describe('useActionController', () => {
     });
   });
 
+  describe('followUp + skip + auto-execute', () => {
+    it('should preserve followUp pre-filled args when skip triggers auto-execute', async () => {
+      // Metadata for the followUp action: one optional selection, no other selections
+      const followUpMeta: Record<string, ActionMetadata> = {
+        collectEquipment: {
+          name: 'collectEquipment',
+          prompt: 'Collect equipment',
+          selections: [
+            {
+              name: 'equipment',
+              type: 'choice',
+              prompt: 'Select equipment',
+              optional: true,
+              choices: [
+                { value: 'sword', display: 'Sword' },
+                { value: 'shield', display: 'Shield' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'collectEquipment'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: false,
+      });
+
+      // Simulate followUp starting with pre-filled args
+      // This is what happens when Action A returns { followUp: { action: 'collectEquipment', args: { combatantId: 42, sectorId: 7 } } }
+      sendAction.mockResolvedValueOnce({
+        success: true,
+        followUp: {
+          action: 'collectEquipment',
+          args: { combatantId: 42, sectorId: 7 },
+        },
+      });
+
+      // Execute the first action which triggers the followUp
+      await controller.execute('endTurn');
+      // Wait for setTimeout(0) in executeCurrentAction's followUp handling
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await nextTick();
+
+      // Verify followUp started with pre-filled args
+      expect(controller.currentAction.value).toBe('collectEquipment');
+      expect(controller.currentArgs.value.combatantId).toBe(42);
+      expect(controller.currentArgs.value.sectorId).toBe(7);
+
+      // Now skip the optional equipment selection
+      controller.skip('equipment');
+      await nextTick();
+      await nextTick(); // Extra tick for auto-execute watch
+
+      // The auto-execute should have sent the action with ALL args including pre-filled followUp args
+      // Bug: executeCurrentAction uses { ...currentArgs.value } which can be wiped by external code
+      // Fix: should use buildServerArgs() which reads from collectedPicks (controller-owned state)
+      const lastCall = sendAction.mock.calls[sendAction.mock.calls.length - 1];
+      expect(lastCall[0]).toBe('collectEquipment');
+      expect(lastCall[1]).toHaveProperty('combatantId', 42);
+      expect(lastCall[1]).toHaveProperty('sectorId', 7);
+    });
+
+    it('buildServerArgs should exclude skipped selections', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        autoFill: false,
+      });
+
+      await controller.start('optionalDiscard');
+      controller.skip('card');
+
+      // After skip, isReady should be true
+      expect(controller.isReady.value).toBe(true);
+
+      // The snapshot should have the skipped entry
+      const snapshot = controller.actionSnapshot.value;
+      expect(snapshot).not.toBeNull();
+      const cardPick = snapshot!.collectedPicks.get('card');
+      expect(cardPick).toBeDefined();
+      expect(cardPick!.skipped).toBe(true);
+      expect(cardPick!.value).toBe(null);
+
+      // When auto-execute sends args, skipped entries should NOT be included as null
+      // They should be excluded (server expects undefined for optional missing args)
+      // We can verify this by checking that executeCurrentAction sends args without the skipped key
+      sendAction.mockClear();
+
+      // Manually trigger auto-execute path by starting and skipping with auto-execute on
+      const controller2 = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: false,
+      });
+
+      await controller2.start('optionalDiscard');
+      controller2.skip('card');
+      await nextTick();
+      await nextTick();
+
+      // sendAction should have been called without 'card' key (not with card: null)
+      expect(sendAction).toHaveBeenCalled();
+      const args = sendAction.mock.calls[sendAction.mock.calls.length - 1][1];
+      expect(args).not.toHaveProperty('card');
+    });
+  });
+
 });

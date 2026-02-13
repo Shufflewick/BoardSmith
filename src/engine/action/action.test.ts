@@ -542,6 +542,50 @@ describe('Action Executor', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Something went wrong');
     });
+
+    it('should treat null as skipped for optional selections', () => {
+      // When the UI skips an optional selection, it sends null.
+      // The engine should treat null the same as undefined for optional selections:
+      // skip validation and exclude from execute callback args.
+      let receivedArgs: Record<string, unknown> = {};
+      const action = Action.create('test')
+        .chooseFrom('color', {
+          choices: ['red', 'blue'],
+          optional: true,
+        })
+        .execute((args) => {
+          receivedArgs = args;
+        });
+
+      // Sending null for optional selection should succeed (treated as "not provided")
+      const result = executor.executeAction(action, game.getPlayer(1)!, { color: null });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should preserve non-selection followUp args when optional selection is null', () => {
+      // followUp pre-fills args like { combatantId: 42, sectorId: 7 } alongside selections.
+      // When equipment is skipped (null), the pre-filled args should still be in ctx.args.
+      let receivedCtx: ActionContext | undefined;
+      const action = Action.create('test')
+        .chooseFrom('equipment', {
+          choices: ['sword', 'shield'],
+          optional: true,
+        })
+        .execute((_args, ctx) => {
+          receivedCtx = ctx;
+        });
+
+      const result = executor.executeAction(action, game.getPlayer(1)!, {
+        combatantId: 42,
+        sectorId: 7,
+        equipment: null,
+      });
+
+      expect(result.success).toBe(true);
+      expect(receivedCtx!.args.combatantId).toBe(42);
+      expect(receivedCtx!.args.sectorId).toBe(7);
+    });
   });
 
   describe('isActionAvailable', () => {
