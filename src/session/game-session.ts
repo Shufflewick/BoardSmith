@@ -451,7 +451,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
             // Replace the session's runner
             session.#runner = newRunner;
-            session.#pickHandler = session.#pickHandler.updateRunner(newRunner);
+            session.#pickHandler = new PickHandler(newRunner, currentSlotCount);
             session.#pendingActionManager.updateRunner(newRunner);
 
             // Update storedState to reflect actual counts
@@ -592,7 +592,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
             // Replace the session's runner
             session.#runner = newRunner;
-            session.#pickHandler = session.#pickHandler.updateRunner(newRunner);
+            session.#pickHandler = new PickHandler(newRunner, currentSlotCount);
             session.#pendingActionManager.updateRunner(newRunner);
 
             // Update storedState to reflect actual counts

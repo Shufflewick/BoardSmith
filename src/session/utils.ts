@@ -360,16 +360,18 @@ export function buildPlayerState(
   const playerView = runner.getPlayerView(playerPosition);
   const truthView = playerView.state;
 
+  const isMyTurn = isPlayersTurn(flowState, playerPosition);
+
   // Get available actions - check awaitingPlayers first (for simultaneous actions)
+  // For non-simultaneous flows, only the current player sees available actions.
+  // This prevents clients from prematurely starting actions during another player's turn.
   let availableActions: string[];
   if (flowState?.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
     const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === playerPosition);
     availableActions = playerState?.availableActions ?? [];
   } else {
-    availableActions = flowState?.availableActions ?? [];
+    availableActions = isMyTurn ? (flowState?.availableActions ?? []) : [];
   }
-
-  const isMyTurn = isPlayersTurn(flowState, playerPosition);
 
   // Compute undo info - pass moveCount from FlowState for accurate turn boundary detection
   // This fixes issues with games where the same player acts at the end of one phase

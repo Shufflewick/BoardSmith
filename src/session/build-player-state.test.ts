@@ -126,6 +126,38 @@ describe('buildPlayerState - single truth view (SES-01)', () => {
   });
 });
 
+describe('buildPlayerState - availableActions scoped to current player', () => {
+  let runner: GameRunner<TestGame>;
+
+  beforeEach(() => {
+    runner = new GameRunner({
+      GameClass: TestGame,
+      gameType: 'test-game',
+      gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'test' },
+    });
+    runner.start();
+  });
+
+  it('current player sees available actions', () => {
+    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    expect(state.isMyTurn).toBe(true);
+    expect(state.availableActions.length).toBeGreaterThan(0);
+  });
+
+  it('non-current player sees empty available actions', () => {
+    const state = buildPlayerState(runner, ['Alice', 'Bob'], 2);
+    expect(state.isMyTurn).toBe(false);
+    expect(state.availableActions).toEqual([]);
+  });
+
+  it('non-current player gets no action metadata even when requested', () => {
+    const state = buildPlayerState(runner, ['Alice', 'Bob'], 2, { includeActionMetadata: true });
+    expect(state.isMyTurn).toBe(false);
+    expect(state.availableActions).toEqual([]);
+    expect(state.actionMetadata).toBeUndefined();
+  });
+});
+
 describe('buildPlayerState - animation events (SES-02)', () => {
   let runner: GameRunner<TestGame>;
 
