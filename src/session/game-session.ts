@@ -16,7 +16,7 @@
  * - AI scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions } from '../engine/index.js';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -537,12 +537,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       {
         GameClass,
         gameType: storedState.gameType,
-        gameOptions: {
-          playerCount: storedState.playerCount,
-          playerNames: storedState.playerNames,
-          seed: storedState.seed,
-          ...storedState.gameOptions,
-        },
+        gameOptions: GameSession.#buildGameOptionsFromState(storedState),
       },
       storedState.actionHistory
     );
@@ -962,12 +957,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Build class registry from the NEW game class
     // We create a temporary game instance to get the class registry populated by registerElements()
     // This ensures we have the NEW classes (with correct identity) for validation and restoration
-    const tempGame = new (definition.gameClass as GameClass<G>)({
-      playerCount: this.#storedState.playerCount,
-      playerNames: this.#storedState.playerNames,
-      seed: this.#storedState.seed,
-      ...this.#storedState.gameOptions,
-    });
+    const gameOptions = this.#buildGameOptions();
+    const tempGame = new (definition.gameClass as GameClass<G>)(gameOptions as any);
     const classRegistry = tempGame._ctx.classRegistry;
 
     // Also add the Game class itself to the registry (registerElements only adds element classes)
@@ -1011,12 +1002,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       snapshot,
       definition.gameClass as GameClass<G>,
       {
-        gameOptions: {
-          playerCount: this.#storedState.playerCount,
-          playerNames: this.#storedState.playerNames,
-          seed: this.#storedState.seed,
-          ...this.#storedState.gameOptions,
-        },
+        gameOptions,
         classRegistry,
       }
     );
@@ -1025,12 +1011,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const newRunner = new GameRunner<G>({
       GameClass: definition.gameClass as GameClass<G>,
       gameType: this.#storedState.gameType,
-      gameOptions: {
-        playerCount: this.#storedState.playerCount,
-        playerNames: this.#storedState.playerNames,
-        seed: this.#storedState.seed,
-        ...this.#storedState.gameOptions,
-      },
+      gameOptions,
     });
 
     // Replace the runner's game with our restored game
@@ -1113,12 +1094,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       {
         GameClass: definition.gameClass as GameClass<G>,
         gameType: this.#storedState.gameType,
-        gameOptions: {
-          playerCount: this.#storedState.playerCount,
-          playerNames: this.#storedState.playerNames,
-          seed: this.#storedState.seed,
-          ...this.#storedState.gameOptions,
-        },
+        gameOptions: this.#buildGameOptions(),
       },
       this.#storedState.actionHistory
     );
@@ -1154,14 +1130,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    */
   #reloadFromCheckpoint(checkpoint: DevCheckpoint, definition: GameDefinition): GameRunner<G> | null {
     try {
+      const gameOptions = this.#buildGameOptions();
+
       // Build class registry from the NEW game class
       // Create a temporary game instance to get the NEW class registry
-      const tempGame = new (definition.gameClass as GameClass<G>)({
-        playerCount: this.#storedState.playerCount,
-        playerNames: this.#storedState.playerNames,
-        seed: this.#storedState.seed,
-        ...this.#storedState.gameOptions,
-      });
+      const tempGame = new (definition.gameClass as GameClass<G>)(gameOptions as any);
       const classRegistry = tempGame._ctx.classRegistry;
 
       // Also add the Game class itself to the registry (registerElements only adds element classes)
@@ -1179,12 +1152,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         checkpoint,
         definition.gameClass as GameClass<G>,
         {
-          gameOptions: {
-            playerCount: this.#storedState.playerCount,
-            playerNames: this.#storedState.playerNames,
-            seed: this.#storedState.seed,
-            ...this.#storedState.gameOptions,
-          },
+          gameOptions,
           classRegistry,
         }
       );
@@ -1193,12 +1161,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       const newRunner = new GameRunner<G>({
         GameClass: definition.gameClass as GameClass<G>,
         gameType: this.#storedState.gameType,
-        gameOptions: {
-          playerCount: this.#storedState.playerCount,
-          playerNames: this.#storedState.playerNames,
-          seed: this.#storedState.seed,
-          ...this.#storedState.gameOptions,
-        },
+        gameOptions,
       });
 
       // @ts-expect-error - Accessing readonly for HMR
@@ -1228,6 +1191,58 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       console.warn('[HMR] Checkpoint restore failed:', error);
       return null;
     }
+  }
+
+  /**
+   * Build full game options from stored state, including playerConfigs
+   * reconstructed from lobbySlots when available.
+   *
+   * All game reconstruction paths (HMR, restore, checkpoint) MUST use this
+   * to ensure the constructor receives the same options as the original game.
+   */
+  #buildGameOptions(): GameOptions & Record<string, unknown> {
+    const options: GameOptions & Record<string, unknown> = {
+      playerCount: this.#storedState.playerCount,
+      playerNames: this.#storedState.playerNames,
+      seed: this.#storedState.seed,
+      ...this.#storedState.gameOptions,
+    };
+
+    // Reconstruct playerConfigs from lobbySlots so constructor-time logic
+    // (e.g. setting up AI flags, roles) runs correctly in clones/replays
+    if (this.#storedState.lobbySlots && this.#storedState.lobbyState === 'playing') {
+      options.playerConfigs = this.#storedState.lobbySlots.map(slot => ({
+        name: slot.name,
+        isAI: slot.status === 'ai',
+        aiLevel: slot.aiLevel,
+        ...slot.playerOptions,
+      }));
+    }
+
+    return options;
+  }
+
+  /**
+   * Static version of #buildGameOptions for use in static factory methods.
+   */
+  static #buildGameOptionsFromState(storedState: StoredGameState): GameOptions & Record<string, unknown> {
+    const options: GameOptions & Record<string, unknown> = {
+      playerCount: storedState.playerCount,
+      playerNames: storedState.playerNames,
+      seed: storedState.seed,
+      ...storedState.gameOptions,
+    };
+
+    if (storedState.lobbySlots && storedState.lobbyState === 'playing') {
+      options.playerConfigs = storedState.lobbySlots.map(slot => ({
+        name: slot.name,
+        isAI: slot.status === 'ai',
+        aiLevel: slot.aiLevel,
+        ...slot.playerOptions,
+      }));
+    }
+
+    return options;
   }
 
   // ============================================
