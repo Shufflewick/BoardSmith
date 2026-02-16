@@ -310,6 +310,27 @@ const currentPlayerName = computed(() => {
   const player = players.value.find(p => p.seat === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
+// Awaiting player seats during simultaneous action steps
+const awaitingPlayerSeats = computed(() => {
+  const flowState = state.value?.flowState as any;
+  if (!flowState?.awaitingPlayers?.length) return [];
+  return flowState.awaitingPlayers
+    .filter((p: any) => !p.completed && p.availableActions.length > 0)
+    .map((p: any) => p.playerIndex);
+});
+
+// Awaiting player info for ActionPanel (names + colors for waiting message)
+const awaitingPlayerNames = computed(() => {
+  const flowState = state.value?.flowState as any;
+  if (!flowState?.awaitingPlayers?.length) return [];
+  return flowState.awaitingPlayers
+    .filter((p: any) => !p.completed && p.availableActions.length > 0)
+    .map((p: any) => {
+      const player = players.value.find(pl => pl.seat === p.playerIndex);
+      return { seat: p.playerIndex, name: player?.name || `Player ${p.playerIndex}`, color: typeof (player as any)?.color === 'string' ? (player as any).color : undefined };
+    });
+});
+
 const currentPlayerColor = computed((): string | undefined => {
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return undefined;
@@ -1098,6 +1119,7 @@ if ((import.meta as any).hot) {
             :player-seat="playerSeat"
             :current-player-seat="state?.state.currentPlayer"
             :color-selection-enabled="colorSelectionEnabled"
+            :awaiting-player-seats="awaitingPlayerSeats"
           >
             <template #player-stats="{ player }">
               <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>
@@ -1165,6 +1187,7 @@ if ((import.meta as any).hot) {
           :messages="gameMessages"
           :current-player-name="currentPlayerName"
           :current-player-color="currentPlayerColor"
+          :awaiting-players="awaitingPlayerNames"
           @undo="handleUndo"
         />
         <!-- Time travel banner -->

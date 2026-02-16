@@ -79,6 +79,8 @@ const props = defineProps<{
   currentPlayerName?: string;
   /** Color of the player whose turn it is */
   currentPlayerColor?: string;
+  /** Players currently awaiting action during simultaneous steps */
+  awaitingPlayers?: Array<{ seat: number; name: string; color?: string }>;
 }>();
 
 const emit = defineEmits<{
@@ -1680,7 +1682,13 @@ function clearBoardSelection() {
 
   <!-- Not my turn -->
   <div v-else class="waiting-message">
-    <template v-if="latestMessage">
+    <template v-if="awaitingPlayers?.length">
+      Waiting for
+      <template v-for="(p, i) in awaitingPlayers" :key="p.seat">
+        <span class="awaiting-seat" :style="p.color ? { color: p.color } : undefined">{{ p.name }}</span><template v-if="i < awaitingPlayers.length - 1">, </template>
+      </template>
+    </template>
+    <template v-else-if="latestMessage">
       <span v-if="currentPlayerName" class="player-name-prefix" :style="currentPlayerColor ? { color: currentPlayerColor } : undefined">{{ currentPlayerName }}:</span>
       {{ latestMessage }}
     </template>
@@ -1997,6 +2005,11 @@ function clearBoardSelection() {
 
 .player-name-prefix {
   font-weight: 600;
+}
+
+.awaiting-seat {
+  font-weight: 700;
+  font-size: 0.95rem;
 }
 
 /* Multi-select styles */

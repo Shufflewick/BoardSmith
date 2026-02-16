@@ -11,7 +11,7 @@ export interface Player {
   color?: string;
 }
 
-defineProps<{
+const props = defineProps<{
   /** Array of players in the game */
   players: Player[];
   /** Current player's seat (the viewer) */
@@ -20,7 +20,15 @@ defineProps<{
   currentPlayerSeat?: number;
   /** Whether color selection is enabled (controls color indicator display) */
   colorSelectionEnabled?: boolean;
+  /** Seats of players currently awaiting action during simultaneous steps */
+  awaitingPlayerSeats?: number[];
 }>();
+
+function isPlayerActive(seat: number): boolean {
+  if (seat === props.currentPlayerSeat) return true;
+  if (props.awaitingPlayerSeats?.includes(seat)) return true;
+  return false;
+}
 
 defineSlots<{
   /** Custom stats for each player */
@@ -34,10 +42,10 @@ defineSlots<{
       v-for="player in players"
       :key="player.seat"
       class="player-card"
-      :class="{ current: player.seat === currentPlayerSeat }"
+      :class="{ current: isPlayerActive(player.seat) }"
     >
       <div class="player-name-row">
-        <span v-if="player.seat === currentPlayerSeat" class="turn-indicator-dot"></span>
+        <span v-if="isPlayerActive(player.seat)" class="turn-indicator-dot"></span>
         <span class="player-name">{{ player.name }}</span>
         <span v-if="colorSelectionEnabled && player.color" class="player-color" :style="{ backgroundColor: player.color }"></span>
         <span v-if="player.seat === playerSeat" class="you-badge">(You)</span>
