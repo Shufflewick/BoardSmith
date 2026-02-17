@@ -29,6 +29,8 @@ export type {
   LobbyUpdate,
   ClaimSeatRequest,
   ClaimSeatResponse,
+  JoinLobbyRequest,
+  JoinLobbyResponse,
   PlayerConfig,
 } from '../session/index.js';
 

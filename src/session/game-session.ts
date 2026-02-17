@@ -1599,6 +1599,23 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
+   * Join the lobby — server assigns the first available open seat.
+   *
+   * @param playerId Player's unique ID
+   * @param name Player's display name
+   * @returns Result with assigned seat and updated lobby info
+   */
+  async joinLobby(
+    playerId: string,
+    name: string
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo; seat?: number }> {
+    if (!this.#lobbyManager) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+    return this.#lobbyManager.joinLobby(playerId, name);
+  }
+
+  /**
    * Update a player's name in their slot
    *
    * @param playerId Player's unique ID

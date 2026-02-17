@@ -16,6 +16,7 @@ import type {
   GameConnectionConfig,
   LobbyInfo,
   ClaimSeatResponse,
+  JoinLobbyResponse,
   LobbyResponse,
 } from './types.js';
 
@@ -337,6 +338,21 @@ export class MeepleClient {
       method: 'POST',
       body: JSON.stringify({
         seat,
+        name,
+        playerId: this.playerId,
+      }),
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Join the game lobby. The server assigns the first available seat.
+   */
+  async joinLobby(gameId: string, name: string): Promise<JoinLobbyResponse> {
+    const response = await this.fetch(`/games/${gameId}/join-lobby`, {
+      method: 'POST',
+      body: JSON.stringify({
         name,
         playerId: this.playerId,
       }),

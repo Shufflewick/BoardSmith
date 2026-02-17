@@ -181,6 +181,28 @@ export interface ClaimSeatResponse {
   seat?: number;
 }
 
+/**
+ * Request to join the lobby (server assigns seat).
+ */
+export interface JoinLobbyRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** Player's display name */
+  name: string;
+}
+
+/**
+ * Response to join lobby request.
+ */
+export interface JoinLobbyResponse {
+  success: boolean;
+  error?: string;
+  /** Updated lobby info */
+  lobby?: LobbyInfo;
+  /** Seat that was assigned by the server */
+  seat?: number;
+}
+
 // ============================================
 // WebSocket Message Types
 // ============================================
@@ -196,6 +218,7 @@ export interface WebSocketMessage {
     | 'getState'
     | 'getLobby'
     | 'claimSeat'
+    | 'joinLobby'
     | 'updateName'
     | 'setReady'
     | 'addSlot'

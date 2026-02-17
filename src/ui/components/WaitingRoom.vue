@@ -43,7 +43,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'claim-position', position: number, name: string): void;
+  (e: 'join', name: string): void;
   (e: 'update-name', name: string): void;
   (e: 'set-ready', ready: boolean): void;
   (e: 'add-slot'): void;
@@ -56,11 +56,12 @@ const emit = defineEmits<{
   (e: 'cancel'): void;
 }>();
 
-// State for joining - track name per slot for open positions
-const slotNames = ref<Record<number, string>>({});
+// State for joining - single name input (server assigns seat)
+const joinName = ref('');
 
 // For name update after claiming
 const myName = ref('');
+const isNameDirty = ref(false);
 
 // Toast notifications
 const toast = useToast();
@@ -80,10 +81,10 @@ const isReady = computed(() => {
   return mySlot.value?.ready ?? false;
 });
 
-// Sync name when player claims
+// Sync name from server unless the user is actively editing
 watch(() => props.lobby, (lobby) => {
   const slot = lobby.slots.find(s => s.playerId === props.playerId);
-  if (slot) {
+  if (slot && !isNameDirty.value) {
     myName.value = slot.name;
   }
 }, { immediate: true });
@@ -237,17 +238,16 @@ function copyGameCode() {
   toast.success('Copied!');
 }
 
-function handleJoinSlot(position: number) {
-  const name = slotNames.value[position]?.trim();
-  if (!name) {
-    return;
-  }
-  emit('claim-position', position, name);
+function handleJoin() {
+  const name = joinName.value.trim();
+  if (!name) return;
+  emit('join', name);
 }
 
 function handleUpdateName() {
   if (!myName.value.trim()) return;
   emit('update-name', myName.value.trim());
+  isNameDirty.value = false;
 }
 
 function handleToggleReady() {
@@ -286,11 +286,6 @@ function getSlotStatusClass(slot: LobbySlot): string {
   if (slot.status === 'ai') return 'ai';
   if (slot.status === 'claimed') return 'claimed';
   return 'open';
-}
-
-function canJoinSlot(slot: LobbySlot): boolean {
-  // Can join if: not creator, haven't claimed yet, slot is open
-  return !props.isCreator && !hasClaimed.value && slot.status === 'open';
 }
 
 function canHostManageSlot(slot: LobbySlot): boolean {
@@ -554,23 +549,10 @@ function handleUpdateGameOption(key: string, value: unknown) {
         >
           <div class="slot-position">P{{ slot.seat }}</div>
 
-          <!-- Open slot that joiner can claim: show name input + Join button -->
-          <template v-if="canJoinSlot(slot)">
-            <div class="join-input-row">
-              <input
-                v-model="slotNames[slot.seat]"
-                type="text"
-                placeholder="Your name"
-                class="join-name-input"
-                @keyup.enter="handleJoinSlot(slot.seat)"
-              />
-              <button
-                @click="handleJoinSlot(slot.seat)"
-                class="btn join-btn"
-                :disabled="!slotNames[slot.seat]?.trim()"
-              >
-                Join
-              </button>
+          <!-- Open slot for non-host non-joiners: just show "Open Slot" -->
+          <template v-if="!isCreator && slot.status === 'open'">
+            <div class="slot-content">
+              <span class="slot-name open-label">Open Slot</span>
             </div>
           </template>
 
@@ -731,6 +713,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
           v-model="myName"
           type="text"
           placeholder="Enter your name"
+          @input="isNameDirty = true"
           @keyup.enter="handleUpdateName"
         />
         <button @click="handleUpdateName" class="btn small">Update</button>
@@ -787,6 +770,26 @@ function handleUpdateGameOption(key: string, value: unknown) {
         </div>
       </div>
     </div>
+    </div>
+
+    <!-- Join Section (for players who haven't claimed a seat yet) -->
+    <div v-if="!hasClaimed && !isCreator && lobby.openSlots > 0" class="join-section">
+      <div class="join-input-row">
+        <input
+          v-model="joinName"
+          type="text"
+          placeholder="Your name"
+          class="join-name-input"
+          @keyup.enter="handleJoin"
+        />
+        <button
+          @click="handleJoin"
+          class="btn join-btn"
+          :disabled="!joinName.trim()"
+        >
+          Join Game
+        </button>
+      </div>
     </div>
 
     <!-- Status Message -->
@@ -1360,6 +1363,15 @@ function handleUpdateGameOption(key: string, value: unknown) {
   background: rgba(46, 204, 113, 0.2);
   color: #2ecc71;
   border: 2px solid #2ecc71;
+}
+
+/* Join section */
+.join-section {
+  background: rgba(0, 217, 255, 0.05);
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 2px solid rgba(0, 217, 255, 0.2);
 }
 
 /* Join button on slots */

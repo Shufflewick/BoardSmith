@@ -652,6 +652,13 @@ export function createGameWorker(config: WorkerConfig) {
           return await handleLobbyRoute(gameId, 'claim-position', body, env, corsHeaders);
         }
 
+        const joinLobbyMatch = path.match(/^\/games\/([^/]+)\/join-lobby$/);
+        if (joinLobbyMatch && request.method === 'POST') {
+          const gameId = joinLobbyMatch[1];
+          const body = await request.json();
+          return await handleLobbyRoute(gameId, 'join-lobby', body, env, corsHeaders);
+        }
+
         const updateNameMatch = path.match(/^\/games\/([^/]+)\/update-name$/);
         if (updateNameMatch && request.method === 'POST') {
           const gameId = updateNameMatch[1];
@@ -1299,6 +1306,12 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
         case 'claim-position': {
           const { seat, name, playerId } = body as { seat: number; name: string; playerId: string };
           const result = await this.#gameSession.claimSeat(seat, playerId, name);
+          return Response.json(result, { status: result.success ? 200 : 400 });
+        }
+
+        case 'join-lobby': {
+          const { playerId, name } = body as { playerId: string; name: string };
+          const result = await this.#gameSession.joinLobby(playerId, name);
           return Response.json(result, { status: result.success ? 200 : 400 });
         }
 

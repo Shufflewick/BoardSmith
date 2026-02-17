@@ -675,28 +675,27 @@ async function joinGame() {
           setSessionPlayerId(newPlayerId);
         }
 
-        // Find the first open slot
-        const firstOpenSlot = lobby.slots.find(s => s.status === 'open');
+        // Check if there are open slots to join
+        const hasOpenSlots = lobby.slots.some(s => s.status === 'open');
 
-        if (firstOpenSlot) {
-          // Auto-claim the first open slot
-          // Use saved name if available, otherwise keep the slot's default name
-          const playerName = getPlayerName() || firstOpenSlot.name;
-          const claimResult = await client.claimSeat(gid, firstOpenSlot.seat, playerName);
+        if (hasOpenSlots) {
+          // Auto-join the lobby (server assigns seat)
+          const playerName = getPlayerName() || `Player ${lobby.slots.length + 1}`;
+          const joinResult = await client.joinLobby(gid, playerName);
 
-          if (claimResult.success && claimResult.lobby) {
-            lobbyInfo.value = claimResult.lobby;
+          if (joinResult.success && joinResult.lobby) {
+            lobbyInfo.value = joinResult.lobby;
 
             // Check if game started (all slots filled)
-            if (claimResult.lobby.state === 'playing') {
-              playerSeat.value = firstOpenSlot.seat;
+            if (joinResult.lobby.state === 'playing' && joinResult.seat) {
+              playerSeat.value = joinResult.seat;
               gameId.value = gid;
               currentScreen.value = 'game';
-              updateUrl(gid, firstOpenSlot.seat);
+              updateUrl(gid, joinResult.seat);
               return;
             }
           } else {
-            // Claim failed, show lobby anyway so they can try manually
+            // Join failed, show lobby anyway so they can try manually
             lobbyInfo.value = lobby;
           }
 
@@ -714,7 +713,7 @@ async function joinGame() {
       // Game already started - fall through to direct join
     } catch (e) {
       // Only fall through if lobby doesn't exist
-      // Re-throw other errors (like claimSeat failures)
+      // Re-throw other errors (like joinLobby failures)
       if (e instanceof Error && !e.message.includes('lobby')) {
         throw e;
       }
@@ -744,11 +743,11 @@ async function resumeGame(gid: string) {
 }
 
 // Lobby event handlers
-async function handleClaimSeat(position: number, name: string) {
+async function handleJoinLobby(name: string) {
   if (!createdGameId.value) return;
 
   try {
-    const result = await client.claimSeat(createdGameId.value, position, name);
+    const result = await client.joinLobby(createdGameId.value, name);
 
     if (result.success && result.lobby) {
       lobbyInfo.value = result.lobby;
@@ -756,19 +755,19 @@ async function handleClaimSeat(position: number, name: string) {
       setPlayerName(name);
 
       // If game started, transition
-      if (result.lobby.state === 'playing') {
+      if (result.lobby.state === 'playing' && result.seat) {
         disconnectFromLobby();
-        playerSeat.value = position;
+        playerSeat.value = result.seat;
         gameId.value = createdGameId.value;
         currentScreen.value = 'game';
-        updateUrl(createdGameId.value, position);
+        updateUrl(createdGameId.value, result.seat);
       }
     } else {
-      alert(result.error || 'Failed to claim position');
+      alert(result.error || 'Failed to join lobby');
     }
   } catch (err) {
-    console.error('Failed to claim position:', err);
-    alert('Failed to claim position');
+    console.error('Failed to join lobby:', err);
+    alert('Failed to join lobby');
   }
 }
 
@@ -1084,7 +1083,7 @@ if ((import.meta as any).hot) {
       :player-id="playerId"
       :is-creator="isCreator"
       :player-options="gamePlayerOptions"
-      @claim-position="handleClaimSeat"
+      @join="handleJoinLobby"
       @update-name="handleUpdateLobbyName"
       @set-ready="handleSetReady"
       @add-slot="handleAddSlot"

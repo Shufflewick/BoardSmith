@@ -12,6 +12,7 @@ import type {
   AIConfig,
   GameDefinition,
   ClaimSeatRequest,
+  JoinLobbyRequest,
 } from '../types.js';
 
 // ============================================
@@ -435,6 +436,42 @@ export async function handleClaimSeat(
     });
   } else {
     return error(result.error ?? 'Failed to claim seat');
+  }
+}
+
+/**
+ * POST /games/:gameId/join-lobby - Join lobby (server assigns seat)
+ */
+export async function handleJoinLobby(
+  store: GameStore,
+  gameId: string,
+  request: JoinLobbyRequest
+): Promise<ServerResponse> {
+  const session = await store.getGame(gameId);
+  if (!session) {
+    return error('Game not found', 404);
+  }
+
+  const { playerId, name } = request;
+
+  if (!playerId) {
+    return error('Player ID is required');
+  }
+
+  if (!name) {
+    return error('Player name is required');
+  }
+
+  const result = await session.joinLobby(playerId, name);
+
+  if (result.success) {
+    return success({
+      success: true,
+      lobby: result.lobby,
+      seat: result.seat,
+    });
+  } else {
+    return error(result.error ?? 'Failed to join lobby');
   }
 }
 

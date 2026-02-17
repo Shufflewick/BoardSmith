@@ -1683,10 +1683,10 @@ function clearBoardSelection() {
   <!-- Not my turn -->
   <div v-else class="waiting-message">
     <template v-if="awaitingPlayers?.length">
-      Waiting for
       <template v-for="(p, i) in awaitingPlayers" :key="p.seat">
         <span class="awaiting-seat" :style="p.color ? { color: p.color } : undefined">{{ p.name }}</span><template v-if="i < awaitingPlayers.length - 1">, </template>
-      </template>
+      </template><template v-if="latestMessage">: {{ latestMessage }}</template>
+      <template v-else>: Waiting...</template>
     </template>
     <template v-else-if="latestMessage">
       <span v-if="currentPlayerName" class="player-name-prefix" :style="currentPlayerColor ? { color: currentPlayerColor } : undefined">{{ currentPlayerName }}:</span>

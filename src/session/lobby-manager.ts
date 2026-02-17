@@ -241,6 +241,80 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   }
 
   /**
+   * Join the lobby — server assigns the first available open seat.
+   * This avoids the race condition where two players pick the same seat client-side.
+   *
+   * @param playerId Player's unique ID
+   * @param name Player's display name
+   * @returns Result with assigned seat and updated lobby info
+   */
+  async joinLobby(
+    playerId: string,
+    name: string
+  ): Promise<{ success: boolean; error?: string; lobby?: LobbyInfo; seat?: number }> {
+    if (!this.#storedState.lobbySlots) {
+      return { success: false, error: 'Game does not have a lobby' };
+    }
+
+    if (this.#storedState.lobbyState !== 'waiting') {
+      return { success: false, error: 'Game has already started' };
+    }
+
+    // Check if player already has a seat
+    const existingSlot = this.#storedState.lobbySlots.find(s => s.playerId === playerId);
+    if (existingSlot) {
+      return { success: false, error: 'You already have a seat in this lobby' };
+    }
+
+    // Find the first open slot
+    const openSlot = this.#storedState.lobbySlots.find(s => s.status === 'open');
+    if (!openSlot) {
+      return { success: false, error: 'No open seats available' };
+    }
+
+    // Claim the seat atomically (reuse claimSeat logic inline)
+    const seat = openSlot.seat;
+    openSlot.status = 'claimed';
+    openSlot.playerId = playerId;
+    openSlot.name = name;
+    openSlot.ready = false;
+
+    // Initialize player options with defaults (if definitions exist)
+    if (this.#storedState.playerOptionsDefinitions) {
+      openSlot.playerOptions = this.#computeDefaultPlayerOptions(seat);
+    }
+
+    // Assign a default color from the palette if colorSelectionEnabled and no color assigned
+    if (this.#storedState.colorSelectionEnabled &&
+        this.#storedState.colors &&
+        !openSlot.playerOptions?.color) {
+      const takenColors = new Set<string>();
+      for (const s of this.#storedState.lobbySlots) {
+        if (s.playerOptions?.color) {
+          takenColors.add(s.playerOptions.color as string);
+        }
+      }
+      const availableColor = this.#storedState.colors.find(c => !takenColors.has(c));
+      if (availableColor) {
+        openSlot.playerOptions = { ...openSlot.playerOptions, color: availableColor };
+      }
+    }
+
+    // Update player names in stored state
+    this.#storedState.playerNames[seat - 1] = name;
+
+    // Persist changes
+    if (this.#storage) {
+      await this.#storage.save(this.#storedState);
+    }
+
+    // Broadcast lobby update
+    this.broadcastLobby();
+
+    return { success: true, lobby: this.getLobbyInfo()!, seat };
+  }
+
+  /**
    * Update a player's name in their slot
    *
    * @param playerId Player's unique ID

@@ -29,6 +29,7 @@ import {
   handleHealth,
   handleGetLobby,
   handleClaimSeat,
+  handleJoinLobby,
   handleUpdateName,
   handleSetReady,
   handleAddSlot,
@@ -53,7 +54,7 @@ import {
   // Selection choices handlers
   handleGetSelectionChoices,
 } from './handlers/games.js';
-import type { ClaimSeatRequest } from './types.js';
+import type { ClaimSeatRequest, JoinLobbyRequest } from './types.js';
 
 import {
   handleMatchmakingJoin,
@@ -315,6 +316,13 @@ export class GameServerCore {
         return await handleClaimSeat(this.#store, gameId, body as ClaimSeatRequest);
       }
 
+      // POST /games/:gameId/join-lobby - Join lobby (server assigns seat)
+      const joinLobbyMatch = path.match(/^\/games\/([^/]+)\/join-lobby$/);
+      if (joinLobbyMatch && method === 'POST') {
+        const gameId = joinLobbyMatch[1];
+        return await handleJoinLobby(this.#store, gameId, body as JoinLobbyRequest);
+      }
+
       // POST /games/:gameId/update-name - Update player name in lobby
       const updateNameLobbyMatch = path.match(/^\/games\/([^/]+)\/update-name$/);
       if (updateNameLobbyMatch && method === 'POST') {
@@ -570,6 +578,35 @@ export class GameServerCore {
           session.ws.send({ type: 'error', error: claimResult.error });
         }
         // Success: broadcast happens automatically in GameSession.claimSeat
+        break;
+
+      case 'joinLobby':
+        if (!gameSession) {
+          session.ws.send({ type: 'error', error: 'Game not found' });
+          return;
+        }
+
+        if (!session.playerId || !message.name) {
+          session.ws.send({ type: 'error', error: 'PlayerId and name are required' });
+          return;
+        }
+
+        const joinLobbyResult = await gameSession.joinLobby(
+          session.playerId,
+          message.name
+        );
+
+        if (joinLobbyResult.success) {
+          // Send the assigned seat back to the requesting client
+          session.ws.send({
+            type: 'joinLobbyResult',
+            success: true,
+            seat: joinLobbyResult.seat,
+          });
+        } else {
+          session.ws.send({ type: 'error', error: joinLobbyResult.error });
+        }
+        // Success: lobby broadcast happens automatically
         break;
 
       case 'updateName':

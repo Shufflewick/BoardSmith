@@ -68,6 +68,8 @@ export type {
   LobbyUpdate,
   ClaimSeatRequest,
   ClaimSeatResponse,
+  JoinLobbyRequest,
+  JoinLobbyResponse,
   UpdateNameRequest,
   // Pick types
   PickMetadata,

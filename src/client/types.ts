@@ -333,6 +333,14 @@ export interface ClaimSeatResponse {
   seat?: number;
 }
 
+/** Response to join lobby (server assigns seat) */
+export interface JoinLobbyResponse {
+  success: boolean;
+  error?: string;
+  lobby?: LobbyInfo;
+  seat?: number;
+}
+
 /** Generic lobby response */
 export interface LobbyResponse {
   success: boolean;

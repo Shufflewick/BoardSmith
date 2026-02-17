@@ -531,7 +531,7 @@ export interface ActionRequest {
  * WebSocket message from client
  */
 export interface WebSocketMessage {
-  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimSeat' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leaveSeat' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
+  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimSeat' | 'joinLobby' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leaveSeat' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
   action?: string;
   args?: Record<string, unknown>;
   /** Request ID for action request/response correlation */
@@ -576,6 +576,28 @@ export interface ClaimSeatResponse {
   error?: string;
   /** Updated lobby info */
   lobby?: LobbyInfo;
+}
+
+/**
+ * Request to join the lobby (server assigns seat)
+ */
+export interface JoinLobbyRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** Player's display name */
+  name: string;
+}
+
+/**
+ * Response to join lobby request
+ */
+export interface JoinLobbyResponse {
+  success: boolean;
+  error?: string;
+  /** Updated lobby info */
+  lobby?: LobbyInfo;
+  /** Seat that was assigned by the server */
+  seat?: number;
 }
 
 /**
