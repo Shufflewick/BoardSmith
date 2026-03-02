@@ -131,10 +131,6 @@ async function simulateSingleGame<G extends Game>(
       const currentPlayer = flowState.currentPlayer;
       if (currentPlayer === undefined) break;
 
-      // Get available actions for this player
-      // This is a simplified version - real implementation would introspect the game
-      const player = testGame.getPlayer(currentPlayer);
-
       // Try to perform a random valid action
       // In a real implementation, we'd enumerate valid actions
       // For now, we'll try common action patterns
@@ -194,7 +190,7 @@ async function simulateSingleGame<G extends Game>(
  */
 function getAvailableActions<G extends Game>(
   testGame: TestGame<G>,
-  playerIndex: number
+  playerSeat: number
 ): Array<{ name: string; args: Record<string, unknown> }> {
   const flowState = testGame.getFlowState();
   if (!flowState) return [];
@@ -202,7 +198,7 @@ function getAvailableActions<G extends Game>(
   // Look at the awaiting actions if available
   const awaitingPlayers = flowState.awaitingPlayers;
   if (awaitingPlayers) {
-    const playerState = awaitingPlayers[playerIndex];
+    const playerState = awaitingPlayers.find(p => p.playerIndex === playerSeat);
     if (playerState?.availableActions) {
       // Return actions with empty args - real impl would generate valid args
       return playerState.availableActions.map((name: string) => ({ name, args: {} }));

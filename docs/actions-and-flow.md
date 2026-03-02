@@ -738,11 +738,7 @@ loop({
 #### `repeat` - Fixed number of iterations
 
 ```typescript
-repeat({
-  name: 'deal-cards',
-  times: 5,
-  do: actionStep({ actions: ['deal'] }),
-})
+repeat(5, actionStep({ actions: ['deal'] }))
 ```
 
 #### `eachPlayer` - Iterate over players
@@ -750,7 +746,7 @@ repeat({
 ```typescript
 eachPlayer({
   name: 'player-turns',
-  order: TurnOrder.clockwise(),
+  ...TurnOrder.DEFAULT,
   filter: (player, ctx) => !player.hasPassed,
   do: /* flow node */,
 })
@@ -776,7 +772,6 @@ forEach({
 actionStep({
   name: 'move-step',
   actions: ['move', 'jump'],      // Available actions
-  prompt: 'Move or jump a piece',
   skipIf: (ctx) => game.isFinished(),
 })
 ```
@@ -787,7 +782,6 @@ actionStep({
 simultaneousActionStep({
   name: 'discard-step',
   actions: ['discard'],
-  prompt: 'Choose cards to discard',
 })
 ```
 
@@ -796,7 +790,7 @@ simultaneousActionStep({
 ```typescript
 phase('setup', {
   do: sequence(
-    execute({ do: () => game.deal() }),
+    execute(() => game.deal()),
     simultaneousActionStep({ actions: ['discard'] }),
   ),
 })
@@ -806,7 +800,7 @@ phase('setup', {
 
 ```typescript
 switchOn({
-  value: (ctx) => game.currentPhase,
+  on: (ctx) => game.currentPhase,
   cases: {
     'deal': /* flow node */,
     'play': /* flow node */,
@@ -820,7 +814,7 @@ switchOn({
 
 ```typescript
 ifThen({
-  if: (ctx) => ctx.game.deck.count(Card) > 0,
+  condition: (ctx) => ctx.game.deck.count(Card) > 0,
   then: actionStep({ actions: ['draw'] }),
   else: execute((ctx) => ctx.game.endRound()),
 })
@@ -861,13 +855,13 @@ TurnOrder.CONTINUE          // Continue from current player
 TurnOrder.ACTIVE_ONLY       // Only non-eliminated players
 TurnOrder.START_FROM(n)     // Start from seat n (1-indexed)
 TurnOrder.ONLY([1, 3])      // Specific players only (seats 1 and 3)
-TurnOrder.LEFT_OF_DEALER()  // Common for card games (reads ctx.get('dealer'))
+TurnOrder.LEFT_OF_DEALER(fn) // Common for card games (pass a dealer-seat getter)
 TurnOrder.SKIP_IF(fn)       // Skip players based on condition
 TurnOrder.combine(...)      // Combine multiple configs
 
 // Example with dealer rotation
 eachPlayer({
-  ...TurnOrder.LEFT_OF_DEALER(),
+  ...TurnOrder.LEFT_OF_DEALER(ctx => ctx.game.dealerSeat),
   do: actionStep({ actions: ['playCard'] }),
 })
 ```

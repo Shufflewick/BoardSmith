@@ -168,25 +168,25 @@ export class TestGame<G extends Game = Game> {
   /**
    * Perform an action as a player.
    *
-   * @param playerIndex - The player performing the action (0-indexed)
+   * @param playerSeat - The player seat performing the action (1-indexed)
    * @param actionName - The name of the action to perform
    * @param args - Arguments for the action
    * @returns The result of the action execution
    *
    * @example
    * ```typescript
-   * const result = testGame.doAction(0, 'playCard', { card: myCard });
+   * const result = testGame.doAction(1, 'playCard', { card: myCard });
    * if (!result.success) {
    *   console.error(result.error);
    * }
    * ```
    */
   doAction(
-    playerIndex: number,
+    playerSeat: number,
     actionName: string,
     args: Record<string, unknown> = {}
   ): ActionExecutionResult {
-    return this.runner.performAction(actionName, playerIndex, args);
+    return this.runner.performAction(actionName, playerSeat, args);
   }
 
   /**
@@ -219,11 +219,11 @@ export class TestGame<G extends Game = Game> {
   /**
    * Get a player's view of the game (with hidden information removed).
    *
-   * @param playerIndex - The player whose view to get (0-indexed)
+   * @param playerSeat - The player whose view to get (1-indexed)
    * @returns The game state as visible to that player
    */
-  getPlayerView(playerIndex: number) {
-    return this.runner.getPlayerView(playerIndex);
+  getPlayerView(playerSeat: number) {
+    return this.runner.getPlayerView(playerSeat);
   }
 }
 

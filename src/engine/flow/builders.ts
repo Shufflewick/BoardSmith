@@ -125,15 +125,13 @@ export function loop(config: {
  * ```
  */
 export function repeat(times: number, body: FlowNode): FlowNode {
-  let count = 0;
-  return loop({
-    while: () => {
-      count++;
-      return count <= times;
+  return {
+    type: 'repeat',
+    config: {
+      times,
+      do: body,
     },
-    maxIterations: times,
-    do: body,
-  });
+  };
 }
 
 /**

@@ -64,9 +64,29 @@ class TestPickGame extends Game<TestPickGame, Player> {
         .execute(() => ({ success: true }))
     );
 
+    // Action with dependent filtering
+    this.registerAction(
+      Action.create('pickByType')
+        .chooseFrom('type', {
+          prompt: 'Choose item type',
+          choices: ['weapon', 'consumable'],
+        })
+        .chooseFrom('item', {
+          prompt: 'Choose item',
+          choices: [
+            { id: 'sword', type: 'weapon' },
+            { id: 'shield', type: 'weapon' },
+            { id: 'potion', type: 'consumable' },
+          ],
+          filterBy: { key: 'type', selectionName: 'type' },
+          display: (choice) => (choice as { id: string }).id,
+        })
+        .execute(() => ({ success: true }))
+    );
+
     // Set up flow making all actions available
     this.setFlow(defineFlow({
-      root: actionStep({ actions: ['pickFruit', 'pickItem', 'pickColor', 'pickItems'] }),
+      root: actionStep({ actions: ['pickFruit', 'pickItem', 'pickColor', 'pickItems', 'pickByType'] }),
     }));
   }
 }
@@ -169,6 +189,15 @@ describe('PickHandler disabled threading', () => {
       const potion = result.validElements!.find(e => e.display === 'Potion')!;
       expect('disabled' in sword).toBe(false);
       expect('disabled' in potion).toBe(false);
+    });
+  });
+
+  describe('choice selection: filterBy uses resolved args from action executor', () => {
+    test('dependent choices are filtered consistently with action validation', () => {
+      const result = session.getPickChoices('pickByType', 'item', 1, { type: 'weapon' });
+      expect(result.success).toBe(true);
+      expect(result.choices).toBeDefined();
+      expect(result.choices!.map(c => c.display)).toEqual(['sword', 'shield']);
     });
   });
 });

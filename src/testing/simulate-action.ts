@@ -17,7 +17,7 @@ export interface SimulateActionResult extends ActionExecutionResult {
   /** The action that was attempted */
   action: string;
   /** The player who attempted the action */
-  playerIndex: number;
+  playerSeat: number;
   /** The arguments passed to the action */
   args: Record<string, unknown>;
 }
@@ -29,15 +29,15 @@ export interface SimulateActionResult extends ActionExecutionResult {
  * making test assertions easier to write and debug.
  *
  * @param testGame - The test game instance
- * @param playerIndex - The player performing the action (0-indexed)
+ * @param playerSeat - The player seat performing the action (1-indexed)
  * @param actionName - The name of the action to perform
  * @param args - Arguments for the action
  * @returns The action result with additional context
  *
  * @example
  * ```typescript
- * const result = simulateAction(testGame, 0, 'ask', {
- *   target: 1,
+ * const result = simulateAction(testGame, 1, 'ask', {
+ *   target: 2,
  *   rank: '8',
  * });
  *
@@ -46,16 +46,16 @@ export interface SimulateActionResult extends ActionExecutionResult {
  */
 export function simulateAction<G extends Game>(
   testGame: TestGame<G>,
-  playerIndex: number,
+  playerSeat: number,
   actionName: string,
   args: Record<string, unknown> = {}
 ): SimulateActionResult {
-  const result = testGame.doAction(playerIndex, actionName, args);
+  const result = testGame.doAction(playerSeat, actionName, args);
 
   return {
     ...result,
     action: actionName,
-    playerIndex,
+    playerSeat,
     args,
   };
 }
@@ -67,14 +67,14 @@ export function simulateAction<G extends Game>(
  * Useful for setting up a game state by replaying a series of moves.
  *
  * @param testGame - The test game instance
- * @param actions - Array of actions to perform, each as [playerIndex, actionName, args?]
+ * @param actions - Array of actions to perform, each as [playerSeat, actionName, args?]
  * @returns Array of action results in order
  *
  * @example
  * ```typescript
  * const results = simulateActions(testGame, [
- *   [0, 'ask', { target: 1, rank: '8' }],
- *   [1, 'ask', { target: 0, rank: 'K' }],
+ *   [1, 'ask', { target: 2, rank: '8' }],
+ *   [2, 'ask', { target: 1, rank: 'K' }],
  * ]);
  *
  * expect(results.every(r => r.success)).toBe(true);
@@ -82,10 +82,10 @@ export function simulateAction<G extends Game>(
  */
 export function simulateActions<G extends Game>(
   testGame: TestGame<G>,
-  actions: Array<[playerIndex: number, actionName: string, args?: Record<string, unknown>]>
+  actions: Array<[playerSeat: number, actionName: string, args?: Record<string, unknown>]>
 ): SimulateActionResult[] {
-  return actions.map(([playerIndex, actionName, args]) =>
-    simulateAction(testGame, playerIndex, actionName, args ?? {})
+  return actions.map(([playerSeat, actionName, args]) =>
+    simulateAction(testGame, playerSeat, actionName, args ?? {})
   );
 }
 
@@ -96,7 +96,7 @@ export function simulateActions<G extends Game>(
  * Useful for actions that should always succeed in a valid game state.
  *
  * @param testGame - The test game instance
- * @param playerIndex - The player performing the action (0-indexed)
+ * @param playerSeat - The player seat performing the action (1-indexed)
  * @param actionName - The name of the action to perform
  * @param args - Arguments for the action
  * @returns The action result (always successful if no error thrown)
@@ -105,20 +105,20 @@ export function simulateActions<G extends Game>(
  * @example
  * ```typescript
  * // This will throw if the action fails
- * assertActionSucceeds(testGame, 0, 'drawCard');
+ * assertActionSucceeds(testGame, 1, 'drawCard');
  * ```
  */
 export function assertActionSucceeds<G extends Game>(
   testGame: TestGame<G>,
-  playerIndex: number,
+  playerSeat: number,
   actionName: string,
   args: Record<string, unknown> = {}
 ): SimulateActionResult {
-  const result = simulateAction(testGame, playerIndex, actionName, args);
+  const result = simulateAction(testGame, playerSeat, actionName, args);
 
   if (!result.success) {
     throw new Error(
-      `Expected action '${actionName}' by player ${playerIndex} to succeed, but it failed: ${result.error}`
+      `Expected action '${actionName}' by player ${playerSeat} to succeed, but it failed: ${result.error}`
     );
   }
 
@@ -132,7 +132,7 @@ export function assertActionSucceeds<G extends Game>(
  * Optionally verifies the error message matches an expected pattern.
  *
  * @param testGame - The test game instance
- * @param playerIndex - The player performing the action (0-indexed)
+ * @param playerSeat - The player seat performing the action (1-indexed)
  * @param actionName - The name of the action to perform
  * @param args - Arguments for the action
  * @param expectedError - Optional string or regex that the error should match
@@ -142,24 +142,24 @@ export function assertActionSucceeds<G extends Game>(
  * @example
  * ```typescript
  * // Assert the action fails
- * assertActionFails(testGame, 0, 'playCard', { card: wrongCard });
+ * assertActionFails(testGame, 1, 'playCard', { card: wrongCard });
  *
  * // Assert the action fails with specific error message
- * assertActionFails(testGame, 0, 'playCard', { card: wrongCard }, 'not your turn');
+ * assertActionFails(testGame, 1, 'playCard', { card: wrongCard }, 'not your turn');
  * ```
  */
 export function assertActionFails<G extends Game>(
   testGame: TestGame<G>,
-  playerIndex: number,
+  playerSeat: number,
   actionName: string,
   args: Record<string, unknown> = {},
   expectedError?: string | RegExp
 ): SimulateActionResult {
-  const result = simulateAction(testGame, playerIndex, actionName, args);
+  const result = simulateAction(testGame, playerSeat, actionName, args);
 
   if (result.success) {
     throw new Error(
-      `Expected action '${actionName}' by player ${playerIndex} to fail, but it succeeded`
+      `Expected action '${actionName}' by player ${playerSeat} to fail, but it succeeded`
     );
   }
 

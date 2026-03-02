@@ -54,7 +54,7 @@ describe('Flow Builders', () => {
 
   it('should create repeat node', () => {
     const node = repeat(3, noop());
-    expect(node.type).toBe('loop');
+    expect(node.type).toBe('repeat');
   });
 
   it('should create eachPlayer node', () => {
@@ -241,6 +241,30 @@ describe('FlowEngine', () => {
 
       expect(count).toBe(4);
     });
+
+    it('should allow reusing repeat flow definitions across engine instances', () => {
+      game.registerAction(
+        Action.create('test')
+          .chooseFrom('choice', { choices: ['a', 'b'] })
+          .execute(() => ({ success: true }))
+      );
+
+      const flow = defineFlow({
+        root: repeat(2, actionStep({ actions: ['test'] })),
+      });
+
+      const engine1 = new FlowEngine(game, flow);
+      let state = engine1.start();
+      expect(state.awaitingInput).toBe(true);
+      state = engine1.resume('test', { choice: 'a' });
+      expect(state.awaitingInput).toBe(true);
+      state = engine1.resume('test', { choice: 'b' });
+      expect(state.complete).toBe(true);
+
+      const engine2 = new FlowEngine(game, flow);
+      const restartState = engine2.start();
+      expect(restartState.awaitingInput).toBe(true);
+    });
   });
 
   describe('EachPlayer Execution', () => {
@@ -296,6 +320,31 @@ describe('FlowEngine', () => {
       engine.start();
 
       expect(visitedPlayers).toEqual([3, 2, 1]);
+    });
+
+    it('should re-check filter dynamically between player turns', () => {
+      game.registerAction(
+        Action.create('act').execute((args, ctx) => {
+          if (ctx.player.seat === 1) {
+            (ctx.game.getPlayerOrThrow(2) as any).eliminated = true;
+          }
+          return { success: true };
+        })
+      );
+
+      const flow = defineFlow({
+        root: eachPlayer({
+          filter: (player) => !(player as any).eliminated,
+          do: actionStep({ actions: ['act'] }),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      let state = engine.start();
+      expect(state.currentPlayer).toBe(1);
+
+      state = engine.resume('act', {});
+      expect(state.currentPlayer).toBe(3);
     });
   });
 
@@ -491,6 +540,28 @@ describe('FlowEngine', () => {
       expect(afterAction).toBe(true);
     });
 
+    it('should reject actions outside the current flow allow-list', () => {
+      game.registerAction(
+        Action.create('other').execute(() => ({ success: true }))
+      );
+
+      const flow = defineFlow({
+        root: actionStep({
+          actions: ['test'],
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      let state = engine.start();
+      expect(state.availableActions).toEqual(['test']);
+
+      state = engine.resume('other', {});
+      expect(state.awaitingInput).toBe(true);
+      expect(state.complete).toBe(false);
+      expect(state.actionError).toContain('not available');
+      expect(state.availableActions).toEqual(['test']);
+    });
+
     it('should skip if condition is met', () => {
       let actionReached = false;
 
@@ -536,6 +607,32 @@ describe('FlowEngine', () => {
       state = engine.resume('test', { choice: 'b' });
 
       // Should continue until repeatUntil evaluates
+    });
+
+    it('should not auto-complete the next step from a stale lastActionResult', () => {
+      game.registerActions(
+        Action.create('first').execute(() => ({ success: true })),
+        Action.create('second').execute(() => ({ success: true }))
+      );
+
+      const flow = defineFlow({
+        root: sequence(
+          actionStep({ actions: ['first'] }),
+          actionStep({
+            actions: ['second'],
+            repeatUntil: () => true,
+          })
+        ),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      let state = engine.start();
+      expect(state.availableActions).toEqual(['first']);
+
+      state = engine.resume('first', {});
+      expect(state.complete).toBe(false);
+      expect(state.awaitingInput).toBe(true);
+      expect(state.availableActions).toEqual(['second']);
     });
 
     it('should not leak player override to sibling action steps', () => {
@@ -659,6 +756,57 @@ describe('FlowEngine', () => {
       const state = engine.start();
 
       expect(state.position.variables.myVar).toBe(42);
+    });
+
+    it('should restore the active if/else branch correctly', () => {
+      game.registerActions(
+        Action.create('thenAction').execute(() => ({ success: true })),
+        Action.create('elseAction').execute(() => ({ success: true }))
+      );
+
+      const flow = defineFlow({
+        root: ifThen({
+          condition: () => false,
+          then: actionStep({ actions: ['thenAction'] }),
+          else: actionStep({ actions: ['elseAction'] }),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      const state = engine.start();
+      expect(state.availableActions).toEqual(['elseAction']);
+
+      const restored = new FlowEngine(game, flow);
+      const restoreResult = restored.restoreFullState(state);
+      expect(restoreResult.success).toBe(true);
+
+      const resumed = restored.resume('elseAction', {});
+      expect(resumed.complete).toBe(true);
+    });
+
+    it('should preserve move counts across full-state restore', () => {
+      game.registerAction(
+        Action.create('count').execute(() => ({ success: true }))
+      );
+
+      const flow = defineFlow({
+        root: actionStep({
+          actions: ['count'],
+          maxMoves: 2,
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      let state = engine.start();
+      state = engine.resume('count', {});
+      expect(state.moveCount).toBe(1);
+
+      const restored = new FlowEngine(game, flow);
+      const restoreResult = restored.restoreFullState(state);
+      expect(restoreResult.success).toBe(true);
+
+      const resumed = restored.resume('count', {});
+      expect(resumed.complete).toBe(true);
     });
   });
 });

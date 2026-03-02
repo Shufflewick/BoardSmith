@@ -8,6 +8,7 @@ import type { ActionDefinition, ActionResult, FollowUpAction } from '../action/t
 export type FlowNodeType =
   | 'sequence'
   | 'loop'
+  | 'repeat'
   | 'each-player'
   | 'for-each'
   | 'action-step'
@@ -39,6 +40,8 @@ export interface FlowPosition {
   path: number[];
   /** Current iteration counts for loops */
   iterations: Record<string, number>;
+  /** Per-frame execution metadata needed for accurate restore */
+  frameData?: Record<string, Record<string, unknown>>;
   /** Current player index for eachPlayer */
   playerIndex?: number;
   /** Variables stored in flow context */
@@ -88,6 +91,16 @@ export interface LoopConfig extends BaseFlowConfig {
   /** Maximum iterations (safety limit) */
   maxIterations?: number;
   /** Body of the loop */
+  do: FlowNode;
+}
+
+/**
+ * Configuration for repeat flow
+ */
+export interface RepeatNodeConfig extends BaseFlowConfig {
+  /** Number of iterations to run */
+  times: number;
+  /** Body of the repeat */
   do: FlowNode;
 }
 
@@ -199,6 +212,7 @@ export interface PhaseConfig extends BaseFlowConfig {
 export type FlowNode =
   | { type: 'sequence'; config: SequenceConfig }
   | { type: 'loop'; config: LoopConfig }
+  | { type: 'repeat'; config: RepeatNodeConfig }
   | { type: 'each-player'; config: EachPlayerConfig }
   | { type: 'for-each'; config: ForEachConfig }
   | { type: 'action-step'; config: ActionStepConfig }

@@ -77,24 +77,8 @@ export class PickHandler<G extends Game = Game> {
       return { success: false, error: `Player not found at seat ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
-    // Resolve any element IDs in currentArgs to actual elements
-    // Handles both plain numbers (id) and serialized element objects ({ id: number, ... })
-    const resolvedArgs: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(currentArgs)) {
-      if (typeof value === 'number') {
-        // Plain element ID
-        const element = this.#runner.game.getElementById(value);
-        resolvedArgs[key] = element || value;
-      } else if (typeof value === 'object' && value !== null && 'id' in value && typeof (value as { id: unknown }).id === 'number') {
-        // Serialized element object from followUp args (e.g., { id: 123, name: 'Coffee Industry' })
-        // When an action returns followUp.args with elements, they get JSON-serialized.
-        // The client sends them back as objects, so we need to resolve them here.
-        const element = this.#runner.game.getElementById((value as { id: number }).id);
-        resolvedArgs[key] = element || value;
-      } else {
-        resolvedArgs[key] = value;
-      }
-    }
+    const executor = this.#runner.game.getActionExecutor();
+    const resolvedArgs = executor.resolveArgs(action, currentArgs, player);
 
     const ctx = { game: this.#runner.game, player, args: resolvedArgs };
 
@@ -113,22 +97,16 @@ export class PickHandler<G extends Game = Game> {
     switch (selection.type) {
       case 'choice': {
         const choiceSel = selection as any;
-
-        // Evaluate choices NOW
-        let choices: unknown[];
-        if (typeof choiceSel.choices === 'function') {
-          try {
-            choices = choiceSel.choices(ctx);
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            return { success: false, error: `Error evaluating choices: ${errorMsg}`, errorCode: ErrorCode.CHOICES_EVALUATION_ERROR };
-          }
-        } else {
-          choices = choiceSel.choices || [];
+        let annotatedChoices: Array<{ value: unknown; disabled: string | false }>;
+        try {
+          annotatedChoices = executor.getChoices(selection, player, resolvedArgs) as Array<{ value: unknown; disabled: string | false }>;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          return { success: false, error: `Error evaluating choices: ${errorMsg}`, errorCode: ErrorCode.CHOICES_EVALUATION_ERROR };
         }
 
         // Convert to display format with board refs
-        const formattedChoices = choices.map(rawValue => {
+        const formattedChoices = annotatedChoices.map(({ value: rawValue, disabled }) => {
           // Check if the choice already has { value, display } structure (e.g., from playerChoices())
           // If so, use those directly instead of wrapping again
           let value: unknown;
@@ -158,12 +136,8 @@ export class PickHandler<G extends Game = Game> {
             }
           }
 
-          // Thread disabled status from engine callback
-          if (choiceSel.disabled) {
-            const disabledReason = choiceSel.disabled(rawValue, ctx);
-            if (disabledReason) {
-              choice.disabled = disabledReason;
-            }
+          if (disabled !== false) {
+            choice.disabled = disabled;
           }
 
           return choice;
@@ -193,76 +167,32 @@ export class PickHandler<G extends Game = Game> {
 
       case 'element': {
         const elemSel = selection as any;
-        let elements: any[];
-
-        // Get elements - either from elements property or from/filter/elementClass pattern
-        if (elemSel.elements) {
-          if (typeof elemSel.elements === 'function') {
-            try {
-              elements = elemSel.elements(ctx);
-            } catch (error) {
-              const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-              return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
-            }
-          } else {
-            elements = elemSel.elements || [];
-          }
-        } else {
-          // Original from/filter/elementClass pattern
-          let from: any;
-
-          if (typeof elemSel.from === 'function') {
-            from = elemSel.from(ctx);
-            // DEV WARNING: from function returned undefined/null - this will cause errors
-            if (from === undefined || from === null) {
-              if (process.env.NODE_ENV !== 'production') {
-                console.warn(
-                  `[BoardSmith] chooseElement '${selectionName}' from() returned ${from}.\n` +
-                  `  This will cause errors. Check your from() function and ensure ctx.args has the expected values.\n` +
-                  `  ctx.args: ${JSON.stringify(ctx.args)}`
-                );
-              }
-              // Fall back to game to avoid crash, but this is likely a bug
-              from = this.#runner.game;
-            }
-          } else {
-            from = elemSel.from ?? this.#runner.game;
-          }
-
-          if (elemSel.elementClass) {
-            elements = [...from.all(elemSel.elementClass)];
-          } else {
-            elements = [...from.all()];
-          }
-
-          if (elemSel.filter) {
-            elements = elements.filter((e: any) => elemSel.filter!(e, ctx));
-          }
+        let annotatedElements: Array<{ value: unknown; disabled: string | false }>;
+        try {
+          annotatedElements = executor.getChoices(selection, player, resolvedArgs) as Array<{ value: unknown; disabled: string | false }>;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
         }
 
         // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(elements, elemSel, ctx);
+        const validElements = this.#buildValidElementsList(annotatedElements, elemSel, ctx);
 
         return { success: true, validElements };
       }
 
       case 'elements': {
         const elementsSel = selection as any;
-        let elements: any[];
-
-        if (typeof elementsSel.elements === 'function') {
-          try {
-            elements = elementsSel.elements(ctx);
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
-          }
-        } else {
-          elements = elementsSel.elements || [];
+        let annotatedElements: Array<{ value: unknown; disabled: string | false }>;
+        try {
+          annotatedElements = executor.getChoices(selection, player, resolvedArgs) as Array<{ value: unknown; disabled: string | false }>;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
         }
 
         // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(elements, elementsSel, ctx);
+        const validElements = this.#buildValidElementsList(annotatedElements, elementsSel, ctx);
 
         // Evaluate multiSelect config if present
         let multiSelect: { min: number; max?: number } | undefined;
@@ -304,10 +234,12 @@ export class PickHandler<G extends Game = Game> {
    * Used internally by getPickChoices.
    */
   #buildValidElementsList(
-    elements: any[],
+    annotatedElements: Array<{ value: unknown; disabled: string | false }>,
     elemSel: any,
     ctx: { game: Game; player: Player; args: Record<string, unknown> }
   ): ValidElement[] {
+    const elements = annotatedElements.map(({ value }) => value) as Array<{ id: number; name?: string; notation?: string }>;
+
     // Auto-disambiguate display names
     const nameCounts = new Map<string, number>();
     for (const el of elements) {
@@ -316,7 +248,8 @@ export class PickHandler<G extends Game = Game> {
     }
     const nameIndices = new Map<string, number>();
 
-    return elements.map((element: any) => {
+    return annotatedElements.map(({ value: elementRaw, disabled }) => {
+      const element = elementRaw as any;
       const validElem: any = { id: element.id };
 
       // Add display text if display function provided
@@ -356,12 +289,8 @@ export class PickHandler<G extends Game = Game> {
         }
       }
 
-      // Thread disabled status from engine callback
-      if (elemSel.disabled) {
-        const disabledReason = elemSel.disabled(element, ctx);
-        if (disabledReason) {
-          validElem.disabled = disabledReason;
-        }
+      if (disabled !== false) {
+        validElem.disabled = disabled;
       }
 
       return validElem;

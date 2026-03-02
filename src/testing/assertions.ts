@@ -56,7 +56,7 @@ export interface FlowStateAssertionResult {
  * @example
  * ```typescript
  * assertFlowState(testGame, {
- *   currentPlayer: 0,
+ *   currentPlayer: 1,
  *   actions: ['move', 'attack'],
  *   awaitingInput: true,
  * });
@@ -116,7 +116,7 @@ export function assertFlowState(
  * Checks element counts in a player's zone with exact, min, or max constraints.
  *
  * @param testGame - The test game instance
- * @param playerIndex - The player to check (0-indexed)
+ * @param playerSeat - The player seat to check (1-indexed)
  * @param zoneName - The name of the zone property on the player (e.g., 'hand', 'board')
  * @param elementClass - The element class to count
  * @param countOrOptions - Exact count or { min?, max?, exact? } options
@@ -124,22 +124,22 @@ export function assertFlowState(
  *
  * @example
  * ```typescript
- * assertPlayerHas(testGame, 0, 'hand', Card, 5);  // Player 0 has 5 cards in hand
- * assertPlayerHas(testGame, 1, 'army', Soldier, { min: 2 });  // Player 1 has at least 2 soldiers
+ * assertPlayerHas(testGame, 1, 'hand', Card, 5);  // Player 1 has 5 cards in hand
+ * assertPlayerHas(testGame, 2, 'army', Soldier, { min: 2 });  // Player 2 has at least 2 soldiers
  * ```
  */
 export function assertPlayerHas<E extends GameElement>(
   testGame: TestGame,
-  playerIndex: number,
+  playerSeat: number,
   zoneName: string,
   elementClass: new (...args: any[]) => E,
   countOrOptions: number | { min?: number; max?: number; exact?: number }
 ): void {
-  const player = testGame.getPlayer(playerIndex) as any;
+  const player = testGame.getPlayer(playerSeat) as any;
   const zone = player[zoneName];
 
   if (!zone) {
-    throw new Error(`Player ${playerIndex} has no zone named "${zoneName}"`);
+    throw new Error(`Player ${playerSeat} has no zone named "${zoneName}"`);
   }
 
   const count = zone.count(elementClass);
@@ -147,19 +147,19 @@ export function assertPlayerHas<E extends GameElement>(
 
   if (options.exact !== undefined && count !== options.exact) {
     throw new Error(
-      `Expected player ${playerIndex} to have exactly ${options.exact} ${elementClass.name}(s) in ${zoneName}, got ${count}`
+      `Expected player ${playerSeat} to have exactly ${options.exact} ${elementClass.name}(s) in ${zoneName}, got ${count}`
     );
   }
 
   if (options.min !== undefined && count < options.min) {
     throw new Error(
-      `Expected player ${playerIndex} to have at least ${options.min} ${elementClass.name}(s) in ${zoneName}, got ${count}`
+      `Expected player ${playerSeat} to have at least ${options.min} ${elementClass.name}(s) in ${zoneName}, got ${count}`
     );
   }
 
   if (options.max !== undefined && count > options.max) {
     throw new Error(
-      `Expected player ${playerIndex} to have at most ${options.max} ${elementClass.name}(s) in ${zoneName}, got ${count}`
+      `Expected player ${playerSeat} to have at most ${options.max} ${elementClass.name}(s) in ${zoneName}, got ${count}`
     );
   }
 }
@@ -219,8 +219,8 @@ export function assertElementCount<E extends GameElement>(
  *
  * @example
  * ```typescript
- * assertGameFinished(testGame, { winner: 0 });  // Player 0 won
- * assertGameFinished(testGame, { winners: [0, 1] });  // Draw between players 0 and 1
+ * assertGameFinished(testGame, { winner: 1 });  // Player 1 won
+ * assertGameFinished(testGame, { winners: [1, 2] });  // Draw between players 1 and 2
  * assertGameFinished(testGame);  // Just assert game is finished
  * ```
  */
@@ -260,32 +260,32 @@ export function assertGameFinished(
  * Verifies that it's the player's turn and the action is in their available actions.
  *
  * @param testGame - The test game instance
- * @param playerIndex - The player to check (0-indexed)
+ * @param playerSeat - The player seat to check (1-indexed)
  * @param actionName - The action that should be available
  * @throws Error if it's not the player's turn or action is not available
  *
  * @example
  * ```typescript
- * assertActionAvailable(testGame, 0, 'move');
+ * assertActionAvailable(testGame, 1, 'move');
  * ```
  */
 export function assertActionAvailable(
   testGame: TestGame,
-  playerIndex: number,
+  playerSeat: number,
   actionName: string
 ): void {
   const flowState = testGame.getFlowState();
 
-  if (flowState?.currentPlayer !== playerIndex) {
+  if (flowState?.currentPlayer !== playerSeat) {
     throw new Error(
-      `Cannot check action availability for player ${playerIndex} - current player is ${flowState?.currentPlayer}`
+      `Cannot check action availability for player ${playerSeat} - current player is ${flowState?.currentPlayer}`
     );
   }
 
   const availableActions = flowState?.availableActions ?? [];
   if (!availableActions.includes(actionName)) {
     throw new Error(
-      `Action "${actionName}" is not available for player ${playerIndex}. Available actions: [${availableActions.join(', ')}]`
+      `Action "${actionName}" is not available for player ${playerSeat}. Available actions: [${availableActions.join(', ')}]`
     );
   }
 }
@@ -296,31 +296,31 @@ export function assertActionAvailable(
  * Passes if it's not the player's turn or if the action is not in their available actions.
  *
  * @param testGame - The test game instance
- * @param playerIndex - The player to check (0-indexed)
+ * @param playerSeat - The player seat to check (1-indexed)
  * @param actionName - The action that should not be available
  * @throws Error if the action is available for this player
  *
  * @example
  * ```typescript
- * assertActionNotAvailable(testGame, 0, 'move');  // Player can't move
+ * assertActionNotAvailable(testGame, 1, 'move');  // Player can't move
  * ```
  */
 export function assertActionNotAvailable(
   testGame: TestGame,
-  playerIndex: number,
+  playerSeat: number,
   actionName: string
 ): void {
   const flowState = testGame.getFlowState();
 
   // If it's not this player's turn, action is definitely not available
-  if (flowState?.currentPlayer !== playerIndex) {
+  if (flowState?.currentPlayer !== playerSeat) {
     return;
   }
 
   const availableActions = flowState?.availableActions ?? [];
   if (availableActions.includes(actionName)) {
     throw new Error(
-      `Action "${actionName}" should NOT be available for player ${playerIndex}, but it is`
+      `Action "${actionName}" should NOT be available for player ${playerSeat}, but it is`
     );
   }
 }

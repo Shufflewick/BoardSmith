@@ -10,6 +10,7 @@ import type {
   FlowDefinition,
   SequenceConfig,
   LoopConfig,
+  RepeatNodeConfig,
   EachPlayerConfig,
   ForEachConfig,
   ActionStepConfig,
@@ -141,7 +142,14 @@ export class FlowEngine<G extends Game = Game> {
     this.variables = { ...context.variables };
     this.currentPlayer = this.game.currentPlayer;
     this.awaitingInput = false;
+    this.availableActions = [];
+    this.awaitingPlayers = [];
     this.complete = false;
+    this.currentActionConfig = undefined;
+    this.moveCount = 0;
+    this.lastActionResult = undefined;
+    this.actionError = undefined;
+    this.currentPhase = undefined;
 
     // Execute until we need input or complete
     return this.run();
@@ -163,6 +171,12 @@ export class FlowEngine<G extends Game = Game> {
     // Handle simultaneous action step
     if (currentFrame?.node.type === 'simultaneous-action-step') {
       return this.resumeSimultaneousAction(actionName, args, playerIndex, currentFrame);
+    }
+
+    // Enforce flow-level allow-list for regular action steps.
+    if (currentFrame?.node.type === 'action-step' && !this.availableActions.includes(actionName)) {
+      this.actionError = `Action ${actionName} is not available in the current flow step`;
+      return this.getState();
     }
 
     // Execute the action (regular action step)
@@ -201,10 +215,12 @@ export class FlowEngine<G extends Game = Game> {
 
     if (!result.success) {
       // Action failed, stay in same state
+      this.actionError = result.error;
       return this.getState();
     }
 
     // Clear awaiting state
+    this.actionError = undefined;
     this.awaitingInput = false;
 
     // Handle action step completion - returns true if should run() immediately (followUp)
@@ -282,8 +298,26 @@ export class FlowEngine<G extends Game = Game> {
    */
   private restorePlayerFromActionStep(frame: ExecutionFrame): void {
     if (frame.data?.playerSaved) {
-      this.currentPlayer = frame.data.previousPlayer as Player | undefined;
+      const previousPlayer = frame.data.previousPlayer as Player | undefined;
+      const previousPlayerSeat = frame.data.previousPlayerSeat as number | undefined;
+      this.currentPlayer = previousPlayer ?? (previousPlayerSeat ? this.game.getPlayer(previousPlayerSeat) : undefined);
     }
+  }
+
+  /**
+   * Restore move-limit tracking fields from the current stack frame.
+   * Used after state restore so maxMoves/minMoves remain correct.
+   */
+  private restoreActionStepTracking(): void {
+    const currentFrame = this.stack[this.stack.length - 1];
+    if (currentFrame?.node.type === 'action-step') {
+      this.currentActionConfig = currentFrame.node.config as ActionStepConfig;
+      this.moveCount = (currentFrame.data?.moveCount as number) ?? 0;
+      return;
+    }
+
+    this.currentActionConfig = undefined;
+    this.moveCount = 0;
   }
 
   /**
@@ -434,30 +468,25 @@ export class FlowEngine<G extends Game = Game> {
     for (let i = 0; i < position.path.length; i++) {
       const index = position.path[i];
       const iterationKey = `__iter_${i}`;
-      const iteration = position.iterations[iterationKey] ?? 0;
+      const restoredFrameData = {
+        ...(position.frameData?.[`__frame_${i}`] ?? {}),
+      } as Record<string, unknown>;
+      if (restoredFrameData.iteration === undefined) {
+        restoredFrameData.iteration = position.iterations[iterationKey] ?? 0;
+      }
+      if (typeof restoredFrameData.previousPlayerSeat === 'number' && restoredFrameData.previousPlayer === undefined) {
+        restoredFrameData.previousPlayer = this.game.getPlayer(restoredFrameData.previousPlayerSeat as number);
+      }
 
       this.stack.push({
         node: currentNode,
         index,
         completed: false,
-        data: { iteration },
+        data: restoredFrameData,
       });
 
       // Navigate to child node for next level
-      // For iterating nodes (loop, each-player, etc.), always navigate to child 0 (the 'do' body)
-      // For sequences, navigate based on index (with adjustment for completion state)
-      const nodeType = currentNode.type;
-      const isIteratingNode = nodeType === 'loop' || nodeType === 'each-player' ||
-                              nodeType === 'for-each' || nodeType === 'phase';
-
-      let navIndex: number;
-      if (isIteratingNode) {
-        navIndex = 0; // Always the 'do' body
-      } else {
-        const childCount = this.getChildCount(currentNode);
-        navIndex = index === childCount ? index - 1 : index;
-      }
-
+      const navIndex = this.getNavigationIndex(currentNode, index, restoredFrameData);
       const childCount = this.getChildCount(currentNode);
       if (navIndex >= 0 && navIndex < childCount) {
         currentNode = this.getChildNode(currentNode, navIndex);
@@ -468,6 +497,8 @@ export class FlowEngine<G extends Game = Game> {
     if (position.playerIndex !== undefined) {
       this.currentPlayer = this.game.getPlayer(position.playerIndex);
     }
+
+    this.restoreActionStepTracking();
   }
 
   /**
@@ -480,7 +511,7 @@ export class FlowEngine<G extends Game = Game> {
    */
   tryRestore(position: FlowPosition): { success: true } | { success: false; error: string; validPath: number[] } {
     // Validate path before attempting restore
-    const validationResult = this.validatePath(position.path);
+    const validationResult = this.validatePath(position.path, position.frameData);
 
     if (!validationResult.valid) {
       return {
@@ -514,19 +545,24 @@ export class FlowEngine<G extends Game = Game> {
       this.currentPlayer = this.game.getPlayer(state.currentPlayer);
     }
 
-    if (state.availableActions) {
-      this.availableActions = [...state.availableActions];
-    }
+    this.availableActions = state.availableActions ? [...state.availableActions] : [];
 
     // Restore awaiting players for simultaneous actions
-    if (state.awaitingPlayers) {
-      this.awaitingPlayers = state.awaitingPlayers.map(p => ({ ...p }));
-    }
+    this.awaitingPlayers = state.awaitingPlayers
+      ? state.awaitingPlayers.map(p => ({ ...p }))
+      : [];
 
     // Restore phase
     if (state.currentPhase !== undefined) {
       this.currentPhase = state.currentPhase;
     }
+
+    // Restore action error and follow-up state
+    this.actionError = state.actionError;
+    this.lastActionResult = state.followUp ? { success: true, followUp: state.followUp } : undefined;
+
+    // Restore move-limit tracking for action steps
+    this.restoreActionStepTracking();
 
     return { success: true };
   }
@@ -535,7 +571,10 @@ export class FlowEngine<G extends Game = Game> {
    * Validate that a flow path is still valid with the current flow definition.
    * Returns the longest valid prefix if the path is invalid.
    */
-  private validatePath(path: number[]): { valid: true } | { valid: false; error: string; validPath: number[] } {
+  private validatePath(
+    path: number[],
+    frameData?: Record<string, Record<string, unknown>>
+  ): { valid: true } | { valid: false; error: string; validPath: number[] } {
     if (path.length === 0) {
       return { valid: true };
     }
@@ -546,12 +585,13 @@ export class FlowEngine<G extends Game = Game> {
     for (let i = 0; i < path.length; i++) {
       const index = path[i];
       const nodeType = currentNode.type;
+      const frameDataAtDepth = frameData?.[`__frame_${i}`];
 
       // For loop/each-player/for-each/phase nodes, index represents iteration count,
       // not child position. These can have any non-negative index value.
       // For leaf nodes (action-step, execute, etc.), they have no children so skip bounds check.
       // For sequences, index represents child position and must be validated.
-      const isIteratingNode = nodeType === 'loop' || nodeType === 'each-player' ||
+      const isIteratingNode = nodeType === 'loop' || nodeType === 'repeat' || nodeType === 'each-player' ||
                               nodeType === 'for-each' || nodeType === 'phase';
       const isLeafNode = nodeType === 'action-step' || nodeType === 'simultaneous-action-step' ||
                          nodeType === 'execute';
@@ -572,15 +612,7 @@ export class FlowEngine<G extends Game = Game> {
       validPath.push(index);
 
       // Navigate to the child node for next iteration
-      // For iterating nodes (loop, etc.), always navigate to child 0 (the 'do' body)
-      // For sequences, navigate based on index (with adjustment for completion state)
-      let navIndex: number;
-      if (isIteratingNode) {
-        navIndex = 0; // Always the 'do' body
-      } else {
-        const childCount = this.getChildCount(currentNode);
-        navIndex = index === childCount ? index - 1 : index;
-      }
+      const navIndex = this.getNavigationIndex(currentNode, index, frameDataAtDepth);
 
       const childCount = this.getChildCount(currentNode);
       if (navIndex >= 0 && navIndex < childCount) {
@@ -607,6 +639,7 @@ export class FlowEngine<G extends Game = Game> {
       case 'sequence':
         return node.config.steps.length;
       case 'loop':
+      case 'repeat':
       case 'each-player':
       case 'for-each':
       case 'phase':
@@ -661,21 +694,76 @@ export class FlowEngine<G extends Game = Game> {
   private getPosition(): FlowPosition {
     const path: number[] = [];
     const iterations: Record<string, number> = {};
+    const frameData: Record<string, Record<string, unknown>> = {};
 
     for (let i = 0; i < this.stack.length; i++) {
       const frame = this.stack[i];
       path.push(frame.index);
-      if (frame.data?.iteration !== undefined) {
-        iterations[`__iter_${i}`] = frame.data.iteration as number;
+      if (frame.data) {
+        const serializedData: Record<string, unknown> = { ...frame.data };
+        if (serializedData.previousPlayer && typeof serializedData.previousPlayer === 'object' && 'seat' in (serializedData.previousPlayer as Record<string, unknown>)) {
+          serializedData.previousPlayerSeat = (serializedData.previousPlayer as Player).seat;
+          delete serializedData.previousPlayer;
+        }
+        frameData[`__frame_${i}`] = serializedData;
+        if (serializedData.iteration !== undefined) {
+          iterations[`__iter_${i}`] = serializedData.iteration as number;
+        }
       }
     }
 
     return {
       path,
       iterations,
+      frameData: Object.keys(frameData).length > 0 ? frameData : undefined,
       playerIndex: this.currentPlayer?.seat,
       variables: { ...this.variables },
     };
+  }
+
+  private getSwitchBranchIndex(config: SwitchConfig, branchKey: string): number | undefined {
+    const caseKeys = Object.keys(config.cases);
+    if (branchKey === '__default') {
+      return config.default ? caseKeys.length : undefined;
+    }
+    const index = caseKeys.indexOf(branchKey);
+    return index >= 0 ? index : undefined;
+  }
+
+  private getNavigationIndex(
+    node: FlowNode,
+    frameIndex: number,
+    frameData?: Record<string, unknown>
+  ): number {
+    const isIteratingNode =
+      node.type === 'loop' ||
+      node.type === 'repeat' ||
+      node.type === 'each-player' ||
+      node.type === 'for-each' ||
+      node.type === 'phase';
+
+    if (isIteratingNode) {
+      return 0;
+    }
+
+    if (node.type === 'if' && typeof frameData?.branchIndex === 'number') {
+      return frameData.branchIndex as number;
+    }
+
+    if (node.type === 'switch') {
+      if (typeof frameData?.branchKey === 'string') {
+        const branchIndex = this.getSwitchBranchIndex(node.config, frameData.branchKey);
+        if (branchIndex !== undefined) {
+          return branchIndex;
+        }
+      }
+      if (typeof frameData?.branchIndex === 'number') {
+        return frameData.branchIndex as number;
+      }
+    }
+
+    const childCount = this.getChildCount(node);
+    return frameIndex === childCount ? frameIndex - 1 : frameIndex;
   }
 
   private getChildNode(node: FlowNode, index: number): FlowNode {
@@ -683,6 +771,7 @@ export class FlowEngine<G extends Game = Game> {
       case 'sequence':
         return node.config.steps[index];
       case 'loop':
+      case 'repeat':
       case 'each-player':
       case 'for-each':
       case 'phase':
@@ -788,6 +877,8 @@ export class FlowEngine<G extends Game = Game> {
         return this.executeSequence(frame, frame.node.config, context);
       case 'loop':
         return this.executeLoop(frame, frame.node.config, context);
+      case 'repeat':
+        return this.executeRepeat(frame, frame.node.config, context);
       case 'each-player':
         return this.executeEachPlayer(frame, frame.node.config, context);
       case 'for-each':
@@ -860,49 +951,85 @@ export class FlowEngine<G extends Game = Game> {
     return { continue: true, awaitingInput: false };
   }
 
+  private executeRepeat(
+    frame: ExecutionFrame,
+    config: RepeatNodeConfig,
+    context: FlowContext
+  ): FlowStepResult {
+    const iteration = (frame.data?.iteration as number) ?? 0;
+    const times = Math.max(0, config.times);
+
+    if (iteration >= times) {
+      frame.completed = true;
+      return { continue: true, awaitingInput: false };
+    }
+
+    this.stack.push({ node: config.do, index: 0, completed: false });
+    frame.data = { ...frame.data, iteration: iteration + 1 };
+    frame.index++;
+
+    return { continue: true, awaitingInput: false };
+  }
+
   private executeEachPlayer(
     frame: ExecutionFrame,
     config: EachPlayerConfig,
     context: FlowContext
   ): FlowStepResult {
-    // Get players to iterate over
-    let players = [...this.game.all(Player as any)] as Player[];
+    // Build eligible seat list once so turn order is deterministic, then re-check
+    // filter dynamically each iteration so mid-round state changes are respected.
+    if (frame.data?.eligibleSeats === undefined) {
+      let players = [...this.game.all(Player as any)] as Player[];
 
-    if (config.filter) {
-      players = players.filter((p) => config.filter!(p, context));
-    }
+      if (config.filter) {
+        players = players.filter((p) => config.filter!(p, context));
+      }
 
-    if (config.direction === 'backward') {
-      players.reverse();
-    }
+      if (config.direction === 'backward') {
+        players.reverse();
+      }
 
-    // Determine starting index
-    if (frame.data?.playerIndex === undefined) {
       let startIndex = 0;
       if (config.startingPlayer) {
         const startPlayer = config.startingPlayer(context);
-        startIndex = players.findIndex((p) => p === startPlayer);
-        if (startIndex === -1) startIndex = 0;
+        const foundIndex = players.findIndex((p) => p.seat === startPlayer.seat);
+        startIndex = foundIndex >= 0 ? foundIndex : 0;
       }
-      frame.data = { ...frame.data, playerIndex: startIndex, players };
+
+      frame.data = {
+        ...frame.data,
+        eligibleSeats: players.slice(startIndex).map(p => p.seat),
+        nextIndex: 0,
+      };
     }
 
-    const playerIndex = frame.data.playerIndex as number;
-    const playerList = (frame.data.players as Player[]) ?? players;
+    const eligibleSeats = (frame.data.eligibleSeats as number[]) ?? [];
+    let nextIndex = (frame.data.nextIndex as number) ?? 0;
 
-    if (playerIndex >= playerList.length) {
-      frame.completed = true;
+    while (nextIndex < eligibleSeats.length) {
+      const seat = eligibleSeats[nextIndex];
+      nextIndex++;
+
+      const player = this.game.getPlayer(seat);
+      if (!player) {
+        continue;
+      }
+
+      if (config.filter && !config.filter(player, this.createContext())) {
+        continue;
+      }
+
+      this.currentPlayer = player;
+      this.variables[config.name ?? 'currentPlayer'] = this.currentPlayer;
+
+      this.stack.push({ node: config.do, index: 0, completed: false });
+      frame.data = { ...frame.data, nextIndex };
+      frame.index++;
+
       return { continue: true, awaitingInput: false };
     }
 
-    // Set current player and execute body
-    this.currentPlayer = playerList[playerIndex];
-    this.variables[config.name ?? 'currentPlayer'] = this.currentPlayer;
-
-    this.stack.push({ node: config.do, index: 0, completed: false });
-    frame.data = { ...frame.data, playerIndex: playerIndex + 1 };
-    frame.index++;
-
+    frame.completed = true;
     return { continue: true, awaitingInput: false };
   }
 
@@ -986,16 +1113,7 @@ export class FlowEngine<G extends Game = Game> {
       return { continue: true, awaitingInput: false };
     }
 
-    // Check repeat-until (if we have a last action result and minMoves is met)
     const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
-    if (this.lastActionResult && config.repeatUntil?.(context) && minMovesMet) {
-      this.restorePlayerFromActionStep(frame);
-      this.currentActionConfig = undefined;
-      this.moveCount = 0;
-      frame.completed = true;
-      this.lastActionResult = undefined;
-      return { continue: true, awaitingInput: false };
-    }
 
     // Determine player
     const player = config.player ? config.player(context) : context.player;
@@ -1151,14 +1269,20 @@ export class FlowEngine<G extends Game = Game> {
     const value = config.on(context);
     const stringValue = String(value);
 
-    const branch = config.cases[stringValue] ?? config.default;
+    const hasCase = Object.prototype.hasOwnProperty.call(config.cases, stringValue);
+    const branch = hasCase ? config.cases[stringValue] : config.default;
     if (!branch) {
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
 
     this.stack.push({ node: branch, index: 0, completed: false });
-    frame.data = { branchPushed: true };
+    frame.data = {
+      ...frame.data,
+      branchPushed: true,
+      branchKey: hasCase ? stringValue : '__default',
+      branchIndex: hasCase ? Object.keys(config.cases).indexOf(stringValue) : Object.keys(config.cases).length,
+    };
 
     return { continue: true, awaitingInput: false };
   }
@@ -1178,10 +1302,10 @@ export class FlowEngine<G extends Game = Game> {
 
     if (condition) {
       this.stack.push({ node: config.then, index: 0, completed: false });
-      frame.data = { branchPushed: true };
+      frame.data = { ...frame.data, branchPushed: true, branchIndex: 0 };
     } else if (config.else) {
       this.stack.push({ node: config.else, index: 0, completed: false });
-      frame.data = { branchPushed: true };
+      frame.data = { ...frame.data, branchPushed: true, branchIndex: 1 };
     } else {
       // No branch to execute, complete immediately
       frame.completed = true;

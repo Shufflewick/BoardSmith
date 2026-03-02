@@ -39,6 +39,7 @@ export type {
   BaseFlowConfig,
   SequenceConfig,
   LoopConfig,
+  RepeatNodeConfig,
   EachPlayerConfig,
   ForEachConfig,
   ActionStepConfig,
