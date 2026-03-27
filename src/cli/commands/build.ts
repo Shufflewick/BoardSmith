@@ -61,8 +61,8 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         lib: {
           entry: join(cwd, 'src/rules/index.ts'),
           name: config.name,
-          fileName: 'rules',
-          formats: ['es'],
+          fileName: () => 'rules.js',
+          formats: ['cjs'],
         },
         rollupOptions: {
           // Mark boardsmith and all its subpath exports as external
@@ -78,6 +78,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     spinner.start('Building UI...');
     await viteBuild({
       root: cwd,
+      base: './',
       build: {
         outDir: join(outDir, 'ui'),
         emptyOutDir: true,
