@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
@@ -54,10 +54,12 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
 
   try {
     // Build rules (TypeScript -> JS)
+    // copyPublicDir disabled — public/ is copied once to dist root below
     await viteBuild({
       root: cwd,
       build: {
         outDir: join(outDir, 'rules'),
+        copyPublicDir: false,
         lib: {
           entry: join(cwd, 'src/rules/index.ts'),
           name: config.name,
@@ -87,11 +89,18 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
       base: './',
       build: {
         outDir: join(outDir, 'ui'),
+        copyPublicDir: false,
         emptyOutDir: true,
       },
       logLevel: 'warn',
     });
     spinner.succeed('UI built');
+
+    // Copy public/ assets once to dist root (not into each sub-build)
+    const publicDir = join(cwd, 'public');
+    if (existsSync(publicDir)) {
+      cpSync(publicDir, join(cwd, outDir), { recursive: true });
+    }
 
     // Copy and update config
     spinner.start('Generating manifest...');

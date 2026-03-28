@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { initCommand } from './commands/init.js';
 import { devCommand } from './commands/dev.js';
 import { buildCommand } from './commands/build.js';
@@ -101,8 +101,10 @@ program
 // Publishing
 program
   .command('publish')
-  .description('Publish game to boardsmith.io')
+  .description('Publish game to shufflewick.pub')
+  .option('--api-key <key>', 'API key (saved for future use)')
   .option('--dry-run', 'Show what would be published without uploading')
+  .addOption(new Option('--test').hideHelp())
   .action(publishCommand);
 
 // Claude Code integration

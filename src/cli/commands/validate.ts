@@ -40,10 +40,13 @@ export async function validateCommand(options: ValidateOptions): Promise<void> {
   // 3. Security checks (forbidden APIs)
   results.push(await validateSecurity(cwd));
 
-  // 4. Bundle size check
+  // 4. Asset path check (absolute paths break on platform)
+  results.push(await validateAssetPaths(cwd));
+
+  // 5. Bundle size check
   results.push(await validateBundleSize(cwd));
 
-  // 5. Required files check
+  // 6. Required files check
   results.push(await validateRequiredFiles(cwd));
 
   // Print results
@@ -244,42 +247,35 @@ async function validateSecurity(cwd: string): Promise<ValidationResult> {
 }
 
 async function validateBundleSize(cwd: string): Promise<ValidationResult> {
-  const maxRulesSize = 500 * 1024; // 500KB
-  const maxUISize = 2 * 1024 * 1024; // 2MB
+  // Limits match server-side enforcement:
+  //   rules.js: 1MB (executor MAX_BUNDLE_SIZE)
+  //   total bundle zip: 50MB (games worker MAX_BUNDLE_SIZE)
+  const maxRulesJs = 1 * 1024 * 1024; // 1MB - executor limit
+  const maxTotalBundle = 200 * 1024 * 1024; // 200MB - upload limit
 
-  const rulesDir = join(cwd, 'src/rules');
-  const uiDir = join(cwd, 'src/ui');
+  const distDir = join(cwd, 'dist');
+  const rulesJsPath = join(distDir, 'rules', 'rules.js');
 
-  let rulesSize = 0;
-  let uiSize = 0;
-
-  function getDirSize(dir: string): number {
-    if (!existsSync(dir)) return 0;
-
-    let size = 0;
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        size += getDirSize(fullPath);
-      } else {
-        size += statSync(fullPath).size;
-      }
-    }
-    return size;
+  // If no build exists, skip — publish will build automatically
+  if (!existsSync(distDir) || !existsSync(rulesJsPath)) {
+    return {
+      name: 'Bundle Size',
+      passed: true,
+      message: '',
+      details: ['No build found — sizes will be checked after build during publish'],
+    };
   }
 
-  rulesSize = getDirSize(rulesDir);
-  uiSize = getDirSize(uiDir);
-
+  const rulesJsSize = statSync(rulesJsPath).size;
+  const totalSize = getDirSize(distDir);
   const issues: string[] = [];
 
-  if (rulesSize > maxRulesSize) {
-    issues.push(`Rules size (${formatBytes(rulesSize)}) exceeds limit (${formatBytes(maxRulesSize)})`);
+  if (rulesJsSize > maxRulesJs) {
+    issues.push(`rules.js (${formatBytes(rulesJsSize)}) exceeds executor limit (${formatBytes(maxRulesJs)})`);
   }
 
-  if (uiSize > maxUISize) {
-    issues.push(`UI size (${formatBytes(uiSize)}) exceeds limit (${formatBytes(maxUISize)})`);
+  if (totalSize > maxTotalBundle) {
+    issues.push(`Total bundle (${formatBytes(totalSize)}) exceeds upload limit (${formatBytes(maxTotalBundle)})`);
   }
 
   return {
@@ -287,8 +283,94 @@ async function validateBundleSize(cwd: string): Promise<ValidationResult> {
     passed: issues.length === 0,
     message: issues.length > 0 ? 'Bundle size limits exceeded' : '',
     details: issues.length > 0 ? issues : [
-      `Rules: ${formatBytes(rulesSize)} / ${formatBytes(maxRulesSize)}`,
-      `UI: ${formatBytes(uiSize)} / ${formatBytes(maxUISize)}`,
+      `rules.js: ${formatBytes(rulesJsSize)} / ${formatBytes(maxRulesJs)}`,
+      `Total bundle: ${formatBytes(totalSize)} / ${formatBytes(maxTotalBundle)}`,
+    ],
+  };
+}
+
+function getDirSize(dir: string): number {
+  if (!existsSync(dir)) return 0;
+
+  let size = 0;
+  const entries = readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      size += getDirSize(fullPath);
+    } else {
+      size += statSync(fullPath).size;
+    }
+  }
+  return size;
+}
+
+async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
+  const publicDir = join(cwd, 'public');
+  if (!existsSync(publicDir)) {
+    return { name: 'Asset Paths', passed: true, message: '', details: ['No public/ directory'] };
+  }
+
+  // Get top-level directory names in public/
+  const publicDirs = readdirSync(publicDir, { withFileTypes: true })
+    .filter(e => e.isDirectory())
+    .map(e => e.name);
+
+  if (publicDirs.length === 0) {
+    return { name: 'Asset Paths', passed: true, message: '' };
+  }
+
+  // Scan built UI JS and source files for absolute paths like "/dirname/"
+  const filesToScan: string[] = [];
+
+  // Check built JS if it exists
+  const uiAssetsDir = join(cwd, 'dist', 'ui', 'assets');
+  if (existsSync(uiAssetsDir)) {
+    for (const entry of readdirSync(uiAssetsDir)) {
+      if (entry.endsWith('.js')) {
+        filesToScan.push(join(uiAssetsDir, entry));
+      }
+    }
+  }
+
+  // Also check source data files (JSON with image paths)
+  const dataDir = join(cwd, 'data');
+  if (existsSync(dataDir)) {
+    for (const entry of readdirSync(dataDir)) {
+      if (entry.endsWith('.json')) {
+        filesToScan.push(join(dataDir, entry));
+      }
+    }
+  }
+
+  const issues: string[] = [];
+  for (const filePath of filesToScan) {
+    const content = readFileSync(filePath, 'utf-8');
+    for (const dir of publicDirs) {
+      // Match absolute paths like "/${dir}/" in strings
+      const pattern = new RegExp(`["'\`]\\/${dir}\\/`, 'g');
+      if (pattern.test(content)) {
+        const relPath = filePath.replace(cwd + '/', '');
+        issues.push(`${relPath}: absolute path "/${dir}/..." found`);
+        break; // One issue per file is enough
+      }
+    }
+  }
+
+  if (issues.length === 0) {
+    return { name: 'Asset Paths', passed: true, message: '' };
+  }
+
+  return {
+    name: 'Asset Paths',
+    passed: false,
+    message: 'Absolute asset paths will break on the publishing platform',
+    details: [
+      ...issues.slice(0, 5),
+      '',
+      'Use relative paths (e.g., "sectors/image.jpg" not "/sectors/image.jpg")',
+      'Absolute paths starting with "/" resolve to the domain root,',
+      'which doesn\'t match the game\'s asset path on the platform.',
     ],
   };
 }
