@@ -69,6 +69,12 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
           external: ['boardsmith', /^boardsmith\//],
         },
         emptyOutDir: true,
+        // Keep class names — the game engine uses constructor.name for element
+        // type identification in serialized state and player views.
+        minify: 'esbuild',
+      },
+      esbuild: {
+        keepNames: true,
       },
       logLevel: 'warn',
     });

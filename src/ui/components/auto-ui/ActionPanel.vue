@@ -13,7 +13,7 @@
  * Requires: ActionPanel must be used inside a GameShell context where the
  * action controller is provided via inject('actionController').
  */
-import { ref, computed, watch, inject, reactive } from 'vue';
+import { ref, computed, watch, inject } from 'vue';
 import { useBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import type {
@@ -35,22 +35,6 @@ if (!_actionController) {
 }
 const actionController = _actionController;
 
-/**
- * Helper to clear all keys from a reactive object while preserving reactivity.
- */
-function clearReactiveObject(obj: Record<string, unknown>): void {
-  for (const key of Object.keys(obj)) {
-    delete obj[key];
-  }
-}
-
-/**
- * Clear action-related state (args and display cache)
- */
-function clearActionState(args: Record<string, unknown>): void {
-  clearReactiveObject(args);
-}
-
 // Re-export types
 export type { ChoiceWithRefs, ValidElement, ElementRef };
 /** A pick/choice the player must make */
@@ -62,7 +46,6 @@ const props = defineProps<{
   actionMetadata?: Record<string, ActionMetadata>;
   playerSeat: number;
   isMyTurn: boolean;
-  selectedElementId?: number;
   canUndo?: boolean;
   /**
    * Auto mode: streamlines UX by reducing unnecessary clicks (default: true)
@@ -139,12 +122,7 @@ const multiSelectState = ref<{
 const numberInputValue = ref<number | null>(null);
 const textInputValue = ref<string>('');
 
-// Inject shared actionArgs from GameShell (required for bidirectional sync with custom game boards)
-const _currentArgs = inject<Record<string, unknown>>('actionArgs');
-if (!_currentArgs) {
-  throw new Error('ActionPanel requires actionArgs to be provided via inject. Use inside GameShell.');
-}
-const currentArgs = _currentArgs;
+const currentArgs = computed(() => actionController.currentArgs.value);
 
 // Get metadata for available actions
 const actionsWithMetadata = computed(() => {
@@ -208,7 +186,7 @@ const currentMultiSelect = computed(() => {
 
   // If selection has dependsOn and multiSelectByDependentValue, resolve it
   if (sel.dependsOn && sel.multiSelectByDependentValue) {
-    const depValue = currentArgs[sel.dependsOn];
+    const depValue = currentArgs.value[sel.dependsOn];
     if (depValue !== undefined) {
       const key = String(depValue);
       return sel.multiSelectByDependentValue[key];
@@ -220,30 +198,14 @@ const currentMultiSelect = computed(() => {
   return sel.multiSelect;
 });
 
-// Get the selected element ID (from currentArgs when element selection completed)
-const selectedElementId = computed(() => {
-  // Check if we have a previous element selection in args
-  if (!currentActionMeta.value) return null;
-
-  for (const sel of currentActionMeta.value.selections) {
-    if ((sel.type === 'element' || sel.type === 'elements') && currentArgs[sel.name] !== undefined) {
-      return currentArgs[sel.name] as number;
-    }
-  }
-  return null;
-});
-
-// Filter args for display - exclude internal keys and current multiSelect selection
+// Filter args for display - exclude current multiSelect selection
 // (multiSelect shows its state via checkboxes, not chips)
 const displayableArgs = computed(() => {
   const result: Record<string, unknown> = {};
   const currentSelName = currentPick.value?.name;
   const isMultiSelectActive = currentMultiSelect.value !== undefined;
 
-  for (const [key, value] of Object.entries(currentArgs)) {
-    // Skip internal preview keys
-    if (key.startsWith('_preview_')) continue;
-
+  for (const [key, value] of Object.entries(currentArgs.value)) {
     // Skip the current multiSelect selection (checkboxes show it)
     if (isMultiSelectActive && key === currentSelName) continue;
 
@@ -272,7 +234,7 @@ const filteredChoices = computed(() => {
     const alreadySelectedValues = new Set<unknown>();
     for (const sel of currentActionMeta.value.selections) {
       if (sel.type === 'choice' && sel.name !== currentPick.value.name) {
-        const selectedValue = currentArgs[sel.name];
+        const selectedValue = currentArgs.value[sel.name];
         if (selectedValue !== undefined) {
           alreadySelectedValues.add(selectedValue);
         }
@@ -302,7 +264,7 @@ const filteredValidElements = computed(() => {
   if (currentActionMeta.value) {
     for (const sel of currentActionMeta.value.selections) {
       if ((sel.type === 'element' || sel.type === 'elements') && sel.name !== currentPick.value.name) {
-        const selectedValue = currentArgs[sel.name];
+        const selectedValue = currentArgs.value[sel.name];
         if (typeof selectedValue === 'number') {
           alreadySelectedIds.add(selectedValue);
         } else if (Array.isArray(selectedValue)) {
@@ -364,7 +326,7 @@ function submitTextInput() {
 }
 
 // Select an element (from element selection buttons)
-function selectElement(elementId: number, ref?: ElementRef) {
+function selectElement(elementId: number) {
   if (!currentPick.value || (currentPick.value.type !== 'element' && currentPick.value.type !== 'elements')) return;
 
   // Get the selection name BEFORE calling setSelectionValue
@@ -474,20 +436,12 @@ function clearSelection(selectionName: string) {
   // Clear this selection and all subsequent ones
   for (let i = index; i < currentActionMeta.value.selections.length; i++) {
     const sel = currentActionMeta.value.selections[i];
-    delete currentArgs[sel.name];
+    actionController.clear(sel.name);
   }
 
   // Clear board interaction
   boardInteraction?.clear();
 }
-
-// Check if action is ready
-const isActionReady = computed(() => {
-  if (!currentActionMeta.value) return false;
-  // Ready when all required selections have values AND no selection needs input
-  // (currentPick is null means all selections are filled or skipped)
-  return currentPick.value === null;
-});
 
 // Note: Auto-execute when action becomes ready is handled by the controller
 
@@ -517,11 +471,13 @@ function tryAutoStartSingleAction(skipNoSelections = false): void {
 
   // If action has selections, auto-start it (show first selection prompt)
   if (action.selections.length > 0) {
-    startAction(action.name);
+    void startAction(action.name);
   }
-  // If action has no selections, auto-execute it (unless skipped)
-  else if (!skipNoSelections) {
-    executeAction(action.name, {});
+  // If action has no selections, auto-execute it (unless skipped).
+  // Only auto-execute if we have real action metadata — without it, we can't know
+  // whether an action truly has no selections or if metadata is simply unavailable.
+  else if (!skipNoSelections && props.actionMetadata) {
+    void executeAction(action.name, {});
   }
 }
 
@@ -554,7 +510,6 @@ watch(() => props.availableActions, (actions, oldActions) => {
 
   if (shouldClear) {
     actionController.cancel();
-    clearActionState(currentArgs);
     multiSelectState.value = null;
     boardInteraction?.clear();
   }
@@ -589,7 +544,7 @@ watch([currentPick, filteredValidElements], ([selection]) => {
     boardInteraction.setCurrentPick(selectionIndex, selection.name);
   }
 
-  let validElems: { id: number; ref: any }[] = [];
+  let validElems: { id: number; ref: ElementRef; disabled?: string }[] = [];
   let onSelect: ((id: number) => void) | null = null;
 
   // Handle element/elements selections - always support board-direct clicking
@@ -621,12 +576,12 @@ watch([currentPick, filteredValidElements], ([selection]) => {
     // Use filtered choices if there's a filterBy configuration
     const choices = filteredChoices.value.length > 0 ? filteredChoices.value : selection.choices;
 
-    const choicesWithRefs = choices.filter((c: any) => c.sourceRef || c.targetRef);
+    const choicesWithRefs = choices.filter((c: ChoiceWithRefs) => c.sourceRef || c.targetRef);
 
     if (choicesWithRefs.length > 0) {
-      const refToChoice = new Map<number, { value: any; ref: any; disabled?: string }>();
+      const refToChoice = new Map<number, { value: unknown; ref: ElementRef; disabled?: string }>();
 
-      choicesWithRefs.forEach((choice: any) => {
+      choicesWithRefs.forEach((choice: ChoiceWithRefs) => {
         // Use targetRef for clickable elements (destinations)
         // sourceRef is only for highlighting the source
         const ref = choice.targetRef || choice.sourceRef;
@@ -648,7 +603,7 @@ watch([currentPick, filteredValidElements], ([selection]) => {
           const multiSelect = currentMultiSelect.value;
           if (multiSelect) {
             // Find the display for this choice
-            const choice = choices.find((c: any) => c.value === entry.value);
+            const choice = choices.find((c: ChoiceWithRefs) => c.value === entry.value);
             const display = choice?.display || String(entry.value);
             toggleMultiSelectValue(selection.name, entry.value, display);
           } else {
@@ -662,8 +617,8 @@ watch([currentPick, filteredValidElements], ([selection]) => {
     // set the selected piece as draggable
     if (selection.filterBy && currentActionMeta.value) {
       const firstSel = currentActionMeta.value.selections[0];
-      if ((firstSel?.type === 'element' || firstSel?.type === 'elements') && currentArgs[firstSel.name] !== undefined) {
-        const selectedPieceId = currentArgs[firstSel.name] as number;
+      if ((firstSel?.type === 'element' || firstSel?.type === 'elements') && currentArgs.value[firstSel.name] !== undefined) {
+        const selectedPieceId = currentArgs.value[firstSel.name] as number;
         // Find the ref for this piece from the first selection's validElements
         const pieceRef = firstSel.validElements?.find(ve => ve.id === selectedPieceId)?.ref;
         boardInteraction.setDraggableSelectedElement(pieceRef || { id: selectedPieceId });
@@ -685,6 +640,10 @@ watch(currentAction, (action) => {
   if (!boardInteraction) return;
 
   if (action) {
+    const pickName = currentPick.value?.name ?? null;
+    const pickIndex = currentActionMeta.value?.selections.findIndex(s => s.name === pickName) ?? 0;
+    boardInteraction.setCurrentAction(action, pickIndex >= 0 ? pickIndex : 0, pickName);
+
     // Set callback that allows custom UI to trigger choice selection
     boardInteraction.setChoiceSelectCallback((selectionName: string, value: unknown) => {
       // Verify we're on the right selection
@@ -693,6 +652,7 @@ watch(currentAction, (action) => {
       }
     });
   } else {
+    boardInteraction.setCurrentAction(null);
     boardInteraction.setChoiceSelectCallback(null);
   }
 }, { immediate: true });
@@ -706,7 +666,6 @@ watch(() => boardInteraction?.currentAction, (boardAction) => {
     // Reset ActionPanel's internal state to match
     actionController.cancel();
     multiSelectState.value = null;
-    clearActionState(currentArgs);
     emit('cancelSelection');
   }
 });
@@ -727,7 +686,7 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
 
     // Check if this element was already selected in a previous selection
     // (prevents double-selection bug when clicking elements)
-    const alreadySelected = Object.values(currentArgs).includes(selected.id);
+    const alreadySelected = Object.values(currentArgs.value).includes(selected.id);
     if (alreadySelected) {
       return;
     }
@@ -765,10 +724,6 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
   });
 
   if (elementAction) {
-    currentAction.value = elementAction.name;
-    clearActionState(currentArgs);
-
-    // Find and set the element in args
     const firstSel = elementAction.selections[0];
     const validElem = firstSel.validElements?.find(e => {
       if (selected.id !== undefined && e.id === selected.id) return true;
@@ -777,8 +732,9 @@ watch(() => boardInteraction?.selectedElement, (selected) => {
     });
 
     if (validElem) {
-      currentArgs[firstSel.name] = validElem.id;
-      // Note: Display is stored via controller's fill() - direct arg setting loses display info
+      void startAction(elementAction.name, {
+        args: { [firstSel.name]: validElem.id },
+      });
     }
   }
 });
@@ -799,26 +755,26 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
     // If first selection is element/elements and already filled, and second is choice with filterBy
     if ((firstSel?.type === 'element' || firstSel?.type === 'elements') &&
-        currentArgs[firstSel.name] !== undefined &&
+        currentArgs.value[firstSel.name] !== undefined &&
         secondSel?.type === 'choice' &&
         secondSel.filterBy) {
 
-      const selectedPieceId = currentArgs[firstSel.name] as number;
+      const selectedPieceId = currentArgs.value[firstSel.name] as number;
 
       // Check if dragged element matches the selected piece
       if (dragged.id === selectedPieceId) {
         // Set up drop targets for destinations
         const allChoices = secondSel.choices || [];
         const filterBy = secondSel.filterBy!;
-        const filteredDestinations = allChoices.filter((choice: any) => {
+        const filteredDestinations = allChoices.filter((choice: ChoiceWithRefs) => {
           const choiceValue = choice.value as Record<string, unknown>;
           return choiceValue[filterBy.key] === selectedPieceId;
         });
 
         const dropTargets: { id: number; ref: ElementRef }[] = [];
-        const choiceByTargetId = new Map<number, any>();
+        const choiceByTargetId = new Map<number, ChoiceWithRefs>();
 
-        filteredDestinations.forEach((choice: any) => {
+        filteredDestinations.forEach((choice: ChoiceWithRefs) => {
           const ref = choice.targetRef;
           if (ref?.id !== undefined) {
             dropTargets.push({ id: ref.id, ref });
@@ -828,11 +784,8 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
         boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
           const choice = choiceByTargetId.get(targetId);
-          if (choice && currentAction.value) {
-            executeAction(currentAction.value, {
-              ...currentArgs,
-              [secondSel.name]: choice.value
-            });
+          if (choice) {
+            void setSelectionValue(secondSel.name, choice.value);
           }
         });
         return;
@@ -877,25 +830,19 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
 
     if (!validPiece) return;
 
-    // Set up the action state
-    currentAction.value = dragAction.name;
-    clearActionState(currentArgs);
-    currentArgs[firstSel.name] = validPiece.id;
-    // Note: Display is stored via controller's fill() - direct arg setting loses display info
-
     // Get filtered choices for this piece (destinations)
     const allChoices = secondSel.choices || [];
     const filterBy = secondSel.filterBy!;
-    const filteredDestinations = allChoices.filter((choice: any) => {
+    const filteredDestinations = allChoices.filter((choice: ChoiceWithRefs) => {
       const choiceValue = choice.value as Record<string, unknown>;
       return choiceValue[filterBy.key] === validPiece.id;
     });
 
     // Convert choices to drop targets
     const dropTargets: { id: number; ref: ElementRef }[] = [];
-    const choiceByTargetId = new Map<number, any>();
+    const choiceByTargetId = new Map<number, ChoiceWithRefs>();
 
-    filteredDestinations.forEach((choice: any) => {
+    filteredDestinations.forEach((choice: ChoiceWithRefs) => {
       // Use targetRef for drop targets (the destination square)
       const ref = choice.targetRef;
       if (ref?.id !== undefined) {
@@ -904,14 +851,16 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
       }
     });
 
-    // Set drop targets with callback to execute the action
+    // Start action with dragged piece pre-filled, then wire drop targets.
+    void startAction(dragAction.name, {
+      args: { [firstSel.name]: validPiece.id },
+    });
+
+    // Set drop targets with callback to fill the destination selection.
     boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
       const choice = choiceByTargetId.get(targetId);
-      if (choice && currentAction.value) {
-        executeAction(currentAction.value, {
-          ...currentArgs,
-          [secondSel.name]: choice.value
-        });
+      if (choice) {
+        void setSelectionValue(secondSel.name, choice.value);
       }
     });
     return;
@@ -974,24 +923,13 @@ Available actions: ${props.availableActions?.join(', ') || 'none'}`
     // Set drop targets with callback to execute the action
     boardInteraction.setDropTargets(dropTargets, (targetId: number) => {
       const elem = elementById.get(targetId);
-      if (elem && currentAction.value) {
-        executeAction(currentAction.value, {
-          ...currentArgs,
-          [secondSel.name]: targetId
-        });
+      if (elem) {
+        void setSelectionValue(secondSel.name, targetId);
       }
     });
   }).catch(() => {
     // Element might not be valid for this action - that's ok, just don't set up drop targets
   });
-});
-
-// Watch for external element selection prop
-watch(() => props.selectedElementId, (newId) => {
-  if (newId !== undefined && (currentPick.value?.type === 'element' || currentPick.value?.type === 'elements')) {
-    currentArgs[currentPick.value.name] = newId;
-    // Note: Display is stored via controller's fill() - direct arg setting loses display info
-  }
 });
 
 function formatActionName(name: string): string {
@@ -1087,14 +1025,11 @@ function toggleMultiSelectValue(selectionName: string, value: unknown, display?:
 
       // Auto-confirm when min === max and we've reached exact count (no Done button needed)
       if (multiSelect.min === multiSelect.max && state.selectedValues.length === multiSelect.min) {
-        confirmMultiSelect();
+        void confirmMultiSelect();
         return;
       }
     }
   }
-
-  // Sync preview to board using special key (doesn't affect selection completion)
-  currentArgs[`_preview_${selectionName}`] = [...state.selectedValues];
 
   // Update AutoUI board highlighting for selected items
   updateMultiSelectBoardHighlights();
@@ -1134,62 +1069,21 @@ function updateMultiSelectBoardHighlights() {
   }
 }
 
-// Watch for external changes from board (via preview key) when in multiSelect mode
-watch(
-  () => {
-    const sel = currentPick.value;
-    const multiSelect = currentMultiSelect.value;
-    if (!sel || !multiSelect) return undefined;
-    return currentArgs[`_preview_${sel.name}`];
-  },
-  (previewValue) => {
-    const sel = currentPick.value;
-    const multiSelect = currentMultiSelect.value;
-    if (!sel || !multiSelect || !Array.isArray(previewValue)) return;
-
-    // Sync preview to multiSelectState
-    const currentValues = multiSelectState.value?.selectedValues ?? [];
-    const isDifferent = previewValue.length !== currentValues.length ||
-      previewValue.some((v, i) => v !== currentValues[i]);
-
-    if (isDifferent) {
-      multiSelectState.value = {
-        selectionName: sel.name,
-        selectedValues: [...previewValue],
-      };
-
-      // Update AutoUI board highlighting for the new selection
-      updateMultiSelectBoardHighlights();
-
-      // Check for auto-confirm when min === max
-      if (multiSelect.min === multiSelect.max && previewValue.length === multiSelect.min) {
-        confirmMultiSelect();
-      }
-    }
-  },
-  { deep: true }
-);
-
 /**
  * Confirm multi-select and move to next selection or execute action
  */
-function confirmMultiSelect() {
+async function confirmMultiSelect() {
   if (!currentPick.value) return;
 
   const selectionName = currentPick.value.name;
   const values = multiSelectState.value?.selectedValues ? [...multiSelectState.value.selectedValues] : [];
 
-  // Set the selection value as an array
-  currentArgs[selectionName] = values;
-
   // Clear multi-select state and board highlights
   multiSelectState.value = null;
   boardInteraction?.setHoveredChoice(null);
 
-  // Auto-execute if action is now complete
-  if (currentAction.value && isActionReady.value) {
-    executeAction(currentAction.value, { ...currentArgs });
-  }
+  // Delegate to controller so snapshot/display/execution state stays consistent
+  await setSelectionValue(selectionName, values);
 }
 
 /**
@@ -1225,11 +1119,14 @@ const multiSelectCountDisplay = computed(() => {
   return `Selected: ${count}`;
 });
 
-async function startAction(actionName: string) {
+async function startAction(
+  actionName: string,
+  options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
+) {
   const meta = actionsWithMetadata.value.find(a => a.name === actionName);
 
   if (!meta || meta.selections.length === 0) {
-    executeAction(actionName, {});
+    await executeAction(actionName, {});
     return;
   }
 
@@ -1237,7 +1134,7 @@ async function startAction(actionName: string) {
 
   // Delegate to controller for core start logic
   // Controller handles: clearing args, fetching choices for first selection
-  await actionController.start(actionName);
+  await actionController.start(actionName, options);
 
   // ActionPanel-specific state cleanup (controller doesn't know about these)
   multiSelectState.value = null;
@@ -1257,7 +1154,6 @@ function cancelAction() {
 
   // Clear ActionPanel-specific state
   multiSelectState.value = null;
-  clearActionState(currentArgs);
   boardInteraction?.clear();
   emit('cancelSelection');
 }
@@ -1293,7 +1189,7 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
 
   // For choice selections with board refs, mark the selected element
   if (selection?.type === 'choice' && selection.choices) {
-    const choice = selection.choices.find((c: any) => c.value === value);
+    const choice = selection.choices.find((c: ChoiceWithRefs) => c.value === value);
     if (choice && (choice.sourceRef || choice.targetRef)) {
       const ref = choice.sourceRef || choice.targetRef;
       if (ref && boardInteraction) {
@@ -1345,7 +1241,7 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   } catch (err) {
     console.error('Execute action error:', err);
   } finally {
-    clearActionState(currentArgs);
+    multiSelectState.value = null;
     boardInteraction?.clear();
     emit('cancelSelection');
   }
@@ -1457,7 +1353,7 @@ function clearBoardSelection() {
               class="choice-btn element-btn"
               :disabled="!!element.disabled"
               :title="element.disabled || undefined"
-              @click="selectElement(element.id, element.ref)"
+              @click="selectElement(element.id)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >
@@ -1521,7 +1417,7 @@ function clearBoardSelection() {
               class="choice-btn element-btn"
               :disabled="!!element.disabled"
               :title="element.disabled || undefined"
-              @click="selectElement(element.id, element.ref)"
+              @click="selectElement(element.id)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
             >

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, provide } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
 import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
@@ -95,9 +95,14 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   showHistory: true,
 });
 
-// Screen state
+// Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub)
+// Synchronous detection: if we're in an iframe, we're in platform mode.
+// The boardsmith dev server always serves in the main window, never in an iframe.
+const platformMode = ref(typeof window !== 'undefined' && window.parent !== window);
+
+// Screen state — start on 'game' in platform mode (skip lobby)
 type Screen = 'lobby' | 'waiting' | 'game';
-const currentScreen = ref<Screen>('lobby');
+const currentScreen = ref<Screen>(platformMode.value ? 'game' : 'lobby');
 
 // Player identity (persistent across sessions, but can change for joiners in same-browser scenarios)
 const playerId = ref(getPlayerId());
@@ -209,13 +214,19 @@ const gameView = computed(() => {
   return state.value?.state.view as any;
 });
 
-// Shared action args - bidirectional sync between ActionPanel and custom game boards
-const actionArgs = reactive<Record<string, unknown>>({});
-
 // Action controller - unified action handling for ActionPanel and custom UIs
 // This provides 100% parity: same auto-fill, validation, and server communication
 const actionController = useActionController({
   sendAction: async (actionName, args) => {
+    if (platformMode.value) {
+      window.parent.postMessage({
+        source: 'shufflewick-game',
+        type: 'action',
+        actionName,
+        args,
+      }, '*');
+      return { success: true };
+    }
     const result = await action(actionName, args);
     return result as ControllerActionResult;
   },
@@ -228,13 +239,11 @@ const actionController = useActionController({
   // When auto mode is OFF, user must manually select each option even if only one choice
   autoFill: autoEndTurn,
   autoExecute: true, // Always auto-execute once all selections are manually filled
-  // Share actionArgs with the controller for bidirectional sync with custom UIs
-  externalArgs: actionArgs,
   // Animation events for gating (shows "Playing animations..." during playback)
   animationEvents,
   // Selection choices - fetched from server on-demand for each selection
   fetchPickChoices: async (actionName, selectionName, player, currentArgs) => {
-    if (!gameId.value) {
+    if (platformMode.value || !gameId.value) {
       return { success: false, error: 'No game ID' };
     }
     try {
@@ -291,6 +300,9 @@ const actionController = useActionController({
     }
   },
 });
+
+// Read-only action args for display and slot props.
+const actionArgs = computed(() => actionController.currentArgs.value);
 
 // Extract messages from game state (prefer formatted messages from session, fall back to view)
 const gameMessages = computed(() => {
@@ -403,13 +415,14 @@ provide('myPlayer', myPlayer);
 provide('playerSeat', playerSeat);
 provide('isMyTurn', isMyTurn);
 provide('availableActions', availableActions);
-provide('actionArgs', actionArgs);
 provide('actionController', actionController);
-provide('boardInteraction', boardInteraction);
 provide('timeTravelDiff', timeTravelDiff);
 
 // URL routing - check for game ID or lobby ID in URL on mount
 onMounted(async () => {
+  // In platform mode, skip all lobby/URL routing — the host manages the session
+  if (platformMode.value) return;
+
   const path = window.location.pathname;
 
   hmrLog('onMounted', {
@@ -427,10 +440,8 @@ onMounted(async () => {
     const urlPosition = gameMatch[2] ? parseInt(gameMatch[2], 10) : 1;
 
     playerSeat.value = urlPosition;
-    setTimeout(() => {
-      gameId.value = urlGameId;
-      currentScreen.value = 'game';
-    }, 50);
+    gameId.value = urlGameId;
+    currentScreen.value = 'game';
     return;
   }
 
@@ -485,7 +496,94 @@ onMounted(async () => {
 // Cleanup on unmount
 onUnmounted(() => {
   disconnectFromLobby();
+  if (platformMessageHandler) {
+    window.removeEventListener('message', platformMessageHandler);
+  }
 });
+
+// Platform mode: postMessage bridge for iframe embedding
+// When hosted inside a platform like ShufflewickPub, the parent page manages
+// the session/lobby and sends game state via postMessage. The game UI just
+// renders the board and sends actions back.
+let platformMessageHandler: ((event: MessageEvent) => void) | null = null;
+
+if (typeof window !== 'undefined' && window.parent !== window) {
+  platformMessageHandler = (event: MessageEvent) => {
+    const data = event.data;
+    if (!data || data.source !== 'shufflewick') return;
+
+    if (data.type === 'init') {
+      playerSeat.value = data.seat;
+      currentScreen.value = 'game';
+    }
+
+    if (data.type === 'game_state' && platformMode.value) {
+      const view = data.view;
+      if (!view) return;
+
+      // Convert PlayerStateView → GameState format
+      const flowAvailableActions = view.flowState?.availableActions ?? [];
+      const flowIsMyTurn = view.flowState?.isMyTurn ?? false;
+
+      // Extract player data (name, seat, color) from the game view's element tree.
+      // Player elements are direct children of the root game element with a `seat` attribute.
+      // They may be named 'Player', 'CheckersPlayer', or any custom Player subclass.
+      const viewState = view.state as Record<string, unknown> | undefined;
+      const viewChildren = (viewState?.children ?? []) as Array<Record<string, unknown>>;
+      const playerElements = viewChildren.filter((c) => {
+        const attrs = c.attributes as Record<string, unknown> | undefined;
+        return attrs?.seat != null;
+      });
+      // Extract colorSelectionEnabled from game settings
+      const gameSettings = (viewState?.settings ?? {}) as Record<string, unknown>;
+      if (gameSettings.colorSelectionEnabled) {
+        colorSelectionEnabled.value = true;
+      }
+
+      const players = playerElements.length > 0
+        ? playerElements.map((p) => {
+            const attrs = (p.attributes ?? {}) as Record<string, unknown>;
+            return {
+              name: (p.name ?? attrs.name ?? `Player ${attrs.seat}`) as string,
+              seat: (attrs.seat ?? p.id) as number,
+              color: attrs.color as string | undefined,
+            };
+          })
+        : state.value?.state?.players ?? [];
+
+      state.value = {
+        flowState: {
+          currentPlayer: flowIsMyTurn ? playerSeat.value : undefined,
+          awaitingInput: view.flowState?.awaitingInput ?? false,
+          availableActions: flowAvailableActions,
+          phase: view.phase ?? 'playing',
+        },
+        state: {
+          phase: view.phase ?? 'playing',
+          players,
+          currentPlayer: flowIsMyTurn ? playerSeat.value : undefined,
+          availableActions: flowAvailableActions,
+          isMyTurn: flowIsMyTurn,
+          view: view.state,
+          messages: view.messages ?? [],
+        },
+        playerSeat: playerSeat.value,
+        isSpectator: false,
+      } as any;
+    }
+  };
+  window.addEventListener('message', platformMessageHandler);
+
+  // Auto-execute endTurn in platform mode when it's the only available action.
+  // Without ActionPanel, there's no UI for endTurn. The game flow requires it
+  // to advance after a move, so auto-execute it transparently.
+  watch([isMyTurn, availableActions], ([myTurn, actions]) => {
+    if (!myTurn || !actions?.length) return;
+    if (actions.length === 1 && actions[0] === 'endTurn') {
+      actionController.execute('endTurn', {});
+    }
+  });
+}
 
 // Update URL when entering a game
 function updateUrl(gid: string, position: number) {
@@ -725,7 +823,6 @@ async function joinGame() {
 
     if (stateResult) {
       playerSeat.value = 1;
-      await new Promise(resolve => setTimeout(resolve, 10));
       gameId.value = gid;
       currentScreen.value = 'game';
       updateUrl(gid, 1);
@@ -1060,7 +1157,7 @@ if ((import.meta as any).hot) {
 </script>
 
 <template>
-  <div class="game-shell">
+  <div class="game-shell" :class="{ 'game-shell--platform': platformMode }">
     <!-- LOBBY SCREEN -->
     <GameLobby
       v-if="currentScreen === 'lobby'"
@@ -1102,7 +1199,7 @@ if ((import.meta as any).hot) {
       <GameHeader
         :game-title="displayName || gameType"
         :game-id="gameId"
-        :connection-status="connectionStatus"
+        :connection-status="platformMode ? 'connected' : connectionStatus"
         v-model:zoom="zoomLevel"
         v-model:auto-end-turn="autoEndTurn"
         v-model:show-undo="showUndo"
@@ -1111,7 +1208,7 @@ if ((import.meta as any).hot) {
 
       <!-- Main Content Area -->
       <div class="game-shell__main">
-        <!-- Left Sidebar: Players, Stats & History (on desktop) -->
+        <!-- Left Sidebar: Players, Stats & History -->
         <aside class="game-shell__sidebar">
           <PlayersPanel
             :players="players"
@@ -1196,9 +1293,9 @@ if ((import.meta as any).hot) {
         </div>
       </footer>
 
-      <!-- Debug Panel (bottom) -->
+      <!-- Debug Panel (hidden in platform mode) -->
       <DebugPanel
-        v-if="debugMode"
+        v-if="debugMode && !platformMode"
         :state="state"
         :player-seat="playerSeat"
         :player-count="playerCount"
@@ -1231,6 +1328,21 @@ if ((import.meta as any).hot) {
   font-family: system-ui, -apple-system, sans-serif;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   color: #fff;
+}
+
+/* Platform mode: embedded in host iframe, no outer chrome */
+.game-shell--platform {
+  min-height: 100%;
+  height: 100vh;
+}
+
+.game-shell--platform .game-shell__game {
+  min-height: 100%;
+  height: 100%;
+}
+
+.game-shell--platform .game-shell__content {
+  padding-bottom: 60px;
 }
 
 /* Game Screen */
