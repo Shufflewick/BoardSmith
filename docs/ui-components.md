@@ -298,25 +298,18 @@ export const gameDefinition = {
 
 #### Lobby Color Selection
 
-To enable players to choose colors in the lobby, use `createColorOption`:
+To enable players to choose colors in the lobby, define `colorPalette` in `boardsmith.json`:
 
-```typescript
-import { createColorOption, STANDARD_PLAYER_COLORS } from 'boardsmith/session';
-
-export const gameDefinition = {
-  playerOptions: {
-    color: createColorOption(), // Uses STANDARD_PLAYER_COLORS (8 colors)
-  },
-};
-
-// Or with custom colors
-playerOptions: {
-  color: createColorOption([
-    { value: '#ff0000', label: 'Fire' },
-    { value: '#0000ff', label: 'Ice' },
-  ], 'Team Color'),
+```json
+{
+  "colorPalette": [
+    { "hex": "#ff0000", "label": "Fire" },
+    { "hex": "#0000ff", "label": "Ice" }
+  ]
 }
 ```
+
+If `colorPalette` is omitted, the standard 8-color palette is used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
 
 The color picker in PlayerConfigList:
 - Shows color swatches with labels

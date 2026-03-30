@@ -36,7 +36,7 @@ import {
 ### Player Colors
 
 - `STANDARD_PLAYER_COLORS` - Full color palette (8 colors)
-- `createColorOption()` - Create color selection option for lobby configuration
+- `createColorOption()` - Create color selection option (used internally; define colors via `colorPalette` in boardsmith.json)
 
 ### Error Handling
 

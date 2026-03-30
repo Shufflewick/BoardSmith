@@ -318,23 +318,21 @@ export async function devCommand(options: DevOptions): Promise<void> {
     const minPlayers = gameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
     const maxPlayers = gameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
 
-    // Override option definitions from boardsmith.json when present.
-    // The boardsmith.json array format (name as a field) is converted to the
-    // object format (name as key) that GameDefinition expects.
-    const mergedGameOptions = config.gameOptions
+    // boardsmith.json is the single source of truth for option definitions.
+    // Convert array format (id as a field) to object format (id as key).
+    const gameOptions = config.gameOptions
       ? configOptionsToRecord<import('../../session/types.js').GameOptionDefinition>(config.gameOptions)
-      : gameDefinition.gameOptions;
+      : undefined;
 
-    const mergedPlayerOptions = config.playerOptions
+    let playerOptions = config.playerOptions
       ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
-      : gameDefinition.playerOptions;
+      : undefined;
 
-    // If boardsmith.json has colorPalette, inject/override the color player option
-    let finalPlayerOptions = mergedPlayerOptions;
+    // colorPalette → inject as a color player option
     if (config.colorPalette) {
       const colorChoices = normalizeColorPalette(config.colorPalette);
-      finalPlayerOptions = {
-        ...finalPlayerOptions,
+      playerOptions = {
+        ...playerOptions,
         color: { type: 'color' as const, label: 'Color', choices: colorChoices },
       };
     }
@@ -343,8 +341,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
       ...gameDefinition,
       minPlayers,
       maxPlayers,
-      ...(mergedGameOptions && { gameOptions: mergedGameOptions }),
-      ...(finalPlayerOptions && { playerOptions: finalPlayerOptions }),
+      ...(gameOptions && { gameOptions }),
+      ...(playerOptions && { playerOptions }),
     };
 
     console.log(chalk.dim(`  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
@@ -643,14 +641,14 @@ export async function devCommand(options: DevOptions): Promise<void> {
           const minPlayers = newGameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
           const maxPlayers = newGameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
 
-          // Apply boardsmith.json option overrides (same logic as initial load)
+          // boardsmith.json is the single source of truth for option definitions
           const reloadGameOptions = config.gameOptions
             ? configOptionsToRecord<import('../../session/types.js').GameOptionDefinition>(config.gameOptions)
-            : newGameDefinition.gameOptions;
+            : undefined;
 
           let reloadPlayerOptions = config.playerOptions
             ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
-            : newGameDefinition.playerOptions;
+            : undefined;
 
           if (config.colorPalette) {
             const colorChoices = normalizeColorPalette(config.colorPalette);

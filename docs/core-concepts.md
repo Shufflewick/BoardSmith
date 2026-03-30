@@ -349,10 +349,11 @@ Each player receives a filtered view of the game state:
 ## Game Definition Metadata
 
 Games export a `gameDefinition` object that describes the game to the framework. This metadata enables:
-- Dynamic lobby UI generation
-- Game options configuration
-- Per-player settings (colors, roles)
+- Game registration and identification
+- AI configuration
 - Quick-start presets
+
+Lobby configuration (game options, player options, color palettes) is defined in `boardsmith.json`, not in the game definition. This ensures a single source of truth that both the dev server and the platform read from.
 
 ### Basic Structure
 
@@ -367,96 +368,109 @@ export const gameDefinition = {
   ai: {
     objectives: getMyGameObjectives,  // Optional AI support
   },
-  gameOptions: { /* ... */ },         // Optional game-level options
-  playerOptions: { /* ... */ },       // Optional per-player options
   presets: [ /* ... */ ],             // Optional quick-start presets
 };
 ```
 
-### Game Options
+### Lobby Options (boardsmith.json)
 
-Game-level configuration options that appear in the lobby.
+Game options, player options, and color palettes are defined in `boardsmith.json`. The dev server reads these and injects them into the game definition automatically.
 
-```typescript
-gameOptions: {
-  boardSize: {
-    type: 'number',
-    label: 'Board Size',
-    description: 'Number of hexes per side',
-    min: 5,
-    max: 19,
-    step: 1,
-    default: 11,
-  },
-  targetScore: {
-    type: 'number',
-    label: 'Target Score',
-    description: 'Points needed to win',
-    min: 31,
-    max: 121,
-    default: 121,
-  },
-  variant: {
-    type: 'select',
-    label: 'Game Variant',
-    choices: [
-      { value: 'standard', label: 'Standard' },
-      { value: 'speed', label: 'Speed Mode' },
-    ],
-    default: 'standard',
-  },
-  allowUndo: {
-    type: 'boolean',
-    label: 'Allow Undo',
-    default: true,
-  },
+#### Game Options
+
+Game-level configuration options that appear in the lobby. Defined as an array with `id` as the key field.
+
+```json
+{
+  "gameOptions": [
+    {
+      "id": "boardSize",
+      "type": "number",
+      "label": "Board Size",
+      "description": "Number of hexes per side",
+      "min": 5,
+      "max": 19,
+      "step": 1,
+      "default": 11
+    },
+    {
+      "id": "variant",
+      "type": "select",
+      "label": "Game Variant",
+      "choices": [
+        { "value": "standard", "label": "Standard" },
+        { "value": "speed", "label": "Speed Mode" }
+      ],
+      "default": "standard"
+    },
+    {
+      "id": "allowUndo",
+      "type": "boolean",
+      "label": "Allow Undo",
+      "default": true
+    }
+  ]
 }
 ```
 
-### Player Options
+Option types: `number` (with min/max/step), `select` (with choices), `boolean`.
+
+#### Player Options
 
 Per-player settings that appear for each player slot in the lobby.
 
-```typescript
-import { createColorOption } from 'boardsmith/session';
-
-playerOptions: {
-  // Standard color picker (8 colors)
-  color: createColorOption(),
-
-  // Custom color picker
-  color: createColorOption([
-    { value: '#ff0000', label: 'Red Team' },
-    { value: '#0000ff', label: 'Blue Team' },
-  ], 'Team'),
-
-  // Role selector (for symmetric options)
-  role: {
-    type: 'select',
-    label: 'Role',
-    choices: [
-      { value: 'attacker', label: 'Attacker' },
-      { value: 'defender', label: 'Defender' },
-    ],
-    default: 'attacker',
-  },
+```json
+{
+  "playerOptions": [
+    {
+      "id": "role",
+      "type": "select",
+      "label": "Role",
+      "choices": [
+        { "value": "attacker", "label": "Attacker" },
+        { "value": "defender", "label": "Defender" }
+      ],
+      "default": "attacker"
+    }
+  ]
 }
 ```
+
+#### Color Palette
+
+Custom player colors for the color picker. If omitted, the standard 8-color palette is used.
+
+```json
+{
+  "colorPalette": [
+    { "hex": "#e74c3c", "label": "Red" },
+    { "hex": "#3498db", "label": "Blue" },
+    { "hex": "#27ae60", "label": "Green" }
+  ]
+}
+```
+
+Each entry needs a `hex` color value and a `label` for display. Plain hex strings are also accepted (e.g., `["#e74c3c", "#3498db"]`).
 
 ### Exclusive Player Options
 
-For asymmetric games where exactly one player must have a specific role (e.g., 1 Dictator vs many Rebels), use the `exclusive` type. This renders as a radio button on each player row.
+For asymmetric games where exactly one player must have a specific role (e.g., 1 Dictator vs many Rebels), use the `exclusive` type in `playerOptions`:
 
-```typescript
-playerOptions: {
-  isDictator: {
-    type: 'exclusive',
-    label: 'Dictator',
-    description: 'Select which player is the dictator',
-    default: 'last',  // 'first', 'last', or player index number
-  },
+```json
+{
+  "playerOptions": [
+    {
+      "id": "isDictator",
+      "type": "exclusive",
+      "label": "Dictator",
+      "description": "Select which player is the dictator",
+      "default": "last"
+    }
+  ]
 }
 ```
+
+The `default` field accepts `"first"`, `"last"`, or a player index number.
 
 ### Presets
 
