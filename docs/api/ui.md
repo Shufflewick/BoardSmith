@@ -251,24 +251,13 @@ const { flyingElements } = useFlyingElements({
 
 ```vue
 <script setup lang="ts">
-import { GameShell, ActionPanel, useBoardInteraction } from 'boardsmith/ui';
-
-const { state, flowState, performAction } = useBoardInteraction();
+import { GameShell } from 'boardsmith/ui';
 </script>
 
 <template>
-  <GameShell>
-    <template #board>
-      <!-- Your custom board rendering -->
-      <div class="board">
-        <div v-for="piece in state.board.children" :key="piece.id">
-          {{ piece.type }}
-        </div>
-      </div>
-    </template>
-
-    <template #actions>
-      <ActionPanel />
+  <GameShell game-type="my-game" display-name="My Game">
+    <template #game-board="{ gameView, actionController }">
+      <MyBoard :game-view="gameView" :action-controller="actionController" />
     </template>
   </GameShell>
 </template>
@@ -279,23 +268,33 @@ const { state, flowState, performAction } = useBoardInteraction();
 ```vue
 <script setup lang="ts">
 import { useDragDrop } from 'boardsmith/ui';
+import 'boardsmith/ui/animation/drag-drop.css';
 
-const { drag, drop } = useDragDrop({
-  canDrag: (el) => el.type === 'card' && el.owner === currentPlayer,
-  canDrop: (dragEl, dropEl) => dropEl.type === 'space',
-  onDrop: (dragEl, dropEl) => {
-    performAction('play', { card: dragEl.id, target: dropEl.id });
-  },
-});
+const { drag, drop } = useDragDrop();
+
+const canDragCard = (cardId: number) =>
+  currentAction.value === 'moveCard' &&
+  currentPick.value?.name === 'card' &&
+  isCardSelectable(cardId);
 </script>
 
 <template>
-  <div v-for="card in hand.children" :key="card.id" v-bind="drag(card)">
-    {{ card.rank }} of {{ card.suit }}
+  <div
+    v-for="card in cards"
+    :key="card.id"
+    v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
+    :class="drag({ id: card.id }, { when: canDragCard(card.id) }).classes"
+  >
+    {{ card.name }}
   </div>
 
-  <div v-for="space in board.children" :key="space.id" v-bind="drop(space)">
-    <!-- Drop zone -->
+  <div
+    v-for="zone in zones"
+    :key="zone.id"
+    v-bind="drop({ name: zone.id }).props"
+    :class="drop({ name: zone.id }).classes"
+  >
+    {{ zone.name }}
   </div>
 </template>
 ```
@@ -304,6 +303,7 @@ const { drag, drop } = useDragDrop({
 
 ```vue
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useFLIP } from 'boardsmith/ui';
 
 const boardRef = ref<HTMLElement | null>(null);

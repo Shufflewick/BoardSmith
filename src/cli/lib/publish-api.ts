@@ -43,6 +43,10 @@ export async function initiatePublish(
           playerCount: manifest.playerCount,
           displayName: manifest.displayName ?? manifest.name ?? gameSlug,
           description: manifest.description,
+          // Lobby option declarations — platform uses these for lobby UI
+          ...(manifest.gameOptions ? { gameOptions: manifest.gameOptions } : {}),
+          ...(manifest.playerOptions ? { playerOptions: manifest.playerOptions } : {}),
+          ...(manifest.colorPalette ? { colorPalette: manifest.colorPalette } : {}),
         },
       }),
     });
@@ -132,6 +136,41 @@ export async function completePublish(
   }
 
   return res.json() as Promise<{ gameUrl: string }>;
+}
+
+export async function checkVersionAvailable(
+  platformUrl: string,
+  apiKey: string,
+  gameIdOrSlug: string,
+  version: string,
+): Promise<void> {
+  const url = `${platformUrl}/api/publish/check-version`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ gameIdOrSlug, version }),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw { kind: 'NETWORK', message: msg } satisfies PublishError;
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    const data = body.data as { code?: string } | undefined;
+    const message = (body.statusMessage as string) || res.statusText;
+
+    if (res.status === 409 && data?.code === 'VERSION_EXISTS') {
+      throw { kind: 'VERSION_EXISTS', message, statusCode: 409 } satisfies PublishError;
+    }
+    // Other errors are non-fatal for preflight
+    throw { kind: 'SERVER', message, statusCode: res.status } satisfies PublishError;
+  }
 }
 
 export function isPublishError(err: unknown): err is PublishError {

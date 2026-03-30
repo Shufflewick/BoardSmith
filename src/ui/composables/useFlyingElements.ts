@@ -917,6 +917,7 @@ export function useFlyingElements(
         }
 
         const flyConfigs: FlyConfig[] = [];
+        const lastDroppedElementId = boardInteraction?.consumeLastDroppedElementId() ?? null;
 
         // Check for elements that moved between containers
         for (const [id, { element, container: newContainer, isHidden }] of currentElements) {
@@ -925,7 +926,7 @@ export function useFlyingElements(
           if (oldContainer && newContainer && oldContainer !== newContainer) {
             // Skip animation for elements that were just drag-dropped
             // (the drag gesture already moved them visually)
-            if (boardInteraction?.lastDroppedElementId === id) continue;
+            if (lastDroppedElementId === id) continue;
 
             // Element moved between containers - trigger fly animation
             const fromContainerConfig = getContainers().find((c) => c.name === oldContainer);

@@ -69,7 +69,7 @@
  * ✅ Repeating selections - Selections that repeat until terminator
  *
  * ## Board Interaction
- * For highlighting elements on hover, use `inject('boardInteraction')` from useBoardInteraction.
+ * For highlighting elements on hover, use `injectBoardInteraction()` or `useBoardInteraction()`.
  * This is a separate concern from action handling and works independently.
  *
  * @example
@@ -93,9 +93,10 @@
  * ```
  */
 
-import { ref, computed, watch, inject } from 'vue';
+import { ref, readonly, computed, watch, inject, nextTick } from 'vue';
 import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
+import { useBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -147,7 +148,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     playerSeat,
     autoFill: autoFillOption = true,
     autoExecute: autoExecuteOption = true,
-    externalArgs,
     onBeforeAutoExecute: initialBeforeAutoExecute,
   } = options;
 
@@ -168,30 +168,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // === State ===
   const currentAction = ref<string | null>(null);
 
-  // Args storage - uses externalArgs if provided (for custom UI sync), otherwise internal ref
-  // Note: fill() updates both currentArgs AND collectedPicks (for display tracking)
-  // Direct modifications to currentArgs work but lose display info - use fill() for proper display
-  const internalArgs = ref<Record<string, unknown>>({});
-  const currentArgs = computed({
-    get: () => externalArgs ?? internalArgs.value,
-    set: (val) => {
-      if (externalArgs) {
-        for (const key of Object.keys(externalArgs)) {
-          delete externalArgs[key];
-        }
-        Object.assign(externalArgs, val);
-      } else {
-        internalArgs.value = val;
-      }
-    }
-  });
+  // Args storage for the in-progress action.
+  // Use fill/start/clear to keep collectedPicks snapshot and args in sync.
+  const currentArgs = ref<Record<string, unknown>>({});
+  const exposedCurrentArgs = readonly(currentArgs);
   const isExecuting = ref(false);
   const lastError = ref<string | null>(null);
 
   // Track pending followUp to prevent race condition with auto-start
-  // When execute() returns with followUp, it clears currentAction but schedules
-  // startFollowUp via setTimeout. During this window, external code might see
-  // currentAction === null and try to start a new action, causing parallel actions.
+  // During follow-up transition, external code might see currentAction === null and
+  // try to start a new action, causing parallel actions.
   const pendingFollowUp = ref(false);
 
   // Selection choices loading state
@@ -234,6 +220,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value = null;
     actionSnapshot.value = null;
     pendingOnServer.value = false;
+  }
+
+  /**
+   * Queue a follow-up action after reactive state has settled.
+   * Uses a microtask + Vue tick instead of timers to avoid timing fragility.
+   */
+  function queueFollowUp(result: NonNullable<ActionResult['followUp']>): void {
+    pendingFollowUp.value = true;
+    const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result;
+
+    void (async () => {
+      try {
+        await nextTick();
+        await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
+      } finally {
+        pendingFollowUp.value = false;
+      }
+    })();
   }
 
   function getActionMetadata(actionName: string): ActionMetadata | undefined {
@@ -433,7 +437,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * Build args for server requests from the controller's source of truth.
-   * This prevents pollution from external code writing to the shared externalArgs.
    * Only includes args that the controller explicitly set via fill/startFollowUp.
    */
   function buildServerArgs(): Record<string, unknown> {
@@ -445,24 +448,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       for (const [name, collected] of actionSnapshot.value.collectedPicks) {
         if (collected.skipped) continue;
         args[name] = collected.value;
-      }
-    }
-
-    // Development warning: detect when externalArgs has been polluted by external code
-    if (externalArgs && actionSnapshot.value) {
-      const controllerKeys = new Set(actionSnapshot.value.collectedPicks.keys());
-      const externalKeys = Object.keys(externalArgs);
-      const unknownKeys = externalKeys.filter(k => !controllerKeys.has(k));
-
-      if (unknownKeys.length > 0) {
-        devWarn(
-          `externalArgs-pollution:${currentAction.value}`,
-          `Detected unexpected keys in actionArgs during '${currentAction.value}': ${unknownKeys.join(', ')}\n` +
-          `  These were NOT set by the action controller (start/fill/startFollowUp).\n` +
-          `  This usually means your custom UI is writing to actionArgs in a watcher/computed.\n` +
-          `  The controller ignores these to prevent bugs - use actionController.fill() instead.\n` +
-          `  Controller knows: ${[...controllerKeys].join(', ') || '(none)'}`
-        );
       }
     }
 
@@ -559,8 +544,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const fetchStartTime = Date.now();
     try {
 
-      // Use controller's source of truth for args, not the shared externalArgs
-      // This prevents pollution from custom UI code writing to the shared args object
+      // Use controller snapshot as the source of truth for args during wizard mode.
       const result = await fetchFn(
         currentAction.value,
         selectionName,
@@ -781,13 +765,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         lastError.value = result.error || 'Action failed';
       }
 
-      // IMPORTANT: Set pendingFollowUp BEFORE clearing currentAction to prevent race condition.
-      // Without this, external code (like ActionPanel's tryAutoStartSingleAction) might see
-      // currentAction === null and start a new action before the followUp runs.
-      if (result.success && result.followUp) {
-        pendingFollowUp.value = true;
-      }
-
       // Clear state on success or failure
       currentAction.value = null;
       clearArgs();
@@ -795,15 +772,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
-        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
-        // Use setTimeout to ensure state updates are flushed before starting next action
-        setTimeout(async () => {
-          try {
-            await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
-          } finally {
-            pendingFollowUp.value = false;
-          }
-        }, 0);
+        queueFollowUp(result.followUp);
       }
 
       return result;
@@ -913,16 +882,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
-        pendingFollowUp.value = true;
-        const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
-        // Use setTimeout to ensure state updates are flushed before starting next action
-        setTimeout(async () => {
-          try {
-            await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
-          } finally {
-            pendingFollowUp.value = false;
-          }
-        }, 0);
+        queueFollowUp(result.followUp);
       }
 
       return result;
@@ -1018,10 +978,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   async function start(
     actionName: string,
-    options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
+    startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
   ): Promise<void> {
-    const initialArgs = options?.args ?? {};
-    const prefillArgs = options?.prefill ?? {};
+    const initialArgs = startOptions?.args ?? {};
+    const prefillArgs = startOptions?.prefill ?? {};
 
     if (!availableActions.value?.includes(actionName)) {
       lastError.value = `Action "${actionName}" is not available`;
@@ -1216,11 +1176,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
-        // Set pendingFollowUp BEFORE clearing state to prevent race condition
-        if (result.followUp) {
-          pendingFollowUp.value = true;
-        }
-
         // Action completed - clear everything
         repeatingState.value = null;
         currentAction.value = null;
@@ -1229,14 +1184,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
-          const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
-          setTimeout(async () => {
-            try {
-              await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
-            } finally {
-              pendingFollowUp.value = false;
-            }
-          }, 0);
+          queueFollowUp(result.followUp);
         }
 
         return { valid: true };
@@ -1307,11 +1255,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       pendingOnServer.value = true;
 
       if (result.actionComplete) {
-        // Set pendingFollowUp BEFORE clearing state to prevent race condition
-        if (result.followUp) {
-          pendingFollowUp.value = true;
-        }
-
         // Server executed the action — clear local state
         currentAction.value = null;
         clearArgs();
@@ -1319,14 +1262,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
-          const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result.followUp;
-          setTimeout(async () => {
-            try {
-              await startFollowUp(followUpAction, followUpArgs ?? {}, followUpMetadata, followUpDisplay);
-            } finally {
-              pendingFollowUp.value = false;
-            }
-          }, 0);
+          queueFollowUp(result.followUp);
         }
 
         return { valid: true };
@@ -1489,7 +1425,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   return {
     // State
     currentAction,
-    currentArgs,
+    currentArgs: exposedCurrentArgs,
     currentPick,
     validElements,           // Reactive! Use this in custom UIs
     isReady,
@@ -1615,8 +1551,8 @@ export function injectPickStepFn(): PickStepFn | undefined {
  * }
  * ```
  */
-export function injectBoardInteraction(): unknown {
-  return inject('boardInteraction', undefined);
+export function injectBoardInteraction(): BoardInteraction | undefined {
+  return useBoardInteraction();
 }
 
 export default useActionController;

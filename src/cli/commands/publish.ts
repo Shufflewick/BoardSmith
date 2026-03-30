@@ -9,6 +9,7 @@ import {
   initiatePublish,
   uploadBundle,
   completePublish,
+  checkVersionAvailable,
   isPublishError,
 } from '../lib/publish-api.js';
 import { buildCommand } from './build.js';
@@ -72,10 +73,29 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   const displayName = config.displayName || config.name || 'Unknown';
   const platformUrl = getPlatformUrl(!!options.test);
 
+  // -- Resolve game identity early (needed for preflight) --
+  // Prefer gameId from boardsmith.json (stable across slug changes).
+  // Fall back to slug derivation if no gameId (first publish or deleted).
+  const existingGameId: string | undefined = config.gameId;
+  const baseSlug = toSlug(config.name || pkg.name || 'game');
+
   console.log(chalk.cyan(`\nPublishing ${displayName} v${version}\n`));
   console.log(chalk.dim(`  Platform:  ${platformUrl}`));
   console.log(chalk.dim(`  API Key:   ${apiKey.slice(0, 12)}...`));
   console.log('');
+
+  // -- Preflight: check version availability before building --
+  try {
+    await checkVersionAvailable(platformUrl, apiKey, existingGameId ?? baseSlug, version);
+  } catch (err: unknown) {
+    if (isPublishError(err) && err.kind === 'VERSION_EXISTS') {
+      console.error(chalk.red(`Version ${version} already exists for this game.`));
+      console.error(chalk.dim('Bump the version in package.json and try again.'));
+      process.exit(1);
+    }
+    // Network errors during preflight are non-fatal — continue with build
+    // and let the existing initiatePublish catch it later
+  }
 
   // -- Validate (exits process on failure) --
   console.log(chalk.cyan('Running pre-publish validation...\n'));
@@ -113,12 +133,6 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
 
   // -- Read manifest for initiate --
   const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf-8'));
-
-  // -- Resolve game identity --
-  // Prefer gameId from boardsmith.json (stable across slug changes).
-  // Fall back to slug derivation if no gameId (first publish or deleted).
-  const existingGameId: string | undefined = config.gameId;
-  const baseSlug = toSlug(config.name || pkg.name || 'game');
 
   // -- Initiate (with slug disambiguation) --
   spinner.start('Publishing...');

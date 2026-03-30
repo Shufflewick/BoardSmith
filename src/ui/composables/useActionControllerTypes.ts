@@ -217,13 +217,6 @@ export interface UseActionControllerOptions {
   /** Enable auto-execute when all selections filled (default: true). Can be reactive. */
   autoExecute?: boolean | Ref<boolean>;
   /**
-   * External args object for bidirectional sync with custom UIs.
-   * If provided, the controller will use this instead of creating its own.
-   * This allows custom game boards to write directly to args (e.g., args.cards = [...])
-   * and have the controller see the changes.
-   */
-  externalArgs?: Record<string, unknown>;
-  /**
    * Function to fetch pick choices from server.
    * Required for choice/element/elements picks.
    */
@@ -293,8 +286,8 @@ export interface UseActionControllerReturn {
   // === State ===
   /** Currently active action name */
   currentAction: Ref<string | null>;
-  /** Args collected so far for current action */
-  currentArgs: Ref<Record<string, unknown>>;
+  /** Args collected so far for current action (read-only; use fill/start/clear to change) */
+  currentArgs: Readonly<Ref<Readonly<Record<string, unknown>>>>;
   /** Current pick that needs user input (null if all filled or no action) */
   currentPick: ComputedRef<PickMetadata | null>;
   /**

@@ -1012,36 +1012,31 @@ describe('useActionController picks', () => {
       });
 
       await controller.start('discardMultiple');
-      // Directly set the array (bypassing single-value validation)
-      controller.currentArgs.value.cards = [1, 2];
+      await controller.fill('cards', [1, 2]);
 
       expect(controller.currentArgs.value.cards).toEqual([1, 2]);
       expect(controller.isReady.value).toBe(true);
     });
 
     it('should send multiSelect array via sendAction when ready', async () => {
-      // MultiSelect arrays are built incrementally by ActionPanel, then
-      // the action is executed when isReady becomes true.
-      // This test simulates that flow.
       const controller = useActionController({
         sendAction,
         availableActions,
         actionMetadata,
         isMyTurn,
         autoFill: false,
-        autoExecute: false, // We'll manually trigger execution
+        autoExecute: true,
       });
 
-      // Start the action and set the array directly (as ActionPanel does)
+      // Start the action and fill with the full multi-select array.
       await controller.start('discardMultiple');
-      controller.currentArgs.value.cards = [1, 2, 3];
+      await controller.fill('cards', [1, 2, 3]);
 
       expect(controller.isReady.value).toBe(true);
+      await nextTick();
+      await nextTick();
 
-      // Use the private executeCurrentAction pattern by calling execute
-      // with the action name and the pre-set currentArgs
-      // Note: Direct execute() with array args fails validation (known limitation)
-      // ActionPanel uses isReady watch to trigger execution instead
+      expect(sendAction).toHaveBeenCalledWith('discardMultiple', { cards: [1, 2, 3] });
     });
 
     it('should have multiSelect metadata available', () => {

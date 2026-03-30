@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ref, reactive, nextTick } from 'vue';
+import { ref, nextTick } from 'vue';
 import {
   useActionController,
   injectActionController,
@@ -684,153 +684,22 @@ describe('useActionController', () => {
     });
   });
 
-  describe('externalArgs (bidirectional sync)', () => {
-    it('should use external args when provided', () => {
-      const externalArgs: Record<string, unknown> = { existing: 'value' };
-
+  describe('currentArgs ownership', () => {
+    it('should keep args isolated to controller state', async () => {
       const controller = useActionController({
         sendAction,
         availableActions,
         actionMetadata,
         isMyTurn,
         autoExecute: false,
-        externalArgs,
-      });
-
-      // Controller should see the external args
-      expect(controller.currentArgs.value.existing).toBe('value');
-    });
-
-    it('should write to external args object', async () => {
-      const externalArgs: Record<string, unknown> = {};
-
-      const controller = useActionController({
-        sendAction,
-        availableActions,
-        actionMetadata,
-        isMyTurn,
-        autoExecute: false,
-        externalArgs,
       });
 
       await controller.start('playCard');
       await controller.fill('card', 2);
-
-      // Both controller.currentArgs and externalArgs should see the value
       expect(controller.currentArgs.value.card).toBe(2);
-      expect(externalArgs.card).toBe(2);
-    });
-
-    it('should allow external writes to be seen by controller', () => {
-      const externalArgs: Record<string, unknown> = {};
-
-      const controller = useActionController({
-        sendAction,
-        availableActions,
-        actionMetadata,
-        isMyTurn,
-        autoExecute: false,
-        externalArgs,
-      });
-
-      // Simulate external write (e.g., from custom game board)
-      externalArgs.customField = 'custom value';
-
-      // Controller should see it
-      expect(controller.currentArgs.value.customField).toBe('custom value');
-    });
-
-    it('should clear external args when clearArgs is called', () => {
-      const externalArgs: Record<string, unknown> = { a: 1, b: 2 };
-
-      const controller = useActionController({
-        sendAction,
-        availableActions,
-        actionMetadata,
-        isMyTurn,
-        autoExecute: false,
-        externalArgs,
-      });
-
-      expect(Object.keys(externalArgs).length).toBe(2);
-
-      controller.clearArgs();
-
-      // External args should be cleared
-      expect(Object.keys(externalArgs).length).toBe(0);
-      expect(Object.keys(controller.currentArgs.value).length).toBe(0);
-    });
-
-    it('should clear external args when action is cancelled', async () => {
-      const externalArgs: Record<string, unknown> = {};
-
-      const controller = useActionController({
-        sendAction,
-        availableActions,
-        actionMetadata,
-        isMyTurn,
-        autoExecute: false,
-        externalArgs,
-      });
-
-      await controller.start('playCard');
-      await controller.fill('card', 2);
-      expect(externalArgs.card).toBe(2);
 
       controller.cancel();
-
-      // External args should be cleared
-      expect(Object.keys(externalArgs).length).toBe(0);
-    });
-
-    it('should clear external args after wizard-mode execution via auto-execute', async () => {
-      // External args must be reactive for Vue's watch to detect changes
-      const externalArgs = reactive<Record<string, unknown>>({});
-
-      const controller = useActionController({
-        sendAction,
-        availableActions,
-        actionMetadata,
-        isMyTurn,
-        autoFill: false,
-        autoExecute: true, // Enable auto-execute to test the wizard flow
-        externalArgs,
-      });
-
-      await controller.start('playCard');
-      await controller.fill('card', 2);
-      expect(externalArgs.card).toBe(2);
-
-      // Wait for auto-execute to complete (needs multiple ticks for watch cascade)
-      await nextTick();
-      await nextTick();
-      await nextTick();
-      // Also wait for the sendAction promise to resolve
-      await new Promise(resolve => setTimeout(resolve, 10));
-
-      // External args should be cleared after wizard execution
-      expect(Object.keys(externalArgs).length).toBe(0);
-      expect(controller.currentAction.value).toBe(null);
-    });
-
-    it('should preserve external args when using direct execute (bypasses wizard)', async () => {
-      const externalArgs: Record<string, unknown> = { preserved: 'value' };
-
-      const controller = useActionController({
-        sendAction,
-        availableActions,
-        actionMetadata,
-        isMyTurn,
-        autoFill: false,
-        autoExecute: false,
-        externalArgs,
-      });
-
-      // Direct execute with explicit args - doesn't use or clear wizard state
-      await controller.execute('playCard', { card: 2 });
-
-      // External args should be preserved (direct execute doesn't touch wizard state)
-      expect(externalArgs.preserved).toBe('value');
+      expect(controller.currentArgs.value.card).toBeUndefined();
     });
   });
 

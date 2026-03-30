@@ -169,6 +169,9 @@ export interface BoardInteractionActions {
 
   /** Trigger choice selection (called by custom UI for non-element choices like suit selection) */
   triggerChoiceSelect: (selectionName: string, value: unknown) => void;
+
+  /** Read and clear the most recent dropped element ID (for animation suppression) */
+  consumeLastDroppedElementId: () => number | null;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -319,10 +322,6 @@ export function createBoardInteraction(): BoardInteraction {
         const draggedId = state.draggedElement?.id;
         if (draggedId !== undefined) {
           state.lastDroppedElementId = draggedId;
-          // Clear after a delay to allow gameView update and animation skip check
-          setTimeout(() => {
-            state.lastDroppedElementId = null;
-          }, 100);
         }
         onDropCallback(dropTarget.id);
         // End drag after successful drop
@@ -367,6 +366,12 @@ export function createBoardInteraction(): BoardInteraction {
       if (state.onChoiceSelect) {
         state.onChoiceSelect(selectionName, value);
       }
+    },
+
+    consumeLastDroppedElementId() {
+      const id = state.lastDroppedElementId;
+      state.lastDroppedElementId = null;
+      return id;
     },
   };
 

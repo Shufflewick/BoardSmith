@@ -40,6 +40,17 @@ interface DevOptions {
   debug?: boolean;
 }
 
+/** Option definition in boardsmith.json array format (id/name is a field, not a key) */
+interface ConfigOptionDefinition {
+  id?: string;
+  name?: string;
+  type: string;
+  label: string;
+  description?: string;
+  default?: unknown;
+  [key: string]: unknown;
+}
+
 interface BoardSmithConfig {
   name: string;
   displayName?: string;
@@ -51,6 +62,44 @@ interface BoardSmithConfig {
     rules?: string;
     ui?: string;
   };
+  /** Game-level options (array format for JSON config) */
+  gameOptions?: ConfigOptionDefinition[];
+  /** Per-player options (array format for JSON config) */
+  playerOptions?: ConfigOptionDefinition[];
+  /** Custom color palette (hex strings or objects with hex/value + label) */
+  colorPalette?: Array<string | Record<string, unknown>>;
+}
+
+/**
+ * Convert boardsmith.json array-format options to the object-keyed format
+ * that GameDefinition uses. The array format uses { name, type, ... } entries,
+ * while the object format uses { [name]: { type, ... } }.
+ */
+/**
+ * Normalize colorPalette entries to {value, label} format.
+ * Accepts plain hex strings, {value, label}, or {hex, label, id} objects.
+ */
+function normalizeColorPalette(
+  palette: Array<string | Record<string, unknown>>
+): Array<{ value: string; label: string }> {
+  return palette.map(entry => {
+    if (typeof entry === 'string') return { value: entry, label: entry };
+    // Support {value, label}, {hex, label}, {hex, name}, etc.
+    const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
+    const label = (entry.label ?? entry.name ?? hex) as string | undefined;
+    return { value: hex ?? '', label: label ?? '' };
+  });
+}
+
+function configOptionsToRecord<T>(options: ConfigOptionDefinition[]): Record<string, T> {
+  const result: Record<string, unknown> = {};
+  for (const opt of options) {
+    const { id, name, ...rest } = opt;
+    const key = id ?? name;
+    if (!key) continue;
+    result[key] = rest;
+  }
+  return result as Record<string, T>;
 }
 
 async function createGame(workerPort: number, gameType: string, playerCount: number, playerNames: string[]): Promise<string | null> {
@@ -269,10 +318,33 @@ export async function devCommand(options: DevOptions): Promise<void> {
     const minPlayers = gameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
     const maxPlayers = gameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
 
+    // Override option definitions from boardsmith.json when present.
+    // The boardsmith.json array format (name as a field) is converted to the
+    // object format (name as key) that GameDefinition expects.
+    const mergedGameOptions = config.gameOptions
+      ? configOptionsToRecord<import('../../session/types.js').GameOptionDefinition>(config.gameOptions)
+      : gameDefinition.gameOptions;
+
+    const mergedPlayerOptions = config.playerOptions
+      ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
+      : gameDefinition.playerOptions;
+
+    // If boardsmith.json has colorPalette, inject/override the color player option
+    let finalPlayerOptions = mergedPlayerOptions;
+    if (config.colorPalette) {
+      const colorChoices = normalizeColorPalette(config.colorPalette);
+      finalPlayerOptions = {
+        ...finalPlayerOptions,
+        color: { type: 'color' as const, label: 'Color', choices: colorChoices },
+      };
+    }
+
     gameDefinition = {
       ...gameDefinition,
       minPlayers,
       maxPlayers,
+      ...(mergedGameOptions && { gameOptions: mergedGameOptions }),
+      ...(finalPlayerOptions && { playerOptions: finalPlayerOptions }),
     };
 
     console.log(chalk.dim(`  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
@@ -571,10 +643,29 @@ export async function devCommand(options: DevOptions): Promise<void> {
           const minPlayers = newGameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
           const maxPlayers = newGameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
 
+          // Apply boardsmith.json option overrides (same logic as initial load)
+          const reloadGameOptions = config.gameOptions
+            ? configOptionsToRecord<import('../../session/types.js').GameOptionDefinition>(config.gameOptions)
+            : newGameDefinition.gameOptions;
+
+          let reloadPlayerOptions = config.playerOptions
+            ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
+            : newGameDefinition.playerOptions;
+
+          if (config.colorPalette) {
+            const colorChoices = normalizeColorPalette(config.colorPalette);
+            reloadPlayerOptions = {
+              ...reloadPlayerOptions,
+              color: { type: 'color' as const, label: 'Color', choices: colorChoices },
+            };
+          }
+
           const updatedDefinition = {
             ...newGameDefinition,
             minPlayers,
             maxPlayers,
+            ...(reloadGameOptions && { gameOptions: reloadGameOptions }),
+            ...(reloadPlayerOptions && { playerOptions: reloadPlayerOptions }),
           };
 
           // Update the server with new rules
