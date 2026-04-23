@@ -70,3 +70,9 @@ Example games are located in `~/BoardSmithGames/`. Reference games include Hex (
 - Trace at least one real value through the full stack (config → engine → session → UI) to confirm data survives every layer boundary.
 - Treat identified test gaps as blockers, not observations. If verification flags untested code within the scope of the change, address it before completion.
 - Write at least one integration test per cross-layer boundary the change touches.
+
+# Code Quality Audits
+- Run `npm run audit:dead-code` (Fallow) after significant refactors to catch unused exports, dead files, and circular dependencies.
+- Run `npm run audit:duplication` (jscpd) when touching modules with similar patterns to catch copy-paste drift.
+- Run `npm run audit` for both at once.
+- Note: Fallow's "unused class members" findings are mostly false positives for BoardSmith — our public API is consumed by external game projects, not internally. Focus on unused files, exports, and dependencies.

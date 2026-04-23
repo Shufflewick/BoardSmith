@@ -192,44 +192,7 @@ export class PendingActionManager<G extends Game = Game> {
 
       // Check if the action is now complete
       if (result.done && executor.isPendingActionComplete(action, pendingState)) {
-        // Execute the final action
-        const actionResult = executor.executePendingAction(action, player, pendingState);
-        this.#pendingActions.delete(playerPosition);
-
-        if (actionResult.success) {
-          // Continue the flow to update available actions
-          this.#runner.game.continueFlowAfterPendingAction(actionResult);
-
-          // Update stored action history
-          this.#storedState.actionHistory = this.#runner.actionHistory;
-
-          // Persist
-          if (this.#storage) {
-            await this.#callbacks.save();
-          }
-
-          // Broadcast
-          this.#callbacks.broadcast();
-
-          // Check if AI should respond
-          this.#callbacks.scheduleAICheck();
-        }
-
-        const flowState = this.#runner.getFlowState();
-        return {
-          success: actionResult.success,
-          error: actionResult.error,
-          done: true,
-          actionComplete: true,
-          actionResult: {
-            success: actionResult.success,
-            error: actionResult.error,
-            flowState,
-            state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-          },
-          state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-          followUp: flowState?.followUp,
-        };
+        return this.#completePendingAction(executor, action, player, pendingState, playerPosition);
       }
 
       // More selections needed
@@ -251,43 +214,7 @@ export class PendingActionManager<G extends Game = Game> {
 
     // Check if action is now complete
     if (executor.isPendingActionComplete(action, pendingState)) {
-      const actionResult = executor.executePendingAction(action, player, pendingState);
-      this.#pendingActions.delete(playerPosition);
-
-      if (actionResult.success) {
-        // Continue the flow to update available actions
-        this.#runner.game.continueFlowAfterPendingAction(actionResult);
-
-        // Update stored action history
-        this.#storedState.actionHistory = this.#runner.actionHistory;
-
-        // Persist
-        if (this.#storage) {
-          await this.#callbacks.save();
-        }
-
-        // Broadcast
-        this.#callbacks.broadcast();
-
-        // Check if AI should respond
-        this.#callbacks.scheduleAICheck();
-      }
-
-      const flowState = this.#runner.getFlowState();
-      return {
-        success: actionResult.success,
-        error: actionResult.error,
-        done: true,
-        actionComplete: true,
-        actionResult: {
-          success: actionResult.success,
-          error: actionResult.error,
-          flowState,
-          state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-        },
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
-        followUp: flowState?.followUp,
-      };
+      return this.#completePendingAction(executor, action, player, pendingState, playerPosition);
     }
 
     // Broadcast state updates to all clients (e.g. animation events from onSelect)
@@ -340,5 +267,44 @@ export class PendingActionManager<G extends Game = Game> {
    */
   clearAll(): void {
     this.#pendingActions.clear();
+  }
+
+  async #completePendingAction(
+    executor: ReturnType<Game['getActionExecutor']>,
+    action: any,
+    player: any,
+    pendingState: PendingActionState,
+    playerPosition: number,
+  ): Promise<PickStepResult> {
+    const actionResult = executor.executePendingAction(action, player, pendingState);
+    this.#pendingActions.delete(playerPosition);
+
+    if (actionResult.success) {
+      this.#runner.game.continueFlowAfterPendingAction(actionResult);
+      this.#storedState.actionHistory = this.#runner.actionHistory;
+
+      if (this.#storage) {
+        await this.#callbacks.save();
+      }
+
+      this.#callbacks.broadcast();
+      this.#callbacks.scheduleAICheck();
+    }
+
+    const flowState = this.#runner.getFlowState();
+    return {
+      success: actionResult.success,
+      error: actionResult.error,
+      done: true,
+      actionComplete: true,
+      actionResult: {
+        success: actionResult.success,
+        error: actionResult.error,
+        flowState,
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+      },
+      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+      followUp: flowState?.followUp,
+    };
   }
 }
