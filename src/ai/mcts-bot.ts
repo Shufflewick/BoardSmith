@@ -280,12 +280,25 @@ export class MCTSBot<G extends Game = Game> {
       // BACKPROPAGATE: Update stats, RAVE table, and undo back to root
       this.backpropagateWithUndo(child, score, playoutMoves, treeMoves);
 
-      // Yield to event loop in async mode (every iteration for responsiveness)
+      // Yield to the event loop in async mode (every iteration). Prefer the
+      // Scheduler API when present: inside a Cloudflare Worker, Date.now() is
+      // frozen during synchronous execution and is NOT advanced by setTimeout(0),
+      // so the timeout failsafe above can never fire -- a heavy search then runs
+      // its full iteration budget and blows the Worker's CPU limit. Awaiting
+      // scheduler.wait(0) advances the clock by the real elapsed time (including
+      // CPU spent since the last yield), which lets the timeout bound each move
+      // as intended. Outside Workers (e.g. Node) the clock advances normally, so
+      // the setImmediate/setTimeout fallback works there.
       if (this.config.async) {
-        const schedule = typeof setImmediate !== 'undefined'
-          ? setImmediate
-          : (fn: () => void) => setTimeout(fn, 0);
-        await new Promise(resolve => schedule(resolve));
+        const sched = (globalThis as { scheduler?: { wait?: (ms: number) => Promise<void> } }).scheduler;
+        if (sched?.wait) {
+          await sched.wait(0);
+        } else {
+          const schedule = typeof setImmediate !== 'undefined'
+            ? setImmediate
+            : (fn: () => void) => setTimeout(fn, 0);
+          await new Promise(resolve => schedule(resolve));
+        }
       }
     }
 
