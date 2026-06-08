@@ -325,16 +325,19 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         } as LobbySlot;
       });
 
-      // Initialize default player options for the host (seat 1)
+      // Initialize default player options for all non-open slots (host + AI)
       // Merge with existing preset options so preset values (e.g., color from preset config) take precedence
-      if (playerOptionsDefinitions && lobbySlots[0]?.status === 'claimed') {
-        const defaults = GameSession.computeDefaultPlayerOptions(
-          1,
-          playerOptionsDefinitions,
-          lobbySlots,
-          playerCount
-        );
-        lobbySlots[0].playerOptions = { ...defaults, ...lobbySlots[0].playerOptions };
+      if (playerOptionsDefinitions) {
+        for (const slot of lobbySlots) {
+          if (slot.status === 'open') continue;
+          const defaults = GameSession.computeDefaultPlayerOptions(
+            slot.seat,
+            playerOptionsDefinitions,
+            lobbySlots,
+            playerCount
+          );
+          slot.playerOptions = { ...defaults, ...slot.playerOptions };
+        }
       }
 
       // Always start in 'waiting' state when using lobby

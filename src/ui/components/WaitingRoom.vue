@@ -386,9 +386,11 @@ function slotHasExclusiveOption(slotPosition: number, key: string, opt: Exclusiv
  * Get the default player index for an exclusive option
  */
 function getExclusiveDefaultIndex(opt: ExclusivePlayerOption): number {
-  if (opt.default === 'first' || opt.default === undefined) return 0;
-  if (opt.default === 'last') return props.lobby.slots.length - 1;
-  return opt.default;
+  // Returns 1-indexed seat number to match slot.seat
+  if (opt.default === 'first' || opt.default === undefined) return 1;
+  if (opt.default === 'last') return props.lobby.slots.length;
+  // Numeric defaults are 0-indexed in the manifest, convert to 1-indexed seat
+  return typeof opt.default === 'number' ? opt.default + 1 : opt.default;
 }
 
 /**

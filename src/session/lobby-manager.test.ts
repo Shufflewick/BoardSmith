@@ -211,6 +211,39 @@ describe('GameSession lobby integration', () => {
     expect(capturedPlayerConfigs![1].isDictator).toBe(false);
   });
 
+  it('should compute default exclusive options for AI slots during lobby creation', async () => {
+    // Create a session with 1 human + 1 AI, where AI should get the exclusive option
+    const session = GameSession.create<TestLobbyGame>({
+      gameType: 'test-lobby',
+      GameClass: TestLobbyGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bot'],
+      useLobby: true,
+      creatorId: 'creator-123',
+      playerConfigs: [
+        { name: 'Alice' },
+        { name: 'Bot', isAI: true },
+      ],
+      playerOptionsDefinitions: {
+        role: {
+          type: 'exclusive',
+          label: 'Dictator',
+          default: 'last',
+        },
+      },
+    });
+
+    // Verify the lobby slots have correct default options
+    const lobby = session.getLobbyInfo();
+    expect(lobby).toBeDefined();
+
+    // Seat 1 (human host) should NOT have role=true (it's not "last")
+    expect(lobby!.slots[0].playerOptions?.role).toBe(false);
+
+    // Seat 2 (AI, the "last" player) SHOULD have role=true
+    expect(lobby!.slots[1].playerOptions?.role).toBe(true);
+  });
+
   it('should include player options set in lobby', async () => {
     const session = GameSession.create<TestLobbyGame>({
       gameType: 'test-lobby',
