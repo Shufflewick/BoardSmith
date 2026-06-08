@@ -222,14 +222,22 @@ const pendingChoiceRequests = new Map<string, (r: { success: boolean; choices?: 
 function requestPlatformChoices(actionName: string, selectionName: string, currentArgs: Record<string, unknown>) {
   return new Promise<{ success: boolean; choices?: unknown; validElements?: unknown; multiSelect?: unknown; error?: string }>((resolve) => {
     const requestId = `pc-${choiceRequestSeq++}`;
-    pendingChoiceRequests.set(requestId, resolve);
+    const timer = setTimeout(() => {
+      if (pendingChoiceRequests.delete(requestId)) {
+        resolve({ success: false, error: 'Timed out resolving choices' });
+      }
+    }, 15000);
+    pendingChoiceRequests.set(requestId, (result) => {
+      clearTimeout(timer);
+      resolve(result);
+    });
     window.parent.postMessage({
       source: 'shufflewick-game',
       type: 'resolve_choices',
       requestId,
       actionName,
       selectionName,
-      args: currentArgs ?? {},
+      args: currentArgs,
     }, '*');
   });
 }
@@ -522,6 +530,10 @@ onUnmounted(() => {
   if (platformMessageHandler) {
     window.removeEventListener('message', platformMessageHandler);
   }
+  for (const [, cb] of pendingChoiceRequests) {
+    cb({ success: false, error: 'GameShell unmounted' });
+  }
+  pendingChoiceRequests.clear();
 });
 
 // Platform mode: postMessage bridge for iframe embedding
