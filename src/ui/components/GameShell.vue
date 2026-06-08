@@ -252,13 +252,11 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
 const actionController = useActionController({
   sendAction: async (actionName, args) => {
     if (platformMode.value) {
-      window.parent.postMessage({
-        source: 'shufflewick-game',
-        type: 'action',
-        actionName,
-        args,
-      }, '*');
-      return { success: true };
+      // Request/response so the action RESULT (notably followUp, which chains the
+      // next action e.g. explore -> take equipment) comes back to the controller,
+      // matching the dev path. Fire-and-forget would drop followUp.
+      const result = await platformRequest('action', { actionName, args });
+      return result as ControllerActionResult;
     }
     const result = await action(actionName, args);
     return result as ControllerActionResult;
