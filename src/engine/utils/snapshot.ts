@@ -66,6 +66,11 @@ export interface PlayerStateView {
 
   /** Winners (if game is complete) */
   winners?: number[];
+
+  /** Static action metadata for the player's available actions (embed/platform
+   *  consumers read this; the dev server builds its own via buildPlayerState).
+   *  Populated by the executor, not by createPlayerView. */
+  actionMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -99,17 +104,40 @@ export function createPlayerView(
   playerPosition: number
 ): PlayerStateView {
   const flowState = game.getFlowState();
-  const currentPlayer = flowState?.currentPlayer;
+
+  // Resolve this player's turn status and available actions, handling BOTH
+  // sequential action steps (flowState.currentPlayer / flowState.availableActions)
+  // and simultaneous action steps (flowState.awaitingPlayers[].availableActions).
+  // Mirrors buildPlayerState() and GameShell so host-embedded views (which read
+  // this PlayerStateView) match the BoardSmith dev server. Without the
+  // awaitingPlayers branch, simultaneous steps (e.g. a "choose your landing"
+  // phase) report zero available actions and no action buttons render.
+  let isMyTurn = false;
+  let availableActions: string[] | undefined;
+  if (flowState) {
+    const awaiting = flowState.awaitingPlayers;
+    if (awaiting && awaiting.length > 0) {
+      const entry = awaiting.find(
+        (p) => p.playerIndex === playerPosition && !p.completed
+      );
+      isMyTurn = entry !== undefined;
+      availableActions = entry?.availableActions;
+    } else {
+      isMyTurn = flowState.currentPlayer === playerPosition;
+      availableActions =
+        flowState.awaitingInput && isMyTurn
+          ? flowState.availableActions
+          : undefined;
+    }
+  }
 
   return {
     player: playerPosition,
     state: game.toJSONForPlayer(playerPosition),
     flowState: flowState ? {
       awaitingInput: flowState.awaitingInput,
-      isMyTurn: currentPlayer === playerPosition,
-      availableActions: flowState.awaitingInput && currentPlayer === playerPosition
-        ? flowState.availableActions
-        : undefined,
+      isMyTurn,
+      availableActions,
     } : undefined,
     messages: game.getFormattedMessages().map(text => ({ text })),
     phase: game.phase,

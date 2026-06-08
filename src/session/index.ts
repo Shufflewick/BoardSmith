@@ -88,6 +88,7 @@ export { ErrorCode } from './types.js';
 export {
   generateGameId,
   isPlayersTurn,
+  buildActionMetadata,
   buildPlayerState,
 } from './utils.js';
 

@@ -214,6 +214,26 @@ const gameView = computed(() => {
   return state.value?.state.view as any;
 });
 
+// Platform mode: resolve selection choices via a postMessage round-trip to the
+// host (which relays to the games worker / executor). Correlated by requestId.
+let choiceRequestSeq = 0;
+const pendingChoiceRequests = new Map<string, (r: { success: boolean; choices?: unknown; validElements?: unknown; multiSelect?: unknown; error?: string }) => void>();
+
+function requestPlatformChoices(actionName: string, selectionName: string, currentArgs: Record<string, unknown>) {
+  return new Promise<{ success: boolean; choices?: unknown; validElements?: unknown; multiSelect?: unknown; error?: string }>((resolve) => {
+    const requestId = `pc-${choiceRequestSeq++}`;
+    pendingChoiceRequests.set(requestId, resolve);
+    window.parent.postMessage({
+      source: 'shufflewick-game',
+      type: 'resolve_choices',
+      requestId,
+      actionName,
+      selectionName,
+      args: currentArgs ?? {},
+    }, '*');
+  });
+}
+
 // Action controller - unified action handling for ActionPanel and custom UIs
 // This provides 100% parity: same auto-fill, validation, and server communication
 const actionController = useActionController({
@@ -243,7 +263,10 @@ const actionController = useActionController({
   animationEvents,
   // Selection choices - fetched from server on-demand for each selection
   fetchPickChoices: async (actionName, selectionName, player, currentArgs) => {
-    if (platformMode.value || !gameId.value) {
+    if (platformMode.value) {
+      return await requestPlatformChoices(actionName, selectionName, currentArgs ?? {});
+    }
+    if (!gameId.value) {
       return { success: false, error: 'No game ID' };
     }
     try {
@@ -517,6 +540,21 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       currentScreen.value = 'game';
     }
 
+    if (data.type === 'choices') {
+      const cb = pendingChoiceRequests.get(data.requestId);
+      if (cb) {
+        pendingChoiceRequests.delete(data.requestId);
+        cb({
+          success: data.success,
+          choices: data.choices,
+          validElements: data.validElements,
+          multiSelect: data.multiSelect,
+          error: data.error,
+        });
+      }
+      return;
+    }
+
     if (data.type === 'game_state' && platformMode.value) {
       const view = data.view;
       if (!view) return;
@@ -543,7 +581,13 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       const players = playerElements.length > 0
         ? playerElements.map((p) => {
             const attrs = (p.attributes ?? {}) as Record<string, unknown>;
+            // Flatten ALL element attributes onto the player object (matching the
+            // dev-server's buildPlayerState shape) so custom game UIs can read
+            // per-player fields like `role`, not just name/seat/color. Without
+            // this, the player-stats slot only sees name/seat/color and game UIs
+            // mis-render (e.g. every MERC player shows as "Rebel").
             return {
+              ...attrs,
               name: (p.name ?? attrs.name ?? `Player ${attrs.seat}`) as string,
               seat: (attrs.seat ?? p.id) as number,
               color: attrs.color as string | undefined,
@@ -566,6 +610,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
           isMyTurn: flowIsMyTurn,
           view: view.state,
           messages: view.messages ?? [],
+          actionMetadata: view.actionMetadata,
         },
         playerSeat: playerSeat.value,
         isSpectator: false,
@@ -1343,6 +1388,13 @@ if ((import.meta as any).hot) {
 
 .game-shell--platform .game-shell__content {
   padding-bottom: 60px;
+}
+
+/* Platform mode: the host renders a pull-down header tab centered at the very
+   top. Reserve vertical space so the game header's centered controls (zoom /
+   Auto / Undo) sit clear of the closed tab. */
+.game-shell--platform :deep(.game-header) {
+  padding-top: 26px;
 }
 
 /* Game Screen */
