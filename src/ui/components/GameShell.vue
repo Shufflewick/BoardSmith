@@ -1402,11 +1402,20 @@ if ((import.meta as any).hot) {
   padding-bottom: 60px;
 }
 
-/* Platform mode: the host renders a pull-down header tab centered at the very
-   top. Reserve vertical space so the game header's centered controls (zoom /
-   Auto / Undo) sit clear of the closed tab. */
+/* Platform mode: the host renders a pull-down logo tab at the top-center.
+   Keep the header's centered controls (zoom / Auto / Undo) out of the middle
+   by packing them to the left and pushing the connection badge to the right,
+   leaving the horizontal center clear for the host tab. Do NOT add vertical
+   padding here — that only makes the bar taller. */
 .game-shell--platform :deep(.game-header) {
-  padding-top: 26px;
+  justify-content: flex-start;
+}
+.game-shell--platform :deep(.header-center) {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+}
+.game-shell--platform :deep(.header-right) {
+  margin-left: auto;
 }
 
 /* Game Screen */
