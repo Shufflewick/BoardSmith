@@ -919,6 +919,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     currentAction.value = actionName;
     clearArgs();
     clearAdvancedState();
+    // A followUp action is, by definition, NOT in availableActions (it's gated by
+    // args-only conditions the server already validated when it returned the
+    // followUp). The plain `action` path enforces the flow allow-list and would
+    // reject it; the selection-step / pending-action path does not. So mark the
+    // action server-pending: every selection (and the optional skip) routes
+    // through pickStep, which is the only path that can run a followUp action.
+    // This is why "explore -> take equipment" chains work transport-agnostically.
+    pendingOnServer.value = true;
     Object.assign(currentArgs.value, initialArgs);
     lastError.value = null;
 
@@ -1326,17 +1334,26 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!currentActionMeta.value) return;
 
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
-    if (selection?.optional) {
-      currentArgs.value[selectionName] = null; // Explicitly skipped
+    if (!selection?.optional) return;
 
-      // Store skipped state in snapshot
-      if (actionSnapshot.value) {
-        actionSnapshot.value.collectedPicks.set(selectionName, {
-          value: null,
-          display: '',
-          skipped: true,
-        });
-      }
+    // When the action is server-pending (e.g. a followUp), the auto-execute watch
+    // is disabled, so skipping must actively submit the step with a null value so
+    // the server runs the action with the selection skipped (e.g. "Done taking
+    // equipment"). Otherwise just record the skip and let auto-execute submit.
+    if (pendingOnServer.value) {
+      void handleOnSelectFill(selection, null);
+      return;
+    }
+
+    currentArgs.value[selectionName] = null; // Explicitly skipped
+
+    // Store skipped state in snapshot
+    if (actionSnapshot.value) {
+      actionSnapshot.value.collectedPicks.set(selectionName, {
+        value: null,
+        display: '',
+        skipped: true,
+      });
     }
   }
 

@@ -15,6 +15,7 @@ import {
   type StoredGameState,
 } from './types.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
+import { buildSingleActionMetadata } from './utils.js';
 
 /** Serialize a pending action's state to a JSON-safe object (Set -> array). */
 function serializePendingState(s: PendingActionState): Record<string, unknown> {
@@ -99,6 +100,17 @@ export class PickHandler<G extends Game = Game> {
       actionName,
       initialArgs,
     );
+
+    // Enrich a chained followUp with metadata (same as the dev session does), so
+    // the embedded UI can render the next action's selections — e.g. taking one
+    // item from a stash chains back to the same action with full metadata.
+    if (result.followUp) {
+      const player = this.#runner.game.getPlayer(playerPosition);
+      const metadata = player
+        ? buildSingleActionMetadata(this.#runner.game, player, result.followUp.action, result.followUp.args)
+        : undefined;
+      result.followUp = { ...result.followUp, metadata } as typeof result.followUp;
+    }
 
     const pending = manager.getPendingAction(playerPosition);
     return { ...result, pendingState: pending ? serializePendingState(pending) : null };
