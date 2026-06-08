@@ -214,30 +214,35 @@ const gameView = computed(() => {
   return state.value?.state.view as any;
 });
 
-// Platform mode: resolve selection choices via a postMessage round-trip to the
-// host (which relays to the games worker / executor). Correlated by requestId.
-let choiceRequestSeq = 0;
-const pendingChoiceRequests = new Map<string, (r: { success: boolean; choices?: unknown; validElements?: unknown; multiSelect?: unknown; error?: string }) => void>();
+// Platform mode: generic request/response bridge to the host (which relays to
+// the games worker / executor). Every server operation the embedded game needs
+// — fetching choices, stepping selections, cancelling, undo — goes through this
+// ONE helper, so platform/dev branching lives in exactly one place. Adding a new
+// server op only requires calling platformRequest(op, ...) and implementing the
+// op in the executor; the host relay is generic and needs no per-op changes.
+// This prevents the recurring "works in dev, broken in the iframe" class of bug
+// where an individual server call forgot its platform branch.
+let platformRequestSeq = 0;
+const pendingPlatformRequests = new Map<string, (r: Record<string, unknown>) => void>();
 
-function requestPlatformChoices(actionName: string, selectionName: string, currentArgs: Record<string, unknown>) {
-  return new Promise<{ success: boolean; choices?: unknown; validElements?: unknown; multiSelect?: unknown; error?: string }>((resolve) => {
-    const requestId = `pc-${choiceRequestSeq++}`;
+function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    const requestId = `req-${platformRequestSeq++}`;
     const timer = setTimeout(() => {
-      if (pendingChoiceRequests.delete(requestId)) {
-        resolve({ success: false, error: 'Timed out resolving choices' });
+      if (pendingPlatformRequests.delete(requestId)) {
+        resolve({ success: false, error: `Timed out on '${op}'` });
       }
-    }, 15000);
-    pendingChoiceRequests.set(requestId, (result) => {
+    }, 20000);
+    pendingPlatformRequests.set(requestId, (result) => {
       clearTimeout(timer);
       resolve(result);
     });
     window.parent.postMessage({
       source: 'shufflewick-game',
-      type: 'resolve_choices',
+      type: 'server_request',
       requestId,
-      actionName,
-      selectionName,
-      args: currentArgs,
+      op,
+      payload,
     }, '*');
   });
 }
@@ -272,7 +277,9 @@ const actionController = useActionController({
   // Selection choices - fetched from server on-demand for each selection
   fetchPickChoices: async (actionName, selectionName, player, currentArgs) => {
     if (platformMode.value) {
-      return await requestPlatformChoices(actionName, selectionName, currentArgs ?? {});
+      return await platformRequest('resolve_choices', {
+        actionName, selectionName, player, args: currentArgs ?? {},
+      });
     }
     if (!gameId.value) {
       return { success: false, error: 'No game ID' };
@@ -296,6 +303,10 @@ const actionController = useActionController({
   },
   // Cancel pending action on server (for onSelect-routed actions)
   cancelPendingAction: async (player) => {
+    if (platformMode.value) {
+      await platformRequest('cancel_action', { player });
+      return;
+    }
     if (!gameId.value) return;
     try {
       await fetch(`${props.apiUrl}/games/${gameId.value}/cancel-action`, {
@@ -309,6 +320,11 @@ const actionController = useActionController({
   },
   // Phase 3: Repeating selections - processed step by step on server
   pickStep: async (player, selectionName, value, actionName, initialArgs) => {
+    if (platformMode.value) {
+      return await platformRequest('selection_step', {
+        player, selectionName, value, actionName, initialArgs,
+      });
+    }
     if (!gameId.value) {
       return { success: false, error: 'No game ID' };
     }
@@ -396,6 +412,12 @@ function setBoardPrompt(prompt: string | null): void {
 
 // Undo actions back to turn start (called by ActionPanel)
 async function handleUndo(): Promise<void> {
+  if (platformMode.value) {
+    const result = await platformRequest('undo', { player: playerSeat.value });
+    if (!result.success) console.error('Undo failed:', result.error);
+    // State update arrives via the game_state broadcast.
+    return;
+  }
   if (!gameId.value) return;
   try {
     const response = await fetch(`${props.apiUrl}/games/${gameId.value}/undo`, {
@@ -530,10 +552,10 @@ onUnmounted(() => {
   if (platformMessageHandler) {
     window.removeEventListener('message', platformMessageHandler);
   }
-  for (const [, cb] of pendingChoiceRequests) {
+  for (const [, cb] of pendingPlatformRequests) {
     cb({ success: false, error: 'GameShell unmounted' });
   }
-  pendingChoiceRequests.clear();
+  pendingPlatformRequests.clear();
 });
 
 // Platform mode: postMessage bridge for iframe embedding
@@ -552,17 +574,13 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       currentScreen.value = 'game';
     }
 
-    if (data.type === 'choices') {
-      const cb = pendingChoiceRequests.get(data.requestId);
+    if (data.type === 'server_response') {
+      const cb = pendingPlatformRequests.get(data.requestId);
       if (cb) {
-        pendingChoiceRequests.delete(data.requestId);
-        cb({
-          success: data.success,
-          choices: data.choices,
-          validElements: data.validElements,
-          multiSelect: data.multiSelect,
-          error: data.error,
-        });
+        pendingPlatformRequests.delete(data.requestId);
+        // `result` is the executor op's full result object (choices, step
+        // result, etc.). Fall back to the message itself for resilience.
+        cb((data.result ?? data) as Record<string, unknown>);
       }
       return;
     }

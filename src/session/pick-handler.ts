@@ -6,13 +6,29 @@
  * A "pick" represents a choice the player must make during action resolution.
  */
 
-import type { Game, Player } from '../engine/index.js';
+import type { Game, Player, PendingActionState } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
   type PickChoicesResponse,
   type ValidElement,
+  type StoredGameState,
 } from './types.js';
+import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
+
+/** Serialize a pending action's state to a JSON-safe object (Set -> array). */
+function serializePendingState(s: PendingActionState): Record<string, unknown> {
+  return { ...s, onSelectFired: s.onSelectFired ? Array.from(s.onSelectFired) : undefined };
+}
+
+/** Restore a pending action's state from its JSON-safe form (array -> Set). */
+function deserializePendingState(s: Record<string, unknown>): PendingActionState {
+  const onSelectFired = s.onSelectFired;
+  return {
+    ...(s as unknown as PendingActionState),
+    onSelectFired: Array.isArray(onSelectFired) ? new Set(onSelectFired as number[]) : undefined,
+  };
+}
 
 /**
  * Handles pick choice resolution for game actions.
@@ -35,6 +51,79 @@ export class PickHandler<G extends Game = Game> {
    */
   updateRunner(runner: GameRunner<G>): PickHandler<G> {
     return new PickHandler(runner, this.#playerCount);
+  }
+
+  /**
+   * Process one selection step for an action with a multi-step or repeating
+   * selection, statelessly. The caller (e.g. the ShufflewickPub executor)
+   * persists `priorPendingState` between steps and passes it back; on the first
+   * step it is omitted and the pending action is auto-created from `actionName`
+   * + `initialArgs`. Reuses PendingActionManager (with no-op persistence) so the
+   * behaviour matches the dev server exactly. Mutates the underlying game when a
+   * step has side effects or completes the action, so the caller should read a
+   * fresh snapshot afterwards.
+   *
+   * Returns the step result plus a JSON-safe `pendingState` to persist (null
+   * once the action has completed and no pending state remains).
+   */
+  async processSelectionStep(
+    playerPosition: number,
+    selectionName: string,
+    value: unknown,
+    actionName?: string,
+    initialArgs?: Record<string, unknown>,
+    priorPendingState?: Record<string, unknown> | null,
+  ): Promise<PickStepResult & { pendingState: Record<string, unknown> | null }> {
+    const storedState = {
+      gameType: (this.#runner as unknown as { gameType?: string }).gameType ?? '',
+      playerCount: this.#playerCount,
+      playerNames: [],
+      actionHistory: this.#runner.actionHistory,
+      createdAt: 0,
+    } as unknown as StoredGameState;
+
+    const manager = new PendingActionManager(this.#runner, storedState, undefined, {
+      save: async () => {},
+      broadcast: () => {},
+      scheduleAICheck: () => {},
+    });
+
+    if (priorPendingState) {
+      manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
+    }
+
+    const result = await manager.processSelectionStep(
+      playerPosition,
+      selectionName,
+      value,
+      actionName,
+      initialArgs,
+    );
+
+    const pending = manager.getPendingAction(playerPosition);
+    return { ...result, pendingState: pending ? serializePendingState(pending) : null };
+  }
+
+  /**
+   * Cancel a player's pending action (fires onCancel callbacks). Stateless:
+   * the caller restores the pending state first.
+   */
+  cancelPendingAction(playerPosition: number, priorPendingState: Record<string, unknown> | null): void {
+    if (!priorPendingState) return;
+    const storedState = {
+      gameType: (this.#runner as unknown as { gameType?: string }).gameType ?? '',
+      playerCount: this.#playerCount,
+      playerNames: [],
+      actionHistory: this.#runner.actionHistory,
+      createdAt: 0,
+    } as unknown as StoredGameState;
+    const manager = new PendingActionManager(this.#runner, storedState, undefined, {
+      save: async () => {},
+      broadcast: () => {},
+      scheduleAICheck: () => {},
+    });
+    manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
+    manager.cancelPendingAction(playerPosition);
   }
 
   /**

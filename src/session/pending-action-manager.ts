@@ -237,6 +237,15 @@ export class PendingActionManager<G extends Game = Game> {
   }
 
   /**
+   * Seed a pending action's state directly. Used by stateless hosts (e.g. the
+   * ShufflewickPub executor) that persist the pending state externally between
+   * selection steps and restore it before each step.
+   */
+  setPendingAction(playerPosition: number, state: PendingActionState): void {
+    this.#pendingActions.set(playerPosition, state);
+  }
+
+  /**
    * Cancel a pending action for a player.
    */
   cancelPendingAction(playerPosition: number): void {
