@@ -5,7 +5,7 @@ export interface SnapshotSessionAdapters {
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
   broadcast: (playerViews: unknown[], meta: { isComplete: boolean; winners: number[] }) => void;
   aiSeats?: Array<{ seat: number; level?: string }>;
-  persist?: (state: { snapshot: unknown; pendingStates: Record<number, Record<string, unknown>> }) => void | Promise<void>;
+  persist?: (state: { snapshot: unknown; pendingStates: Record<string, Record<string, unknown>> }) => void | Promise<void>;
 }
 
 export class SnapshotSessionHost {
@@ -16,9 +16,9 @@ export class SnapshotSessionHost {
   private pendingStates = new Map<number, Record<string, unknown>>();
   private aiPumpRunning = false;
 
-  constructor(private readonly a: SnapshotSessionAdapters) {}
+  constructor(private readonly adapters: SnapshotSessionAdapters) {}
 
-  private apply(res: OpResult, seat?: number): void {
+  private async apply(res: OpResult, seat?: number): Promise<void> {
     this.snapshot = res.snapshot;
     this.flowState = res.flowState;
     this.isComplete = res.isComplete;
@@ -27,24 +27,25 @@ export class SnapshotSessionHost {
       if (res.pendingState) this.pendingStates.set(seat, res.pendingState);
       else this.pendingStates.delete(seat);
     }
-    this.a.broadcast(res.playerViews, { isComplete: res.isComplete, winners: res.winners });
-    void this.a.persist?.({ snapshot: this.snapshot, pendingStates: Object.fromEntries(this.pendingStates) });
+    this.adapters.broadcast(res.playerViews, { isComplete: res.isComplete, winners: res.winners });
+    await this.adapters.persist?.({ snapshot: this.snapshot, pendingStates: Object.fromEntries(this.pendingStates) });
   }
 
   async start(): Promise<void> {
-    const res = await this.a.executeOp(null, null, { type: 'start' });
-    this.apply(res);
+    const res = await this.adapters.executeOp(null, null, { type: 'start' });
+    if (!res.success) throw new Error(res.error ?? 'start op failed');
+    await this.apply(res);
   }
 
   /** Read-only ops (resolveChoices) do NOT mutate or broadcast. State-mutating
    *  ops broadcast the new state, THEN the caller returns the op response. */
   async handleOp(seat: number, op: Op): Promise<OpResult> {
     if (op.type === 'resolveChoices') {
-      return this.a.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
+      return this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     }
-    const res = await this.a.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
+    const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     if (!res.success) return res;
-    this.apply(res, seat);
+    await this.apply(res, seat);
     if (!this.isComplete && (op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete))) {
       await this.runAITurns();
     }
@@ -52,13 +53,13 @@ export class SnapshotSessionHost {
   }
 
   async runAITurns(): Promise<void> {
-    if (this.aiPumpRunning || !this.a.aiSeats?.length) return;
+    if (this.aiPumpRunning || !this.adapters.aiSeats?.length) return;
     this.aiPumpRunning = true;
     try {
       while (true) {
-        const res = await this.a.executeOp(this.snapshot, null, { type: 'aiTurn', seats: this.a.aiSeats });
+        const res = await this.adapters.executeOp(this.snapshot, null, { type: 'aiTurn', seats: this.adapters.aiSeats });
         if (!res.success || !res.aiMoved) break;
-        this.apply(res);
+        await this.apply(res);
         if (this.isComplete) break;
       }
     } finally {

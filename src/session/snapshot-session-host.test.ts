@@ -206,12 +206,11 @@ describe('SnapshotSessionHost', () => {
       // Snapshot should have advanced from step1→step2 (action completed)
       expect(JSON.stringify(host.snapshot)).not.toBe(JSON.stringify(snapshotAfterStep1));
 
-      // Broadcasts happened for both state-mutating selectionSteps (actionComplete:true triggers broadcast)
-      // At minimum one broadcast for the completing step
-      expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
+      // Broadcasts fire for every state-mutating op via apply, regardless of actionComplete
+      expect(broadcastLog.length).toBe(2);
     });
 
-    it('retains per-seat pendingState independently (two seats in flight)', async () => {
+    it('threads step-1 pendingState into the step-2 executeOp call (same seat)', async () => {
       // Use a multi-player variant where BOTH players share the same step flow.
       // We'll just verify seat 1 and seat 2 can each carry independent pendingState.
       // We need a game where both seats can act; reuse twoStepGameDef but inject
