@@ -584,62 +584,24 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     }
 
     if (data.type === 'game_state' && platformMode.value) {
-      const view = data.view;
-      if (!view) return;
+      const view = data.view as { flowState?: unknown; state?: Record<string, unknown> } | undefined;
+      if (!view?.state) return;
 
-      // Convert PlayerStateView → GameState format
-      const flowAvailableActions = view.flowState?.availableActions ?? [];
-      const flowIsMyTurn = view.flowState?.isMyTurn ?? false;
-
-      // Extract player data (name, seat, color) from the game view's element tree.
-      // Player elements are direct children of the root game element with a `seat` attribute.
-      // They may be named 'Player', 'CheckersPlayer', or any custom Player subclass.
-      const viewState = view.state as Record<string, unknown> | undefined;
-      const viewChildren = (viewState?.children ?? []) as Array<Record<string, unknown>>;
-      const playerElements = viewChildren.filter((c) => {
-        const attrs = c.attributes as Record<string, unknown> | undefined;
-        return attrs?.seat != null;
-      });
-      // Extract colorSelectionEnabled from game settings
-      const gameSettings = (viewState?.settings ?? {}) as Record<string, unknown>;
-      if (gameSettings.colorSelectionEnabled) {
+      // The host now sends the SAME { flowState, state } shape the dev server's
+      // WebSocket sends, where `state` is the full PlayerGameState produced by
+      // buildPlayerState. Assign it directly -- exactly like the dev path -- so
+      // the auto-UI and custom UIs receive everything (currentPlayer,
+      // awaitingPlayers via flowState, canUndo, animation events, full player
+      // attributes, action metadata, messages) with no field dropped. Hand-mapping
+      // individual fields here is what caused the recurring "works in dev, broken
+      // in the iframe" bugs, so there is deliberately no per-field reconstruction.
+      if (view.state.colorSelectionEnabled) {
         colorSelectionEnabled.value = true;
       }
 
-      const players = playerElements.length > 0
-        ? playerElements.map((p) => {
-            const attrs = (p.attributes ?? {}) as Record<string, unknown>;
-            // Flatten ALL element attributes onto the player object (matching the
-            // dev-server's buildPlayerState shape) so custom game UIs can read
-            // per-player fields like `role`, not just name/seat/color. Without
-            // this, the player-stats slot only sees name/seat/color and game UIs
-            // mis-render (e.g. every MERC player shows as "Rebel").
-            return {
-              ...attrs,
-              name: (p.name ?? attrs.name ?? `Player ${attrs.seat}`) as string,
-              seat: (attrs.seat ?? p.id) as number,
-              color: attrs.color as string | undefined,
-            };
-          })
-        : state.value?.state?.players ?? [];
-
       state.value = {
-        flowState: {
-          currentPlayer: flowIsMyTurn ? playerSeat.value : undefined,
-          awaitingInput: view.flowState?.awaitingInput ?? false,
-          availableActions: flowAvailableActions,
-          phase: view.phase ?? 'playing',
-        },
-        state: {
-          phase: view.phase ?? 'playing',
-          players,
-          currentPlayer: flowIsMyTurn ? playerSeat.value : undefined,
-          availableActions: flowAvailableActions,
-          isMyTurn: flowIsMyTurn,
-          view: view.state,
-          messages: view.messages ?? [],
-          actionMetadata: view.actionMetadata,
-        },
+        flowState: view.flowState,
+        state: view.state,
         playerSeat: playerSeat.value,
         isSpectator: false,
       } as any;
