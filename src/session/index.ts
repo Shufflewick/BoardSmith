@@ -132,3 +132,6 @@ export { computeUndoInfo } from './utils.js';
 // Exposed so the stateless executor can enrich an action's followUp with the
 // same metadata the dev server attaches, letting the embedded UI auto-start it.
 export { buildSingleActionMetadata } from './utils.js';
+
+// Pure stateless op executor — single source of truth for per-op game execution.
+export * from './stateless-ops.js';
