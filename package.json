@@ -19,6 +19,10 @@
       "types": "./src/session/index.ts",
       "import": "./src/session/index.ts"
     },
+    "./session-host": {
+      "types": "./src/session/snapshot-session-host.ts",
+      "import": "./src/session/snapshot-session-host.ts"
+    },
     "./testing": {
       "types": "./src/testing/index.ts",
       "import": "./src/testing/index.ts"

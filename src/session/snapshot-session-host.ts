@@ -1,5 +1,7 @@
 import type { Op, OpResult } from './stateless-ops.js';
 
+export type { Op, OpResult } from './stateless-ops.js';
+
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
