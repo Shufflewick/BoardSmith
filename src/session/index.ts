@@ -135,3 +135,8 @@ export { buildSingleActionMetadata } from './utils.js';
 
 // Pure stateless op executor — single source of truth for per-op game execution.
 export * from './stateless-ops.js';
+
+// Stateful session host: threads snapshot/pendingStates, enforces broadcast-before-response
+// ordering, and drives the AI pump. Accepts an injected executeOp adapter so the same
+// host class works in-process (dev) and via remote RPC (production executor worker).
+export * from './snapshot-session-host.js';
