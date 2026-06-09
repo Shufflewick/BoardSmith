@@ -509,9 +509,26 @@ watch(() => props.availableActions, (actions, oldActions) => {
   }
 
   if (shouldClear) {
-    actionController.cancel();
-    multiSelectState.value = null;
-    boardInteraction?.clear();
+    // A server-pending action (a followUp like collectEquipment, or an
+    // onSelect-routed selection) is NEVER in availableActions by design. Cancelling
+    // it here on a routine state broadcast tears down live followUp chains (e.g.
+    // explore -> take equipment) — which is exactly the iframe equip bug. Only the
+    // platform transport raced this (the host broadcasts the post-action state,
+    // dropping the followUp from availableActions, before the action response),
+    // so it slipped past dev. Never clear while the action is server-pending.
+    const serverPending = actionController.pendingOnServer?.value ?? false;
+    // eslint-disable-next-line no-console
+    console.log('[EQUIP-DBG b1] ActionPanel availableActions-watch shouldClear', {
+      currentAction: currentAction.value,
+      availableActions: [...actions],
+      serverPending,
+      willCancel: !serverPending,
+    });
+    if (!serverPending) {
+      actionController.cancel();
+      multiSelectState.value = null;
+      boardInteraction?.clear();
+    }
   }
 
   // Try auto-start, but skip no-selection actions to avoid double-execution

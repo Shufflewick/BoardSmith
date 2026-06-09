@@ -314,6 +314,14 @@ export interface UseActionControllerReturn {
    */
   pendingFollowUp: Ref<boolean>;
 
+  /**
+   * True while the current action is server-pending — a followUp started via
+   * startFollowUp, or an onSelect-routed selection. These actions are never in
+   * availableActions by design, so UIs must not treat their absence from
+   * availableActions as a reason to cancel the current action.
+   */
+  pendingOnServer: Readonly<Ref<boolean>>;
+
   // === High-level Methods ===
   /**
    * Execute an action with all args at once.
