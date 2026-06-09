@@ -2,6 +2,8 @@ import type { Op, OpResult } from './stateless-ops.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 
+const MAX_AI_MOVES = 500;
+
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
@@ -45,6 +47,11 @@ export class SnapshotSessionHost {
     if (op.type === 'resolveChoices') {
       return this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     }
+    // A new direct action supersedes any in-progress selection for this seat.
+    // Clear pending state BEFORE executing so a failed superseding action
+    // doesn't leave stale selection state behind (matches the old DO's
+    // applyHumanAction, which deleted pending state before a direct action).
+    if (op.type === 'action') this.pendingStates.delete(seat);
     const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     if (!res.success) return res;
     await this.apply(res, seat);
@@ -58,9 +65,15 @@ export class SnapshotSessionHost {
     if (this.aiPumpRunning || !this.adapters.aiSeats?.length) return;
     this.aiPumpRunning = true;
     try {
+      let moves = 0;
       while (true) {
+        if (moves >= MAX_AI_MOVES) {
+          console.error('[SnapshotSessionHost] AI pump hit MAX_AI_MOVES cap (500); stopping to avoid runaway.');
+          break;
+        }
         const res = await this.adapters.executeOp(this.snapshot, null, { type: 'aiTurn', seats: this.adapters.aiSeats });
         if (!res.success || !res.aiMoved) break;
+        moves++;
         await this.apply(res);
         if (this.isComplete) break;
       }

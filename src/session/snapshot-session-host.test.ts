@@ -386,6 +386,137 @@ describe('SnapshotSessionHost', () => {
       // AI pump should have been triggered (at least one aiTurn call)
       expect(aiCallCount).toBeGreaterThanOrEqual(1);
     });
+
+    it('caps the AI pump at MAX_AI_MOVES (500) and logs when a runaway bundle never stops', async () => {
+      const base: OpResult = {
+        success: true,
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+        aiMoved: true,
+      };
+
+      let aiCallCount = 0;
+      const adapters: SnapshotSessionAdapters = {
+        playerCount: 2,
+        // A buggy bundle that ALWAYS reports a move was made — would loop forever
+        // without the cap.
+        executeOp: async (_snap, _pend, op) => {
+          if (op.type === 'start') return { ...base, aiMoved: false };
+          if (op.type === 'aiTurn') {
+            aiCallCount++;
+            return { ...base, aiMoved: true };
+          }
+          return { ...base };
+        },
+        broadcast: () => {},
+        aiSeats: [{ seat: 2 }],
+      };
+
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // Must terminate (not hang) and stop exactly at the cap.
+      await host.runAITurns();
+
+      expect(aiCallCount).toBe(500);
+      expect(errSpy).toHaveBeenCalledWith(
+        '[SnapshotSessionHost] AI pump hit MAX_AI_MOVES cap (500); stopping to avoid runaway.',
+      );
+
+      errSpy.mockRestore();
+    });
+  });
+
+  // ── 5. New action supersedes an in-progress selection ───────────────────────
+
+  describe('action supersedes in-progress selection', () => {
+    it('clears stale pending state when a new (failing) action is dispatched mid-selection', async () => {
+      const calls: Array<{ type: string; pendingState: Record<string, unknown> | null }> = [];
+      const base: OpResult = {
+        success: true,
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+      };
+
+      const adapters: SnapshotSessionAdapters = {
+        playerCount: 2,
+        executeOp: async (_snap, pend, op) => {
+          calls.push({ type: op.type, pendingState: pend });
+          if (op.type === 'start') return { ...base };
+          if (op.type === 'selectionStep') {
+            // Mid-action: action not complete, so the host retains pendingState.
+            return { ...base, actionComplete: false, pendingState: { step: 'mid' } };
+          }
+          if (op.type === 'action') {
+            // The superseding action FAILS — must not leave stale pending behind.
+            return { ...base, success: false, error: 'boom' };
+          }
+          return { ...base };
+        },
+        broadcast: () => {},
+      };
+
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      const startCalls = calls.length;
+
+      // Step A: drive seat 1 into a mid-action pending state.
+      await host.handleOp(1, {
+        type: 'selectionStep',
+        player: 1,
+        selectionName: 'color',
+        value: 'red',
+        actionName: 'pick',
+      });
+
+      // Step B: a follow-up selectionStep proves the pending state was retained.
+      await host.handleOp(1, {
+        type: 'selectionStep',
+        player: 1,
+        selectionName: 'size',
+        value: 'M',
+        actionName: 'pick',
+      });
+      const followUpCall = calls[startCalls + 1];
+      expect(followUpCall.type).toBe('selectionStep');
+      expect(followUpCall.pendingState).not.toBeNull();
+
+      // Step C: a NEW action is dispatched mid-selection and FAILS.
+      const actionRes = await host.handleOp(1, {
+        type: 'action',
+        actionName: 'pass',
+        player: 1,
+        args: {},
+      });
+      expect(actionRes.success).toBe(false);
+      // The action itself must have run with pending already cleared.
+      const actionCall = calls[startCalls + 2];
+      expect(actionCall.type).toBe('action');
+      expect(actionCall.pendingState).toBeNull();
+
+      // Step D: a subsequent selectionStep for that seat now sees NO stale pending.
+      await host.handleOp(1, {
+        type: 'selectionStep',
+        player: 1,
+        selectionName: 'color',
+        value: 'blue',
+        actionName: 'pick',
+      });
+      const afterActionCall = calls[startCalls + 3];
+      expect(afterActionCall.type).toBe('selectionStep');
+      expect(afterActionCall.pendingState).toBeNull();
+    });
   });
 
   // ── persist hook ───────────────────────────────────────────────────────────
