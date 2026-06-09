@@ -32,3 +32,6 @@ export {
   type GameRunnerOptions,
   type ActionExecutionResult,
 } from './runner.js';
+
+// Serialized action type (used by callers that invoke GameRunner.replay)
+export type { SerializedAction } from '../engine/index.js';

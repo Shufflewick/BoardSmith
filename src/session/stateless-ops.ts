@@ -10,7 +10,7 @@
  */
 
 import type { Game } from '../engine/index.js';
-import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
+import { GameRunner, type GameStateSnapshot, type GameRunnerOptions, type SerializedAction } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { PickHandler, buildSingleActionMetadata, buildPlayerState, computeUndoInfo } from './index.js';
 
@@ -344,15 +344,13 @@ function handleUndo(
     ...(snapshot.seed != null ? { seed: snapshot.seed } : {}),
   };
 
-  const replayed = (GameRunner as unknown as {
-    replay: (opts: GameRunnerOptions<never>, actions: unknown[]) => GameRunner;
-  }).replay(
+  const replayed = GameRunner.replay(
     {
       GameClass: def.gameClass,
       gameType: def.gameType,
       gameOptions: replayGameOptions,
     } as unknown as GameRunnerOptions<never>,
-    actionsToReplay,
+    actionsToReplay as SerializedAction[],
   );
 
   return {
@@ -376,12 +374,7 @@ async function handleAITurn(
 
   const notDue: OpResult = {
     success: true,
-    snapshot: runner.getSnapshot(),
-    flowState,
-    playerViews: buildViews(runner, gameOptions.playerCount),
-    isComplete: runner.isComplete(),
-    winners: runner.getWinners().map((p) => p.seat),
-    pendingState: null,
+    ...stateEnvelope(runner, gameOptions.playerCount),
     aiMoved: false,
   };
 
@@ -448,17 +441,10 @@ export async function executeOp(
   try {
     const { playerCount } = gameOptions;
     if (playerCount < def.minPlayers || playerCount > def.maxPlayers) {
-      return {
-        success: false,
-        error: `playerCount ${playerCount} is outside the allowed range (${def.minPlayers}-${def.maxPlayers})`,
-        category: 'protocol',
-        snapshot: null,
-        pendingState: null,
-        flowState: null,
-        playerViews: [],
-        isComplete: false,
-        winners: [],
-      };
+      return errorResult(
+        `playerCount ${playerCount} is outside the allowed range (${def.minPlayers}-${def.maxPlayers})`,
+        'protocol',
+      );
     }
 
     if (op.type === 'start') {
