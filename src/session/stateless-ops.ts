@@ -210,10 +210,9 @@ function handleAction(
 
   let followUp: unknown;
   if (rawFollowUp) {
-    const game = runner.game as { getPlayer: (seat: number) => unknown };
-    const player = game.getPlayer(op.player);
+    const player = runner.game.getPlayer(op.player);
     const metadata = player
-      ? buildSingleActionMetadata(game, player, rawFollowUp.action, rawFollowUp.args)
+      ? buildSingleActionMetadata(runner.game, player, rawFollowUp.action, rawFollowUp.args)
       : undefined;
     followUp = { ...rawFollowUp, metadata };
   }
