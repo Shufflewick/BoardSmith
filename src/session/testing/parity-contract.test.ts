@@ -21,7 +21,7 @@ function newSession() {
 describe('collect-equipment parity contract', () => {
   // KNOWN BUG (reproduced): fixed in Phase 5 of
   // docs/superpowers/plans/2026-06-09-dev-prod-parity-harness.md; flip it.fails -> it when green.
-  it.fails('A. equipment collected via selectionStep persists across the snapshot round-trip', async () => {
+  it('A. equipment collected via selectionStep persists across the snapshot round-trip', async () => {
     const session = newSession();
     await session.start();
 

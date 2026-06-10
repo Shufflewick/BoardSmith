@@ -2556,6 +2556,64 @@ export class Game<
   }
 
   /**
+   * Load a serialized state payload (a `game.toJSON()` result) into THIS existing
+   * game instance, replacing the element tree, phase, messages, settings and
+   * animation buffer with the serialized values.
+   *
+   * The game's registered actions, flow definition and seeded RNG live on the
+   * instance (not in the JSON) and are preserved. This is the authoritative way
+   * to adopt a serialized tree without replaying history — used both by
+   * `restoreGame()` and by state-authoritative snapshot restore, so that direct
+   * tree mutations (e.g. `Piece.putInto` inside a completed pending action,
+   * which are recorded in neither commandHistory nor actionHistory) survive a
+   * snapshot round-trip.
+   */
+  loadSerializedState(json: ReturnType<Game['toJSON']>): void {
+    // Restore game-level state from JSON
+    this.phase = json.phase;
+    this.messages = json.messages;
+    this.settings = json.settings;
+
+    // Restore animation events if present
+    const jsonWithEvents = json as { animationEvents?: AnimationEvent[]; animationEventSeq?: number };
+    if (jsonWithEvents.animationEvents) {
+      this._animationEvents = [...jsonWithEvents.animationEvents];
+      this._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
+    }
+
+    // Clear existing children and rebuild the tree from JSON
+    this._t.children = [];
+    if (json.children) {
+      for (const childJson of json.children) {
+        const child = GameElement.fromJSON(childJson, this._ctx, this._ctx.classRegistry);
+        child._t.parent = this;
+        (child as GameElement).game = this;
+        this._t.children.push(child);
+      }
+    }
+
+    // Re-apply the game's OWN serialized attributes (e.g. convenience element
+    // refs assigned in the constructor like `game.sector`/`game.held`). The
+    // constructor set these to point at the now-discarded original elements;
+    // overwriting them with the serialized refs lets resolveElementReferences
+    // below re-point them at the freshly loaded tree. phase/messages/settings are
+    // restored explicitly above, so skip them here.
+    const unserializable = new Set(
+      (this.constructor as typeof GameElement).unserializableAttributes
+    );
+    const handledKeys = new Set(['phase', 'messages', 'settings']);
+    for (const [key, value] of Object.entries(json.attributes)) {
+      if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
+        (this as unknown as Record<string, unknown>)[key] = value;
+      }
+    }
+
+    // Resolve element references in all restored elements
+    // This converts { __elementRef: "path" } objects back to actual element references
+    this.resolveElementReferences(this);
+  }
+
+  /**
    * Create a game from serialized JSON
    */
   static restoreGame<G extends Game>(
@@ -2578,32 +2636,7 @@ export class Game<
       game._ctx.classRegistry.set(name, cls);
     }
 
-    // Restore state from JSON
-    game.phase = json.phase;
-    game.messages = json.messages;
-    game.settings = json.settings;
-
-    // Restore animation events if present
-    if ((json as { animationEvents?: AnimationEvent[] }).animationEvents) {
-      const jsonWithEvents = json as { animationEvents: AnimationEvent[]; animationEventSeq?: number };
-      game._animationEvents = [...jsonWithEvents.animationEvents];
-      game._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
-    }
-
-    // Clear auto-created children and restore from JSON
-    game._t.children = [];
-    if (json.children) {
-      for (const childJson of json.children) {
-        const child = GameElement.fromJSON(childJson, game._ctx, game._ctx.classRegistry);
-        child._t.parent = game;
-        (child as GameElement).game = game;
-        game._t.children.push(child);
-      }
-    }
-
-    // Resolve element references in all restored elements
-    // This converts { __elementRef: "path" } objects back to actual element references
-    game.resolveElementReferences(game);
+    game.loadSerializedState(json as ReturnType<Game['toJSON']>);
 
     return game;
   }

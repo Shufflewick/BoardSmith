@@ -269,12 +269,33 @@ export class GameRunner<G extends Game = Game> {
     // Restore action history
     runner.actionHistory.push(...snapshot.actionHistory);
 
-    // Start flow and replay actions to restore flow state
+    // Start flow and replay actions. The replay re-runs each action's execute,
+    // which re-advances the seeded RNG (dice/shuffle draw directly from
+    // game.random() at execute time) and reconstructs flow position. This is the
+    // mechanism that keeps randomness deterministic across a snapshot round-trip.
     runner.start();
     for (const action of snapshot.actionHistory) {
       const { actionName, player, args } = deserializeAction(action, runner.game);
       // Pass player seat for simultaneous actions
       runner.game.continueFlow(actionName, args, player.seat);
+    }
+
+    // Adopt the authoritative element tree from the snapshot. Direct tree
+    // mutations made by a completed pending action (e.g. Piece.putInto inside
+    // executePendingAction) are recorded in NEITHER commandHistory NOR
+    // actionHistory, so the replay above cannot reproduce them. snapshot.state is
+    // game.toJSON() captured after those mutations, so loading it makes the
+    // restored tree authoritative while the replay above leaves the RNG correctly
+    // positioned for subsequent ops.
+    runner.game.loadSerializedState(
+      snapshot.state as unknown as ReturnType<Game['toJSON']>
+    );
+
+    // Restore the authoritative flow state (re-resolves players against the tree
+    // just loaded). This matches what the replay produces for ordinary actions
+    // and additionally captures flow progress from completed pending actions.
+    if (snapshot.flowState) {
+      runner.game.restoreFlowState(snapshot.flowState);
     }
 
     return runner;
