@@ -204,6 +204,25 @@ describe('GameRunner', () => {
       expect(views[0].flowState?.isMyTurn).toBe(true);
       expect(views[1].flowState?.isMyTurn).toBe(false);
     });
+
+    it('persists a direct tree mutation (recorded in neither command nor action history) across fromSnapshot', () => {
+      // Simulate a pending-action mutation: move a piece directly via putInto,
+      // bypassing performAction so it lands in NEITHER commandHistory NOR
+      // actionHistory — the exact shape that previously vanished on restore.
+      const card = runner.game.deck.first(Card)!;
+      const cardId = card.id;
+      const hand = runner.game.hands[0];
+      card.putInto(hand);
+      expect(runner.actionHistory).toHaveLength(0);
+
+      const snapshot = runner.getSnapshot();
+      const restored = GameRunner.fromSnapshot(snapshot, TestGame);
+
+      // The moved card must still be in the hand (not back in the deck) after the
+      // snapshot round-trip.
+      expect(restored.game.hands[0].all(Card).some(c => c.id === cardId)).toBe(true);
+      expect(restored.game.deck.all(Card).some(c => c.id === cardId)).toBe(false);
+    });
   });
 
   describe('replay', () => {

@@ -80,6 +80,61 @@ class EquipGame extends Game<EquipGame, Player> {
   }
 }
 
+class OptionalGame extends Game<OptionalGame, Player> {
+  stash!: Stash;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.stash = this.create(Stash, 'stash');
+    this.stash.create(Equipment, 'Sword', { slot: 'weapon' });
+
+    this.registerAction(
+      Action.create('collect')
+        .chooseElement<Equipment>('item', {
+          optional: true,
+          elementClass: Equipment,
+        })
+        .execute(() => {})
+    );
+
+    this.setFlow(defineFlow({
+      root: actionStep({
+        actions: ['collect'],
+        player: (ctx) => ctx.game.getPlayer(1)!,
+      }),
+    }));
+  }
+}
+
+function createOptionalManager() {
+  const gameOptions = { playerCount: 1, playerNames: ['Alice'], seed: 'test' };
+
+  const runner = new GameRunner({
+    GameClass: OptionalGame,
+    gameType: 'optional',
+    gameOptions,
+  });
+  runner.start();
+
+  const storedState: StoredGameState = {
+    playerCount: 1,
+    playerNames: ['Alice'],
+    gameType: 'optional',
+    actionHistory: [],
+    createdAt: Date.now(),
+  };
+
+  const callbacks = {
+    save: vi.fn().mockResolvedValue(undefined),
+    broadcast: vi.fn(),
+    scheduleAICheck: vi.fn(),
+  };
+
+  const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
+  return { manager, callbacks, game: runner.game };
+}
+
 function createEquipManager() {
   const gameOptions = {
     playerCount: 2,
@@ -180,6 +235,17 @@ describe('PendingActionManager', () => {
     const step2 = await manager.processSelectionStep(1, 'equipment', sword.id);
     expect(step2.success).toBe(true);
     expect(step2.actionComplete).toBe(true);
+  });
+
+  it('treats a null value on an optional selection as a skip that completes the action', async () => {
+    const { manager } = createOptionalManager();
+
+    // A null value for an optional selection must complete the action (not error
+    // with "Invalid selection"), mirroring the bulk validateAction skip path.
+    const result = await manager.processSelectionStep(1, 'item', null, 'collect');
+
+    expect(result.success).toBe(true);
+    expect(result.actionComplete).toBe(true);
   });
 
   it('returns followUp when action execute returns one through processSelectionStep', async () => {
