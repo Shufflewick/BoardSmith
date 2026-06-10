@@ -309,8 +309,27 @@ export class GameRunner<G extends Game = Game> {
   }
 
   /**
-   * Restore a game from a snapshot
-   * Note: This creates a new game and replays commands, not a full restore
+   * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
+   *
+   * The snapshot already carries the complete authoritative state: the element
+   * tree (`snapshot.state` = `game.toJSON()`), the flow engine state
+   * (`snapshot.flowState`), the element sequence counter (`snapshot.sequence`),
+   * and — since RNG-state capture was added — the seeded RNG position
+   * (`snapshot.randomState`). We reconstruct the game directly from those rather
+   * than replaying command/action history.
+   *
+   * This deliberately does NOT call `replayCommands`, `start()`, or re-run the
+   * actionHistory through `continueFlow`. The previous replay-based restore was
+   * only ever a way to re-derive the tree, flow position, and RNG advance — all
+   * three of which are now restored authoritatively below. Crucially, replay was
+   * also unsound: selection-step / pending-completed actions are recorded in
+   * NEITHER command nor action history, so replaying an incomplete actionHistory
+   * mis-positioned the flow and crashed real games (e.g. MERC's AI dictator
+   * Day-1 turn: "Player N is not awaiting action"). Restoring state directly
+   * sidesteps that entire class of bug.
+   *
+   * `actionHistory` is still preserved on the runner because the undo op reads
+   * `runner.actionHistory` — it is just no longer replayed here.
    */
   static fromSnapshot<G extends Game>(
     snapshot: GameStateSnapshot,
@@ -324,62 +343,45 @@ export class GameRunner<G extends Game = Game> {
       seed: snapshot.seed,
     };
 
+    // Constructs an initial game tree; everything below overwrites it with the
+    // authoritative snapshot state.
     const runner = new GameRunner({
       GameClass,
       gameType: snapshot.gameType,
       gameOptions: gameOptions as GameOptions,
     });
 
-    // Replay commands to restore state
-    runner.game.replayCommands(snapshot.commandHistory);
-
-    // Restore action history
+    // Preserve action history for the undo op (which reads runner.actionHistory).
+    // It is intentionally NOT replayed.
     runner.actionHistory.push(...snapshot.actionHistory);
 
-    // Start flow and replay actions. The replay re-runs each action's execute,
-    // which re-advances the seeded RNG (dice/shuffle draw directly from
-    // game.random() at execute time) and reconstructs flow position. This is the
-    // mechanism that keeps randomness deterministic across a snapshot round-trip.
-    //
-    // KNOWN LIMITATION (RNG residual): only RNG draws made during this
-    // actionHistory replay are recovered. RNG advances that happened inside a
-    // pending/selection-step `onSelect`/`execute` are NOT in actionHistory, so
-    // they are not re-applied — the tree they produced is still restored
-    // authoritatively below via loadSerializedState, but the RNG *position* is
-    // only as advanced as the replay leaves it. A game that calls game.random()
-    // inside a pending/selection execute would therefore repeat those draws after
-    // a restore. MERC's collect path draws no RNG, so it is unaffected. Close this
-    // by serializing/restoring the RNG generator state (getState/setState) if/when
-    // a game needs RNG inside a pending execute; that refactor is out of scope here.
-    runner.start();
-    for (const action of snapshot.actionHistory) {
-      const { actionName, player, args } = deserializeAction(action, runner.game);
-      // Pass player seat for simultaneous actions
-      runner.game.continueFlow(actionName, args, player.seat);
-    }
-
-    // Adopt the authoritative element tree from the snapshot. Direct tree
-    // mutations made by a completed pending action (e.g. Piece.putInto inside
-    // executePendingAction) are recorded in NEITHER commandHistory NOR
-    // actionHistory, so the replay above cannot reproduce them. snapshot.state is
-    // game.toJSON() captured after those mutations, so loading it makes the
-    // restored tree authoritative while the replay above leaves the RNG correctly
-    // positioned for subsequent ops.
+    // Adopt the authoritative element tree. loadSerializedState fully clears and
+    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
+    // / Game.restoreGame), so it stands alone with no prior replay.
     runner.game.loadSerializedState(snapshot.state);
 
     // Restore the element sequence counter to its authoritative snapshot value.
-    // Both the action replay above and the fromJSON tree rebuild in
-    // loadSerializedState advance _ctx.sequence, so without this reset the next
-    // element created after restore would get an id that drifts from what dev
-    // assigns (a parity bug) and can trip the deletion-detector console.warn.
-    // Mirrors restoreDevState.
+    // The fromJSON tree rebuild in loadSerializedState advances _ctx.sequence, so
+    // without this reset the next element created after restore would get an id
+    // that drifts from what dev assigns (a parity bug) and can trip the
+    // deletion-detector console.warn. Mirrors restoreDevState.
     if (snapshot.sequence !== undefined) {
       runner.game._ctx.sequence = snapshot.sequence;
     }
 
+    // Restore the seeded RNG position directly so the next game.random() draw
+    // matches the live game exactly. This is what lets us drop the replay: the
+    // replay's only surviving contribution was re-advancing the RNG, and it could
+    // not account for draws made inside pending/selection executes. Restoring the
+    // generator state covers all of those. Skip for older snapshots that predate
+    // RNG-state capture.
+    if (snapshot.randomState !== undefined) {
+      runner.game.setRandomState(snapshot.randomState);
+    }
+
     // Restore the authoritative flow state (re-resolves players against the tree
-    // just loaded). This matches what the replay produces for ordinary actions
-    // and additionally captures flow progress from completed pending actions.
+    // just loaded). restoreFlowState builds a fresh FlowEngine from the saved
+    // position, so it does not require a prior start().
     //
     // Flow variables/frameData are first re-linked to the loaded tree: an
     // element-valued flow variable (e.g. an executeForEach `as` binding read after
