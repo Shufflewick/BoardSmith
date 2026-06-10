@@ -5,6 +5,7 @@ import {
   createPlayerView,
   createAllPlayerViews,
   ActionExecutor,
+  GameElement,
   type Game,
   type GameOptions,
   type Player,
@@ -15,6 +16,72 @@ import {
   type GameStateSnapshot,
   type PlayerStateView,
 } from '../engine/index.js';
+
+/**
+ * Re-link a flow-variable value to the authoritative game tree.
+ *
+ * Flow variables (e.g. an `executeForEach` `as` binding) can hold live
+ * GameElement/Player values, and `FlowPosition` serializes `variables`/`frameData`
+ * verbatim. Over the snapshot JSON boundary an element value becomes a detached
+ * `ElementJSON` (`{ className, id, attributes, ... }`); in-process it stays a
+ * reference into the PRE-restore tree. Either way it no longer points at the tree
+ * just loaded by `loadSerializedState`. This re-resolves such values by id against
+ * the loaded `game`:
+ *   - a live `GameElement` -> the same-id element in `game`
+ *   - a serialized element (numeric `id` + matching `className`) -> the live element
+ * Non-element values are walked structurally and returned unchanged. An id that no
+ * longer resolves is left as-is rather than nulled, so a stale reference surfaces
+ * loudly instead of silently becoming null.
+ */
+function relinkFlowValue(value: unknown, game: Game): unknown {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  // Live element (in-process restore): re-resolve by id into the loaded tree.
+  if (value instanceof GameElement) {
+    return game.getElementById(value.id) ?? value;
+  }
+
+  // Serialized element (JSON boundary): a toJSON() payload carries numeric `id`
+  // and string `className`. Only treat it as an element if an element with that
+  // id AND class actually exists in the loaded tree.
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.id === 'number' && typeof obj.className === 'string') {
+    const live = game.getElementById(obj.id);
+    if (live && live.constructor.name === obj.className) {
+      return live;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => relinkFlowValue(item, game));
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(obj)) {
+    result[key] = relinkFlowValue(entry, game);
+  }
+  return result;
+}
+
+/**
+ * Return a copy of `flowState` whose `position.variables`/`position.frameData`
+ * element values are re-linked to the loaded `game` tree (see `relinkFlowValue`).
+ */
+function relinkFlowState(flowState: FlowState, game: Game): FlowState {
+  const position = flowState.position;
+  return {
+    ...flowState,
+    position: {
+      ...position,
+      variables: relinkFlowValue(position.variables, game) as Record<string, unknown>,
+      frameData: position.frameData
+        ? (relinkFlowValue(position.frameData, game) as Record<string, Record<string, unknown>>)
+        : undefined,
+    },
+  };
+}
 
 /**
  * Options for creating a game runner
@@ -313,8 +380,14 @@ export class GameRunner<G extends Game = Game> {
     // Restore the authoritative flow state (re-resolves players against the tree
     // just loaded). This matches what the replay produces for ordinary actions
     // and additionally captures flow progress from completed pending actions.
+    //
+    // Flow variables/frameData are first re-linked to the loaded tree: an
+    // element-valued flow variable (e.g. an executeForEach `as` binding read after
+    // a mid-loop await) serializes to a detached ElementJSON over the snapshot
+    // JSON boundary and would otherwise stay detached from the restored tree.
+    // relinkFlowState re-resolves those by id so they become live refs again.
     if (snapshot.flowState) {
-      runner.game.restoreFlowState(snapshot.flowState);
+      runner.game.restoreFlowState(relinkFlowState(snapshot.flowState, runner.game));
     }
 
     return runner;
