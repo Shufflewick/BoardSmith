@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, mkdirSync, rmSync, watch } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
@@ -7,7 +7,8 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import open from 'open';
 
-import { createLocalServer, type LocalServer, type GameDefinition } from '../local-server.js';
+import type { GameDefinition } from '../../session/index.js';
+import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 
 /**
  * Detect if we're running in the BoardSmith monorepo or a standalone game project.
@@ -32,12 +33,8 @@ interface DevOptions {
   port: string;
   host?: string;
   players: string;
-  workerPort: string;
   ai?: string[];
   aiLevel?: string;
-  lobby?: boolean;
-  persist?: string | boolean;
-  debug?: boolean;
 }
 
 /** Option definition in boardsmith.json array format (id/name is a field, not a key) */
@@ -71,11 +68,6 @@ interface BoardSmithConfig {
 }
 
 /**
- * Convert boardsmith.json array-format options to the object-keyed format
- * that GameDefinition uses. The array format uses { name, type, ... } entries,
- * while the object format uses { [name]: { type, ... } }.
- */
-/**
  * Normalize colorPalette entries to {value, label} format.
  * Accepts plain hex strings, {value, label}, or {hex, label, id} objects.
  */
@@ -84,13 +76,17 @@ function normalizeColorPalette(
 ): Array<{ value: string; label: string }> {
   return palette.map(entry => {
     if (typeof entry === 'string') return { value: entry, label: entry };
-    // Support {value, label}, {hex, label}, {hex, name}, etc.
     const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
     const label = (entry.label ?? entry.name ?? hex) as string | undefined;
     return { value: hex ?? '', label: label ?? '' };
   });
 }
 
+/**
+ * Convert boardsmith.json array-format options to the object-keyed format
+ * that GameDefinition uses. The array format uses { name, type, ... } entries,
+ * while the object format uses { [name]: { type, ... } }.
+ */
 function configOptionsToRecord<T>(options: ConfigOptionDefinition[]): Record<string, T> {
   const result: Record<string, unknown> = {};
   for (const opt of options) {
@@ -102,49 +98,34 @@ function configOptionsToRecord<T>(options: ConfigOptionDefinition[]): Record<str
   return result as Record<string, T>;
 }
 
-async function createGame(workerPort: number, gameType: string, playerCount: number, playerNames: string[]): Promise<string | null> {
-  console.log(chalk.dim(`  Creating game (type: ${gameType}, players: ${playerCount})...`));
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    const response = await fetch(`http://localhost:${workerPort}/games`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        gameType,
-        playerCount,
-        playerNames,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    const data = await response.json() as { success: boolean; gameId?: string; error?: string };
-    if (data.success && data.gameId) {
-      return data.gameId;
-    }
-    if (data.error) {
-      console.error(chalk.red(`  Failed to create game: ${data.error}`));
-    } else {
-      console.error(chalk.red(`  Unexpected response: ${JSON.stringify(data)}`));
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      console.error(chalk.red('  Game creation timed out'));
-    } else {
-      console.error(chalk.red('Failed to create game:'), error);
-    }
-  }
-  return null;
+/** Flatten object-keyed option definitions to the dev host's id-carrying list. */
+function optionRecordToList(record: Record<string, unknown> | undefined): DevOptionDef[] {
+  if (!record) return [];
+  return Object.entries(record).map(([id, def]) => ({ id, ...(def as object) } as DevOptionDef));
 }
 
-// Get the CLI's directory to find the monorepo root
+// Get the CLI's directory to find the monorepo root and the dev-host source.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 // After monorepo collapse, CLI is at dist/cli/, monorepo root is 2 levels up
 const cliMonorepoRoot = resolve(__dirname, '..', '..');
+
+/**
+ * Locate the dev-host source directory. It ships in the package `src/` (the
+ * package `files` array includes `src`), so it is present whether the CLI runs
+ * from source (tsx) or from the bundled `dist/cli.js`.
+ */
+function resolveDevHostDir(): string {
+  const candidates = [
+    resolve(__dirname, '..', 'dev-host'),                 // tsx: src/cli/commands → src/cli/dev-host
+    resolve(__dirname, '..', 'src', 'cli', 'dev-host'),   // bundled: dist → <root>/src/cli/dev-host
+    resolve(__dirname, 'dev-host'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(join(c, 'host-main.ts'))) return c;
+  }
+  return candidates[0];
+}
 
 /**
  * esbuild plugin to resolve @boardsmith/* imports to the monorepo source.
@@ -152,7 +133,6 @@ const cliMonorepoRoot = resolve(__dirname, '..', '..');
  * Returns a no-op plugin for standalone context.
  */
 function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlugin {
-  // In standalone context, don't intercept - let esbuild resolve from node_modules
   if (context === 'standalone') {
     return {
       name: 'boardsmith-resolve-noop',
@@ -165,8 +145,6 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
   return {
     name: 'boardsmith-resolve',
     setup(build) {
-      // Map package names to their directory names in src/
-      // After monorepo collapse, packages are at src/<name>/
       const packageDirs: Record<string, string> = {
         'boardsmith': 'engine',
         'boardsmith/ai': 'ai',
@@ -180,12 +158,10 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
         'boardsmith/worker': 'worker',
       };
 
-      // Handle boardsmith and boardsmith/* imports
       build.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
         const importPath = args.path;
         const dirName = packageDirs[importPath];
         if (dirName) {
-          // Resolve to the src/<dir>/index.ts for bundling
           return { path: join(cliMonorepoRoot, 'src', dirName, 'index.ts') };
         }
         return undefined;
@@ -195,7 +171,9 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
 }
 
 /**
- * Bundle and load the game rules dynamically
+ * Bundle and load the game rules dynamically (Node side) to read the game
+ * metadata used for the dev chrome config. The browser host page imports the
+ * real gameDefinition directly via Vite (see the dev-host virtual module).
  */
 async function loadGameDefinition(
   rulesPath: string,
@@ -205,9 +183,6 @@ async function loadGameDefinition(
   const rulesIndexPath = join(rulesPath, 'index.ts');
   const bundlePath = join(tempDir, 'rules-bundle.mjs');
 
-  // Bundle the rules with esbuild
-  // In monorepo context, use plugin to resolve boardsmith imports to src/
-  // In standalone context, let normal node_modules resolution work
   await build({
     entryPoints: [rulesIndexPath],
     bundle: true,
@@ -218,7 +193,6 @@ async function loadGameDefinition(
     plugins: [boardsmithResolvePlugin(context)],
   });
 
-  // Import the bundled module with cache-busting to ensure fresh load
   const moduleUrl = pathToFileURL(bundlePath).href;
   const module = await import(`${moduleUrl}?t=${Date.now()}`);
 
@@ -239,14 +213,111 @@ const UNSAFE_PORTS = new Set([
   10080,
 ]);
 
+/** Forward-slash an absolute path for use in a Vite module specifier / `/@fs/` URL. */
+function toPosix(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+/** The URL the host iframe loads to render the game UI (GameShell, platform mode). */
+const GAME_IFRAME_PATH = '/__boardsmith/play';
+
+/**
+ * The dev-host Vite plugin: it serves the HOST page in the main window, exposes
+ * the author's gameDefinition + dev config as virtual modules, and lets the game
+ * UI be served (via SPA fallback) at the iframe route. This is what makes
+ * `boardsmith dev` drive the game through the production iframe/postMessage path.
+ */
+function boardsmithDevHostPlugin(args: {
+  devHostDir: string;
+  rulesIndexPath: string;
+  devConfig: DevHostConfig;
+}): VitePlugin {
+  const VIRTUAL_GAME = 'virtual:boardsmith-game';
+  const VIRTUAL_CONFIG = 'virtual:boardsmith-dev-config';
+  const RESOLVED_GAME = '\0' + VIRTUAL_GAME;
+  const RESOLVED_CONFIG = '\0' + VIRTUAL_CONFIG;
+
+  const hostHtmlPath = join(args.devHostDir, 'host.html');
+  const hostMainPath = join(args.devHostDir, 'host-main.ts');
+
+  return {
+    name: 'boardsmith-dev-host',
+    enforce: 'pre',
+    resolveId(source) {
+      if (source === VIRTUAL_GAME) return RESOLVED_GAME;
+      if (source === VIRTUAL_CONFIG) return RESOLVED_CONFIG;
+      return null;
+    },
+    load(id) {
+      if (id === RESOLVED_GAME) {
+        // Re-export the author's compiled rules so the host page runs the SAME
+        // gameDefinition the executor would, with no sandbox (author's own code).
+        return `export { gameDefinition } from ${JSON.stringify(toPosix(args.rulesIndexPath))};`;
+      }
+      if (id === RESOLVED_CONFIG) {
+        return `export const devConfig = ${JSON.stringify(args.devConfig)};`;
+      }
+      return null;
+    },
+    configureServer(server) {
+      // Serve the HOST page for the main window. Added in configureServer so it
+      // runs before Vite's SPA index fallback, which then serves the GAME UI at
+      // the iframe route (GAME_IFRAME_PATH) in platform mode.
+      server.middlewares.use(async (req, res, next) => {
+        const url = (req.url ?? '/').split('?')[0];
+        if (url !== '/' && url !== '/index.html') return next();
+        try {
+          const raw = readFileSync(hostHtmlPath, 'utf-8').replace(
+            '__HOST_MAIN_SRC__',
+            `/@fs/${toPosix(hostMainPath)}`,
+          );
+          const html = await server.transformIndexHtml(req.url ?? '/', raw);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/html');
+          res.end(html);
+        } catch (err) {
+          next(err as Error);
+        }
+      });
+    },
+  };
+}
+
+/** Build the dev-host config the browser consumes from the resolved game definition. */
+function buildDevConfig(args: {
+  gameDefinition: GameDefinition;
+  minPlayers: number;
+  maxPlayers: number;
+  playerCount: number;
+  aiSeats: number[];
+  aiLevel: string;
+  colorPalette: Array<{ value: string; label: string }>;
+}): DevHostConfig {
+  const gd = args.gameDefinition as GameDefinition & {
+    gameOptions?: Record<string, unknown>;
+    playerOptions?: Record<string, unknown>;
+  };
+  return {
+    gameType: gd.gameType,
+    displayName: gd.displayName ?? gd.gameType,
+    minPlayers: args.minPlayers,
+    maxPlayers: args.maxPlayers,
+    playerCount: args.playerCount,
+    aiSeats: args.aiSeats,
+    aiLevel: args.aiLevel,
+    gameOptions: optionRecordToList(gd.gameOptions),
+    playerOptions: optionRecordToList(gd.playerOptions),
+    colorPalette: args.colorPalette,
+    gameUrl: GAME_IFRAME_PATH,
+  };
+}
+
 export async function devCommand(options: DevOptions): Promise<void> {
   const port = parseInt(options.port, 10);
   const playerCount = parseInt(options.players, 10);
-  const workerPort = parseInt(options.workerPort, 10);
   const host = options.host;
   const cwd = process.cwd();
 
-  // Warn about browser-restricted ports
   if (UNSAFE_PORTS.has(port)) {
     console.error(chalk.red(`Error: Port ${port} is blocked by browsers for security reasons.`));
     console.error(chalk.dim('Try a different port like 5173, 3000, 8080, or any port above 1024 that isn\'t restricted.'));
@@ -259,7 +330,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
     : [];
   const aiLevel = options.aiLevel ?? 'medium';
 
-  // Validate AI player positions are 1-indexed
   const invalidAiPlayers = aiPlayers.filter(p => p < 1 || p > playerCount);
   if (invalidAiPlayers.length > 0) {
     console.error(chalk.red(`Error: Invalid AI player position(s): ${invalidAiPlayers.join(', ')}`));
@@ -278,13 +348,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   console.log(chalk.cyan(`\nStarting development server for ${config.displayName || config.name}...`));
 
-  // Detect project context - monorepo or standalone game
   const context = getProjectContext(cwd);
   if (context === 'monorepo') {
     console.log(chalk.dim('  Running in monorepo context (using source resolution)'));
   }
 
-  // Determine paths
   const uiPath = config.paths?.ui ? resolve(cwd, config.paths.ui) : cwd;
   const rulesPath = config.paths?.rules ? resolve(cwd, config.paths.rules) : join(cwd, 'src', 'rules');
 
@@ -293,7 +361,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Check for rules
   const rulesIndexPath = join(rulesPath, 'index.ts');
   if (!existsSync(rulesIndexPath)) {
     console.error(chalk.red(`Error: Rules not found at ${rulesIndexPath}`));
@@ -301,7 +368,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Create temp directory
+  // Temp dir for the Node-side rules metadata bundle.
   const tempDir = join(cwd, '.boardsmith');
   if (!existsSync(tempDir)) {
     mkdirSync(tempDir, { recursive: true });
@@ -309,17 +376,18 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));
 
-  // Load the game definition
+  // Load the game definition (Node side) for the dev chrome config.
   let gameDefinition: GameDefinition;
+  let minPlayers: number;
+  let maxPlayers: number;
+  let colorPalette: Array<{ value: string; label: string }> = [];
   try {
     gameDefinition = await loadGameDefinition(rulesPath, tempDir, context);
 
-    // Apply fallback config from boardsmith.json if needed
-    const minPlayers = gameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
-    const maxPlayers = gameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
+    minPlayers = gameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
+    maxPlayers = gameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
 
     // boardsmith.json is the single source of truth for option definitions.
-    // Convert array format (id as a field) to object format (id as key).
     const gameOptions = config.gameOptions
       ? configOptionsToRecord<import('../../session/types.js').GameOptionDefinition>(config.gameOptions)
       : undefined;
@@ -328,12 +396,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
       ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
       : undefined;
 
-    // colorPalette → inject as a color player option
     if (config.colorPalette) {
-      const colorChoices = normalizeColorPalette(config.colorPalette);
+      colorPalette = normalizeColorPalette(config.colorPalette);
       playerOptions = {
         ...playerOptions,
-        color: { type: 'color' as const, label: 'Color', choices: colorChoices },
+        color: { type: 'color' as const, label: 'Color', choices: colorPalette },
       };
     }
 
@@ -351,39 +418,19 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Start the local game server
-  let server: LocalServer | null = null;
+  const effectivePlayerCount = Math.min(Math.max(playerCount, minPlayers), maxPlayers);
+  const devConfig = buildDevConfig({
+    gameDefinition,
+    minPlayers,
+    maxPlayers,
+    playerCount: effectivePlayerCount,
+    aiSeats: aiPlayers,
+    aiLevel,
+    colorPalette,
+  });
 
-  console.log(chalk.dim(`  Starting game server on port ${workerPort}...`));
-
-  try {
-    if (options.debug) {
-      console.log(chalk.cyan('  Debug mode enabled - verbose logging active'));
-    }
-
-    server = createLocalServer({
-      port: workerPort,
-      host,
-      definitions: [gameDefinition],
-      onReady: (p) => {
-        const displayHost = host === '0.0.0.0' ? 'localhost' : (host || 'localhost');
-        console.log(chalk.green(`  Game server ready on http://${displayHost}:${p}`));
-      },
-      aiConfig: aiPlayers.length > 0 ? { players: aiPlayers, level: aiLevel } : undefined,
-      persist: options.persist,
-      debug: options.debug,
-    });
-
-    // Wait for server to be ready before continuing
-    await server.ready;
-
-    if (aiPlayers.length > 0) {
-      console.log(chalk.cyan(`  AI players enabled: ${aiPlayers.join(', ')} (level: ${aiLevel})`));
-    }
-  } catch (error) {
-    console.error(chalk.red('Failed to start game server:'), error);
-    process.exit(1);
-  }
+  const devHostDir = resolveDevHostDir();
+  const boardsmithRoot = resolve(devHostDir, '..', '..', '..');
 
   // Clear Vite cache to prevent stale file references when switching games
   const viteCacheDir = join(uiPath, 'node_modules', '.vite');
@@ -392,40 +439,22 @@ export async function devCommand(options: DevOptions): Promise<void> {
     try {
       rmSync(viteCacheDir, { recursive: true, force: true });
     } catch {
-      // Intentionally silent: cache cleanup is best-effort.
-      // Dev server works correctly even if stale cache remains.
+      // best-effort; dev works even if stale cache remains
     }
   }
 
-  // Start Vite dev server for UI
-  // Build Vite plugins based on context
   const vitePlugins: VitePlugin[] = [
-    // Always include the API URL injection plugin
-    {
-      name: 'inject-api-url',
-      transformIndexHtml(html) {
-        // Inject API URL as global variable before any scripts run
-        // This works for external packages (unlike Vite's define option)
-        // When binding to 0.0.0.0, use window.location.hostname so it works from any device
-        const apiUrlScript = host === '0.0.0.0'
-          ? `<script>window.__BOARDSMITH_API_URL__ = "http://" + window.location.hostname + ":${workerPort}";</script>`
-          : `<script>window.__BOARDSMITH_API_URL__ = "http://${host || 'localhost'}:${workerPort}";</script>`;
-        return html.replace('<head>', `<head>\n    ${apiUrlScript}`);
-      },
-    },
+    boardsmithDevHostPlugin({ devHostDir, rulesIndexPath, devConfig }),
   ];
 
   // In monorepo context, add plugin to resolve boardsmith imports to src/
-  // In standalone context, let Vite resolve from node_modules naturally
   if (context === 'monorepo') {
     const boardsmithVitePlugin: VitePlugin = {
       name: 'boardsmith-resolve',
-      enforce: 'pre',  // Run before default resolver to intercept boardsmith imports
+      enforce: 'pre',
       resolveId(source: string) {
-        // Handle boardsmith and boardsmith/* imports
         if (!source.startsWith('boardsmith')) return null;
 
-        // Map import paths to src/ directories
         const srcDirs: Record<string, string> = {
           'boardsmith': 'engine',
           'boardsmith/ai': 'ai',
@@ -441,11 +470,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
         const srcDir = srcDirs[source];
         if (srcDir) {
-          // Resolve to the src/<dir>/index.ts
           return join(cliMonorepoRoot, 'src', srcDir, 'index.ts');
         }
 
-        // Handle subpath imports (e.g., boardsmith/ui/GameShell.css)
         if (source.startsWith('boardsmith/')) {
           const parts = source.replace('boardsmith/', '').split('/');
           const pkgName = parts[0];
@@ -454,21 +481,17 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
           if (srcDir && subpath) {
             const srcPath = join(cliMonorepoRoot, 'src', srcDir);
-            // Check for .css files
             if (subpath.endsWith('.css')) {
               return join(srcPath, 'src', subpath);
             }
-            // Check for known subpath patterns
             const subpathFile = join(srcPath, 'src', `${subpath}.ts`);
             if (existsSync(subpathFile)) {
               return subpathFile;
             }
-            // Try as directory with index.ts
             const subpathIndex = join(srcPath, 'src', subpath, 'index.ts');
             if (existsSync(subpathIndex)) {
               return subpathIndex;
             }
-            // Try components subdirectory (for ui package)
             const componentsPath = join(srcPath, 'src', 'components', subpath, 'index.ts');
             if (existsSync(componentsPath)) {
               return componentsPath;
@@ -482,22 +505,27 @@ export async function devCommand(options: DevOptions): Promise<void> {
     vitePlugins.unshift(boardsmithVitePlugin);
   }
 
-  // Configure optimizeDeps based on context
   // Always exclude all boardsmith subpaths - Vite requires exact matches for deep imports
   const optimizeDepsExclude = ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'];
 
   try {
     const vite = await createViteServer({
       root: uiPath,
-      appType: 'spa', // Enable SPA fallback so /game/:id/:position routes serve index.html
+      // SPA fallback serves the GAME UI (index.html → GameShell) at the iframe
+      // route; the dev-host plugin intercepts '/' to serve the HOST page.
+      appType: 'spa',
       server: {
         port,
         host,
-        strictPort: true, // Fail if port unavailable instead of silently using another
+        strictPort: true,
         open: false,
+        fs: {
+          // Allow serving the dev-host source + boardsmith source (via /@fs/) and
+          // the game project (rules/ui) outside the Vite root.
+          allow: [uiPath, cwd, boardsmithRoot],
+        },
       },
       plugins: vitePlugins,
-      // Don't pre-bundle boardsmith packages so changes are picked up immediately during development
       optimizeDeps: {
         exclude: optimizeDepsExclude,
       },
@@ -505,7 +533,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     await vite.listen();
 
-    // Get the actual port Vite is using (in case config file overrode our setting)
     const resolvedUrl = vite.resolvedUrls?.local[0];
     const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;
 
@@ -515,214 +542,28 @@ export async function devCommand(options: DevOptions): Promise<void> {
     }
 
     const displayHost = host === '0.0.0.0' ? 'localhost' : (host || 'localhost');
-    console.log(chalk.green(`  UI server running on http://${displayHost}:${uiPort}`));
+    const hostUrl = `http://${displayHost}:${uiPort}`;
+    console.log(chalk.green(`  Dev host running on ${hostUrl}`));
     if (host === '0.0.0.0') {
       console.log(chalk.dim(`  Network: accessible on all interfaces`));
     }
 
-    if (options.lobby) {
-      // Show any persisted games that can be resumed
-      if (options.persist && server) {
-        const persistedGames = server.listPersistedGames();
-        if (persistedGames.length > 0) {
-          console.log(chalk.cyan(`\n  Found ${persistedGames.length} persisted game(s):`));
-          for (const gameId of persistedGames) {
-            console.log(chalk.dim(`    Resume: http://localhost:${uiPort}/game/${gameId}/0`));
-          }
-        }
-      }
+    console.log(chalk.dim(`  Game runs in an <iframe> via the in-process SnapshotSessionHost (production path).`));
+    console.log(chalk.cyan(`  Players: ${effectivePlayerCount}${aiPlayers.length ? `  AI seats: ${aiPlayers.join(', ')} (${aiLevel})` : ''}`));
 
-      // Open the lobby for manual game configuration
-      console.log(chalk.cyan('\n  Opening game lobby...'));
-      const lobbyUrl = `http://localhost:${uiPort}`;
-      await open(lobbyUrl);
-      console.log(chalk.dim(`  Lobby: ${lobbyUrl}`));
-    } else if (options.persist && server) {
-      // Non-lobby mode with persistence: try to resume the most recent game or create new
-      const persistedGames = server.listPersistedGames();
-      if (persistedGames.length > 0) {
-        const gameId = persistedGames[0]; // Most recently updated game
-        console.log(chalk.cyan(`\n  Resuming persisted game: ${gameId}`));
-
-        // Open browser tabs for players (1-indexed positions)
-        console.log(chalk.cyan(`  Opening ${playerCount} player tab(s)...`));
-        for (let position = 1; position <= playerCount; position++) {
-          const url = `http://localhost:${uiPort}/game/${gameId}/${position}`;
-          await open(url);
-          console.log(chalk.dim(`  Player ${position}: ${url}`));
-        }
-      } else {
-        // No persisted games - create a new one
-        // aiPlayers contains 1-indexed positions from user input
-        const playerNames = Array.from({ length: playerCount }, (_, i) =>
-          aiPlayers.includes(i + 1) ? 'Bot' : `Player ${i + 1}`  // i+1 for 1-indexed
-        );
-        const gameId = await createGame(workerPort, gameDefinition.gameType, playerCount, playerNames);
-
-        if (gameId) {
-          console.log(chalk.cyan(`\n  Game created: ${gameId}`));
-
-          // humanPlayers are 1-indexed positions
-          const humanPlayers = Array.from({ length: playerCount }, (_, i) => i + 1)
-            .filter(position => !aiPlayers.includes(position));
-
-          if (humanPlayers.length > 0) {
-            console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
-            for (const position of humanPlayers) {
-              const url = `http://localhost:${uiPort}/game/${gameId}/${position}`;
-              await open(url);
-              console.log(chalk.dim(`  Player ${position}: ${url}`));
-            }
-          }
-
-          for (const position of aiPlayers) {
-            if (position >= 1 && position <= playerCount) {
-              console.log(chalk.dim(`  Player ${position}: AI (${aiLevel})`));
-            }
-          }
-        } else {
-          console.log(chalk.yellow('\n  Could not auto-create game. Open the UI manually.'));
-          await open(`http://localhost:${uiPort}`);
-        }
-      }
-    } else {
-      // Create a game with appropriate names for AI and human players
-      // aiPlayers contains 1-indexed positions from user input
-      const playerNames = Array.from({ length: playerCount }, (_, i) =>
-        aiPlayers.includes(i + 1) ? 'Bot' : `Player ${i + 1}`  // i+1 for 1-indexed
-      );
-      const gameId = await createGame(workerPort, gameDefinition.gameType, playerCount, playerNames);
-
-      if (gameId) {
-        console.log(chalk.cyan(`\n  Game created: ${gameId}`));
-
-        // Only open browser tabs for human players (1-indexed positions)
-        const humanPlayers = Array.from({ length: playerCount }, (_, i) => i + 1)
-          .filter(position => !aiPlayers.includes(position));
-
-        if (humanPlayers.length > 0) {
-          console.log(chalk.cyan(`  Opening ${humanPlayers.length} player tab(s)...`));
-          for (const position of humanPlayers) {
-            const url = `http://localhost:${uiPort}/game/${gameId}/${position}`;
-            await open(url);
-            console.log(chalk.dim(`  Player ${position}: ${url}`));
-          }
-        }
-
-        // Log AI player info
-        for (const position of aiPlayers) {
-          if (position >= 1 && position <= playerCount) {
-            console.log(chalk.dim(`  Player ${position}: AI (${aiLevel})`));
-          }
-        }
-      } else {
-        console.log(chalk.yellow('\n  Could not auto-create game. Open the UI manually.'));
-        await open(`http://localhost:${uiPort}`);
-      }
-    }
+    await open(hostUrl);
 
     console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
-    // Watch for rules and data changes with hot reload
-    let reloadDebounce: NodeJS.Timeout | null = null;
-    const watchers: ReturnType<typeof watch>[] = [];
-
-    const triggerReload = (source: string, filename: string) => {
-      // Debounce to avoid multiple reloads for rapid changes
-      if (reloadDebounce) clearTimeout(reloadDebounce);
-
-      reloadDebounce = setTimeout(async () => {
-        console.log(chalk.yellow(`\n  ${source} changed: ${filename}`));
-        console.log(chalk.dim('  Reloading game rules...'));
-
-        try {
-          // Reload the game definition
-          const newGameDefinition = await loadGameDefinition(rulesPath, tempDir, context);
-          const minPlayers = newGameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
-          const maxPlayers = newGameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
-
-          // boardsmith.json is the single source of truth for option definitions
-          const reloadGameOptions = config.gameOptions
-            ? configOptionsToRecord<import('../../session/types.js').GameOptionDefinition>(config.gameOptions)
-            : undefined;
-
-          let reloadPlayerOptions = config.playerOptions
-            ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
-            : undefined;
-
-          if (config.colorPalette) {
-            const colorChoices = normalizeColorPalette(config.colorPalette);
-            reloadPlayerOptions = {
-              ...reloadPlayerOptions,
-              color: { type: 'color' as const, label: 'Color', choices: colorChoices },
-            };
-          }
-
-          const updatedDefinition = {
-            ...newGameDefinition,
-            minPlayers,
-            maxPlayers,
-            ...(reloadGameOptions && { gameOptions: reloadGameOptions }),
-            ...(reloadPlayerOptions && { playerOptions: reloadPlayerOptions }),
-          };
-
-          // Update the server with new rules
-          if (server) {
-            server.updateDefinition(updatedDefinition);
-            console.log(chalk.green('  Rules reloaded successfully!'));
-          }
-        } catch (error) {
-          console.error(chalk.red('  Failed to reload rules:'), error);
-        }
-      }, 100);
-    };
-
-    // Watch rules directory for .ts files
-    const rulesWatcher = watch(rulesPath, { recursive: true }, async (eventType, filename) => {
-      if (!filename || !filename.endsWith('.ts')) return;
-      triggerReload('Rules', filename);
-    });
-    watchers.push(rulesWatcher);
-
-    // Watch for JSON data files (check common locations)
-    const dataDirectories = [
-      join(cwd, 'data'),           // <game>/data/
-      join(cwd, 'rules', 'data'),  // <game>/rules/data/
-      join(rulesPath, 'data'),     // <rulesPath>/data/
-    ];
-
-    for (const dataDir of dataDirectories) {
-      if (existsSync(dataDir)) {
-        console.log(chalk.dim(`  Watching data directory: ${dataDir}`));
-        const dataWatcher = watch(dataDir, { recursive: true }, async (eventType, filename) => {
-          if (!filename || !filename.endsWith('.json')) return;
-          triggerReload('Data', filename);
-        });
-        watchers.push(dataWatcher);
-      }
-    }
-
-    // Cleanup on exit
     const cleanup = async () => {
       console.log(chalk.dim('\n  Shutting down...'));
-      for (const w of watchers) {
-        w.close();
-      }
       await vite.close();
-      if (server) {
-        await server.close();
-      }
-      // Clean up temp files (but preserve database if persisting)
       try {
-        // Only delete the rules bundle, not the entire directory (which contains the database)
         const bundlePath = join(tempDir, 'rules-bundle.mjs');
         if (existsSync(bundlePath)) {
           rmSync(bundlePath);
         }
-        // Only delete the directory if it's empty (no database)
-        if (!options.persist) {
-          rmSync(tempDir, { recursive: true, force: true });
-        }
+        rmSync(tempDir, { recursive: true, force: true });
       } catch {
         // Ignore cleanup errors
       }
@@ -734,9 +575,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   } catch (error) {
     console.error(chalk.red('Failed to start Vite dev server:'), error);
-    if (server) {
-      await server.close();
-    }
     process.exit(1);
   }
 }

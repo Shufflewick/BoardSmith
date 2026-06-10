@@ -30,15 +30,11 @@ program
 program
   .command('dev')
   .description('Start local development server')
-  .option('-p, --port <port>', 'UI server port', '5173')
-  .option('--host <host>', 'Host to bind servers to (e.g., 0.0.0.0 for network access)')
-  .option('--players <count>', 'Number of player tabs to open', '2')
-  .option('-w, --worker-port <port>', 'Worker/API server port', '8787')
-  .option('--ai <players...>', 'Player positions to be AI (e.g., --ai 1 or --ai 0 2)')
+  .option('-p, --port <port>', 'Dev host server port', '5173')
+  .option('--host <host>', 'Host to bind the server to (e.g., 0.0.0.0 for network access)')
+  .option('--players <count>', 'Initial number of players', '2')
+  .option('--ai <players...>', 'Player positions to be AI (e.g., --ai 1 or --ai 2 4)')
   .option('--ai-level <level>', 'AI difficulty: easy, medium, hard, expert, or iteration count', 'medium')
-  .option('--lobby', 'Open game lobby instead of auto-creating a game')
-  .option('--persist [path]', 'Persist games to SQLite (default: .boardsmith/games.db)')
-  .option('--debug', 'Enable debug mode for verbose logging of actions, flow, and commands')
   .action(devCommand);
 
 // Testing

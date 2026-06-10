@@ -471,78 +471,16 @@ provide('availableActions', availableActions);
 provide('actionController', actionController);
 provide('timeTravelDiff', timeTravelDiff);
 
-// URL routing - check for game ID or lobby ID in URL on mount
+// Mount: in platform mode the host (ShufflewickPub in prod, the boardsmith dev
+// host locally) manages the session and drives everything via postMessage.
 onMounted(async () => {
-  // In platform mode, skip all lobby/URL routing — the host manages the session
   if (platformMode.value) return;
 
-  const path = window.location.pathname;
-
-  hmrLog('onMounted', {
-    currentScreen: currentScreen.value,
-    lobbyInfo: !!lobbyInfo.value,
-    lobbyConnection: !!lobbyConnection.value,
-    path,
-    createdGameId: createdGameId.value,
-  });
-
-  // Check for game URL: /game/:gameId/:position?
-  const gameMatch = path.match(/^\/game\/([a-z0-9]+)(?:\/(\d))?$/);
-  if (gameMatch) {
-    const urlGameId = gameMatch[1];
-    const urlPosition = gameMatch[2] ? parseInt(gameMatch[2], 10) : 1;
-
-    playerSeat.value = urlPosition;
-    gameId.value = urlGameId;
-    currentScreen.value = 'game';
-    return;
-  }
-
-  // Check for lobby URL: /lobby/:gameId
-  const lobbyMatch = path.match(/^\/lobby\/([a-z0-9]+)$/);
-  if (lobbyMatch) {
-    const urlGameId = lobbyMatch[1];
-    createdGameId.value = urlGameId;
-
-    try {
-      // Fetch lobby info to determine our role
-      const lobby = await client.getLobby(urlGameId);
-
-      if (lobby.state === 'playing') {
-        // Game already started - find our seat and go to game
-        const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
-        if (mySlot) {
-          playerSeat.value = mySlot.seat;
-          gameId.value = urlGameId;
-          currentScreen.value = 'game';
-          updateUrl(urlGameId, mySlot.seat);
-        } else {
-          // Not in this game - go to lobby screen
-          currentScreen.value = 'lobby';
-          clearUrl();
-        }
-        return;
-      }
-
-      // Check if we're the creator
-      isCreator.value = lobby.creatorId === playerId.value;
-
-      // Check if we have a claimed slot
-      const mySlot = lobby.slots.find(s => s.playerId === playerId.value);
-      if (mySlot) {
-        playerSeat.value = mySlot.seat;
-      }
-
-      lobbyInfo.value = lobby;
-      // Fetch playerOptions for the lobby
-      gamePlayerOptions.value = await fetchPlayerOptions(lobby.gameType);
-      currentScreen.value = 'waiting';
-      connectToLobby(urlGameId);
-    } catch (err) {
-      console.error('Failed to load lobby:', err);
-      currentScreen.value = 'lobby';
-      clearUrl();
-    }
+  // A game ONLY runs through the production path: GameShell embedded in an
+  // <iframe> as platform mode. A top-level (non-iframe) load can't run a game,
+  // so send the visitor to the host page rather than the removed dev-server path.
+  if (window.location.pathname !== '/') {
+    window.location.replace('/');
   }
 });
 
