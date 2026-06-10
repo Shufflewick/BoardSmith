@@ -74,7 +74,7 @@ class CollectGame extends Game<CollectGame, Player> {
     // ("done collecting") when the player skips (no item).
     this.registerAction(
       Action.create('collect')
-        .condition((ctx) => ctx.args?.sectorId != null)
+        .condition({ 'has sector arg': (ctx) => ctx.args?.sectorId != null })
         .chooseElement<Equipment>('item', {
           optional: true,
           elementClass: Equipment,

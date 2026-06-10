@@ -141,7 +141,8 @@ describe('buildPlayerState - availableActions scoped to current player', () => {
   it('current player sees available actions', () => {
     const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
     expect(state.isMyTurn).toBe(true);
-    expect(state.availableActions.length).toBeGreaterThan(0);
+    expect(state.availableActions).toBeDefined();
+    expect(state.availableActions!.length).toBeGreaterThan(0);
   });
 
   it('non-current player sees empty available actions', () => {
