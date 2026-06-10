@@ -15,12 +15,10 @@ export interface GameStateSnapshot {
   /** Game class name for reconstruction */
   gameType: string;
 
-  /** Full element tree state (players are now children in the tree) */
-  state: {
-    phase: string;
-    messages: Array<{ text: string; data?: Record<string, unknown> }>;
-    settings: Record<string, unknown>;
-  };
+  /** Full element tree state (players are now children in the tree).
+   *  This is the exact `game.toJSON()` payload — the same shape consumed by
+   *  `loadSerializedState`, so restore is typed end-to-end with no casts. */
+  state: ReturnType<Game['toJSON']>;
 
   /** Flow engine state (if flow is active) */
   flowState?: FlowState;
@@ -33,6 +31,12 @@ export interface GameStateSnapshot {
 
   /** Random seed for deterministic replay */
   seed?: string;
+
+  /** Element sequence counter (`game._ctx.sequence`) captured at snapshot time.
+   *  Restored after the tree is loaded so new-element ids stay aligned between
+   *  dev and the executor (mirrors `restoreDevState`). Without this, ids drift
+   *  on the next created element and can trip the deletion-detector warning. */
+  sequence?: number;
 
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
@@ -87,11 +91,12 @@ export function createSnapshot(
   return {
     version: 1,
     gameType,
-    state: game.toJSON() as GameStateSnapshot['state'],
+    state: game.toJSON(),
     flowState: flowState ?? undefined,
     commandHistory: [...game.commandHistory],
     actionHistory: [...actionHistory],
     seed,
+    sequence: game._ctx.sequence,
     gameOptions: game.getConstructorOptions(),
   };
 }

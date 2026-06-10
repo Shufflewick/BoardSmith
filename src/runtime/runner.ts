@@ -273,6 +273,17 @@ export class GameRunner<G extends Game = Game> {
     // which re-advances the seeded RNG (dice/shuffle draw directly from
     // game.random() at execute time) and reconstructs flow position. This is the
     // mechanism that keeps randomness deterministic across a snapshot round-trip.
+    //
+    // KNOWN LIMITATION (RNG residual): only RNG draws made during this
+    // actionHistory replay are recovered. RNG advances that happened inside a
+    // pending/selection-step `onSelect`/`execute` are NOT in actionHistory, so
+    // they are not re-applied — the tree they produced is still restored
+    // authoritatively below via loadSerializedState, but the RNG *position* is
+    // only as advanced as the replay leaves it. A game that calls game.random()
+    // inside a pending/selection execute would therefore repeat those draws after
+    // a restore. MERC's collect path draws no RNG, so it is unaffected. Close this
+    // by serializing/restoring the RNG generator state (getState/setState) if/when
+    // a game needs RNG inside a pending execute; that refactor is out of scope here.
     runner.start();
     for (const action of snapshot.actionHistory) {
       const { actionName, player, args } = deserializeAction(action, runner.game);
@@ -287,9 +298,17 @@ export class GameRunner<G extends Game = Game> {
     // game.toJSON() captured after those mutations, so loading it makes the
     // restored tree authoritative while the replay above leaves the RNG correctly
     // positioned for subsequent ops.
-    runner.game.loadSerializedState(
-      snapshot.state as unknown as ReturnType<Game['toJSON']>
-    );
+    runner.game.loadSerializedState(snapshot.state);
+
+    // Restore the element sequence counter to its authoritative snapshot value.
+    // Both the action replay above and the fromJSON tree rebuild in
+    // loadSerializedState advance _ctx.sequence, so without this reset the next
+    // element created after restore would get an id that drifts from what dev
+    // assigns (a parity bug) and can trip the deletion-detector console.warn.
+    // Mirrors restoreDevState.
+    if (snapshot.sequence !== undefined) {
+      runner.game._ctx.sequence = snapshot.sequence;
+    }
 
     // Restore the authoritative flow state (re-resolves players against the tree
     // just loaded). This matches what the replay produces for ordinary actions
