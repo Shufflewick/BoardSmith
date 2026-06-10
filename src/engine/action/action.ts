@@ -1502,6 +1502,19 @@ export class ActionExecutor {
       return { success: !result.error, error: result.error };
     }
 
+    // Skipping an optional selection: a null/undefined value means "no choice".
+    // Mirror the bulk validateAction path (which treats null/undefined on an
+    // optional selection as a valid skip) instead of running validateSelection,
+    // which would reject null as an invalid element. The arg is intentionally
+    // omitted from collectedArgs so the action's execute sees it as absent.
+    if (value === null || value === undefined) {
+      if (!selection.optional) {
+        return { success: false, error: `Missing required selection: ${selectionName}` };
+      }
+      pendingState.currentSelectionIndex++;
+      return { success: true };
+    }
+
     // Resolve raw values (e.g. element IDs → GameElement objects) before validation.
     // Clients send element IDs over the wire; validation compares against GameElement objects.
     const resolvedValue = this.resolveSelectionValue(selection, value, player);

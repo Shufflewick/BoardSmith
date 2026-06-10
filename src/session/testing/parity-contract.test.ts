@@ -68,7 +68,7 @@ describe('collect-equipment parity contract', () => {
 
   // KNOWN BUG (reproduced): fixed in Phase 5 of
   // docs/superpowers/plans/2026-06-09-dev-prod-parity-harness.md; flip it.fails -> it when green.
-  it.fails('B. skipping the optional selection (null) completes the action ("Done collecting")', async () => {
+  it('B. skipping the optional selection (null) completes the action ("Done collecting")', async () => {
     const session = newSession();
     await session.start();
 
