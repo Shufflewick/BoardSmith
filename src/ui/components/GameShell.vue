@@ -24,6 +24,7 @@ import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
 import type { ActionMetadata } from '../composables/useActionControllerTypes';
 import turnNotificationSound from '../assets/turn-notification.mp3';
+import { assertCloneable } from './platformRequestClone.js';
 
 // Generate or retrieve persistent player ID
 // Session-specific IDs (for same-browser scenarios) are stored in sessionStorage
@@ -226,6 +227,7 @@ let platformRequestSeq = 0;
 const pendingPlatformRequests = new Map<string, (r: Record<string, unknown>) => void>();
 
 function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  assertCloneable(op, payload);
   return new Promise((resolve) => {
     const requestId = `req-${platformRequestSeq++}`;
     const timer = setTimeout(() => {
