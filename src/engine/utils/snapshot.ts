@@ -38,6 +38,14 @@ export interface GameStateSnapshot {
    *  on the next created element and can trip the deletion-detector warning. */
   sequence?: number;
 
+  /** Seeded RNG internal state (`game.getRandomState()`) captured at snapshot
+   *  time. Restored via `game.setRandomState()` so the next `game.random()` draw
+   *  matches the live game exactly. This is what makes `fromSnapshot` fully
+   *  state-authoritative: the RNG position is restored directly instead of being
+   *  re-derived by replaying actions. Optional for back-compat with older
+   *  snapshots that predate RNG-state capture. */
+  randomState?: number;
+
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
 }
@@ -97,6 +105,7 @@ export function createSnapshot(
     actionHistory: [...actionHistory],
     seed,
     sequence: game._ctx.sequence,
+    randomState: game.getRandomState(),
     gameOptions: game.getConstructorOptions(),
   };
 }

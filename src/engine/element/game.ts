@@ -176,22 +176,45 @@ export type PlayerViewFunction<G extends Game = Game> = (
 ) => ElementJSON;
 
 /**
- * Seeded random number generator
+ * A seeded random function whose entire internal state is exposed so it can be
+ * serialized and restored exactly. The mulberry32 generator's state is a single
+ * 32-bit integer (`h`); `getState`/`setState` read and write it so a snapshot can
+ * round-trip the RNG position without replaying the actions that advanced it.
  */
-function createSeededRandom(seed: string): () => number {
+export interface SeededRandom {
+  (): number;
+  /** Read the generator's current internal state (the mulberry32 `h`). */
+  getState(): number;
+  /** Restore the generator's internal state to a previously captured value. */
+  setState(state: number): void;
+}
+
+/**
+ * Seeded random number generator (mulberry32). The returned function exposes its
+ * single-integer state via `getState`/`setState` so it can be captured in a
+ * snapshot and restored authoritatively (no action replay needed).
+ */
+function createSeededRandom(seed: string): SeededRandom {
   // Simple mulberry32 PRNG
   let h = 0;
   for (let i = 0; i < seed.length; i++) {
     h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
   }
 
-  return function () {
+  const random = function () {
     h |= 0;
     h = h + 0x6D2B79F5 | 0;
     let t = Math.imul(h ^ h >>> 15, 1 | h);
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  } as SeededRandom;
+
+  random.getState = () => h;
+  random.setState = (state: number) => {
+    h = state | 0;
   };
+
+  return random;
 }
 
 /**
@@ -292,7 +315,7 @@ export class Game<
   phase: GamePhase = 'setup';
 
   /** Seeded random number generator */
-  random: () => number;
+  random: SeededRandom;
 
   /** Message log */
   messages: Array<{ text: string; data?: Record<string, unknown> }> = [];
@@ -1599,6 +1622,24 @@ export class Game<
         `Valid path prefix: [${result.validPath.join(', ')}]`
       );
     }
+  }
+
+  /**
+   * Read the seeded RNG's internal state so it can be captured in a snapshot.
+   * The state is the mulberry32 generator's single integer; restoring it makes
+   * the next `game.random()` draw identical to the live game's (see setRandomState).
+   */
+  getRandomState(): number {
+    return this.random.getState();
+  }
+
+  /**
+   * Restore the seeded RNG's internal state from a snapshot value. After this the
+   * next `game.random()` draw matches where the live game left off, so a
+   * state-authoritative restore needs no action replay to re-advance the RNG.
+   */
+  setRandomState(state: number): void {
+    this.random.setState(state);
   }
 
   /**
