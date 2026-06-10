@@ -762,6 +762,19 @@ export class FlowEngine<G extends Game = Game> {
       }
     }
 
+    // Sequence: reconstruct the child that is currently IN PROGRESS on the stack.
+    // executeSequence pushes child `k` and THEN does `frame.index++`, so a live
+    // sequence frame's index always points ONE PAST the in-progress child (k+1).
+    // Navigating back to that child therefore requires `index - 1` for EVERY
+    // position, not only the last one. The previous `=== childCount` special case
+    // only corrected the final child; a non-last awaiting child (e.g. a landing
+    // phase that is step 0 of a multi-step root sequence) mis-navigated to the
+    // NEXT sibling, corrupting the restored flow position. Clamp at 0 so a leaf
+    // (childCount 0, index 0 — navIndex is unused there) stays in range.
+    if (node.type === 'sequence') {
+      return Math.max(0, frameIndex - 1);
+    }
+
     const childCount = this.getChildCount(node);
     return frameIndex === childCount ? frameIndex - 1 : frameIndex;
   }
