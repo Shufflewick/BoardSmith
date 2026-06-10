@@ -100,11 +100,6 @@ const props = withDefaults(defineProps<GameShellProps>(), {
 // The boardsmith dev server always serves in the main window, never in an iframe.
 const platformMode = ref(typeof window !== 'undefined' && window.parent !== window);
 
-// TEMP EQUIP-BUG INSTRUMENTATION (build marker b1): confirms the instrumented
-// bundle is the one actually loaded on test (rules out a stale vendored build).
-// eslint-disable-next-line no-console
-console.log('[EQUIP-DBG b1] GameShell loaded; platformMode=' + platformMode.value);
-
 // Screen state — start on 'game' in platform mode (skip lobby)
 type Screen = 'lobby' | 'waiting' | 'game';
 const currentScreen = ref<Screen>(platformMode.value ? 'game' : 'lobby');
@@ -233,12 +228,6 @@ const pendingPlatformRequests = new Map<string, (r: Record<string, unknown>) => 
 function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     const requestId = `req-${platformRequestSeq++}`;
-    // TEMP EQUIP-BUG INSTRUMENTATION (build marker b1): the single chokepoint
-    // through which EVERY server op leaves the iframe. This is the definitive
-    // signal for "what op does an equipment click actually send" (action vs
-    // selection_step). Remove after the bug is confirmed fixed.
-    // eslint-disable-next-line no-console
-    console.log('[EQUIP-DBG b1] platformRequest -> op=' + op, JSON.stringify(payload));
     const timer = setTimeout(() => {
       if (pendingPlatformRequests.delete(requestId)) {
         resolve({ success: false, error: `Timed out on '${op}'` });
@@ -246,8 +235,6 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
     }, 20000);
     pendingPlatformRequests.set(requestId, (result) => {
       clearTimeout(timer);
-      // eslint-disable-next-line no-console
-      console.log('[EQUIP-DBG b1] platformRequest <- op=' + op, JSON.stringify(result));
       resolve(result);
     });
     window.parent.postMessage({

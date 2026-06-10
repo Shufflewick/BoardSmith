@@ -517,13 +517,6 @@ watch(() => props.availableActions, (actions, oldActions) => {
     // dropping the followUp from availableActions, before the action response),
     // so it slipped past dev. Never clear while the action is server-pending.
     const serverPending = actionController.pendingOnServer?.value ?? false;
-    // eslint-disable-next-line no-console
-    console.log('[EQUIP-DBG b1] ActionPanel availableActions-watch shouldClear', {
-      currentAction: currentAction.value,
-      availableActions: [...actions],
-      serverPending,
-      willCancel: !serverPending,
-    });
     if (!serverPending) {
       actionController.cancel();
       multiSelectState.value = null;

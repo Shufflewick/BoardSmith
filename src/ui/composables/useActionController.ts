@@ -151,22 +151,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     onBeforeAutoExecute: initialBeforeAutoExecute,
   } = options;
 
-  // === TEMP EQUIP-BUG INSTRUMENTATION (build marker b1) ===
-  // Proves the exact routing of an equipment pick on the iframe/platform path.
-  // The build marker lets us confirm THIS instrumented controller is what's
-  // actually running in the deployed bundle (rules out a stale vendored copy).
-  // Remove only after the explore->take-equipment bug is confirmed fixed.
-  const EQUIP_DBG = '[EQUIP-DBG b1]';
-  function edbg(label: string, data?: unknown): void {
-    try {
-      // eslint-disable-next-line no-console
-      console.log(EQUIP_DBG, label, data === undefined ? '' : JSON.parse(JSON.stringify(data)));
-    } catch {
-      // eslint-disable-next-line no-console
-      console.log(EQUIP_DBG, label, data);
-    }
-  }
-
   // Registered hooks (can be added after creation via registerBeforeAutoExecute)
   // Stored as ref to allow dynamic registration
   const beforeAutoExecuteHook = ref<((actionName: string, args: Record<string, unknown>) => void | Promise<void>) | undefined>(
@@ -725,16 +709,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When all selections are filled, auto-execute
   // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
-    if (ready && currentAction.value) {
-      edbg('autoExec:watch', {
-        ready,
-        currentAction: currentAction.value,
-        autoExecute: getAutoExecute(),
-        isExecuting: isExecuting.value,
-        pendingOnServer: pendingOnServer.value,
-        willExecuteViaActionOp: ready && getAutoExecute() && !isExecuting.value && !pendingOnServer.value,
-      });
-    }
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value) {
       // Call hook before executing - allows capturing element positions for animations
       if (beforeAutoExecuteHook.value) {
@@ -780,13 +754,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const actionName = currentAction.value;
     const args = buildServerArgs();
-
-    edbg('executeCurrentAction:ACTION-OP', {
-      actionName,
-      args,
-      pendingOnServer: pendingOnServer.value,
-      note: 'submitting via the ACTION op (NOT selection_step) — followUp actions get rejected here',
-    });
 
     isExecuting.value = true;
     lastError.value = null;
@@ -1001,14 +968,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       });
     }
 
-    edbg('startFollowUp', {
-      actionName,
-      initialArgs,
-      pendingOnServerNowTrue: pendingOnServer.value,
-      hasProvidedMetadata: !!providedMetadata,
-      selections: meta?.selections?.map(s => ({ name: s.name, optional: s.optional, type: s.type, hasOnSelect: s.hasOnSelect })),
-    });
-
     // If we have metadata with selections, fetch choices for the first unfilled selection
     if (meta && meta.selections.length > 0) {
       let selectionToFetch: PickMetadata | undefined;
@@ -1112,20 +1071,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
       value = (rawValue as { value: unknown }).value;
     }
-
-    edbg('fill:enter', {
-      selectionName,
-      value,
-      currentAction: currentAction.value,
-      pendingOnServer: pendingOnServer.value,
-      hasOnSelect: selection.hasOnSelect,
-      isRepeat: !!selection.repeat,
-      willRoute: selection.repeat
-        ? 'repeat'
-        : (selection.hasOnSelect || pendingOnServer.value)
-          ? 'handleOnSelectFill->selection_step'
-          : 'normal-fill (may auto-execute via ACTION op)',
-    });
 
     // Handle repeating selections
     if (selection.repeat) {
@@ -1290,14 +1235,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   async function handleOnSelectFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
     const stepFn = options.pickStep;
-    edbg('handleOnSelectFill:enter', {
-      selection: selection.name,
-      value,
-      currentAction: currentAction.value,
-      hasPickStep: !!stepFn,
-    });
     if (!stepFn || !currentAction.value) {
-      edbg('handleOnSelectFill:ABORT (no pickStep or no currentAction)', { hasPickStep: !!stepFn, currentAction: currentAction.value });
       return { valid: false, error: 'pickStep function not provided for onSelect routing' };
     }
 
@@ -1314,14 +1252,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         currentAction.value,
         initialArgs
       );
-      edbg('handleOnSelectFill:result', {
-        selection: selection.name,
-        success: result.success,
-        actionComplete: result.actionComplete,
-        hasFollowUp: !!result.followUp,
-        error: result.error,
-      });
-
       if (!result.success) {
         const error = result.error || 'Selection step failed';
         lastError.value = error;
@@ -1404,8 +1334,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (!selection?.optional) return;
-
-    edbg('skip', { selectionName, pendingOnServer: pendingOnServer.value, currentAction: currentAction.value });
 
     // When the action is server-pending (e.g. a followUp), the auto-execute watch
     // is disabled, so skipping must actively submit the step with a null value so
