@@ -11,7 +11,15 @@ import {
   actionStep,
   type FlowContext,
 } from '../engine/index.js';
+import type { GameStateSnapshot } from '../engine/index.js';
 import { GameRunner } from './runner.js';
+import { createHeadlessSession } from '../session/testing/headless-harness.js';
+import {
+  collectFixtureDefinition,
+  CollectGame,
+  Equipment,
+} from '../session/testing/fixtures/collect-fixture.js';
+import type { Op } from '../session/stateless-ops.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {
@@ -222,6 +230,103 @@ describe('GameRunner', () => {
       // snapshot round-trip.
       expect(restored.game.hands[0].all(Card).some(c => c.id === cardId)).toBe(true);
       expect(restored.game.deck.all(Card).some(c => c.id === cardId)).toBe(false);
+    });
+  });
+
+  describe('fromSnapshot is state-authoritative (no replay)', () => {
+    it('restores the seeded RNG so the next random() draw matches the live game', () => {
+      const runner = new GameRunner({
+        GameClass: TestGame,
+        gameType: 'test-game',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'rng-test' },
+      });
+      runner.start();
+
+      // Advance the RNG past its initial state with a few draws.
+      for (let i = 0; i < 5; i++) runner.game.random();
+
+      const snapshot = runner.getSnapshot();
+      expect(snapshot.randomState).toBe(runner.game.getRandomState());
+
+      const restored = GameRunner.fromSnapshot(snapshot, TestGame);
+
+      // The restored generator must be at the SAME position as the live one: the
+      // next draw matches, and they stay in lock-step for subsequent draws. This
+      // proves the RNG position is restored directly, not re-derived by replay.
+      expect(restored.game.random()).toBe(runner.game.random());
+      expect(restored.game.random()).toBe(runner.game.random());
+    });
+
+    it('keeps the authoritative flow position instead of re-deriving it from actionHistory', () => {
+      const runner = new GameRunner({
+        GameClass: TestGame,
+        gameType: 'test-game',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'auth-test' },
+      });
+      runner.start();
+      // Advance the flow to player 2's turn.
+      runner.performAction('draw', 1, {});
+      expect(runner.game.getFlowState()?.currentPlayer).toBe(2);
+
+      const snapshot = runner.getSnapshot();
+
+      // Inject an extra action that would be INVALID to replay from the restored
+      // position (player 1 is no longer awaiting). The old replay-based restore
+      // re-ran the whole actionHistory and could mis-position or throw — the exact
+      // MERC "Player N is not awaiting action" crash class. The authoritative
+      // restore must IGNORE the history for positioning and land on player 2.
+      snapshot.actionHistory.push({ ...snapshot.actionHistory[0] });
+
+      const restored = GameRunner.fromSnapshot(snapshot, TestGame);
+      const fs = restored.game.getFlowState();
+      expect(fs?.currentPlayer).toBe(2);
+      expect(fs?.awaitingInput).toBe(true);
+      // actionHistory is still preserved for the undo op, just not replayed.
+      expect(restored.actionHistory).toHaveLength(2);
+    });
+
+    it('restores a pending-action-gated flow (selection-step mutations) without throwing', async () => {
+      // Drive the MERC-shaped collect flow through the real stateless path to a
+      // mid-collect snapshot: explore -> collect one item via a selection step.
+      // The item move happens inside a pending execute (recorded in NEITHER
+      // command nor action history). Restoring that snapshot directly via
+      // fromSnapshot must NOT throw and must preserve the mutation + flow.
+      const session = createHeadlessSession(collectFixtureDefinition, { playerCount: 1, seed: 't' });
+      await session.start();
+
+      const explore = await session.send(1, {
+        type: 'action', actionName: 'explore', player: 1, args: {},
+      });
+      const followUpArgs = (explore.followUp as { args: Record<string, unknown> }).args;
+
+      const before = await session.send(1, {
+        type: 'resolveChoices', actionName: 'collect', player: 1, selectionName: 'item', args: {},
+      } as Op);
+      const itemsBefore = (before.validElements as Array<{ id: number }>) ?? [];
+      const firstId = itemsBefore[0].id;
+
+      const step = await session.send(1, {
+        type: 'selectionStep',
+        player: 1,
+        selectionName: 'item',
+        value: firstId,
+        actionName: 'collect',
+        initialArgs: followUpArgs,
+      } as Op);
+      expect(step.success).toBe(true);
+
+      const snapshot = step.snapshot as GameStateSnapshot;
+
+      // Direct authoritative restore — this is the operation that previously
+      // crashed when it replayed an incomplete actionHistory.
+      const restored = GameRunner.fromSnapshot(snapshot, CollectGame);
+
+      // No throw, flow is intact, and the collected item moved out of the stash.
+      expect(restored.game.getFlowState()).toBeDefined();
+      const stashCount = restored.game.sector.stash.all(Equipment).length;
+      const heldCount = restored.game.held.all(Equipment).length;
+      expect(stashCount).toBe(itemsBefore.length - 1);
+      expect(heldCount).toBe(1);
     });
   });
 
