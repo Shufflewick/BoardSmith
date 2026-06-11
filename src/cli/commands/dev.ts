@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
@@ -8,8 +8,17 @@ import { WebSocketServer, WebSocket } from 'ws';
 import chalk from 'chalk';
 import open from 'open';
 
-import { executeOp, type GameDefinition } from '../../session/index.js';
+import type { GameDefinition, Op, OpResult } from '../../session/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
+
+/** executeOp bundled from the SAME module graph as the rules (one engine). */
+type RuntimeExecuteOp = (
+  def: { gameClass: new (...args: unknown[]) => unknown; gameType: string; minPlayers: number; maxPlayers: number },
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: unknown,
+  pendingState: Record<string, unknown> | null,
+  op: Op,
+) => Promise<OpResult>;
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 
 /**
@@ -173,20 +182,32 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
 }
 
 /**
- * Bundle and load the game rules dynamically (Node side) to read the game
- * metadata used for the dev chrome config. The browser host page imports the
- * real gameDefinition directly via Vite (see the dev-host virtual module).
+ * Bundle and load the game runtime (Node side): the author's `gameDefinition`
+ * AND `executeOp`, from ONE esbuild bundle so they share a single engine
+ * instance. This matters because the Node multiplayer host runs the game with
+ * `executeOp(gameDefinition.gameClass, …)`; if `executeOp` came from the CLI's
+ * own bundle instead, it would be a different engine module than the rules'
+ * base classes and cross-instance identity (instanceof, registries) would break
+ * — the same reason production externalizes a single boardsmith for the executor.
  */
-async function loadGameDefinition(
+async function loadGameRuntime(
   rulesPath: string,
   tempDir: string,
-  context: 'monorepo' | 'standalone'
-): Promise<GameDefinition> {
+  context: 'monorepo' | 'standalone',
+): Promise<{ gameDefinition: GameDefinition; executeOp: RuntimeExecuteOp }> {
   const rulesIndexPath = join(rulesPath, 'index.ts');
-  const bundlePath = join(tempDir, 'rules-bundle.mjs');
+  const entryPath = join(tempDir, 'runtime-entry.ts');
+  writeFileSync(
+    entryPath,
+    [
+      `export { gameDefinition } from ${JSON.stringify(toPosix(rulesIndexPath))};`,
+      `export { executeOp } from 'boardsmith/session';`,
+    ].join('\n'),
+  );
+  const bundlePath = join(tempDir, 'runtime-bundle.mjs');
 
   await build({
-    entryPoints: [rulesIndexPath],
+    entryPoints: [entryPath],
     bundle: true,
     format: 'esm',
     platform: 'node',
@@ -201,8 +222,11 @@ async function loadGameDefinition(
   if (!module.gameDefinition) {
     throw new Error('Rules module must export a gameDefinition');
   }
+  if (typeof module.executeOp !== 'function') {
+    throw new Error("Could not load executeOp from 'boardsmith/session'.");
+  }
 
-  return module.gameDefinition;
+  return { gameDefinition: module.gameDefinition, executeOp: module.executeOp as RuntimeExecuteOp };
 }
 
 // Ports blocked by browsers for security (Chrome's restricted port list)
@@ -379,13 +403,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));
 
-  // Load the game definition (Node side) for the dev chrome config.
+  // Load the game runtime (Node side): gameDefinition + executeOp, one engine.
   let gameDefinition: GameDefinition;
+  let runExecuteOp: RuntimeExecuteOp;
   let minPlayers: number;
   let maxPlayers: number;
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
-    gameDefinition = await loadGameDefinition(rulesPath, tempDir, context);
+    const runtime = await loadGameRuntime(rulesPath, tempDir, context);
+    gameDefinition = runtime.gameDefinition;
+    runExecuteOp = runtime.executeOp;
 
     minPlayers = gameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
     maxPlayers = gameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
@@ -556,7 +583,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       colorPalette,
       baseGameOptions,
       executeOp: (gameOptions, snapshot, pendingState, op) =>
-        executeOp(gameDef, gameOptions, snapshot, pendingState, op),
+        runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op),
       send: (clientId, message) => {
         const sock = clients.get(clientId);
         if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(message));
@@ -623,10 +650,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
       clients.clear();
       await vite.close();
       try {
-        const bundlePath = join(tempDir, 'rules-bundle.mjs');
-        if (existsSync(bundlePath)) {
-          rmSync(bundlePath);
-        }
         rmSync(tempDir, { recursive: true, force: true });
       } catch {
         // Ignore cleanup errors
