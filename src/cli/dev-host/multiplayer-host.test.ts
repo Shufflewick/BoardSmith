@@ -25,12 +25,13 @@ const def: GameDefinitionLike = {
   maxPlayers: 4,
 };
 
-function makeHost() {
+function makeHost(opts: { designatedAiSeats?: number[] } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 1,
     makeSeed: () => 'mp',
+    designatedAiSeats: opts.designatedAiSeats,
     executeOp: (gameOptions, snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
     send: (clientId, msg) => sent.push({ clientId, msg }),
   });
@@ -48,6 +49,13 @@ describe('MultiplayerHost (always-live)', () => {
     expect(has('A', 'init')).toBe(true);
     expect(has('A', 'game_state')).toBe(true);
     expect((to('A').find((m) => m.type === 'init') as any).seat).toBe(1);
+  });
+
+  it('the auto-seated dev avoids an --ai-designated seat', async () => {
+    const { host, to } = makeHost({ designatedAiSeats: [1] }); // --ai 1
+    await host.handleMessage('A', { type: 'hello' });
+    // Seat 1 is reserved for the bot, so the dev lands in seat 2.
+    expect((to('A').find((m) => m.type === 'init') as any).seat).toBe(2);
   });
 
   it('a second client lands in the seat-picker, not auto-seated', async () => {

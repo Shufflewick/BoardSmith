@@ -580,6 +580,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       playerCount: effectivePlayerCount,
       minPlayers,
       aiLevel,
+      designatedAiSeats: aiPlayers,
       colorPalette,
       baseGameOptions,
       executeOp: (gameOptions, snapshot, pendingState, op) =>

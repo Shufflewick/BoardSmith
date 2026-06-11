@@ -56,6 +56,11 @@ export interface MultiplayerHostOptions {
   minPlayers: number;
   /** Default AI level for unclaimed (bot) seats when the game starts. */
   aiLevel?: string;
+  /**
+   * Seats (1-indexed) the `--ai` flag designates as AI. The auto-seated dev
+   * avoids these, so they stay open and play as AI; any open seat is AI anyway.
+   */
+  designatedAiSeats?: number[];
   /** Seat colors offered in the lobby (1-indexed by position). */
   colorPalette?: Array<{ value: string; label: string }>;
   /** Game-level options merged into the `start` op (the author's gameOptions). */
@@ -118,9 +123,12 @@ export class MultiplayerHost {
     }
 
     // First arrival → auto-seat + start so the dev is immediately in the game.
+    // Prefer an open seat NOT designated AI by `--ai` (so `--ai 1` puts the dev
+    // in seat 2 and leaves seat 1 to the bot); fall back to any open seat.
     if (this.phase === 'lobby' && !this.starting) {
-      const open = [...this.seats.values()].find((s) => !s.clientId);
-      if (open) this.assignSeat(clientId, open.seat);
+      const open = [...this.seats.values()].filter((s) => !s.clientId);
+      const pick = open.find((s) => !this.opts.designatedAiSeats?.includes(s.seat)) ?? open[0];
+      if (pick) this.assignSeat(clientId, pick.seat);
       await this.startGame();
       return;
     }
@@ -300,6 +308,11 @@ export class MultiplayerHost {
     this.session = session;
     this.phase = 'playing';
     this.starting = false;
+
+    // The opening seat may belong to a bot (e.g. an AI dictator that acts first);
+    // drive any AI turns before handing control to the humans, then send state.
+    await session.host.runAITurns();
+
     this.broadcastLobby();
     for (const seat of humanSeats) {
       const clientId = this.seats.get(seat)?.clientId;
