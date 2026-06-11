@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, sequence, actionStep, execute, loop, eachPlayer, createSnapshot, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, defineFlow, sequence, actionStep, execute, loop, eachPlayer, createSnapshot, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 
 // ============================================================================
@@ -105,7 +105,7 @@ describe('MCTSBot restoreGame with execute block', () => {
     expect(restoredGame.isFinished()).toBe(true);
   });
 
-  it('playSingle throws actionable error when clone diverges', async () => {
+  it('playSingle searches authoritatively even when trailing history is stale', async () => {
     // Play a complete game to get the full action history
     const finishedGame = createExecuteFinishGame();
     const history: any[] = [];
@@ -120,11 +120,16 @@ describe('MCTSBot restoreGame with execute block', () => {
 
     expect(finishedGame.isFinished()).toBe(true);
 
-    // Create a "live" game that's still in progress (only 1 action played).
-    // Pass the FULL history to the bot. When playSingle calls captureSnapshot(),
-    // it captures the live game's state + full action history. During restoreGame(),
-    // the replay will process all actions through the flow engine, eventually
-    // hitting the execute block that calls finish().
+    // Create a "live" game that's still in progress (only 1 action played) and
+    // pass it the FULL (finished-game) history. captureSnapshot() captures the
+    // LIVE in-progress state plus that stale trailing history.
+    //
+    // Under authoritative restore, restoreGame() adopts snapshot.state +
+    // snapshot.flowState directly and IGNORES the action history — so the clone
+    // is the live in-progress game, never the finished one. There is no replay
+    // and therefore nothing to "diverge": the bot simply searches and returns a
+    // legal move. (The old replay-based restore re-ran the stale history, hit
+    // the game-ending execute block mid-replay, and threw "flow diverged".)
     const liveGame = createExecuteFinishGame();
     liveGame.continueFlow('play', { option: 'a' }, liveGame.getFlowState()!.currentPlayer!);
     expect(liveGame.getFlowState()!.awaitingInput).toBe(true);
@@ -134,11 +139,71 @@ describe('MCTSBot restoreGame with execute block', () => {
       ExecuteFinishGame,
       'execute-finish',
       2,
-      history, // Full history including actions that trigger finish
+      history, // Stale trailing history — authoritatively ignored on restore
       { iterations: 1, playoutDepth: 1, async: false }
     );
 
-    // The bot should throw because the cloned game diverges (flow completes during replay)
-    await expect(bot.play()).rejects.toThrow('flow diverged during replay');
+    const move = await bot.play();
+    expect(move.action).toBe('play');
+    expect(['a', 'b', 'c']).toContain(move.args.option);
+  });
+
+  it('restoreGame preserves direct tree mutations not recorded in command/action history', () => {
+    // A pending/selection action's execute moves a piece via Piece.putInto, which
+    // mutates the element tree DIRECTLY — recorded in neither commandHistory nor
+    // actionHistory. The MCTS search root can carry such a mutation, so restoring
+    // the root by replaying history (the old behavior) silently loses it and the
+    // bot searches from the wrong position. Authoritative restore adopts the
+    // serialized tree and keeps the mutation.
+    class MutationGame extends Game<MutationGame, Player> {
+      stash!: Space<MutationGame>;
+      held!: Space<MutationGame>;
+      token!: Piece<MutationGame>;
+
+      constructor(options: GameOptions) {
+        super(options);
+        this.stash = this.create(Space<MutationGame>, 'stash');
+        this.held = this.create(Space<MutationGame>, 'held');
+        this.token = this.stash.create(Piece<MutationGame>, 'Token');
+
+        this.registerAction(
+          Action.create('noop')
+            .chooseFrom('opt', { prompt: 'Pick', choices: ['a', 'b'] })
+            .execute(() => ({ success: true })),
+        );
+
+        this.setFlow(defineFlow({
+          root: loop({
+            maxIterations: 20,
+            do: actionStep({ actions: ['noop'], player: (ctx) => ctx.game.getPlayer(1)! }),
+          }),
+        }));
+      }
+    }
+
+    const game = new MutationGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'mut' });
+    game.startFlow();
+
+    // Direct tree mutation — exactly what a pending action's execute does.
+    game.token.putInto(game.held);
+    expect(game.token.parent?.name).toBe('held');
+    expect(game.commandHistory.length).toBe(0); // proves it is NOT a recorded command
+
+    const snapshot = createSnapshot(game, 'mutation', [], 'mut');
+
+    const bot = new MCTSBot(
+      game,
+      MutationGame,
+      'mutation',
+      2,
+      [],
+      { iterations: 1, playoutDepth: 1 },
+    );
+
+    const restored = (bot as any).restoreGame(snapshot) as MutationGame;
+    const restoredToken = restored.getElementById(game.token.id);
+
+    // The mutation must survive restore (was lost under replay: token back in stash).
+    expect(restoredToken?.parent?.name).toBe('held');
   });
 });

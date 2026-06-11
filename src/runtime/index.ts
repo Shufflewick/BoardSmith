@@ -29,6 +29,7 @@ export {
 // Game runner (runtime-specific)
 export {
   GameRunner,
+  relinkFlowState,
   type GameRunnerOptions,
   type ActionExecutionResult,
 } from './runner.js';

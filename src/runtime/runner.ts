@@ -68,8 +68,11 @@ function relinkFlowValue(value: unknown, game: Game): unknown {
 /**
  * Return a copy of `flowState` whose `position.variables`/`position.frameData`
  * element values are re-linked to the loaded `game` tree (see `relinkFlowValue`).
+ *
+ * Exported so the MCTS bot's authoritative root restore shares the exact same
+ * flow-relinking as `GameRunner.fromSnapshot` (single source of truth).
  */
-function relinkFlowState(flowState: FlowState, game: Game): FlowState {
+export function relinkFlowState(flowState: FlowState, game: Game): FlowState {
   const position = flowState.position;
   return {
     ...flowState,

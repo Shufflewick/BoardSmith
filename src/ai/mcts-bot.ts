@@ -8,7 +8,8 @@ import type {
   Selection,
   GameStateSnapshot,
 } from '../engine/index.js';
-import { createSnapshot, deserializeAction } from '../engine/index.js';
+import { createSnapshot } from '../engine/index.js';
+import { relinkFlowState } from '../runtime/index.js';
 import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { SeededRandom } from '../utils/random.js';
@@ -222,26 +223,12 @@ export class MCTSBot<G extends Game = Game> {
     this.raveTable.clear();
 
     // Initialize incremental state management:
-    // Clone game once and track root command count for undo
+    // Clone game once and track root command count for undo. Authoritative
+    // restore reproduces the live awaiting-input position exactly (the search
+    // root was validated awaitingInput above), so there is no replay-divergence
+    // case to guard against here.
     this.rootSnapshot = this.captureSnapshot();
-    const clonedGame = this.restoreGame(this.rootSnapshot) as G;
-
-    // Validate the clone is still playable. If flow completed or stopped
-    // awaiting input during replay, the game has non-deterministic flow logic
-    // (e.g., an execute block that ends the game based on state accumulated
-    // during replay). The MCTS search cannot proceed.
-    const clonedFlowState = clonedGame.getFlowState()!;
-    if (clonedFlowState.complete || !clonedFlowState.awaitingInput) {
-      throw new Error(
-        'Failed to clone game for MCTS search: flow diverged during replay. ' +
-        'This usually means the game has non-deterministic flow logic (e.g., an execute ' +
-        'block that completes the game based on state that differs between the original ' +
-        'and replayed game). Check that all game-ending logic is deterministic given the ' +
-        'same action history and seed.'
-      );
-    }
-
-    this.searchGame = clonedGame;
+    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
     this.rootCommandCount = this.searchGame.commandHistory.length;
 
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
@@ -1208,10 +1195,22 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Restore a game from snapshot by replaying command history and actions.
-   * Handles games where flow completes or stops awaiting input mid-replay
-   * (e.g., execute blocks that end the game). In such cases, remaining
-   * actions are stale and replay stops early.
+   * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
+   *
+   * Mirrors `GameRunner.fromSnapshot`: the snapshot carries the complete
+   * authoritative state (element tree, flow position, sequence counter, seeded
+   * RNG), so we adopt those directly instead of replaying command/action
+   * history. Replay was unsound for the search root: selection-step /
+   * pending-completed actions mutate the tree via `Piece.putInto` and are
+   * recorded in NEITHER commandHistory NOR actionHistory, so a root carrying
+   * such a mutation lost it on every clone and the bot searched from a wrong
+   * position. Adopting the serialized tree keeps those mutations.
+   *
+   * MCTS still drives the search incrementally on the returned game: it appends
+   * commands (with valid inverses) and rolls them back via `undoCommands` down
+   * to `rootCommandCount`, which the caller recomputes from THIS game's
+   * commandHistory length right after restore — so the (empty) command baseline
+   * here is correct, only the delta matters.
    */
   private restoreGame(snapshot: GameStateSnapshot): Game {
     // Use full gameOptions from snapshot if available, falling back to basic options
@@ -1224,21 +1223,24 @@ export class MCTSBot<G extends Game = Game> {
 
     const game = new this.GameClass(gameOptions as any);
 
-    // Replay commands to restore element state
-    game.replayCommands(snapshot.commandHistory);
+    // Adopt the authoritative element tree (clears + rebuilds children, re-points
+    // the game's own serialized refs, resolves element references).
+    game.loadSerializedState(snapshot.state);
 
-    // Start flow and replay actions
-    game.startFlow();
-    for (const action of snapshot.actionHistory) {
-      const { actionName, player, args } = deserializeAction(action, game);
-      // Pass the player seat to continueFlow (required for simultaneous actions)
-      const flowState = game.continueFlow(actionName, args, player.seat);
+    // Restore the element id sequence so newly created elements don't drift.
+    if (snapshot.sequence !== undefined) {
+      game._ctx.sequence = snapshot.sequence;
+    }
 
-      // If the flow completed or stopped awaiting input during replay
-      // (e.g., an execute block ended the game), remaining history is stale
-      if (flowState.complete || !flowState.awaitingInput) {
-        break;
-      }
+    // Restore the seeded RNG position so the next draw matches the live game.
+    if (snapshot.randomState !== undefined) {
+      game.setRandomState(snapshot.randomState);
+    }
+
+    // Restore the authoritative flow position (re-link element-valued flow
+    // variables/frameData to the freshly loaded tree).
+    if (snapshot.flowState) {
+      game.restoreFlowState(relinkFlowState(snapshot.flowState, game));
     }
 
     return game;
