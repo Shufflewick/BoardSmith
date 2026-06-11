@@ -156,7 +156,29 @@ export class GameRunner<G extends Game = Game> {
    * Start the game flow
    */
   start(): FlowState {
-    return this.game.startFlow();
+    const flowState = this.game.startFlow();
+    // Seed actionCheckpoints[0] with the initial in-flow state so undoing the
+    // first turn has a turn-start checkpoint to restore.
+    this.captureCheckpoint();
+    return flowState;
+  }
+
+  /**
+   * Refresh the per-action undo checkpoint for the current action count.
+   *
+   * `actionCheckpoints[k]` holds the latest authoritative state observed while
+   * `k` actions are recorded. We keep `[0..len-1]` frozen and overwrite `[len]`
+   * with the current state, dropping any entries beyond `len`. Calling this after
+   * every state change (each recorded action AND each trailing pending/selection
+   * mutation) makes `[len]` capture the complete turn-boundary state — which undo
+   * restores authoritatively. The stateless path calls it via `getSnapshot`; the
+   * stateful `GameSession` calls it from its broadcast funnel.
+   */
+  captureCheckpoint(): void {
+    const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
+    const len = this.actionHistory.length;
+    this.actionCheckpoints = this.actionCheckpoints.slice(0, len);
+    this.actionCheckpoints[len] = base;
   }
 
   /**
@@ -270,17 +292,8 @@ export class GameRunner<G extends Game = Game> {
    * Entries beyond `len` are dropped (e.g. after an undo rewinds the history).
    */
   getSnapshot(): GameStateSnapshot {
-    const base = createSnapshot(
-      this.game,
-      this.gameType,
-      this.actionHistory,
-      this.seed
-    );
-
-    const len = this.actionHistory.length;
-    this.actionCheckpoints = this.actionCheckpoints.slice(0, len);
-    this.actionCheckpoints[len] = base;
-
+    this.captureCheckpoint();
+    const base = this.actionCheckpoints[this.actionHistory.length];
     return { ...base, actionCheckpoints: [...this.actionCheckpoints] };
   }
 

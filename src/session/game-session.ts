@@ -1455,6 +1455,14 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Broadcast current state to all connected sessions
    */
   broadcast(): void {
+    // Refresh the runner's per-action undo checkpoint on every state change.
+    // broadcast() is the universal post-mutation funnel (human actions, AI moves,
+    // pending selection steps, and cancels all broadcast), so this keeps
+    // StateHistory.undoToTurnStart's authoritative checkpoints current even
+    // though the stateful session persists only actionHistory. Runs before the
+    // broadcaster guard so it also works headless (no clients connected).
+    this.#runner.captureCheckpoint();
+
     if (!this.#broadcaster) return;
 
     const flowState = this.#runner.getFlowState();

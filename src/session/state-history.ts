@@ -344,30 +344,37 @@ export class StateHistory<G extends Game = Game> {
       return { success: false, error: 'No actions to undo', errorCode: ErrorCode.NO_ACTIONS_TO_UNDO };
     }
 
-    // Replay game to the turn start point
-    const actionsToReplay = this.#storedState.actionHistory.slice(0, turnStartActionIndex);
+    // Restore the turn-start state AUTHORITATIVELY from the per-action checkpoint
+    // captured at that action count — NOT by replaying actionHistory. Replay
+    // re-runs start() + recorded actions, which never re-applies pending/selection
+    // mutations (Piece.putInto, recorded in neither command nor action history):
+    // it loses prior-turn equipment and mis-positions the flow (a later action by
+    // another player then throws "Not Player N's turn"). The runner accumulates
+    // these checkpoints via GameSession's broadcast funnel.
+    const checkpoints = runner.getSnapshot().actionCheckpoints;
+    const turnStart = checkpoints?.[turnStartActionIndex];
+    if (!turnStart) {
+      return {
+        success: false,
+        error: `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
+          `(have ${checkpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
+          `it runs; a session cold-restored from action history alone cannot undo across pending mutations.`,
+        errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
+      };
+    }
 
     try {
-      // Create a new runner replayed to the turn start
-      const newRunner = GameRunner.replay<G>(
-        {
-          GameClass: this.#GameClass,
-          gameType: this.#storedState.gameType,
-          gameOptions: {
-            playerCount: this.#storedState.playerCount,
-            playerNames: this.#storedState.playerNames,
-            seed: this.#storedState.seed,
-            ...this.#storedState.gameOptions,
-          },
-        },
-        actionsToReplay
+      // Restore the checkpoint, carrying its prefix forward so further undos work.
+      const newRunner = GameRunner.fromSnapshot<G>(
+        { ...turnStart, actionCheckpoints: checkpoints!.slice(0, turnStartActionIndex + 1) },
+        this.#GameClass,
       );
 
       // Replace the current runner via callback
       this.#callbacks.replaceRunner(newRunner);
 
-      // Update stored action history
-      this.#storedState.actionHistory = actionsToReplay;
+      // Update stored action history to the restored point
+      this.#storedState.actionHistory = newRunner.actionHistory;
 
       // Persist and broadcast
       await this.#callbacks.save();
