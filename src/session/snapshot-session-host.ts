@@ -1,4 +1,5 @@
 import type { Op, OpResult } from './stateless-ops.js';
+import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 
@@ -44,7 +45,9 @@ export class SnapshotSessionHost {
   /** Read-only ops (resolveChoices) do NOT mutate or broadcast. State-mutating
    *  ops broadcast the new state, THEN the caller returns the op response. */
   async handleOp(seat: number, op: Op): Promise<OpResult> {
-    if (op.type === 'resolveChoices') {
+    // Read-only ops (resolveChoices + debug queries) report state without
+    // mutating or broadcasting — just return the executor's result.
+    if (READ_ONLY_OP_TYPES.has(op.type)) {
       return this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     }
     // A new direct action supersedes any in-progress selection for this seat.

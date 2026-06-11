@@ -9,10 +9,12 @@
  * no memory between calls.
  */
 
-import type { Game } from '../engine/index.js';
+import type { Game, GameCommand } from '../engine/index.js';
+import { executeCommand } from '../engine/index.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { PickHandler, buildSingleActionMetadata, buildPlayerState, computeUndoInfo } from './index.js';
+import { buildActionTraces } from './utils.js';
 
 // ---------------------------------------------------------------------------
 // Op discriminated union
@@ -38,7 +40,26 @@ export type Op =
     }
   | { type: 'cancelAction'; player: number }
   | { type: 'undo'; player: number }
-  | { type: 'aiTurn'; seats: Array<{ seat: number; level?: string }> };
+  | { type: 'aiTurn'; seats: Array<{ seat: number; level?: string }> }
+  // Debug ops (dev-only; the debug panel issues these over the platform bridge).
+  // Read-only ops report state without mutating; the rest edit state like a move.
+  | { type: 'debugHistory' }
+  | { type: 'debugStateAt'; actionIndex: number; player: number }
+  | { type: 'debugStateDiff'; fromIndex: number; toIndex: number; player: number }
+  | { type: 'debugActionTraces'; player: number }
+  | { type: 'debugRewind'; actionIndex: number }
+  | { type: 'debugReorder'; cardId: number; targetIndex: number }
+  | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
+  | { type: 'debugShuffle'; deckId: number };
+
+/** The read-only debug ops — reported without mutating or broadcasting state. */
+export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
+  'resolveChoices',
+  'debugHistory',
+  'debugStateAt',
+  'debugStateDiff',
+  'debugActionTraces',
+]);
 
 // ---------------------------------------------------------------------------
 // OpResult
@@ -59,6 +80,13 @@ export interface OpResult {
   multiSelect?: { min: number; max?: number };
   aiMoved?: boolean;
   aiPlayer?: number;
+
+  // Debug op fields
+  actionHistory?: unknown[];
+  historicalState?: unknown;
+  diff?: unknown;
+  traces?: unknown[];
+  flowContext?: unknown;
 
   // State envelope — always present on success
   snapshot: unknown;
@@ -426,6 +454,236 @@ async function handleAITurn(
 }
 
 // ---------------------------------------------------------------------------
+// Debug op handlers
+// ---------------------------------------------------------------------------
+
+function gameClassOf(def: GameDefinitionLike): GameRunnerOptions<never>['GameClass'] {
+  return def.gameClass as GameRunnerOptions<never>['GameClass'];
+}
+
+/**
+ * Reconstruct the runner at a historical action index AUTHORITATIVELY from the
+ * snapshot's per-action checkpoints — never by replay. `actionCheckpoints[k]` is
+ * the exact serialized state when k actions had been recorded (the same data the
+ * undo op restores from), so time-travel and rewind preserve every prior
+ * mutation instead of re-deriving them. Returns null if the checkpoint is absent.
+ */
+function runnerFromCheckpoint(
+  def: GameDefinitionLike,
+  snap: GameStateSnapshot,
+  actionIndex: number,
+): GameRunner | null {
+  const checkpoints = snap.actionCheckpoints;
+  const checkpoint = checkpoints?.[actionIndex];
+  if (!checkpoint) return null;
+  // Carry checkpoints up to and including the restore point so a later getSnapshot
+  // keeps the linear history coherent (mirrors the undo op).
+  return GameRunner.fromSnapshot(
+    { ...checkpoint, actionCheckpoints: checkpoints.slice(0, actionIndex + 1) },
+    gameClassOf(def),
+  );
+}
+
+function handleDebugHistory(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+): OpResult {
+  const runner = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    actionHistory: [...runner.actionHistory],
+  };
+}
+
+function handleDebugStateAt(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'debugStateAt' }>,
+): OpResult {
+  const current = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const historyLength = current.actionHistory.length;
+  if (op.actionIndex < 0 || op.actionIndex > historyLength) {
+    return errorResult(
+      `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
+      'protocol',
+    );
+  }
+  const at = runnerFromCheckpoint(def, snapshot, op.actionIndex);
+  if (!at) {
+    return errorResult(`No checkpoint at action index ${op.actionIndex}.`, 'executor');
+  }
+  return {
+    success: true,
+    ...stateEnvelope(current, gameOptions.playerCount),
+    historicalState: buildPlayerState(at, [], op.player, { includeActionMetadata: false }),
+  };
+}
+
+function comparableAttrs(node: Record<string, unknown>): string {
+  const attrs = node.attributes as Record<string, unknown> | undefined;
+  if (!attrs) return '';
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === 'player' || key === 'game' || key.startsWith('_')) continue;
+    filtered[key] = value;
+  }
+  return JSON.stringify(filtered);
+}
+
+type DiffElement = { parentId: number | null; attrs: string };
+
+function collectElements(
+  node: unknown,
+  map: Map<number, DiffElement>,
+  parentId: number | null = null,
+): void {
+  if (!node || typeof node !== 'object') return;
+  const obj = node as Record<string, unknown>;
+  if (typeof obj.id === 'number') {
+    map.set(obj.id, { parentId, attrs: comparableAttrs(obj) });
+    if (Array.isArray(obj.children)) {
+      for (const child of obj.children) collectElements(child, map, obj.id);
+    }
+  } else if (Array.isArray(obj.children)) {
+    for (const child of obj.children) collectElements(child, map, parentId);
+  }
+}
+
+function handleDebugStateDiff(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'debugStateDiff' }>,
+): OpResult {
+  const current = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const historyLength = current.actionHistory.length;
+  if (op.fromIndex < 0 || op.fromIndex > historyLength) {
+    return errorResult(`Invalid fromIndex: ${op.fromIndex}`, 'protocol');
+  }
+  if (op.toIndex < 0 || op.toIndex > historyLength) {
+    return errorResult(`Invalid toIndex: ${op.toIndex}`, 'protocol');
+  }
+  const fromRunner = runnerFromCheckpoint(def, snapshot, op.fromIndex);
+  const toRunner = runnerFromCheckpoint(def, snapshot, op.toIndex);
+  if (!fromRunner || !toRunner) {
+    return errorResult('Missing checkpoint for state diff.', 'executor');
+  }
+  const fromView = buildPlayerState(fromRunner, [], op.player, { includeActionMetadata: false }).view;
+  const toView = buildPlayerState(toRunner, [], op.player, { includeActionMetadata: false }).view;
+
+  const fromElements = new Map<number, DiffElement>();
+  const toElements = new Map<number, DiffElement>();
+  collectElements(fromView, fromElements);
+  collectElements(toView, toElements);
+
+  const added: number[] = [];
+  const changed: number[] = [];
+  const removed: number[] = [];
+  for (const [id, to] of toElements.entries()) {
+    const from = fromElements.get(id);
+    if (!from) added.push(id);
+    else if (from.parentId !== to.parentId || from.attrs !== to.attrs) changed.push(id);
+  }
+  for (const id of fromElements.keys()) {
+    if (!toElements.has(id)) removed.push(id);
+  }
+
+  return {
+    success: true,
+    ...stateEnvelope(current, gameOptions.playerCount),
+    diff: { added, removed, changed, fromIndex: op.fromIndex, toIndex: op.toIndex },
+  };
+}
+
+function handleDebugActionTraces(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'debugActionTraces' }>,
+): OpResult {
+  if (op.player < 1 || op.player > gameOptions.playerCount) {
+    return errorResult(`Invalid player seat: ${op.player}.`, 'protocol');
+  }
+  const runner = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const traces = buildActionTraces(runner, op.player);
+
+  const flowState = runner.getFlowState() as
+    | {
+        awaitingInput?: boolean;
+        awaitingPlayers?: Array<{ playerIndex: number; completed: boolean; availableActions: string[] }>;
+        availableActions?: string[];
+        currentPlayer?: number;
+        currentPhase?: string;
+      }
+    | undefined;
+
+  let flowAllowedActions: string[] = [];
+  let isMyTurn = false;
+  if (flowState?.awaitingInput) {
+    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
+      const playerState = flowState.awaitingPlayers.find((p) => p.playerIndex === op.player);
+      if (playerState && !playerState.completed) {
+        flowAllowedActions = playerState.availableActions;
+        isMyTurn = true;
+      }
+    } else {
+      flowAllowedActions = flowState.availableActions ?? [];
+      isMyTurn = flowState.currentPlayer === op.player;
+    }
+  }
+
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    traces,
+    flowContext: {
+      flowAllowedActions,
+      currentPlayer: flowState?.currentPlayer,
+      isMyTurn,
+      currentPhase: flowState?.currentPhase,
+    },
+  };
+}
+
+function handleDebugRewind(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'debugRewind' }>,
+): OpResult {
+  const current = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const historyLength = current.actionHistory.length;
+  if (op.actionIndex < 0 || op.actionIndex > historyLength) {
+    return errorResult(
+      `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
+      'protocol',
+    );
+  }
+  const restored = runnerFromCheckpoint(def, snapshot, op.actionIndex);
+  if (!restored) {
+    return errorResult(`No checkpoint at action index ${op.actionIndex}.`, 'executor');
+  }
+  return { success: true, ...stateEnvelope(restored, gameOptions.playerCount) };
+}
+
+function handleDebugCommand(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  command: GameCommand,
+): OpResult {
+  const runner = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const result = executeCommand(runner.game as Game, command);
+  if (!result.success) {
+    return errorResult(result.error ?? 'Debug command failed');
+  }
+  return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatch
 // ---------------------------------------------------------------------------
 
@@ -475,6 +733,34 @@ export async function executeOp(
         return handleUndo(def, gameOptions, snap, op);
       case 'aiTurn':
         return handleAITurn(def, gameOptions, snap, op);
+      case 'debugHistory':
+        return handleDebugHistory(def, gameOptions, snap);
+      case 'debugStateAt':
+        return handleDebugStateAt(def, gameOptions, snap, op);
+      case 'debugStateDiff':
+        return handleDebugStateDiff(def, gameOptions, snap, op);
+      case 'debugActionTraces':
+        return handleDebugActionTraces(def, gameOptions, snap, op);
+      case 'debugRewind':
+        return handleDebugRewind(def, gameOptions, snap, op);
+      case 'debugReorder':
+        return handleDebugCommand(def, gameOptions, snap, {
+          type: 'REORDER_CHILD',
+          elementId: op.cardId,
+          targetIndex: op.targetIndex,
+        });
+      case 'debugTransfer':
+        return handleDebugCommand(def, gameOptions, snap, {
+          type: 'MOVE',
+          elementId: op.cardId,
+          destinationId: op.targetDeckId,
+          position: op.position,
+        });
+      case 'debugShuffle':
+        return handleDebugCommand(def, gameOptions, snap, {
+          type: 'SHUFFLE',
+          spaceId: op.deckId,
+        });
     }
   } catch (err) {
     return errorResult(err, 'executor');
