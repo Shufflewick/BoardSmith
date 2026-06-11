@@ -4,10 +4,12 @@ import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
 import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { WebSocketServer, WebSocket } from 'ws';
 import chalk from 'chalk';
 import open from 'open';
 
-import type { GameDefinition } from '../../session/index.js';
+import { executeOp, type GameDefinition } from '../../session/index.js';
+import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 
 /**
@@ -315,7 +317,8 @@ function buildDevConfig(args: {
 export async function devCommand(options: DevOptions): Promise<void> {
   const port = parseInt(options.port, 10);
   const playerCount = parseInt(options.players, 10);
-  const host = options.host;
+  // Default to all interfaces so other computers on the LAN can join the game.
+  const host = options.host ?? '0.0.0.0';
   const cwd = process.cwd();
 
   if (UNSAFE_PORTS.has(port)) {
@@ -533,6 +536,66 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     await vite.listen();
 
+    // ── Always-on multiplayer host ────────────────────────────────────────
+    // The engine is inherently multiplayer, so dev is too: the CLI process owns
+    // the authoritative SnapshotSessionHost (the local stand-in for the
+    // ShufflewickPub game DO) and every browser is a WebSocket client. A solo
+    // dev is just one client; others on the LAN join the same game.
+    const gameDef = {
+      gameClass: gameDefinition.gameClass as new (...args: unknown[]) => unknown,
+      gameType: gameDefinition.gameType,
+      minPlayers,
+      maxPlayers,
+    };
+    const baseGameOptions = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
+    const clients = new Map<string, WebSocket>();
+    const mpHost = new MultiplayerHost({
+      playerCount: effectivePlayerCount,
+      minPlayers,
+      aiLevel,
+      colorPalette,
+      baseGameOptions,
+      executeOp: (gameOptions, snapshot, pendingState, op) =>
+        executeOp(gameDef, gameOptions, snapshot, pendingState, op),
+      send: (clientId, message) => {
+        const sock = clients.get(clientId);
+        if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(message));
+      },
+    });
+
+    if (!vite.httpServer) throw new Error('Vite dev server has no HTTP server to attach the WS host to.');
+    // Vite types httpServer as a broader union; at runtime (http, not http2) it is
+    // a node http.Server, which is what ws needs.
+    const wss = new WebSocketServer({
+      server: vite.httpServer as unknown as import('node:http').Server,
+      path: '/__boardsmith/ws',
+    });
+    wss.on('connection', (socket) => {
+      let clientId: string | null = null;
+      socket.on('message', (raw) => {
+        let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
+        try {
+          msg = JSON.parse(raw.toString());
+        } catch {
+          return;
+        }
+        if (msg.type === 'hello') {
+          clientId = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+          clients.set(clientId, socket);
+          void mpHost.handleMessage(clientId, { type: 'hello' });
+          return;
+        }
+        if (!clientId) return; // a client must identify itself via `hello` first
+        void mpHost.handleMessage(clientId, msg as Parameters<typeof mpHost.handleMessage>[1]);
+      });
+      socket.on('close', () => {
+        if (clientId) {
+          clients.delete(clientId);
+          mpHost.disconnect(clientId);
+        }
+      });
+    });
+
     const resolvedUrl = vite.resolvedUrls?.local[0];
     const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;
 
@@ -541,15 +604,14 @@ export async function devCommand(options: DevOptions): Promise<void> {
       console.log(chalk.dim(`  (Check if the game's vite.config.ts has a hardcoded port)`));
     }
 
-    const displayHost = host === '0.0.0.0' ? 'localhost' : (host || 'localhost');
-    const hostUrl = `http://${displayHost}:${uiPort}`;
+    const hostUrl = `http://localhost:${uiPort}`;
     console.log(chalk.green(`  Dev host running on ${hostUrl}`));
-    if (host === '0.0.0.0') {
-      console.log(chalk.dim(`  Network: accessible on all interfaces`));
+    for (const networkUrl of vite.resolvedUrls?.network ?? []) {
+      console.log(chalk.cyan(`  Network (others can join): ${networkUrl}`));
     }
 
-    console.log(chalk.dim(`  Game runs in an <iframe> via the in-process SnapshotSessionHost (production path).`));
-    console.log(chalk.cyan(`  Players: ${effectivePlayerCount}${aiPlayers.length ? `  AI seats: ${aiPlayers.join(', ')} (${aiLevel})` : ''}`));
+    console.log(chalk.dim(`  Multiplayer: each browser is a player; open the page on another computer to join.`));
+    console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as AI${aiPlayers.length ? `; --ai ${aiPlayers.join(',')} pre-marked` : ''}, level ${aiLevel}).`));
 
     await open(hostUrl);
 
@@ -557,6 +619,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     const cleanup = async () => {
       console.log(chalk.dim('\n  Shutting down...'));
+      wss.close();
+      clients.clear();
       await vite.close();
       try {
         const bundlePath = join(tempDir, 'rules-bundle.mjs');
