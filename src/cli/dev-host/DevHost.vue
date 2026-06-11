@@ -36,17 +36,21 @@ interface SeatInfo {
   color?: string;
   connected: boolean;
 }
-const phase = ref<'connecting' | 'lobby' | 'playing'>('connecting');
+// The game is always live on the host: this client is in the game once it holds a
+// seat (mySeat). The first client to connect is auto-seated by the host and lands
+// straight in the game; later clients arrive unseated and see the seat-picker.
+const connected = ref(false);
 const seats = ref<SeatInfo[]>([]);
-const minPlayers = ref(cfg.minPlayers);
 const mySeat = ref<number | null>(null);
 const errorMsg = ref<string | null>(null);
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
 
-const seatedHumans = computed(() => seats.value.filter((s) => s.clientId && s.connected).length);
-const canStart = computed(() => seatedHumans.value >= minPlayers.value);
+/** Seats this client may take: open, or held by an away (disconnected) player. */
+function canTake(seat: SeatInfo): boolean {
+  return !(seat.clientId && seat.connected);
+}
 const takenColors = computed(
   () => new Set(seats.value.filter((s) => s.color).map((s) => s.color as string)),
 );
@@ -80,19 +84,19 @@ function connect(): void {
   });
   ws.addEventListener('close', () => {
     if (closedByUs) return;
-    phase.value = 'connecting';
+    connected.value = false;
     reconnectTimer = setTimeout(connect, 1000);
   });
 }
 
 function onHostMessage(msg: Record<string, unknown>): void {
+  connected.value = true;
   switch (msg.type) {
     case 'lobby': {
       seats.value = msg.seats as SeatInfo[];
-      minPlayers.value = msg.minPlayers as number;
       const mine = (msg.seats as SeatInfo[]).find((s) => s.clientId === clientId);
-      mySeat.value = mine ? mine.seat : null;
-      phase.value = msg.phase as 'lobby' | 'playing';
+      // Don't clear an already-known seat from a lobby broadcast (init is authoritative).
+      if (mine) mySeat.value = mine.seat;
       break;
     }
     case 'joined':
@@ -161,9 +165,6 @@ function leaveSeat(): void {
   wsSend({ type: 'leave' });
   mySeat.value = null;
 }
-function startGame(): void {
-  wsSend({ type: 'start' });
-}
 function newGame(): void {
   wsSend({ type: 'restart' });
 }
@@ -189,21 +190,21 @@ onUnmounted(() => {
 <template>
   <div class="dev-host">
     <!-- Connecting -->
-    <div v-if="phase === 'connecting'" class="dev-host__center">
+    <div v-if="!connected" class="dev-host__center">
       <p>Connecting to the dev host…</p>
     </div>
 
-    <!-- Seat-picker lobby -->
-    <div v-else-if="phase === 'lobby'" class="dev-host__center">
+    <!-- Seat-picker — only additional players see this; the dev is auto-seated. -->
+    <div v-else-if="mySeat === null" class="dev-host__center">
       <div class="lobby">
         <header class="lobby__head">
           <strong>{{ cfg.displayName }}</strong>
-          <span class="dev-chrome__badge">boardsmith dev · multiplayer</span>
+          <span class="dev-chrome__badge">join · pick a seat</span>
         </header>
 
         <p class="lobby__hint">
-          Take a seat, then start. Open seats are played by AI. Others on your network can
-          join this URL.
+          This game is in progress — pick an open seat to join. Open seats are played by AI
+          until someone takes them.
         </p>
 
         <div class="lobby__seats">
@@ -211,7 +212,7 @@ onUnmounted(() => {
             v-for="seat in seats"
             :key="seat.seat"
             class="seat-card"
-            :class="{ 'seat-card--mine': seat.seat === mySeat, 'seat-card--open': !seat.clientId }"
+            :class="{ 'seat-card--mine': seat.seat === mySeat, 'seat-card--open': canTake(seat) }"
           >
             <span class="seat-card__num">Seat {{ seat.seat }}</span>
             <span
@@ -226,15 +227,7 @@ onUnmounted(() => {
               :class="seat.connected ? 'is-online' : 'is-offline'"
             ></span>
             <button
-              v-if="seat.seat === mySeat"
-              type="button"
-              class="btn btn--ghost"
-              @click="leaveSeat"
-            >
-              Leave
-            </button>
-            <button
-              v-else-if="!seat.clientId"
+              v-if="canTake(seat)"
               type="button"
               class="btn"
               @click="takeSeat(seat.seat)"
@@ -268,18 +261,6 @@ onUnmounted(() => {
         </div>
 
         <div v-if="errorMsg" class="dev-chrome__error">{{ errorMsg }}</div>
-
-        <div class="lobby__actions">
-          <button
-            type="button"
-            class="btn btn--start"
-            :disabled="!canStart"
-            @click="startGame"
-          >
-            Start game
-          </button>
-          <span class="lobby__count">{{ seatedHumans }} seated · min {{ minPlayers }}</span>
-        </div>
       </div>
     </div>
 
@@ -441,17 +422,6 @@ onUnmounted(() => {
   opacity: 0.4;
 }
 
-.lobby__actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.lobby__count {
-  font-size: 0.8rem;
-  color: #9aa;
-}
-
 /* ── Buttons ── */
 .btn {
   padding: 6px 14px;
@@ -460,10 +430,6 @@ onUnmounted(() => {
   background: #0f1020;
   color: #e8e8f0;
   cursor: pointer;
-}
-
-.btn--ghost {
-  background: transparent;
 }
 
 .btn--start {

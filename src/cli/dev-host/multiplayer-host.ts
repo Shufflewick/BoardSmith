@@ -48,7 +48,6 @@ export type ClientInbound =
   | { type: 'hello' }
   | { type: 'join'; seat: number; name?: string; color?: string }
   | { type: 'leave' }
-  | { type: 'start' }
   | { type: 'restart' }
   | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> };
 
@@ -81,11 +80,14 @@ export interface MultiplayerHostOptions {
 
 export class MultiplayerHost {
   private phase: LobbyPhase = 'lobby';
+  private starting = false;
   private readonly seats = new Map<number, SeatInfo>();
   /** clientId → seat it currently holds (survives disconnect for reconnect). */
   private readonly clientSeat = new Map<string, number>();
   private readonly connected = new Set<string>();
   private session: DevSession | null = null;
+  /** Live AI-seat list passed to the session; mutated as humans take/leave seats. */
+  private aiSeats: Array<{ seat: number; level?: string }> = [];
 
   constructor(private readonly opts: MultiplayerHostOptions) {
     for (let seat = 1; seat <= opts.playerCount; seat++) {
@@ -95,20 +97,35 @@ export class MultiplayerHost {
 
   // ── Connection lifecycle ──────────────────────────────────────────────────
 
-  /** A client connection identified itself (first message after connect). */
-  hello(clientId: string): void {
+  /**
+   * A client connection identified itself. The game is always live: the FIRST
+   * client to connect auto-takes a seat and the game starts immediately (the dev
+   * lands straight in — open seats are AI). Later clients land in the seat-picker
+   * to take over an AI/open seat; a reconnecting client resumes its seat.
+   */
+  async hello(clientId: string): Promise<void> {
     this.connected.add(clientId);
-    const seat = this.clientSeat.get(clientId);
-    if (seat !== undefined) {
-      // Reconnect: re-mark connected and, if mid-game, replay their view.
-      const info = this.seats.get(seat);
+
+    const existing = this.clientSeat.get(clientId);
+    if (existing !== undefined) {
+      const info = this.seats.get(existing);
       if (info) info.connected = true;
       if (this.phase === 'playing') {
-        this.reinitSeat(clientId, seat);
+        this.reinitSeat(clientId, existing);
         this.broadcastLobby();
         return;
       }
     }
+
+    // First arrival → auto-seat + start so the dev is immediately in the game.
+    if (this.phase === 'lobby' && !this.starting) {
+      const open = [...this.seats.values()].find((s) => !s.clientId);
+      if (open) this.assignSeat(clientId, open.seat);
+      await this.startGame();
+      return;
+    }
+
+    // Game already live (or starting): show the seat-picker.
     this.send(clientId, this.lobbyMessage());
   }
 
@@ -118,8 +135,8 @@ export class MultiplayerHost {
     if (seat !== undefined) {
       const info = this.seats.get(seat);
       if (info) info.connected = false;
-      // In the lobby, a disconnect frees the seat; mid-game we keep it for reconnect.
-      if (this.phase === 'lobby') this.releaseSeat(clientId);
+      // Keep the seat reserved for reconnect (a page reload mustn't lose it); the
+      // game pauses on an away player's turn until they return or explicitly leave.
     }
     this.broadcastLobby();
   }
@@ -133,11 +150,7 @@ export class MultiplayerHost {
       case 'join':
         return this.handleJoin(clientId, msg);
       case 'leave':
-        this.releaseSeat(clientId);
-        this.send(clientId, this.lobbyMessage());
-        return this.broadcastLobby();
-      case 'start':
-        return this.handleStart(clientId);
+        return this.handleLeave(clientId);
       case 'restart':
         return this.handleRestart(clientId);
       case 'server_request':
@@ -154,12 +167,9 @@ export class MultiplayerHost {
     await this.startGame();
   }
 
+  /** Take over a seat (works mid-game: claim an open/AI seat → it stops being AI). */
   private handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): void {
     this.connected.add(clientId);
-    if (this.phase !== 'lobby') {
-      this.send(clientId, { type: 'error', message: 'Game already started.' });
-      return;
-    }
     const info = this.seats.get(msg.seat);
     if (!info) {
       this.send(clientId, { type: 'error', message: `Seat ${msg.seat} does not exist.` });
@@ -169,31 +179,25 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: `Seat ${msg.seat} is taken.` });
       return;
     }
-    // One seat per client: drop any seat this client already held.
-    this.releaseSeat(clientId);
-    info.clientId = clientId;
-    info.name = msg.name?.trim() || `Player ${msg.seat}`;
-    info.color = msg.color ?? this.opts.colorPalette?.[msg.seat - 1]?.value;
-    info.connected = true;
-    this.clientSeat.set(clientId, msg.seat);
+    this.assignSeat(clientId, msg.seat, msg.name, msg.color);
     this.send(clientId, { type: 'joined', seat: msg.seat });
+    if (this.phase === 'playing') this.reinitSeat(clientId, msg.seat);
     this.broadcastLobby();
   }
 
-  private async handleStart(clientId: string): Promise<void> {
-    if (this.phase !== 'lobby') {
-      this.send(clientId, { type: 'error', message: 'Game already started.' });
+  /** Give up a seat mid-game → it reverts to AI so the game continues for others. */
+  private async handleLeave(clientId: string): Promise<void> {
+    const seat = this.clientSeat.get(clientId);
+    this.releaseSeat(clientId);
+    if (seat !== undefined && this.phase === 'playing') {
+      this.addAiSeat(seat);
+      this.broadcastLobby();
+      this.send(clientId, this.lobbyMessage());
+      await this.session?.host.runAITurns();
       return;
     }
-    const seatedHumans = [...this.seats.values()].filter((s) => s.clientId && s.connected);
-    if (seatedHumans.length < this.opts.minPlayers) {
-      this.send(clientId, {
-        type: 'error',
-        message: `Need at least ${this.opts.minPlayers} player(s) to start (have ${seatedHumans.length}).`,
-      });
-      return;
-    }
-    await this.startGame();
+    this.send(clientId, this.lobbyMessage());
+    this.broadcastLobby();
   }
 
   private async handleServerRequest(
@@ -212,16 +216,45 @@ export class MultiplayerHost {
     await this.session.handleServerRequest(seat, msg.requestId, msg.op, msg.payload);
   }
 
+  // ── Seat helpers ──────────────────────────────────────────────────────────
+
+  private assignSeat(clientId: string, seat: number, name?: string, color?: string): void {
+    this.releaseSeat(clientId); // one seat per client
+    const info = this.seats.get(seat);
+    if (!info) return;
+    info.clientId = clientId;
+    info.name = name?.trim() || `Player ${seat}`;
+    info.color = color ?? this.opts.colorPalette?.[seat - 1]?.value;
+    info.connected = true;
+    this.clientSeat.set(clientId, seat);
+    this.removeAiSeat(seat); // a human now plays this seat
+  }
+
+  private removeAiSeat(seat: number): void {
+    const i = this.aiSeats.findIndex((s) => s.seat === seat);
+    if (i !== -1) this.aiSeats.splice(i, 1);
+  }
+
+  private addAiSeat(seat: number): void {
+    if (seat >= 1 && seat <= this.opts.playerCount && !this.aiSeats.some((s) => s.seat === seat)) {
+      this.aiSeats.push({ seat, level: this.opts.aiLevel });
+    }
+  }
+
   // ── Game start ────────────────────────────────────────────────────────────
 
   private async startGame(): Promise<void> {
+    this.starting = true;
     const { playerCount } = this.opts;
     const humanSeats = new Set(
       [...this.seats.values()].filter((s) => s.clientId).map((s) => s.seat),
     );
-    const aiSeats: Array<{ seat: number; level?: string }> = [];
+    // Seed the live AI-seat list from the current open seats. Mutated later as
+    // humans take over seats (removeAiSeat) or give them up (addAiSeat); the
+    // session's AI pump reads this same array reference.
+    this.aiSeats = [];
     for (let seat = 1; seat <= playerCount; seat++) {
-      if (!humanSeats.has(seat)) aiSeats.push({ seat, level: this.opts.aiLevel });
+      if (!humanSeats.has(seat)) this.aiSeats.push({ seat, level: this.opts.aiLevel });
     }
 
     // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
@@ -239,7 +272,7 @@ export class MultiplayerHost {
 
     const session = createDevSession({
       playerCount,
-      aiSeats,
+      aiSeats: this.aiSeats,
       executeOp,
       postGameState: (seat, view, meta) =>
         this.sendToSeat(seat, {
@@ -258,6 +291,7 @@ export class MultiplayerHost {
     try {
       await session.start();
     } catch (err) {
+      this.starting = false;
       const message = err instanceof Error ? err.message : 'Failed to start the game.';
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
       return;
@@ -265,6 +299,7 @@ export class MultiplayerHost {
 
     this.session = session;
     this.phase = 'playing';
+    this.starting = false;
     this.broadcastLobby();
     for (const seat of humanSeats) {
       const clientId = this.seats.get(seat)?.clientId;
