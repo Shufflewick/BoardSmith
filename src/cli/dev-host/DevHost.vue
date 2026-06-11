@@ -195,14 +195,28 @@ function onIframeLoad(): void {
 function onMessage(event: MessageEvent): void {
   const data = event.data;
   if (!data || data.source !== 'shufflewick-game') return;
-  if (data.type === 'server_request' && session) {
-    void session.handleServerRequest(
-      currentSeat.value,
-      typeof data.requestId === 'string' ? data.requestId : null,
-      typeof data.op === 'string' ? data.op : '',
-      (data.payload as Record<string, unknown>) ?? {},
-    );
+  if (data.type !== 'server_request' || !session) return;
+
+  const requestId = typeof data.requestId === 'string' ? data.requestId : null;
+  const op = typeof data.op === 'string' ? data.op : '';
+  const payload = (data.payload as Record<string, unknown>) ?? {};
+
+  // Host-chrome debug ops drive the dev host itself (the local stand-in for the
+  // platform host), not the game session — restart rebuilds the game, switch-seat
+  // changes which seat the iframe renders. Ack first; both may remount the iframe.
+  if (op === 'debug:restart') {
+    postToGame({ type: 'server_response', requestId, result: { success: true } });
+    void restart();
+    return;
   }
+  if (op === 'debug:switch-seat') {
+    postToGame({ type: 'server_response', requestId, result: { success: true } });
+    const seat = Number(payload.seat);
+    if (Number.isInteger(seat)) switchSeat(seat);
+    return;
+  }
+
+  void session.handleServerRequest(currentSeat.value, requestId, op, payload);
 }
 
 onMounted(async () => {

@@ -96,10 +96,14 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   showHistory: true,
 });
 
-// Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub)
+// Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub
+// in prod, or the boardsmith dev host locally — both run GameShell in an iframe).
 // Synchronous detection: if we're in an iframe, we're in platform mode.
-// The boardsmith dev server always serves in the main window, never in an iframe.
 const platformMode = ref(typeof window !== 'undefined' && window.parent !== window);
+
+// Dev build (Vite serves `boardsmith dev`); false in production embeds. Gates the
+// debug panel so it appears under `boardsmith dev` but never in a deployed game.
+const isDevBuild = import.meta.env.DEV;
 
 // Screen state — start on 'game' in platform mode (skip lobby)
 type Screen = 'lobby' | 'waiting' | 'game';
@@ -470,6 +474,8 @@ provide('isMyTurn', isMyTurn);
 provide('availableActions', availableActions);
 provide('actionController', actionController);
 provide('timeTravelDiff', timeTravelDiff);
+// The debug panel issues its queries/edits through the host bridge (dev only).
+provide('platformRequest', platformRequest);
 
 // Mount: in platform mode the host (ShufflewickPub in prod, the boardsmith dev
 // host locally) manages the session and drives everything via postMessage.
@@ -1047,6 +1053,12 @@ function leaveGame() {
 
 // Debug panel handlers
 function handleSwitchPlayer(position: number) {
+  // In platform mode the host owns which seat the iframe renders; ask it to
+  // switch (the dev host reloads this iframe as that seat).
+  if (platformMode.value) {
+    void platformRequest('debug:switch-seat', { seat: position });
+    return;
+  }
   playerSeat.value = position;
   if (gameId.value) {
     updateUrl(gameId.value, position);
@@ -1054,6 +1066,11 @@ function handleSwitchPlayer(position: number) {
 }
 
 async function handleRestartGame() {
+  // In platform mode the host owns the session; ask it to start a fresh game.
+  if (platformMode.value) {
+    void platformRequest('debug:restart', {});
+    return;
+  }
   if (!gameId.value) return;
 
   try {
@@ -1268,14 +1285,14 @@ if ((import.meta as any).hot) {
         </div>
       </footer>
 
-      <!-- Debug Panel (hidden in platform mode) -->
+      <!-- Debug Panel: dev only. Renders inside the dev host iframe (platform
+           mode + dev build); never in a deployed/production embed. -->
       <DebugPanel
-        v-if="debugMode && !platformMode"
+        v-if="debugMode && platformMode && isDevBuild"
         :state="state"
         :player-seat="playerSeat"
         :player-count="playerCount"
         :game-id="gameId"
-        :api-url="apiUrl"
         v-model:expanded="debugExpanded"
         @switch-player="handleSwitchPlayer"
         @restart-game="handleRestartGame"

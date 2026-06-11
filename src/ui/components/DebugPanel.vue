@@ -185,17 +185,15 @@ export interface DebugPanelProps {
   playerSeat: number;
   /** Total number of players */
   playerCount: number;
-  /** Game ID */
+  /** Game ID (null in the dev host — kept for state-download filenames) */
   gameId: string | null;
-  /** API base URL */
-  apiUrl?: string;
   /** Whether panel is expanded */
   expanded?: boolean;
 }
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue';
 
 interface SerializedAction {
   name: string;
@@ -227,7 +225,6 @@ interface ActionTrace {
 }
 
 const props = withDefaults(defineProps<DebugPanelProps>(), {
-  apiUrl: 'http://localhost:8787',
   expanded: false,
 });
 
@@ -238,6 +235,19 @@ const emit = defineEmits<{
   'time-travel': [state: any | null, actionIndex: number | null, diff: ElementDiff | null];
   'highlight-element': [elementId: number | null];
 }>();
+
+// All debug data/edits flow through the host bridge that GameShell provides in
+// platform mode (the dev host answers from its in-process session). There is no
+// debug HTTP server, so this is the only transport.
+type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
+const platformRequest = inject<PlatformRequest | null>('platformRequest', null);
+
+async function debugRequest(op: string, payload: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  if (!platformRequest) {
+    throw new Error('DebugPanel requires a host bridge (mount it inside GameShell in platform mode).');
+  }
+  return platformRequest(op, payload);
+}
 
 // Local state
 const panelExpanded = ref(props.expanded);
@@ -451,19 +461,18 @@ function downloadState() {
   URL.revokeObjectURL(url);
 }
 
-// Fetch action traces from server
+// Fetch action traces from the host bridge
 async function fetchActionTraces() {
-  if (!props.gameId || tracesLoading.value) return;
+  if (tracesLoading.value) return;
 
   tracesLoading.value = true;
   tracesError.value = null;
 
   try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/action-traces?player=${props.playerSeat}`);
-    const data = await response.json();
+    const data = await debugRequest('debug:action-traces', { player: props.playerSeat });
 
     if (!data.success) {
-      throw new Error(data.error || 'Failed to fetch action traces');
+      throw new Error((data.error as string) || 'Failed to fetch action traces');
     }
 
     actionTraces.value = data.traces || [];
@@ -864,114 +873,38 @@ async function copyDeckToClipboard(deck: DeckInfo) {
   });
 }
 
-// Deck manipulation API calls
-async function moveCardToTop(cardId: number) {
-  if (!props.gameId) {
-    deckManipulationError.value = 'No game ID available';
-    return;
-  }
-
+// Deck manipulation — routed through the host bridge. The host broadcasts the
+// new state, so the view updates without a local refresh.
+async function runDeckEdit(op: string, payload: Record<string, unknown>, failMessage: string) {
   deckManipulationLoading.value = true;
   deckManipulationError.value = null;
 
   try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/move-to-top`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cardId }),
-    });
-
-    const data = await response.json();
+    const data = await debugRequest(op, payload);
     if (!data.success) {
-      deckManipulationError.value = data.error || 'Failed to move card';
+      deckManipulationError.value = (data.error as string) || failMessage;
     }
-    // State will be updated via WebSocket broadcast
   } catch (err) {
-    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
+    deckManipulationError.value = err instanceof Error ? err.message : 'Debug request failed';
   } finally {
     deckManipulationLoading.value = false;
   }
+}
+
+async function moveCardToTop(cardId: number) {
+  await runDeckEdit('debug:move-to-top', { cardId }, 'Failed to move card');
 }
 
 async function reorderCard(cardId: number, targetIndex: number) {
-  if (!props.gameId) {
-    deckManipulationError.value = 'No game ID available';
-    return;
-  }
-
-  deckManipulationLoading.value = true;
-  deckManipulationError.value = null;
-
-  try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/reorder-card`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cardId, targetIndex }),
-    });
-
-    const data = await response.json();
-    if (!data.success) {
-      deckManipulationError.value = data.error || 'Failed to reorder card';
-    }
-  } catch (err) {
-    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
-  } finally {
-    deckManipulationLoading.value = false;
-  }
+  await runDeckEdit('debug:reorder-card', { cardId, targetIndex }, 'Failed to reorder card');
 }
 
 async function transferCard(cardId: number, targetDeckId: number, position: 'first' | 'last' = 'first') {
-  if (!props.gameId) {
-    deckManipulationError.value = 'No game ID available';
-    return;
-  }
-
-  deckManipulationLoading.value = true;
-  deckManipulationError.value = null;
-
-  try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/transfer-card`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cardId, targetDeckId, position }),
-    });
-
-    const data = await response.json();
-    if (!data.success) {
-      deckManipulationError.value = data.error || 'Failed to transfer card';
-    }
-  } catch (err) {
-    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
-  } finally {
-    deckManipulationLoading.value = false;
-  }
+  await runDeckEdit('debug:transfer-card', { cardId, targetDeckId, position }, 'Failed to transfer card');
 }
 
 async function shuffleDeck(deckId: number) {
-  if (!props.gameId) {
-    deckManipulationError.value = 'No game ID available';
-    return;
-  }
-
-  deckManipulationLoading.value = true;
-  deckManipulationError.value = null;
-
-  try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/debug/shuffle-deck`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deckId }),
-    });
-
-    const data = await response.json();
-    if (!data.success) {
-      deckManipulationError.value = data.error || 'Failed to shuffle deck';
-    }
-  } catch (err) {
-    deckManipulationError.value = err instanceof Error ? err.message : 'Network error';
-  } finally {
-    deckManipulationLoading.value = false;
-  }
+  await runDeckEdit('debug:shuffle-deck', { deckId }, 'Failed to shuffle deck');
 }
 
 // Move card up one position in the deck
@@ -1056,20 +989,19 @@ watch(() => props.state, () => {
 
 // Fetch action history from server
 async function fetchHistory() {
-  if (!props.gameId || historyLoading.value) return;
+  if (historyLoading.value) return;
 
   historyLoading.value = true;
   historyError.value = null;
 
   try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/history`);
-    const data = await response.json();
+    const data = await debugRequest('debug:history', {});
 
     if (!data.success) {
-      throw new Error(data.error || 'Failed to fetch history');
+      throw new Error((data.error as string) || 'Failed to fetch history');
     }
 
-    actionHistory.value = data.actionHistory || [];
+    actionHistory.value = (data.actionHistory as typeof actionHistory.value) || [];
     historyLastFetched.value = Date.now();
   } catch (e) {
     historyError.value = e instanceof Error ? e.message : 'Unknown error';
@@ -1149,30 +1081,29 @@ async function selectAction(index: number) {
 
 // Fetch state at a specific action
 async function fetchStateAtAction(actionIndex: number) {
-  if (!props.gameId) return;
-
   historicalStateLoading.value = true;
   historicalStateError.value = null;
 
   try {
-    // Fetch state and diff in parallel
-    const [stateResponse, diffResponse] = await Promise.all([
-      fetch(`${props.apiUrl}/games/${props.gameId}/state-at/${actionIndex}?player=${props.playerSeat}`),
+    // Fetch state and diff in parallel via the host bridge.
+    const [stateData, diffData] = await Promise.all([
+      debugRequest('debug:state-at', { actionIndex, player: props.playerSeat }),
       // Diff from previous action to this action (what changed to get here)
       actionIndex > 0
-        ? fetch(`${props.apiUrl}/games/${props.gameId}/state-diff/${actionIndex - 1}/${actionIndex}?player=${props.playerSeat}`)
+        ? debugRequest('debug:state-diff', {
+            fromIndex: actionIndex - 1,
+            toIndex: actionIndex,
+            player: props.playerSeat,
+          })
         : Promise.resolve(null),
     ]);
 
-    const stateData = await stateResponse.json();
-    const diffData = diffResponse ? await diffResponse.json() : null;
-
     if (!stateData.success) {
-      throw new Error(stateData.error || 'Failed to fetch state');
+      throw new Error((stateData.error as string) || 'Failed to fetch state');
     }
 
     historicalState.value = stateData.state;
-    stateDiff.value = diffData?.success ? diffData.diff : null;
+    stateDiff.value = diffData?.success ? (diffData.diff as ElementDiff) : null;
 
     // Emit to parent so main game UI can show historical state with diff
     emit('time-travel', stateData.state, actionIndex, stateDiff.value);
@@ -1213,13 +1144,7 @@ async function rewindToAction(actionIndex: number) {
   rewindError.value = null;
 
   try {
-    const response = await fetch(`${props.apiUrl}/games/${props.gameId}/rewind`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actionIndex }),
-    });
-
-    const result = await response.json();
+    const result = await debugRequest('debug:rewind', { actionIndex });
 
     if (result.success) {
       // Clear time travel state - we're now at the live (rewound) state
@@ -1227,7 +1152,7 @@ async function rewindToAction(actionIndex: number) {
       // Refresh history to show the updated action list
       await fetchHistory();
     } else {
-      rewindError.value = result.error || 'Rewind failed';
+      rewindError.value = (result.error as string) || 'Rewind failed';
     }
   } catch (err) {
     rewindError.value = err instanceof Error ? err.message : 'Rewind failed';
@@ -1989,12 +1914,12 @@ const displayedState = computed(() => {
           <div class="action-group">
             <h4>Connection</h4>
             <div class="state-item">
-              <span class="label">API URL:</span>
-              <span class="value monospace">{{ apiUrl }}</span>
+              <span class="label">Transport:</span>
+              <span class="value monospace">host bridge (dev)</span>
             </div>
             <div class="state-item">
-              <span class="label">Game ID:</span>
-              <span class="value monospace">{{ gameId || 'N/A' }}</span>
+              <span class="label">Seat:</span>
+              <span class="value monospace">{{ playerSeat }} / {{ playerCount }}</span>
             </div>
             <div class="shortcut-hint">
               <kbd>D</kbd> Toggle debug panel
