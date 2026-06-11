@@ -591,12 +591,31 @@ export async function devCommand(options: DevOptions): Promise<void> {
     });
 
     if (!vite.httpServer) throw new Error('Vite dev server has no HTTP server to attach the WS host to.');
-    // Vite types httpServer as a broader union; at runtime (http, not http2) it is
-    // a node http.Server, which is what ws needs.
-    const wss = new WebSocketServer({
-      server: vite.httpServer as unknown as import('node:http').Server,
-      path: '/__boardsmith/ws',
+    // CRITICAL: use `noServer` and route upgrades ourselves. Attaching a second
+    // WebSocketServer with `{ server }` collides with Vite's own HMR WebSocket on
+    // the same http server — both break, HMR drops, and Vite reload-loops the
+    // page. We only claim `/__boardsmith/ws` and leave every other upgrade
+    // (including Vite HMR) for Vite's handler.
+    const WS_PATH = '/__boardsmith/ws';
+    const wss = new WebSocketServer({ noServer: true });
+    vite.httpServer.on('upgrade', (req, socket, head) => {
+      let pathname: string;
+      try {
+        pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+      } catch {
+        return;
+      }
+      if (pathname !== WS_PATH) return; // not ours — Vite HMR handles it
+      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
     });
+
+    // A rejected message handler must never crash the dev process.
+    const dispatch = (clientId: string, msg: Parameters<typeof mpHost.handleMessage>[1]) => {
+      Promise.resolve(mpHost.handleMessage(clientId, msg)).catch((err) => {
+        console.error(chalk.red(`[boardsmith dev] message '${msg.type}' failed:`), err);
+      });
+    };
+
     wss.on('connection', (socket) => {
       let clientId: string | null = null;
       socket.on('message', (raw) => {
@@ -609,11 +628,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
         if (msg.type === 'hello') {
           clientId = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
           clients.set(clientId, socket);
-          void mpHost.handleMessage(clientId, { type: 'hello' });
+          dispatch(clientId, { type: 'hello' });
           return;
         }
         if (!clientId) return; // a client must identify itself via `hello` first
-        void mpHost.handleMessage(clientId, msg as Parameters<typeof mpHost.handleMessage>[1]);
+        dispatch(clientId, msg as Parameters<typeof mpHost.handleMessage>[1]);
       });
       socket.on('close', () => {
         if (clientId) {

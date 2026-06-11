@@ -215,7 +215,6 @@ export class MultiplayerHost {
   // ── Game start ────────────────────────────────────────────────────────────
 
   private async startGame(): Promise<void> {
-    this.phase = 'playing';
     const { playerCount } = this.opts;
     const humanSeats = new Set(
       [...this.seats.values()].filter((s) => s.clientId).map((s) => s.seat),
@@ -238,7 +237,7 @@ export class MultiplayerHost {
     const executeOp = (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) =>
       this.opts.executeOp(op.type === 'start' ? startGameOptions : baseOptions, snapshot, pendingState, op);
 
-    this.session = createDevSession({
+    const session = createDevSession({
       playerCount,
       aiSeats,
       executeOp,
@@ -253,9 +252,20 @@ export class MultiplayerHost {
         this.sendToSeat(seat, { type: 'server_response', requestId, result }),
     });
 
-    this.broadcastLobby(); // phase is now 'playing'
-    await this.session.start();
+    // Only commit to 'playing' if the game actually starts — otherwise a failed
+    // start would strand clients on an empty board. On failure, stay in the lobby
+    // and surface the reason.
+    try {
+      await session.start();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to start the game.';
+      for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
+      return;
+    }
 
+    this.session = session;
+    this.phase = 'playing';
+    this.broadcastLobby();
     for (const seat of humanSeats) {
       const clientId = this.seats.get(seat)?.clientId;
       if (clientId) this.reinitSeat(clientId, seat);
