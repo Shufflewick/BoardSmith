@@ -882,6 +882,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     }
 
     const element = new ElementClass(ctx);
+    // Every deserialized element needs its game back-reference. Without this,
+    // nested elements restored from a snapshot have `game === undefined` (only
+    // the game's direct children get it in loadSerializedState), so e.g.
+    // `piece.remove()` → `this.game.pile` throws after any restore.
+    if (ctx.game) (element as GameElement).game = ctx.game;
     element._t.id = json.id;
 
     if (json.name) {
