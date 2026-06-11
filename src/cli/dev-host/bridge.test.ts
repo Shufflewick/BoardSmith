@@ -152,4 +152,72 @@ describe('dev host bridge', () => {
       expect(posted).toEqual([{ kind: 'server_response', seat: 1 }]);
     });
   });
+
+  // ── debug wire ops ──────────────────────────────────────────────────────
+  describe('debug wire ops', () => {
+    /** A session that records the result payload of each server_response. */
+    function makeResultSession() {
+      const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
+      let stateBroadcasts = 0;
+      const session = createDevSession({
+        playerCount: 2,
+        executeOp: (snap, pend, op) =>
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
+        postGameState: () => {
+          stateBroadcasts++;
+        },
+        postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
+      });
+      return { session, responses, broadcasts: () => stateBroadcasts };
+    }
+
+    async function pass(session: ReturnType<typeof makeResultSession>['session'], n: number) {
+      for (let i = 0; i < n; i++) {
+        await session.handleServerRequest(1, `a${i}`, 'action', { actionName: 'pass', args: {} });
+      }
+    }
+
+    it('debug:history returns the action history (read-only, no broadcast)', async () => {
+      const { session, responses, broadcasts } = makeResultSession();
+      await session.start();
+      await pass(session, 2);
+      const before = broadcasts();
+
+      await session.handleServerRequest(1, 'h', 'debug:history', {});
+
+      const last = responses[responses.length - 1];
+      expect(last.result.success).toBe(true);
+      expect(last.result.actionHistory).toHaveLength(2);
+      // Read-only: no new game_state broadcast.
+      expect(broadcasts()).toBe(before);
+    });
+
+    it('debug:state-at returns historical state under the `state` key', async () => {
+      const { session, responses } = makeResultSession();
+      await session.start();
+      await pass(session, 2);
+
+      await session.handleServerRequest(1, 's', 'debug:state-at', { actionIndex: 1, player: 1 });
+
+      const last = responses[responses.length - 1];
+      expect(last.result.success).toBe(true);
+      expect((last.result.state as { view: unknown }).view).toBeTruthy();
+    });
+
+    it('debug:rewind truncates history and broadcasts the new state', async () => {
+      const { session, responses, broadcasts } = makeResultSession();
+      await session.start();
+      await pass(session, 3);
+      const before = broadcasts();
+
+      await session.handleServerRequest(1, 'r', 'debug:rewind', { actionIndex: 1 });
+      const rewindResp = responses[responses.length - 1];
+      expect(rewindResp.result.success).toBe(true);
+      // Mutating: it broadcast new state to both seats.
+      expect(broadcasts()).toBeGreaterThan(before);
+
+      await session.handleServerRequest(1, 'h', 'debug:history', {});
+      expect(responses[responses.length - 1].result.actionHistory).toHaveLength(1);
+    });
+  });
 });

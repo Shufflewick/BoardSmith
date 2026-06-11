@@ -23,7 +23,18 @@ export type WireOp =
   | 'resolve_choices'
   | 'selection_step'
   | 'cancel_action'
-  | 'undo';
+  | 'undo'
+  // Debug-panel wire ops (dev only). `debug:restart` / `debug:switch-seat` are
+  // host-chrome ops handled in DevHost, not here.
+  | 'debug:history'
+  | 'debug:state-at'
+  | 'debug:state-diff'
+  | 'debug:action-traces'
+  | 'debug:rewind'
+  | 'debug:move-to-top'
+  | 'debug:reorder-card'
+  | 'debug:transfer-card'
+  | 'debug:shuffle-deck';
 
 export interface DevSessionOptions {
   playerCount: number;
@@ -112,6 +123,42 @@ export function translateOp(
       return { type: 'cancelAction', player: seat };
     case 'undo':
       return { type: 'undo', player: seat };
+    case 'debug:history':
+      return { type: 'debugHistory' };
+    case 'debug:state-at':
+      return {
+        type: 'debugStateAt',
+        actionIndex: payload.actionIndex as number,
+        player: (payload.player as number) ?? seat,
+      };
+    case 'debug:state-diff':
+      return {
+        type: 'debugStateDiff',
+        fromIndex: payload.fromIndex as number,
+        toIndex: payload.toIndex as number,
+        player: (payload.player as number) ?? seat,
+      };
+    case 'debug:action-traces':
+      return { type: 'debugActionTraces', player: (payload.player as number) ?? seat };
+    case 'debug:rewind':
+      return { type: 'debugRewind', actionIndex: payload.actionIndex as number };
+    case 'debug:move-to-top':
+      return { type: 'debugReorder', cardId: payload.cardId as number, targetIndex: 0 };
+    case 'debug:reorder-card':
+      return {
+        type: 'debugReorder',
+        cardId: payload.cardId as number,
+        targetIndex: payload.targetIndex as number,
+      };
+    case 'debug:transfer-card':
+      return {
+        type: 'debugTransfer',
+        cardId: payload.cardId as number,
+        targetDeckId: payload.targetDeckId as number,
+        position: (payload.position as 'first' | 'last') ?? 'first',
+      };
+    case 'debug:shuffle-deck':
+      return { type: 'debugShuffle', deckId: payload.deckId as number };
     default:
       return undefined;
   }
@@ -139,6 +186,26 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
       };
     case 'cancel_action':
     case 'undo':
+      return { success: result.success, error: result.error };
+    case 'debug:history':
+      return { success: result.success, error: result.error, actionHistory: result.actionHistory };
+    case 'debug:state-at':
+      // DebugPanel reads `data.state`; the op carries it as `historicalState`.
+      return { success: result.success, error: result.error, state: result.historicalState };
+    case 'debug:state-diff':
+      return { success: result.success, error: result.error, diff: result.diff };
+    case 'debug:action-traces':
+      return {
+        success: result.success,
+        error: result.error,
+        traces: result.traces,
+        flowContext: result.flowContext,
+      };
+    case 'debug:rewind':
+    case 'debug:move-to-top':
+    case 'debug:reorder-card':
+    case 'debug:transfer-card':
+    case 'debug:shuffle-deck':
       return { success: result.success, error: result.error };
     default:
       return { success: false, error: `Unknown server op: '${wireOp}'` };
