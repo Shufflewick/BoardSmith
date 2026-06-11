@@ -24,15 +24,14 @@ const def: GameDefinitionLike = {
   minPlayers: 1,
   maxPlayers: 4,
 };
-const gameOptions = { playerCount: 2, seed: 'mp' };
 
 function makeHost(overrides: Partial<{ minPlayers: number }> = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: overrides.minPlayers ?? 1,
-    executeOp: (snap, pend, op) =>
-      executeOp(def, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
+    makeSeed: () => 'mp',
+    executeOp: (gameOptions, snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
     send: (clientId, msg) => sent.push({ clientId, msg }),
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
@@ -115,6 +114,19 @@ describe('MultiplayerHost', () => {
     clear();
 
     await host.handleMessage('A', { type: 'hello' });
+
+    const types = to('A').map((m) => m.type);
+    expect(types).toContain('init');
+    expect(types).toContain('game_state');
+  });
+
+  it('restart rebuilds the game and re-sends init to seated clients', async () => {
+    const { host, to, clear } = makeHost();
+    await host.handleMessage('A', { type: 'join', seat: 1 });
+    await host.handleMessage('A', { type: 'start' });
+    clear();
+
+    await host.handleMessage('A', { type: 'restart' });
 
     const types = to('A').map((m) => m.type);
     expect(types).toContain('init');

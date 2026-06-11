@@ -18,6 +18,11 @@
 import { createDevSession, type DevSession } from './bridge.js';
 import type { Op, OpResult } from '../../session/index.js';
 
+/** A fresh random 32-bit seed for a new game. */
+function defaultSeed(): string {
+  return String(Math.floor(Math.random() * 0xffffffff));
+}
+
 export interface SeatInfo {
   seat: number;
   /** The client holding this seat, or null if open. */
@@ -44,6 +49,7 @@ export type ClientInbound =
   | { type: 'join'; seat: number; name?: string; color?: string }
   | { type: 'leave' }
   | { type: 'start' }
+  | { type: 'restart' }
   | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> };
 
 export interface MultiplayerHostOptions {
@@ -53,10 +59,24 @@ export interface MultiplayerHostOptions {
   aiLevel?: string;
   /** Seat colors offered in the lobby (1-indexed by position). */
   colorPalette?: Array<{ value: string; label: string }>;
-  /** In-process op executor bound to the author's gameDefinition (as in DevHost). */
-  executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
+  /** Game-level options merged into the `start` op (the author's gameOptions). */
+  baseGameOptions?: Record<string, unknown>;
+  /**
+   * Run one op against a snapshot for the given gameOptions, bound to the
+   * author's gameDefinition: `(gameOptions, snapshot, pendingState, op) =>
+   * executeOp(def, gameOptions, …)`. The host computes the start gameOptions
+   * (seed, per-seat colors, playerIsAI) from lobby state, so it must own them.
+   */
+  executeOp: (
+    gameOptions: { playerCount: number; [key: string]: unknown },
+    snapshot: unknown,
+    pendingState: Record<string, unknown> | null,
+    op: Op,
+  ) => Promise<OpResult>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
+  /** Seed source for a fresh game (defaults to a random 32-bit seed). */
+  makeSeed?: () => string;
 }
 
 export class MultiplayerHost {
@@ -118,9 +138,20 @@ export class MultiplayerHost {
         return this.broadcastLobby();
       case 'start':
         return this.handleStart(clientId);
+      case 'restart':
+        return this.handleRestart(clientId);
       case 'server_request':
         return this.handleServerRequest(clientId, msg);
     }
+  }
+
+  private async handleRestart(clientId: string): Promise<void> {
+    if (this.phase !== 'playing') {
+      this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
+      return;
+    }
+    // Rebuild the session with the same seats and a fresh seed.
+    await this.startGame();
   }
 
   private handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): void {
@@ -185,18 +216,32 @@ export class MultiplayerHost {
 
   private async startGame(): Promise<void> {
     this.phase = 'playing';
+    const { playerCount } = this.opts;
     const humanSeats = new Set(
       [...this.seats.values()].filter((s) => s.clientId).map((s) => s.seat),
     );
     const aiSeats: Array<{ seat: number; level?: string }> = [];
-    for (let seat = 1; seat <= this.opts.playerCount; seat++) {
+    for (let seat = 1; seat <= playerCount; seat++) {
       if (!humanSeats.has(seat)) aiSeats.push({ seat, level: this.opts.aiLevel });
     }
 
+    // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
+    // a fresh seed, each seat's chosen/default color, and which seats are AI.
+    const startGameOptions = {
+      playerCount,
+      seed: (this.opts.makeSeed ?? defaultSeed)(),
+      ...this.opts.baseGameOptions,
+      playerOptions: this.buildPerSeatOptions(),
+      playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
+    };
+    const baseOptions = { playerCount };
+    const executeOp = (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) =>
+      this.opts.executeOp(op.type === 'start' ? startGameOptions : baseOptions, snapshot, pendingState, op);
+
     this.session = createDevSession({
-      playerCount: this.opts.playerCount,
+      playerCount,
       aiSeats,
-      executeOp: this.opts.executeOp,
+      executeOp,
       postGameState: (seat, view, meta) =>
         this.sendToSeat(seat, {
           type: 'game_state',
@@ -218,6 +263,17 @@ export class MultiplayerHost {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Per-seat playerOptions for the start op: each seat's chosen/default color. */
+  private buildPerSeatOptions(): Array<Record<string, unknown>> {
+    return Array.from({ length: this.opts.playerCount }, (_, i) => {
+      const seat = this.seats.get(i + 1);
+      const color = seat?.color ?? this.opts.colorPalette?.[i]?.value;
+      const perSeat: Record<string, unknown> = {};
+      if (color !== undefined) perSeat.color = color;
+      return perSeat;
+    });
+  }
 
   private reinitSeat(clientId: string, seat: number): void {
     this.send(clientId, { type: 'init', seat });
