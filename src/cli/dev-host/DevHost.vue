@@ -43,6 +43,17 @@ const gameOptionValues = reactive<Record<string, unknown>>(
 );
 const currentSeat = ref(1);
 
+// ── Collapsible dev chrome ──────────────────────────────────────────────────
+// Keep the bar slim when you just want screen space, while the live controls
+// (New game / View seat) stay reachable. Persist the choice so it sticks across
+// reloads and game restarts.
+const COLLAPSE_KEY = 'boardsmith:dev-chrome-collapsed';
+const collapsed = ref(localStorage.getItem(COLLAPSE_KEY) === '1');
+function toggleCollapsed(): void {
+  collapsed.value = !collapsed.value;
+  localStorage.setItem(COLLAPSE_KEY, collapsed.value ? '1' : '0');
+}
+
 // ── Session + iframe wiring ─────────────────────────────────────────────────
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 const iframeKey = ref(0);
@@ -214,93 +225,109 @@ function optionInputType(opt: DevOptionDef): 'number' | 'boolean' | 'select' | '
 
 <template>
   <div class="dev-host">
-    <header class="dev-chrome">
-      <div class="dev-chrome__title">
-        <strong>{{ cfg.displayName }}</strong>
-        <span class="dev-chrome__badge">boardsmith dev</span>
-      </div>
-
-      <div class="dev-chrome__row">
-        <label>
-          Players
-          <input
-            type="number"
-            :min="def.minPlayers"
-            :max="def.maxPlayers"
-            v-model.number="playerCount"
-          />
-        </label>
-
-        <div class="dev-chrome__seats">
-          <span class="dev-chrome__label">AI seats</span>
-          <button
-            v-for="seat in playerCount"
-            :key="`ai-${seat}`"
-            type="button"
-            class="seat-toggle"
-            :class="{ 'seat-toggle--on': aiSeatSet.has(seat) }"
-            @click="toggleAISeat(seat)"
+    <header class="dev-chrome" :class="{ 'dev-chrome--collapsed': collapsed }">
+      <div class="dev-chrome__bar">
+        <button
+          type="button"
+          class="dev-chrome__toggle"
+          :aria-expanded="!collapsed"
+          :title="collapsed ? 'Expand dev controls' : 'Collapse dev controls'"
+          @click="toggleCollapsed"
+        >
+          <span
+            class="dev-chrome__chevron"
+            :class="{ 'dev-chrome__chevron--open': !collapsed }"
+            aria-hidden="true"
+            >▸</span
           >
-            {{ seat }}
-          </button>
-        </div>
-
-        <label>
-          AI level
-          <select v-model="aiLevel">
-            <option value="easy">easy</option>
-            <option value="medium">medium</option>
-            <option value="hard">hard</option>
-            <option value="expert">expert</option>
-          </select>
-        </label>
-      </div>
-
-      <div v-if="cfg.gameOptions.length" class="dev-chrome__row">
-        <span class="dev-chrome__label">Options</span>
-        <label v-for="opt in cfg.gameOptions" :key="opt.id">
-          {{ opt.label || opt.id }}
-          <input
-            v-if="optionInputType(opt) === 'number'"
-            type="number"
-            :min="opt.min"
-            :max="opt.max"
-            v-model.number="gameOptionValues[opt.id]"
-          />
-          <input
-            v-else-if="optionInputType(opt) === 'boolean'"
-            type="checkbox"
-            v-model="gameOptionValues[opt.id]"
-          />
-          <select
-            v-else-if="optionInputType(opt) === 'select'"
-            v-model="gameOptionValues[opt.id]"
-          >
-            <option v-for="c in opt.choices" :key="String(c.value)" :value="c.value">
-              {{ c.label || String(c.value) }}
-            </option>
-          </select>
-          <input v-else type="text" v-model="gameOptionValues[opt.id]" />
-        </label>
-      </div>
-
-      <div class="dev-chrome__row">
-        <button type="button" class="dev-chrome__restart" :disabled="starting" @click="restart">
-          {{ starting ? 'Starting…' : 'New game' }}
+          <strong>{{ cfg.displayName }}</strong>
+          <span class="dev-chrome__badge">boardsmith dev</span>
         </button>
 
-        <div class="dev-chrome__seats">
-          <span class="dev-chrome__label">View seat</span>
-          <button
-            v-for="seat in playerCount"
-            :key="`view-${seat}`"
-            type="button"
-            class="seat-toggle"
-            :class="{ 'seat-toggle--on': currentSeat === seat }"
-            @click="switchSeat(seat)"
-          >
-            {{ seat }}<span v-if="aiSeatSet.has(seat)" class="seat-toggle__ai">AI</span>
+        <div class="dev-chrome__bar-actions">
+          <button type="button" class="dev-chrome__restart" :disabled="starting" @click="restart">
+            {{ starting ? 'Starting…' : 'New game' }}
           </button>
+
+          <div class="dev-chrome__seats">
+            <span class="dev-chrome__label">View seat</span>
+            <button
+              v-for="seat in playerCount"
+              :key="`view-${seat}`"
+              type="button"
+              class="seat-toggle"
+              :class="{ 'seat-toggle--on': currentSeat === seat }"
+              @click="switchSeat(seat)"
+            >
+              {{ seat }}<span v-if="aiSeatSet.has(seat)" class="seat-toggle__ai">AI</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="!collapsed" class="dev-chrome__config">
+        <div class="dev-chrome__row">
+          <label>
+            Players
+            <input
+              type="number"
+              :min="def.minPlayers"
+              :max="def.maxPlayers"
+              v-model.number="playerCount"
+            />
+          </label>
+
+          <div class="dev-chrome__seats">
+            <span class="dev-chrome__label">AI seats</span>
+            <button
+              v-for="seat in playerCount"
+              :key="`ai-${seat}`"
+              type="button"
+              class="seat-toggle"
+              :class="{ 'seat-toggle--on': aiSeatSet.has(seat) }"
+              @click="toggleAISeat(seat)"
+            >
+              {{ seat }}
+            </button>
+          </div>
+
+          <label>
+            AI level
+            <select v-model="aiLevel">
+              <option value="easy">easy</option>
+              <option value="medium">medium</option>
+              <option value="hard">hard</option>
+              <option value="expert">expert</option>
+            </select>
+          </label>
+        </div>
+
+        <div v-if="cfg.gameOptions.length" class="dev-chrome__row">
+          <span class="dev-chrome__label">Options</span>
+          <label v-for="opt in cfg.gameOptions" :key="opt.id">
+            {{ opt.label || opt.id }}
+            <input
+              v-if="optionInputType(opt) === 'number'"
+              type="number"
+              :min="opt.min"
+              :max="opt.max"
+              v-model.number="gameOptionValues[opt.id]"
+            />
+            <input
+              v-else-if="optionInputType(opt) === 'boolean'"
+              type="checkbox"
+              v-model="gameOptionValues[opt.id]"
+            />
+            <select
+              v-else-if="optionInputType(opt) === 'select'"
+              v-model="gameOptionValues[opt.id]"
+            >
+              <option v-for="c in opt.choices" :key="String(c.value)" :value="c.value">
+                {{ c.label || String(c.value) }}
+              </option>
+            </select>
+            <input v-else type="text" v-model="gameOptionValues[opt.id]" />
+          </label>
         </div>
       </div>
 
@@ -340,11 +367,49 @@ function optionInputType(opt: DevOptionDef): 'number' | 'boolean' | 'select' | '
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.dev-chrome__title {
+.dev-chrome__bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dev-chrome__toggle {
+  display: inline-flex;
+  align-items: center;
   gap: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
   font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.dev-chrome__chevron {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: #9aa;
+  transition: transform 0.15s ease;
+}
+
+.dev-chrome__chevron--open {
+  transform: rotate(90deg);
+}
+
+.dev-chrome__bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dev-chrome__config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .dev-chrome__badge {
