@@ -48,6 +48,18 @@ export interface GameStateSnapshot {
 
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
+
+  /** Per-action authoritative checkpoints for undo. `actionCheckpoints[k]` is
+   *  the LATEST full state observed while `k` actions were recorded — refreshed
+   *  on every op so trailing pending/selection mutations (e.g. `Piece.putInto`
+   *  inside a completed pending action, recorded in neither command nor action
+   *  history) are captured at the right action-count boundary. Undo restores
+   *  `actionCheckpoints[turnStartActionIndex]` directly instead of replaying
+   *  history — replay loses those pending mutations and mis-positions the flow.
+   *
+   *  Maintained by `GameRunner` (not `createSnapshot`), so each entry is itself
+   *  a snapshot WITHOUT its own `actionCheckpoints` — there is no nesting. */
+  actionCheckpoints?: GameStateSnapshot[];
 }
 
 /**

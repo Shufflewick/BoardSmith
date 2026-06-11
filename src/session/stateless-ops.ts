@@ -10,7 +10,7 @@
  */
 
 import type { Game } from '../engine/index.js';
-import { GameRunner, type GameStateSnapshot, type GameRunnerOptions, type SerializedAction } from '../runtime/index.js';
+import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { PickHandler, buildSingleActionMetadata, buildPlayerState, computeUndoInfo } from './index.js';
 
@@ -336,26 +336,34 @@ function handleUndo(
     return errorResult('No actions to undo');
   }
 
-  const actionsToReplay = runner.actionHistory.slice(0, turnStartActionIndex);
+  // Restore the turn-start state AUTHORITATIVELY from the per-action checkpoint
+  // captured at that action count — NOT by replaying actionHistory. Replay
+  // re-runs `start()` + recorded actions, which never re-applies pending/
+  // selection mutations (Piece.putInto, recorded in neither command nor action
+  // history); it loses prior-turn equipment and mis-positions the flow (a later
+  // action by another player then throws "Not Player N's turn"). The checkpoint
+  // is the exact serialized state at the turn boundary, so restoring it keeps
+  // every prior mutation and the correct flow position.
+  const checkpoints = snapshot.actionCheckpoints;
+  const turnStart = checkpoints?.[turnStartActionIndex];
+  if (!turnStart) {
+    return errorResult(
+      `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
+      `(snapshot carries ${checkpoints?.length ?? 0} checkpoint(s)). The snapshot must be ` +
+      `produced by GameRunner.getSnapshot so per-action checkpoints are present.`,
+    );
+  }
 
-  const replayGameOptions = {
-    ...gameOptions,
-    ...(snapshot.gameOptions ?? {}),
-    ...(snapshot.seed != null ? { seed: snapshot.seed } : {}),
-  };
-
-  const replayed = GameRunner.replay(
-    {
-      GameClass: def.gameClass,
-      gameType: def.gameType,
-      gameOptions: replayGameOptions,
-    } as unknown as GameRunnerOptions<never>,
-    actionsToReplay as SerializedAction[],
+  // Carry the checkpoints up to and including the restore point so further undos
+  // (e.g. undoing the now-current turn) still resolve authoritatively.
+  const restored = GameRunner.fromSnapshot(
+    { ...turnStart, actionCheckpoints: checkpoints.slice(0, turnStartActionIndex + 1) },
+    def.gameClass as GameRunnerOptions<never>['GameClass'],
   );
 
   return {
     success: true,
-    ...stateEnvelope(replayed, gameOptions.playerCount),
+    ...stateEnvelope(restored, gameOptions.playerCount),
   };
 }
 

@@ -130,6 +130,14 @@ export class GameRunner<G extends Game = Game> {
   /** History of serialized actions */
   readonly actionHistory: SerializedAction[] = [];
 
+  /**
+   * Per-action authoritative undo checkpoints. `actionCheckpoints[k]` is the
+   * latest full snapshot observed while `k` actions were recorded. Carried
+   * across the stateless snapshot boundary (loaded in `fromSnapshot`, emitted
+   * by `getSnapshot`) and read by the undo op. See `GameStateSnapshot`.
+   */
+  private actionCheckpoints: GameStateSnapshot[] = [];
+
   /** Random seed (for deterministic replay) */
   readonly seed?: string;
 
@@ -250,15 +258,30 @@ export class GameRunner<G extends Game = Game> {
   }
 
   /**
-   * Get a complete snapshot of the game state
+   * Get a complete snapshot of the game state, including the per-action undo
+   * checkpoints.
+   *
+   * `actionCheckpoints[k]` holds the latest authoritative state observed while
+   * `k` actions were recorded. We keep `[0..len-1]` frozen and refresh `[len]`
+   * to the current state on every call: that captures any trailing
+   * pending/selection mutations (e.g. `Piece.putInto`, recorded in neither
+   * command nor action history) that ran AFTER the k-th action but before the
+   * (k+1)-th, so undoing a later turn restores the true turn-start state.
+   * Entries beyond `len` are dropped (e.g. after an undo rewinds the history).
    */
   getSnapshot(): GameStateSnapshot {
-    return createSnapshot(
+    const base = createSnapshot(
       this.game,
       this.gameType,
       this.actionHistory,
       this.seed
     );
+
+    const len = this.actionHistory.length;
+    this.actionCheckpoints = this.actionCheckpoints.slice(0, len);
+    this.actionCheckpoints[len] = base;
+
+    return { ...base, actionCheckpoints: [...this.actionCheckpoints] };
   }
 
   /**
@@ -357,6 +380,11 @@ export class GameRunner<G extends Game = Game> {
     // Preserve action history for the undo op (which reads runner.actionHistory).
     // It is intentionally NOT replayed.
     runner.actionHistory.push(...snapshot.actionHistory);
+
+    // Carry the per-action undo checkpoints forward so the next getSnapshot keeps
+    // [0..len-1] intact while refreshing [len]. Older snapshots without the field
+    // start fresh (their checkpoint at the current action count is rebuilt below).
+    runner.actionCheckpoints = snapshot.actionCheckpoints ? [...snapshot.actionCheckpoints] : [];
 
     // Adopt the authoritative element tree. loadSerializedState fully clears and
     // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
