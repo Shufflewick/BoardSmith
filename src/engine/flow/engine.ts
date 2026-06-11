@@ -1,4 +1,5 @@
 import type { Game } from '../element/game.js';
+import { GameElement } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import type { ActionResult } from '../action/types.js';
 import type {
@@ -26,6 +27,73 @@ import type {
  * Maximum iterations for safety (prevent infinite loops)
  */
 const DEFAULT_MAX_ITERATIONS = 10000;
+
+/**
+ * Marker for a serialized element-valued flow variable. Flow variables can hold
+ * live `GameElement`/`Player` values (e.g. `eachPlayer`'s `currentPlayer`, a
+ * `forEach` `as` binding). A live element is NOT structured-cloneable, so a flow
+ * state carrying one throws `DataCloneError` when broadcast over postMessage or
+ * sent across the executor RPC boundary. `serializeFlowVariables` replaces such
+ * values with this marker on the way out (in `getPosition`); `relinkFlowVariables`
+ * resolves it back to the live element on the way in (in `restore`).
+ */
+interface SerializedFlowElement {
+  __flowElementId: number;
+  className: string;
+}
+
+function isSerializedFlowElement(value: unknown): value is SerializedFlowElement {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as SerializedFlowElement).__flowElementId === 'number' &&
+    typeof (value as SerializedFlowElement).className === 'string'
+  );
+}
+
+/** Replace live `GameElement` values (anywhere in the structure) with a
+ *  structured-cloneable marker. Non-element values pass through unchanged. */
+function serializeFlowVariables(value: unknown): unknown {
+  if (value instanceof GameElement) {
+    return { __flowElementId: value.id, className: value.constructor.name } satisfies SerializedFlowElement;
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(serializeFlowVariables);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    result[key] = serializeFlowVariables(entry);
+  }
+  return result;
+}
+
+/** Inverse of `serializeFlowVariables`: resolve element markers back to live
+ *  elements of `game` by id. A marker whose id no longer resolves is left as-is
+ *  so the staleness surfaces loudly rather than silently becoming null. A live
+ *  element (in-process, never serialized) is passed through unchanged. */
+function relinkFlowVariables(value: unknown, game: Game): unknown {
+  if (value instanceof GameElement) {
+    return value;
+  }
+  if (isSerializedFlowElement(value)) {
+    const live = game.getElementById(value.__flowElementId);
+    return live && live.constructor.name === value.className ? live : value;
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => relinkFlowVariables(entry, game));
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    result[key] = relinkFlowVariables(entry, game);
+  }
+  return result;
+}
 
 /**
  * Creates a flow context for execution
@@ -460,7 +528,11 @@ export class FlowEngine<G extends Game = Game> {
    * Restore flow from a serialized position
    */
   restore(position: FlowPosition): void {
-    this.variables = { ...position.variables };
+    // Relink serialized element-valued flow variables back to live elements of
+    // this game (inverse of getPosition's serializeFlowVariables). Doing it here
+    // means every restore path — runner.fromSnapshot, MCTS clone, and the HMR
+    // dev-transfer in game-session — is covered without each caller relinking.
+    this.variables = relinkFlowVariables({ ...position.variables }, this.game) as Record<string, unknown>;
     this.stack = [];
 
     // Rebuild stack from path
@@ -717,7 +789,9 @@ export class FlowEngine<G extends Game = Game> {
       iterations,
       frameData: Object.keys(frameData).length > 0 ? frameData : undefined,
       playerIndex: this.currentPlayer?.seat,
-      variables: { ...this.variables },
+      // Serialize element-valued flow variables (e.g. eachPlayer's currentPlayer)
+      // so the position is structured-cloneable across the broadcast/RPC boundary.
+      variables: serializeFlowVariables({ ...this.variables }) as Record<string, unknown>,
     };
   }
 

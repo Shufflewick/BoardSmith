@@ -9,7 +9,6 @@ import type {
   GameStateSnapshot,
 } from '../engine/index.js';
 import { createSnapshot } from '../engine/index.js';
-import { relinkFlowState } from '../runtime/index.js';
 import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { SeededRandom } from '../utils/random.js';
@@ -1237,10 +1236,11 @@ export class MCTSBot<G extends Game = Game> {
       game.setRandomState(snapshot.randomState);
     }
 
-    // Restore the authoritative flow position (re-link element-valued flow
-    // variables/frameData to the freshly loaded tree).
+    // Restore the authoritative flow position. Element-valued flow variables were
+    // serialized to markers by getPosition; restoreFlowState relinks them to the
+    // freshly loaded tree internally.
     if (snapshot.flowState) {
-      game.restoreFlowState(relinkFlowState(snapshot.flowState, game));
+      game.restoreFlowState(snapshot.flowState);
     }
 
     return game;
