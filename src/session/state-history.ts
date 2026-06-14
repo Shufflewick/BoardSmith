@@ -17,7 +17,7 @@ import {
   type StoredGameState,
   type PlayerGameState,
 } from './types.js';
-import { buildPlayerState, computeUndoInfo, buildActionTraces } from './utils.js';
+import { buildPlayerState, computeUndoInfo, buildActionTraces, computeElementDiff } from './utils.js';
 
 // ============================================
 // Types
@@ -173,70 +173,12 @@ export class StateHistory<G extends Game = Game> {
         return { success: false, error: toResult.error || 'Failed to get to state' };
       }
 
-      // Extract element IDs from view trees, tracking parent relationships
-      // Map: element id -> { parentId, attributes (without children/player metadata) }
-      const fromElements = new Map<number, { parentId: number | null; attrs: string }>();
-      const toElements = new Map<number, { parentId: number | null; attrs: string }>();
-
-      function getComparableAttrs(obj: Record<string, unknown>): string {
-        // Only compare attributes that represent actual game state, not metadata
-        const attrs = obj.attributes as Record<string, unknown> | undefined;
-        if (!attrs) return '';
-        // Filter out player objects and internal metadata
-        const filtered: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(attrs)) {
-          // Skip player objects and internal metadata
-          if (key === 'player' || key === 'game' || key.startsWith('_')) continue;
-          filtered[key] = value;
-        }
-        return JSON.stringify(filtered);
-      }
-
-      function collectElements(node: unknown, map: Map<number, { parentId: number | null; attrs: string }>, parentId: number | null = null) {
-        if (!node || typeof node !== 'object') return;
-        const obj = node as Record<string, unknown>;
-        if (typeof obj.id === 'number') {
-          map.set(obj.id, {
-            parentId,
-            attrs: getComparableAttrs(obj),
-          });
-          // Recurse into children with this node as parent
-          if (Array.isArray(obj.children)) {
-            for (const child of obj.children) {
-              collectElements(child, map, obj.id);
-            }
-          }
-        } else if (Array.isArray(obj.children)) {
-          // Node without id, just recurse
-          for (const child of obj.children) {
-            collectElements(child, map, parentId);
-          }
-        }
-      }
-
-      collectElements(fromResult.state.view, fromElements);
-      collectElements(toResult.state.view, toElements);
-
-      // Compute diff - focus on elements that moved (parent changed) or whose attributes changed
-      const added: number[] = [];
-      const removed: number[] = [];
-      const changed: number[] = [];
-
-      for (const [id, toData] of toElements.entries()) {
-        const fromData = fromElements.get(id);
-        if (!fromData) {
-          added.push(id);
-        } else if (fromData.parentId !== toData.parentId || fromData.attrs !== toData.attrs) {
-          // Element moved to different parent OR its attributes changed
-          changed.push(id);
-        }
-      }
-
-      for (const id of fromElements.keys()) {
-        if (!toElements.has(id)) {
-          removed.push(id);
-        }
-      }
+      // Compute the element-level diff between the two state views using the
+      // shared helper (single source of truth with the stateless executor).
+      const { added, removed, changed } = computeElementDiff(
+        fromResult.state.view,
+        toResult.state.view,
+      );
 
       return {
         success: true,
