@@ -2,7 +2,7 @@
  * StateHistory class for time travel debugging and undo functionality.
  *
  * Encapsulates:
- * - getStateAtAction(): Replay to a specific action index
+ * - getStateAtAction(): Restore state at a specific action index from checkpoints
  * - getStateDiff(): Compute element diff between two states
  * - getActionTraces(): Debug action availability
  * - undoToTurnStart(): Undo current turn
@@ -95,8 +95,17 @@ export class StateHistory<G extends Game = Game> {
   // ============================================
 
   /**
-   * Get state at a specific action index (for time travel debugging)
-   * Creates a temporary game and replays actions up to the specified index.
+   * Get state at a specific action index (for time travel debugging).
+   *
+   * Restores AUTHORITATIVELY from the per-action checkpoint captured at that
+   * action count — NOT by replaying actionHistory. Replay re-runs start() +
+   * recorded actions, which never re-applies pending/selection mutations
+   * (Piece.putInto, recorded in neither command nor action history): it loses
+   * prior-turn equipment and mis-positions the flow, so it would silently show a
+   * board that never actually existed. This shares the single restore primitive
+   * (GameRunner.fromSnapshot + actionCheckpoints) with undoToTurnStart and the
+   * stateless undo op. The live session accumulates these checkpoints via its
+   * broadcast funnel.
    */
   getStateAtAction(actionIndex: number, playerPosition: number): { success: boolean; state?: PlayerGameState; error?: string } {
     const history = this.#storedState.actionHistory;
@@ -106,24 +115,21 @@ export class StateHistory<G extends Game = Game> {
       return { success: false, error: `Invalid action index: ${actionIndex}. History has ${history.length} actions.` };
     }
 
-    try {
-      // Get subset of actions to replay
-      const actionsToReplay = history.slice(0, actionIndex);
+    const checkpoints = this.#getRunner().getSnapshot().actionCheckpoints;
+    const checkpoint = checkpoints?.[actionIndex];
+    if (!checkpoint) {
+      return {
+        success: false,
+        error: `Cannot view state at action index ${actionIndex}: no checkpoint ` +
+          `(have ${checkpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
+          `it runs; a session cold-restored from action history alone cannot time-travel across ` +
+          `pending mutations.`,
+      };
+    }
 
-      // Create a temporary runner and replay
-      const tempRunner = GameRunner.replay<G>(
-        {
-          GameClass: this.#GameClass,
-          gameType: this.#storedState.gameType,
-          gameOptions: {
-            playerCount: this.#storedState.playerCount,
-            playerNames: this.#storedState.playerNames,
-            seed: this.#storedState.seed,
-            ...this.#storedState.gameOptions,
-          },
-        },
-        actionsToReplay
-      );
+    try {
+      // Restore the checkpoint authoritatively. No replay.
+      const tempRunner = GameRunner.fromSnapshot<G>(checkpoint, this.#GameClass);
 
       // Build state for the requested player
       const state = buildPlayerState(
@@ -137,7 +143,7 @@ export class StateHistory<G extends Game = Game> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to replay game state',
+        error: error instanceof Error ? error.message : 'Failed to restore game state',
       };
     }
   }
@@ -361,31 +367,39 @@ export class StateHistory<G extends Game = Game> {
       return { success: false, error: `Cannot rewind forward: target ${targetActionIndex} >= current ${currentLength}` };
     }
 
-    // Slice history to target point
-    const actionsToReplay = this.#storedState.actionHistory.slice(0, targetActionIndex);
     const actionsDiscarded = currentLength - targetActionIndex;
 
+    // Restore the target state AUTHORITATIVELY from the per-action checkpoint —
+    // NOT by replaying actionHistory. Replay re-runs start() + recorded actions,
+    // which never re-applies pending/selection mutations (Piece.putInto, recorded
+    // in neither command nor action history): it loses prior-turn equipment and
+    // mis-positions the flow, so rewind would resurrect a corrupted/mis-positioned
+    // live game. This shares the single restore primitive (GameRunner.fromSnapshot
+    // + actionCheckpoints) with undoToTurnStart and the stateless undo op.
+    const checkpoints = this.#getRunner().getSnapshot().actionCheckpoints;
+    const checkpoint = checkpoints?.[targetActionIndex];
+    if (!checkpoint) {
+      return {
+        success: false,
+        error: `Cannot rewind to action index ${targetActionIndex}: no checkpoint ` +
+          `(have ${checkpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
+          `it runs; a session cold-restored from action history alone cannot rewind across ` +
+          `pending mutations.`,
+      };
+    }
+
     try {
-      // Replay game to that point
-      const newRunner = GameRunner.replay<G>(
-        {
-          GameClass: this.#GameClass,
-          gameType: this.#storedState.gameType,
-          gameOptions: {
-            playerCount: this.#storedState.playerCount,
-            playerNames: this.#storedState.playerNames,
-            seed: this.#storedState.seed,
-            ...this.#storedState.gameOptions,
-          },
-        },
-        actionsToReplay
+      // Restore the checkpoint, carrying its prefix forward so further undos/rewinds work.
+      const newRunner = GameRunner.fromSnapshot<G>(
+        { ...checkpoint, actionCheckpoints: checkpoints!.slice(0, targetActionIndex + 1) },
+        this.#GameClass,
       );
 
       // Replace current runner via callback
       this.#callbacks.replaceRunner(newRunner);
 
-      // Update stored action history
-      this.#storedState.actionHistory = actionsToReplay;
+      // Update stored action history to the restored point
+      this.#storedState.actionHistory = newRunner.actionHistory;
 
       // Persist and broadcast
       await this.#callbacks.save();
