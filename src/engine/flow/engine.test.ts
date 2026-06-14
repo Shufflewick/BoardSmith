@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   Game,
   Space,
@@ -1793,5 +1793,57 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     // If followUp counted as iterations, we would have failed at iteration 2
     // with chainDepth still less than maxChainDepth
+  });
+});
+
+describe('Unknown action warning (F20)', () => {
+  let game: TestGame;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 3 });
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('actionStep references a non-existent method in the warning is not used; points to the real API', () => {
+    const flow = defineFlow({
+      root: actionStep({ actions: ['nope'] }),
+    });
+
+    new FlowEngine(game, flow).start();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = warnSpy.mock.calls[0][0] as string;
+
+    // Names the unknown action.
+    expect(message).toContain("references unknown action 'nope'");
+    // Points to the REAL, object-based registration API.
+    expect(message).toContain('registerActions(');
+    expect(message).toContain("action('nope')");
+    expect(message).toContain('defineActions()');
+    // Must NOT reference the non-existent method / wrong signature (the F20 defect).
+    expect(message).not.toContain('defineAction(');
+    expect(message).not.toContain("game.defineAction('nope', ...)");
+  });
+
+  it('simultaneous-action-step warning also points to the real API', () => {
+    const flow = defineFlow({
+      root: eachPlayer({
+        simultaneous: true,
+        do: actionStep({ actions: ['missing'] }),
+      }),
+    });
+
+    new FlowEngine(game, flow).start();
+
+    expect(warnSpy).toHaveBeenCalled();
+    const message = warnSpy.mock.calls[0][0] as string;
+    expect(message).toContain("references unknown action 'missing'");
+    expect(message).toContain('registerActions(');
+    expect(message).not.toContain('defineAction(');
   });
 });

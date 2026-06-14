@@ -1223,7 +1223,7 @@ export class FlowEngine<G extends Game = Game> {
           this.warnedUnknownActions.add(actionName);
           console.warn(
             `[BoardSmith] Flow step '${config.name ?? 'action-step'}' references unknown action '${actionName}'. ` +
-            `Did you forget to register it with game.defineAction('${actionName}', ...)?`
+            `Define it with action('${actionName}') and register it via this.registerActions(...) in your game's defineActions() method.`
           );
         }
         return false;
@@ -1299,7 +1299,7 @@ export class FlowEngine<G extends Game = Game> {
             this.warnedUnknownActions.add(actionName);
             console.warn(
               `[BoardSmith] Flow step '${config.name ?? 'simultaneous-action-step'}' references unknown action '${actionName}'. ` +
-              `Did you forget to register it with game.defineAction('${actionName}', ...)?`
+              `Define it with action('${actionName}') and register it via this.registerActions(...) in your game's defineActions() method.`
             );
           }
           return false;
