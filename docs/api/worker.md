@@ -92,7 +92,7 @@ id = "your-kv-namespace-id"
 
 ```typescript
 // games/go-fish/game.ts
-import { Game, Player, Card, Hand, Deck } from 'boardsmith';
+import { Game, Player, Card, Hand, Deck, Action } from 'boardsmith';
 import type { GameDefinition } from 'boardsmith/worker';
 
 export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
@@ -104,10 +104,11 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
   }
 
   defineActions() {
-    this.defineAction('ask', {
-      prompt: 'Ask a player for a rank',
-      // ... action definition
-    });
+    this.registerActions(
+      Action.create('ask')
+        .prompt('Ask a player for a rank'),
+      // ... more actions
+    );
   }
 }
 

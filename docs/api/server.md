@@ -322,6 +322,43 @@ registry.set({
 // Server automatically handles all game types
 ```
 
+## Debug & Integrity Routes
+
+`GameServerCore` can mount debug / time-travel routes that are useful in local
+development but dangerous in a deployed game. These routes have **no per-request
+auth**, so an untrusted client could use them to stack a deck, transfer cards
+between decks, reshuffle, rewind away other players' moves, or dump the full
+action history (which can reveal hidden information via replay).
+
+Gated routes:
+
+```
+GET  /games/:id/history                 - Full action history
+GET  /games/:id/state-at/:n             - Replay state at action N
+GET  /games/:id/action-traces          - Action availability traces
+POST /games/:id/rewind                 - Rewind to an action
+POST /games/:id/debug/move-to-top      - Move a card to the top of a deck
+POST /games/:id/debug/reorder-card     - Reorder a card within a deck
+POST /games/:id/debug/transfer-card    - Transfer a card to another deck
+POST /games/:id/debug/shuffle-deck     - Shuffle a deck
+```
+
+They are **secure by default**: closed (HTTP 404) unless the `environment`
+option is explicitly set to `'development'`. An unset or `'production'`
+environment leaves them disabled.
+
+```typescript
+// Enable debug/integrity routes for local development only:
+const server = new GameServerCore({
+  store: new InMemoryGameStore(),
+  registry,
+  environment: 'development', // unset or 'production' => routes return 404
+});
+```
+
+Note: `GET /games/:id/state-diff/:from/:to` is **not** gated — it powers
+production replay/animation and stays available in every environment.
+
 ## See Also
 
 - [boardsmith/client](./client.md) - Browser client SDK

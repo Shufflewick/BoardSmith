@@ -1007,13 +1007,13 @@ actions: ['dictatorMove', 'dictatorAttack']
 
 // After consolidation, actions are unified
 // But flow still references old names!
-game.defineAction('move', ...)  // 'dictatorMove' no longer exists
+this.registerActions(action('move')...)  // 'dictatorMove' no longer exists
 ```
 
 **Fix:** Update flow to use new action names. The engine now warns about unknown actions:
 ```
 [BoardSmith] Flow step 'player-turn' references unknown action 'dictatorMove'.
-Did you forget to register it with game.defineAction('dictatorMove', ...)?
+Define it with action('dictatorMove') and register it via this.registerActions(...) in your game's defineActions() method.
 ```
 
 #### 2. Dynamic Action Lists

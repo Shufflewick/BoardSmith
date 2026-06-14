@@ -202,16 +202,17 @@ class MyGame extends Game<MyGame, MyPlayer> {
   }
 
   defineActions() {
-    this.defineAction('move', {
-      prompt: 'Select a token to move',
-      select: {
-        type: 'element',
-        from: this.board.all(Piece),
-      },
-      execute: ({ selected }) => {
-        // Move logic
-      },
-    });
+    this.registerActions(
+      Action.create('move')
+        .prompt('Select a token to move')
+        .chooseElement('token', {
+          prompt: 'Select a token',
+          elementClass: Piece,
+        })
+        .execute(({ token }) => {
+          // Move logic
+        }),
+    );
   }
 }
 ```
