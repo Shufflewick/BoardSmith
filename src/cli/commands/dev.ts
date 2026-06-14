@@ -139,7 +139,7 @@ function resolveDevHostDir(): string {
 }
 
 /**
- * esbuild plugin to resolve @boardsmith/* imports to the monorepo source.
+ * esbuild plugin to resolve boardsmith/* imports to the monorepo source.
  * Only used in monorepo context - standalone games resolve from node_modules.
  * Returns a no-op plugin for standalone context.
  */

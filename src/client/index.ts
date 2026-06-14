@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { MeepleClient } from '@boardsmith/client';
+ * import { MeepleClient } from 'boardsmith/client';
  *
  * const client = new MeepleClient({
  *   baseUrl: 'https://game.example.com',

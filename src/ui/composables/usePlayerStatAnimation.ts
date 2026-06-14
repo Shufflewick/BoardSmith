@@ -20,7 +20,7 @@
  * ## Usage in Custom UI
  *
  * ```typescript
- * import { usePlayerStatAnimation, useFlyingElements } from '@boardsmith/ui';
+ * import { usePlayerStatAnimation, useFlyingElements } from 'boardsmith/ui';
  *
  * const { flyingElements, flyMultiple } = useFlyingElements();
  * const { flyToPlayerStat, getPlayerStatElement } = usePlayerStatAnimation();

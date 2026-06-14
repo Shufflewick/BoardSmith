@@ -8,7 +8,7 @@
  *
  * @example
  * ```typescript
- * import { STANDARD_PLAYER_COLORS, createColorOption } from '@boardsmith/session';
+ * import { STANDARD_PLAYER_COLORS, createColorOption } from 'boardsmith/session';
  *
  * export const gameDefinition = {
  *   // ...
@@ -20,7 +20,7 @@
  *
  * @example Custom colors
  * ```typescript
- * import { createColorOption } from '@boardsmith/session';
+ * import { createColorOption } from 'boardsmith/session';
  *
  * export const gameDefinition = {
  *   // ...

@@ -1,5 +1,5 @@
 /**
- * @boardsmith/testing - Test utilities for BoardSmith games
+ * boardsmith/testing - Test utilities for BoardSmith games
  *
  * Provides utilities for testing BoardSmith games including:
  * - Test game creation and management
@@ -15,7 +15,7 @@
  *   simulateAction,
  *   assertFlowState,
  *   assertActionSucceeds,
- * } from '@boardsmith/testing';
+ * } from 'boardsmith/testing';
  *
  * test('player can draw a card', () => {
  *   const game = createTestGame(MyGame, { playerCount: 2 });

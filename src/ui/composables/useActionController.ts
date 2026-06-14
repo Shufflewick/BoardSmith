@@ -52,7 +52,7 @@
  * ```
  * Or via inject:
  * ```typescript
- * import { injectActionController } from '@boardsmith/ui';
+ * import { injectActionController } from 'boardsmith/ui';
  * const controller = injectActionController();
  * ```
  *

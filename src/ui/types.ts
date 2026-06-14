@@ -1,5 +1,5 @@
 /**
- * Shared types for @boardsmith/ui
+ * Shared types for boardsmith/ui
  *
  * This file contains the canonical type definitions used throughout the UI package.
  * All other type definitions should import from here to ensure consistency.
@@ -66,7 +66,7 @@ export interface BaseElementAttributes {
  *
  * @example Finding element IDs for action calls
  * ```typescript
- * import { findChildByAttribute } from '@boardsmith/ui';
+ * import { findChildByAttribute } from 'boardsmith/ui';
  *
  * // When you have attribute data but need the element ID:
  * const equipment = findChildByAttribute(merc, 'equipmentName', 'Laser Rifle');

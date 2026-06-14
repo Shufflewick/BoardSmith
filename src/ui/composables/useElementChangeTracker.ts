@@ -13,7 +13,7 @@
  * ## Basic Usage (Cards)
  *
  * ```typescript
- * import { useElementChangeTracker } from '@boardsmith/ui';
+ * import { useElementChangeTracker } from 'boardsmith/ui';
  *
  * const handRef = ref<HTMLElement | null>(null);
  *

@@ -238,7 +238,7 @@ export class TestGame<G extends Game = Game> {
  *
  * @example
  * ```typescript
- * import { createTestGame } from '@boardsmith/testing';
+ * import { createTestGame } from 'boardsmith/testing';
  * import { GoFishGame } from '../games/go-fish';
  *
  * test('player can ask for a card', () => {
