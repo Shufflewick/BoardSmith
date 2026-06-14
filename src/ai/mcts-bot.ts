@@ -8,7 +8,7 @@ import type {
   Selection,
   GameStateSnapshot,
 } from '../engine/index.js';
-import { createSnapshot } from '../engine/index.js';
+import { createSnapshot, canSeatAct } from '../engine/index.js';
 import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { SeededRandom } from '../utils/random.js';
@@ -741,20 +741,7 @@ export class MCTSBot<G extends Game = Game> {
    * Check if the bot can act in the current flow state
    */
   private canBotAct(flowState: FlowState): boolean {
-    // Simultaneous action step - check awaitingPlayers first (takes priority)
-    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-      const playerState = flowState.awaitingPlayers.find(
-        p => p.playerIndex === this.playerIndex && !p.completed
-      );
-      return playerState !== undefined && playerState.availableActions.length > 0;
-    }
-
-    // Regular action step - check currentPlayer
-    if (flowState.currentPlayer !== undefined) {
-      return flowState.currentPlayer === this.playerIndex;
-    }
-
-    return false;
+    return canSeatAct(flowState, this.playerIndex);
   }
 
   /**

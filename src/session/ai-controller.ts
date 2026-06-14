@@ -2,7 +2,7 @@
  * AI controller for managing AI player moves
  */
 
-import type { Game, SerializedAction } from '../engine/index.js';
+import { dueSeats, canSeatAct, type Game, type SerializedAction } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
@@ -83,25 +83,9 @@ export class AIController<G extends Game = Game> {
       return null;
     }
 
-    // Find which AI player should act
-    let aiPlayer: number | undefined;
-
-    // Check for simultaneous actions first (awaitingPlayers)
-    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-      for (const playerState of flowState.awaitingPlayers) {
-        if (!playerState.completed &&
-            playerState.availableActions.length > 0 &&
-            this.#aiPlayers.has(playerState.playerIndex)) {
-          aiPlayer = playerState.playerIndex;
-          break;
-        }
-      }
-    } else if (flowState.currentPlayer !== undefined) {
-      // Regular turn-based action - check currentPlayer
-      if (this.#aiPlayers.has(flowState.currentPlayer)) {
-        aiPlayer = flowState.currentPlayer;
-      }
-    }
+    // Find which AI player should act. dueSeats() handles both simultaneous
+    // and sequential steps, so we just pick the first due seat that is an AI.
+    const aiPlayer = dueSeats(flowState).find(seat => this.#aiPlayers.has(seat));
 
     // No AI player needs to act
     if (aiPlayer === undefined) {
@@ -122,18 +106,8 @@ export class AIController<G extends Game = Game> {
         return null;
       }
 
-      // Check if the current player changed
-      let stillOurTurn = false;
-      if (currentFlowState.awaitingPlayers && currentFlowState.awaitingPlayers.length > 0) {
-        const playerState = currentFlowState.awaitingPlayers.find(
-          p => p.playerIndex === aiPlayer && !p.completed && p.availableActions.length > 0
-        );
-        stillOurTurn = playerState !== undefined;
-      } else if (currentFlowState.currentPlayer === aiPlayer) {
-        stillOurTurn = true;
-      }
-
-      if (!stillOurTurn) {
+      // Check if the acting seat is still due after the delay
+      if (!canSeatAct(currentFlowState, aiPlayer)) {
         // Turn changed during the delay - skip this AI check
         return null;
       }
