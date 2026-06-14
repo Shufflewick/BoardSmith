@@ -15,6 +15,8 @@ import type {
   CreateElementCommand,
   CreateManyCommand,
   RemoveCommand,
+  ShuffleCommand,
+  RestoreOrderCommand,
   SetVisibilityCommand,
   AddVisibleToCommand,
   SetCurrentPlayerCommand,
@@ -68,8 +70,7 @@ export function createInverseCommand(game: Game, command: GameCommand): GameComm
       return createRemoveInverse(game, command);
 
     case 'SHUFFLE':
-      // Not invertible - random operation
-      return null;
+      return createShuffleInverse(game, command);
 
     case 'SET_VISIBILITY':
       return createSetVisibilityInverse(game, command);
@@ -178,6 +179,28 @@ function createRemoveInverse(game: Game, command: RemoveCommand): MoveCommand | 
     elementId: command.elementId,
     destinationId: currentParent.id,
     position: isFirst ? 'first' : 'last',
+  };
+}
+
+/**
+ * Create inverse for SHUFFLE command.
+ *
+ * Shuffling randomly permutes a space's children in place. The inverse captures
+ * the exact pre-shuffle order (by element id) and restores it via RESTORE_ORDER,
+ * so MCTS can roll a shuffle back incrementally instead of rebuilding the whole
+ * game. Must be called BEFORE the shuffle executes (per createInverseCommand's
+ * contract) so the captured order is the original one.
+ */
+function createShuffleInverse(game: Game, command: ShuffleCommand): RestoreOrderCommand | null {
+  const space = game.getElementById(command.spaceId);
+  if (!space) return null;
+
+  const elementIds = space._t.children.map((child) => child.id);
+
+  return {
+    type: 'RESTORE_ORDER',
+    spaceId: command.spaceId,
+    elementIds,
   };
 }
 
