@@ -72,9 +72,33 @@ function notFound(): ServerResponse {
   return { status: 404, body: { success: false, error: 'Not found' } };
 }
 
+/**
+ * Generate a short, unique identifier to correlate a client-facing 500
+ * response with the full error logged server-side.
+ */
+function generateErrorId(): string {
+  return `err_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Build a 500 response for an uncaught exception.
+ *
+ * Internal exception text can embed element ids, property paths, or class names,
+ * so it must never reach the client (see CLAUDE.md: "Never leak implementation
+ * details"). The full error is logged server-side under a generated error id;
+ * the client receives only that id plus a generic, non-revealing message.
+ */
 function serverError(error: unknown): ServerResponse {
-  const message = error instanceof Error ? error.message : 'Internal error';
-  return { status: 500, body: { success: false, error: message } };
+  const errorId = generateErrorId();
+  console.error(`Server error [${errorId}]:`, error);
+  return {
+    status: 500,
+    body: {
+      success: false,
+      error: `Internal server error. Reference: ${errorId}`,
+      errorId,
+    },
+  };
 }
 
 // ============================================
@@ -465,7 +489,6 @@ export class GameServerCore {
 
       return notFound();
     } catch (error) {
-      console.error('Server error:', error);
       return serverError(error);
     }
   }

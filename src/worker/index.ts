@@ -130,6 +130,14 @@ export interface WorkerConfig {
 // ============================================
 
 /**
+ * Generate a short, unique identifier to correlate a client-facing 500
+ * response with the full error logged server-side.
+ */
+function generateErrorId(): string {
+  return `err_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
  * Build game and config registries from an array of game definitions.
  */
 export function buildRegistries(definitions: GameDefinition[]): {
@@ -739,9 +747,14 @@ export function createGameWorker(config: WorkerConfig) {
           { status: 404, headers: corsHeaders }
         );
       } catch (error) {
-        console.error('Worker error:', error);
+        // Internal exception text can embed element ids, property paths, or
+        // class names, so it must never reach the client (see CLAUDE.md:
+        // "Never leak implementation details"). Log the full error server-side
+        // under a generated error id; return only that id plus a generic message.
+        const errorId = generateErrorId();
+        console.error(`Worker error [${errorId}]:`, error);
         return Response.json(
-          { success: false, error: error instanceof Error ? error.message : 'Internal error' },
+          { success: false, error: `Internal server error. Reference: ${errorId}`, errorId },
           { status: 500, headers: corsHeaders }
         );
       }
