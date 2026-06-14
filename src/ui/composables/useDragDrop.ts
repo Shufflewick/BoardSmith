@@ -70,7 +70,7 @@
  *      :class="{ 'is-dragging': isDragging({ id: card.id }) }">
  * ```
  */
-import { useBoardInteraction, type ElementRef } from './useBoardInteraction.js';
+import { tryUseBoardInteraction, type ElementRef } from './useBoardInteraction.js';
 
 export interface DragProps {
   draggable: true;
@@ -173,7 +173,7 @@ export interface UseDragDropReturn {
 }
 
 export function useDragDrop(): UseDragDropReturn {
-  const boardInteraction = useBoardInteraction();
+  const boardInteraction = tryUseBoardInteraction();
 
   const dragProps = (ref: ElementRef, options?: DragOptions): DragProps => ({
     draggable: true,

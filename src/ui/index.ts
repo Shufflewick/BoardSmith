@@ -49,6 +49,7 @@ export {
 
 export {
   useBoardInteraction,
+  tryUseBoardInteraction,
   createBoardInteraction,
   provideBoardInteraction,
   type BoardInteraction,

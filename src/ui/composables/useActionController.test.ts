@@ -674,7 +674,13 @@ describe('useActionController', () => {
     it('should return undefined for optional injections outside context', () => {
       // These return undefined instead of throwing (optional)
       expect(injectPickStepFn()).toBeUndefined();
-      expect(injectBoardInteraction()).toBeUndefined();
+    });
+
+    it('should throw when injectBoardInteraction called outside context', () => {
+      // Mirrors injectActionController: the board-interaction channel fails
+      // loudly with an actionable message instead of silently returning
+      // undefined (regression for F21).
+      expect(() => injectBoardInteraction()).toThrow('must be called inside a <GameShell>');
     });
 
     it('should export injection helper functions', () => {

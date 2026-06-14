@@ -16,7 +16,7 @@
  * - Click to select and filter ActionPanel choices
  */
 import { computed, inject, provide, ref, watchEffect, type Ref } from 'vue';
-import { useBoardInteraction } from '../../composables/useBoardInteraction';
+import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { Die3D } from '../dice';
 
 export interface GameElement {
@@ -65,7 +65,7 @@ const diffHighlightClass = computed(() => {
 const isDebugHighlighted = computed(() => debugHighlight?.value === props.element.id);
 
 // Board interaction for hover highlighting and click selection
-const boardInteraction = useBoardInteraction();
+const boardInteraction = tryUseBoardInteraction();
 
 // Grid coordinate metadata (provided by parent Grid element)
 const parentGridCoords = inject<{ rowCoord: string; colCoord: string } | null>('gridCoords', null);

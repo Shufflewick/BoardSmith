@@ -14,7 +14,7 @@
  * action controller is provided via inject('actionController').
  */
 import { ref, computed, watch, inject } from 'vue';
-import { useBoardInteraction } from '../../composables/useBoardInteraction';
+import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import type {
   UseActionControllerReturn,
@@ -80,7 +80,7 @@ const latestMessage = computed(() => {
 });
 
 // Board interaction for hover/selection sync
-const boardInteraction = useBoardInteraction();
+const boardInteraction = tryUseBoardInteraction();
 
 // Animation events for skip functionality (optional - may not be provided)
 const animationEvents = useAnimationEvents();

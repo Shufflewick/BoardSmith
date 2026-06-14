@@ -418,6 +418,12 @@ boardInteraction.isDropTarget(element)
 boardInteraction.isDraggedElement(element)
 ```
 
+A custom board or panel is always rendered inside `<GameShell>`, so
+`useBoardInteraction()` returns a guaranteed instance. It throws an actionable
+error if called outside a `<GameShell>` (mirroring `injectActionController()`).
+If a component must work without a provider, use `tryUseBoardInteraction()`,
+which returns `BoardInteraction | undefined`.
+
 #### Action State Detection
 
 Custom game boards can detect which action is currently being filled in. This is useful when:

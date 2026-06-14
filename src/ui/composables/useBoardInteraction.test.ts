@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createBoardInteraction, type ValidElement } from './useBoardInteraction.js';
+import {
+  createBoardInteraction,
+  useBoardInteraction,
+  tryUseBoardInteraction,
+  type ValidElement,
+} from './useBoardInteraction.js';
 
 describe('createBoardInteraction', () => {
   it('does not trigger selection for disabled elements', () => {
@@ -28,5 +33,18 @@ describe('createBoardInteraction', () => {
 
     expect(interaction.consumeLastDroppedElementId()).toBe(42);
     expect(interaction.consumeLastDroppedElementId()).toBeNull();
+  });
+});
+
+describe('board interaction injection (F21)', () => {
+  // Outside a Vue component setup / GameShell provider, inject() yields no value.
+  it('useBoardInteraction throws an actionable error outside a GameShell', () => {
+    expect(() => useBoardInteraction()).toThrow('must be called inside a <GameShell>');
+    // Error names the escape hatch so misuse is self-correcting.
+    expect(() => useBoardInteraction()).toThrow('tryUseBoardInteraction()');
+  });
+
+  it('tryUseBoardInteraction returns undefined (no throw) outside a GameShell', () => {
+    expect(tryUseBoardInteraction()).toBeUndefined();
   });
 });

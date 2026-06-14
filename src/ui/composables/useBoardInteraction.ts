@@ -388,8 +388,34 @@ export function provideBoardInteraction(interaction: BoardInteraction): void {
 }
 
 /**
- * Use board interaction (call in ActionPanel or game board)
+ * Use board interaction (call in ActionPanel or game board).
+ *
+ * Throws if called outside a `<GameShell>` (which always provides board
+ * interaction). This mirrors `injectActionController()` so the two sibling
+ * injection APIs fail the same way instead of one silently returning
+ * undefined. If board interaction is genuinely optional for a component,
+ * use {@link tryUseBoardInteraction} instead.
  */
-export function useBoardInteraction(): BoardInteraction | undefined {
+export function useBoardInteraction(): BoardInteraction {
+  const interaction = inject(BOARD_INTERACTION_KEY);
+  if (!interaction) {
+    throw new Error(
+      'useBoardInteraction() must be called inside a <GameShell>. ' +
+        'Render this component within <GameShell>, or use tryUseBoardInteraction() ' +
+        'if board interaction is optional here.'
+    );
+  }
+  return interaction;
+}
+
+/**
+ * Try to use board interaction without requiring a `<GameShell>` provider.
+ *
+ * Returns `undefined` instead of throwing when there is no provider. Use this
+ * for components/composables that must degrade gracefully when board
+ * interaction is unavailable. Prefer {@link useBoardInteraction} when the
+ * component is always rendered inside `<GameShell>`.
+ */
+export function tryUseBoardInteraction(): BoardInteraction | undefined {
   return inject(BOARD_INTERACTION_KEY);
 }
