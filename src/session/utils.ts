@@ -461,6 +461,102 @@ export function buildPlayerState(
   return state;
 }
 
+// ============================================
+// Element diffing (time-travel debugging)
+// ============================================
+
+/**
+ * The added/removed/changed element IDs between two state views.
+ */
+export interface ElementDiff {
+  added: number[];
+  removed: number[];
+  changed: number[];
+}
+
+interface ComparableElement {
+  parentId: number | null;
+  attrs: string;
+}
+
+/**
+ * Serialize the game-state attributes of a view node for comparison.
+ * Excludes player objects and internal metadata so that diffs reflect
+ * actual game state changes only.
+ */
+function comparableAttrs(node: Record<string, unknown>): string {
+  const attrs = node.attributes as Record<string, unknown> | undefined;
+  if (!attrs) return '';
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    // Skip player objects and internal metadata
+    if (key === 'player' || key === 'game' || key.startsWith('_')) continue;
+    filtered[key] = value;
+  }
+  return JSON.stringify(filtered);
+}
+
+/**
+ * Walk a view tree, collecting every id-bearing element keyed by id, along
+ * with its parent id and comparable attributes. Nodes without an id are
+ * transparent: recursion continues with the same parent.
+ */
+function collectElements(
+  node: unknown,
+  map: Map<number, ComparableElement>,
+  parentId: number | null = null,
+): void {
+  if (!node || typeof node !== 'object') return;
+  const obj = node as Record<string, unknown>;
+  if (typeof obj.id === 'number') {
+    map.set(obj.id, { parentId, attrs: comparableAttrs(obj) });
+    if (Array.isArray(obj.children)) {
+      for (const child of obj.children) collectElements(child, map, obj.id);
+    }
+  } else if (Array.isArray(obj.children)) {
+    for (const child of obj.children) collectElements(child, map, parentId);
+  }
+}
+
+/**
+ * Compute the element-level diff between two player-state view trees.
+ *
+ * An element is:
+ * - `added` if its id appears only in `toView`,
+ * - `removed` if its id appears only in `fromView`,
+ * - `changed` if it moved to a different parent OR its comparable
+ *   attributes changed.
+ *
+ * This is the single source of truth shared by GameSession's state-history
+ * diff and the stateless executor's debug state diff.
+ */
+export function computeElementDiff(fromView: unknown, toView: unknown): ElementDiff {
+  const fromElements = new Map<number, ComparableElement>();
+  const toElements = new Map<number, ComparableElement>();
+  collectElements(fromView, fromElements);
+  collectElements(toView, toElements);
+
+  const added: number[] = [];
+  const removed: number[] = [];
+  const changed: number[] = [];
+
+  for (const [id, to] of toElements.entries()) {
+    const from = fromElements.get(id);
+    if (!from) {
+      added.push(id);
+    } else if (from.parentId !== to.parentId || from.attrs !== to.attrs) {
+      // Element moved to a different parent OR its attributes changed
+      changed.push(id);
+    }
+  }
+
+  for (const id of fromElements.keys()) {
+    if (!toElements.has(id)) removed.push(id);
+  }
+
+  return { added, removed, changed };
+}
+
 /**
  * Build action traces for debugging.
  * Returns detailed information about why each action is or isn't available.

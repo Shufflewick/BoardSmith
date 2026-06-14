@@ -14,7 +14,7 @@ import { executeCommand } from '../engine/index.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { PickHandler, buildSingleActionMetadata, buildPlayerState, computeUndoInfo } from './index.js';
-import { buildActionTraces } from './utils.js';
+import { buildActionTraces, computeElementDiff } from './utils.js';
 
 // ---------------------------------------------------------------------------
 // Op discriminated union
@@ -522,36 +522,6 @@ function handleDebugStateAt(
   };
 }
 
-function comparableAttrs(node: Record<string, unknown>): string {
-  const attrs = node.attributes as Record<string, unknown> | undefined;
-  if (!attrs) return '';
-  const filtered: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key === 'player' || key === 'game' || key.startsWith('_')) continue;
-    filtered[key] = value;
-  }
-  return JSON.stringify(filtered);
-}
-
-type DiffElement = { parentId: number | null; attrs: string };
-
-function collectElements(
-  node: unknown,
-  map: Map<number, DiffElement>,
-  parentId: number | null = null,
-): void {
-  if (!node || typeof node !== 'object') return;
-  const obj = node as Record<string, unknown>;
-  if (typeof obj.id === 'number') {
-    map.set(obj.id, { parentId, attrs: comparableAttrs(obj) });
-    if (Array.isArray(obj.children)) {
-      for (const child of obj.children) collectElements(child, map, obj.id);
-    }
-  } else if (Array.isArray(obj.children)) {
-    for (const child of obj.children) collectElements(child, map, parentId);
-  }
-}
-
 function handleDebugStateDiff(
   def: GameDefinitionLike,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -574,22 +544,7 @@ function handleDebugStateDiff(
   const fromView = buildPlayerState(fromRunner, [], op.player, { includeActionMetadata: false }).view;
   const toView = buildPlayerState(toRunner, [], op.player, { includeActionMetadata: false }).view;
 
-  const fromElements = new Map<number, DiffElement>();
-  const toElements = new Map<number, DiffElement>();
-  collectElements(fromView, fromElements);
-  collectElements(toView, toElements);
-
-  const added: number[] = [];
-  const changed: number[] = [];
-  const removed: number[] = [];
-  for (const [id, to] of toElements.entries()) {
-    const from = fromElements.get(id);
-    if (!from) added.push(id);
-    else if (from.parentId !== to.parentId || from.attrs !== to.attrs) changed.push(id);
-  }
-  for (const id of fromElements.keys()) {
-    if (!toElements.has(id)) removed.push(id);
-  }
+  const { added, removed, changed } = computeElementDiff(fromView, toView);
 
   return {
     success: true,
