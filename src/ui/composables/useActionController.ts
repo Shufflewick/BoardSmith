@@ -1557,23 +1557,23 @@ export function injectPickStepFn(): PickStepFn | undefined {
 
 /**
  * Inject the board interaction controller for element highlighting.
- * Returns undefined if not in a GameShell context.
+ * Throws if not inside a GameShell context, mirroring
+ * {@link injectActionController}. For the optional case use
+ * `tryUseBoardInteraction()`.
  *
  * @example
  * ```typescript
  * const boardInteraction = injectBoardInteraction();
- * if (boardInteraction) {
- *   // Highlight an element on the board
- *   boardInteraction.setHoveredChoice({
- *     value: choice.value,
- *     display: choice.display,
- *     sourceRefs: [{ id: 42 }],
- *     targetRefs: [],
- *   });
- * }
+ * // Highlight an element on the board
+ * boardInteraction.setHoveredChoice({
+ *   value: choice.value,
+ *   display: choice.display,
+ *   sourceRefs: [{ id: 42 }],
+ *   targetRefs: [],
+ * });
  * ```
  */
-export function injectBoardInteraction(): BoardInteraction | undefined {
+export function injectBoardInteraction(): BoardInteraction {
   return useBoardInteraction();
 }
 

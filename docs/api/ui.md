@@ -56,7 +56,8 @@ import {
 
 #### Board Interaction
 
-- `useBoardInteraction()` - Core board interaction state and actions
+- `useBoardInteraction()` - Core board interaction state and actions (throws if used outside a `<GameShell>`)
+- `tryUseBoardInteraction()` - Same as above but returns `undefined` instead of throwing, for components that must degrade gracefully
 - `createBoardInteraction()` - Create board interaction instance
 - `provideBoardInteraction()` - Provide to component tree
 
@@ -212,7 +213,7 @@ const { flyingElements } = useFlyingElements({
 - `injectActionController()` - Inject action controller
 - `ACTION_CONTROLLER_KEY` - Injection key
 - `injectPickStepFn()` - Inject pick step function
-- `injectBoardInteraction()` - Inject board interaction
+- `injectBoardInteraction()` - Inject board interaction (throws if outside a `<GameShell>`, mirroring `injectActionController()`; use `tryUseBoardInteraction()` for the optional case)
 - `actionNeedsWizardMode()` - Check if action needs wizard
 
 ### Theming

@@ -94,7 +94,7 @@
 import { ref, computed, watch, onUnmounted, isRef, type Ref, type ComputedRef } from 'vue';
 import { prefersReducedMotion } from './useElementAnimation.js';
 import { easeOutCubic } from '../../utils/easing.js';
-import { useBoardInteraction } from './useBoardInteraction.js';
+import { tryUseBoardInteraction } from './useBoardInteraction.js';
 
 /**
  * Game element type for auto-watch mode
@@ -420,7 +420,7 @@ export function useFlyingElements(
   const flyingCards = ref<FlyingCard[]>([]);
   const activeAnimations = new Map<string, { cancel: () => void }>();
   const isAnimating = ref(false);
-  const boardInteraction = useBoardInteraction();
+  const boardInteraction = tryUseBoardInteraction();
 
   /**
    * Internal options type for the core animation implementation
