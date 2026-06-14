@@ -9,7 +9,7 @@
  * - rewindToAction(): Rewind to arbitrary point
  */
 
-import type { FlowState, Game } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, type FlowState, type Game } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -221,25 +221,13 @@ export class StateHistory<G extends Game = Game> {
       const runner = this.#getRunner();
       const traces = buildActionTraces(runner, playerPosition);
 
-      // Get flow context to show which actions are restricted by flow
+      // Get flow context to show which actions are restricted by flow.
+      // Both "is it my turn" and "what may I do" come from the canonical
+      // seat-activity predicates so simultaneous and sequential steps are
+      // handled identically here and everywhere else.
       const flowState = runner.getFlowState();
-      let flowAllowedActions: string[] = [];
-      let isMyTurn = false;
-
-      if (flowState?.awaitingInput) {
-        // Handle simultaneous actions
-        if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-          const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === playerPosition);
-          if (playerState && !playerState.completed) {
-            flowAllowedActions = playerState.availableActions;
-            isMyTurn = true;
-          }
-        } else {
-          // Regular turn-based flow
-          flowAllowedActions = flowState.availableActions ?? [];
-          isMyTurn = flowState.currentPlayer === playerPosition;
-        }
-      }
+      const isMyTurn = canSeatAct(flowState, playerPosition);
+      const flowAllowedActions = availableActionsForSeat(flowState, playerPosition);
 
       return {
         success: true,

@@ -174,6 +174,9 @@ export {
   setVar,
   turnLoop,
   TurnOrder,
+  dueSeats,
+  canSeatAct,
+  availableActionsForSeat,
 } from './flow/index.js';
 
 export type {
@@ -197,6 +200,7 @@ export type {
   PhaseConfig,
   PlayerAwaitingState,
   TurnOrderConfig,
+  SeatActivityState,
 } from './flow/index.js';
 
 // Utilities (serialization, snapshots, replays, action helpers, dev state)

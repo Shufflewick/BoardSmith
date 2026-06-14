@@ -10,7 +10,7 @@
  */
 
 import type { Game, GameCommand } from '../engine/index.js';
-import { executeCommand } from '../engine/index.js';
+import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { PickHandler, buildSingleActionMetadata, buildPlayerState, computeUndoInfo } from './index.js';
@@ -168,24 +168,7 @@ function selectDueAISeat(
   flowState: AIFlowState,
   aiSeats: Set<number>,
 ): number | undefined {
-  if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-    for (const playerState of flowState.awaitingPlayers) {
-      if (
-        !playerState.completed &&
-        playerState.availableActions.length > 0 &&
-        aiSeats.has(playerState.playerIndex)
-      ) {
-        return playerState.playerIndex;
-      }
-    }
-    return undefined;
-  }
-
-  if (flowState.currentPlayer !== undefined && aiSeats.has(flowState.currentPlayer)) {
-    return flowState.currentPlayer;
-  }
-
-  return undefined;
+  return dueSeats(flowState).find(seat => aiSeats.has(seat));
 }
 
 // ---------------------------------------------------------------------------
@@ -565,30 +548,12 @@ function handleDebugActionTraces(
   const runner = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
   const traces = buildActionTraces(runner, op.player);
 
-  const flowState = runner.getFlowState() as
-    | {
-        awaitingInput?: boolean;
-        awaitingPlayers?: Array<{ playerIndex: number; completed: boolean; availableActions: string[] }>;
-        availableActions?: string[];
-        currentPlayer?: number;
-        currentPhase?: string;
-      }
-    | undefined;
+  const flowState = runner.getFlowState();
 
-  let flowAllowedActions: string[] = [];
-  let isMyTurn = false;
-  if (flowState?.awaitingInput) {
-    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-      const playerState = flowState.awaitingPlayers.find((p) => p.playerIndex === op.player);
-      if (playerState && !playerState.completed) {
-        flowAllowedActions = playerState.availableActions;
-        isMyTurn = true;
-      }
-    } else {
-      flowAllowedActions = flowState.availableActions ?? [];
-      isMyTurn = flowState.currentPlayer === op.player;
-    }
-  }
+  // Canonical seat-activity predicates collapse the simultaneous/sequential
+  // split: a seat that cannot act has no flow-allowed actions.
+  const isMyTurn = canSeatAct(flowState, op.player);
+  const flowAllowedActions = availableActionsForSeat(flowState, op.player);
 
   return {
     success: true,

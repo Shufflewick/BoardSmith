@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, evaluateCondition, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '../engine/index.js';
+import { Player, evaluateCondition, canSeatAct, availableActionsForSeat, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata } from './types.js';
 
@@ -22,16 +22,7 @@ export function generateGameId(): string {
  * Check if it's a specific player's turn
  */
 export function isPlayersTurn(flowState: FlowState | undefined, playerPosition: number): boolean {
-  if (!flowState?.awaitingInput) return false;
-
-  // Handle simultaneous action flows (awaitingPlayers)
-  if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-    const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === playerPosition);
-    return playerState ? !playerState.completed && playerState.availableActions.length > 0 : false;
-  }
-
-  // Handle regular turn-based flows
-  return flowState.currentPlayer === playerPosition;
+  return canSeatAct(flowState, playerPosition);
 }
 
 /**
@@ -362,16 +353,11 @@ export function buildPlayerState(
 
   const isMyTurn = isPlayersTurn(flowState, playerPosition);
 
-  // Get available actions - check awaitingPlayers first (for simultaneous actions)
-  // For non-simultaneous flows, only the current player sees available actions.
-  // This prevents clients from prematurely starting actions during another player's turn.
-  let availableActions: string[];
-  if (flowState?.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-    const playerState = flowState.awaitingPlayers.find(p => p.playerIndex === playerPosition);
-    availableActions = playerState?.availableActions ?? [];
-  } else {
-    availableActions = isMyTurn ? (flowState?.availableActions ?? []) : [];
-  }
+  // Get available actions for this seat. Handles both simultaneous steps
+  // (awaitingPlayers) and sequential steps (currentPlayer); for sequential
+  // flows only the current player sees available actions, which prevents
+  // clients from prematurely starting actions during another player's turn.
+  const availableActions = availableActionsForSeat(flowState, playerPosition);
 
   // Compute undo info - pass moveCount from FlowState for accurate turn boundary detection
   // This fixes issues with games where the same player acts at the end of one phase

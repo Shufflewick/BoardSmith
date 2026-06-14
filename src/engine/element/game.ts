@@ -103,6 +103,7 @@ export class PersistentMap<K, V> implements Map<K, V> {
   }
 }
 import { FlowEngine } from '../flow/engine.js';
+import { canSeatAct } from '../flow/seat-activity.js';
 
 /**
  * Default player color palette.
@@ -1680,17 +1681,7 @@ export class Game<
    * Check if a player can act (either as current player or in simultaneous action)
    */
   canPlayerAct(playerIndex: number): boolean {
-    const state = this._flowEngine?.getState();
-    if (!state?.awaitingInput) return false;
-
-    // Check for simultaneous action step
-    if (state.awaitingPlayers && state.awaitingPlayers.length > 0) {
-      const playerState = state.awaitingPlayers.find(p => p.playerIndex === playerIndex);
-      return playerState ? !playerState.completed && playerState.availableActions.length > 0 : false;
-    }
-
-    // Check for regular single-player action step
-    return state.currentPlayer === playerIndex;
+    return canSeatAct(this._flowEngine?.getState(), playerIndex);
   }
 
   // ============================================
