@@ -661,7 +661,7 @@ export class MCTSBot<G extends Game = Game> {
     if (playoutCommands > 0) {
       const success = this.searchGame.undoCommands(playoutCommands);
       if (!success) {
-        // Undo failed (e.g., non-invertible command like SHUFFLE)
+        // Undo failed (e.g., a non-invertible command appeared mid-playout)
         // Recover by restoring from root snapshot
         this.recoverFromUndoFailure();
         // Still update statistics
@@ -1248,7 +1248,8 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Recover from undo failure by restoring searchGame from root snapshot.
-   * Called when undoCommands returns false (e.g., non-invertible command like SHUFFLE).
+   * Called when undoCommands returns false (e.g., a non-invertible command like
+   * CREATE/CREATE_MANY or ADD_VISIBLE_TO appears mid-playout).
    */
   private recoverFromUndoFailure(): void {
     if (!this.rootSnapshot) return;

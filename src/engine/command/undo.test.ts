@@ -93,17 +93,41 @@ describe('Command Undo', () => {
       expect(board.all(TestPiece).length).toBe(1);
     });
 
-    it('should return false for non-invertible commands (SHUFFLE)', () => {
-      // Create some pieces to shuffle
-      board.createMany(3, TestPiece, 'piece', (i) => ({ value: i }));
+    it('should undo SHUFFLE command (original child order restored)', () => {
+      // Use a fixed seed so the shuffle actually permutes deterministically.
+      game = new TestGame({ playerCount: 2, seed: 'shuffle-seed' });
+      board = game.create(TestSpace, 'board');
 
-      // Execute a SHUFFLE command
+      // Create enough pieces that a shuffle is overwhelmingly likely to reorder.
+      board.createMany(8, TestPiece, 'piece', (i) => ({ value: i }));
+      const originalOrder = board.all(TestPiece).map((p) => p.value);
+
+      // Execute a SHUFFLE command (tracks inverse via game.execute)
       game.execute({
         type: 'SHUFFLE',
         spaceId: board.id,
       });
 
-      // Undo should return false (SHUFFLE is not invertible)
+      const shuffledOrder = board.all(TestPiece).map((p) => p.value);
+      // Sanity: the seeded shuffle changed the order (otherwise the test proves nothing)
+      expect(shuffledOrder).not.toEqual(originalOrder);
+
+      // Undo should restore the exact pre-shuffle order
+      const success = game.undoLastCommand();
+      expect(success).toBe(true);
+      expect(board.all(TestPiece).map((p) => p.value)).toEqual(originalOrder);
+    });
+
+    it('should return false for non-invertible commands (ADD_VISIBLE_TO)', () => {
+      const piece = board.create(TestPiece, 'piece', { value: 1 });
+
+      // ADD_VISIBLE_TO is not invertible (no captured previous addPlayers)
+      game.execute({
+        type: 'ADD_VISIBLE_TO',
+        elementId: piece.id,
+        players: [0],
+      });
+
       const success = game.undoLastCommand();
       expect(success).toBe(false);
     });
@@ -147,6 +171,31 @@ describe('Command Undo', () => {
       expect(piece.value).toBe(1);
     });
 
+    it('should undo a batch that crosses a SHUFFLE (MCTS incremental rollback)', () => {
+      // This is the F18 scenario: a playout that deals then shuffles must roll
+      // back incrementally instead of degrading to a full game rebuild.
+      game = new TestGame({ playerCount: 2, seed: 'mcts-seed' });
+      board = game.create(TestSpace, 'board');
+      hand = game.create(TestSpace, 'hand');
+
+      board.createMany(6, TestPiece, 'piece', (i) => ({ value: i }));
+      const piece = board.all(TestPiece)[0];
+      const originalBoardOrder = board.all(TestPiece).map((p) => p.value);
+
+      // MOVE, then SHUFFLE, then MOVE — a typical shuffle-crossing sequence.
+      game.execute({ type: 'MOVE', elementId: piece.id, destinationId: hand.id });
+      game.execute({ type: 'SHUFFLE', spaceId: board.id });
+      const movedBack = board.all(TestPiece)[0];
+      game.execute({ type: 'MOVE', elementId: movedBack.id, destinationId: hand.id });
+
+      // Undo all three should succeed (no rebuild) and restore exact state.
+      const success = game.undoCommands(3);
+      expect(success).toBe(true);
+      expect(piece.parent).toBe(board);
+      expect(hand.all(TestPiece).length).toBe(0);
+      expect(board.all(TestPiece).map((p) => p.value)).toEqual(originalBoardOrder);
+    });
+
     it('should stop and return false if a non-invertible command is encountered', () => {
       const piece = board.create(TestPiece, 'piece', { value: 1 });
 
@@ -157,10 +206,11 @@ describe('Command Undo', () => {
         destinationId: hand.id,
       });
 
-      // Then a SHUFFLE (not invertible)
+      // Then an ADD_VISIBLE_TO (not invertible)
       game.execute({
-        type: 'SHUFFLE',
-        spaceId: hand.id,
+        type: 'ADD_VISIBLE_TO',
+        elementId: piece.id,
+        players: [0],
       });
 
       // Then another MOVE (invertible)
@@ -171,7 +221,7 @@ describe('Command Undo', () => {
       });
 
       // Try to undo all 3 - should fail after the first undo (which was the last MOVE)
-      // because it hits SHUFFLE next
+      // because it hits the non-invertible ADD_VISIBLE_TO next
       const success = game.undoCommands(3);
       expect(success).toBe(false);
 
@@ -214,11 +264,13 @@ describe('Command Undo', () => {
     });
 
     it('should not remove command from history on failed undo', () => {
-      board.createMany(3, TestPiece, 'piece', (i) => ({ value: i }));
+      const piece = board.create(TestPiece, 'piece', { value: 1 });
 
+      // ADD_VISIBLE_TO is non-invertible, so undo will fail.
       game.execute({
-        type: 'SHUFFLE',
-        spaceId: board.id,
+        type: 'ADD_VISIBLE_TO',
+        elementId: piece.id,
+        players: [0],
       });
 
       const historyLengthBefore = game.commandHistory.length;

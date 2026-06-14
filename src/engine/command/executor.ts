@@ -14,6 +14,7 @@ import type {
   StartGameCommand,
   EndGameCommand,
   SetOrderCommand,
+  RestoreOrderCommand,
   ReorderChildCommand,
   TrackAddCommand,
   TrackRemoveLastCommand,
@@ -61,6 +62,8 @@ export function executeCommand(game: Game, command: GameCommand): CommandResult 
         return executeEndGame(game, command);
       case 'SET_ORDER':
         return executeSetOrder(game, command);
+      case 'RESTORE_ORDER':
+        return executeRestoreOrder(game, command);
       case 'REORDER_CHILD':
         return executeReorderChild(game, command);
       case 'TRACK_ADD':
@@ -225,6 +228,41 @@ function executeSetOrder(game: Game, command: SetOrderCommand): CommandResult {
   }
 
   space._t.order = command.order;
+  return { success: true };
+}
+
+function executeRestoreOrder(game: Game, command: RestoreOrderCommand): CommandResult {
+  const space = game.getElementById(command.spaceId);
+  if (!space) {
+    return { success: false, error: `Space not found: ${command.spaceId}` };
+  }
+
+  const children = space._t.children;
+  if (children.length !== command.elementIds.length) {
+    return {
+      success: false,
+      error: `Cannot restore order of space ${command.spaceId}: expected ${command.elementIds.length} children but found ${children.length}`,
+    };
+  }
+
+  const byId = new Map<number, GameElement>();
+  for (const child of children) {
+    byId.set(child.id, child);
+  }
+
+  const reordered: GameElement[] = [];
+  for (const id of command.elementIds) {
+    const element = byId.get(id);
+    if (!element) {
+      return {
+        success: false,
+        error: `Cannot restore order of space ${command.spaceId}: element ${id} is no longer a child`,
+      };
+    }
+    reordered.push(element);
+  }
+
+  children.splice(0, children.length, ...reordered);
   return { success: true };
 }
 
