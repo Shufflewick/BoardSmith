@@ -138,6 +138,25 @@ export class GameServerCore {
   }
 
   /**
+   * Whether debug / integrity-sensitive routes are mounted.
+   *
+   * These routes (full history & state-at replay, action traces, rewind, and
+   * direct deck manipulation: move-to-top / reorder / transfer / shuffle) can
+   * compromise game integrity and confidentiality: an untrusted client could
+   * stack a deck, transfer cards between decks, reshuffle, rewind away other
+   * players' moves, or dump the full action history (revealing hidden
+   * information via replay). The server layer has no per-request auth, so these
+   * must never be reachable in a deployed environment.
+   *
+   * Secure by default: the routes stay closed (404) unless `environment` is
+   * explicitly set to 'development'. An unset or production `environment`
+   * leaves them disabled.
+   */
+  get #debugRoutesEnabled(): boolean {
+    return this.#environment === 'development';
+  }
+
+  /**
    * Handle an HTTP request and return a response
    */
   async handleRequest(request: ServerRequest): Promise<ServerResponse> {
@@ -179,16 +198,18 @@ export class GameServerCore {
         return await handleAction(this.#store, gameId, body as ActionRequest);
       }
 
-      // GET /games/:gameId/history - Get action history
+      // GET /games/:gameId/history - Get action history (debug only)
       const historyMatch = path.match(/^\/games\/([^/]+)\/history$/);
       if (historyMatch && method === 'GET') {
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = historyMatch[1];
         return await handleGetHistory(this.#store, gameId);
       }
 
-      // GET /games/:gameId/state-at/:actionIndex - Time travel
+      // GET /games/:gameId/state-at/:actionIndex - Time travel (debug only)
       const stateAtMatch = path.match(/^\/games\/([^/]+)\/state-at\/(\d+)$/);
       if (stateAtMatch && method === 'GET') {
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = stateAtMatch[1];
         const actionIndex = parseInt(stateAtMatch[2], 10);
         const playerPosition = parseInt(query.player || '1', 10);
@@ -208,7 +229,7 @@ export class GameServerCore {
       // GET /games/:gameId/action-traces - Action availability traces (debug)
       const actionTracesMatch = path.match(/^\/games\/([^/]+)\/action-traces$/);
       if (actionTracesMatch && method === 'GET') {
-        // Note: This is a debug endpoint. Consider disabling in production.
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = actionTracesMatch[1];
         const playerPosition = parseInt(query.player || '1', 10);
         return await handleGetActionTraces(this.#store, gameId, playerPosition);
@@ -253,6 +274,7 @@ export class GameServerCore {
       // POST /games/:gameId/rewind - Rewind to a specific action (debug only)
       const rewindMatch = path.match(/^\/games\/([^/]+)\/rewind$/);
       if (rewindMatch && method === 'POST') {
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = rewindMatch[1];
         const { actionIndex } = body as { actionIndex: number };
         return await handleRewind(this.#store, gameId, actionIndex);
@@ -265,6 +287,7 @@ export class GameServerCore {
       // POST /games/:gameId/debug/move-to-top - Move card to top of deck (debug only)
       const moveToTopMatch = path.match(/^\/games\/([^/]+)\/debug\/move-to-top$/);
       if (moveToTopMatch && method === 'POST') {
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = moveToTopMatch[1];
         const { cardId } = body as { cardId: number };
         return await handleMoveCardToTop(this.#store, gameId, cardId);
@@ -273,6 +296,7 @@ export class GameServerCore {
       // POST /games/:gameId/debug/reorder-card - Reorder card within deck (debug only)
       const reorderCardMatch = path.match(/^\/games\/([^/]+)\/debug\/reorder-card$/);
       if (reorderCardMatch && method === 'POST') {
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = reorderCardMatch[1];
         const { cardId, targetIndex } = body as { cardId: number; targetIndex: number };
         return await handleReorderCard(this.#store, gameId, cardId, targetIndex);
@@ -281,6 +305,7 @@ export class GameServerCore {
       // POST /games/:gameId/debug/transfer-card - Transfer card to another deck (debug only)
       const transferCardMatch = path.match(/^\/games\/([^/]+)\/debug\/transfer-card$/);
       if (transferCardMatch && method === 'POST') {
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = transferCardMatch[1];
         const { cardId, targetDeckId, position } = body as { cardId: number; targetDeckId: number; position?: 'first' | 'last' };
         return await handleTransferCard(this.#store, gameId, cardId, targetDeckId, position);
@@ -289,6 +314,7 @@ export class GameServerCore {
       // POST /games/:gameId/debug/shuffle-deck - Shuffle a deck (debug only)
       const shuffleDeckMatch = path.match(/^\/games\/([^/]+)\/debug\/shuffle-deck$/);
       if (shuffleDeckMatch && method === 'POST') {
+        if (!this.#debugRoutesEnabled) return notFound();
         const gameId = shuffleDeckMatch[1];
         const { deckId } = body as { deckId: number };
         return await handleShuffleDeck(this.#store, gameId, deckId);
