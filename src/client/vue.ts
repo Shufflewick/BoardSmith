@@ -2,7 +2,7 @@
  * Vue Composables for BoardSmith Client SDK
  *
  * Optional Vue 3 integration - only import if using Vue.
- * Import from '@boardsmith/client/vue'
+ * Import from 'boardsmith/client/vue'
  */
 
 import { ref, computed, watch, onUnmounted, shallowRef, type Ref, type ComputedRef } from 'vue';

@@ -7,7 +7,7 @@
  * ## Usage
  *
  * ```typescript
- * import { useGameGrid } from '@boardsmith/ui';
+ * import { useGameGrid } from 'boardsmith/ui';
  *
  * const props = defineProps<{ gameView: GameElement; playerSeat: number }>();
  *

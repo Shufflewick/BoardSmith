@@ -8,8 +8,8 @@
  *
  * ```vue
  * <script setup>
- * import { useDragDrop } from '@boardsmith/ui';
- * import '@boardsmith/ui/animation/drag-drop.css';
+ * import { useDragDrop } from 'boardsmith/ui';
+ * import 'boardsmith/ui/animation/drag-drop.css';
  *
  * const { drag, drop } = useDragDrop();
  * const canDrag = (id) => currentAction.value === 'move' && isSelectable(id);

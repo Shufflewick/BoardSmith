@@ -15,7 +15,7 @@
  * ## Usage
  *
  * ```typescript
- * import { useHexGrid } from '@boardsmith/ui';
+ * import { useHexGrid } from 'boardsmith/ui';
  *
  * const props = defineProps<{ gameView: GameElement; playerSeat: number }>();
  *

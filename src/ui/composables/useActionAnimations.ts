@@ -33,7 +33,7 @@
  * ```vue
  * <script setup lang="ts">
  * import { ref, toRef, watchEffect } from 'vue';
- * import { useActionAnimations, FlyingCardsOverlay } from '@boardsmith/ui';
+ * import { useActionAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
  *
  * // Create a ref that we'll sync with gameView from slot props
  * const gameViewRef = ref(null);

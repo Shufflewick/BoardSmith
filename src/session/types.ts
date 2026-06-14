@@ -19,7 +19,7 @@ import type { LobbyState, SlotStatus, LobbySlot, LobbyInfo } from '../types/prot
  *
  * @example
  * ```typescript
- * import { ErrorCode } from '@boardsmith/session';
+ * import { ErrorCode } from 'boardsmith/session';
  *
  * const result = await session.performAction('move', player, args);
  * if (!result.success) {

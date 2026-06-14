@@ -1,5 +1,5 @@
 /**
- * @boardsmith/session - Game session management
+ * boardsmith/session - Game session management
  *
  * This package provides a unified API for managing game sessions across different platforms
  * (local development, Cloudflare Workers, etc.) while keeping game designers
@@ -13,7 +13,7 @@
  *   type GameDefinition,
  *   type StorageAdapter,
  *   type BroadcastAdapter,
- * } from '@boardsmith/session';
+ * } from 'boardsmith/session';
  *
  * // Create a game session
  * const session = GameSession.create({

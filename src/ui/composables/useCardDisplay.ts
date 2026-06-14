@@ -7,7 +7,7 @@
  * ## Usage
  *
  * ```typescript
- * import { useCardDisplay, getSuitSymbol, getSuitColor, getRankName } from '@boardsmith/ui';
+ * import { useCardDisplay, getSuitSymbol, getSuitColor, getRankName } from 'boardsmith/ui';
  *
  * // Use individual functions
  * const symbol = getSuitSymbol('H'); // '♥'
@@ -22,7 +22,7 @@
  *
  * ```vue
  * <script setup>
- * import { getSuitSymbol, getSuitColor } from '@boardsmith/ui';
+ * import { getSuitSymbol, getSuitColor } from 'boardsmith/ui';
  * </script>
  *
  * <template>

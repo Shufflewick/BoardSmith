@@ -5,12 +5,12 @@
  * Uses Durable Objects for game state persistence and WebSocket connections.
  * Uses KV for matchmaking queues.
  *
- * Now uses @boardsmith/server for shared routing and matchmaking logic.
+ * Now uses boardsmith/server for shared routing and matchmaking logic.
  *
  * Usage:
  * ```typescript
  * import { gameDefinition } from './my-game-rules';
- * import { createGameWorker, createGameStateDurableObject, buildRegistries } from '@boardsmith/worker';
+ * import { createGameWorker, createGameStateDurableObject, buildRegistries } from 'boardsmith/worker';
  *
  * const { gameRegistry, gameConfigRegistry } = buildRegistries([gameDefinition]);
  * export const GameState = createGameStateDurableObject(gameRegistry);
@@ -701,7 +701,7 @@ export function createGameWorker(config: WorkerConfig) {
           return await handleLobbyRoute(gameId, 'leave-position', body, env, corsHeaders);
         }
 
-        // Matchmaking routes - use shared handlers from @boardsmith/server
+        // Matchmaking routes - use shared handlers from boardsmith/server
         if (path === '/matchmaking/join' && request.method === 'POST') {
           const body = await request.json() as MatchmakingRequest;
           const result = await handleMatchmakingJoin(

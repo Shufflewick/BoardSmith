@@ -40,7 +40,7 @@ export function wrapFilterWithHelpfulErrors<T>(
             `Undefined args: ${undefinedList}\n\n` +
             `Fix: Use the dependentFilter helper or add a null check:\n\n` +
             `  // Option 1: Use dependentFilter (recommended)\n` +
-            `  import { dependentFilter } from '@boardsmith/engine';\n` +
+            `  import { dependentFilter } from 'boardsmith';\n` +
             `  filter: dependentFilter({\n` +
             `    dependsOn: 'previousSelection',\n` +
             `    whenUndefined: (element) => true, // Allow during availability check\n` +
@@ -97,7 +97,7 @@ export interface ActionTempState {
  *
  * @example
  * ```typescript
- * import { actionTempState } from '@boardsmith/engine';
+ * import { actionTempState } from 'boardsmith';
  *
  * Action.create('armsDealer')
  *   .chooseFrom('equipment', {

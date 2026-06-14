@@ -51,8 +51,8 @@ export function generateAICode(
   lines.push(``);
 
   // Imports
-  lines.push(`import type { Game } from '@boardsmith/engine';`);
-  lines.push(`import type { Objective } from '@boardsmith/ai';`);
+  lines.push(`import type { Game } from 'boardsmith';`);
+  lines.push(`import type { Objective } from 'boardsmith/ai';`);
 
   // Import game-specific types if provided
   if (options.gameClassName) {

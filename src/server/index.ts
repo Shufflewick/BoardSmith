@@ -1,5 +1,5 @@
 /**
- * @boardsmith/server
+ * boardsmith/server
  *
  * Platform-agnostic server core for BoardSmith games.
  * Provides shared HTTP routing and WebSocket handling that works
