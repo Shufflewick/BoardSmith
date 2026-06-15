@@ -75,6 +75,10 @@
     "F7": {
       "sha": "b8b767cbb7209afdd8ef6d1e778342d8d48289b4",
       "desc": "serializeValue silently drops circular references and over-deep objects, partially corrupting saved state"
+    },
+    "F3": {
+      "sha": "5e19cc7288892e865da390005dd00507e1097d9b",
+      "desc": "Declared array state is silently replaced by a dev-only Proxy backed by a magic settings key — dual source of truth + dev/prod snapshot divergence"
     }
   },
   "blocked": [
@@ -101,6 +105,7 @@
     "F20": "merged",
     "F22": "merged",
     "F7": "merged",
+    "F3": "merged",
     "F8": "blocked",
     "F9": "blocked"
   }

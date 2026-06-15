@@ -154,15 +154,15 @@
     being a <em>pit of success</em> for game designers and the AI agents building games with them.</p>
     <p class="meta-line">Generated <strong>2026-06-14</strong> &middot; updated <strong>2026-06-15</strong> with fix status &middot;
     29 confirmed findings + 2 rejected &middot;
-    <strong style="color:var(--low)">19 fixed</strong>, 2 blocked, 8 open</p>
+    <strong style="color:var(--low)">20 fixed</strong>, 2 blocked, 7 open</p>
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">19</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">20</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">2</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">8</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">7</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
-    <div class="stat s-medium"><div class="n">5</div><div class="l">Medium (active)</div></div>
+    <div class="stat s-medium"><div class="n">4</div><div class="l">Medium (active)</div></div>
     <div class="stat s-low"><div class="n">3</div><div class="l">Low (active)</div></div>
   </div>
 
@@ -264,10 +264,10 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 10 of 29)</span></h2>
-  <p class="section-note">The 19 fixed-and-merged findings have been moved to the
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 9 of 29)</span></h2>
+  <p class="section-note">The 20 fixed-and-merged findings have been moved to the
   <a href="#completed" style="color:var(--accent)">Completed</a> section at the bottom. What remains here are the
-  2 blocked + 8 open problems that still need attention.</p>
+  2 blocked + 7 open problems that still need attention.</p>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -473,65 +473,9 @@ Severity: I rate it high rather than critical. It is a real unauthenticated info
     </div>
   </article>
 
-  <article class="card fx-open" data-cat="architecture" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F3</span>#4</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-medium">Medium</span>
-          <span class="badge cat cat-architecture">Architecture</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">3 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Declared array state is silently replaced by a dev-only Proxy backed by a magic settings key — dual source of truth + dev/prod snapshot divergence</h3>
-        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The same array now lives twice in a dev snapshot (attributes.&lt;key&gt; AND settings.__autoSync_&lt;key&gt;) with settings silently winning on restore, and zero times in settings for a production snapshot (the proxy is never installed). The declared property's runtime identity (plain Array vs Proxy) and the serialized snapshot's shape both depend on NODE_ENV.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A designer writes `items: Card[] = []` and gets, in dev only, a Proxy with different identity/reference semantics and a hidden second copy in settings. Bugs that depend on array identity, or on the attribute-vs-settings copy, reproduce in dev but not prod (or vice versa) — the worst kind of footgun. A snapshot captured in dev and restored in prod (or by the stateless executor) can resolve the array from a different source than the designer expects.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Make persistence environment-independent: either always install the sync wrapper or never (prefer never — persist arrays solely via toJSON attributes). If HMR survival is needed, fold it into the one serialization path rather than a parallel settings shadow. Don't mutate the shape of designer-declared properties at runtime.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 1 affected, 2 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">If the audit changes how declared array/object state persists (away from a settings shadow toward serializable shapes / element children), migrate currentPlayCards, playerSaidGo, and originalHandCardIds off `this.settings`/`this.game.settings` to whatever the new sanctioned mechanism is (plain declared serializable properties or element-backed state). Verify scoringAnimation/roundSummary still persist across save/HMR without the dev-only Proxy.<details class="gi-ev"><summary>evidence</summary><div class="mono">Game subclass stores mutable array state via a settings shadow: <code>src/rules/game.ts:67-72</code> `get/set currentPlayCards` -&gt; `this.settings._currentPlayCards as string[]`; <code>game.ts:75-80</code> `get/set playerSaidGo` -&gt; `this.settings._playerSaidGo`. Element does the same: <code>src/rules/elements.ts:86-95</code> `originalHandCardIds` -&gt; `this.game.settings[\`_originalHandCardIds_${this.seat}\`]`. Comment at <code>game.ts:64</code> 'HMR-safe state (stored in settings)' shows this is a deliberate workaround for array persistence. Also two declared deep plain-object props holding mutable round state: <code>game.ts:88-114</code> `scoringAnimation` and <code>game.ts:116-148</code> `roundSummary` (reassigned wholesale, but nested arrays).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Re-home settings-shadow data and mutable declared array/object state onto a supported serializable shape (element children or persistentMap/persistentArray-style APIs, as already done for pendingLootMap), since F3 stops Proxy-wrapping declared arrays and changes settings-shadow persistence. Verify save/HMR survival for each pending* field.<details class="gi-ev"><summary>evidence</summary><div class="mono">Heavy this.settings shadow store in <code>src/rules/game.ts:764-795</code> (combatantData/equipmentData/sectorData/tacticsData/setupConfigurations getters+setters via '(this.settings as Record&lt;string, unknown&gt;).combatantData = data'), and <code>game.ts:740</code> 'const settings = this.settings as Record&lt;string, unknown&gt;'. Plus many declared plain object/array state fields mutated at runtime: <code>game.ts:597</code> pendingArtilleryAllocation object, :626 pendingGeneralissimoHire {drawnMercIds:number[]}, :636 pendingLockdownMilitia, :1498 declinedPlayers:[]. Note pendingLootMap (<code>game.ts:721</code>) already uses the correct this.persistentMap API.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">polyhedral-potions</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">If the engine stops Proxy-wrapping declared arrays / changes settings-shadow persistence, verify draftedDice/draftedValues still round-trip and the player's in-place mutations of ingredientTracks/potionsCrafted still persist across save/HMR; may need to move these to a serializable shape or element children.<details class="gi-ev"><summary>evidence</summary><div class="mono">Game stores array state in a manual settings shadow: <code>src/rules/game.ts:70-76</code> get/set draftedDice via 'this.settings._draftedDiceIds' and <code>game.ts:79-84</code> draftedValues via 'this.settings._draftedValues' (comment line 67: 'HMR-safe state (stored in settings)'). Player declares plain mutable array/object state mutated in place: <code>src/rules/elements.ts:181</code> 'ingredientTracks: Record&lt;string, IngredientBox[]&gt; = {}' (mutated at <code>elements.ts:438</code> 'box.marked = true') and <code>elements.ts:186</code> 'potionsCrafted: boolean[] = new Array(32).fill(false)' (mutated at <code>elements.ts:495</code> 'this.potionsCrafted[value-1] = true').</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>game.ts:485-488</code> runs _checkForVolatileState only when `process.env?.NODE_ENV !== 'production'`. That walks own properties and, for any array, calls _autoSyncArray (<code>game.ts:548-551</code>) which via _autoSyncArrayOnTarget (598-721) replaces the property with an Object.defineProperty getter returning a `new Proxy(...)` whose mutations write to `this.settings['__autoSync_'+key]` (623,653,675). Meanwhile toJSON serializes the SAME array as an ordinary attribute (<code>game-element.ts:704-711</code> iterates all own non-'_' keys). On restore, the proxy prefers the settings copy over the attribute copy: `if (storedData &amp;&amp; Array.isArray(storedData)) backingArray = [...storedData]` (<code>game.ts:614-617</code>).</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Verified every citation in /<code>Users/jtsmith/BoardSmith/src/engine/element/game.ts</code> and <code>game-element.ts</code>. <code>game.ts:485-493</code> gates _checkForVolatileState behind NODE_ENV !== 'production' via queueMicrotask. <code>game.ts:548-550</code> routes any own array (except 'messages') to _autoSyncArray. <code>game.ts:589-721</code> replaces the property with an enumerable Object.defineProperty getter (line 718) returning a Proxy that writes mutations to this.settings['__autoSync_'+key] (623,653,675,683,713). <code>game-element.ts:704-711</code> serializes all own non-'_' keys, and because the getter is enumerable the array is emitted as a normal attribute; <code>game.ts:2458</code> ALSO serializes the whole settings object (settings is absent from unserializableAttributes at 370-381). So in dev the same array is in the snapshot twice; in prod the proxy is never installed and it appears once with no __autoSync_ key. <code>game.ts:614-617</code> prefers the settings copy on proxy install; loadSerializedState (2612-2650) copies settings synchronously and re-applies attributes, then the deferred microtask installs the proxy and the settings copy wins in dev, whereas prod uses the attribute copy. All claimed mechanics are accurate. I downgrade from high to medium because the two copies are always written together within a single environment (proxy syncs to settings on every mutation; serialization reads the same backing array), so normal round-trips do not actually corrupt data. The real harm is dev/prod behavioral divergence (Proxy vs plain Array identity, settings-wins vs attribute-wins restore, and dev-only validation in _validateArrayValue that throws in dev but is silently absent in prod) plus a dual-source-of-truth code smell that contradicts the project's stated single-source-of-truth and dev/prod-parity principles.</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="dx" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F26</span>#5</div>
+      <div class="rank"><span class="fid">F26</span>#4</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -599,7 +543,7 @@ Severity: I rate it high rather than critical. It is a real unauthenticated info
 
   <article class="card fx-open" data-cat="security" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F13</span>#6</div>
+      <div class="rank"><span class="fid">F13</span>#5</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -677,7 +621,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
 
   <article class="card fx-open" data-cat="usability" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F19</span>#7</div>
+      <div class="rank"><span class="fid">F19</span>#6</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -769,7 +713,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
 
   <article class="card fx-open" data-cat="dx" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F29</span>#8</div>
+      <div class="rank"><span class="fid">F29</span>#7</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -837,7 +781,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
 
   <article class="card fx-open" data-cat="usability" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F23</span>#9</div>
+      <div class="rank"><span class="fid">F23</span>#8</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -923,7 +867,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
 
   <article class="card fx-open" data-cat="dx" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F28</span>#10</div>
+      <div class="rank"><span class="fid">F28</span>#9</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -1009,7 +953,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(19 fixed — no longer active, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(20 fixed — no longer active, kept for the record)</span></span></h2>
   <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
   zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
   <div id="completed-list">
@@ -1254,6 +1198,62 @@ The inconsistency is genuine AND fixable with existing infrastructure: actionChe
 Impact assessment tempering the severity: (1) These are debug/dev-only features (time-travel debugging, state-diff highlighting, rewind explicitly &quot;intended for debug/development use&quot;). (2) The read paths (getStateAtAction/getStateDiff) are wrapped in try/catch and return {success:false} on throw — they cannot crash the live session; worst case they show wrong/missing historical state. (3) The wrongness only manifests for games that use pending/selection mutations (equipment via Piece.putInto, selection-step mutations); simpler games whose entire state lives in command/action history replay correctly. rewindToAction is the most serious because it replaces the live runner, saves, and broadcasts — for affected games it can corrupt/mis-position the live dev game — but it is still a debug-gated operation, not normal gameplay.
 
 So: real correctness/architecture bug, accurately described (&quot;silently shows WRONG historical state&quot;; rewind can resurrect a mis-positioned flow), but confined to debug/dev tooling with non-destructive, error-caught read paths. That makes &quot;high&quot; slightly overstated; medium is the appropriate independent severity.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="architecture" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F3</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — 5e19cc7288892e865da390005dd00507e1097d9b">✅ Fixed · 5e19cc7288892e865da390005dd00507e1097d9b</span>
+          <span class="badge sev-medium">Medium</span>
+          <span class="badge cat cat-architecture">Architecture</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">3 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Declared array state is silently replaced by a dev-only Proxy backed by a magic settings key — dual source of truth + dev/prod snapshot divergence</h3>
+        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>5e19cc7288892e865da390005dd00507e1097d9b</code> — Declared array state is silently replaced by a dev-only Proxy backed by a magic settings key — dual source of truth + dev/prod snapshot divergence</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The same array now lives twice in a dev snapshot (attributes.&lt;key&gt; AND settings.__autoSync_&lt;key&gt;) with settings silently winning on restore, and zero times in settings for a production snapshot (the proxy is never installed). The declared property's runtime identity (plain Array vs Proxy) and the serialized snapshot's shape both depend on NODE_ENV.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A designer writes `items: Card[] = []` and gets, in dev only, a Proxy with different identity/reference semantics and a hidden second copy in settings. Bugs that depend on array identity, or on the attribute-vs-settings copy, reproduce in dev but not prod (or vice versa) — the worst kind of footgun. A snapshot captured in dev and restored in prod (or by the stateless executor) can resolve the array from a different source than the designer expects.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Make persistence environment-independent: either always install the sync wrapper or never (prefer never — persist arrays solely via toJSON attributes). If HMR survival is needed, fold it into the one serialization path rather than a parallel settings shadow. Don't mutate the shape of designer-declared properties at runtime.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 1 affected, 2 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">If the audit changes how declared array/object state persists (away from a settings shadow toward serializable shapes / element children), migrate currentPlayCards, playerSaidGo, and originalHandCardIds off `this.settings`/`this.game.settings` to whatever the new sanctioned mechanism is (plain declared serializable properties or element-backed state). Verify scoringAnimation/roundSummary still persist across save/HMR without the dev-only Proxy.<details class="gi-ev"><summary>evidence</summary><div class="mono">Game subclass stores mutable array state via a settings shadow: <code>src/rules/game.ts:67-72</code> `get/set currentPlayCards` -&gt; `this.settings._currentPlayCards as string[]`; <code>game.ts:75-80</code> `get/set playerSaidGo` -&gt; `this.settings._playerSaidGo`. Element does the same: <code>src/rules/elements.ts:86-95</code> `originalHandCardIds` -&gt; `this.game.settings[\`_originalHandCardIds_${this.seat}\`]`. Comment at <code>game.ts:64</code> 'HMR-safe state (stored in settings)' shows this is a deliberate workaround for array persistence. Also two declared deep plain-object props holding mutable round state: <code>game.ts:88-114</code> `scoringAnimation` and <code>game.ts:116-148</code> `roundSummary` (reassigned wholesale, but nested arrays).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Re-home settings-shadow data and mutable declared array/object state onto a supported serializable shape (element children or persistentMap/persistentArray-style APIs, as already done for pendingLootMap), since F3 stops Proxy-wrapping declared arrays and changes settings-shadow persistence. Verify save/HMR survival for each pending* field.<details class="gi-ev"><summary>evidence</summary><div class="mono">Heavy this.settings shadow store in <code>src/rules/game.ts:764-795</code> (combatantData/equipmentData/sectorData/tacticsData/setupConfigurations getters+setters via '(this.settings as Record&lt;string, unknown&gt;).combatantData = data'), and <code>game.ts:740</code> 'const settings = this.settings as Record&lt;string, unknown&gt;'. Plus many declared plain object/array state fields mutated at runtime: <code>game.ts:597</code> pendingArtilleryAllocation object, :626 pendingGeneralissimoHire {drawnMercIds:number[]}, :636 pendingLockdownMilitia, :1498 declinedPlayers:[]. Note pendingLootMap (<code>game.ts:721</code>) already uses the correct this.persistentMap API.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">polyhedral-potions</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">If the engine stops Proxy-wrapping declared arrays / changes settings-shadow persistence, verify draftedDice/draftedValues still round-trip and the player's in-place mutations of ingredientTracks/potionsCrafted still persist across save/HMR; may need to move these to a serializable shape or element children.<details class="gi-ev"><summary>evidence</summary><div class="mono">Game stores array state in a manual settings shadow: <code>src/rules/game.ts:70-76</code> get/set draftedDice via 'this.settings._draftedDiceIds' and <code>game.ts:79-84</code> draftedValues via 'this.settings._draftedValues' (comment line 67: 'HMR-safe state (stored in settings)'). Player declares plain mutable array/object state mutated in place: <code>src/rules/elements.ts:181</code> 'ingredientTracks: Record&lt;string, IngredientBox[]&gt; = {}' (mutated at <code>elements.ts:438</code> 'box.marked = true') and <code>elements.ts:186</code> 'potionsCrafted: boolean[] = new Array(32).fill(false)' (mutated at <code>elements.ts:495</code> 'this.potionsCrafted[value-1] = true').</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>game.ts:485-488</code> runs _checkForVolatileState only when `process.env?.NODE_ENV !== 'production'`. That walks own properties and, for any array, calls _autoSyncArray (<code>game.ts:548-551</code>) which via _autoSyncArrayOnTarget (598-721) replaces the property with an Object.defineProperty getter returning a `new Proxy(...)` whose mutations write to `this.settings['__autoSync_'+key]` (623,653,675). Meanwhile toJSON serializes the SAME array as an ordinary attribute (<code>game-element.ts:704-711</code> iterates all own non-'_' keys). On restore, the proxy prefers the settings copy over the attribute copy: `if (storedData &amp;&amp; Array.isArray(storedData)) backingArray = [...storedData]` (<code>game.ts:614-617</code>).</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Verified every citation in /<code>Users/jtsmith/BoardSmith/src/engine/element/game.ts</code> and <code>game-element.ts</code>. <code>game.ts:485-493</code> gates _checkForVolatileState behind NODE_ENV !== 'production' via queueMicrotask. <code>game.ts:548-550</code> routes any own array (except 'messages') to _autoSyncArray. <code>game.ts:589-721</code> replaces the property with an enumerable Object.defineProperty getter (line 718) returning a Proxy that writes mutations to this.settings['__autoSync_'+key] (623,653,675,683,713). <code>game-element.ts:704-711</code> serializes all own non-'_' keys, and because the getter is enumerable the array is emitted as a normal attribute; <code>game.ts:2458</code> ALSO serializes the whole settings object (settings is absent from unserializableAttributes at 370-381). So in dev the same array is in the snapshot twice; in prod the proxy is never installed and it appears once with no __autoSync_ key. <code>game.ts:614-617</code> prefers the settings copy on proxy install; loadSerializedState (2612-2650) copies settings synchronously and re-applies attributes, then the deferred microtask installs the proxy and the settings copy wins in dev, whereas prod uses the attribute copy. All claimed mechanics are accurate. I downgrade from high to medium because the two copies are always written together within a single environment (proxy syncs to settings on every mutation; serialization reads the same backing array), so normal round-trips do not actually corrupt data. The real harm is dev/prod behavioral divergence (Proxy vs plain Array identity, settings-wins vs attribute-wins restore, and dev-only validation in _validateArrayValue that throws in dev but is silently absent in prod) plus a dual-source-of-truth code smell that contradicts the project's stated single-source-of-truth and dev/prod-parity principles.</div>
       </details>
     </div>
   </article>
