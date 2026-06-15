@@ -51,7 +51,9 @@ export {
 // Random game simulation
 export {
   simulateRandomGames,
+  replayRandomGame,
   type SimulateRandomGamesOptions,
+  type ReplayRandomGameOptions,
   type SingleGameResult,
   type SimulationResults,
 } from './random-simulation.js';
