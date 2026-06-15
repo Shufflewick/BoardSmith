@@ -438,9 +438,20 @@ export function execute(fn: (context: FlowContext) => void): FlowNode {
 /**
  * Set a flow variable
  *
+ * Initialize a variable (e.g. in flow setup) before reading it. Reading a
+ * variable that was never set returns undefined and a `?? default` fallback
+ * would silently mask a typo, so `ctx.get` warns in dev mode for unset keys.
+ *
  * @example
  * ```typescript
- * setVar('turnCount', (ctx) => (ctx.get('turnCount') ?? 0) + 1)
+ * // Initialize once, then increment — no `?? default` needed
+ * sequence(
+ *   setVar('turnCount', 0),
+ *   loop({
+ *     maxIterations: 100,
+ *     do: setVar('turnCount', (ctx) => ctx.get<number>('turnCount')! + 1),
+ *   })
+ * )
  * ```
  */
 export function setVar(

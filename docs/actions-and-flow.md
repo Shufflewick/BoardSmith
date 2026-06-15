@@ -831,8 +831,19 @@ execute((ctx) => {
 
 #### `setVar` - Set flow variable
 
+Initialize a variable before reading it. Reading a variable that was never set
+returns `undefined`, and a `?? default` fallback would silently mask a typo — so
+`ctx.get` warns in dev mode when the key was never set.
+
 ```typescript
-setVar('roundNumber', (ctx) => (ctx.get('roundNumber') ?? 0) + 1)
+// Initialize once, then increment — no `?? default` needed
+sequence(
+  setVar('roundNumber', 0),
+  loop({
+    maxIterations: 100,
+    do: setVar('roundNumber', (ctx) => ctx.get<number>('roundNumber')! + 1),
+  })
+)
 ```
 
 ### Turn Order
