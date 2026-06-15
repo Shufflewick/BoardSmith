@@ -87,4 +87,20 @@ describe('scanSandboxViolations', () => {
     expect(rules).toContain('boardsmith/no-timers');
     expect(rules).toContain('boardsmith/no-eval');
   });
+
+  // F51: network access via module imports must be caught, not just bare fetch().
+  it('flags networking module imports and member-expression fetch', () => {
+    write('src/rules/a.ts', "import https from 'node:https';\nexport const _ = https;\n");
+    write('src/ui/b.ts', "const net = require('net');\nexport const __ = net;\n");
+    write('src/ui/c.ts', 'export function go() { return window.fetch("/x"); }\n');
+    write('src/rules/d.ts', "export const p = import('dgram');\n");
+    const network = scanSandboxViolations(dir).filter(
+      (v) => v.ruleId === 'boardsmith/no-network',
+    );
+    const files = new Set(network.map((v) => v.file));
+    expect(files).toContain('src/rules/a.ts');
+    expect(files).toContain('src/ui/b.ts');
+    expect(files).toContain('src/ui/c.ts');
+    expect(files).toContain('src/rules/d.ts');
+  });
 });
