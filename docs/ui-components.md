@@ -959,7 +959,7 @@ Utilities for square grids (chess notation, etc.).
 ```typescript
 import { useGameGrid, toAlgebraicNotation, fromAlgebraicNotation } from 'boardsmith/ui';
 
-const { getCellAt, getAlgebraic, pixelToCell } = useGameGrid({
+const { getCellAt, toNotation, fromNotation } = useGameGrid({
   rows: 8,
   cols: 8,
   cellSize: 60,
@@ -983,10 +983,10 @@ import {
 } from 'boardsmith/ui';
 
 const {
-  hexToPixel,
-  pixelToHex,
-  getHexCorners,
-  getNeighbors
+  getHexPosition,
+  getHexPoints,
+  getNeighbors,
+  hexDistance
 } = useHexGrid({
   size: 30,
   orientation: 'flat',  // or 'pointy'
@@ -1340,10 +1340,10 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `execute` | `(name: string, args?: Record<string, unknown>) => Promise<void>` | Execute an action immediately with provided args |
-| `start` | `(name: string, options?: StartOptions) => void` | Start wizard mode for a multi-selection action |
-| `fill` | `(name: string, value: unknown) => void` | Fill a specific selection in wizard mode |
-| `skip` | `() => void` | Skip an optional selection |
+| `execute` | `(name: string, args?: Record<string, unknown>) => Promise<ActionResult>` | Execute an action immediately with provided args; resolves to the server `ActionResult` (`.success`/`.error`) |
+| `start` | `(name: string, options?: StartOptions) => Promise<void>` | Start wizard mode for a multi-selection action (await before driving further selections) |
+| `fill` | `(name: string, value: unknown) => Promise<ValidationResult>` | Fill a specific selection in wizard mode (async) |
+| `skip` | `(selectionName: string) => void` | Skip an optional selection (requires the selection name) |
 | `cancel` | `() => void` | Cancel wizard mode and clear selections |
 
 **StartOptions:**
@@ -1359,11 +1359,11 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `pendingAction` | `string \| null` | Name of action currently in wizard mode |
-| `currentPick` | `PickMetadata \| null` | Metadata for the current pick step |
+| `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
+| `currentPick` | `ComputedRef<PickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
 | `validElements` | `ComputedRef<ValidElement[]>` | **Reactive** list of valid elements for current selection |
-| `isExecuting` | `boolean` | Whether an action is currently executing |
-| `error` | `string \| null` | Error message from last failed execution |
+| `isExecuting` | `Ref<boolean>` | Whether an action is currently executing (read `.value`) |
+| `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
 
 ### Element Selections with validElements
 
@@ -1430,8 +1430,8 @@ actionController.start('move', {
 // Custom boards can fill selections programmatically
 actionController.fill('destination', cellId);
 
-// Skip optional selections
-actionController.skip();
+// Skip an optional selection (pass the selection's name)
+actionController.skip('destination');
 
 // Cancel and clear
 actionController.cancel();
@@ -1440,18 +1440,18 @@ actionController.cancel();
 **Reading controller state:**
 ```typescript
 // Check if an action is in progress
-if (actionController.pendingAction === 'move') {
+if (actionController.currentAction.value === 'move') {
   // Show move-specific UI
 }
 
 // Show loading state during execution
-<button :disabled="actionController.isExecuting">
-  {{ actionController.isExecuting ? 'Working...' : 'Execute' }}
+<button :disabled="actionController.isExecuting.value">
+  {{ actionController.isExecuting.value ? 'Working...' : 'Execute' }}
 </button>
 
 // Display errors
-<div v-if="actionController.error" class="error">
-  {{ actionController.error }}
+<div v-if="actionController.lastError.value" class="error">
+  {{ actionController.lastError.value }}
 </div>
 ```
 
@@ -1466,8 +1466,8 @@ The `actionController` provides error state that your UI should handle gracefull
   <div class="game-board">
     <!-- Error toast/banner -->
     <Transition name="fade">
-      <div v-if="actionController.error" class="error-banner">
-        {{ actionController.error }}
+      <div v-if="actionController.lastError.value" class="error-banner">
+        {{ actionController.lastError.value }}
         <button @click="dismissError">×</button>
       </div>
     </Transition>
@@ -1483,7 +1483,7 @@ const props = defineProps<{
 }>();
 
 // Error auto-dismisses after 5 seconds
-watch(() => props.actionController.error, (error) => {
+watch(() => props.actionController.lastError.value, (error) => {
   if (error) {
     setTimeout(() => {
       // Error clears automatically on next successful action
@@ -1562,11 +1562,11 @@ async function handleAction(name: string, args: Record<string, unknown>) {
   try {
     await actionController.execute(name, args);
   } catch (e) {
-    // actionController.error is already set, but you may want custom handling
+    // actionController.lastError is already set, but you may want custom handling
   }
 
   // Check error after execution
-  const error = actionController.error;
+  const error = actionController.lastError.value;
   if (error) {
     switch (true) {
       case error.includes('Not your turn'):
@@ -1649,7 +1649,7 @@ async function executeWithRetry(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     await actionController.execute(name, args);
 
-    if (!actionController.error) return; // Success
+    if (!actionController.lastError.value) return; // Success
 
     if (attempt < maxRetries) {
       // Wait before retry (connection issues)
