@@ -59,8 +59,6 @@ export {
 // Assertion helpers
 export {
   assertFlowState,
-  assertPlayerHas,
-  assertElementCount,
   assertGameFinished,
   assertActionAvailable,
   assertActionNotAvailable,
@@ -68,27 +66,13 @@ export {
   type FlowStateAssertionResult,
 } from './assertions.js';
 
-// Fixture and scenario helpers
-export {
-  ScenarioBuilder,
-  scenario,
-  quickGame,
-  playSequence,
-  playUntil,
-  createMultiple,
-} from './fixtures.js';
-
 // Debug utilities
 export {
   toDebugString,
   traceAction,
-  visualizeFlow,
-  visualizeFlowWithPosition,
-  debugFlowState,
   logAvailableActions,
   diffSnapshots,
   type DebugStringOptions,
   type ActionTraceResult,
   type ActionTraceDetail,
-  type FlowStateDebug,
 } from './debug.js';
