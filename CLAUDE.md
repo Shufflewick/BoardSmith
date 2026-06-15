@@ -43,8 +43,6 @@ Every design decision should guide developers and users toward correct behavior 
 - **session** - Game lifecycle management: player handling, action validation, checkpoints, undo, and storage/broadcast adapters.
 - **ui** - Vue 3 components: GameShell, AutoUI, drag-drop, animations (FLIP, flying elements), action panels, and theming.
 - **types** - Shared protocol types for WebSocket messages, lobby state, and action requests.
-- **server** - Platform-agnostic HTTP/WebSocket server with game stores (memory, SQLite) and matchmaking.
-- **worker** - Cloudflare Worker bindings using Durable Objects and KV for edge deployment.
 - **client** - TypeScript SDK for connecting to game servers with matchmaking and state management.
 - **runtime** - Game execution: serialization, snapshots, replays, and GameRunner for action execution.
 - **testing** - Test utilities: TestGame, action simulation, random simulation, assertions, and scenario builders.

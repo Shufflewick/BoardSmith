@@ -18,21 +18,21 @@ class MyGame extends Game<MyGame, MyPlayer> {
    * Get the current dealer
    */
   get dealer(): MyPlayer {
-    return this.players.get(this.dealerPosition) as MyPlayer;
+    return this.getPlayer(this.dealerPosition) as MyPlayer;
   }
 
   /**
    * Get the player to the dealer's left (usually plays first)
    */
   get playerAfterDealer(): MyPlayer {
-    return this.players.nextAfter(this.dealer) as MyPlayer;
+    return this.nextAfter(this.dealer) as MyPlayer;
   }
 
   /**
    * Rotate dealer to the next player
    */
   rotateDealer(): void {
-    const nextDealer = this.players.nextAfter(this.dealer);
+    const nextDealer = this.nextAfter(this.dealer);
     this.dealerPosition = nextDealer.seat;
   }
 }

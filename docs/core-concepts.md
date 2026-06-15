@@ -204,19 +204,28 @@ Commands are generic state mutations that happen automatically when you call ele
 ### Custom Player Classes
 
 ```typescript
+// Declare extra fields with initializers — do NOT define a constructor.
+// The engine instantiates players from `playerCount`, so a custom Player
+// just adds the per-player state it needs.
 export class MyPlayer extends Player<MyGame, MyPlayer> {
-  hand!: Hand;
-  score: number = 0;  // Auto-serialized to gameView
-  abilities: Record<string, number> = { reroll: 1 };  // Auto-serialized
+  hand!: Hand;                                          // Assigned in the Game constructor
+  score: number = 0;                                    // Auto-serialized to gameView
+  abilities: Record<string, number> = { reroll: 1 };   // Auto-serialized
+}
+```
 
-  constructor(position: number, name: string, game: MyGame) {
-    super(position, name);
-    this.game = game;
+Player-owned elements (like each player's `hand`) are created in the **Game** constructor, which loops over the already-instantiated `this.players`:
 
-    // Create player's hand
-    this.hand = game.create(Hand, `hand-${position}`);
-    this.hand.player = this;
-    this.hand.contentsVisibleToOwner();
+```typescript
+class MyGame extends Game<MyGame, MyPlayer> {
+  constructor(options: GameOptions) {
+    super(options);
+
+    for (const player of this.players) {
+      player.hand = this.create(Hand, `hand-${player.seat}`);
+      player.hand.player = player;
+      player.hand.contentsVisibleToOwner();
+    }
   }
 }
 ```
@@ -233,15 +242,14 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 
 ```typescript
 // In game class
-this.players                    // PlayerCollection
-this.players.get(1)             // First player (1-indexed)
-this.players.get(2)             // Second player
-this.players.current            // Player whose turn it is
-this.players.all()              // Array of all players
+this.players                    // Array of all players
+this.getPlayer(1)               // First player (by seat, 1-indexed)
+this.getPlayer(2)               // Second player
+this.currentPlayer              // Player whose turn it is
 
 // In action context
 ctx.player                      // Current action's player
-ctx.game.players.current        // Current player from game
+ctx.game.currentPlayer          // Current player from game
 ```
 
 ### Player Colors
@@ -276,25 +284,6 @@ BoardSmith automatically handles serialization for:
 - Network transmission
 - State persistence
 - Replays
-
-### PlayerCollection Serialization Warning
-
-`game.players` is a `PlayerCollection` (an Array subclass), not a plain Array. This has important implications when working with player data:
-
-```typescript
-// ❌ WRONG: Returns a PlayerCollection, not a plain Array
-// When JSON.stringify() is called, PlayerCollection.toJSON() re-serializes
-// the elements, losing any custom properties
-const playerData = game.players.map(p => p.toJSON());
-
-// ✅ CORRECT: Spread to convert to plain Array
-const playerData = [...game.players.map(p => p.toJSON())];
-
-// ✅ ALSO CORRECT: Use Array.from()
-const playerData = Array.from(game.players.map(p => p.toJSON()));
-```
-
-This is a JavaScript quirk: when you call `.map()` on an Array subclass, the result is an instance of the same subclass, not a plain Array. The `PlayerCollection.toJSON()` method then gets called during serialization, which re-processes the already-serialized data.
 
 ### Registering Elements
 

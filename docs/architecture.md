@@ -47,33 +47,27 @@ This document provides an overview of the BoardSmith package architecture and ho
 │  - Feature generation    │  - AI controller                                 │
 │  - Code generation       │  - Lobby system                                  │
 │                          │                                                  │
-│                          ├──────────────────┬───────────────────┐           │
-│                          ▼                  ▼                   ▼           │
-│                     ┌─────────┐        ┌─────────┐         ┌─────────┐      │
-│                     │ server  │        │  worker │         │   cli   │      │
-│                     └────┬────┘        └────┬────┘         └─────────┘      │
-│                          │                  │               - init          │
-│                     HTTP/WS core       Cloudflare           - dev           │
-│                     - Handlers         Workers              - build         │
-│                     - Game stores      - Durable Objects    - test          │
-│                     - Matchmaking      - KV storage         - validate      │
-│                          │                  │               - evolve-ai     │
-│                          └────────┬─────────┘               - publish       │
-│                                   │                                         │
-│                                   ▼                                         │
-│                              ┌─────────┐                                    │
-│                              │ client  │  Browser SDK                       │
-│                              └────┬────┘  - MeepleClient (matchmaking)      │
-│                                   │       - GameConnection (WebSocket)      │
-│                                   │       - Vue composables                 │
-│                                   │                                         │
-│                                   ▼                                         │
-│                              ┌─────────┐                                    │
-│                              │   ui    │  Vue 3 components                  │
-│                              └─────────┘  - GameShell, ActionPanel          │
-│                                           - AutoUI, Die3D                   │
-│                                           - 20+ composables                 │
-│                                           - Animation system                │
+│                          ├──────────────────┐                              │
+│                          ▼                  ▼                              │
+│                     ┌─────────┐        ┌─────────┐                         │
+│                     │   cli   │        │ client  │  Browser SDK            │
+│                     └─────────┘        └────┬────┘  - MeepleClient         │
+│                     - init                  │       - GameConnection (WS)  │
+│                     - dev                   │       - Vue composables      │
+│                     - build                 │                              │
+│                     - test          client connects over WebSocket to a    │
+│                     - validate      host PROVIDED BY THE DEPLOYMENT         │
+│                     - evolve-ai     PLATFORM — BoardSmith ships no server   │
+│                     - publish       or worker module (see Runtime          │
+│                                     Isolation below).                       │
+│                                             │                              │
+│                                             ▼                              │
+│                                        ┌─────────┐                         │
+│                                        │   ui    │  Vue 3 components       │
+│                                        └─────────┘  - GameShell, ActionPanel│
+│                                                     - AutoUI, Die3D        │
+│                                                     - 20+ composables      │
+│                                                     - Animation system     │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -105,7 +99,7 @@ UI Click / Bot Decision
 actionController.execute(name, args)
     │
     ▼
-GameConnection.action()  ──► WebSocket ──► Server/Worker
+GameConnection.action()  ──► WebSocket ──► Host (deployment platform)
     │                                           │
     │                                           ▼
     │                                    GameSession.performAction()
@@ -175,25 +169,25 @@ The `playerView()` method filters state based on these visibility rules.
 
 ### Platform Adapters
 
-The session package uses adapters for platform-specific concerns:
+`GameSession` exposes `StorageAdapter` and `BroadcastAdapter` *interfaces*
+(`src/session/types.ts`) for platform-specific concerns. BoardSmith ships the
+interfaces only — concrete storage/transport implementations are supplied by
+the deployment platform that hosts the session (see Runtime Isolation below).
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   GameSession                       │
 │                                                     │
-│  ┌─────────────────┐      ┌─────────────────┐      │
+│  ┌─────────────────┐      ┌──────────────────┐      │
 │  │ StorageAdapter  │      │ BroadcastAdapter │      │
-│  └────────┬────────┘      └────────┬────────┘      │
+│  │  (interface)    │      │   (interface)    │      │
+│  └────────┬────────┘      └────────┬─────────┘      │
 └───────────┼─────────────────────────┼───────────────┘
             │                         │
-    ┌───────┴───────┐         ┌───────┴───────┐
-    │               │         │               │
-    ▼               ▼         ▼               ▼
-┌────────┐    ┌─────────┐  ┌────────┐   ┌──────────┐
-│In-Mem  │    │ SQLite  │  │Express │   │Durable   │
-│ Store  │    │ Store   │  │  WS    │   │Object WS │
-└────────┘    └─────────┘  └────────┘   └──────────┘
-   CLI dev      CLI --persist   CLI dev    Cloudflare
+            ▼                         ▼
+   Persistence implementation   Transport implementation
+   supplied by the host         supplied by the host
+   (e.g. KV, in-memory)         (e.g. WebSocket fan-out)
 ```
 
 ## Package Responsibilities
@@ -202,9 +196,7 @@ The session package uses adapters for platform-specific concerns:
 |---------|---------------|-------------|
 | `engine` | Game rules framework | `Game`, `Action`, `Flow`, elements |
 | `runtime` | Game execution | `GameRunner` |
-| `session` | Session management | `GameSession`, adapters |
-| `server` | HTTP/WS handlers | `GameServerCore`, handlers |
-| `worker` | Cloudflare runtime | `createGameWorker`, adapters |
+| `session` | Session management | `GameSession`, adapter interfaces |
 | `client` | Browser SDK | `MeepleClient`, `GameConnection` |
 | `ui` | Vue components | `GameShell`, composables |
 | `ai` | MCTS bot | `createBot`, `MCTSBot` |

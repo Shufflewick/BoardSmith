@@ -295,7 +295,7 @@ Action.create('askPlayer')
     // playerChoices returns { value: seat; display: string } objects
     // Seat values are 1-indexed
     const choice = args.target as { value: number; display: string };
-    const targetPlayer = game.players.get(choice.value)!;
+    const targetPlayer = game.getPlayer(choice.value)!;
     // ...
   });
 ```
@@ -686,7 +686,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
       prompt: 'Who do you want to ask?',
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number; display: string }, ctx) => {
-        const targetPlayer = game.players.get(choice.value) as GoFishPlayer;
+        const targetPlayer = game.getPlayer(choice.value) as GoFishPlayer;
         return { targetRef: { id: game.getPlayerHand(targetPlayer).id } };
       },
     })
@@ -705,7 +705,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
     .execute((args, ctx) => {
       const player = ctx.player as GoFishPlayer;
       const targetChoice = args.target as { value: number; display: string };
-      const target = game.players.get(targetChoice.value) as GoFishPlayer;
+      const target = game.getPlayer(targetChoice.value) as GoFishPlayer;
       const rank = args.rank as string;
 
       const matchingCards = game.getCardsOfRank(target, rank);
@@ -914,7 +914,7 @@ Access and set variables during flow:
 
 ```typescript
 // Set variable (player seats are 1-indexed)
-setVar('dealer', (ctx) => ctx.game.players.get(1))
+setVar('dealer', (ctx) => ctx.game.getPlayer(1))
 
 // Access in conditions
 loop({
