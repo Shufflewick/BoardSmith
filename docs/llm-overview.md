@@ -140,7 +140,7 @@ export class Deck extends BaseDeck {}
 // actions.ts
 export function createPlayAction(game: MyGame): ActionDefinition {
   return Action.create('play')
-    .chooseFrom<Card>('card', {
+    .chooseFrom('card', {
       choices: (ctx) => [...ctx.player.hand.all(Card)],
     })
     .execute((args) => {
@@ -439,7 +439,7 @@ When using `chooseElement` in actions, the args passed to `execute()` contain th
 
 ```typescript
 // ❌ WRONG: args.die is an object, not a number
-.chooseElement<Die>('die', { ... })
+.chooseElement('die', { ... })
 .execute((args, ctx) => {
   const dieId = args.die as number;  // This is actually an object!
   const die = game.all(Die).find(d => d.id === dieId);  // Never finds it

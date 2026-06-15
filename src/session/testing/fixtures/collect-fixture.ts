@@ -75,7 +75,7 @@ class CollectGame extends Game<CollectGame, Player> {
     this.registerAction(
       Action.create('collect')
         .condition({ 'has sector arg': (ctx) => ctx.args?.sectorId != null })
-        .chooseElement<Equipment>('item', {
+        .chooseElement('item', {
           optional: true,
           elementClass: Equipment,
           // Scope to pieces currently in this game's stash. Closure (not ctx.args)

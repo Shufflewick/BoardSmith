@@ -361,11 +361,17 @@ export type Selection =
   | NumberSelection;
 
 /**
- * Context passed to selection functions and validators
+ * Context passed to selection functions, validators, and execute handlers.
+ *
+ * Generic over the concrete game type `G` so that `ctx.game` is fully typed
+ * (no `as MyGame` cast needed). When created via `Action.create<MyGame>(...)`,
+ * the game type threads through every callback in the builder chain.
+ *
+ * @typeParam G - The concrete Game subclass. Defaults to the base `Game`.
  */
-export interface ActionContext {
-  /** The game instance */
-  game: Game;
+export interface ActionContext<G extends Game = Game> {
+  /** The game instance, typed as the concrete game class. */
+  game: G;
   /** The player taking the action */
   player: Player;
   /** Arguments collected so far */
@@ -378,8 +384,10 @@ export interface ActionContext {
 
 /**
  * A condition predicate function that checks if an action is available.
+ *
+ * @typeParam G - The concrete Game subclass, so `ctx.game` is fully typed.
  */
-export type ConditionPredicate = (context: ActionContext) => boolean;
+export type ConditionPredicate<G extends Game = Game> = (context: ActionContext<G>) => boolean;
 
 /**
  * Object-based condition where keys are human-readable labels and values are predicates.
@@ -394,7 +402,7 @@ export type ConditionPredicate = (context: ActionContext) => boolean;
  * }
  * ```
  */
-export type ObjectCondition = Record<string, ConditionPredicate>;
+export type ObjectCondition<G extends Game = Game> = Record<string, ConditionPredicate<G>>;
 
 /**
  * Condition configuration using object format with labeled predicates.
@@ -410,7 +418,7 @@ export type ObjectCondition = Record<string, ConditionPredicate>;
  * })
  * ```
  */
-export type ConditionConfig = ObjectCondition;
+export type ConditionConfig<G extends Game = Game> = ObjectCondition<G>;
 
 /**
  * Definition of an action

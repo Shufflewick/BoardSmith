@@ -45,8 +45,8 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
     super(options);
     this.registerAction(
       Action.create('pick')
-        .chooseFrom<string>('color', { choices: ['red', 'blue', 'green'] })
-        .chooseFrom<string>('size', { choices: ['S', 'M', 'L'] })
+        .chooseFrom('color', { choices: ['red', 'blue', 'green'] })
+        .chooseFrom('size', { choices: ['S', 'M', 'L'] })
         .execute(() => ({ success: true })),
     );
     this.setFlow(

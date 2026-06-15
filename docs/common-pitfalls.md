@@ -123,7 +123,7 @@ For complex cases where you need custom availability logic, you can still handle
 
 ```typescript
 // Manual approach - handle undefined explicitly
-.chooseElement<Sector>('destination', {
+.chooseElement('destination', {
   filter: (sector, ctx) => {
     const selectedSquad = ctx.args?.squad as Squad | undefined;
 
@@ -207,7 +207,7 @@ If you place action cost logic inside a `repeat.onEach` callback, the cost is ch
 ```typescript
 // WRONG - charges 1 action for EACH equipment piece selected
 Action.create('equip')
-  .chooseElement<Equipment>('equipment', {
+  .chooseElement('equipment', {
     repeat: { max: 3 },
     onEach: (equipment, ctx) => {
       merc.useAction(1);  // Called 3 times if player selects 3 items!
@@ -223,7 +223,7 @@ Place action costs in the `execute` block, which runs once:
 ```typescript
 // CORRECT - charges once in execute
 Action.create('equip')
-  .chooseElement<Equipment>('equipment', {
+  .chooseElement('equipment', {
     repeat: { max: 3 }
   })
   .execute((args, ctx) => {

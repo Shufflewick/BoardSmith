@@ -8,18 +8,29 @@ Actions define what players can do during the game. They use a fluent builder pa
 
 ### Basic Action Structure
 
+Pass your concrete game class to `Action.create<MyGame>(...)`. The builder then
+**threads full type information through the whole chain**:
+
+- `ctx.game` is typed as `MyGame` in every callback (`condition`, `choices`,
+  `filter`, `validate`, and `execute`) — no `ctx.game as MyGame` cast needed.
+- Each selection method adds its `{ name: type }` to the args object, so the
+  `execute` handler receives a **fully-typed `args`** — no `args.card as Card`
+  casts, and a typo'd key (`args.crad`) is a compile error instead of silently
+  returning `undefined`.
+
 ```typescript
 import { Action, type ActionDefinition } from 'boardsmith';
 
 export function createMyAction(game: MyGame): ActionDefinition {
-  return Action.create('actionName')
+  return Action.create<MyGame>('actionName')
     .prompt('Description shown to player')
     .condition({
+      // ctx.game is MyGame here
       'player has enough resources': (ctx) => ctx.player.gold >= 5,
     })
-    .chooseFrom('selection', { /* selection options */ })
+    .chooseElement('card', { elementClass: Card })
     .execute((args, ctx) => {
-      // Game logic here
+      // args.card is typed as Card, ctx.game is typed as MyGame — no casts.
       return { success: true };
     });
 }
@@ -27,11 +38,11 @@ export function createMyAction(game: MyGame): ActionDefinition {
 
 ### Selection Methods
 
-#### `chooseFrom<T>` - Choose from a list
+#### `chooseFrom` - Choose from a list
 
 ```typescript
 Action.create('selectRank')
-  .chooseFrom<string>('rank', {
+  .chooseFrom('rank', {
     prompt: 'Choose a rank to ask for',
     choices: (ctx) => ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'],
   })
@@ -170,11 +181,11 @@ Action.create('hireFirstMerc')
 > ```
 > This pattern ensures the UI sees the exploration results before the player picks equipment.
 
-#### `chooseElement<T>` - Choose a game element
+#### `chooseElement` - Choose a game element
 
 ```typescript
 Action.create('placeStone')
-  .chooseElement<Cell>('cell', {
+  .chooseElement('cell', {
     prompt: 'Select an empty cell',
     elementClass: Cell,
     filter: (cell, ctx) => cell.isEmpty(),
@@ -183,13 +194,13 @@ Action.create('placeStone')
   })
 ```
 
-#### `fromElements<T>` - Select from a list of elements (Recommended for Custom UIs)
+#### `fromElements` - Select from a list of elements (Recommended for Custom UIs)
 
 **This is the preferred method when building custom game UIs.** It uses element IDs as values, making it seamless for custom components to send selections.
 
 ```typescript
 Action.create('attack')
-  .fromElements<Unit>('target', {
+  .fromElements('target', {
     prompt: 'Choose a target',
     elements: (ctx) => ctx.game.combat.validTargets,
     display: (unit, ctx, allUnits) => unit.name,  // Optional: custom display
@@ -230,7 +241,7 @@ When multiple elements share the same name, display names are automatically suff
 **Multi-select:**
 
 ```typescript
-.fromElements<Unit>('targets', {
+.fromElements('targets', {
   elements: (ctx) => ctx.game.combat.validTargets,
   multiSelect: { min: 1, max: 3 },  // Select 1-3 targets
 })
@@ -246,12 +257,12 @@ When multiple elements share the same name, display names are automatically suff
 Allow players to skip a selection. Use `optional: true` for a "Skip" button, or provide a string for custom button text:
 
 ```typescript
-.fromElements<Equipment>('item', {
+.fromElements('item', {
   elements: (ctx) => ctx.loot.all(Equipment),
   optional: true,           // Shows "Skip" button
 })
 
-.fromElements<Equipment>('item', {
+.fromElements('item', {
   elements: (ctx) => ctx.loot.all(Equipment),
   optional: 'Done',         // Shows "Done" button instead of "Skip"
 })
@@ -331,11 +342,11 @@ Works with all selection types:
 ```typescript
 // With chooseElement
 Action.create('move')
-  .chooseElement<Piece>('piece', {
+  .chooseElement('piece', {
     elementClass: Piece,
     filter: (p, ctx) => p.player === ctx.player,
   })
-  .chooseElement<Cell>('destination', {
+  .chooseElement('destination', {
     dependsOn: 'piece',
     from: (ctx) => ctx.args.piece as Piece,
     elementClass: Cell,
@@ -416,19 +427,22 @@ Action.create('play')
 
 ### Execute Function
 
-The execute function performs the actual game logic:
+The execute function performs the actual game logic. When the action was created
+with `Action.create<MyGame>(...)`, `args` and `ctx.game` are fully typed, so no
+casts are required:
 
 ```typescript
+// Action.create<MyGame>('playCard').chooseElement('card', { elementClass: Card })
 .execute((args, ctx) => {
-  const player = ctx.player as MyPlayer;
-  const card = args.card as Card;
+  // args.card is Card, ctx.game is MyGame — typed by the builder chain.
+  const card = args.card;
 
   // Perform game actions (generates commands automatically)
-  card.putInto(game.discardPile);
-  player.score += card.value;
+  card.putInto(ctx.game.discardPile);
+  ctx.player.score += card.value;
 
   // Add game message
-  game.message(`${player.name} played ${card.name}`);
+  ctx.game.message(`${ctx.player.name} played ${card.name}`);
 
   // Return result
   return {
@@ -438,6 +452,10 @@ The execute function performs the actual game logic:
   };
 });
 ```
+
+> **Note:** `ctx.player` is typed as the base `Player`. If your game uses a
+> custom player subclass, cast it (`ctx.player as MyPlayer`) — only `ctx.game`
+> and `args` are auto-typed by the builder.
 
 > **Important:** When using `chooseElement`, the `args` contain the **full serialized element object**, not just the ID. To find the element by ID:
 > ```typescript
@@ -503,7 +521,7 @@ Action.create('explore')
 
 // The follow-up action receives pre-filled args
 Action.create('collectEquipment')
-  .fromElements<Equipment>('equipment', {
+  .fromElements('equipment', {
     prompt: 'Select equipment to take',
     elements: (ctx) => {
       // UI shows updated state - stash has the drawn equipment
@@ -659,7 +677,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
         return { targetRef: { id: game.getPlayerHand(targetPlayer).id } };
       },
     })
-    .chooseFrom<string>('rank', {
+    .chooseFrom('rank', {
       prompt: 'What rank do you want?',
       choices: (ctx) => game.getPlayerRanks(ctx.player as GoFishPlayer),
       display: (rank) => {

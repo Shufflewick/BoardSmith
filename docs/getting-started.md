@@ -204,7 +204,7 @@ import { Action, type ActionDefinition } from 'boardsmith';
 export function createPlayAction(game: MyGame): ActionDefinition {
   return Action.create('play')
     .prompt('Play a card from your hand')
-    .chooseFrom<Card>('card', {
+    .chooseFrom('card', {
       prompt: 'Select a card to play',
       choices: (ctx) => [...ctx.player.hand.all(Card)],
     })
