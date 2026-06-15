@@ -1030,16 +1030,32 @@ export class FlowEngine<G extends Game = Game> {
   ): FlowStepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
     const maxIterations = config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
+    const loopName = config.name ?? 'unnamed';
 
-    // Check termination conditions
-    if (iteration >= maxIterations) {
+    // Clean exit: the while condition became false. This is the ONLY correct
+    // way for a loop to terminate.
+    if (config.while && !config.while(context)) {
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
 
-    if (config.while && !config.while(context)) {
-      frame.completed = true;
-      return { continue: true, awaitingInput: false };
+    // Safety assertion: hitting maxIterations means the loop did NOT terminate
+    // via its `while` condition. The cap is a tripwire for runaway loops, not a
+    // terminator — so fail loud instead of silently completing.
+    if (iteration >= maxIterations) {
+      throw new Error(
+        `Loop ${config.name ? `"${loopName}" ` : ''}hit its maxIterations safety cap ` +
+        `(${maxIterations} iterations) without its 'while' condition becoming false.\n\n` +
+        `maxIterations is a safety assertion to catch runaway loops, NOT a way to end a loop. ` +
+        `A loop should always terminate because its 'while' condition returns false.\n\n` +
+        `Common causes:\n` +
+        `- The 'while' condition never becomes false (it should eventually return false)\n` +
+        `- Using maxIterations as the intended terminator instead of a real condition\n` +
+        `- A missing state update that should break the loop\n` +
+        `- The condition references stale game state\n\n` +
+        `Fix: Ensure the loop's 'while' condition becomes false before ${maxIterations} ` +
+        `iterations${config.name ? `, or raise maxIterations on loop "${loopName}" if the cap is genuinely too low` : ''}.`
+      );
     }
 
     // Push loop body and increment iteration

@@ -207,11 +207,12 @@ describe('FlowEngine', () => {
       expect(count).toBe(3);
     });
 
-    it('should respect maxIterations', () => {
+    it('should throw when a loop hits its maxIterations safety cap', () => {
       let count = 0;
 
       const flow = defineFlow({
         root: loop({
+          name: 'runaway-loop',
           while: () => true,
           maxIterations: 5,
           do: execute(() => {
@@ -221,9 +222,36 @@ describe('FlowEngine', () => {
       });
 
       const engine = new FlowEngine(game, flow);
-      engine.start();
 
-      expect(count).toBe(5);
+      // The cap is a safety assertion, not a terminator: hitting it must fail
+      // loud, naming the loop and the iteration count, instead of silently
+      // completing.
+      expect(() => engine.start()).toThrow(/runaway-loop/);
+      expect(() => engine.start()).toThrow(/maxIterations safety cap/);
+      expect(() => engine.start()).toThrow(/5 iterations/);
+      // The loop body ran up to the cap before throwing.
+      expect(count).toBeGreaterThanOrEqual(5);
+    });
+
+    it('completes cleanly when its while condition becomes false below the cap', () => {
+      let count = 0;
+
+      const flow = defineFlow({
+        root: loop({
+          name: 'condition-loop',
+          while: () => count < 3,
+          maxIterations: 100,
+          do: execute(() => {
+            count++;
+          }),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      const state = engine.start();
+
+      expect(state.complete).toBe(true);
+      expect(count).toBe(3);
     });
 
     it('should execute repeat fixed times', () => {
@@ -1355,7 +1383,7 @@ describe('turnLoop Helper', () => {
     expect(actionsRemaining).toBe(0);
   });
 
-  it('should respect maxIterations', () => {
+  it('terminates a turnLoop via its while condition', () => {
     let actionCount = 0;
 
     game.registerAction(
@@ -1364,10 +1392,12 @@ describe('turnLoop Helper', () => {
       })
     );
 
+    // Terminate via a real condition (stop after 2 actions), not by abusing
+    // the maxIterations safety cap as a loop terminator.
     const flow = defineFlow({
       root: turnLoop({
         actions: ['act'],
-        maxIterations: 2,
+        while: () => actionCount < 2,
       }),
     });
 
