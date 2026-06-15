@@ -17,6 +17,7 @@
  */
 import { computed, inject, provide, ref, watchEffect, type Ref } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
+import { setTransformAwareDragImage } from '../../composables/dragImage';
 import { Die3D } from '../dice';
 
 export interface GameElement {
@@ -813,6 +814,9 @@ function handleDragStart(event: DragEvent) {
     event.preventDefault();
     return;
   }
+
+  // Transform-aware drag ghost (shared with useDragDrop for visual parity).
+  setTransformAwareDragImage(event, event.currentTarget as HTMLElement);
 
   event.dataTransfer?.setData('boardsmith/element', JSON.stringify({
     id: props.element.id,

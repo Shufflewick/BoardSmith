@@ -71,6 +71,24 @@
  * ```
  */
 import { tryUseBoardInteraction, type ElementRef } from './useBoardInteraction.js';
+import { setTransformAwareDragImage } from './dragImage.js';
+import { devWarn } from '../../utils/dev.js';
+
+/**
+ * Warn (once) when a drag/drop handler fires with no `<GameShell>` provider.
+ *
+ * `useDragDrop` degrades gracefully (handlers no-op) rather than throwing at
+ * setup like {@link useBoardInteraction}, so a board rendered outside a
+ * provider would otherwise get silently dead drag-and-drop. This surfaces the
+ * cause in dev instead.
+ */
+const warnNoProvider = (): void =>
+  devWarn(
+    'useDragDrop-no-provider',
+    'useDragDrop() drag-and-drop is inactive because there is no <GameShell> ' +
+      'board-interaction provider. Render this component inside <GameShell> ' +
+      '(or use tryUseBoardInteraction() directly if drag-and-drop is optional here).'
+  );
 
 export interface DragProps {
   draggable: true;
@@ -178,39 +196,14 @@ export function useDragDrop(): UseDragDropReturn {
   const dragProps = (ref: ElementRef, options?: DragOptions): DragProps => ({
     draggable: true,
     onDragstart: (e: DragEvent) => {
-      if (!boardInteraction) return;
-      const target = e.currentTarget as HTMLElement;
-      const rect = target.getBoundingClientRect();
-
-      // Check if element has a CSS transform (e.g., translateY from hover state)
-      // Transforms cause the drag ghost to be clipped, so we create a clone without it
-      const style = window.getComputedStyle(target);
-      const transform = style.transform;
-
-      if (transform && transform !== 'none') {
-        // Create a clone without the transform for a clean drag image
-        const clone = target.cloneNode(true) as HTMLElement;
-        clone.style.transform = 'none';
-        clone.style.position = 'absolute';
-        clone.style.top = '-9999px';
-        clone.style.left = '-9999px';
-        document.body.appendChild(clone);
-
-        // Use clone for drag image with correct cursor offset
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        e.dataTransfer?.setDragImage(clone, x, y);
-
-        // Clean up clone after browser captures it
-        requestAnimationFrame(() => {
-          document.body.removeChild(clone);
-        });
-      } else {
-        // No transform - use the element directly
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        e.dataTransfer?.setDragImage(target, x, y);
+      if (!boardInteraction) {
+        warnNoProvider();
+        return;
       }
+      const target = e.currentTarget as HTMLElement;
+
+      // Transform-aware drag ghost (shared with AutoElement for visual parity).
+      setTransformAwareDragImage(e, target);
 
       e.dataTransfer?.setData('boardsmith/element', JSON.stringify(ref));
       e.dataTransfer!.effectAllowed = 'move';
@@ -257,17 +250,26 @@ export function useDragDrop(): UseDragDropReturn {
   });
 
   const isDragging = (ref: ElementRef): boolean => {
-    if (!boardInteraction) return false;
+    if (!boardInteraction) {
+      warnNoProvider();
+      return false;
+    }
     return boardInteraction.isDraggedElement(ref);
   };
 
   const isDropTarget = (ref: ElementRef): boolean => {
-    if (!boardInteraction) return false;
+    if (!boardInteraction) {
+      warnNoProvider();
+      return false;
+    }
     return boardInteraction.isDropTarget(ref);
   };
 
   const isOver = (ref: ElementRef): boolean => {
-    if (!boardInteraction) return false;
+    if (!boardInteraction) {
+      warnNoProvider();
+      return false;
+    }
     return boardInteraction.isHoveredDropTarget(ref);
   };
 
