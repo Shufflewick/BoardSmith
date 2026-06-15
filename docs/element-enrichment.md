@@ -1,6 +1,6 @@
 # Automatic Element Enrichment
 
-When using element selections (`fromElements`, `chooseElement`), the `actionController` automatically enriches valid elements with full element data from the game view. This is the "pit of success" pattern - designers get everything they need without extra work.
+When using element selections (`chooseElement`, `chooseElements`), the `actionController` automatically enriches valid elements with full element data from the game view. This is the "pit of success" pattern - designers get everything they need without extra work.
 
 ## Recommended: Use `validElements` Computed
 

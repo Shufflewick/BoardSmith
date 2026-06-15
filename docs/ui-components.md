@@ -1367,7 +1367,7 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 
 ### Element Selections with validElements
 
-When building custom UIs for element selections (`fromElements`, `chooseElement`), use the **reactive `validElements` computed** instead of `getValidElements()`. This computed automatically updates when:
+When building custom UIs for element selections (`chooseElement`, `chooseElements`), use the **reactive `validElements` computed** instead of `getValidElements()`. This computed automatically updates when:
 - The current selection changes
 - Choices are fetched from the server
 - The gameView updates
@@ -1833,7 +1833,7 @@ actionController.start('dropEquipment', {
 When calling `actionController.execute()` or `actionController.fill()`, pass **numeric element IDs**:
 
 ```typescript
-// For fromElements / chooseElement selections, pass the element ID
+// For chooseElement / chooseElements selections, pass the element ID
 await actionController.execute('dropEquipment', {
   actingMerc: merc.id,       // number (e.g., 42)
   equipment: equipment.id,   // number (e.g., 17)

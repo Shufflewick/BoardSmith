@@ -349,7 +349,7 @@ export interface PickMetadata {
   /**
    * For element picks with dependsOn: elements indexed by the dependent pick's value.
    * Key is the string representation of the dependent value (element ID, player seat, etc.)
-   * Used when fromElements() has dependsOn option.
+   * Used when chooseElement()/chooseElements() has the dependsOn option.
    */
   elementsByDependentValue?: Record<string, ValidElement[]>;
   /** For repeating choice picks: configuration for repeat behavior */

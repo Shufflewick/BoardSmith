@@ -249,7 +249,7 @@ if (check.needed) {
 
 ## Step 4: Handling Element Selections
 
-When an action uses `fromElements()` or `chooseElement()`, the `actionController` provides `validElements` - a reactive computed of which elements can be selected:
+When an action uses `chooseElement()` or `chooseElements()`, the `actionController` provides `validElements` - a reactive computed of which elements can be selected:
 
 ```vue
 <script setup lang="ts">
@@ -444,8 +444,8 @@ When selection B depends on selection A (e.g., "select merc, then select their e
 
 ```typescript
 Action.create('dropEquipment')
-  .fromElements('merc', { elements: () => [...game.all(Merc)] })
-  .fromElements('equipment', {
+  .chooseElement('merc', { elements: () => [...game.all(Merc)] })
+  .chooseElement('equipment', {
     dependsOn: 'merc',  // Tells framework this depends on merc
     elements: (ctx) => {
       const merc = ctx.args.merc as Merc;

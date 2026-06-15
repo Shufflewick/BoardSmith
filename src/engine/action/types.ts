@@ -218,7 +218,7 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
   type: 'element';
   /**
    * Elements to choose from (alternative to filter/from pattern).
-   * Used by fromElements() for single-select.
+   * Used by chooseElement() when candidates are precomputed.
    */
   elements?: T[] | ((context: ActionContext) => T[]);
   /** Filter which elements can be selected */
@@ -258,25 +258,21 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
 }
 
 /**
- * Select from a pre-computed array of elements.
+ * Select multiple game elements (produced by chooseElements()).
  *
- * This is the "pit of success" selection for element-based choices.
- * Unlike chooseFrom, this selection:
- * - Uses element IDs as values (numbers), not strings
- * - Auto-generates display names with disambiguation
- * - Accepts element IDs from custom UIs naturally
- * - Resolves IDs to actual Element objects in execute()
+ * Like {@link ElementSelection} but the resolved value is an array of Element
+ * objects. Values on the wire are element IDs (numbers), display names
+ * auto-disambiguate, and custom UIs send IDs directly.
  *
  * @example
  * ```typescript
- * action('attack')
- *   .fromElements('target', {
- *     elements: (ctx) => ctx.game.combat.validTargets,
- *     prompt: 'Choose a target',
+ * action('discard')
+ *   .chooseElements('cards', {
+ *     elements: (ctx) => [...ctx.player.hand.all(Card)],
+ *     multiSelect: { min: 0, max: 2 },
  *   })
- *   .execute(({ target }) => {
- *     // target is the resolved Element object
- *     target.takeDamage(10);
+ *   .execute(({ cards }) => {
+ *     for (const card of cards) card.discard();
  *   });
  * ```
  */
