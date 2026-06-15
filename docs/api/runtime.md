@@ -67,16 +67,12 @@ const runner = new GameRunner({
 const snapshot = runner.getSnapshot();
 console.log('Current player:', snapshot.flowState.currentPlayer);
 
-// Execute an action
-const result = runner.executeAction({
-  action: 'move',
-  player: 0,
-  args: { from: 'a1', to: 'b2' },
-});
+// Perform an action (actionName, player, args)
+const result = runner.performAction('move', 0, { from: 'a1', to: 'b2' });
 
 if (result.success) {
   console.log('Move executed');
-  console.log('New state:', result.snapshot);
+  console.log('New flow state:', result.flowState);
 } else {
   console.error('Move failed:', result.error);
 }
@@ -170,17 +166,17 @@ const runner = new GameRunner({
   seed: 'deterministic-seed',
 });
 
-// Execute a series of actions
-runner.executeAction({ action: 'draw', player: 0, args: {} });
-runner.executeAction({ action: 'play', player: 0, args: { card: 'card-1' } });
-runner.executeAction({ action: 'draw', player: 1, args: {} });
+// Perform a series of actions (actionName, player, args)
+runner.performAction('draw', 0, {});
+runner.performAction('play', 0, { card: 'card-1' });
+runner.performAction('draw', 1, {});
 
-// Get action history
-const history = runner.getActionHistory();
-console.log(`${history.length} actions played`);
+// Read the recorded action history (a public readonly field)
+console.log(`${runner.actionHistory.length} actions played`);
 
-// Replay to a specific point
-const stateAtAction2 = runner.getStateAt(2);
+// Capture the current state as a snapshot
+const snapshot = runner.getSnapshot();
+console.log('Current flow state:', runner.getFlowState());
 ```
 
 ## See Also
