@@ -382,18 +382,6 @@ function capitalize(s: string): string {
 }
 
 /**
- * Save generated code to file
- */
-export function saveAICode(
-  code: string,
-  outputPath: string
-): void {
-  // This would be called by the CLI
-  // For now, just export the function
-  // The actual file writing happens in the CLI command
-}
-
-/**
  * Options for updating AI weights
  */
 export interface UpdateWeightsOptions {
