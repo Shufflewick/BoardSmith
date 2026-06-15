@@ -16,10 +16,14 @@ import { CollectTurnsGame } from './fixtures/collect-turns-fixture.js';
  * checkpoint at the matching action count captures that trailing mutation, so the
  * fixed paths show the true historical board.
  *
- * checkpoint[1] is the discriminator: after `explore` is recorded (action count
- * 1) the `collect` selection step runs and puts the item into held-1 WITHOUT
- * advancing the action count, so checkpoint[1] reflects the item in held-1. Replay
- * of the single recorded `explore` action would leave held-1 empty.
+ * checkpoint[2] is the discriminator: `explore` is recorded (action count 1),
+ * then the `collect` selection step runs — it puts the item into held-1 AND (per
+ * audit fix F43) is itself recorded as action count 2. So checkpoint[2] reflects
+ * the item in held-1, while checkpoint[1] (post-explore, pre-collect) does not.
+ * The collect mutation (Piece.putInto) is still recorded in NEITHER command
+ * history nor — for the element move — anywhere a pure replay could reconstruct
+ * the exact prior-turn board, so the authoritative checkpoint remains the source
+ * of truth for time-travel.
  */
 
 /** Children ids of the first node named `nodeName`, walking a view tree. */
@@ -70,37 +74,42 @@ describe('stateful time-travel across a pending mutation', () => {
   it('getStateAtAction shows the collected equipment at the action count where it was picked up', async () => {
     const { session, collectedId } = await buildSessionWithCollectedItem();
 
-    // Time-travel to action count 1 (right after `explore`, where `collect` ran).
-    const result = session.getStateAtAction(1, 1);
+    // Action count 1 is post-`explore`, pre-`collect`: held-1 is still empty.
+    const before = session.getStateAtAction(1, 1);
+    expect(before.success).toBe(true);
+    expect(viewChildIds(before.state!.view, 'held-1')).not.toContain(collectedId);
+
+    // Action count 2 is right after `collect` is recorded (F43): the checkpoint
+    // captures the Piece.putInto, so the collected item is in held-1.
+    const result = session.getStateAtAction(2, 1);
     expect(result.success).toBe(true);
-    // Replay-based time-travel would show held-1 EMPTY here (collect is in neither
-    // command nor action history). Authoritative checkpoint restore shows the item.
     expect(viewChildIds(result.state!.view, 'held-1')).toContain(collectedId);
   });
 
   it('getStateDiff does not report the collected piece as added between two post-collect points', async () => {
     const { session, collectedId } = await buildSessionWithCollectedItem();
 
-    // Between action counts 1 and 2 the item is already in held-1 at BOTH points,
-    // so it must not appear in the diff. Replay-based diff would show held-1 empty
-    // at both points and miss the piece entirely / mis-report it.
-    const diff = session.getStateDiff(1, 2, 1);
+    // Between action counts 2 and 3 the item is already in held-1 at BOTH points
+    // (collect recorded at count 2; a `pass` recorded at count 3 doesn't move it),
+    // so it must not appear in the diff.
+    const diff = session.getStateDiff(2, 3, 1);
     expect(diff.success).toBe(true);
     expect(diff.diff!.added).not.toContain(collectedId);
     expect(diff.diff!.removed).not.toContain(collectedId);
 
-    // Sanity: at count 1 the piece is genuinely present in the view we diffed from.
-    const at1 = session.getStateAtAction(1, 1);
-    expect(viewChildIds(at1.state!.view, 'held-1')).toContain(collectedId);
+    // Sanity: at count 2 the piece is genuinely present in the view we diffed from.
+    const at2 = session.getStateAtAction(2, 1);
+    expect(viewChildIds(at2.state!.view, 'held-1')).toContain(collectedId);
   });
 
   it('rewindToAction restores the collected equipment into the live runner', async () => {
     const { session, collectedId } = await buildSessionWithCollectedItem();
 
-    const rewind = await session.rewindToAction(1);
+    // Rewind to action count 2 — the point just after `collect` was recorded (F43).
+    const rewind = await session.rewindToAction(2);
     expect(rewind.success).toBe(true);
 
-    // The live runner after rewind MUST still hold the earlier collected item.
+    // The live runner after rewind MUST still hold the collected item.
     // Replay-based rewind would resurrect a runner with held-1 empty.
     expect(viewChildIds(session.runner.getSnapshot().state, 'held-1')).toContain(collectedId);
   });

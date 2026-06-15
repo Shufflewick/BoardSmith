@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Game, Player, Piece, Space, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, defineFlow, actionStep, deserializeAction, type GameOptions } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import { PendingActionManager } from './pending-action-manager.js';
+import { computeUndoInfo } from './utils.js';
 import type { StoredGameState } from './types.js';
 
 class Equipment extends Piece<EquipGame> {
@@ -164,7 +165,7 @@ function createEquipManager() {
   };
 
   const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
-  return { manager, callbacks, game: runner.game };
+  return { manager, callbacks, game: runner.game, runner };
 }
 
 function createManager() {
@@ -196,7 +197,7 @@ function createManager() {
   };
 
   const manager = new PendingActionManager(runner, storedState, undefined, callbacks);
-  return { manager, callbacks, game: runner.game };
+  return { manager, callbacks, game: runner.game, runner };
 }
 
 describe('PendingActionManager', () => {
@@ -263,5 +264,103 @@ describe('PendingActionManager', () => {
     expect(step2.followUp).toBeDefined();
     expect(step2.followUp!.action).toBe('reEquipContinue');
     expect(step2.followUp!.args).toEqual({ unitId: 1 });
+  });
+
+  // F43: completed pending/multi-step selection actions must be appended to
+  // runner.actionHistory so replay, undo counts, and AI history see them.
+  describe('F43: records completed multi-step actions in actionHistory', () => {
+    it('appends a serialized entry (name, player, fully-collected args) after a multi-step action completes', async () => {
+      const { manager, runner } = createManager();
+
+      expect(runner.actionHistory).toHaveLength(0);
+
+      // First step does NOT complete the action — nothing recorded yet.
+      await manager.processSelectionStep(1, 'color', 'red', 'pick');
+      expect(runner.actionHistory).toHaveLength(0);
+
+      // Second (final) step completes the action — now it must be recorded.
+      const result = await manager.processSelectionStep(1, 'size', 'M');
+      expect(result.actionComplete).toBe(true);
+
+      expect(runner.actionHistory).toHaveLength(1);
+      const entry = runner.actionHistory[0];
+      expect(entry.name).toBe('pick');
+      expect(entry.player).toBe(1);
+      // Fully-collected args from BOTH steps, not a partial.
+      expect(entry.args).toEqual({ color: 'red', size: 'M' });
+    });
+
+    it('serializes element-reference args so they survive restoration', async () => {
+      const { manager, game, runner } = createEquipManager();
+
+      await manager.processSelectionStep(1, 'unit', 'warrior', 'reEquip');
+      const sword = game.all(Equipment).find(e => e.name === 'Sword')!;
+      const step2 = await manager.processSelectionStep(1, 'equipment', sword.id);
+      expect(step2.actionComplete).toBe(true);
+
+      expect(runner.actionHistory).toHaveLength(1);
+      const entry = runner.actionHistory[0];
+      expect(entry.name).toBe('reEquip');
+      expect(entry.player).toBe(1);
+      expect(entry.args.unit).toBe('warrior');
+      // The element arg is serialized as a resolvable reference, not a raw id.
+      expect(entry.args.equipment).not.toBe(sword.id);
+      expect(typeof entry.args.equipment).toBe('object');
+    });
+
+    it('does not record a turn that only had a failed/cancelled pending action', async () => {
+      const { manager, runner } = createManager();
+
+      // Only the first step — action never completes.
+      await manager.processSelectionStep(1, 'color', 'red', 'pick');
+      expect(runner.actionHistory).toHaveLength(0);
+    });
+
+    it('reports an undoable action for a turn whose only action was multi-step', async () => {
+      const { manager, runner } = createManager();
+
+      // Before completion, computeUndoInfo sees nothing to undo.
+      expect(computeUndoInfo(runner.actionHistory, 1).actionsThisTurn).toBe(0);
+
+      await manager.processSelectionStep(1, 'color', 'red', 'pick');
+      await manager.processSelectionStep(1, 'size', 'M');
+
+      // After completion, the multi-step action is counted — undo is possible.
+      const undoInfo = computeUndoInfo(runner.actionHistory, 1);
+      expect(undoInfo.actionsThisTurn).toBeGreaterThanOrEqual(1);
+    });
+
+    it('replay/clone from actionHistory reproduces the completed multi-step action', async () => {
+      const { manager, game, runner } = createEquipManager();
+
+      await manager.processSelectionStep(1, 'unit', 'warrior', 'reEquip');
+      const sword = game.all(Equipment).find(e => e.name === 'Sword')!;
+      await manager.processSelectionStep(1, 'equipment', sword.id);
+
+      expect(runner.actionHistory).toHaveLength(1);
+
+      // Rebuild a fresh runner and replay the recorded history through the normal
+      // single-step action funnel — the multi-step entry must be indistinguishable
+      // from a normal action: it deserializes, re-resolves its element ref, and runs.
+      const replayRunner = new GameRunner({
+        GameClass: EquipGame,
+        gameType: 'equip',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'test' },
+      });
+      replayRunner.start();
+
+      for (const recorded of runner.actionHistory) {
+        const { actionName, player, args } = deserializeAction(recorded, replayRunner.game);
+        const replayResult = replayRunner.performAction(actionName, player.seat, args);
+        expect(replayResult.success).toBe(true);
+      }
+
+      expect(replayRunner.actionHistory).toHaveLength(runner.actionHistory.length);
+      // The re-serialized entry matches the original (ignoring timestamp).
+      const { name, player, args } = runner.actionHistory[0];
+      const replayed = replayRunner.actionHistory[0];
+      expect({ name: replayed.name, player: replayed.player, args: replayed.args })
+        .toEqual({ name, player, args });
+    });
   });
 });

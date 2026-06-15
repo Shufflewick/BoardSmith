@@ -162,28 +162,8 @@ export class GameRunner<G extends Game = Game> {
       };
     }
 
-    // Get the action's undoable flag from its definition
-    const actionDef = (this.game as any)._actions?.get(actionName);
-    const isUndoable = actionDef?.undoable;
-
-    // Resolve raw element IDs to actual GameElement objects before serializing.
-    // This ensures element references are properly serialized (with branch paths or IDs)
-    // instead of being passed through as raw numbers which won't survive game restoration.
-    let argsToSerialize = args;
-    if (actionDef) {
-      const executor = new ActionExecutor(this.game);
-      argsToSerialize = executor.resolveArgs(actionDef, args, playerObj);
-    }
-
     // Serialize the action before executing (captures current element refs)
-    const serializedAction = serializeAction(
-      actionName,
-      playerObj,
-      argsToSerialize,
-      this.game,
-      this.serializeOptions,
-      isUndoable
-    );
+    const serializedAction = this.serializeForHistory(actionName, playerObj, args);
 
     // Execute through flow (pass player index for simultaneous actions)
     let flowState: FlowState;
@@ -214,6 +194,60 @@ export class GameRunner<G extends Game = Game> {
       flowState,
       playerViews: createAllPlayerViews(this.game),
     };
+  }
+
+  /**
+   * Resolve + serialize an action's args into a history entry.
+   *
+   * Raw element IDs are first resolved to GameElement objects so they serialize
+   * with branch paths (or stable IDs) that survive game restoration, instead of
+   * being passed through as raw numbers. This is the single place the
+   * `actionHistory` entry shape is produced, shared by:
+   *   - `performAction` (single-step actions), and
+   *   - the pending-action completion funnel (multi-step / repeating-selection
+   *     actions, via `PendingActionManager`).
+   * Keeping both paths on this one helper guarantees every `actionHistory` entry
+   * is identical in shape regardless of how the action was driven, so replay,
+   * undo, and AI history treat them the same.
+   *
+   * Does NOT push to history — callers decide when to record (e.g. only after a
+   * successful execute). Use `recordSerializedAction` to append.
+   */
+  serializeForHistory(
+    actionName: string,
+    player: Player,
+    args: Record<string, unknown>
+  ): SerializedAction {
+    const actionDef = (this.game as any)._actions?.get(actionName);
+    const isUndoable = actionDef?.undoable;
+
+    let argsToSerialize = args;
+    if (actionDef) {
+      const executor = new ActionExecutor(this.game);
+      argsToSerialize = executor.resolveArgs(actionDef, args, player);
+    }
+
+    return serializeAction(
+      actionName,
+      player,
+      argsToSerialize,
+      this.game,
+      this.serializeOptions,
+      isUndoable
+    );
+  }
+
+  /**
+   * Append an already-serialized action to history.
+   *
+   * Used by the multi-step pending-action completion path, which serializes the
+   * collected args BEFORE executing (so recorded element refs are replay-safe)
+   * but must defer the actual history append until execution succeeds. Single
+   * source of truth: `performAction` and this method are the only writers of
+   * `actionHistory` entries during normal play.
+   */
+  recordSerializedAction(serializedAction: SerializedAction): void {
+    this.actionHistory.push(serializedAction);
   }
 
   /**
