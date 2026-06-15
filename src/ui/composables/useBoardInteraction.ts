@@ -204,9 +204,14 @@ export function createBoardInteraction(): BoardInteraction {
   let onDropCallback: ((elementId: number) => void) | null = null;
 
   function matchesRef(element: { id?: number; name?: string; notation?: string }, ref: ElementRef): boolean {
-    if (ref.id !== undefined && element.id === ref.id) return true;
-    if (ref.name && element.name === ref.name) return true;
-    if (ref.notation && element.notation === ref.notation) return true;
+    // Precedence-based matching: a precise id wins outright. name/notation are
+    // only fallbacks when the ref carries no id. Without this, a ref that
+    // carries BOTH id and name (e.g. { id: 5, name: 'Militia' }) would also
+    // match a DIFFERENT element with a colliding name (id: 8, name: 'Militia'),
+    // causing the wrong element to be selected/highlighted.
+    if (ref.id !== undefined) return element.id === ref.id;
+    if (ref.notation !== undefined) return element.notation === ref.notation;
+    if (ref.name !== undefined) return element.name === ref.name;
     return false;
   }
 
