@@ -1,4 +1,4 @@
-import type { GameStructure, CandidateFeature } from './types.js';
+import type { GameStructure, CandidateFeature, GameType } from './types.js';
 import { FEATURE_TEMPLATES, type FeatureTemplate } from './feature-templates.js';
 
 /**
@@ -30,10 +30,33 @@ export function generateCandidateFeatures(structure: GameStructure): CandidateFe
 }
 
 /**
+ * Check if a template's gameType requirement is satisfied by the game structure.
+ */
+function matchesGameType(
+  templateGameType: GameType | GameType[] | undefined,
+  structureGameType: GameType
+): boolean {
+  if (templateGameType === undefined) {
+    return true; // No requirement = matches all
+  }
+
+  if (Array.isArray(templateGameType)) {
+    return templateGameType.includes(structureGameType);
+  }
+
+  return templateGameType === structureGameType;
+}
+
+/**
  * Check if a template applies to the given game structure
  */
 function templateApplies(template: FeatureTemplate, structure: GameStructure): boolean {
   const req = template.requires;
+
+  // Check gameType requirement
+  if (!matchesGameType(req.gameType, structure.winConditionInfo.gameType)) {
+    return false;
+  }
 
   // Check element type requirements
   if (req.elementType) {
