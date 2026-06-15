@@ -545,47 +545,50 @@ See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-te
 
 ### The Problem
 
-Storing game elements in property arrays throws an error because elements cannot be serialized to JSON:
+An array does not *own* the elements it holds. Game elements are owned by the
+element tree (their parent), and that is the single source of truth that gets
+serialized. An array of elements serializes each entry as a *reference*, not as
+the element's data — so the element must already live somewhere in the tree for
+the reference to resolve on restore. If you only ever push freshly-created
+elements into an array and never attach them to the tree, their data has no home
+and the references dangle:
 
 ```typescript
-// ERROR - Will throw at runtime
+// SMELL - the array is the only thing "holding" the equipment
 class Sector extends Space {
-  stash: Equipment[] = [];  // Throws: "Element arrays cannot be auto-synced"
+  stash: Equipment[] = [];
 
   addToStash(equipment: Equipment): void {
-    this.stash.push(equipment);  // Error thrown here
+    this.stash.push(equipment);  // equipment is not in the tree -> ref can't resolve
   }
 }
 ```
 
-BoardSmith detects element arrays and throws a clear error with guidance:
-```
-Element arrays cannot be auto-synced: game.stash contains a GameElement.
-Use element children instead:
-  // Instead of: game.stash = []
-  // Use: stashZone = this.create(Space, 'stashZone')
-  //      stashZone.create(Equipment, 'item')
-  //      Access via: this.stashZone.all(Equipment)
-```
+### Primitive and Plain-Data Arrays Just Work
 
-### Primitive Arrays Work Automatically
-
-Simple data arrays (numbers, strings, objects) **automatically survive HMR** without any special handling:
+Simple data arrays (numbers, strings, plain objects) **survive HMR and every
+snapshot/undo round-trip** with no special handling. They are serialized by
+`toJSON` exactly like any other declared property — there is no Proxy and no
+hidden `settings` shadow copy. A declared array is always a plain `Array` at
+runtime, in development and production alike:
 
 ```typescript
-// WORKS - Primitive arrays auto-sync to settings
+// WORKS - persisted via toJSON like any other attribute
 class MyGame extends Game {
-  scores: number[] = [];           // Auto-synced, survives HMR
-  history: string[] = [];          // Auto-synced, survives HMR
-  roundData: { round: number }[] = [];  // Auto-synced, survives HMR
+  scores: number[] = [];                // survives HMR
+  history: string[] = [];               // survives HMR
+  roundData: { round: number }[] = [];  // survives HMR
 
   recordScore(score: number): void {
-    this.scores.push(score);       // Automatically persisted
+    this.scores.push(score);            // captured by the next toJSON
   }
 }
 ```
 
-All array mutations (push, pop, splice, sort, etc.) and reassignments are tracked automatically.
+All array mutations (push, pop, splice, sort, etc.) and reassignments are
+captured because the array itself is the source of truth. Note that, like any
+serialized value, a circular reference inside an array fails loud at
+serialization time rather than being silently dropped.
 
 ### The Solution for Element Arrays
 
@@ -622,11 +625,11 @@ Now equipment serializes with all attributes because it's part of the element tr
 
 | Pattern | Use For | Example |
 |---------|---------|---------|
-| **Element children** | Game pieces that need UI display | Cards in hand, pieces on board, equipment in stash |
-| **Property arrays** | Simple data (auto-syncs to HMR) | `scores: number[]`, `history: string[]`, `roundData: object[]` |
+| **Element children** | Game pieces that need UI display / ownership | Cards in hand, pieces on board, equipment in stash |
+| **Property arrays** | Simple data | `scores: number[]`, `history: string[]`, `roundData: object[]` |
 | **ID arrays** | References you'll look up later | `selectedCardIds: number[]` then use `getElementById()` |
 
-> **Note:** Property arrays automatically sync to `game.settings` and survive HMR. You don't need to manually use `game.settings.myArray` anymore - just declare a regular array property.
+> **Note:** Property arrays are persisted via `toJSON` like any other declared property and survive HMR — you don't need to mirror them into `game.settings`, just declare a regular array property. Owned game pieces still belong in the element tree (as children); an array can hold *references* to tree elements, but it should not be the sole owner of element data.
 
 ### Migration Example
 
