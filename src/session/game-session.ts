@@ -47,7 +47,7 @@ import { PickHandler } from './pick-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
 import { DebugController } from './debug-controller.js';
-import { CheckpointManager } from './checkpoint-manager.js';
+import { DevCheckpointManager } from './dev-checkpoint-manager.js';
 
 // ============================================
 // Types
@@ -163,8 +163,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #stateHistory: StateHistory<G>;
   /** Debug controller for deck manipulation */
   #debugController: DebugController<G>;
-  /** Checkpoint manager for fast HMR recovery (dev only) */
-  #checkpointManager?: CheckpointManager<G>;
+  /** Dev checkpoint manager for fast HMR recovery (dev only) */
+  #checkpointManager?: DevCheckpointManager<G>;
   /** Circuit breaker: consecutive AI failures before giving up */
   #aiConsecutiveFailures = 0;
 
@@ -234,7 +234,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Initialize checkpoint manager in dev mode only
     if (process.env.NODE_ENV !== 'production') {
-      this.#checkpointManager = new CheckpointManager<G>();
+      this.#checkpointManager = new DevCheckpointManager<G>();
     }
   }
 

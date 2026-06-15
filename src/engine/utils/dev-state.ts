@@ -607,11 +607,19 @@ export function getSnapshotElementCount(snapshot: DevSnapshot): number {
 }
 
 // ============================================================================
-// SECTION: Checkpoints for Fast HMR Recovery
+// SECTION: Dev Checkpoints for Fast HMR Recovery
+//
+// NOTE: This "Dev checkpoint" family (DevCheckpoint / createDevCheckpoint /
+// restoreFromDevCheckpoint, plus DevCheckpointManager in the session module) is
+// the dev-only, every-N-actions, in-memory HMR-recovery mechanism. It is
+// UNRELATED to the per-action undo `ActionCheckpoint` family in
+// utils/snapshot.ts (createActionCheckpoint), which is carried inside the
+// authoritative GameStateSnapshot and powers undo. The two are kept distinct by
+// their `Dev`/`Action` name qualifiers — do not conflate them.
 // ============================================================================
 
 /**
- * A checkpoint is a snapshot of game state at a specific action index.
+ * A dev checkpoint is a snapshot of game state at a specific action index.
  * When HMR fails and replay is needed, checkpoints provide intermediate
  * restore points so only a subset of actions need replay instead of
  * replaying all actions from the beginning.
@@ -625,13 +633,13 @@ export interface DevCheckpoint extends DevSnapshot {
 }
 
 /**
- * Create a checkpoint capturing the current game state at a specific action index.
+ * Create a dev checkpoint capturing the current game state at a specific action index.
  *
  * @param game - The game instance to capture
  * @param actionIndex - The action index at which this checkpoint is taken
  * @returns DevCheckpoint containing snapshot plus action index
  */
-export function createCheckpoint<G extends Game>(
+export function createDevCheckpoint<G extends Game>(
   game: G,
   actionIndex: number
 ): DevCheckpoint {
@@ -646,7 +654,7 @@ export function createCheckpoint<G extends Game>(
 /**
  * Options for restoring from a checkpoint.
  */
-export interface RestoreFromCheckpointOptions<G extends Game> extends RestoreDevStateOptions {
+export interface RestoreFromDevCheckpointOptions<G extends Game> extends RestoreDevStateOptions {
   /** The game class to instantiate */
   GameClass: new (options: GameOptions) => G;
 }
@@ -654,7 +662,7 @@ export interface RestoreFromCheckpointOptions<G extends Game> extends RestoreDev
 /**
  * Result of restoring from a checkpoint.
  */
-export interface CheckpointRestoreResult<G extends Game> {
+export interface DevCheckpointRestoreResult<G extends Game> {
   /** The restored game instance */
   game: G;
 
@@ -674,11 +682,11 @@ export interface CheckpointRestoreResult<G extends Game> {
  * @param options - Restore options including GameClass and gameOptions
  * @returns The restored game and count of replayed actions
  */
-export function restoreFromCheckpoint<G extends Game>(
+export function restoreFromDevCheckpoint<G extends Game>(
   checkpoint: DevCheckpoint,
   remainingActions: Array<{ name: string; player: number; args: Record<string, unknown> }>,
-  options: RestoreFromCheckpointOptions<G>
-): CheckpointRestoreResult<G> {
+  options: RestoreFromDevCheckpointOptions<G>
+): DevCheckpointRestoreResult<G> {
   // Restore game from checkpoint snapshot
   const game = restoreDevState(checkpoint, options.GameClass, options);
 
@@ -689,7 +697,7 @@ export function restoreFromCheckpoint<G extends Game>(
     const flowState = game.getFlowState();
     if (!flowState?.awaitingInput) {
       throw new Error(
-        `[Checkpoint] Cannot replay action "${action.name}" at index ${checkpoint.actionIndex + replayed}: ` +
+        `[DevCheckpoint] Cannot replay action "${action.name}" at index ${checkpoint.actionIndex + replayed}: ` +
         `game is not awaiting input. Flow may be out of sync.`
       );
     }
@@ -699,7 +707,7 @@ export function restoreFromCheckpoint<G extends Game>(
       replayed++;
     } catch (error) {
       throw new Error(
-        `[Checkpoint] Failed to replay action "${action.name}" at index ${checkpoint.actionIndex + replayed}: ` +
+        `[DevCheckpoint] Failed to replay action "${action.name}" at index ${checkpoint.actionIndex + replayed}: ` +
         `${error instanceof Error ? error.message : String(error)}`
       );
     }

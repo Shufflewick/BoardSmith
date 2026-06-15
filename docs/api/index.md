@@ -133,8 +133,8 @@ import {
 - `createTrackedRandom()` - Create deterministic random
 - `getRandomCallCount()` - Get random call count
 - `resetRandomCallCounter()` - Reset random counter
-- `createCheckpoint()` - Create HMR checkpoint
-- `restoreFromCheckpoint()` - Restore from checkpoint
+- `createDevCheckpoint()` - Create dev HMR checkpoint
+- `restoreFromDevCheckpoint()` - Restore from dev checkpoint
 
 ### Sandbox
 

@@ -117,9 +117,9 @@ export {
 export { AIController } from './ai-controller.js';
 
 export {
-  CheckpointManager,
-  type CheckpointManagerOptions,
-} from './checkpoint-manager.js';
+  DevCheckpointManager,
+  type DevCheckpointManagerOptions,
+} from './dev-checkpoint-manager.js';
 
 export { PickHandler } from './pick-handler.js';
 
