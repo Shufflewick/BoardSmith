@@ -43,17 +43,9 @@
       "types": "./src/client/index.ts",
       "import": "./src/client/index.ts"
     },
-    "./server": {
-      "types": "./src/server/index.ts",
-      "import": "./src/server/index.ts"
-    },
     "./runtime": {
       "types": "./src/runtime/index.ts",
       "import": "./src/runtime/index.ts"
-    },
-    "./worker": {
-      "types": "./src/worker/index.ts",
-      "import": "./src/worker/index.ts"
     },
     "./utils": {
       "types": "./src/utils/index.ts",

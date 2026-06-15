@@ -308,6 +308,5 @@ try {
 
 ## See Also
 
-- [boardsmith/server](./server.md) - Server-side implementation
 - [boardsmith/session](./session.md) - Session management
 - [UI Components Guide](../ui-components.md) - Building game UIs

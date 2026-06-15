@@ -162,11 +162,9 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
         'boardsmith/ai-trainer': 'ai-trainer',
         'boardsmith/client': 'client',
         'boardsmith/runtime': 'runtime',
-        'boardsmith/server': 'server',
         'boardsmith/session': 'session',
         'boardsmith/testing': 'testing',
         'boardsmith/ui': 'ui',
-        'boardsmith/worker': 'worker',
       };
 
       build.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
@@ -491,11 +489,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
           'boardsmith/ai-trainer': 'ai-trainer',
           'boardsmith/client': 'client',
           'boardsmith/runtime': 'runtime',
-          'boardsmith/server': 'server',
           'boardsmith/session': 'session',
           'boardsmith/testing': 'testing',
           'boardsmith/ui': 'ui',
-          'boardsmith/worker': 'worker',
         };
 
         const srcDir = srcDirs[source];
