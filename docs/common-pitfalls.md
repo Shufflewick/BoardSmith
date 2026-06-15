@@ -68,8 +68,8 @@ When selection B depends on selection A's value, the filter/elements function fo
 ```typescript
 // WRONG - crashes when merc is undefined during availability check
 Action.create('dropEquipment')
-  .fromElements('merc', { elements: () => [...game.all(Merc)] })
-  .fromElements('equipment', {
+  .chooseElement('merc', { elements: () => [...game.all(Merc)] })
+  .chooseElement('equipment', {
     elements: (ctx) => {
       const merc = ctx.args.merc as Merc;  // undefined during availability!
       return [...merc.equipment.all(Equipment)];  // CRASH!
@@ -84,8 +84,8 @@ Add `dependsOn` to tell the framework that selection B depends on selection A. T
 ```typescript
 // CORRECT - use dependsOn for automatic handling
 Action.create('dropEquipment')
-  .fromElements('merc', { elements: () => [...game.all(Merc)] })
-  .fromElements('equipment', {
+  .chooseElement('merc', { elements: () => [...game.all(Merc)] })
+  .chooseElement('equipment', {
     dependsOn: 'merc',  // Framework handles availability check!
     elements: (ctx) => {
       const merc = ctx.args.merc as Merc;
@@ -1413,8 +1413,8 @@ In development mode, BoardSmith warns you when a drag starts but no matching act
 [BoardSmith] Drag started for element {"id":42} but no matching action found.
 
 For drag-drop to work automatically, your action needs one of these patterns:
-1. Element -> Choice with filterBy: .fromElements('piece', {...}).chooseFrom('dest', { filterBy: { key: 'pieceId' } })
-2. Element -> Element: .fromElements('source', {...}).fromElements('target', {...})
+1. Element -> Choice with filterBy: .chooseElement('piece', {...}).chooseFrom('dest', { filterBy: { key: 'pieceId' } })
+2. Element -> Element: .chooseElement('source', {...}).chooseElement('target', {...})
 
 Current action: none
 Available actions: move, attack, endTurn
@@ -1427,7 +1427,7 @@ For ActionPanel's automatic drag-drop to work, your action must follow one of th
 **Pattern 1: Element -> Choice with filterBy**
 ```typescript
 Action.create('moveCard')
-  .fromElements('card', {
+  .chooseElement('card', {
     elements: (ctx) => [...ctx.game.all(Card)],
   })
   .chooseFrom('destination', {
@@ -1439,10 +1439,10 @@ Action.create('moveCard')
 **Pattern 2: Element -> Element**
 ```typescript
 Action.create('assignToSquad')
-  .fromElements('combatant', {
+  .chooseElement('combatant', {
     elements: (ctx) => [...ctx.game.all(Combatant)],
   })
-  .fromElements('targetSquad', {
+  .chooseElement('targetSquad', {
     elements: (ctx) => [...ctx.game.all(Squad)],
   })
 ```
@@ -1464,7 +1464,7 @@ Action.create('assignToSquad')
    }))
    ```
 
-4. **Element ref mismatch**: The `dragProps` ref must match what the action's `fromElements` returns:
+4. **Element ref mismatch**: The `dragProps` ref must match what the action's `chooseElement` returns:
    ```typescript
    // If your action uses element IDs:
    dragProps({ id: card.id })  // ✓
@@ -1479,7 +1479,7 @@ Action.create('assignToSquad')
 1. **Open browser console** - Look for `[BoardSmith] Drag started...` warnings
 2. **Check action availability** - Is the action in `availableActions`?
 3. **Verify action pattern** - Does it use one of the supported patterns?
-4. **Check element refs** - Do `dragProps` refs match what `fromElements` returns?
+4. **Check element refs** - Do `dragProps` refs match what `chooseElement` returns?
 5. **Inspect choices** - For `chooseFrom`, do choices have `targetRef`?
 
 ### Using the Pit-of-Success API

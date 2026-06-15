@@ -326,7 +326,7 @@ Terms for player decisions and their execution.
 
 **Definition:** A choice that a player must make to complete an action. Picks can select from a list, choose an element, or enter a value.
 
-**In Code:** Selection methods: `chooseFrom()`, `chooseElement()`, `fromElements()`, `enterNumber()`
+**In Code:** Selection methods: `chooseFrom()`, `chooseElement()`, `chooseElements()`, `enterText()`, `enterNumber()`
 **Related Terms:** Action, Choice, Execute, Condition
 **Usage:**
 - "Pick a card to discard"

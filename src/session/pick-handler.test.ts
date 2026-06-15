@@ -34,7 +34,7 @@ class TestPickGame extends Game<TestPickGame, Player> {
     // Action with disabled elements (chooseElement)
     this.registerAction(
       Action.create('pickItem')
-        .fromElements('item', {
+        .chooseElement('item', {
           prompt: 'Choose an item',
           elements: (ctx) => [...ctx.game.all(Item)],
           disabled: (element) => (element as Item).locked ? 'Item is locked' : false,
@@ -55,7 +55,7 @@ class TestPickGame extends Game<TestPickGame, Player> {
     // Action with elements multi-select and disabled callback
     this.registerAction(
       Action.create('pickItems')
-        .fromElements('items', {
+        .chooseElements('items', {
           prompt: 'Choose items',
           elements: (ctx) => [...ctx.game.all(Item)],
           disabled: (element) => (element as Item).locked ? 'Item is locked' : false,

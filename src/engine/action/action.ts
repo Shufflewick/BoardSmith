@@ -175,7 +175,7 @@ export class ActionExecutor {
           break;
         }
         case 'elements': {
-          // fromElements() selection - value is element ID(s)
+          // chooseElements() selection - value is element ID(s)
           // Resolve to actual GameElement object(s)
           if (typeof value === 'number') {
             // Single element ID
@@ -371,7 +371,7 @@ export class ActionExecutor {
 
         let elements: GameElement[];
 
-        // Check if elements array is provided directly (from fromElements without multiSelect)
+        // Check if elements array is provided directly (chooseElement precomputed candidates)
         if (elementSel.elements) {
           elements = typeof elementSel.elements === 'function'
             ? elementSel.elements(context)
@@ -1098,7 +1098,7 @@ export class ActionExecutor {
       return this.hasValidSelectionPath(selections, player, args, index + 1);
     }
 
-    // For elements selections (fromElements), check if they have enabled elements
+    // For elements selections (chooseElements), check if they have enabled elements
     // If a later selection depends on this one, do full path validation
     if (selection.type === 'elements') {
       const annotatedElements = this.getChoices(selection, player, args);

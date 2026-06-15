@@ -815,10 +815,10 @@ describe('Dependent Selection with dependsOn', () => {
     const mercs = [...game.all(Space)];
 
     const action = Action.create('dropEquipment')
-      .fromElements('merc', {
+      .chooseElement('merc', {
         elements: () => mercs,
       })
-      .fromElements('equipment', {
+      .chooseElement('equipment', {
         dependsOn: 'merc',
         elements: (ctx) => {
           const merc = ctx.args.merc as Space;
@@ -836,10 +836,10 @@ describe('Dependent Selection with dependsOn', () => {
     const merc3 = game.first(Space, (s) => s.name === 'merc3')!;
 
     const action = Action.create('dropEquipment')
-      .fromElements('merc', {
+      .chooseElement('merc', {
         elements: () => [merc3],
       })
-      .fromElements('equipment', {
+      .chooseElement('equipment', {
         dependsOn: 'merc',
         elements: (ctx) => {
           const merc = ctx.args.merc as Space;
@@ -857,10 +857,10 @@ describe('Dependent Selection with dependsOn', () => {
     const mercs = [...game.all(Space)]; // merc1, merc2 have equipment; merc3 doesn't
 
     const action = Action.create('dropEquipment')
-      .fromElements('merc', {
+      .chooseElement('merc', {
         elements: () => mercs,
       })
-      .fromElements('equipment', {
+      .chooseElement('equipment', {
         dependsOn: 'merc',
         elements: (ctx) => {
           const merc = ctx.args.merc as Space;
@@ -1435,10 +1435,10 @@ describe('Disabled Selections', () => {
     expect(enabledCount).toBe(3); // values 3, 4, 5
   });
 
-  it('should mark disabled fromElements in getChoices but keep them in list', () => {
+  it('should mark disabled chooseElement candidates in getChoices but keep them in list', () => {
     const cards = [...game.all(Card)];
     const action = Action.create('test')
-      .fromElements('card', {
+      .chooseElement('card', {
         elements: () => cards,
         disabled: (el) => (el as Card).suit === 'H' ? 'Hearts blocked' : false,
       })
@@ -1571,10 +1571,10 @@ describe('onSelect / onCancel builder', () => {
     expect(action.selections[0].onSelect).toBe(handler);
   });
 
-  it('should store onSelect on fromElements selection', () => {
+  it('should store onSelect on chooseElements selection', () => {
     const handler = () => {};
     const action = Action.create('test')
-      .fromElements('target', { elements: [], onSelect: handler })
+      .chooseElements('target', { elements: [], onSelect: handler })
       .execute(() => {});
     expect(action.selections[0].onSelect).toBe(handler);
   });
@@ -1954,5 +1954,79 @@ describe('onSelect in executeAction', () => {
     executor.executeAction(action, player, { color: 'red', size: 'M' });
 
     expect(onSelectCalls).toEqual(['M']);
+  });
+});
+
+// Regression test for F23/F28: the three overlapping element-selection methods
+// (chooseFrom / chooseElement / fromElements) collapsed to a single canonical
+// pair — chooseElement (one) and chooseElements (many). fromElements is removed.
+describe('Element selection API (F23/F28)', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+    game.createMany(3, Card, 'card', (i) => ({
+      suit: 'H',
+      rank: String(i + 1),
+      value: i + 1,
+    }));
+  });
+
+  it('removes fromElements entirely — no third overlapping method remains', () => {
+    const builder = Action.create('test') as unknown as Record<string, unknown>;
+    expect(builder.fromElements).toBeUndefined();
+    expect(typeof builder.chooseElement).toBe('function');
+    expect(typeof builder.chooseElements).toBe('function');
+  });
+
+  it('chooseElement accepts a precomputed elements array and resolves an ID to the element', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElement('card', { elements: () => cards })
+      .execute(() => {});
+
+    expect(action.selections[0].type).toBe('element');
+
+    const resolved = executor.resolveArgs(action, { card: cards[1].id }, game.getPlayer(1)!);
+    expect(resolved.card).toBe(cards[1]);
+  });
+
+  it('chooseElement still supports the board pattern (elementClass/from/filter)', () => {
+    const action = Action.create('test')
+      .chooseElement('card', { elementClass: Card, filter: (c) => (c as Card).value > 1 })
+      .execute(() => {});
+
+    const choices = executor.getChoices(action.selections[0], game.getPlayer(1)!, {});
+    expect(choices).toHaveLength(2);
+  });
+
+  it('chooseElements produces an "elements" selection and defaults to one-or-more', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards })
+      .execute(() => {});
+
+    const selection = action.selections[0];
+    expect(selection.type).toBe('elements');
+    // Default multiSelect makes it genuinely multi (returns an array).
+    expect((selection as { multiSelect?: unknown }).multiSelect).toEqual({ min: 1 });
+
+    const resolved = executor.resolveArgs(
+      action,
+      { cards: [cards[0].id, cards[2].id] },
+      game.getPlayer(1)!,
+    );
+    expect(resolved.cards).toEqual([cards[0], cards[2]]);
+  });
+
+  it('chooseElements honors an explicit multiSelect bound', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards, multiSelect: { min: 0, max: 2 } })
+      .execute(() => {});
+
+    expect((action.selections[0] as { multiSelect?: unknown }).multiSelect).toEqual({ min: 0, max: 2 });
   });
 });

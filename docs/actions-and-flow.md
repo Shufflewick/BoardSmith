@@ -181,9 +181,22 @@ Action.create('hireFirstMerc')
 > ```
 > This pattern ensures the UI sees the exploration results before the player picks equipment.
 
-#### `chooseElement` - Choose a game element
+#### `chooseElement` - Choose a single game element
+
+This is the canonical method for any one-element choice (board click or
+button list). Say which elements are selectable in one of two ways:
+
+- **Board pattern** — `elementClass` (+ optional `from` / `filter`). The player
+  clicks matching elements on the board.
+- **Precomputed pattern** — `elements`, a ready-made array (or function). Use
+  when you already have the exact candidate list.
+
+Either way the value encoding is identical: wire values are element IDs
+(numbers), custom UIs send the ID directly, and `execute()` receives the
+resolved Element object.
 
 ```typescript
+// Board pattern - click a matching element
 Action.create('placeStone')
   .chooseElement('cell', {
     prompt: 'Select an empty cell',
@@ -191,16 +204,11 @@ Action.create('placeStone')
     filter: (cell, ctx) => cell.isEmpty(),
     display: (cell) => cell.notation,        // Display text
     boardRef: (cell) => ({ id: cell.id }),   // For UI highlighting
-  })
-```
+  });
 
-#### `fromElements` - Select from a list of elements (Recommended for Custom UIs)
-
-**This is the preferred method when building custom game UIs.** It uses element IDs as values, making it seamless for custom components to send selections.
-
-```typescript
+// Precomputed pattern - choose from a known list
 Action.create('attack')
-  .fromElements('target', {
+  .chooseElement('target', {
     prompt: 'Choose a target',
     elements: (ctx) => ctx.game.combat.validTargets,
     display: (unit, ctx, allUnits) => unit.name,  // Optional: custom display
@@ -214,9 +222,9 @@ Action.create('attack')
   });
 ```
 
-**Why use `fromElements` instead of `chooseFrom`?**
+**Why select elements with `chooseElement` instead of `chooseFrom`?**
 
-| Feature | `chooseFrom` | `fromElements` |
+| Feature | `chooseFrom` | `chooseElement` |
 |---------|-------------|----------------|
 | Value type | String (manual) | Element ID (automatic) |
 | Custom UI sends | `"Militia #1"` (must match exactly) | `42` (element ID) |
@@ -238,10 +246,15 @@ When multiple elements share the same name, display names are automatically suff
 - "Militia" (if unique)
 - "Militia #1", "Militia #2" (if duplicates exist)
 
-**Multi-select:**
+#### `chooseElements` - Choose multiple game elements
+
+Use this when the player picks more than one element. It always resolves to an
+array of Element objects. Bound the count with `multiSelect` (a number means
+"up to N"; `{ min, max }` gives full control); when omitted, the player may
+pick one or more.
 
 ```typescript
-.fromElements('targets', {
+.chooseElements('targets', {
   elements: (ctx) => ctx.game.combat.validTargets,
   multiSelect: { min: 1, max: 3 },  // Select 1-3 targets
 })
@@ -257,12 +270,12 @@ When multiple elements share the same name, display names are automatically suff
 Allow players to skip a selection. Use `optional: true` for a "Skip" button, or provide a string for custom button text:
 
 ```typescript
-.fromElements('item', {
+.chooseElement('item', {
   elements: (ctx) => ctx.loot.all(Equipment),
   optional: true,           // Shows "Skip" button
 })
 
-.fromElements('item', {
+.chooseElement('item', {
   elements: (ctx) => ctx.loot.all(Equipment),
   optional: 'Done',         // Shows "Done" button instead of "Skip"
 })
@@ -319,10 +332,10 @@ When selection B depends on selection A's value, use the `dependsOn` option:
 
 ```typescript
 Action.create('dropEquipment')
-  .fromElements('merc', {
+  .chooseElement('merc', {
     elements: () => [...game.all(Merc)],
   })
-  .fromElements('equipment', {
+  .chooseElement('equipment', {
     dependsOn: 'merc',  // Tells framework B depends on A
     elements: (ctx) => {
       const merc = ctx.args.merc as Merc;
@@ -521,7 +534,7 @@ Action.create('explore')
 
 // The follow-up action receives pre-filled args
 Action.create('collectEquipment')
-  .fromElements('equipment', {
+  .chooseElement('equipment', {
     prompt: 'Select equipment to take',
     elements: (ctx) => {
       // UI shows updated state - stash has the drawn equipment
@@ -1064,12 +1077,12 @@ When validation fails, you get helpful error messages:
 
 ### Best Practices
 
-1. **Prefer `fromElements` for new code** - It's designed for custom UIs
+1. **Use `chooseElement` / `chooseElements` for elements** - they're designed for custom UIs
 2. **Use element IDs, not string values** - IDs are stable; display strings can change
 3. **Check `actionMetadata` for valid choices** - It includes element IDs for reference
 
 ```typescript
-// actionMetadata structure for fromElements (single-select):
+// actionMetadata structure for chooseElement (single-select):
 {
   selections: [{
     name: 'target',
@@ -1081,7 +1094,7 @@ When validation fails, you get helpful error messages:
   }]
 }
 
-// actionMetadata structure for fromElements (multi-select):
+// actionMetadata structure for chooseElements (multi-select):
 {
   selections: [{
     name: 'targets',

@@ -650,7 +650,7 @@ Action.create('explore')
 
 // Second action: picks from drawn items
 Action.create('collect')
-  .fromElements('item', {
+  .chooseElement('item', {
     elements: (ctx) => {
       const location = ctx.game.getElementById(ctx.args.locationId);
       return [...location.itemsZone.all(Item)];

@@ -140,7 +140,8 @@ export class Action<
    * Add a choice selection from a list of values.
    *
    * Use this for string/number choices (e.g., ranks, colors, amounts).
-   * For selecting game elements, prefer {@link fromElements} instead.
+   * For selecting game elements, use {@link chooseElement} (one) or
+   * {@link chooseElements} (many) instead.
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the choice selection
@@ -242,10 +243,19 @@ export class Action<
   }
 
   /**
-   * Add a selection for a single element from the game board.
+   * Select a single game element. This is the canonical method for any
+   * one-element choice; use {@link chooseElements} when the player picks many.
    *
-   * Uses the board for selection - player clicks on elements directly.
-   * For choices shown as buttons/dropdowns, prefer {@link fromElements} instead.
+   * Two ways to say which elements are selectable (pick one):
+   * - **Board pattern**: `elementClass` + optional `from` + `filter`. Searches
+   *   the board (or a container) and lets the player click matching elements.
+   * - **Precomputed pattern**: `elements` — a ready-made array (or function
+   *   returning one). Use when you already have the exact list of candidates.
+   *
+   * Value encoding is the same either way: values are element IDs (numbers),
+   * custom UIs send the ID directly (`props.action('move', { piece: 42 })`),
+   * and the execute handler receives the resolved Element object. Display
+   * names auto-disambiguate (e.g., "Militia #1", "Militia #2").
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the element selection
@@ -253,6 +263,7 @@ export class Action<
    * @param options.elementClass - Filter to specific element types (e.g., Card, Piece)
    * @param options.from - Container element to select from (defaults to game board)
    * @param options.filter - Additional filter function for elements
+   * @param options.elements - Precomputed array (or function) of candidates
    * @param options.optional - If true, player can skip this selection
    * @param options.validate - Custom validation function
    * @param options.display - Display function for elements (for UI buttons)
@@ -262,7 +273,7 @@ export class Action<
    *
    * @example
    * ```typescript
-   * // Select a piece from the board
+   * // Board pattern: click a piece, then a destination
    * action('move')
    *   .chooseElement('piece', {
    *     prompt: 'Select a piece to move',
@@ -277,6 +288,16 @@ export class Action<
    *   .execute(({ piece, destination }) => {
    *     piece.moveTo(destination);
    *   });
+   *
+   * // Precomputed pattern: choose from a known list of targets
+   * action('attack')
+   *   .chooseElement('target', {
+   *     prompt: 'Choose a target',
+   *     elements: (ctx) => ctx.game.combat.validTargets,
+   *   })
+   *   .execute(({ target }) => {
+   *     target.takeDamage(10);
+   *   });
    * ```
    */
   chooseElement<K extends string, T extends GameElement>(
@@ -286,6 +307,11 @@ export class Action<
       elementClass?: ElementClass<T>;
       from?: GameElement | ((context: ActionContext<G>) => GameElement);
       filter?: (element: GameElement, context: ActionContext<G>) => boolean;
+      /**
+       * Precomputed candidates (alternative to elementClass/from/filter).
+       * Custom UIs send the element ID directly.
+       */
+      elements?: T[] | ((context: ActionContext<G>) => T[]);
       optional?: boolean;
       validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Display function for elements (for UI buttons) */
@@ -298,6 +324,17 @@ export class Action<
        * choice from the dependency leads to valid choices for this selection.
        */
       dependsOn?: string;
+      /**
+       * Repeat this selection until termination condition is met.
+       * When used, the selection value becomes an array of all elements selected.
+       * Each selection round-trips to the server for state updates.
+       */
+      repeat?: RepeatConfig<T>;
+      /**
+       * Shorthand for repeat.until that terminates when this element is selected.
+       * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
+       */
+      repeatUntil?: T;
       /** Check if element should be disabled. Returns reason string or false. */
       disabled?: (element: T, context: ActionContext<G>) => string | false;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
@@ -313,11 +350,14 @@ export class Action<
       elementClass: options.elementClass,
       from: options.from,
       filter: options.filter,
+      elements: options.elements,
       optional: options.optional,
       validate: options.validate,
       display: options.display as ElementSelection<T>['display'],
       boardRef: options.boardRef as ElementSelection<T>['boardRef'],
       dependsOn: options.dependsOn,
+      repeat: options.repeat,
+      repeatUntil: options.repeatUntil,
       disabled: options.disabled,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
@@ -327,28 +367,42 @@ export class Action<
   }
 
   /**
-   * Select from a pre-computed array of elements.
+   * Select multiple game elements. This is the canonical method for any
+   * many-element choice; use {@link chooseElement} when the player picks one.
    *
-   * This is the "pit of success" method for element-based choices.
-   * - Values are element IDs (numbers), not strings
-   * - Custom UIs send IDs directly: `props.action('attack', { target: 42 })`
-   * - Execute handler receives resolved Element objects
-   * - Display names auto-disambiguate (e.g., "Militia #1", "Militia #2")
+   * The execute handler receives an array of resolved Element objects. Bound
+   * the count with `multiSelect` (a number is "up to N"; `{ min, max }` gives
+   * full control). When omitted, the player may pick one or more.
+   *
+   * Value encoding matches {@link chooseElement}: the wire values are element
+   * IDs, and custom UIs send IDs directly.
+   *
+   * @param name - Argument name that will be passed to the execute handler
+   * @param options - Configuration for the element selection
+   * @param options.prompt - User-facing prompt text
+   * @param options.elements - Elements to choose from (array or function)
+   * @param options.multiSelect - Count bound (number = max, or `{ min, max }`)
+   * @param options.optional - If true, player can skip this selection
+   * @param options.validate - Custom validation function
+   * @param options.display - Display function for elements (for UI buttons)
+   * @param options.boardRef - Get board element reference for highlighting
+   * @param options.dependsOn - Name of previous selection this depends on
+   * @returns The builder for chaining
    *
    * @example
    * ```typescript
-   * action('attack')
-   *   .fromElements('target', {
-   *     elements: (ctx) => ctx.game.combat.validTargets,
-   *     prompt: 'Choose a target',
+   * action('discard')
+   *   .chooseElements('cards', {
+   *     prompt: 'Discard up to 2 cards',
+   *     elements: (ctx) => [...ctx.player.hand.all(Card)],
+   *     multiSelect: { min: 0, max: 2 },
    *   })
-   *   .execute(({ target }) => {
-   *     // target is the resolved Element object, not an ID
-   *     target.takeDamage(10);
+   *   .execute(({ cards }) => {
+   *     for (const card of cards) card.discard();
    *   });
    * ```
    */
-  fromElements<K extends string, T extends GameElement>(
+  chooseElements<K extends string, T extends GameElement>(
     name: K,
     options: {
       prompt?: string;
@@ -358,18 +412,19 @@ export class Action<
        */
       elements: T[] | ((context: ActionContext<G>) => T[]);
       /**
+       * Bound the number of elements the player may pick. A number means
+       * "up to N"; `{ min, max }` gives full control. Defaults to one or more.
+       */
+      multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
+      /**
        * Custom display function. If not provided, uses element.name with
        * automatic disambiguation when multiple elements have the same name.
        */
       display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
       optional?: boolean;
-      validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
+      validate?: (value: T[], args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Get board element reference for highlighting */
       boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
-      /**
-       * Enable multi-select mode. Result will be an array of elements.
-       */
-      multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
       /**
        * Name of a previous selection this element selection depends on.
        * When specified, elements are computed for each possible value of the
@@ -390,53 +445,31 @@ export class Action<
       /** Check if element should be disabled. Returns reason string or false. */
       disabled?: (element: T, context: ActionContext<G>) => string | false;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
-      onSelect?: (value: T, context: OnSelectContext) => void;
+      onSelect?: (value: T[], context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     }
-  ): Action<G, AddArg<A, K, T>> {
-    // For single-select (no multiSelect), use 'element' type to leverage existing code paths
-    // For multi-select, use 'elements' type
-    if (options.multiSelect !== undefined) {
-      const selection = {
-        type: 'elements',
-        name,
-        prompt: options.prompt,
-        elements: options.elements,
-        display: options.display,
-        optional: options.optional,
-        validate: options.validate,
-        boardRef: options.boardRef,
-        multiSelect: options.multiSelect,
-        dependsOn: options.dependsOn,
-        repeat: options.repeat,
-        repeatUntil: options.repeatUntil,
-        disabled: options.disabled,
-        onSelect: options.onSelect,
-        onCancel: options.onCancel,
-      } as ElementsSelection<T>;
-      this.definition.selections.push(selection as Selection);
-    } else {
-      // Single-select: use 'element' type with elements array
-      const selection = {
-        type: 'element',
-        name,
-        prompt: options.prompt,
-        elements: options.elements,
-        display: options.display as ElementSelection<T>['display'],
-        optional: options.optional,
-        validate: options.validate,
-        boardRef: options.boardRef,
-        dependsOn: options.dependsOn,
-        repeat: options.repeat,
-        repeatUntil: options.repeatUntil,
-        disabled: options.disabled,
-        onSelect: options.onSelect,
-        onCancel: options.onCancel,
-      } as ElementSelection<T>;
-      this.definition.selections.push(selection as Selection);
-    }
-    return this as unknown as Action<G, AddArg<A, K, T>>;
+  ): Action<G, AddArg<A, K, T[]>> {
+    const selection = {
+      type: 'elements',
+      name,
+      prompt: options.prompt,
+      elements: options.elements,
+      // Default to "one or more" so chooseElements always yields an array.
+      multiSelect: options.multiSelect ?? { min: 1 },
+      display: options.display,
+      optional: options.optional,
+      validate: options.validate as ElementsSelection<T>['validate'],
+      boardRef: options.boardRef,
+      dependsOn: options.dependsOn,
+      repeat: options.repeat,
+      repeatUntil: options.repeatUntil,
+      disabled: options.disabled,
+      onSelect: options.onSelect as ElementsSelection<T>['onSelect'],
+      onCancel: options.onCancel,
+    } as ElementsSelection<T>;
+    this.definition.selections.push(selection as Selection);
+    return this as unknown as Action<G, AddArg<A, K, T[]>>;
   }
 
   /**
@@ -569,7 +602,7 @@ export class Action<
    * @example
    * ```typescript
    * action('attack')
-   *   .fromElements('target', { ... })
+   *   .chooseElement('target', { ... })
    *   .execute(({ target }, ctx) => {
    *     // target is the resolved Element object
    *     target.hp -= ctx.player.attackPower;

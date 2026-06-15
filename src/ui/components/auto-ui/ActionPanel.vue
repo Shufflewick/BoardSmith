@@ -896,8 +896,8 @@ watch(() => boardInteraction?.isDragging, (isDragging) => {
       `Drag started for element ${JSON.stringify(dragged)} but no matching action found.
 
 For drag-drop to work automatically, your action needs one of these patterns:
-1. Element -> Choice with filterBy: .fromElements('piece', {...}).chooseFrom('dest', { filterBy: { key: 'pieceId' } })
-2. Element -> Element: .fromElements('source', {...}).fromElements('target', {...})
+1. Element -> Choice with filterBy: .chooseElement('piece', {...}).chooseFrom('dest', { filterBy: { key: 'pieceId' } })
+2. Element -> Element: .chooseElement('source', {...}).chooseElement('target', {...})
 
 Current action: ${currentAction.value || 'none'}
 Available actions: ${props.availableActions?.join(', ') || 'none'}`
