@@ -150,10 +150,10 @@
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">44</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">45</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">8</div><div class="l">○ Open</div></div>
-    <div class="stat s-high"><div class="n">3</div><div class="l">High (active)</div></div>
+    <div class="stat s-open"><div class="n">7</div><div class="l">○ Open</div></div>
+    <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
     <div class="stat s-medium"><div class="n">4</div><div class="l">Medium (active)</div></div>
     <div class="stat s-gi"><div class="n">8</div><div class="l">Impact games</div></div>
   </div>
@@ -240,7 +240,7 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 8 of 52 — 44 fixed, moved to bottom)</span></h2>
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 7 of 52 — 45 fixed, moved to bottom)</span></h2>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -325,57 +325,7 @@
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="high" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F31</span>#2</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-high">High</span>
-          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">2 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>chooseElements multiSelect min/max constraints are never enforced server-side; invalid element IDs are silently dropped</h3>
-        
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A designer writes `chooseElements('cards', { multiSelect: { min: 2, max: 2 } })` and trusts the engine to guarantee exactly two cards in `execute`. A bot, test harness, or custom UI that submits `{ cards: [] }`, `{ cards: [a,b,c,d] }`, or `{ cards: [validId, 9999] }` passes validation; <code>execute()</code> then runs with an out-of-bounds (or silently shortened) array, corrupting game state with no error.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The obvious, declarative way to bound a selection (the `multiSelect` option, prominently documented with min/max examples) does nothing on the authoritative server path. The easy path looks correct but silently isn't, and the failure only surfaces as downstream state corruption far from the cause.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">In <code>action/action.ts</code> validateSelection, resolve the selection's multiSelect config (handling number | {min,max} | function) and push errors when the array length is below min or above max, mirroring the text/number bound checks at <code>action.ts:721-748</code>. In resolveArgs (<code>action.ts:188-198</code>), do not silently drop unresolved IDs — collect them and let validateSelection reject the submission with an actionable 'Element ID N not found' error.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 0 affected, 2 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">No code change expected: the discard UI always submits exactly 2 valid hand-card IDs, so server-side min/max enforcement and the no-silent-drop rule will accept it. Re-verify the discard auto-confirm flow still works after the engine now validates multiSelect length; the redundant cards.length!==2 guard in <code>execute()</code> can stay or be removed.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/cribbage/src/rules/actions.ts:1004</code> (multiSelect: { min: 2, max: 2 }) consumed by <code>src/ui/components/CribbageBoard.vue:520</code> (actionController.execute('discard', { cards: [...] }))</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">F31 starts enforcing multiSelect min/max server-side and rejecting unresolved element IDs (previously silently dropped). MERC's custom AI (<code>src/rules/ai-executor.ts</code>) and auto-resolve test helpers must always submit selections that satisfy min/max and contain only currently-valid IDs, or actions that previously passed leniently will now be rejected. Audit arg generation, then re-pack/re-install.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions/rebel-combat.ts:213</code>,526,744,1436,1750 and <code>src/rules/actions/rebel-economy.ts:111</code> use multiSelect returning { min: 1, max: N } (e.g. <code>rebel-combat.ts:213-218</code> target selection min:1/max:pending.maxTargets); <code>execute()</code> at <code>rebel-combat.ts:223</code>+ consumes args.targets as raw string IDs.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>action/action.ts:660-711</code> (validateSelection 'elements' branch) only checks that each submitted element is a *valid choice* and not disabled — it never checks array length against the selection's declared count bounds. The `multiSelect` field is read nowhere in validation: grep shows it appears in <code>action.ts</code> only inside a comment at <code>action/action.ts:624</code>. The declared config (<code>action/types.ts:107-111</code> `MultiSelectConfig { min?, max? }`, documented e.g. `multiSelect: { min: 3, max: 3 }` at <code>action/types.ts:191</code>) is therefore advisory to the UI only. Worse, in resolveArgs (<code>action/action.ts:188-198</code>) a multi-select array maps unknown IDs through `getElementById(...)` and `.filter((el): el is GameElement =&gt; el !== null)`, so any ID that doesn't resolve is silently removed before validation/execute.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Confirmed real on current source. validateSelection's 'elements' branch (<code>action.ts:660-711</code>) only checks each submitted element is a valid, non-disabled choice; it never checks array length against declared multiSelect min/max. grep confirms `multiSelect` appears in <code>action.ts</code> solely as a comment at line 624 — validation never reads it. resolveArgs (<code>action.ts:186-198</code>) maps multi-select IDs and applies `.filter((el): el is GameElement =&gt; el !== null)`, silently dropping unresolvable IDs before validation, so `[validId, 9999]` resolves to `[validElement]` and passes. MultiSelectConfig {min?,max?} exists and is prominently documented (<code>types.ts:107-111</code>, 191). The session layer (<code>pick-handler.ts:247-266</code>, 298-311) evaluates the config only to forward {min,max} to the client for rendering; no submission-side enforcement. executeAction (819-863) goes resolveArgs → validateAction → execute with the count never enforced. By contrast number (740-744) and text (721-728) selections DO enforce min/max, making the gap a clear inconsistency. The default chooseElements is multiSelect:{min:1} (<code>action-builder.ts:459</code>) yet an empty array [] still passes (neither undefined nor null, and the validate for-loop has no items to reject), so even the default is unenforced. Tests (<code>action.test.ts:2024-2030</code>) only assert the config is stored, never that it's enforced. Severity high: the official Action Panel guards via the forwarded config, but AI-trainer/MCTS bots, test harnesses, and custom UIs are first-class parity paths per <code>CLAUDE.md</code> and bypass that guard, reaching <code>execute()</code> with out-of-bounds/silently-shortened arrays and corrupting game state far from the cause.</div>
-      </details>
-    </div>
-  </article>
-
-  <article class="card fx-open" data-cat="pit-of-success" data-sev="high" data-ease="moderate" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F43</span>#3</div>
+      <div class="rank"><span class="fid">F43</span>#2</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -419,7 +369,7 @@
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F33</span>#4</div>
+      <div class="rank"><span class="fid">F33</span>#3</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -505,7 +455,7 @@
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F42</span>#5</div>
+      <div class="rank"><span class="fid">F42</span>#4</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -565,7 +515,7 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F36</span>#6</div>
+      <div class="rank"><span class="fid">F36</span>#5</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -615,7 +565,7 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F35</span>#7</div>
+      <div class="rank"><span class="fid">F35</span>#6</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -669,7 +619,7 @@ Severity medium rather than high: triggering requires a bug inside user-supplied
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F40</span>#8</div>
+      <div class="rank"><span class="fid">F40</span>#7</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -719,7 +669,7 @@ Severity medium rather than high: triggering requires a bug inside user-supplied
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(44 fixed — moved here, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(45 fixed — moved here, kept for the record)</span></span></h2>
   <p class="section-note">Each was fixed in an isolated worktree (self-verified with <code>tsc</code> + <code>vitest run</code> + lint), gated against all 9 game suites for zero impact, and merged to <code>main</code> with docs updated inline.</p>
   <div id="completed-list">
     
@@ -935,6 +885,56 @@ The entire canonical AI-integration snippet cannot compile: private constructor 
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Confirmed accurate. <code>docs/api/client.md</code> calls connection.onConnect (141), onDisconnect (145), onActionResult (157), onLobbyUpdate (243), claimPosition (224), updateName (231), setReady (237), getHistory (195), getStateAt (199), getStateDiff (202), undo (278), restart (285) — verified by reading the file. Grep of <code>src/client/game-connection.ts</code> returns 0 for all of these; the class only defines getState (105), getStatus (109), action (117), onStateChange (167), onLobbyChange (178), onError (193), onConnectionChange (198). The lobby/history/restart ops actually live on MeepleClient in <code>src/client/client.ts</code>: getMatchStatus (82, doc wrongly calls it client.matchmakingStatus and passes an arg it doesn't take), getHistory(gameId) (277), restartGame (298), claimSeat (336), updateLobbyName (367), setReady(gameId,ready) (386). So the doc invents ~12-13 connection methods that do not exist and conflates client-level operations with connection-level ones. Copying the examples throws 'is not a function' at runtime. This is the canonical browser-SDK reference, so impact is broad; high is appropriate (docs-only, no library code defect, so not critical).</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="pit-of-success" data-sev="high" data-ease="moderate" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F31</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Fixed &amp; merged to main — 9f38cab">✅ Fixed · 9f38cab</span>
+          <span class="badge sev-high">High</span>
+          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">2 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>chooseElements multiSelect min/max constraints are never enforced server-side; invalid element IDs are silently dropped</h3>
+        
+        <div class="merge-note">Fixed &amp; merged to <code>main</code> as <code>9f38cab</code> — Enforce chooseElements multiSelect min/max server-side + reject unresolved element IDs (fail loud). Games: cribbage verified no-change; MERC re-vendored, no-change.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A designer writes `chooseElements('cards', { multiSelect: { min: 2, max: 2 } })` and trusts the engine to guarantee exactly two cards in `execute`. A bot, test harness, or custom UI that submits `{ cards: [] }`, `{ cards: [a,b,c,d] }`, or `{ cards: [validId, 9999] }` passes validation; <code>execute()</code> then runs with an out-of-bounds (or silently shortened) array, corrupting game state with no error.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The obvious, declarative way to bound a selection (the `multiSelect` option, prominently documented with min/max examples) does nothing on the authoritative server path. The easy path looks correct but silently isn't, and the failure only surfaces as downstream state corruption far from the cause.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">In <code>action/action.ts</code> validateSelection, resolve the selection's multiSelect config (handling number | {min,max} | function) and push errors when the array length is below min or above max, mirroring the text/number bound checks at <code>action.ts:721-748</code>. In resolveArgs (<code>action.ts:188-198</code>), do not silently drop unresolved IDs — collect them and let validateSelection reject the submission with an actionable 'Element ID N not found' error.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 0 affected, 2 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">No code change expected: the discard UI always submits exactly 2 valid hand-card IDs, so server-side min/max enforcement and the no-silent-drop rule will accept it. Re-verify the discard auto-confirm flow still works after the engine now validates multiSelect length; the redundant cards.length!==2 guard in <code>execute()</code> can stay or be removed.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/cribbage/src/rules/actions.ts:1004</code> (multiSelect: { min: 2, max: 2 }) consumed by <code>src/ui/components/CribbageBoard.vue:520</code> (actionController.execute('discard', { cards: [...] }))</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">F31 starts enforcing multiSelect min/max server-side and rejecting unresolved element IDs (previously silently dropped). MERC's custom AI (<code>src/rules/ai-executor.ts</code>) and auto-resolve test helpers must always submit selections that satisfy min/max and contain only currently-valid IDs, or actions that previously passed leniently will now be rejected. Audit arg generation, then re-pack/re-install.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions/rebel-combat.ts:213</code>,526,744,1436,1750 and <code>src/rules/actions/rebel-economy.ts:111</code> use multiSelect returning { min: 1, max: N } (e.g. <code>rebel-combat.ts:213-218</code> target selection min:1/max:pending.maxTargets); <code>execute()</code> at <code>rebel-combat.ts:223</code>+ consumes args.targets as raw string IDs.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>action/action.ts:660-711</code> (validateSelection 'elements' branch) only checks that each submitted element is a *valid choice* and not disabled — it never checks array length against the selection's declared count bounds. The `multiSelect` field is read nowhere in validation: grep shows it appears in <code>action.ts</code> only inside a comment at <code>action/action.ts:624</code>. The declared config (<code>action/types.ts:107-111</code> `MultiSelectConfig { min?, max? }`, documented e.g. `multiSelect: { min: 3, max: 3 }` at <code>action/types.ts:191</code>) is therefore advisory to the UI only. Worse, in resolveArgs (<code>action/action.ts:188-198</code>) a multi-select array maps unknown IDs through `getElementById(...)` and `.filter((el): el is GameElement =&gt; el !== null)`, so any ID that doesn't resolve is silently removed before validation/execute.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Confirmed real on current source. validateSelection's 'elements' branch (<code>action.ts:660-711</code>) only checks each submitted element is a valid, non-disabled choice; it never checks array length against declared multiSelect min/max. grep confirms `multiSelect` appears in <code>action.ts</code> solely as a comment at line 624 — validation never reads it. resolveArgs (<code>action.ts:186-198</code>) maps multi-select IDs and applies `.filter((el): el is GameElement =&gt; el !== null)`, silently dropping unresolvable IDs before validation, so `[validId, 9999]` resolves to `[validElement]` and passes. MultiSelectConfig {min?,max?} exists and is prominently documented (<code>types.ts:107-111</code>, 191). The session layer (<code>pick-handler.ts:247-266</code>, 298-311) evaluates the config only to forward {min,max} to the client for rendering; no submission-side enforcement. executeAction (819-863) goes resolveArgs → validateAction → execute with the count never enforced. By contrast number (740-744) and text (721-728) selections DO enforce min/max, making the gap a clear inconsistency. The default chooseElements is multiSelect:{min:1} (<code>action-builder.ts:459</code>) yet an empty array [] still passes (neither undefined nor null, and the validate for-loop has no items to reject), so even the default is unenforced. Tests (<code>action.test.ts:2024-2030</code>) only assert the config is stored, never that it's enforced. Severity high: the official Action Panel guards via the forwarded config, but AI-trainer/MCTS bots, test harnesses, and custom UIs are first-class parity paths per <code>CLAUDE.md</code> and bypass that guard, reaching <code>execute()</code> with out-of-bounds/silently-shortened arrays and corrupting game state far from the cause.</div>
       </details>
     </div>
   </article>

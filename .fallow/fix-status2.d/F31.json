@@ -1,0 +1,7 @@
+{
+  "unit": "F31",
+  "fids": ["F31"],
+  "status": "merged",
+  "sha": "9f38cab",
+  "desc": "Enforce chooseElements multiSelect min/max server-side + reject unresolved element IDs (fail loud). Games: cribbage verified no-change; MERC re-vendored, no-change."
+}
