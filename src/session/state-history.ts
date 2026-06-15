@@ -266,10 +266,14 @@ export class StateHistory<G extends Game = Game> {
       return { success: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
     }
 
-    // Compute where the turn started
+    // Compute where the turn started. Pass flowState.moveCount so undo uses the
+    // SAME authoritative turn boundary that buildPlayerState surfaced to the
+    // client as turnStartActionIndex/canUndo. Without it, the backward-scan
+    // fallback can rewind past a phase boundary and discard a prior turn's work.
     const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
       this.#storedState.actionHistory,
-      flowState.currentPlayer
+      flowState.currentPlayer,
+      flowState.moveCount
     );
 
     // Check if there's anything to undo
