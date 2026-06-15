@@ -250,14 +250,6 @@ export {
   type WizardModeCheck,
 } from './composables/actionControllerHelpers.js';
 
-// Hover highlight composable (for custom UI element highlighting)
-export {
-  useHoverHighlight,
-  type HoverableItem,
-  type UseHoverHighlightOptions,
-  type UseHoverHighlightReturn,
-} from './composables/useHoverHighlight.js';
-
 // Image utilities (for custom card/element rendering)
 export {
   parseImageInfo,
