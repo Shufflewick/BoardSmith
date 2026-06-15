@@ -430,4 +430,85 @@ describe('GameRunner', () => {
       expect(restored.getFlowState()).toBeDefined();
     });
   });
+
+  describe('checkpoint payload (F17)', () => {
+    it('does not embed actionHistory or gameOptions in any per-action checkpoint', () => {
+      // Regression for F17: each retained per-action checkpoint used to be a full
+      // `createSnapshot`, re-embedding an O(k) `actionHistory` copy and a duplicate
+      // `gameOptions`/`gameType`/`seed`. With one checkpoint per action, a single
+      // persisted snapshot therefore carried O(N^2) action entries and N duplicate
+      // option blobs — growing per op and per game (O(N^2) storage, hitting
+      // KV/object-store value-size caps mid-session). The lean ActionCheckpoint
+      // carries ONLY the per-action-varying state; the invariants + history prefix
+      // are rehydrated from the enclosing snapshot by fromCheckpoint.
+      const runner = new GameRunner({
+        GameClass: TestGame,
+        gameType: 'test-game',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'f17' },
+      });
+      runner.start();
+
+      for (const [action, seat] of [['draw', 1], ['pass', 2], ['draw', 1], ['pass', 2]] as const) {
+        expect(runner.performAction(action, seat, {}).success).toBe(true);
+        runner.captureCheckpoint();
+      }
+
+      const snapshot = runner.getSnapshot();
+      const checkpoints = snapshot.actionCheckpoints ?? [];
+      expect(checkpoints.length).toBeGreaterThan(1);
+
+      // No per-action checkpoint may re-embed any snapshot-wide / O(k) field. This
+      // is the heart of the fix: the OLD full-snapshot checkpoints carried all of
+      // these, producing the O(N^2) blowup; the lean ones must carry none.
+      let totalEmbeddedActionEntries = 0;
+      for (const checkpoint of checkpoints) {
+        expect('actionHistory' in checkpoint).toBe(false);
+        expect('gameOptions' in checkpoint).toBe(false);
+        expect('gameType' in checkpoint).toBe(false);
+        expect('seed' in checkpoint).toBe(false);
+        expect('actionCheckpoints' in checkpoint).toBe(false);
+        // The lean entry keeps exactly the per-action-varying state.
+        expect(checkpoint.state).toBeDefined();
+        totalEmbeddedActionEntries +=
+          (checkpoint as { actionHistory?: unknown[] }).actionHistory?.length ?? 0;
+      }
+      // Old design: sum(0..N) action entries embedded across checkpoints. Fixed: 0.
+      expect(totalEmbeddedActionEntries).toBe(0);
+    });
+
+    it('fromCheckpoint rehydrates the history prefix and restores the tree authoritatively', () => {
+      // The functional contract must survive the payload fix: restoring a lean
+      // checkpoint at index k must reproduce EXACTLY the state when k actions were
+      // recorded — the history prefix (length k), the element tree, the flow
+      // position, and the RNG — by rehydrating the invariants from the enclosing
+      // snapshot. This is the single restore primitive used by undo + time-travel.
+      const runner = new GameRunner({
+        GameClass: TestGame,
+        gameType: 'test-game',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'f17b' },
+      });
+      runner.start();
+
+      const handAfter: number[] = [runner.game.hands[0].count(Card)];
+      for (const [action, seat] of [['draw', 1], ['pass', 2], ['draw', 1]] as const) {
+        expect(runner.performAction(action, seat, {}).success).toBe(true);
+        runner.captureCheckpoint();
+        handAfter.push(runner.game.hands[0].count(Card));
+      }
+
+      const snapshot = runner.getSnapshot();
+
+      // Restore at each historical action index and verify the prefix + tree match.
+      for (let k = 0; k < handAfter.length; k++) {
+        const restored = GameRunner.fromCheckpoint(snapshot, k, TestGame);
+        expect(restored).not.toBeNull();
+        expect(restored!.actionHistory).toHaveLength(k);
+        expect(restored!.game.hands[0].count(Card)).toBe(handAfter[k]);
+        expect(restored!.getFlowState()).toBeDefined();
+      }
+
+      // Out-of-range index yields null (caller surfaces the actionable error).
+      expect(GameRunner.fromCheckpoint(snapshot, 999, TestGame)).toBeNull();
+    });
+  });
 });

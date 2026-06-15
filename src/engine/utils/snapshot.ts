@@ -45,17 +45,48 @@ export interface GameStateSnapshot {
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
 
-  /** Per-action authoritative checkpoints for undo. `actionCheckpoints[k]` is
-   *  the LATEST full state observed while `k` actions were recorded — refreshed
-   *  on every op so trailing pending/selection mutations (e.g. `Piece.putInto`
-   *  inside a completed pending action, recorded in neither command nor action
-   *  history) are captured at the right action-count boundary. Undo restores
-   *  `actionCheckpoints[turnStartActionIndex]` directly instead of replaying
-   *  history — replay loses those pending mutations and mis-positions the flow.
+  /** Per-action authoritative checkpoints for undo / debug time-travel.
+   *  `actionCheckpoints[k]` is the LATEST per-action state observed while `k`
+   *  actions were recorded — refreshed on every op so trailing pending/selection
+   *  mutations (e.g. `Piece.putInto` inside a completed pending action, recorded
+   *  in neither command nor action history) are captured at the right action-count
+   *  boundary. Undo/rewind restore `actionCheckpoints[k]` directly (via
+   *  `GameRunner.fromCheckpoint`) instead of replaying history — replay loses those
+   *  pending mutations and mis-positions the flow.
    *
-   *  Maintained by `GameRunner` (not `createSnapshot`), so each entry is itself
-   *  a snapshot WITHOUT its own `actionCheckpoints` — there is no nesting. */
-  actionCheckpoints?: GameStateSnapshot[];
+   *  Each entry is a LEAN `ActionCheckpoint` carrying only the per-action-varying
+   *  state (element tree, flow position, sequence, RNG). The snapshot-wide
+   *  invariants (`gameType`, `seed`, `gameOptions`) and the action-history PREFIX
+   *  are NOT duplicated per entry — they are rehydrated from the enclosing snapshot
+   *  by `GameRunner.fromCheckpoint`. This is what keeps a persisted snapshot O(N)
+   *  instead of O(N^2): the old design stored a full `createSnapshot` per entry,
+   *  each re-embedding an O(k) `actionHistory` copy and a duplicate `gameOptions`,
+   *  so a single snapshot carried O(N^2) action entries. Maintained by `GameRunner`,
+   *  never nested. */
+  actionCheckpoints?: ActionCheckpoint[];
+}
+
+/**
+ * A lean per-action checkpoint for authoritative undo / debug time-travel.
+ *
+ * Carries ONLY the state that varies per recorded action; the snapshot-wide
+ * invariants (`gameType`, `seed`, `gameOptions`, `version`) and the
+ * action-history prefix are reconstructed from the enclosing `GameStateSnapshot`
+ * when restoring via `GameRunner.fromCheckpoint`. Storing those per entry would
+ * make a single snapshot O(N^2) (see `GameStateSnapshot.actionCheckpoints`).
+ */
+export interface ActionCheckpoint {
+  /** Full element tree state at this action-count boundary (`game.toJSON()`). */
+  state: ReturnType<Game['toJSON']>;
+
+  /** Flow engine position at this checkpoint (if flow is active). */
+  flowState?: FlowState;
+
+  /** Element sequence counter (`game._ctx.sequence`) at this checkpoint. */
+  sequence?: number;
+
+  /** Seeded RNG internal state (`game.getRandomState()`) at this checkpoint. */
+  randomState?: number;
 }
 
 /**
@@ -114,6 +145,26 @@ export function createSnapshot(
     sequence: game._ctx.sequence,
     randomState: game.getRandomState(),
     gameOptions: game.getConstructorOptions(),
+  };
+}
+
+/**
+ * Create a lean per-action checkpoint for authoritative undo / debug time-travel.
+ *
+ * Captures ONLY the per-action-varying state (element tree, flow position,
+ * sequence counter, RNG position). The snapshot-wide invariants and the
+ * action-history prefix are rehydrated from the enclosing snapshot by
+ * `GameRunner.fromCheckpoint`, so retaining one of these per action stays O(N)
+ * rather than the O(N^2) a full `createSnapshot` per entry would cost.
+ */
+export function createActionCheckpoint(game: Game): ActionCheckpoint {
+  const flowState = game.getFlowState();
+
+  return {
+    state: game.toJSON(),
+    flowState: flowState ?? undefined,
+    sequence: game._ctx.sequence,
+    randomState: game.getRandomState(),
   };
 }
 
