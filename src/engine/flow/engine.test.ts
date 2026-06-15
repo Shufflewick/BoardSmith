@@ -24,6 +24,7 @@ import {
   turnLoop,
 } from '../index.js';
 import type { FlowContext, FlowDefinition } from '../index.js';
+import { _clearShownWarnings } from '../../utils/dev.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
@@ -1845,5 +1846,71 @@ describe('Unknown action warning (F20)', () => {
     expect(message).toContain("references unknown action 'missing'");
     expect(message).toContain('registerActions(');
     expect(message).not.toContain('defineAction(');
+  });
+});
+
+describe('Flow variable get() unset-key warning (F24)', () => {
+  let game: TestGame;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 3 });
+    _clearShownWarnings();
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('warns when ctx.get reads a flow variable that was never set (typo)', () => {
+    let read: unknown = 'sentinel';
+    const flow = defineFlow({
+      root: execute((ctx) => {
+        // Simulates a typo: setVar wrote 'turnCount' but get reads 'turnCout'.
+        read = ctx.get('turnCout');
+      }),
+    });
+
+    new FlowEngine(game, flow).start();
+
+    expect(read).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = warnSpy.mock.calls[0][0] as string;
+    expect(message).toContain("ctx.get('turnCout')");
+    expect(message).toContain('never set');
+  });
+
+  it('does NOT warn when the variable was set first (including set to undefined)', () => {
+    const flow = defineFlow({
+      root: sequence(
+        setVar('turnCount', 0),
+        setVar('maybe', undefined),
+        execute((ctx) => {
+          ctx.get('turnCount');
+          ctx.get('maybe');
+        })
+      ),
+    });
+
+    new FlowEngine(game, flow).start();
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT warn for a forEach-bound variable read inside the loop body', () => {
+    const flow = defineFlow({
+      root: forEach({
+        collection: [1, 2, 3],
+        as: 'num',
+        do: execute((ctx) => {
+          ctx.get('num');
+        }),
+      }),
+    });
+
+    new FlowEngine(game, flow).start();
+
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });

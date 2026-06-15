@@ -1,6 +1,7 @@
 import type { Game } from '../element/game.js';
 import { GameElement } from '../element/game-element.js';
 import { Player } from '../player/player.js';
+import { devWarn } from '../../utils/dev.js';
 import type { ActionResult } from '../action/types.js';
 import type {
   FlowNode,
@@ -111,6 +112,17 @@ function createContext<G extends Game>(
       variables[name] = value;
     },
     get: <T = unknown>(name: string): T | undefined => {
+      if (!(name in variables)) {
+        devWarn(
+          `flow-get-unset:${name}`,
+          `ctx.get('${name}') read a flow variable that was never set.\n` +
+          `  It returns undefined, and an idiomatic '?? default' fallback will silently mask this\n` +
+          `  (e.g. a counter that resets every turn) instead of failing loud.\n` +
+          `  Fix one of:\n` +
+          `    - Spelling: make the key match the one passed to setVar(...) / forEach({ as: ... }).\n` +
+          `    - Initialization: setVar('${name}', <initial>) before reading it (e.g. in flow setup).`
+        );
+      }
       return variables[name] as T | undefined;
     },
   };
