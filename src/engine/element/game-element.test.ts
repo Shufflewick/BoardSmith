@@ -840,3 +840,47 @@ describe('PersistentMap', () => {
     expect(map1).toBe(map2);
   });
 });
+
+describe('Serialization safety (F7)', () => {
+  let game: TestGame;
+  let hand: Hand;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    hand = game.create(Hand, 'hand');
+  });
+
+  it('throws an actionable error naming the property path on a circular reference', () => {
+    const card = hand.create(Card, 'looped', { suit: 'S', rank: 'A', value: 1 });
+    const cyclic: Record<string, unknown> = { label: 'meta' };
+    cyclic.self = cyclic; // back-reference / cycle
+    (card as unknown as Record<string, unknown>).meta = cyclic;
+
+    expect(() => card.toJSON()).toThrowError(/circular reference detected at property 'meta\.self'/);
+  });
+
+  it('throws when nesting exceeds the max serialize depth instead of silently truncating', () => {
+    const card = hand.create(Card, 'deep', { suit: 'S', rank: 'A', value: 1 });
+    let deep: Record<string, unknown> = {};
+    const root = deep;
+    for (let i = 0; i < GameElement.MAX_SERIALIZE_DEPTH + 5; i++) {
+      const next: Record<string, unknown> = {};
+      deep.next = next;
+      deep = next;
+    }
+    (card as unknown as Record<string, unknown>).chain = root;
+
+    expect(() => card.toJSON()).toThrowError(/nesting exceeded \d+ levels/);
+  });
+
+  it('serializes a shared (non-cyclic) node on two branches without dropping it', () => {
+    const card = hand.create(Card, 'shared', { suit: 'S', rank: 'A', value: 1 });
+    const shared = { tag: 'shared-value' };
+    (card as unknown as Record<string, unknown>).pair = { left: shared, right: shared };
+
+    const json = card.toJSON();
+    const pair = json.attributes.pair as { left: unknown; right: unknown };
+    expect(pair.left).toEqual({ tag: 'shared-value' });
+    expect(pair.right).toEqual({ tag: 'shared-value' });
+  });
+});
