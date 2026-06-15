@@ -154,15 +154,15 @@
     being a <em>pit of success</em> for game designers and the AI agents building games with them.</p>
     <p class="meta-line">Generated <strong>2026-06-14</strong> &middot; updated <strong>2026-06-15</strong> with fix status &middot;
     29 confirmed findings + 2 rejected &middot;
-    <strong style="color:var(--low)">20 fixed</strong>, 2 blocked, 7 open</p>
+    <strong style="color:var(--low)">22 fixed</strong>, 2 blocked, 5 open</p>
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">20</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">22</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">2</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">7</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">5</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
-    <div class="stat s-medium"><div class="n">4</div><div class="l">Medium (active)</div></div>
+    <div class="stat s-medium"><div class="n">2</div><div class="l">Medium (active)</div></div>
     <div class="stat s-low"><div class="n">3</div><div class="l">Low (active)</div></div>
   </div>
 
@@ -264,10 +264,10 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 9 of 29)</span></h2>
-  <p class="section-note">The 20 fixed-and-merged findings have been moved to the
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 7 of 29)</span></h2>
+  <p class="section-note">The 22 fixed-and-merged findings have been moved to the
   <a href="#completed" style="color:var(--accent)">Completed</a> section at the bottom. What remains here are the
-  2 blocked + 7 open problems that still need attention.</p>
+  2 blocked + 5 open problems that still need attention.</p>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -381,101 +381,9 @@ Severity: I rate it high rather than critical. It is a real unauthenticated info
     </div>
   </article>
 
-  <article class="card fx-open" data-cat="dx" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F25</span>#3</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-medium">Medium</span>
-          <span class="badge cat cat-dx">DX / Agent-XP</span>
-          <span class="badge ease-hard">hard</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">9 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Action handlers are completely untyped: ctx.game is Game&lt;any&gt; and every arg is unknown, forcing unchecked casts everywhere</h3>
-        <div class="sevnote">judge said <em>critical</em>, verifier set <strong>medium</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Casts (`as`) are unchecked assertions. If an agent renames a selection, changes its type, or typos an arg name, TypeScript stays silent and the bug surfaces only at runtime (or as `undefined` propagating into game logic). The library's own motto is 'impossible to represent invalid states in types' — here the opposite is true: the type system actively certifies wrong code as correct.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">This is the deepest trap for AI agents. Agents rely heavily on the type checker as a correctness oracle while iterating; here it provides none for the core game-logic surface. An agent writing `args.card as Card` when the selection is actually named `cards` (plural) gets a clean compile and a runtime `undefined`. Every example game models the cast-everything pattern, so agents are actively trained to bypass type safety.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(hard)</span></span><div class="ftext">Make `ActionContext` generic (`ActionContext&lt;G extends Game = Game&gt;`) and make the `Action`/builder generic over an accumulating args record so `chooseFrom&lt;T&gt;('card', ...)` adds `{ card: T }` to the execute args type. Thread the game type from `Game&lt;G&gt;` into `registerAction`/`Action.create&lt;G&gt;()`. At minimum, type `args` per-selection so `execute(({ card }) =&gt; ...)` infers `card`'s type. Files: <code>src/engine/action/types.ts</code>, <code>src/engine/action/action-builder.ts</code>, <code>src/engine/element/game.ts</code> (registerAction signature).</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 0 affected, 9 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Cleanup only: once <code>execute()</code> args are typed from declared selections, the `as CheckerPiece`/`as DestinationChoice` casts are unnecessary; `ctx.player` casts may also tighten. Low risk of new compile errors.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is full of casts that typed args/ctx would make redundant: `ctx.player as CheckersPlayer` (lines 16,22,86,117,156,163,171), `element as CheckerPiece` (85), `game.getElementById(id) as CheckerPiece` (76), and in execute `args.piece as CheckerPiece` (172) and `args.destination as DestinationChoice` (173). No `(ctx.game as ...)` casts (game is captured via closure).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Optional cleanup: drop the now-redundant `ctx.game as CribbageGame` / `ctx.player` / `args.* as` casts once context and selection args are generically typed. Mostly additive; watch for any cast that no longer matches the inferred type and may newly error.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is dense with casts that become unnecessary under generic ActionContext&lt;G&gt; and typed execute args: e.g. `const game = ctx.game as CribbageGame` (lines 20,33,39,72,77,89,95,151,192,197), `ctx.player as CribbagePlayer` (21,34,40,...), and arg casts `args.cards as Card[]` (42), `args.card as Card` (98). Condition predicates also use `(ctx.game as CribbageGame)` (31,87,138,190).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-action-panel</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Mostly additive: once execute args are typed from declared selections, several `as` casts become unnecessary cleanup. Some casts (notably `args.chooseElement as Unit` and the string-based value casts) may newly conflict with the new generated types — needs a compile check, but low effort.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses untyped ActionContext and many arg casts inside execute bodies: :35/:39 `(ctx: ActionContext)`, :40 `ctx.args.chooseElement as Unit`, :56 `ctx.player as TestPlayer`, :57 `args.chooseElement as Unit`, :61-64 `args.multiSelect as string[]` / `as string`, :110 `args.optional as string | undefined`, :199 `args.repeatUntil as string[]`, :227 `args.player as number`. No `(ctx.game as ...)` casts present.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Optional cleanup: remove now-redundant `args.x as T` casts once selection typing is generic. Low risk of new compile errors since the casts narrow from unknown/element to the correct concrete types; `args.zone as string` would only break if the redesigned flipReorder selection no longer yields a string.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> contains ~18 casts inside execute bodies (e.g. line 44 `args.card as Card`, line 45 `card.parent as Zone`, line 153 `args.zone as string`, flyToStat `ctx.player as DemoPlayer`). No `(ctx.game as` casts found (game is captured via closure, not ctx). These casts on selection args become unnecessary once <code>execute()</code> args are typed from declared selections.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-complex-ui</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">With typed execute args (from declared selections) and generic ActionContext&lt;G&gt;, the 'args.* as ...' and 'ctx.player as DemoPlayer' casts become unnecessary; redundant casts can be removed and any that conflict with the new inferred types adjusted. Optional cleanup, no functional break expected.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts inside execute/condition bodies in <code>src/rules/actions.ts</code>: :30/:69/:118/:181/:208/:232 &quot;ctx.player as DemoPlayer&quot;; :72 &quot;args.card as Card&quot;; :122 &quot;args.targetPlayer as number&quot;; :123 &quot;game.getPlayer(...) as DemoPlayer&quot;; :183 &quot;args.card as Card&quot;; :185 &quot;args.recipient as number&quot;; :233 &quot;args.suit as string&quot;.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">go-fish</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Optional cleanup: drop now-redundant 'as number'/'as string' casts once execute args are typed from the declared selections. Note these casts are also entangled with the F23+F28 redesign (the arg types/shape will change there).<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> execute body uses casts that the new typed-args/ActionContext&lt;G&gt; may make unnecessary or could newly conflict: :81 &quot;args.target as number&quot;, :83 &quot;args.rank as string&quot;, :79 &quot;ctx.player as GoFishPlayer&quot;, :82 &quot;game.getPlayer(targetPosition) as GoFishPlayer&quot;. (<code>flow.ts</code> also uses 'ctx.game as GoFishGame' and 'player as any' but that is flow context, additive.) No 'ctx.game as' cast in the action since game is closure-captured.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">hex</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Optional: drop now-unnecessary `as Cell` / `as HexPlayer` casts in <code>actions.ts</code> execute once selections are typed; AI `game as HexGame` casts remain because those helpers receive the base Game type from gameDefinition.ai hooks.<details class="gi-ev"><summary>evidence</summary><div class="mono">execute body uses casts that become redundant once args/ctx are generically typed: <code>src/rules/actions.ts:30</code> `const player = ctx.player as HexPlayer;` and :31 `const cell = args.cell as Cell;`. AI helpers cast game repeatedly, e.g. <code>src/rules/ai.ts:349</code> `const hexGame = game as HexGame;` and read `move.args.cell as number` (<code>ai.ts:389</code>, 424, 461, 713, 907). All are correct widening/narrowing casts, so they should still compile; this is cleanup, not breakage.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Mostly cleanup once ctx.game is generic (ActionContext&lt;G&gt;) and execute args are typed from declared selections: many 'ctx.game as MERCGame' and 'args.x as' casts become unnecessary and a few wrong casts may newly fail to compile. Tightly coupled to the F23+F28 migration.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts in execute/condition bodies in src/rules: 8 'ctx.game as' (e.g. <code>rebel-equipment.ts:512</code> 'const g = ctx.game as MERCGame;', :563 'isNotInActiveCombat(ctx.game as MERCGame)'), 44 'ctx.player as', and 92 'args.&lt;x&gt; as' casts (used because chooseFrom returns untyped primitives that get cast before use).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">polyhedral-potions</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Cleanup: drop redundant ctx.game/ctx.player casts once ActionContext&lt;G&gt; is generic; revisit the 'typeof args.dieN === object ? .id : ...' shims once chooseElement args are typed as resolved elements/IDs.<details class="gi-ev"><summary>evidence</summary><div class="mono">Pervasive manual casts in execute bodies become unnecessary or could conflict with newly-typed args: <code>src/rules/actions.ts:59</code> 'ctx.player as PolyPotionsPlayer', :60 'args.die as string', :290 'ctx.game as PolyPotionsGame', and defensive object-or-id handling at :294-297 'const die1Id = typeof args.die1 === &quot;object&quot; ? (args.die1 as any).id : args.die1 as number' (also :396). Same 'ctx.game as PolyPotionsGame' pattern throughout <code>flow.ts</code> (e.g. <code>flow.ts:61</code>,100,111,127).</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">The single most-written API for an agent — the action `.<code>execute()</code>` handler — has zero type safety. `ActionContext` is non-generic: `<code>src/engine/action/types.ts:368</code>` `game: Game;` and `:372` `args: Record&lt;string, unknown&gt;;`. `Game` itself defaults its generics to `any`: `<code>src/engine/element/game.ts:286-288</code>` `export class Game&lt;G extends Game = any, P extends Player = any&gt;`. The builder's execute signature discards all accumulated selection types: `<code>src/engine/action/action-builder.ts:554-556</code>` `execute(fn: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ActionResult | void)` — even though `chooseFrom&lt;T&gt;`, `chooseElement&lt;T&gt;` capture `T`, that `T` never threads into `args`. There is no generic `ActionContext&lt;G&gt;` anywhere (grep confirms only one non-generic declaration). The result in EVERY real game: `~/<code>BoardSmithGames/cribbage/src/rules/actions.ts:20</code>` `const game = ctx.game as CribbageGame;` (repeated in ~10 actions), `:98` `const card = args.card as Card;`, `~/<code>BoardSmithGames/checkers/src/rules/actions.ts:172-173</code>` `const piece = args.piece as CheckerPiece;` / `args.destination as DestinationChoice;`. The project's own <code>MEMORY.md</code> records this as a known papercut: &quot;ctx.game in action .<code>execute()</code> callbacks has type Game&lt;any,any&gt; — cast to specific game class&quot;.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">All cited locations verified in source. <code>types.ts:366-373</code>: ActionContext is a non-generic interface with `game: Game` and `args: Record&lt;string, unknown&gt;`. <code>game.ts:286-289</code>: `class Game&lt;G extends Game = any, P extends Player = any&gt;` — both generics default to `any`. <code>action-builder.ts:554-556</code>: <code>execute()</code> takes `(args: Record&lt;string, unknown&gt;, context: ActionContext)`. The builder `class Action` (line 47) is non-generic and `chooseFrom&lt;T&gt;`/`chooseElement&lt;T&gt;` (lines 153, 254) capture T only locally — there is no accumulated type parameter, so selection types provably cannot reach `args`. grep confirms a single non-generic `ActionContext` declaration and no `ActionContext&lt;...&gt;` usages. The finding's claim that action handlers are untyped and force `as` casts is genuinely correct, and <code>MEMORY.md</code> corroborates it as a known papercut. I downgrade severity: this is a DX/type-safety ergonomics gap affecting game-author code, not a defect causing incorrect library behavior, crashes, data loss, or security exposure. It is pervasive (touches every action) and contradicts the library's stated typing philosophy, which keeps it meaningful, but a documented cast workaround exists and nothing misbehaves at runtime in the library itself. \&quot;Critical\&quot; is inflated; medium is the honest independent rating.</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="dx" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F26</span>#4</div>
+      <div class="rank"><span class="fid">F26</span>#3</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -543,7 +451,7 @@ Severity: I rate it high rather than critical. It is a real unauthenticated info
 
   <article class="card fx-open" data-cat="security" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F13</span>#5</div>
+      <div class="rank"><span class="fid">F13</span>#4</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -619,101 +527,9 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
     </div>
   </article>
 
-  <article class="card fx-open" data-cat="usability" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F19</span>#6</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-medium">Medium</span>
-          <span class="badge cat cat-usability">Usability</span>
-          <span class="badge ease-hard">hard</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">9 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Action execute() args are Record&lt;string, unknown&gt; — no type inference from declared selections, forcing manual casts on every action</h3>
-        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The most frequently used authoring API gives no type safety between the selection name/type declared in the builder and the args received in <code>execute()</code>. A wrong cast (e.g. `args.piece as Square`) compiles cleanly and crashes at runtime; a renamed/typo'd selection key (`args.peice`) is `unknown` with no error. This directly violates the <code>CLAUDE.md</code> goal 'impossible to represent invalid states in types.'</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The easy path (destructure args) yields `unknown`, so the path of least resistance is to sprinkle `as` casts that defeat the compiler. AI agents generating games will produce casts that may not match the declared selection types, creating silent runtime bugs the type system was supposed to catch. There is no compile-time signal when a selection is added/renamed but the execute body isn't updated.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(hard)</span></span><div class="ftext">Accumulate an args type through the fluent chain: make each builder method return `Action&lt;Args &amp; { [name]: T }&gt;` so <code>execute()</code> infers a fully-typed args object. Standard TS builder pattern; would remove every `as` cast in execute bodies.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 0 affected, 9 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Cleanup only: once <code>execute()</code> args are typed from declared selections, the `as CheckerPiece`/`as DestinationChoice` casts are unnecessary; `ctx.player` casts may also tighten. Low risk of new compile errors.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is full of casts that typed args/ctx would make redundant: `ctx.player as CheckersPlayer` (lines 16,22,86,117,156,163,171), `element as CheckerPiece` (85), `game.getElementById(id) as CheckerPiece` (76), and in execute `args.piece as CheckerPiece` (172) and `args.destination as DestinationChoice` (173). No `(ctx.game as ...)` casts (game is captured via closure).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Optional cleanup: drop the now-redundant `ctx.game as CribbageGame` / `ctx.player` / `args.* as` casts once context and selection args are generically typed. Mostly additive; watch for any cast that no longer matches the inferred type and may newly error.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is dense with casts that become unnecessary under generic ActionContext&lt;G&gt; and typed execute args: e.g. `const game = ctx.game as CribbageGame` (lines 20,33,39,72,77,89,95,151,192,197), `ctx.player as CribbagePlayer` (21,34,40,...), and arg casts `args.cards as Card[]` (42), `args.card as Card` (98). Condition predicates also use `(ctx.game as CribbageGame)` (31,87,138,190).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-action-panel</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Mostly additive: once execute args are typed from declared selections, several `as` casts become unnecessary cleanup. Some casts (notably `args.chooseElement as Unit` and the string-based value casts) may newly conflict with the new generated types — needs a compile check, but low effort.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses untyped ActionContext and many arg casts inside execute bodies: :35/:39 `(ctx: ActionContext)`, :40 `ctx.args.chooseElement as Unit`, :56 `ctx.player as TestPlayer`, :57 `args.chooseElement as Unit`, :61-64 `args.multiSelect as string[]` / `as string`, :110 `args.optional as string | undefined`, :199 `args.repeatUntil as string[]`, :227 `args.player as number`. No `(ctx.game as ...)` casts present.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Optional cleanup: remove now-redundant `args.x as T` casts once selection typing is generic. Low risk of new compile errors since the casts narrow from unknown/element to the correct concrete types; `args.zone as string` would only break if the redesigned flipReorder selection no longer yields a string.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> contains ~18 casts inside execute bodies (e.g. line 44 `args.card as Card`, line 45 `card.parent as Zone`, line 153 `args.zone as string`, flyToStat `ctx.player as DemoPlayer`). No `(ctx.game as` casts found (game is captured via closure, not ctx). These casts on selection args become unnecessary once <code>execute()</code> args are typed from declared selections.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-complex-ui</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">With typed execute args (from declared selections) and generic ActionContext&lt;G&gt;, the 'args.* as ...' and 'ctx.player as DemoPlayer' casts become unnecessary; redundant casts can be removed and any that conflict with the new inferred types adjusted. Optional cleanup, no functional break expected.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts inside execute/condition bodies in <code>src/rules/actions.ts</code>: :30/:69/:118/:181/:208/:232 &quot;ctx.player as DemoPlayer&quot;; :72 &quot;args.card as Card&quot;; :122 &quot;args.targetPlayer as number&quot;; :123 &quot;game.getPlayer(...) as DemoPlayer&quot;; :183 &quot;args.card as Card&quot;; :185 &quot;args.recipient as number&quot;; :233 &quot;args.suit as string&quot;.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">go-fish</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Optional cleanup: drop now-redundant 'as number'/'as string' casts once execute args are typed from the declared selections. Note these casts are also entangled with the F23+F28 redesign (the arg types/shape will change there).<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> execute body uses casts that the new typed-args/ActionContext&lt;G&gt; may make unnecessary or could newly conflict: :81 &quot;args.target as number&quot;, :83 &quot;args.rank as string&quot;, :79 &quot;ctx.player as GoFishPlayer&quot;, :82 &quot;game.getPlayer(targetPosition) as GoFishPlayer&quot;. (<code>flow.ts</code> also uses 'ctx.game as GoFishGame' and 'player as any' but that is flow context, additive.) No 'ctx.game as' cast in the action since game is closure-captured.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">hex</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Optional: drop now-unnecessary `as Cell` / `as HexPlayer` casts in <code>actions.ts</code> execute once selections are typed; AI `game as HexGame` casts remain because those helpers receive the base Game type from gameDefinition.ai hooks.<details class="gi-ev"><summary>evidence</summary><div class="mono">execute body uses casts that become redundant once args/ctx are generically typed: <code>src/rules/actions.ts:30</code> `const player = ctx.player as HexPlayer;` and :31 `const cell = args.cell as Cell;`. AI helpers cast game repeatedly, e.g. <code>src/rules/ai.ts:349</code> `const hexGame = game as HexGame;` and read `move.args.cell as number` (<code>ai.ts:389</code>, 424, 461, 713, 907). All are correct widening/narrowing casts, so they should still compile; this is cleanup, not breakage.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Mostly cleanup once ctx.game is generic (ActionContext&lt;G&gt;) and execute args are typed from declared selections: many 'ctx.game as MERCGame' and 'args.x as' casts become unnecessary and a few wrong casts may newly fail to compile. Tightly coupled to the F23+F28 migration.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts in execute/condition bodies in src/rules: 8 'ctx.game as' (e.g. <code>rebel-equipment.ts:512</code> 'const g = ctx.game as MERCGame;', :563 'isNotInActiveCombat(ctx.game as MERCGame)'), 44 'ctx.player as', and 92 'args.&lt;x&gt; as' casts (used because chooseFrom returns untyped primitives that get cast before use).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">polyhedral-potions</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Cleanup: drop redundant ctx.game/ctx.player casts once ActionContext&lt;G&gt; is generic; revisit the 'typeof args.dieN === object ? .id : ...' shims once chooseElement args are typed as resolved elements/IDs.<details class="gi-ev"><summary>evidence</summary><div class="mono">Pervasive manual casts in execute bodies become unnecessary or could conflict with newly-typed args: <code>src/rules/actions.ts:59</code> 'ctx.player as PolyPotionsPlayer', :60 'args.die as string', :290 'ctx.game as PolyPotionsGame', and defensive object-or-id handling at :294-297 'const die1Id = typeof args.die1 === &quot;object&quot; ? (args.die1 as any).id : args.die1 as number' (also :396). Same 'ctx.game as PolyPotionsGame' pattern throughout <code>flow.ts</code> (e.g. <code>flow.ts:61</code>,100,111,127).</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>action-builder.ts:554-556</code> `execute(fn: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ActionResult | void)` and <code>types.ts:436</code> `execute: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ...`. Each chooseFrom/chooseElement/fromElements is generic over &lt;T&gt; but the type is discarded (returns `this`, not an accumulated arg map). Real game code proves the cost: <code>checkers/src/rules/actions.ts:172-173</code> `const piece = args.piece as CheckerPiece; const destination = args.destination as DestinationChoice;`. The builder docstrings show `.execute(({ target }) =&gt; target.takeDamage(10))` as if `target` were typed, but it is `unknown`.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Verified at the cited locations. <code>action/action-builder.ts:554-556</code> declares execute as `fn: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ActionResult | void`, and <code>action/types.ts:436</code> has the same `Record&lt;string, unknown&gt;` signature. The builder selection methods (chooseFrom&lt;T&gt; line 193, chooseElement&lt;T&gt; line 280, fromElements&lt;T&gt; line 369) are generic over T but all return `this` (the Action class), so the declared selection name/type is never accumulated into a typed arg map for execute — the generic is used only to type the internal Selection config. The docstrings (lines 277, 544-551) show `.execute(({ target }) =&gt; target.takeDamage(10))` as if `target` were typed, but at the type level args is `unknown`. Real game code confirms the cost: <code>BoardSmithGames/checkers/src/rules/actions.ts:172-173</code> does `const piece = args.piece as CheckerPiece; const destination = args.destination as DestinationChoice;`. A typo'd key or wrong cast compiles cleanly and would fail at runtime, which conflicts with the <code>CLAUDE.md</code> 'impossible to represent invalid states in types' goal. Downgrading from high to medium: this is an ergonomics/type-safety gap on the most-used authoring API, not a correctness or security bug — authored code runs correctly, casts are explicit, and the builder-returns-this pattern is a common, non-breaking tradeoff.</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="dx" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F29</span>#7</div>
+      <div class="rank"><span class="fid">F29</span>#5</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -781,7 +597,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
 
   <article class="card fx-open" data-cat="usability" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F23</span>#8</div>
+      <div class="rank"><span class="fid">F23</span>#6</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -867,7 +683,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
 
   <article class="card fx-open" data-cat="dx" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F28</span>#9</div>
+      <div class="rank"><span class="fid">F28</span>#7</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -953,7 +769,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(20 fixed — no longer active, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(22 fixed — no longer active, kept for the record)</span></span></h2>
   <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
   zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
   <div id="completed-list">
@@ -1128,6 +944,98 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
     </div>
   </article>
 
+  <article class="card fx-merged" data-cat="dx" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F25</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — e644ee47b4c34bab9d5b6b7e1136178bb1243807">✅ Fixed · e644ee47b4c34bab9d5b6b7e1136178bb1243807</span>
+          <span class="badge sev-medium">Medium</span>
+          <span class="badge cat cat-dx">DX / Agent-XP</span>
+          <span class="badge ease-hard">hard</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">9 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Action handlers are completely untyped: ctx.game is Game&lt;any&gt; and every arg is unknown, forcing unchecked casts everywhere</h3>
+        <div class="sevnote">judge said <em>critical</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>e644ee47b4c34bab9d5b6b7e1136178bb1243807</code> — Action <code>execute()</code> args are Record&lt;string, unknown&gt; — no type inference from declared selections, forcing manual casts on every action</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Casts (`as`) are unchecked assertions. If an agent renames a selection, changes its type, or typos an arg name, TypeScript stays silent and the bug surfaces only at runtime (or as `undefined` propagating into game logic). The library's own motto is 'impossible to represent invalid states in types' — here the opposite is true: the type system actively certifies wrong code as correct.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">This is the deepest trap for AI agents. Agents rely heavily on the type checker as a correctness oracle while iterating; here it provides none for the core game-logic surface. An agent writing `args.card as Card` when the selection is actually named `cards` (plural) gets a clean compile and a runtime `undefined`. Every example game models the cast-everything pattern, so agents are actively trained to bypass type safety.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(hard)</span></span><div class="ftext">Make `ActionContext` generic (`ActionContext&lt;G extends Game = Game&gt;`) and make the `Action`/builder generic over an accumulating args record so `chooseFrom&lt;T&gt;('card', ...)` adds `{ card: T }` to the execute args type. Thread the game type from `Game&lt;G&gt;` into `registerAction`/`Action.create&lt;G&gt;()`. At minimum, type `args` per-selection so `execute(({ card }) =&gt; ...)` infers `card`'s type. Files: <code>src/engine/action/types.ts</code>, <code>src/engine/action/action-builder.ts</code>, <code>src/engine/element/game.ts</code> (registerAction signature).</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 0 affected, 9 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Cleanup only: once <code>execute()</code> args are typed from declared selections, the `as CheckerPiece`/`as DestinationChoice` casts are unnecessary; `ctx.player` casts may also tighten. Low risk of new compile errors.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is full of casts that typed args/ctx would make redundant: `ctx.player as CheckersPlayer` (lines 16,22,86,117,156,163,171), `element as CheckerPiece` (85), `game.getElementById(id) as CheckerPiece` (76), and in execute `args.piece as CheckerPiece` (172) and `args.destination as DestinationChoice` (173). No `(ctx.game as ...)` casts (game is captured via closure).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Optional cleanup: drop the now-redundant `ctx.game as CribbageGame` / `ctx.player` / `args.* as` casts once context and selection args are generically typed. Mostly additive; watch for any cast that no longer matches the inferred type and may newly error.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is dense with casts that become unnecessary under generic ActionContext&lt;G&gt; and typed execute args: e.g. `const game = ctx.game as CribbageGame` (lines 20,33,39,72,77,89,95,151,192,197), `ctx.player as CribbagePlayer` (21,34,40,...), and arg casts `args.cards as Card[]` (42), `args.card as Card` (98). Condition predicates also use `(ctx.game as CribbageGame)` (31,87,138,190).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-action-panel</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Mostly additive: once execute args are typed from declared selections, several `as` casts become unnecessary cleanup. Some casts (notably `args.chooseElement as Unit` and the string-based value casts) may newly conflict with the new generated types — needs a compile check, but low effort.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses untyped ActionContext and many arg casts inside execute bodies: :35/:39 `(ctx: ActionContext)`, :40 `ctx.args.chooseElement as Unit`, :56 `ctx.player as TestPlayer`, :57 `args.chooseElement as Unit`, :61-64 `args.multiSelect as string[]` / `as string`, :110 `args.optional as string | undefined`, :199 `args.repeatUntil as string[]`, :227 `args.player as number`. No `(ctx.game as ...)` casts present.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Optional cleanup: remove now-redundant `args.x as T` casts once selection typing is generic. Low risk of new compile errors since the casts narrow from unknown/element to the correct concrete types; `args.zone as string` would only break if the redesigned flipReorder selection no longer yields a string.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> contains ~18 casts inside execute bodies (e.g. line 44 `args.card as Card`, line 45 `card.parent as Zone`, line 153 `args.zone as string`, flyToStat `ctx.player as DemoPlayer`). No `(ctx.game as` casts found (game is captured via closure, not ctx). These casts on selection args become unnecessary once <code>execute()</code> args are typed from declared selections.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-complex-ui</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">With typed execute args (from declared selections) and generic ActionContext&lt;G&gt;, the 'args.* as ...' and 'ctx.player as DemoPlayer' casts become unnecessary; redundant casts can be removed and any that conflict with the new inferred types adjusted. Optional cleanup, no functional break expected.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts inside execute/condition bodies in <code>src/rules/actions.ts</code>: :30/:69/:118/:181/:208/:232 &quot;ctx.player as DemoPlayer&quot;; :72 &quot;args.card as Card&quot;; :122 &quot;args.targetPlayer as number&quot;; :123 &quot;game.getPlayer(...) as DemoPlayer&quot;; :183 &quot;args.card as Card&quot;; :185 &quot;args.recipient as number&quot;; :233 &quot;args.suit as string&quot;.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">go-fish</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Optional cleanup: drop now-redundant 'as number'/'as string' casts once execute args are typed from the declared selections. Note these casts are also entangled with the F23+F28 redesign (the arg types/shape will change there).<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> execute body uses casts that the new typed-args/ActionContext&lt;G&gt; may make unnecessary or could newly conflict: :81 &quot;args.target as number&quot;, :83 &quot;args.rank as string&quot;, :79 &quot;ctx.player as GoFishPlayer&quot;, :82 &quot;game.getPlayer(targetPosition) as GoFishPlayer&quot;. (<code>flow.ts</code> also uses 'ctx.game as GoFishGame' and 'player as any' but that is flow context, additive.) No 'ctx.game as' cast in the action since game is closure-captured.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">hex</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Optional: drop now-unnecessary `as Cell` / `as HexPlayer` casts in <code>actions.ts</code> execute once selections are typed; AI `game as HexGame` casts remain because those helpers receive the base Game type from gameDefinition.ai hooks.<details class="gi-ev"><summary>evidence</summary><div class="mono">execute body uses casts that become redundant once args/ctx are generically typed: <code>src/rules/actions.ts:30</code> `const player = ctx.player as HexPlayer;` and :31 `const cell = args.cell as Cell;`. AI helpers cast game repeatedly, e.g. <code>src/rules/ai.ts:349</code> `const hexGame = game as HexGame;` and read `move.args.cell as number` (<code>ai.ts:389</code>, 424, 461, 713, 907). All are correct widening/narrowing casts, so they should still compile; this is cleanup, not breakage.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Mostly cleanup once ctx.game is generic (ActionContext&lt;G&gt;) and execute args are typed from declared selections: many 'ctx.game as MERCGame' and 'args.x as' casts become unnecessary and a few wrong casts may newly fail to compile. Tightly coupled to the F23+F28 migration.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts in execute/condition bodies in src/rules: 8 'ctx.game as' (e.g. <code>rebel-equipment.ts:512</code> 'const g = ctx.game as MERCGame;', :563 'isNotInActiveCombat(ctx.game as MERCGame)'), 44 'ctx.player as', and 92 'args.&lt;x&gt; as' casts (used because chooseFrom returns untyped primitives that get cast before use).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">polyhedral-potions</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Cleanup: drop redundant ctx.game/ctx.player casts once ActionContext&lt;G&gt; is generic; revisit the 'typeof args.dieN === object ? .id : ...' shims once chooseElement args are typed as resolved elements/IDs.<details class="gi-ev"><summary>evidence</summary><div class="mono">Pervasive manual casts in execute bodies become unnecessary or could conflict with newly-typed args: <code>src/rules/actions.ts:59</code> 'ctx.player as PolyPotionsPlayer', :60 'args.die as string', :290 'ctx.game as PolyPotionsGame', and defensive object-or-id handling at :294-297 'const die1Id = typeof args.die1 === &quot;object&quot; ? (args.die1 as any).id : args.die1 as number' (also :396). Same 'ctx.game as PolyPotionsGame' pattern throughout <code>flow.ts</code> (e.g. <code>flow.ts:61</code>,100,111,127).</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">The single most-written API for an agent — the action `.<code>execute()</code>` handler — has zero type safety. `ActionContext` is non-generic: `<code>src/engine/action/types.ts:368</code>` `game: Game;` and `:372` `args: Record&lt;string, unknown&gt;;`. `Game` itself defaults its generics to `any`: `<code>src/engine/element/game.ts:286-288</code>` `export class Game&lt;G extends Game = any, P extends Player = any&gt;`. The builder's execute signature discards all accumulated selection types: `<code>src/engine/action/action-builder.ts:554-556</code>` `execute(fn: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ActionResult | void)` — even though `chooseFrom&lt;T&gt;`, `chooseElement&lt;T&gt;` capture `T`, that `T` never threads into `args`. There is no generic `ActionContext&lt;G&gt;` anywhere (grep confirms only one non-generic declaration). The result in EVERY real game: `~/<code>BoardSmithGames/cribbage/src/rules/actions.ts:20</code>` `const game = ctx.game as CribbageGame;` (repeated in ~10 actions), `:98` `const card = args.card as Card;`, `~/<code>BoardSmithGames/checkers/src/rules/actions.ts:172-173</code>` `const piece = args.piece as CheckerPiece;` / `args.destination as DestinationChoice;`. The project's own <code>MEMORY.md</code> records this as a known papercut: &quot;ctx.game in action .<code>execute()</code> callbacks has type Game&lt;any,any&gt; — cast to specific game class&quot;.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">All cited locations verified in source. <code>types.ts:366-373</code>: ActionContext is a non-generic interface with `game: Game` and `args: Record&lt;string, unknown&gt;`. <code>game.ts:286-289</code>: `class Game&lt;G extends Game = any, P extends Player = any&gt;` — both generics default to `any`. <code>action-builder.ts:554-556</code>: <code>execute()</code> takes `(args: Record&lt;string, unknown&gt;, context: ActionContext)`. The builder `class Action` (line 47) is non-generic and `chooseFrom&lt;T&gt;`/`chooseElement&lt;T&gt;` (lines 153, 254) capture T only locally — there is no accumulated type parameter, so selection types provably cannot reach `args`. grep confirms a single non-generic `ActionContext` declaration and no `ActionContext&lt;...&gt;` usages. The finding's claim that action handlers are untyped and force `as` casts is genuinely correct, and <code>MEMORY.md</code> corroborates it as a known papercut. I downgrade severity: this is a DX/type-safety ergonomics gap affecting game-author code, not a defect causing incorrect library behavior, crashes, data loss, or security exposure. It is pervasive (touches every action) and contradicts the library's stated typing philosophy, which keeps it meaningful, but a documented cast workaround exists and nothing misbehaves at runtime in the library itself. \&quot;Critical\&quot; is inflated; medium is the honest independent rating.</div>
+      </details>
+    </div>
+  </article>
+
   <article class="card fx-merged" data-cat="security" data-sev="medium" data-ease="easy" data-gi="no" data-fix="merged">
     <div class="card-head">
       <div class="rank"><span class="fid">F12</span><span class="rank-done">✓</span></div>
@@ -1254,6 +1162,98 @@ So: real correctness/architecture bug, accurately described (&quot;silently show
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Verified every citation in /<code>Users/jtsmith/BoardSmith/src/engine/element/game.ts</code> and <code>game-element.ts</code>. <code>game.ts:485-493</code> gates _checkForVolatileState behind NODE_ENV !== 'production' via queueMicrotask. <code>game.ts:548-550</code> routes any own array (except 'messages') to _autoSyncArray. <code>game.ts:589-721</code> replaces the property with an enumerable Object.defineProperty getter (line 718) returning a Proxy that writes mutations to this.settings['__autoSync_'+key] (623,653,675,683,713). <code>game-element.ts:704-711</code> serializes all own non-'_' keys, and because the getter is enumerable the array is emitted as a normal attribute; <code>game.ts:2458</code> ALSO serializes the whole settings object (settings is absent from unserializableAttributes at 370-381). So in dev the same array is in the snapshot twice; in prod the proxy is never installed and it appears once with no __autoSync_ key. <code>game.ts:614-617</code> prefers the settings copy on proxy install; loadSerializedState (2612-2650) copies settings synchronously and re-applies attributes, then the deferred microtask installs the proxy and the settings copy wins in dev, whereas prod uses the attribute copy. All claimed mechanics are accurate. I downgrade from high to medium because the two copies are always written together within a single environment (proxy syncs to settings on every mutation; serialization reads the same backing array), so normal round-trips do not actually corrupt data. The real harm is dev/prod behavioral divergence (Proxy vs plain Array identity, settings-wins vs attribute-wins restore, and dev-only validation in _validateArrayValue that throws in dev but is silently absent in prod) plus a dual-source-of-truth code smell that contradicts the project's stated single-source-of-truth and dev/prod-parity principles.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="usability" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F19</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — e644ee47b4c34bab9d5b6b7e1136178bb1243807">✅ Fixed · e644ee47b4c34bab9d5b6b7e1136178bb1243807</span>
+          <span class="badge sev-medium">Medium</span>
+          <span class="badge cat cat-usability">Usability</span>
+          <span class="badge ease-hard">hard</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">9 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Action execute() args are Record&lt;string, unknown&gt; — no type inference from declared selections, forcing manual casts on every action</h3>
+        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>e644ee47b4c34bab9d5b6b7e1136178bb1243807</code> — Action <code>execute()</code> args are Record&lt;string, unknown&gt; — no type inference from declared selections, forcing manual casts on every action</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The most frequently used authoring API gives no type safety between the selection name/type declared in the builder and the args received in <code>execute()</code>. A wrong cast (e.g. `args.piece as Square`) compiles cleanly and crashes at runtime; a renamed/typo'd selection key (`args.peice`) is `unknown` with no error. This directly violates the <code>CLAUDE.md</code> goal 'impossible to represent invalid states in types.'</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The easy path (destructure args) yields `unknown`, so the path of least resistance is to sprinkle `as` casts that defeat the compiler. AI agents generating games will produce casts that may not match the declared selection types, creating silent runtime bugs the type system was supposed to catch. There is no compile-time signal when a selection is added/renamed but the execute body isn't updated.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(hard)</span></span><div class="ftext">Accumulate an args type through the fluent chain: make each builder method return `Action&lt;Args &amp; { [name]: T }&gt;` so <code>execute()</code> infers a fully-typed args object. Standard TS builder pattern; would remove every `as` cast in execute bodies.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 0 affected, 9 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Cleanup only: once <code>execute()</code> args are typed from declared selections, the `as CheckerPiece`/`as DestinationChoice` casts are unnecessary; `ctx.player` casts may also tighten. Low risk of new compile errors.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is full of casts that typed args/ctx would make redundant: `ctx.player as CheckersPlayer` (lines 16,22,86,117,156,163,171), `element as CheckerPiece` (85), `game.getElementById(id) as CheckerPiece` (76), and in execute `args.piece as CheckerPiece` (172) and `args.destination as DestinationChoice` (173). No `(ctx.game as ...)` casts (game is captured via closure).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Optional cleanup: drop the now-redundant `ctx.game as CribbageGame` / `ctx.player` / `args.* as` casts once context and selection args are generically typed. Mostly additive; watch for any cast that no longer matches the inferred type and may newly error.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> is dense with casts that become unnecessary under generic ActionContext&lt;G&gt; and typed execute args: e.g. `const game = ctx.game as CribbageGame` (lines 20,33,39,72,77,89,95,151,192,197), `ctx.player as CribbagePlayer` (21,34,40,...), and arg casts `args.cards as Card[]` (42), `args.card as Card` (98). Condition predicates also use `(ctx.game as CribbageGame)` (31,87,138,190).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-action-panel</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Mostly additive: once execute args are typed from declared selections, several `as` casts become unnecessary cleanup. Some casts (notably `args.chooseElement as Unit` and the string-based value casts) may newly conflict with the new generated types — needs a compile check, but low effort.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses untyped ActionContext and many arg casts inside execute bodies: :35/:39 `(ctx: ActionContext)`, :40 `ctx.args.chooseElement as Unit`, :56 `ctx.player as TestPlayer`, :57 `args.chooseElement as Unit`, :61-64 `args.multiSelect as string[]` / `as string`, :110 `args.optional as string | undefined`, :199 `args.repeatUntil as string[]`, :227 `args.player as number`. No `(ctx.game as ...)` casts present.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Optional cleanup: remove now-redundant `args.x as T` casts once selection typing is generic. Low risk of new compile errors since the casts narrow from unknown/element to the correct concrete types; `args.zone as string` would only break if the redesigned flipReorder selection no longer yields a string.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> contains ~18 casts inside execute bodies (e.g. line 44 `args.card as Card`, line 45 `card.parent as Zone`, line 153 `args.zone as string`, flyToStat `ctx.player as DemoPlayer`). No `(ctx.game as` casts found (game is captured via closure, not ctx). These casts on selection args become unnecessary once <code>execute()</code> args are typed from declared selections.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-complex-ui</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">With typed execute args (from declared selections) and generic ActionContext&lt;G&gt;, the 'args.* as ...' and 'ctx.player as DemoPlayer' casts become unnecessary; redundant casts can be removed and any that conflict with the new inferred types adjusted. Optional cleanup, no functional break expected.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts inside execute/condition bodies in <code>src/rules/actions.ts</code>: :30/:69/:118/:181/:208/:232 &quot;ctx.player as DemoPlayer&quot;; :72 &quot;args.card as Card&quot;; :122 &quot;args.targetPlayer as number&quot;; :123 &quot;game.getPlayer(...) as DemoPlayer&quot;; :183 &quot;args.card as Card&quot;; :185 &quot;args.recipient as number&quot;; :233 &quot;args.suit as string&quot;.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">go-fish</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Optional cleanup: drop now-redundant 'as number'/'as string' casts once execute args are typed from the declared selections. Note these casts are also entangled with the F23+F28 redesign (the arg types/shape will change there).<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> execute body uses casts that the new typed-args/ActionContext&lt;G&gt; may make unnecessary or could newly conflict: :81 &quot;args.target as number&quot;, :83 &quot;args.rank as string&quot;, :79 &quot;ctx.player as GoFishPlayer&quot;, :82 &quot;game.getPlayer(targetPosition) as GoFishPlayer&quot;. (<code>flow.ts</code> also uses 'ctx.game as GoFishGame' and 'player as any' but that is flow context, additive.) No 'ctx.game as' cast in the action since game is closure-captured.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">hex</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Optional: drop now-unnecessary `as Cell` / `as HexPlayer` casts in <code>actions.ts</code> execute once selections are typed; AI `game as HexGame` casts remain because those helpers receive the base Game type from gameDefinition.ai hooks.<details class="gi-ev"><summary>evidence</summary><div class="mono">execute body uses casts that become redundant once args/ctx are generically typed: <code>src/rules/actions.ts:30</code> `const player = ctx.player as HexPlayer;` and :31 `const cell = args.cell as Cell;`. AI helpers cast game repeatedly, e.g. <code>src/rules/ai.ts:349</code> `const hexGame = game as HexGame;` and read `move.args.cell as number` (<code>ai.ts:389</code>, 424, 461, 713, 907). All are correct widening/narrowing casts, so they should still compile; this is cleanup, not breakage.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Mostly cleanup once ctx.game is generic (ActionContext&lt;G&gt;) and execute args are typed from declared selections: many 'ctx.game as MERCGame' and 'args.x as' casts become unnecessary and a few wrong casts may newly fail to compile. Tightly coupled to the F23+F28 migration.<details class="gi-ev"><summary>evidence</summary><div class="mono">Casts in execute/condition bodies in src/rules: 8 'ctx.game as' (e.g. <code>rebel-equipment.ts:512</code> 'const g = ctx.game as MERCGame;', :563 'isNotInActiveCombat(ctx.game as MERCGame)'), 44 'ctx.player as', and 92 'args.&lt;x&gt; as' casts (used because chooseFrom returns untyped primitives that get cast before use).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">polyhedral-potions</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Cleanup: drop redundant ctx.game/ctx.player casts once ActionContext&lt;G&gt; is generic; revisit the 'typeof args.dieN === object ? .id : ...' shims once chooseElement args are typed as resolved elements/IDs.<details class="gi-ev"><summary>evidence</summary><div class="mono">Pervasive manual casts in execute bodies become unnecessary or could conflict with newly-typed args: <code>src/rules/actions.ts:59</code> 'ctx.player as PolyPotionsPlayer', :60 'args.die as string', :290 'ctx.game as PolyPotionsGame', and defensive object-or-id handling at :294-297 'const die1Id = typeof args.die1 === &quot;object&quot; ? (args.die1 as any).id : args.die1 as number' (also :396). Same 'ctx.game as PolyPotionsGame' pattern throughout <code>flow.ts</code> (e.g. <code>flow.ts:61</code>,100,111,127).</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>action-builder.ts:554-556</code> `execute(fn: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ActionResult | void)` and <code>types.ts:436</code> `execute: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ...`. Each chooseFrom/chooseElement/fromElements is generic over &lt;T&gt; but the type is discarded (returns `this`, not an accumulated arg map). Real game code proves the cost: <code>checkers/src/rules/actions.ts:172-173</code> `const piece = args.piece as CheckerPiece; const destination = args.destination as DestinationChoice;`. The builder docstrings show `.execute(({ target }) =&gt; target.takeDamage(10))` as if `target` were typed, but it is `unknown`.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Verified at the cited locations. <code>action/action-builder.ts:554-556</code> declares execute as `fn: (args: Record&lt;string, unknown&gt;, context: ActionContext) =&gt; ActionResult | void`, and <code>action/types.ts:436</code> has the same `Record&lt;string, unknown&gt;` signature. The builder selection methods (chooseFrom&lt;T&gt; line 193, chooseElement&lt;T&gt; line 280, fromElements&lt;T&gt; line 369) are generic over T but all return `this` (the Action class), so the declared selection name/type is never accumulated into a typed arg map for execute — the generic is used only to type the internal Selection config. The docstrings (lines 277, 544-551) show `.execute(({ target }) =&gt; target.takeDamage(10))` as if `target` were typed, but at the type level args is `unknown`. Real game code confirms the cost: <code>BoardSmithGames/checkers/src/rules/actions.ts:172-173</code> does `const piece = args.piece as CheckerPiece; const destination = args.destination as DestinationChoice;`. A typo'd key or wrong cast compiles cleanly and would fail at runtime, which conflicts with the <code>CLAUDE.md</code> 'impossible to represent invalid states in types' goal. Downgrading from high to medium: this is an ergonomics/type-safety gap on the most-used authoring API, not a correctness or security bug — authored code runs correctly, casts are explicit, and the builder-returns-this pattern is a common, non-breaking tradeoff.</div>
       </details>
     </div>
   </article>

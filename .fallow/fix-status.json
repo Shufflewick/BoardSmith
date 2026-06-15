@@ -79,6 +79,14 @@
     "F3": {
       "sha": "5e19cc7288892e865da390005dd00507e1097d9b",
       "desc": "Declared array state is silently replaced by a dev-only Proxy backed by a magic settings key — dual source of truth + dev/prod snapshot divergence"
+    },
+    "F19": {
+      "sha": "e644ee47b4c34bab9d5b6b7e1136178bb1243807",
+      "desc": "Action execute() args are Record<string, unknown> — no type inference from declared selections, forcing manual casts on every action"
+    },
+    "F25": {
+      "sha": "e644ee47b4c34bab9d5b6b7e1136178bb1243807",
+      "desc": "Action execute() args are Record<string, unknown> — no type inference from declared selections, forcing manual casts on every action"
     }
   },
   "blocked": [
@@ -106,6 +114,8 @@
     "F22": "merged",
     "F7": "merged",
     "F3": "merged",
+    "F19": "merged",
+    "F25": "merged",
     "F8": "blocked",
     "F9": "blocked"
   }
