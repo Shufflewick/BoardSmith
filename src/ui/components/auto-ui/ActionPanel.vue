@@ -659,11 +659,20 @@ watch(currentAction, (action) => {
       // Verify we're on the right selection
       if (currentPick.value?.name === selectionName) {
         setSelectionValue(selectionName, value);
+        return;
       }
+      devWarn(
+        'board-interaction-choice-pick-mismatch',
+        `triggerChoiceSelect('${selectionName}', ...) was ignored because the active action's current selection is ` +
+          `'${currentPick.value?.name ?? 'none'}', not '${selectionName}'. ` +
+          `Fill selections in order, or trigger the choice once '${selectionName}' is the active selection.`,
+      );
     });
   } else {
-    boardInteraction.setCurrentAction(null);
-    boardInteraction.setChoiceSelectCallback(null);
+    // Action ended (executed or cancelled): fully reset shared board-interaction
+    // state so a direct actionController.cancel() can't leave a piece visually
+    // selected/highlighted. clear() also nulls currentAction and the choice callback.
+    boardInteraction.clear();
   }
 }, { immediate: true });
 
