@@ -1,6 +1,5 @@
 import type { Game } from '../element/game.js';
 import { Player } from '../player/player.js';
-import type { GameCommand } from '../command/types.js';
 import type { SerializedAction } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
 import type { ElementJSON } from '../element/types.js';
@@ -22,9 +21,6 @@ export interface GameStateSnapshot {
 
   /** Flow engine state (if flow is active) */
   flowState?: FlowState;
-
-  /** Command history for replay */
-  commandHistory: GameCommand[];
 
   /** Action history for replay */
   actionHistory: SerializedAction[];
@@ -113,7 +109,6 @@ export function createSnapshot(
     gameType,
     state: game.toJSON(),
     flowState: flowState ?? undefined,
-    commandHistory: [...game.commandHistory],
     actionHistory: [...actionHistory],
     seed,
     sequence: game._ctx.sequence,
