@@ -7,7 +7,6 @@
  * @module
  */
 
-import type { Game, GameElement, Player } from '../engine/index.js';
 import type { TestGame } from './test-game.js';
 
 /**
@@ -16,7 +15,7 @@ import type { TestGame } from './test-game.js';
 export interface ExpectedFlowState {
   /** Player position who should be acting */
   currentPlayer?: number;
-  /** Actions that should be available */
+  /** Exact set of actions that should be available (extras fail the assertion) */
   actions?: string[];
   /** Whether game should be complete */
   complete?: boolean;
@@ -94,9 +93,16 @@ export function assertFlowState(
   }
 
   if (expected.actions !== undefined) {
-    const missingActions = expected.actions.filter(a => !actual.actions?.includes(a));
+    const actualActions = actual.actions ?? [];
+    const missingActions = expected.actions.filter(a => !actualActions.includes(a));
     if (missingActions.length > 0) {
       errors.push(`Missing expected actions: ${missingActions.join(', ')}`);
+    }
+    // Exact-set match: extra available actions are a failure too, so a test
+    // locking down which actions are legal cannot silently accept extras.
+    const extraActions = actualActions.filter(a => !expected.actions!.includes(a));
+    if (extraActions.length > 0) {
+      errors.push(`Unexpected available actions: ${extraActions.join(', ')}`);
     }
   }
 
@@ -108,104 +114,6 @@ export function assertFlowState(
   }
 
   return { passed, message, expected, actual };
-}
-
-/**
- * Assert that a player has specific elements in a zone.
- *
- * Checks element counts in a player's zone with exact, min, or max constraints.
- *
- * @param testGame - The test game instance
- * @param playerSeat - The player seat to check (1-indexed)
- * @param zoneName - The name of the zone property on the player (e.g., 'hand', 'board')
- * @param elementClass - The element class to count
- * @param countOrOptions - Exact count or { min?, max?, exact? } options
- * @throws Error if the count doesn't match the expected constraint
- *
- * @example
- * ```typescript
- * assertPlayerHas(testGame, 1, 'hand', Card, 5);  // Player 1 has 5 cards in hand
- * assertPlayerHas(testGame, 2, 'army', Soldier, { min: 2 });  // Player 2 has at least 2 soldiers
- * ```
- */
-export function assertPlayerHas<E extends GameElement>(
-  testGame: TestGame,
-  playerSeat: number,
-  zoneName: string,
-  elementClass: new (...args: any[]) => E,
-  countOrOptions: number | { min?: number; max?: number; exact?: number }
-): void {
-  const player = testGame.getPlayer(playerSeat) as any;
-  const zone = player[zoneName];
-
-  if (!zone) {
-    throw new Error(`Player ${playerSeat} has no zone named "${zoneName}"`);
-  }
-
-  const count = zone.count(elementClass);
-  const options = typeof countOrOptions === 'number' ? { exact: countOrOptions } : countOrOptions;
-
-  if (options.exact !== undefined && count !== options.exact) {
-    throw new Error(
-      `Expected player ${playerSeat} to have exactly ${options.exact} ${elementClass.name}(s) in ${zoneName}, got ${count}`
-    );
-  }
-
-  if (options.min !== undefined && count < options.min) {
-    throw new Error(
-      `Expected player ${playerSeat} to have at least ${options.min} ${elementClass.name}(s) in ${zoneName}, got ${count}`
-    );
-  }
-
-  if (options.max !== undefined && count > options.max) {
-    throw new Error(
-      `Expected player ${playerSeat} to have at most ${options.max} ${elementClass.name}(s) in ${zoneName}, got ${count}`
-    );
-  }
-}
-
-/**
- * Assert that the game has a specific number of elements of a type.
- *
- * Checks total element counts across the entire game with exact, min, or max constraints.
- *
- * @param testGame - The test game instance
- * @param elementClass - The element class to count
- * @param countOrOptions - Exact count or { min?, max?, exact? } options
- * @throws Error if the count doesn't match the expected constraint
- *
- * @example
- * ```typescript
- * assertElementCount(testGame, Card, 52);  // Game has 52 cards total
- * assertElementCount(testGame, Piece, { min: 1 });  // At least one piece exists
- * ```
- */
-export function assertElementCount<E extends GameElement>(
-  testGame: TestGame,
-  elementClass: new (...args: any[]) => E,
-  countOrOptions: number | { min?: number; max?: number; exact?: number }
-): void {
-  // Use all() instead of count() to work with basic constructor types
-  const count = testGame.game.all(elementClass as any).length;
-  const options = typeof countOrOptions === 'number' ? { exact: countOrOptions } : countOrOptions;
-
-  if (options.exact !== undefined && count !== options.exact) {
-    throw new Error(
-      `Expected exactly ${options.exact} ${elementClass.name}(s) in game, got ${count}`
-    );
-  }
-
-  if (options.min !== undefined && count < options.min) {
-    throw new Error(
-      `Expected at least ${options.min} ${elementClass.name}(s) in game, got ${count}`
-    );
-  }
-
-  if (options.max !== undefined && count > options.max) {
-    throw new Error(
-      `Expected at most ${options.max} ${elementClass.name}(s) in game, got ${count}`
-    );
-  }
 }
 
 /**
