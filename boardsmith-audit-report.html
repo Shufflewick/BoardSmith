@@ -154,16 +154,16 @@
     being a <em>pit of success</em> for game designers and the AI agents building games with them.</p>
     <p class="meta-line">Generated <strong>2026-06-14</strong> &middot; updated <strong>2026-06-15</strong> with fix status &middot;
     29 confirmed findings + 2 rejected &middot;
-    <strong style="color:var(--low)">22 fixed</strong>, 2 blocked, 5 open</p>
+    <strong style="color:var(--low)">24 fixed</strong>, 2 blocked, 3 open</p>
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">22</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">24</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">2</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">5</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">3</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
-    <div class="stat s-medium"><div class="n">2</div><div class="l">Medium (active)</div></div>
-    <div class="stat s-low"><div class="n">3</div><div class="l">Low (active)</div></div>
+    <div class="stat s-medium"><div class="n">1</div><div class="l">Medium (active)</div></div>
+    <div class="stat s-low"><div class="n">2</div><div class="l">Low (active)</div></div>
   </div>
 
   <details class="method">
@@ -264,10 +264,10 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 7 of 29)</span></h2>
-  <p class="section-note">The 22 fixed-and-merged findings have been moved to the
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 5 of 29)</span></h2>
+  <p class="section-note">The 24 fixed-and-merged findings have been moved to the
   <a href="#completed" style="color:var(--accent)">Completed</a> section at the bottom. What remains here are the
-  2 blocked + 5 open problems that still need attention.</p>
+  2 blocked + 3 open problems that still need attention.</p>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -381,77 +381,9 @@ Severity: I rate it high rather than critical. It is a real unauthenticated info
     </div>
   </article>
 
-  <article class="card fx-open" data-cat="dx" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F26</span>#3</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-medium">Medium</span>
-          <span class="badge cat cat-dx">DX / Agent-XP</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">5 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths</h3>
-        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The whole point of the sandbox rules is to keep agents from writing nondeterministic/networked/timer code that silently breaks replays, MCTS cloning, and multiplayer sync. If they never run, they protect no one. The AST-based plugin (accurate) is abandoned in favor of weaker regex duplicates (false positives/negatives, naive comment stripping).</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">An agent scaffolding via `boardsmith init` gets no editor/CI signal when it writes `<code>Math.random()</code>` or `<code>fetch()</code>` in a UI helper. It only learns of a problem if it happens to run `boardsmith validate`, which most agents won't unless told. The guardrail that should make the wrong path hard is invisible.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Pick ONE enforcement path. Wire the eslint-plugin into the scaffold (emit <code>eslint.config.js</code> using flat-config, add eslint + the plugin to devDeps, add a `lint` script), convert `configs.recommended` to flat-config shape, and delete the duplicate regex scanners in <code>validate.ts/lint.ts</code> (or have them delegate to eslint). Files: <code>src/cli/lib/project-scaffold.ts</code>, <code>src/eslint-plugin/index.ts</code>, <code>src/cli/commands/validate.ts</code>, <code>src/cli/commands/lint.ts</code>.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 1 affected, 4 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Remove the <code>Date.now()</code> debug throttle in <code>dictator-actions.ts</code> (use engine RNG/clock or just drop debug). For UI, replace <code>Date.now()</code>/<code>Math.random()</code> id-generation with a deterministic counter and confirm setTimeout animation usage is permitted by the expanded validate scan (or whitelist src/ui). Add the scaffolded eslint sandbox config.<details class="gi-ev"><summary>evidence</summary><div class="mono">RULES (determinism violation): <code>src/rules/actions/dictator-actions.ts:86-87</code> 'if (!g.__tacticsDbgAt || <code>Date.now()</code> - g.__tacticsDbgAt &gt; 1500) { g.__tacticsDbgAt = <code>Date.now()</code>;' inside a [TACTICS-DEBUG] throttle. No Math.random/timers/network found in src/rules otherwise. UI (would newly fail expanded validate/lint): <code>src/ui/components/MapGrid.vue:351</code> 'id: `death-${<code>Date.now()</code>}-...`', <code>src/ui/components/AssignToSquadPanel.vue:123</code> 'return id ? String(id) : <code>Math.random()</code>.<code>toString()</code>;', and 20 setTimeout uses across src/ui (animations). No eslint config present in the game (.eslintrc*/eslint.config.* absent).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ (not just src/rules) or eslint sandbox rules are wired in, these two src/ui patterns would be flagged. They are legitimate UI concerns (unique animation id, animation debounce); needs allowance for src/ui or a non-Date.now id source. No rules-code change required.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is clean (grep for Math.random/Date.now/new Date/fetch/WebSocket/setTimeout/eval/Function/crypto/process/require over src/rules returned nothing; only Math.abs used in <code>game.ts/ai.ts</code>). src/ui hits: <code>CheckersBoard.vue:187</code> `id: `capture-fly-${pieceId}-${<code>Date.now()</code>}`` and <code>CheckersBoard.vue:583</code> `setTimeout(() =&gt; { isMoving.value = false; }, 300)`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Rules code already compliant — no change. If 'boardsmith validate' is expanded to scan all of src/ and the lint rules treat setTimeout/Date.now as violations even in UI, the UI animation timers and the Date.now-based fly key would need allowlisting or replacement (e.g. a monotonic counter / crypto-free unique key). Confirm whether the expanded scan exempts src/ui.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules/** is clean of forbidden host APIs — randomness uses the engine RNG (<code>game.ts:193</code> `<code>this.random()</code> &lt; 0.5`); grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing. src/ui hits: <code>src/ui/components/RoundSummary.vue:58</code>,89,117,124,129,152 use setTimeout for reveal animations; <code>src/ui/components/CribbageBoard.vue:538</code> `id: \`discard-${card.id}-${<code>Date.now()</code>}\``. These are UI-only.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">No rules changes needed. If the expanded `boardsmith validate` / wired eslint sandbox rules scan all of src/ (not just src/rules), the two UI-only uses (setTimeout for animation timing, Date.now for a unique DOM key) may be flagged and need allow-listing or replacement (e.g. a counter instead of Date.now). UI animation timing is legitimate, so likely a lint-config/exception decision rather than a behavioral fix.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is sandbox-clean: grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing; <code>game.ts</code> shuffles via engine RNG (`Math.floor(<code>this.random()</code> * (i + 1))`) which is deterministic. However <code>src/ui/components/GameTable.vue:90</code> `const timer = setTimeout(resolve, 5000);` (inside the demo animation-event handler) and <code>GameTable.vue:263</code> `id: \`fly-stat-${cardId}-${<code>Date.now()</code>}\`` use host APIs.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">go-fish</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ and the sandbox lint is wired in, the setTimeout in <code>src/ui/components/GameTable.vue:419</code> would flag. It is UI animation code (legitimately not deterministic rules), so it likely needs a lint allowance/exclusion for src/ui or a refactor to nextTick rather than a determinism fix. Rules code needs no change.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules grep is clean (<code>src/rules/ai.ts</code> uses only Math.max/min/exp/sqrt — deterministic; no Math.random/Date/fetch/timers). One hit in UI: <code>src/ui/components/GameTable.vue:419</code> &quot;await new Promise(r =&gt; setTimeout(r, 10))&quot; used to wait for Vue DOM update during book-formation animation.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">The eslint-plugin defines the sandbox guardrails (`<code>src/eslint-plugin/index.ts:14-19</code>`: no-network, no-filesystem, no-timers, no-nondeterministic, no-eval). But the scaffold never emits an eslint config or dependency: `<code>src/cli/lib/project-scaffold.ts:472-482</code>` lists every generated file (<code>boardsmith.js</code>on, <code>package.js</code>on, tsconfig, vite, etc.) — no `.eslintrc`/`eslint.config.*` — and `generatePackageJson` produces scripts `{dev, build, test, validate}` with devDeps `{@vitejs/plugin-vue, typescript, vitest}` — no eslint, no lint script. The repo doesn't even dogfood it: `<code>eslint.config.mjs:2</code>` imports `@typescript-eslint/eslint-plugin`, not the boardsmith plugin (grep finds zero references to the plugin's rules outside its own dir). Its `configs.recommended` (`<code>src/eslint-plugin/index.ts:23-31</code>`) uses the legacy `.eslintrc` shape `plugins: ['boardsmith']`, which is incompatible with ESLint 9 flat config. Enforcement is instead reimplemented twice as regex: `<code>src/cli/commands/validate.ts:189-198</code>` (network/fs/timers/determinism/eval) and `<code>src/cli/commands/lint.ts</code>` (element-comparison bugs only). The two regex sets don't even agree on coverage.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Verified all cited locations. <code>eslint-plugin/index.ts:13-19</code> defines the 5 AST sandbox rules; <code>index.ts:22-31</code> uses the legacy .eslintrc shape (plugins: ['boardsmith']) which is incompatible with the flat-config array the repo actually uses in <code>eslint.config.mjs</code>. <code>project-scaffold.ts</code> generateScaffoldFiles (470-484) emits no eslint config, and generatePackageJson (121) emits scripts {dev,build,test,validate} and devDeps {@vitejs/plugin-vue,typescript,vitest} — no eslint, no lint script. <code>eslint.config.mjs:2</code> uses @typescript-eslint, not the boardsmith plugin; the only out-of-dir reference is <code>pack.ts:48</code> naming it as a package string — zero rule usage. <code>validate.ts:189-200</code> reimplements the same 5 concepts as regex with naive comment stripping (210-217). So the plugin is genuinely dead code: exported but never consumed, never scaffolded, never dogfooded, legacy config format. Two corrections temper the framing: (1) The 'protect no one' claim is overstated — the regex enforcement IS wired into `boardsmith validate` (<code>validate.ts:41</code>) and `validate` IS a scaffolded <code>package.js</code>on script, so scaffolded games do get sandbox enforcement, just via the weaker regex. (2) 'Three duplicate enforcement paths' is loose — <code>lint.ts</code> covers a different category (element-comparison bugs), not the sandbox rules, so only two paths cover the sandbox concerns. Net: real DX/dead-code debt with a weaker live regex replacing an accurate abandoned AST plugin, but not a high-severity security gap since enforcement still runs.</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="security" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F13</span>#4</div>
+      <div class="rank"><span class="fid">F13</span>#3</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -527,77 +459,9 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
     </div>
   </article>
 
-  <article class="card fx-open" data-cat="dx" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F29</span>#5</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-low">Low</span>
-          <span class="badge cat cat-dx">DX / Agent-XP</span>
-          <span class="badge ease-easy">easy</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">5 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>boardsmith validate's sandbox scan only covers src/rules — Math.random/fetch/timers in src/ui or helpers pass silently</h3>
-        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Determinism violations anywhere reachable from game state break replays, undo, AI cloning, and multiplayer — not just those in src/rules. A `<code>Math.random()</code>` in a UI helper that feeds a board ref or a derived value is just as corrupting but invisible to validate.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">An agent that factors a helper out of src/rules, or computes something nondeterministic in a Vue component, gets a green `validate` and a game that desyncs in multiplayer or produces non-reproducible replays — a silent, hard-to-trace failure that the tool implies it checks for.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Scan all source under src/ (excluding node_modules/dist) for the forbidden patterns, or better, delegate to the AST eslint-plugin once it's wired in. File: <code>src/cli/commands/validate.ts</code>.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 1 affected, 4 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Remove the <code>Date.now()</code> debug throttle in <code>dictator-actions.ts</code> (use engine RNG/clock or just drop debug). For UI, replace <code>Date.now()</code>/<code>Math.random()</code> id-generation with a deterministic counter and confirm setTimeout animation usage is permitted by the expanded validate scan (or whitelist src/ui). Add the scaffolded eslint sandbox config.<details class="gi-ev"><summary>evidence</summary><div class="mono">RULES (determinism violation): <code>src/rules/actions/dictator-actions.ts:86-87</code> 'if (!g.__tacticsDbgAt || <code>Date.now()</code> - g.__tacticsDbgAt &gt; 1500) { g.__tacticsDbgAt = <code>Date.now()</code>;' inside a [TACTICS-DEBUG] throttle. No Math.random/timers/network found in src/rules otherwise. UI (would newly fail expanded validate/lint): <code>src/ui/components/MapGrid.vue:351</code> 'id: `death-${<code>Date.now()</code>}-...`', <code>src/ui/components/AssignToSquadPanel.vue:123</code> 'return id ? String(id) : <code>Math.random()</code>.<code>toString()</code>;', and 20 setTimeout uses across src/ui (animations). No eslint config present in the game (.eslintrc*/eslint.config.* absent).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ (not just src/rules) or eslint sandbox rules are wired in, these two src/ui patterns would be flagged. They are legitimate UI concerns (unique animation id, animation debounce); needs allowance for src/ui or a non-Date.now id source. No rules-code change required.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is clean (grep for Math.random/Date.now/new Date/fetch/WebSocket/setTimeout/eval/Function/crypto/process/require over src/rules returned nothing; only Math.abs used in <code>game.ts/ai.ts</code>). src/ui hits: <code>CheckersBoard.vue:187</code> `id: `capture-fly-${pieceId}-${<code>Date.now()</code>}`` and <code>CheckersBoard.vue:583</code> `setTimeout(() =&gt; { isMoving.value = false; }, 300)`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Rules code already compliant — no change. If 'boardsmith validate' is expanded to scan all of src/ and the lint rules treat setTimeout/Date.now as violations even in UI, the UI animation timers and the Date.now-based fly key would need allowlisting or replacement (e.g. a monotonic counter / crypto-free unique key). Confirm whether the expanded scan exempts src/ui.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules/** is clean of forbidden host APIs — randomness uses the engine RNG (<code>game.ts:193</code> `<code>this.random()</code> &lt; 0.5`); grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing. src/ui hits: <code>src/ui/components/RoundSummary.vue:58</code>,89,117,124,129,152 use setTimeout for reveal animations; <code>src/ui/components/CribbageBoard.vue:538</code> `id: \`discard-${card.id}-${<code>Date.now()</code>}\``. These are UI-only.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">No rules changes needed. If the expanded `boardsmith validate` / wired eslint sandbox rules scan all of src/ (not just src/rules), the two UI-only uses (setTimeout for animation timing, Date.now for a unique DOM key) may be flagged and need allow-listing or replacement (e.g. a counter instead of Date.now). UI animation timing is legitimate, so likely a lint-config/exception decision rather than a behavioral fix.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is sandbox-clean: grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing; <code>game.ts</code> shuffles via engine RNG (`Math.floor(<code>this.random()</code> * (i + 1))`) which is deterministic. However <code>src/ui/components/GameTable.vue:90</code> `const timer = setTimeout(resolve, 5000);` (inside the demo animation-event handler) and <code>GameTable.vue:263</code> `id: \`fly-stat-${cardId}-${<code>Date.now()</code>}\`` use host APIs.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">go-fish</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ and the sandbox lint is wired in, the setTimeout in <code>src/ui/components/GameTable.vue:419</code> would flag. It is UI animation code (legitimately not deterministic rules), so it likely needs a lint allowance/exclusion for src/ui or a refactor to nextTick rather than a determinism fix. Rules code needs no change.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules grep is clean (<code>src/rules/ai.ts</code> uses only Math.max/min/exp/sqrt — deterministic; no Math.random/Date/fetch/timers). One hit in UI: <code>src/ui/components/GameTable.vue:419</code> &quot;await new Promise(r =&gt; setTimeout(r, 10))&quot; used to wait for Vue DOM update during book-formation animation.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">`validateSecurity` hardcodes `const rulesDir = join(cwd, 'src/rules')` (`<code>src/cli/commands/validate.ts:179-185</code>`) and scans only that directory for the forbidden patterns (`:189-198` fetch/XHR/fs/setTimeout/setInterval/Date.now/Math.random/eval/Function). Game logic, however, routinely lives outside src/rules — custom UI components in `src/ui/` (the scaffold generates `<code>src/ui/components/GameTable.vue</code>`, `<code>src/cli/lib/project-scaffold.ts:481</code>`) and shared helper modules. Since the eslint-plugin (which would catch these everywhere) isn't wired in (see separate finding), this regex scan is the only active determinism guard, and it's blind outside src/rules.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">The literal scope claim is accurate: validateSecurity hardcodes `const rulesDir = join(cwd, 'src/rules')` (<code>validate.ts:180</code>) and the only scan invocation is `scanDir(rulesDir)` (<code>validate.ts:239</code>); src/ui (scaffolded at <code>project-scaffold.ts:481</code>) is never scanned. However, the finding's central justification is wrong. Determinism is only required inside the engine sandbox — the rules bundle that the executor runs (<code>dist/rules/rules.js</code>, see <code>zip.ts:27</code>). UI code runs in the browser, only dispatches actions, and is NOT part of the deterministic replay/undo/AI-clone path; it legitimately needs the flagged APIs. BoardSmith's own UI uses setTimeout (<code>useActionAnimations.ts:545</code>) and Date.now (<code>useActionController.ts:544-570</code>) for animations/timing. Scanning src/ui for setTimeout/Math.random/Date.now would be incorrect and produce massive false positives. The claim that 'Math.random in a UI helper feeds a board ref' is false — game state is mutated only by the engine via actions. The one genuine but narrow gap is a helper module imported into rules yet living outside src/rules; that escapes the scan. But the scaffold creates nothing outside src/rules and src/ui, so it requires deliberate non-idiomatic structuring, and the better fix would be scanning the built rules bundle rather than adding src/ui. Real scope observation, but the determinism-corruption impact is largely invalid, so severity is low.</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="usability" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F23</span>#6</div>
+      <div class="rank"><span class="fid">F23</span>#4</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -683,7 +547,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
 
   <article class="card fx-open" data-cat="dx" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F28</span>#7</div>
+      <div class="rank"><span class="fid">F28</span>#5</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -769,7 +633,7 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(22 fixed — no longer active, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(24 fixed — no longer active, kept for the record)</span></span></h2>
   <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
   zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
   <div id="completed-list">
@@ -1166,6 +1030,74 @@ So: real correctness/architecture bug, accurately described (&quot;silently show
     </div>
   </article>
 
+  <article class="card fx-merged" data-cat="dx" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F26</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — 76a4f26fc1dd24bbfeef6d8088576fffbef3ded1">✅ Fixed · 76a4f26fc1dd24bbfeef6d8088576fffbef3ded1</span>
+          <span class="badge sev-medium">Medium</span>
+          <span class="badge cat cat-dx">DX / Agent-XP</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">5 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths</h3>
+        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>76a4f26fc1dd24bbfeef6d8088576fffbef3ded1</code> — Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The whole point of the sandbox rules is to keep agents from writing nondeterministic/networked/timer code that silently breaks replays, MCTS cloning, and multiplayer sync. If they never run, they protect no one. The AST-based plugin (accurate) is abandoned in favor of weaker regex duplicates (false positives/negatives, naive comment stripping).</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">An agent scaffolding via `boardsmith init` gets no editor/CI signal when it writes `<code>Math.random()</code>` or `<code>fetch()</code>` in a UI helper. It only learns of a problem if it happens to run `boardsmith validate`, which most agents won't unless told. The guardrail that should make the wrong path hard is invisible.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Pick ONE enforcement path. Wire the eslint-plugin into the scaffold (emit <code>eslint.config.js</code> using flat-config, add eslint + the plugin to devDeps, add a `lint` script), convert `configs.recommended` to flat-config shape, and delete the duplicate regex scanners in <code>validate.ts/lint.ts</code> (or have them delegate to eslint). Files: <code>src/cli/lib/project-scaffold.ts</code>, <code>src/eslint-plugin/index.ts</code>, <code>src/cli/commands/validate.ts</code>, <code>src/cli/commands/lint.ts</code>.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 1 affected, 4 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Remove the <code>Date.now()</code> debug throttle in <code>dictator-actions.ts</code> (use engine RNG/clock or just drop debug). For UI, replace <code>Date.now()</code>/<code>Math.random()</code> id-generation with a deterministic counter and confirm setTimeout animation usage is permitted by the expanded validate scan (or whitelist src/ui). Add the scaffolded eslint sandbox config.<details class="gi-ev"><summary>evidence</summary><div class="mono">RULES (determinism violation): <code>src/rules/actions/dictator-actions.ts:86-87</code> 'if (!g.__tacticsDbgAt || <code>Date.now()</code> - g.__tacticsDbgAt &gt; 1500) { g.__tacticsDbgAt = <code>Date.now()</code>;' inside a [TACTICS-DEBUG] throttle. No Math.random/timers/network found in src/rules otherwise. UI (would newly fail expanded validate/lint): <code>src/ui/components/MapGrid.vue:351</code> 'id: `death-${<code>Date.now()</code>}-...`', <code>src/ui/components/AssignToSquadPanel.vue:123</code> 'return id ? String(id) : <code>Math.random()</code>.<code>toString()</code>;', and 20 setTimeout uses across src/ui (animations). No eslint config present in the game (.eslintrc*/eslint.config.* absent).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ (not just src/rules) or eslint sandbox rules are wired in, these two src/ui patterns would be flagged. They are legitimate UI concerns (unique animation id, animation debounce); needs allowance for src/ui or a non-Date.now id source. No rules-code change required.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is clean (grep for Math.random/Date.now/new Date/fetch/WebSocket/setTimeout/eval/Function/crypto/process/require over src/rules returned nothing; only Math.abs used in <code>game.ts/ai.ts</code>). src/ui hits: <code>CheckersBoard.vue:187</code> `id: `capture-fly-${pieceId}-${<code>Date.now()</code>}`` and <code>CheckersBoard.vue:583</code> `setTimeout(() =&gt; { isMoving.value = false; }, 300)`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Rules code already compliant — no change. If 'boardsmith validate' is expanded to scan all of src/ and the lint rules treat setTimeout/Date.now as violations even in UI, the UI animation timers and the Date.now-based fly key would need allowlisting or replacement (e.g. a monotonic counter / crypto-free unique key). Confirm whether the expanded scan exempts src/ui.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules/** is clean of forbidden host APIs — randomness uses the engine RNG (<code>game.ts:193</code> `<code>this.random()</code> &lt; 0.5`); grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing. src/ui hits: <code>src/ui/components/RoundSummary.vue:58</code>,89,117,124,129,152 use setTimeout for reveal animations; <code>src/ui/components/CribbageBoard.vue:538</code> `id: \`discard-${card.id}-${<code>Date.now()</code>}\``. These are UI-only.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">No rules changes needed. If the expanded `boardsmith validate` / wired eslint sandbox rules scan all of src/ (not just src/rules), the two UI-only uses (setTimeout for animation timing, Date.now for a unique DOM key) may be flagged and need allow-listing or replacement (e.g. a counter instead of Date.now). UI animation timing is legitimate, so likely a lint-config/exception decision rather than a behavioral fix.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is sandbox-clean: grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing; <code>game.ts</code> shuffles via engine RNG (`Math.floor(<code>this.random()</code> * (i + 1))`) which is deterministic. However <code>src/ui/components/GameTable.vue:90</code> `const timer = setTimeout(resolve, 5000);` (inside the demo animation-event handler) and <code>GameTable.vue:263</code> `id: \`fly-stat-${cardId}-${<code>Date.now()</code>}\`` use host APIs.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">go-fish</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ and the sandbox lint is wired in, the setTimeout in <code>src/ui/components/GameTable.vue:419</code> would flag. It is UI animation code (legitimately not deterministic rules), so it likely needs a lint allowance/exclusion for src/ui or a refactor to nextTick rather than a determinism fix. Rules code needs no change.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules grep is clean (<code>src/rules/ai.ts</code> uses only Math.max/min/exp/sqrt — deterministic; no Math.random/Date/fetch/timers). One hit in UI: <code>src/ui/components/GameTable.vue:419</code> &quot;await new Promise(r =&gt; setTimeout(r, 10))&quot; used to wait for Vue DOM update during book-formation animation.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">The eslint-plugin defines the sandbox guardrails (`<code>src/eslint-plugin/index.ts:14-19</code>`: no-network, no-filesystem, no-timers, no-nondeterministic, no-eval). But the scaffold never emits an eslint config or dependency: `<code>src/cli/lib/project-scaffold.ts:472-482</code>` lists every generated file (<code>boardsmith.js</code>on, <code>package.js</code>on, tsconfig, vite, etc.) — no `.eslintrc`/`eslint.config.*` — and `generatePackageJson` produces scripts `{dev, build, test, validate}` with devDeps `{@vitejs/plugin-vue, typescript, vitest}` — no eslint, no lint script. The repo doesn't even dogfood it: `<code>eslint.config.mjs:2</code>` imports `@typescript-eslint/eslint-plugin`, not the boardsmith plugin (grep finds zero references to the plugin's rules outside its own dir). Its `configs.recommended` (`<code>src/eslint-plugin/index.ts:23-31</code>`) uses the legacy `.eslintrc` shape `plugins: ['boardsmith']`, which is incompatible with ESLint 9 flat config. Enforcement is instead reimplemented twice as regex: `<code>src/cli/commands/validate.ts:189-198</code>` (network/fs/timers/determinism/eval) and `<code>src/cli/commands/lint.ts</code>` (element-comparison bugs only). The two regex sets don't even agree on coverage.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Verified all cited locations. <code>eslint-plugin/index.ts:13-19</code> defines the 5 AST sandbox rules; <code>index.ts:22-31</code> uses the legacy .eslintrc shape (plugins: ['boardsmith']) which is incompatible with the flat-config array the repo actually uses in <code>eslint.config.mjs</code>. <code>project-scaffold.ts</code> generateScaffoldFiles (470-484) emits no eslint config, and generatePackageJson (121) emits scripts {dev,build,test,validate} and devDeps {@vitejs/plugin-vue,typescript,vitest} — no eslint, no lint script. <code>eslint.config.mjs:2</code> uses @typescript-eslint, not the boardsmith plugin; the only out-of-dir reference is <code>pack.ts:48</code> naming it as a package string — zero rule usage. <code>validate.ts:189-200</code> reimplements the same 5 concepts as regex with naive comment stripping (210-217). So the plugin is genuinely dead code: exported but never consumed, never scaffolded, never dogfooded, legacy config format. Two corrections temper the framing: (1) The 'protect no one' claim is overstated — the regex enforcement IS wired into `boardsmith validate` (<code>validate.ts:41</code>) and `validate` IS a scaffolded <code>package.js</code>on script, so scaffolded games do get sandbox enforcement, just via the weaker regex. (2) 'Three duplicate enforcement paths' is loose — <code>lint.ts</code> covers a different category (element-comparison bugs), not the sandbox rules, so only two paths cover the sandbox concerns. Net: real DX/dead-code debt with a weaker live regex replacing an accurate abandoned AST plugin, but not a high-severity security gap since enforcement still runs.</div>
+      </details>
+    </div>
+  </article>
+
   <article class="card fx-merged" data-cat="usability" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="merged">
     <div class="card-head">
       <div class="rank"><span class="fid">F19</span><span class="rank-done">✓</span></div>
@@ -1481,6 +1413,74 @@ Real mechanism, but the supporting facts are partly incorrect and the severity/f
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Verified all cited code. <code>useBoardInteraction.ts:393-395</code> returns inject(BOARD_INTERACTION_KEY) with no default/throw, so it yields undefined silently outside a provider. injectBoardInteraction (<code>useActionController.ts:1576-1578</code>) merely forwards it. The sibling injectActionController (<code>useActionController.ts:1507-1513</code>) DOES throw '<code>injectActionController()</code> must be called inside a GameShell context' — confirming two sibling injection APIs have opposite failure modes. Game UIs do litter guards: hex <code>HexBoard.vue:101</code> `if (!boardInteraction) return false;` and checkers <code>CheckersBoard.vue</code> uses `boardInteraction?.<code>clear()</code>` / `if (boardInteraction)` at lines 376, 397, 433, 440, 447, 454, 580. So the inconsistency and silent-undefined behavior are factually real. However the severity is somewhat overstated: <code>GameShell.vue:444</code> always calls provideBoardInteraction, so in correct usage (inside GameShell) the channel never fails — undefined only occurs on misuse outside a GameShell. The HARD RULE about parity is not actually broken for shipping games; the real cost is defensive-guard boilerplate plus a missing diagnostic on misuse. That's a genuine DX/API-consistency problem worth fixing (mirror injectActionController by throwing, or provide a sensible default), but it does not break correctly-used code, so low rather than medium.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="dx" data-sev="low" data-ease="easy" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F29</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — 76a4f26fc1dd24bbfeef6d8088576fffbef3ded1">✅ Fixed · 76a4f26fc1dd24bbfeef6d8088576fffbef3ded1</span>
+          <span class="badge sev-low">Low</span>
+          <span class="badge cat cat-dx">DX / Agent-XP</span>
+          <span class="badge ease-easy">easy</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">5 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>boardsmith validate's sandbox scan only covers src/rules — Math.random/fetch/timers in src/ui or helpers pass silently</h3>
+        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>76a4f26fc1dd24bbfeef6d8088576fffbef3ded1</code> — Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Determinism violations anywhere reachable from game state break replays, undo, AI cloning, and multiplayer — not just those in src/rules. A `<code>Math.random()</code>` in a UI helper that feeds a board ref or a derived value is just as corrupting but invisible to validate.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">An agent that factors a helper out of src/rules, or computes something nondeterministic in a Vue component, gets a green `validate` and a game that desyncs in multiplayer or produces non-reproducible replays — a silent, hard-to-trace failure that the tool implies it checks for.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Scan all source under src/ (excluding node_modules/dist) for the forbidden patterns, or better, delegate to the AST eslint-plugin once it's wired in. File: <code>src/cli/commands/validate.ts</code>.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 1 affected, 4 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Remove the <code>Date.now()</code> debug throttle in <code>dictator-actions.ts</code> (use engine RNG/clock or just drop debug). For UI, replace <code>Date.now()</code>/<code>Math.random()</code> id-generation with a deterministic counter and confirm setTimeout animation usage is permitted by the expanded validate scan (or whitelist src/ui). Add the scaffolded eslint sandbox config.<details class="gi-ev"><summary>evidence</summary><div class="mono">RULES (determinism violation): <code>src/rules/actions/dictator-actions.ts:86-87</code> 'if (!g.__tacticsDbgAt || <code>Date.now()</code> - g.__tacticsDbgAt &gt; 1500) { g.__tacticsDbgAt = <code>Date.now()</code>;' inside a [TACTICS-DEBUG] throttle. No Math.random/timers/network found in src/rules otherwise. UI (would newly fail expanded validate/lint): <code>src/ui/components/MapGrid.vue:351</code> 'id: `death-${<code>Date.now()</code>}-...`', <code>src/ui/components/AssignToSquadPanel.vue:123</code> 'return id ? String(id) : <code>Math.random()</code>.<code>toString()</code>;', and 20 setTimeout uses across src/ui (animations). No eslint config present in the game (.eslintrc*/eslint.config.* absent).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ (not just src/rules) or eslint sandbox rules are wired in, these two src/ui patterns would be flagged. They are legitimate UI concerns (unique animation id, animation debounce); needs allowance for src/ui or a non-Date.now id source. No rules-code change required.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is clean (grep for Math.random/Date.now/new Date/fetch/WebSocket/setTimeout/eval/Function/crypto/process/require over src/rules returned nothing; only Math.abs used in <code>game.ts/ai.ts</code>). src/ui hits: <code>CheckersBoard.vue:187</code> `id: `capture-fly-${pieceId}-${<code>Date.now()</code>}`` and <code>CheckersBoard.vue:583</code> `setTimeout(() =&gt; { isMoving.value = false; }, 300)`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Rules code already compliant — no change. If 'boardsmith validate' is expanded to scan all of src/ and the lint rules treat setTimeout/Date.now as violations even in UI, the UI animation timers and the Date.now-based fly key would need allowlisting or replacement (e.g. a monotonic counter / crypto-free unique key). Confirm whether the expanded scan exempts src/ui.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules/** is clean of forbidden host APIs — randomness uses the engine RNG (<code>game.ts:193</code> `<code>this.random()</code> &lt; 0.5`); grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing. src/ui hits: <code>src/ui/components/RoundSummary.vue:58</code>,89,117,124,129,152 use setTimeout for reveal animations; <code>src/ui/components/CribbageBoard.vue:538</code> `id: \`discard-${card.id}-${<code>Date.now()</code>}\``. These are UI-only.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">No rules changes needed. If the expanded `boardsmith validate` / wired eslint sandbox rules scan all of src/ (not just src/rules), the two UI-only uses (setTimeout for animation timing, Date.now for a unique DOM key) may be flagged and need allow-listing or replacement (e.g. a counter instead of Date.now). UI animation timing is legitimate, so likely a lint-config/exception decision rather than a behavioral fix.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules is sandbox-clean: grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing; <code>game.ts</code> shuffles via engine RNG (`Math.floor(<code>this.random()</code> * (i + 1))`) which is deterministic. However <code>src/ui/components/GameTable.vue:90</code> `const timer = setTimeout(resolve, 5000);` (inside the demo animation-event handler) and <code>GameTable.vue:263</code> `id: \`fly-stat-${cardId}-${<code>Date.now()</code>}\`` use host APIs.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">go-fish</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">If 'boardsmith validate' is expanded to scan all of src/ and the sandbox lint is wired in, the setTimeout in <code>src/ui/components/GameTable.vue:419</code> would flag. It is UI animation code (legitimately not deterministic rules), so it likely needs a lint allowance/exclusion for src/ui or a refactor to nextTick rather than a determinism fix. Rules code needs no change.<details class="gi-ev"><summary>evidence</summary><div class="mono">src/rules grep is clean (<code>src/rules/ai.ts</code> uses only Math.max/min/exp/sqrt — deterministic; no Math.random/Date/fetch/timers). One hit in UI: <code>src/ui/components/GameTable.vue:419</code> &quot;await new Promise(r =&gt; setTimeout(r, 10))&quot; used to wait for Vue DOM update during book-formation animation.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">`validateSecurity` hardcodes `const rulesDir = join(cwd, 'src/rules')` (`<code>src/cli/commands/validate.ts:179-185</code>`) and scans only that directory for the forbidden patterns (`:189-198` fetch/XHR/fs/setTimeout/setInterval/Date.now/Math.random/eval/Function). Game logic, however, routinely lives outside src/rules — custom UI components in `src/ui/` (the scaffold generates `<code>src/ui/components/GameTable.vue</code>`, `<code>src/cli/lib/project-scaffold.ts:481</code>`) and shared helper modules. Since the eslint-plugin (which would catch these everywhere) isn't wired in (see separate finding), this regex scan is the only active determinism guard, and it's blind outside src/rules.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">The literal scope claim is accurate: validateSecurity hardcodes `const rulesDir = join(cwd, 'src/rules')` (<code>validate.ts:180</code>) and the only scan invocation is `scanDir(rulesDir)` (<code>validate.ts:239</code>); src/ui (scaffolded at <code>project-scaffold.ts:481</code>) is never scanned. However, the finding's central justification is wrong. Determinism is only required inside the engine sandbox — the rules bundle that the executor runs (<code>dist/rules/rules.js</code>, see <code>zip.ts:27</code>). UI code runs in the browser, only dispatches actions, and is NOT part of the deterministic replay/undo/AI-clone path; it legitimately needs the flagged APIs. BoardSmith's own UI uses setTimeout (<code>useActionAnimations.ts:545</code>) and Date.now (<code>useActionController.ts:544-570</code>) for animations/timing. Scanning src/ui for setTimeout/Math.random/Date.now would be incorrect and produce massive false positives. The claim that 'Math.random in a UI helper feeds a board ref' is false — game state is mutated only by the engine via actions. The one genuine but narrow gap is a helper module imported into rules yet living outside src/rules; that escapes the scan. But the scaffold creates nothing outside src/rules and src/ui, so it requires deliberate non-idiomatic structuring, and the better fix would be scanning the built rules bundle rather than adding src/ui. Real scope observation, but the determinism-corruption impact is largely invalid, so severity is low.</div>
       </details>
     </div>
   </article>

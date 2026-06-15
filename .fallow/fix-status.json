@@ -87,6 +87,14 @@
     "F25": {
       "sha": "e644ee47b4c34bab9d5b6b7e1136178bb1243807",
       "desc": "Action execute() args are Record<string, unknown> — no type inference from declared selections, forcing manual casts on every action"
+    },
+    "F26": {
+      "sha": "76a4f26fc1dd24bbfeef6d8088576fffbef3ded1",
+      "desc": "Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths"
+    },
+    "F29": {
+      "sha": "76a4f26fc1dd24bbfeef6d8088576fffbef3ded1",
+      "desc": "Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths"
     }
   },
   "blocked": [
@@ -116,6 +124,8 @@
     "F3": "merged",
     "F19": "merged",
     "F25": "merged",
+    "F26": "merged",
+    "F29": "merged",
     "F8": "blocked",
     "F9": "blocked"
   }
