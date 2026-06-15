@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import chalk from 'chalk';
+import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 
 interface LintOptions {
   fix?: boolean;
@@ -306,6 +307,21 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     // Run unused action check
     const unusedIssues = checkUnusedActions(filePath, content, fileContents);
     result.issues.push(...unusedIssues);
+  }
+
+  // Sandbox guardrails (determinism / network / filesystem / timers / eval) come
+  // from the AST-based boardsmith ESLint plugin — the single source of truth,
+  // shared with `boardsmith validate`. These are hard errors: they silently break
+  // replays, MCTS cloning, and multiplayer sync.
+  for (const v of scanSandboxViolations(cwd)) {
+    result.issues.push({
+      file: join(cwd, v.file),
+      line: v.line,
+      column: v.column,
+      severity: 'error',
+      rule: v.ruleId,
+      message: v.message,
+    });
   }
 
   // Count by severity

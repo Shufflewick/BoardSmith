@@ -6,11 +6,12 @@ This document provides an overview of the BoardSmith package architecture and ho
 
 ```
                               ┌─────────────────┐
-                              │  eslint-plugin  │  (standalone)
+                              │  eslint-plugin  │  (consumed by cli)
                               └─────────────────┘
-                               Sandbox security rules
-                               (no-network, no-filesystem,
-                                no-timers, no-eval, etc.)
+                               Sandbox security rules — single source of truth
+                               (no-network, no-filesystem, no-timers,
+                                no-nondeterministic, no-eval). `boardsmith lint`
+                                and `boardsmith validate` run these across all of src/.
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                                                             │
