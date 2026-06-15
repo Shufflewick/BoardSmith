@@ -14,25 +14,25 @@ import type { GameOptions, ElementClass } from '../index.js';
 // ============================================
 
 /**
+ * Array state persistence across HMR.
+ *
+ * Declared array properties on a Game (or Player) are persisted exclusively
+ * through the single toJSON attribute path - there is no dev-only Proxy and no
+ * parallel `settings.__autoSync_*` shadow copy (see F3). These tests prove that
+ * plain arrays survive a capture/restore (HMR) round-trip purely via toJSON,
+ * with identical runtime identity (a plain Array) in every environment.
+ */
+
+/**
  * Create a test game instance with given game class.
- * Waits for initialization to complete and throws if there's an error.
+ * Waits for the post-construction volatile-state scan to complete.
  */
 async function createTestGame<G extends Game>(
   GameClass: new (options: GameOptions) => G
 ): Promise<G> {
   const game = new GameClass({ playerCount: 2, playerNames: ['P1', 'P2'] });
-  // Wait for initialization to complete (auto-sync setup)
-  // This will throw if there's an initialization error (e.g., element in array)
+  // Wait for post-construction initialization (e.g. the HMR volatile-state scan)
   return game.ready();
-}
-
-/**
- * Synchronous version for tests that don't need auto-sync
- */
-function createTestGameSync<G extends Game>(
-  GameClass: new (options: GameOptions) => G
-): G {
-  return new GameClass({ playerCount: 2, playerNames: ['P1', 'P2'] });
 }
 
 /**
@@ -61,7 +61,7 @@ async function simulateHMR<G extends Game>(
     classRegistry,
   });
 
-  // 4. Wait for auto-sync to set up on restored game
+  // 4. Let the restored game's post-construction microtask (volatile-state scan) run
   await Promise.resolve();
 
   return restored;
@@ -98,7 +98,7 @@ class TestGame extends Game<TestGame, Player> {
 // TESTS
 // ============================================
 
-describe('Auto-sync: Primitive Arrays', () => {
+describe('Array persistence: Primitive Arrays', () => {
   it('number array survives HMR', async () => {
     class ScoreGame extends Game<ScoreGame, Player> {
       scores: number[] = [];
@@ -155,7 +155,7 @@ describe('Auto-sync: Primitive Arrays', () => {
   });
 });
 
-describe('Auto-sync: All Mutation Methods', () => {
+describe('Array persistence: All Mutation Methods', () => {
   class MutationGame extends Game<MutationGame, Player> {
     items: number[] = [];
   }
@@ -237,7 +237,7 @@ describe('Auto-sync: All Mutation Methods', () => {
   });
 });
 
-describe('Auto-sync: Index Assignment', () => {
+describe('Array persistence: Index Assignment', () => {
   it('direct index assignment persists', async () => {
     class IndexGame extends Game<IndexGame, Player> {
       items: number[] = [1, 2, 3];
@@ -284,7 +284,7 @@ describe('Auto-sync: Index Assignment', () => {
   });
 });
 
-describe('Auto-sync: Object Arrays', () => {
+describe('Array persistence: Object Arrays', () => {
   it('array of plain objects survives HMR', async () => {
     class PlayerDataGame extends Game<PlayerDataGame, Player> {
       playerData: { name: string; score: number }[] = [];
@@ -335,121 +335,56 @@ describe('Auto-sync: Object Arrays', () => {
   });
 });
 
-describe('Auto-sync: Element Array Rejection', () => {
-  it('Die[] throws clear error', async () => {
+describe('Array persistence: Element references in arrays', () => {
+  // F3: there is no special-case element-array rejection. An array of element
+  // references is serialized like any other attribute - each element becomes a
+  // stable ref via toJSON and resolves back to the SAME live tree element on
+  // restore. (Owning the elements is still done via the tree; the array just
+  // holds references into it.)
+  it('element references in a game array round-trip to the same live elements', async () => {
     class DiceGame extends Game<DiceGame, Player> {
+      bag!: TestBoard;
       dice: Die[] = [];
 
       constructor(options: GameOptions) {
         super(options);
-        this.registerElements([Die]);
-        const die = this.create(Die, 'd6');
-        this.dice.push(die); // Should trigger error when auto-sync runs
+        this.registerElements([TestBoard, Die]);
+        this.bag = this.create(TestBoard, 'bag');
+        this.dice.push(this.bag.create(Die, 'd6'), this.bag.create(Die, 'd6'));
       }
     }
 
-    // The error is thrown during queueMicrotask (when auto-sync validates)
-    await expect(createTestGame(DiceGame)).rejects.toThrow(
-      /Element arrays cannot be auto-synced|Use element children instead/
-    );
-  });
+    const game = await createTestGame(DiceGame);
+    const restored = await simulateHMR(game, DiceGame);
 
-  it('Card[] throws clear error', async () => {
-    class HandGame extends Game<HandGame, Player> {
-      hand: Card[] = [];
-
-      constructor(options: GameOptions) {
-        super(options);
-        this.registerElements([Card]);
-        const card = this.create(Card, 'ace');
-        this.hand.push(card);
-      }
-    }
-
-    await expect(createTestGame(HandGame)).rejects.toThrow(
-      /Element arrays cannot be auto-synced|Use element children instead/
-    );
-  });
-
-  it('mixed array with element throws', async () => {
-    class MixedElementGame extends Game<MixedElementGame, Player> {
-      mixed: (number | Die)[] = [];
-
-      constructor(options: GameOptions) {
-        super(options);
-        this.registerElements([Die]);
-        this.mixed.push(1);
-        this.mixed.push(this.create(Die, 'd6')); // Should error
-      }
-    }
-
-    await expect(createTestGame(MixedElementGame)).rejects.toThrow(/Element/);
-  });
-
-  it('error message includes fix guidance', async () => {
-    class GuidanceGame extends Game<GuidanceGame, Player> {
-      dice: Die[] = [];
-
-      constructor(options: GameOptions) {
-        super(options);
-        this.registerElements([Die]);
-        this.dice.push(this.create(Die, 'd6'));
-      }
-    }
-
-    await expect(createTestGame(GuidanceGame)).rejects.toThrow(/element children|Space/i);
+    expect(restored.dice).toHaveLength(2);
+    expect(restored.dice[0]).toBeInstanceOf(Die);
+    // The array holds the very same elements that live in the tree, not copies.
+    expect(restored.dice[0]).toBe(restored.bag.all(Die)[0]);
+    expect(restored.dice[1]).toBe(restored.bag.all(Die)[1]);
   });
 });
 
-describe('Auto-sync: Non-Serializable Rejection', () => {
-  it('array with functions throws', async () => {
-    class FnGame extends Game<FnGame, Player> {
-      callbacks: (() => void)[] = [];
-    }
-    const game = await createTestGame(FnGame);
-
-    expect(() => {
-      game.callbacks.push(() => console.log('test'));
-    }).toThrow(/non-serializable|function/i);
-  });
-
-  it('array with undefined throws', async () => {
-    class UndefGame extends Game<UndefGame, Player> {
-      items: (number | undefined)[] = [];
-    }
-    const game = await createTestGame(UndefGame);
-
-    expect(() => {
-      game.items.push(undefined);
-    }).toThrow(/non-serializable|undefined/i);
-  });
-
-  it('array with Symbol throws', async () => {
-    class SymGame extends Game<SymGame, Player> {
-      items: symbol[] = [];
-    }
-    const game = await createTestGame(SymGame);
-
-    expect(() => {
-      game.items.push(Symbol('test'));
-    }).toThrow(/non-serializable|symbol/i);
-  });
-
-  it('array with circular reference throws', async () => {
+describe('Array persistence: Non-serializable values fail loud at serialization', () => {
+  // F3: validation happens in the single toJSON serialization path (fail fast,
+  // fail loud), not in a dev-only mutation Proxy. A circular reference cannot be
+  // represented as JSON, so capturing state throws an actionable error naming
+  // the offending property path.
+  it('a circular reference in an array throws at capture (toJSON) time', async () => {
     class CircularGame extends Game<CircularGame, Player> {
       items: object[] = [];
     }
     const game = await createTestGame(CircularGame);
     const circular: Record<string, unknown> = { a: 1 };
     circular.self = circular;
+    game.items.push(circular);
 
-    expect(() => {
-      game.items.push(circular);
-    }).toThrow(/circular|non-serializable/i);
+    expect(() => captureDevState(game)).toThrow(/circular reference/i);
+    expect(() => game.toJSON()).toThrow(/circular reference.*items/i);
   });
 });
 
-describe('Auto-sync: Multiple Arrays', () => {
+describe('Array persistence: Multiple Arrays', () => {
   it('multiple arrays are independent', async () => {
     class MultiGame extends Game<MultiGame, Player> {
       scores: number[] = [];
@@ -491,7 +426,7 @@ describe('Auto-sync: Multiple Arrays', () => {
   });
 });
 
-describe('Auto-sync: Edge Cases', () => {
+describe('Array persistence: Edge Cases', () => {
   it('empty array survives HMR', async () => {
     class EmptyGame extends Game<EmptyGame, Player> {
       items: number[] = [];
@@ -561,7 +496,7 @@ describe('Auto-sync: Edge Cases', () => {
   });
 });
 
-describe('Auto-sync: Iteration Methods', () => {
+describe('Array persistence: Iteration Methods', () => {
   class IterGame extends Game<IterGame, Player> {
     items: number[] = [1, 2, 3, 4, 5];
   }

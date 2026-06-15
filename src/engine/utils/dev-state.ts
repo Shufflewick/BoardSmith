@@ -199,6 +199,23 @@ export function restoreDevState<G extends Game>(
     }
   }
 
+  // Re-apply the game's OWN serialized attributes (custom game-level properties
+  // such as declared arrays and convenience element refs). This mirrors
+  // Game.loadSerializedState: the single toJSON attribute path is the source of
+  // truth for game-level state - there is no parallel settings shadow. Without
+  // this, a declared `items: number[]` on the Game would reset to its
+  // constructor default across HMR. phase/messages/settings are restored
+  // explicitly above, so skip them here.
+  const unserializable = new Set(
+    (game.constructor as unknown as { unserializableAttributes: string[] }).unserializableAttributes
+  );
+  const handledKeys = new Set(['phase', 'messages', 'settings']);
+  for (const [key, value] of Object.entries(snapshot.elements.attributes)) {
+    if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {
+      (game as unknown as Record<string, unknown>)[key] = value;
+    }
+  }
+
   // Restore the sequence counter to maintain ID consistency
   game._ctx.sequence = snapshot.sequence;
 
