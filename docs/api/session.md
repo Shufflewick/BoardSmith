@@ -211,6 +211,5 @@ session.setBroadcaster(new WebSocketBroadcaster(connections));
 
 ## See Also
 
-- [boardsmith/server](./server.md) - Server-side game hosting
 - [boardsmith/client](./client.md) - Browser client SDK
 - [boardsmith/ai](./ai.md) - AI opponent system

@@ -229,5 +229,4 @@ const stateAtAction2 = runner.getStateAt(2);
 ## See Also
 
 - [boardsmith/session](./session.md) - Higher-level session management
-- [boardsmith/server](./server.md) - Server implementation
 - [boardsmith](./index.md) - Core game engine
