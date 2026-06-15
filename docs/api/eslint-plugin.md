@@ -4,7 +4,12 @@
 
 ## When to Use
 
-Import from `boardsmith/eslint-plugin` when linting game rule code to ensure determinism. Board games must produce the same results given the same inputs, so this plugin catches common sources of non-determinism.
+These rules are the single source of truth for the BoardSmith sandbox guardrails (no network, no filesystem, no timers, no non-determinism, no eval). They are run automatically by the CLI:
+
+- `boardsmith lint` and `boardsmith validate` execute this plugin's AST rules across **all** of `src/` (rules, UI `.vue` components, and shared helpers) — not just `src/rules`. `validate` also runs as part of `boardsmith publish`, so a `Math.random()` or `fetch()` anywhere reachable from game state fails the build.
+- Scaffolded games get a `lint` script (`npx boardsmith lint`) wired in by default, so no per-game ESLint config is required.
+
+Import from `boardsmith/eslint-plugin` directly only if you want the same rules inside your editor's ESLint integration or your own `eslint.config.js`.
 
 ## Usage
 
@@ -154,11 +159,12 @@ export default [
 ];
 ```
 
-Equivalent to:
+Equivalent to (ESLint 9+ flat-config shape):
 
 ```javascript
 {
-  plugins: ['boardsmith'],
+  name: 'boardsmith/recommended',
+  plugins: { boardsmith: boardsmithPlugin },
   rules: {
     'boardsmith/no-network': 'error',
     'boardsmith/no-filesystem': 'error',

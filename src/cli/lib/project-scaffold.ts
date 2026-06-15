@@ -129,6 +129,7 @@ export function generatePackageJson(config: ProjectConfig): string {
       dev: 'npx boardsmith dev',
       build: 'npx boardsmith build',
       test: 'vitest',
+      lint: 'npx boardsmith lint',
       validate: 'npx boardsmith validate',
     },
     dependencies: {

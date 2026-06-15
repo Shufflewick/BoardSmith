@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
+import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 
 interface ValidateOptions {
   fix?: boolean;
@@ -177,72 +178,29 @@ async function validateTypeScript(cwd: string): Promise<ValidationResult> {
 }
 
 async function validateSecurity(cwd: string): Promise<ValidationResult> {
-  const rulesDir = join(cwd, 'src/rules');
-  if (!existsSync(rulesDir)) {
+  const srcDir = join(cwd, 'src');
+  if (!existsSync(srcDir)) {
     return {
       name: 'Security',
       passed: false,
-      message: 'src/rules directory not found',
+      message: 'src directory not found',
     };
   }
 
-  const forbiddenPatterns = [
-    { pattern: /\bfetch\s*\(/, description: 'Network requests (fetch)' },
-    { pattern: /\bXMLHttpRequest\b/, description: 'Network requests (XMLHttpRequest)' },
-    { pattern: /\bimport\s*\(\s*['"]fs['"]/, description: 'Filesystem access' },
-    { pattern: /\brequire\s*\(\s*['"]fs['"]/, description: 'Filesystem access' },
-    { pattern: /\bsetTimeout\s*\(/, description: 'Timers (setTimeout)' },
-    { pattern: /\bsetInterval\s*\(/, description: 'Timers (setInterval)' },
-    { pattern: /\bDate\.now\s*\(/, description: 'Non-deterministic (Date.now)' },
-    { pattern: /\bMath\.random\s*\(/, description: 'Non-deterministic (Math.random)' },
-    { pattern: /\beval\s*\(/, description: 'Code evaluation (eval)' },
-    { pattern: /\bFunction\s*\(/, description: 'Code evaluation (Function constructor)' },
-  ];
-
-  const issues: string[] = [];
-
-  function scanFile(filePath: string) {
-    const content = readFileSync(filePath, 'utf-8');
-    const relativePath = filePath.replace(cwd + '/', '');
-
-    for (const { pattern, description } of forbiddenPatterns) {
-      if (pattern.test(content)) {
-        // Check if it's in a comment (simple heuristic)
-        const lines = content.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          // Skip comments
-          if (line.trim().startsWith('//') || line.trim().startsWith('*')) {
-            continue;
-          }
-          if (pattern.test(line)) {
-            issues.push(`${relativePath}:${i + 1} - ${description}`);
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  function scanDir(dir: string) {
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        scanDir(fullPath);
-      } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.js')) {
-        scanFile(fullPath);
-      }
-    }
-  }
-
-  scanDir(rulesDir);
+  // Delegate to the AST-based boardsmith ESLint plugin (single source of truth).
+  // Scans ALL of src/ — rules, UI components (.vue), and shared helpers — because
+  // a determinism violation anywhere reachable from game state breaks replays,
+  // undo, AI cloning, and multiplayer sync.
+  const violations = scanSandboxViolations(cwd);
+  const details = violations.map((v) => `${v.file}:${v.line}:${v.column} - ${v.message}`);
 
   return {
     name: 'Security',
-    passed: issues.length === 0,
-    message: issues.length > 0 ? 'Forbidden APIs detected in rules code' : '',
-    details: issues.slice(0, 10),
+    passed: violations.length === 0,
+    message: violations.length > 0
+      ? 'Forbidden APIs detected (non-deterministic / network / filesystem / timers / eval)'
+      : '',
+    details: details.slice(0, 10),
   };
 }
 

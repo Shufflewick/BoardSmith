@@ -18,17 +18,21 @@ const plugin = {
     'no-eval': noEval,
   },
 
-  configs: {
-    recommended: {
-      plugins: ['boardsmith'],
-      rules: {
-        'boardsmith/no-network': 'error',
-        'boardsmith/no-filesystem': 'error',
-        'boardsmith/no-timers': 'error',
-        'boardsmith/no-nondeterministic': 'error',
-        'boardsmith/no-eval': 'error',
-      },
-    },
+  // Populated below so the config can reference `plugin` itself.
+  configs: {} as Record<string, unknown>,
+};
+
+// Flat-config (ESLint 9+) shape: `plugins` is an object, not a string array.
+// Spread `boardsmith.configs.recommended` into an eslint.config.js array.
+plugin.configs.recommended = {
+  name: 'boardsmith/recommended',
+  plugins: { boardsmith: plugin },
+  rules: {
+    'boardsmith/no-network': 'error',
+    'boardsmith/no-filesystem': 'error',
+    'boardsmith/no-timers': 'error',
+    'boardsmith/no-nondeterministic': 'error',
+    'boardsmith/no-eval': 'error',
   },
 };
 
