@@ -11,6 +11,7 @@
  * format, not just chess-style notation.
  */
 import { reactive, provide, inject, type InjectionKey } from 'vue';
+import { devWarn } from '../../utils/dev.js';
 
 /**
  * Reference to a board element (can match by various properties)
@@ -368,9 +369,16 @@ export function createBoardInteraction(): BoardInteraction {
     },
 
     triggerChoiceSelect(selectionName, value) {
-      if (state.onChoiceSelect) {
-        state.onChoiceSelect(selectionName, value);
+      if (!state.onChoiceSelect) {
+        devWarn(
+          'board-interaction-no-choice-callback',
+          `triggerChoiceSelect('${selectionName}', ...) was ignored because no action is active to receive it. ` +
+            `Choice selection only works while an action exposing a '${selectionName}' selection is in progress. ` +
+            `Start the action first (via the ActionPanel or by selecting the relevant board element) before triggering a choice.`,
+        );
+        return;
       }
+      state.onChoiceSelect(selectionName, value);
     },
 
     consumeLastDroppedElementId() {
