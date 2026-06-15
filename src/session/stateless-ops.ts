@@ -13,8 +13,14 @@ import type { Game, GameCommand } from '../engine/index.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
-import { PickHandler, buildSingleActionMetadata, buildPlayerState, computeUndoInfo } from './index.js';
-import { buildActionTraces, computeElementDiff } from './utils.js';
+import { PickHandler } from './pick-handler.js';
+import {
+  buildSingleActionMetadata,
+  buildPlayerState,
+  computeUndoInfo,
+  buildActionTraces,
+  computeElementDiff,
+} from './utils.js';
 
 // ---------------------------------------------------------------------------
 // Op discriminated union
@@ -116,6 +122,7 @@ type AIFlowState = {
   awaitingInput?: boolean;
   complete?: boolean;
   currentPlayer?: number;
+  moveCount?: number;
   awaitingPlayers?: Array<{
     playerIndex: number;
     completed: boolean;
@@ -342,7 +349,15 @@ function handleUndo(
     return errorResult("It's not your turn");
   }
 
-  const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(runner.actionHistory, op.player);
+  // Pass flowState.moveCount so undo uses the SAME authoritative turn boundary
+  // the client was shown (buildPlayerState computes canUndo/turnStartActionIndex
+  // with moveCount). Without it the backward-scan fallback can rewind past a
+  // phase boundary and silently discard a prior turn's committed actions.
+  const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
+    runner.actionHistory,
+    op.player,
+    flowState.moveCount,
+  );
   if (actionsThisTurn === 0) {
     return errorResult('No actions to undo');
   }
