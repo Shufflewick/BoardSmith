@@ -128,7 +128,9 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
         // Only the recipient sees their own playerId; everyone else is masked.
         playerId: isOwn ? slot.playerId : undefined,
         // Non-identifying flag so the host can be badged without leaking the id.
-        isHost: slot.status === 'claimed' && slot.playerId === creatorId,
+        // Uses the same fail-closed rule as host authorization: never badge a
+        // slot as host when no creator is bound (creatorId falsy).
+        isHost: slot.status === 'claimed' && !!creatorId && slot.playerId === creatorId,
       };
     });
 
@@ -432,7 +434,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Game has already started' };
     }
 
-    if (playerId !== this.#storedState.creatorId) {
+    if (!this.#isHost(playerId)) {
       return { success: false, error: 'Only the host can add slots' };
     }
 
@@ -485,7 +487,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Game has already started' };
     }
 
-    if (playerId !== this.#storedState.creatorId) {
+    if (!this.#isHost(playerId)) {
       return { success: false, error: 'Only the host can remove slots' };
     }
 
@@ -560,7 +562,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       return { success: false, error: 'Game has already started' };
     }
 
-    if (playerId !== this.#storedState.creatorId) {
+    if (!this.#isHost(playerId)) {
       return { success: false, error: 'Only the host can modify slots' };
     }
 
@@ -765,7 +767,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     }
 
     // Verify caller is the host
-    if (hostPlayerId !== this.#storedState.creatorId) {
+    if (!this.#isHost(hostPlayerId)) {
       return { success: false, error: 'Only the host can kick players' };
     }
 
@@ -904,7 +906,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     }
 
     // Verify caller is the host
-    if (hostPlayerId !== this.#storedState.creatorId) {
+    if (!this.#isHost(hostPlayerId)) {
       return { success: false, error: 'Only the host can modify other players\' options' };
     }
 
@@ -962,7 +964,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     }
 
     // Verify caller is the host
-    if (hostPlayerId !== this.#storedState.creatorId) {
+    if (!this.#isHost(hostPlayerId)) {
       return { success: false, error: 'Only the host can modify game options' };
     }
 
@@ -1136,6 +1138,24 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   // ============================================
   // Private Methods
   // ============================================
+
+  /**
+   * Authorize a host-only action.
+   *
+   * Host identity rests entirely on the caller presenting the creator's secret
+   * playerId — a per-seat capability that is NEVER broadcast (see getLobbyInfo,
+   * which masks every other slot's playerId and omits creatorId). The check
+   * must FAIL CLOSED on an empty identity: if the lobby has no creator bound,
+   * or the caller presents no id, no host action is authorized. A bare
+   * `playerId !== creatorId` is unsafe because `undefined === undefined` (or two
+   * empty strings) would satisfy it, handing host control to an unauthenticated
+   * caller that simply omits the field.
+   */
+  #isHost(playerId: string | undefined): boolean {
+    const creatorId = this.#storedState.creatorId;
+    if (!creatorId || !playerId) return false;
+    return playerId === creatorId;
+  }
 
   /**
    * Validate that a seat number is 1-indexed (minimum 1).
