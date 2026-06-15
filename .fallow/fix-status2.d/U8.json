@@ -1,0 +1,10 @@
+{
+  "unit": "U8",
+  "fids": [
+    "F37",
+    "F41"
+  ],
+  "status": "merged",
+  "sha": "2967873",
+  "desc": "useDragDrop warns on missing provider; shared transform-aware drag image for AutoUI + custom UI parity"
+}

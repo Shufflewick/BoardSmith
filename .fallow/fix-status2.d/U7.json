@@ -1,0 +1,10 @@
+{
+  "unit": "U7",
+  "fids": [
+    "F7",
+    "F44"
+  ],
+  "status": "merged",
+  "sha": "99cb3c8",
+  "desc": "U7: undo uses authoritative moveCount (F44) + break session barrel import cycle (F7)"
+}

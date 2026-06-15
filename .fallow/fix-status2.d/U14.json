@@ -1,0 +1,9 @@
+{
+  "unit": "U14",
+  "fids": [
+    "F6"
+  ],
+  "status": "merged",
+  "sha": "f1051a2",
+  "desc": "Remove orphaned better-sqlite3 + @types/better-sqlite3 deps (unused after server/SQLite-store removal)"
+}

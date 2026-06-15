@@ -1,0 +1,14 @@
+{
+  "unit": "U1",
+  "fids": [
+    "F2",
+    "F26",
+    "F28",
+    "F29",
+    "F30",
+    "F46"
+  ],
+  "status": "merged",
+  "sha": "94aec98",
+  "desc": "Dedupe GameSession lobby callbacks, mint playerId via Web Crypto, and correct client/ai-system/session docs"
+}

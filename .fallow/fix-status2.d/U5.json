@@ -1,0 +1,11 @@
+{
+  "unit": "U5",
+  "fids": [
+    "F14",
+    "F16",
+    "F47"
+  ],
+  "status": "merged",
+  "sha": "88f8be2",
+  "desc": "Drop dead testing exports (fixtures.ts, flow-visualizers, player/element assertions); make assertFlowState actions exact-set"
+}

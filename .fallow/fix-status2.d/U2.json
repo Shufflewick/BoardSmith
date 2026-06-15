@@ -1,0 +1,12 @@
+{
+  "unit": "U2",
+  "fids": [
+    "F17",
+    "F18",
+    "F19",
+    "F20"
+  ],
+  "status": "merged",
+  "sha": "7ab3e01",
+  "desc": "Correct fabricated player-collection API in docs and remove deleted server/worker modules from architecture"
+}

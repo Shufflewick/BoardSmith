@@ -1,0 +1,9 @@
+{
+  "unit": "U17",
+  "fids": [
+    "F13"
+  ],
+  "status": "merged",
+  "sha": "4cf1ecd",
+  "desc": "Remove orphaned ParallelTrainer subtree; keep live simulator exports (serialize/deserializeGameStructure)"
+}

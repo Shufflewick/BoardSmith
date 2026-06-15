@@ -1,0 +1,10 @@
+{
+  "unit": "U6",
+  "fids": [
+    "F3",
+    "F52"
+  ],
+  "status": "merged",
+  "sha": "ca7f295",
+  "desc": "F3,F52 — make protocol.ts the single owner of game-option metadata types + convert WebSocketMessage to a discriminated union; session/types.ts now re-exports both"
+}

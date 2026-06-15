@@ -1,0 +1,9 @@
+{
+  "unit": "U20",
+  "fids": [
+    "F27"
+  ],
+  "status": "merged",
+  "sha": "aeb17c2",
+  "desc": "Correct runtime.md GameRunner examples to real API (performAction, getSnapshot, actionHistory)"
+}

@@ -1,0 +1,854 @@
+{
+  "generated": "2026-06-15",
+  "unitCount": 24,
+  "findingCount": 44,
+  "units": [
+    {
+      "unit": "U1",
+      "maxSeverity": "high",
+      "categories": [
+        "dead-code",
+        "docs-mismatch",
+        "pit-of-success"
+      ],
+      "fids": [
+        "F2",
+        "F26",
+        "F28",
+        "F29",
+        "F30",
+        "F46"
+      ],
+      "namedFiles": [
+        "src/session/game-session.ts",
+        "docs/api/client.md",
+        "src/client/game-connection.ts",
+        "src/client/client.ts",
+        "docs/ai-system.md",
+        "docs/api/session.md",
+        "src/client/index.ts",
+        "src/session/index.ts",
+        "src/ai/index.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F26",
+          "category": "docs-mismatch",
+          "severity": "high",
+          "easeOfFix": "moderate",
+          "title": "client.md documents a fabricated GameConnection API — ~12 methods that do not exist in source",
+          "whyConcern": "Nearly every connection example in the client SDK reference is uncallable. Code copied from these examples throws 'is not a function' at runtime. The doc also conflates client-level operations (lobby/restart/history) with connection-level ones, so even a careful reader cannot infer the correct object.",
+          "evidence": "docs/api/client.md examples call connection.onConnect() (line 141), onDisconnect() (145), onActionResult() (157), onLobbyUpdate() (243), claimPosition() (224), updateName() (231), setReady() (237), undo() (278), restart() (285), getHistory() (195), getStateAt() (199), getStateDiff() (202), and client.matchmakingStatus() (117). Grep of src/client/game-connection.ts returns 0 for onConnect, onDisconnect, onActionResult, onLobbyUpdate, claimPosition, updateName, setReady, restart, getHistory, getStateAt, getStateDiff, and 0 for `undo`. The real GameConnection methods are onConnectionChange (game-connection.ts:198), onLobbyChange (game-connection.ts:178), action (117), getState (105), getStatus (109). The lobby/history/restart operations live on MeepleClient instead: claimSeat (client.ts:336), updateLobbyName (367), setReady(gameId, ready) (386), restartGame (298), getHistory(gameId) (277), and getMatchStatus (82, not 'matchmakingStatus').",
+          "fixPaths": "docs/api/client.md: rewrite the Connection/Lobby/History/Undo/Restart examples to use the real surface — connection.onConnectionChange/onLobbyChange/action/getState, and MeepleClient.claimSeat/updateLobbyName/setReady/restartGame/getHistory/getMatchStatus. Cross-check every method name against src/client/game-connection.ts and src/client/client.ts."
+        },
+        {
+          "fid": "F28",
+          "category": "docs-mismatch",
+          "severity": "high",
+          "easeOfFix": "easy",
+          "title": "ai-system.md GameSession example uses a private constructor, wrong option names, and a nonexistent start()",
+          "whyConcern": "The entire 'Integration with GameSession' snippet cannot compile or run: private constructor, three invented option keys, and a missing start() method. The correct form (per docs/api/session.md:93) is GameSession.create({ GameClass, gameType, playerCount, playerNames, aiConfig: { players: [1], level: 'hard' } }).",
+          "evidence": "docs/ai-system.md:184 does `new GameSession({ gameClass: MyGame, ..., aiPlayers: [1], aiLevel: 'hard', aiConfig: ... })` then calls `session.start()` (line ~196). But src/session/game-session.ts:171 declares `private constructor(...)` — `new GameSession(...)` is a compile error; the only entry point is the static GameSession.create (game-session.ts:248). GameSessionOptions (game-session.ts:59-79) has fields GameClass (capital G), playerNames, and aiConfig: AIConfig — there are no gameClass/aiPlayers/aiLevel fields. Grep for a public `start(` in game-session.ts returns nothing (the runner has start(), not the session).",
+          "fixPaths": "docs/ai-system.md: change `new GameSession({...})` to `GameSession.create({...})`, rename gameClass->GameClass, replace aiPlayers/aiLevel with aiConfig: { players, level }, add playerNames, and drop session.start(). Mirror docs/api/session.md and src/session/game-session.ts."
+        },
+        {
+          "fid": "F2",
+          "category": "dead-code",
+          "severity": "medium",
+          "easeOfFix": "moderate",
+          "title": "Lobby session callbacks (~85 lines) duplicated verbatim between GameSession.create and GameSession.restore",
+          "whyConcern": "This is the core lobby-to-game handoff logic (player recreation, color/name sync, AI scheduling). A bug fix or new lobby field must be applied in two places; missing one silently breaks either fresh games or restored games depending on which path is exercised.",
+          "evidence": "src/session/game-session.ts:420 (inside `static create`, line 248) and src/session/game-session.ts:556 (inside `static restore`, line 533) both declare `const callbacks = { onGameStart() {...}, onAIConfigChanged(aiSlots) {...} }`. The onGameStart bodies are near-identical: both build `playerConfigs` from `storedState.lobbySlots`, recreate `GameRunner`, replace `session.#runner`/`#pickHandler`/`#pendingActionManager`, then sync player name/color from slots and call `#scheduleAICheck()`. jscpd flagged this as two clones totaling 85 lines (game-session.ts [418:21-450:23]≈[554:21-586:23] and [450:15-501:25]≈[586:37-637:25]). The only deltas are `gameType` vs `storedState.gameType` and `playerCount` vs `storedState.playerCount`.",
+          "fixPaths": "Extract a private static helper, e.g. `GameSession.#buildLobbyCallbacks({ GameClass, gameType, storedState, botAIConfig, getSession })` in src/session/game-session.ts and call it from both create (line ~420) and restore (line ~556). Parameterize the gameType/playerCount source so a single implementation serves both."
+        },
+        {
+          "fid": "F46",
+          "category": "pit-of-success",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "Client SDK mints player-identity capability tokens with Math.random()",
+          "whyConcern": "The playerId is the only auth token: connecting, claiming/leaving seats, kicking players, and changing game options (client.ts:461,508) all authenticate solely by this string. It is generated from a fully predictable timestamp prefix plus ~8 base36 chars of non-cryptographic Math.random(). Math.random() is not a CSPRNG and is seedable/predictable, so another player's identity proof is guessable/brute-forceable — enabling seat hijacking, impersonation, and host-only actions (kick, change options).",
+          "evidence": "src/client/client.ts:572-577 — generatePlayerId() builds the default playerId as `${Date.now().toString(36)}-${Math.random().toString(36).substring(2,10)}` and the constructor uses it as the client's identity (client.ts:37). src/types/protocol.ts:44-51 documents that playerId is a per-seat *capability*: \"it is used as the identity proof on WebSocket connect and for host-only authorization checks\" and is masked from other players for security.",
+          "fixPaths": "src/client/client.ts:572-577 — generate the id with crypto.randomUUID() (available in modern browsers and Node 16+), falling back to crypto.getRandomValues() rather than Math.random(); drop the predictable Date.now() prefix or keep it only as a non-security display hint."
+        },
+        {
+          "fid": "F29",
+          "category": "docs-mismatch",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "client.md and session.md document ClaimPositionRequest/ClaimPositionResponse — the exported names are ClaimSeatRequest/ClaimSeatResponse",
+          "whyConcern": "`import type { ClaimPositionRequest } from 'boardsmith/client'` (or '/session') fails to resolve — the symbol does not exist. The 'position' vs 'seat' naming drift also reinforces the wrong client.claimPosition() method name in the same client.md examples.",
+          "evidence": "docs/api/client.md:48-49 and docs/api/session.md:74-75 list ClaimPositionRequest / ClaimPositionResponse as exported types. Grep for 'ClaimPosition' across src/ returns zero matches. The actual exports are ClaimSeatRequest / ClaimSeatResponse (src/client/index.ts:78-79 and src/session/index.ts:69-70).",
+          "fixPaths": "docs/api/client.md:48-49 and docs/api/session.md:74-75: rename to ClaimSeatRequest / ClaimSeatResponse to match src/client/index.ts and src/session/index.ts."
+        },
+        {
+          "fid": "F30",
+          "category": "docs-mismatch",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "ai-system.md imports `Game` from 'boardsmith/ai', which does not export it",
+          "whyConcern": "The import line fails to resolve `Game` from 'boardsmith/ai'. Game is exported from the root 'boardsmith' package, not from the ai subpath.",
+          "evidence": "docs/ai-system.md:84 and :137 use `import type { AIConfig, Game } from 'boardsmith/ai';`. src/ai/index.ts only exports MCTSBot, createBot, parseAILevel, DIFFICULTY_PRESETS, DEFAULT_CONFIG and types BotConfig/BotMove/AIConfig/Objective/ThreatResponse/DifficultyLevel (src/ai/index.ts:7-16, 45, 72). `Game` is only used as an internal generic bound (imported from '../engine' at index.ts:1) and is never re-exported — grep `export .*\\bGame\\b` in src/ai/index.ts matches only `export function createBot<G extends Game>`.",
+          "fixPaths": "docs/ai-system.md:84,137: import Game from 'boardsmith' (or add a re-export of Game in src/ai/index.ts if a single-import surface is desired)."
+        }
+      ]
+    },
+    {
+      "unit": "U2",
+      "maxSeverity": "high",
+      "categories": [
+        "docs-mismatch"
+      ],
+      "fids": [
+        "F17",
+        "F18",
+        "F19",
+        "F20"
+      ],
+      "namedFiles": [],
+      "findings": [
+        {
+          "fid": "F17",
+          "category": "docs-mismatch",
+          "severity": "high",
+          "easeOfFix": "easy",
+          "title": "Docs use a non-existent `game.players` collection API (`.get()`, `.current`, `.all()`, `.nextAfter()`)",
+          "whyConcern": "`game.players` returns a plain `Array`, so `.get()`, `.current`, `.all()`, and `.nextAfter()` are all `undefined` -- calling them throws `TypeError: ... is not a function` (or yields `undefined` for `.current`). Every doc-copied snippet that looks up a player by seat or gets the current player crashes at runtime and fails TypeScript compilation. This is the single most pervasive copy-paste seed in the docs, spanning five of the seven audited files.",
+          "evidence": "`game.players` is a plain array getter, not a collection: engine/element/game.ts:1478 `get players(): P[] { return (this._t.children...).filter(...).sort(...) }`. The real accessors are methods on Game: `getPlayer(seat)` (engine/element/game.ts:1569), `currentPlayer` getter (engine/element/game.ts:1512), `nextAfter(player)` (engine/element/game.ts:1765). There is no PlayerCollection class anywhere (`grep -rn 'class PlayerCollection' engine/` returns nothing). The real Go Fish game confirms the correct API: ~/BoardSmithGames/go-fish/src/rules/actions.ts:39 `game.getPlayer(choice.value)`. Yet the docs call `game.players.get(...)`, `.current`, `.all()`, `.nextAfter()`: core-concepts.md:236-244 (`this.players.get(1)`, `this.players.current`, `this.players.all()`, `ctx.game.players.current`); actions-and-flow.md:298, 689, 708, 917 (`game.players.get(choice.value)`, `ctx.game.players.get(1)`) -- 689/708 are explicitly labeled 'From Go Fish actions.ts' but the real file uses `game.getPlayer`; common-patterns.md:21,28,35 (`this.players.get(...)`, `this.players.nextAfter(...)`); common-pitfalls.md:861 (`testGame.game.players.get(1)`); nomenclature.md:135 (`game.players.current`).",
+          "fixPaths": "Global replace across core-concepts.md, actions-and-flow.md, common-patterns.md, common-pitfalls.md, nomenclature.md: `game.players.get(x)`->`game.getPlayer(x)`, `game.players.current`->`game.currentPlayer`, `game.players.all()`->`game.players` (already an array), `this.players.nextAfter(p)`->`this.nextAfter(p)`. Verify each against engine/element/game.ts."
+        },
+        {
+          "fid": "F19",
+          "category": "docs-mismatch",
+          "severity": "high",
+          "easeOfFix": "easy",
+          "title": "core-concepts.md custom Player example uses a constructor signature the base class does not have",
+          "whyConcern": "The snippet does not compile (`super(position, name)` mismatches `Partial<ElementContext>`) and teaches creating per-player hands inside the Player constructor, which is not how players are instantiated by the engine -- players are created by the framework from `playerCount`, not hand-constructed with positional args. A reader following this will fight type errors and an incorrect lifecycle model.",
+          "evidence": "core-concepts.md:206-221 shows `export class MyPlayer extends Player<MyGame, MyPlayer> { ... constructor(position: number, name: string, game: MyGame) { super(position, name); this.game = game; this.hand = game.create(Hand, ...); } }`. The actual base Player constructor takes a single element-context arg: engine/player/player.ts:127 `constructor(ctx: Partial<ElementContext>) { super(ctx); }`. There is no `(position, name)` overload, so `super(position, name)` is a compile error. Real custom Player classes confirm the pattern: they declare extra fields and define NO constructor at all -- ~/BoardSmithGames/checkers/src/rules/elements.ts:119 `export class CheckersPlayer extends Player { capturedCount = 0; }` and ~/BoardSmithGames/go-fish/src/rules/elements.ts:40 `export class GoFishPlayer extends Player { bookCount = 0; }`.",
+          "fixPaths": "Rewrite core-concepts.md:206-221 to match real usage: declare extra fields with initializers and no constructor; move hand creation into the Game constructor loop over `this.players` (mirror common-patterns.md:254-264 and the checkers/go-fish elements.ts)."
+        },
+        {
+          "fid": "F18",
+          "category": "docs-mismatch",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "core-concepts.md 'PlayerCollection Serialization Warning' describes a class and toJSON quirk that do not exist",
+          "whyConcern": "The documented failure mode (custom properties lost when mapping over players because a subclass toJSON re-runs) cannot occur, because the value is a plain Array with no custom toJSON. Readers will add pointless `[...]`/`Array.from()` defensive wrappers cargo-culted from a non-existent quirk, and -- more damaging -- will trust a mental model of player serialization that is wrong, making real serialization bugs harder to reason about.",
+          "evidence": "core-concepts.md:280-297 has a whole section asserting `game.players` is a `PlayerCollection` (an Array subclass) whose `.map()` returns a PlayerCollection and whose `PlayerCollection.toJSON()` 're-serializes the elements, losing any custom properties', prescribing `[...game.players.map(...)]` / `Array.from(...)` as the fix. But `game.players` is a plain array (engine/element/game.ts:1478 `get players(): P[]`), and no `PlayerCollection` class exists in the codebase (`grep -rn 'class PlayerCollection' engine/` -> no matches; `grep -rn 'PlayerCollection' engine/` -> no matches). core-concepts.md:236 also annotates `this.players // PlayerCollection`. (The same fabricated warning is duplicated in the out-of-scope llm-overview.md:422-434.)",
+          "fixPaths": "Delete or rewrite core-concepts.md:280-297 (and the annotation at :236). If a real serialization caveat exists, document the actual `Player.toJSON()` behavior from engine/player/player.ts; otherwise remove the section."
+        },
+        {
+          "fid": "F20",
+          "category": "docs-mismatch",
+          "severity": "medium",
+          "easeOfFix": "moderate",
+          "title": "architecture.md documents `server` and `worker` modules (and their exports) that have been deleted from the codebase",
+          "whyConcern": "The architecture doc is the map readers use to understand how the system is wired. It advertises two entire packages and named exports (`GameServerCore`, `createGameWorker`) that cannot be imported, and depicts deployment topologies (Express/Durable Object WebSocket servers) the library no longer ships. Anyone trying to follow the diagram to deploy or extend a server hits dead ends.",
+          "evidence": "architecture.md still presents `server` and `worker` as first-class modules: the dependency graph at architecture.md:50-66 draws `server`/`worker` boxes feeding `client`; the data-flow at architecture.md:108-123 routes `WebSocket -> Server/Worker`; the Package Responsibilities table at architecture.md:206-207 lists `server -> GameServerCore, handlers` and `worker -> createGameWorker, adapters`; the platform-adapters diagram at architecture.md:192-196 shows `Express WS` and `Durable Object WS`. None of this exists: `src/server` and `src/worker` directories are absent (ls -> 'No such file or directory'), and `grep -rn 'GameServerCore|createGameWorker' src` returns no matches. This matches the recorded F8/F9 fix ('server/worker modules removed') in MEMORY.md. The root CLAUDE.md module list still lists them too, but that file is out of audit scope.",
+          "fixPaths": "Update architecture.md:50-66 (graph), :108-123 (data flow), :192-196 (adapters), and the Package Responsibilities table rows at :206-207 to drop `server`/`worker` and `GameServerCore`/`createGameWorker`. Reconcile with the already-updated Runtime Isolation section (:216-239), which correctly states hosting/isolation is the deployment host's job. Also fix the module list in the root CLAUDE.md."
+        }
+      ]
+    },
+    {
+      "unit": "U3",
+      "maxSeverity": "high",
+      "categories": [
+        "docs-mismatch"
+      ],
+      "fids": [
+        "F21",
+        "F22",
+        "F23",
+        "F24"
+      ],
+      "namedFiles": [
+        "docs/ui-components.md"
+      ],
+      "findings": [
+        {
+          "fid": "F21",
+          "category": "docs-mismatch",
+          "severity": "high",
+          "easeOfFix": "easy",
+          "title": "ui-components.md documents actionController.error and .pendingAction — neither property exists (real names: lastError, currentAction)",
+          "whyConcern": "A designer copying the prominent 'Action Controller API' and 'Error Handling in UI' reference sections writes `actionController.error` and `actionController.pendingAction`, both of which are `undefined` at runtime. Error banners/toasts never render (the bound value is always falsy), and `pendingAction === 'move'` branches are dead. Worse, these are refs — even with the correct name they require `.value` in script and template (nested controller props are not auto-unwrapped), yet every example omits `.value`.",
+          "evidence": "docs/ui-components.md:1361 documents controller state `pendingAction | string | null` and :1366 `error | string | null | Error message from last failed execution`. The whole 'Error Handling in UI' section relies on these: :1453 `v-if=\"actionController.error\"`, :1469, :1486 `watch(() => props.actionController.error, ...)`, :1523/:1534, :1556-1594 read `actionController.error`; :1443 `if (actionController.pendingAction === 'move')`. The real public API has NO such properties. Source src/ui/composables/useActionControllerTypes.ts:288 declares `currentAction: Ref<string | null>` and :304 `lastError: Ref<string | null>` (no `error`, no `pendingAction`). The controller's returned object confirms it: src/ui/composables/useActionController.ts:1443 returns `currentAction`, :1449 returns `lastError` — there is no `error` or `pendingAction` key (full return block :1441-1487). The sibling doc custom-ui-guide.md:651 and :794 correctly use `actionController.lastError.value`.",
+          "fixPaths": "docs/ui-components.md: rename `pendingAction`→`currentAction` and `error`→`lastError` in the state table (:1359-1367) and throughout the Error Handling section (:1453-1594), and add `.value` to every access (e.g. `actionController.lastError.value`, `actionController.currentAction.value`). Match the already-correct usage in custom-ui-guide.md."
+        },
+        {
+          "fid": "F22",
+          "category": "docs-mismatch",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "ui-components.md actionController method table has wrong signatures (skip arg, async return types)",
+          "whyConcern": "`skip()` with no argument silently does nothing, so a designer's 'Skip' button appears broken with no error. Documenting `execute` as `Promise<void>` hides the `ActionResult` (with `.success`/`.error`) that custom-ui-guide.md:129 correctly relies on, and documenting `fill`/`start` as `void` hides that they are awaitable async — leading to missed `await` and race conditions during followUp chains.",
+          "evidence": "docs/ui-components.md:1343-1347 documents: `execute | (name, args?) => Promise<void>`, `start | (name, options?) => void`, `fill | (name, value) => void`, `skip | () => void`. Source disagrees on all four. src/ui/composables/useActionControllerTypes.ts:332 `execute: (...) => Promise<ActionResult>` (not `Promise<void>`); :352-355 `start: (...) => Promise<void>` (not `void`); :356-357 `fill: (selectionName, value) => Promise<ValidationResult>` (async, not `void`); :358-359 `skip: (selectionName: string) => void` — skip REQUIRES the selection name. Implementation src/ui/composables/useActionController.ts:1332 `function skip(selectionName: string)` then :1335 `selections.find(s => s.name === selectionName)` — calling `skip()` with no argument (as shown at ui-components.md:1437 `actionController.skip();`) finds nothing and no-ops.",
+          "fixPaths": "docs/ui-components.md:1343-1347 — correct to `execute(name, args?) => Promise<ActionResult>`, `start(name, options?) => Promise<void>`, `fill(name, value) => Promise<ValidationResult>`, `skip(selectionName) => void`; update the `actionController.skip();` example at :1437 to pass the selection name."
+        },
+        {
+          "fid": "F23",
+          "category": "docs-mismatch",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "useGameGrid documented return members getAlgebraic/pixelToCell do not exist",
+          "whyConcern": "Destructuring `getAlgebraic` and `pixelToCell` yields `undefined`; calling them throws `TypeError: x is not a function`. The actual API for notation is `toNotation`/`fromNotation`, which the doc never mentions for the composable.",
+          "evidence": "docs/ui-components.md:962 shows `const { getCellAt, getAlgebraic, pixelToCell } = useGameGrid({ rows: 8, cols: 8, cellSize: 60 });`. Source src/ui/composables/useGameGrid.ts:209-221 returns `{ board, grid, getKey, getCellAt, getChildAt, getChildrenAt, toNotation, fromNotation, iterateCells, findCells, isInBounds }` — there is no `getAlgebraic` and no `pixelToCell` anywhere in the file (grep confirms only `toNotation` :164 and `fromNotation` :173 exist as notation helpers). `getCellAt` is the only documented member that is real.",
+          "fixPaths": "docs/ui-components.md:961-970 — replace `getAlgebraic`/`pixelToCell` with the real return members (`toNotation`, `fromNotation`, `getCellAt`, etc.) from useGameGrid.ts:209-221."
+        },
+        {
+          "fid": "F24",
+          "category": "docs-mismatch",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "useHexGrid documented return members (hexToPixel, pixelToHex, getHexCorners) are not on the composable's return",
+          "whyConcern": "`hexToPixel(...)`, `pixelToHex(...)`, and `getHexCorners(...)` called off the composable instance throw `TypeError: not a function`. The correct instance methods are `getHexPosition` (axial→pixel) and `getHexPoints` (SVG polygon).",
+          "evidence": "docs/ui-components.md:985-991 shows `const { hexToPixel, pixelToHex, getHexCorners, getNeighbors } = useHexGrid({ size: 30, orientation: 'flat' });`. The composable's return type src/ui/composables/useHexGrid.ts:85-119 exposes `getHexPosition` (:104), `getHexPoints` (:106), `getNeighbors` (:116), `hexDistance` (:114), `axialToCube`/`cubeToAxial`, etc. There is no `pixelToHex` and no `getHexCorners` in the file at all; `hexToPixel` exists ONLY as a standalone export (:375), not as a member returned by `useHexGrid`. So 3 of the 4 destructured names resolve to `undefined`.",
+          "fixPaths": "docs/ui-components.md:985-991 — align destructured names with useHexGrid.ts:85-119 (`getHexPosition`, `getHexPoints`, `getNeighbors`, `hexDistance`), or show the standalone `hexToPixel`/`getHexPolygonPoints` import path instead of pulling them off the composable."
+        }
+      ]
+    },
+    {
+      "unit": "U4",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F8",
+        "F9",
+        "F11"
+      ],
+      "namedFiles": [
+        "src/engine/utils/dev-state.ts",
+        "src/engine/utils/index.ts",
+        "src/engine/index.ts",
+        "src/engine/utils/replay.ts",
+        "src/runtime/index.ts",
+        "src/engine/action/helpers.ts",
+        "src/engine/utils/action-helpers.ts",
+        "src/engine/flow/builders.ts",
+        "src/engine/action/index.ts",
+        "src/engine/flow/index.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F8",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "moderate",
+          "title": "Vestigial RNG call-count tracking in dev-state.ts is write-only dead code (always 0)",
+          "whyConcern": "An entire RNG-capture path was left behind after RNG restore moved to setRandomState/getRandomState. The counter can never be non-zero, `randomState.callCount` is written-but-never-read, and three exported functions are unreachable. Worse, after an HMR dev-transfer the RNG position is silently NOT restored through this path, so the snapshot's `randomState` is decorative — a latent correctness trap masked by code that looks like it handles RNG.",
+          "evidence": "src/engine/utils/dev-state.ts:83 declares `let randomCallCounter = 0;` whose ONLY incrementer is `createTrackedRandom` (dev-state.ts:89-94). `createTrackedRandom` has zero call sites anywhere (grep across src + BoardSmithGames + MERC returns only its definition). Therefore `randomCallCounter` is permanently 0. `getRandomCallCount` (dev-state.ts:99) and `resetRandomCallCounter` (dev-state.ts:106) likewise have zero callers. `captureDevState` writes `callCount: randomCallCounter` into `DevSnapshot.randomState` (dev-state.ts:137-146), and `randomState` is NEVER read by `restoreDevState` or by `GameSession.#reloadWithDevTransfer` (game-session.ts:949-1010 contains no `randomState`/`setRandomState` reference). The real RNG restore is done elsewhere via `setRandomState`/`getRandomState` (runner.ts, snapshot.ts, game.ts). The code even admits incompleteness at dev-state.ts:133-136: \"We can't easily capture the exact random state... actual implementation will need GameSession to track this via a wrapper.\"",
+          "fixPaths": "src/engine/utils/dev-state.ts: delete `randomCallCounter`, `createTrackedRandom`, `getRandomCallCount`, `resetRandomCallCounter`, and the `randomState` field from `DevSnapshot`/`captureDevState`; remove the corresponding re-exports in src/engine/utils/index.ts and src/engine/index.ts. If dev-transfer actually needs RNG continuity, capture `game.getRandomState()` and replay it via `setRandomState` in restoreDevState instead."
+        },
+        {
+          "fid": "F9",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "Replay-file module (replay.ts) is fully unused exported dead code",
+          "whyConcern": "102 lines plus two index re-exports of public API that nothing calls. The whole 'replay file' concept is orphaned after the move to state-authoritative snapshots.",
+          "evidence": "src/engine/utils/replay.ts defines `ReplayFile`, `createReplayFile`, `validateReplayFile`, `parseReplayFile`. These are re-exported from src/engine/index.ts (lines 22-26) and src/runtime/index.ts (createReplayFile/validateReplayFile/parseReplayFile/ReplayFile block). Grep across all of src (including *.test.ts), BoardSmithGames, and Dropbox/MERC/BoardSmith/MERC finds zero references outside replay.ts itself and the two index re-export lines. The actual replay/restore path is snapshot-based (`GameRunner.fromSnapshot`), and runner.ts:284-305 documents that replay-based restore was removed as unsound.",
+          "fixPaths": "Delete src/engine/utils/replay.ts and remove its re-export blocks from src/engine/index.ts and src/runtime/index.ts. If a portable replay format is still desired, derive it from GameStateSnapshot."
+        },
+        {
+          "fid": "F11",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "Cluster of exported designer helpers with zero consumers (selection filters + arg resolvers + namedSequence)",
+          "whyConcern": "These are documented, advertised public helpers (filter combinators, followUp arg resolution, named flow steps) that no shipping game or internal code path exercises. Untested, unused API drifts out of sync with the code it is meant to wrap (e.g. resolveElementArg's contract depends on the server's arg-resolution behavior, which has no test pinning it).",
+          "evidence": "Verified zero call sites (grep `name(` across src incl tests, BoardSmithGames, MERC, excluding definitions/docs): `allOf`, `anyOf`, `adjacentToSelection`, `excludeAlreadySelected` (all defined in src/engine/action/helpers.ts), `resolveElementArg`, `isResolvedElement` (src/engine/utils/action-helpers.ts — the entire file), and `namedSequence` (src/engine/flow/builders.ts:39). Each is exported through its module sub-index and src/engine/index.ts but is never called internally, in any test, or in any of the example games (hex, checkers, go-fish, cribbage, polyhedral-potions, demos) or MERC.",
+          "fixPaths": "Either (a) delete the unused exports — src/engine/action/helpers.ts (allOf/anyOf/adjacentToSelection/excludeAlreadySelected), src/engine/utils/action-helpers.ts (whole file), src/engine/flow/builders.ts (namedSequence) — plus their re-exports in src/engine/action/index.ts, src/engine/utils/index.ts, src/engine/flow/index.ts, src/engine/index.ts; or (b) if they are intended public API, add at least one example-game usage and a unit test per helper to keep them honest."
+        }
+      ]
+    },
+    {
+      "unit": "U5",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code",
+        "pit-of-success"
+      ],
+      "fids": [
+        "F14",
+        "F16",
+        "F47"
+      ],
+      "namedFiles": [
+        "src/testing/fixtures.ts",
+        "src/testing/index.ts",
+        "src/testing/debug.ts",
+        "src/testing/assertions.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F14",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "Dead testing module `src/testing/fixtures.ts` — ScenarioBuilder/scenario/quickGame/playSequence/playUntil/createMultiple have zero consumers anywhere",
+          "whyConcern": "An entire 305-line 'Fixture and scenario helpers' module is exported as public API but unused by every known consumer, including the most demanding one (MERC). It is maintenance surface (and TypeScript/test compile cost) with no payoff.",
+          "evidence": "src/testing/index.ts:72-80 re-exports `ScenarioBuilder, scenario, quickGame, playSequence, playUntil, createMultiple` from './fixtures.js' (305 lines). Word-boundary grep for each symbol across src/, all 8 example games' tests, and the MERC test suite (the actual heavy consumer of boardsmith/testing) returns nothing — the example/MERC game.test.ts files import only createTestGame/toDebugString/traceAction/logAvailableActions/diffSnapshots (e.g. checkers/tests/game.test.ts:3-8). `playUntilComplete` in MERC is a local test helper, not this export.",
+          "fixPaths": "If the scenario-builder API is intended as a supported convenience, add at least one example/test that uses it; otherwise delete src/testing/fixtures.ts and its export block in src/testing/index.ts (72-80)."
+        },
+        {
+          "fid": "F16",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "Unused testing debug/assertion exports: visualizeFlow, visualizeFlowWithPosition, debugFlowState, assertPlayerHas, assertElementCount",
+          "whyConcern": "Public testing helpers that no game's test suite calls — dead exports inflating the boardsmith/testing surface and adding compile/maintenance cost with no coverage proving they work.",
+          "evidence": "Exported from src/testing/index.ts (debug block lines 84-97; assertions block 60-71). Word-boundary grep across src/, all example games, and MERC tests returns 0 consumers for `visualizeFlow`, `visualizeFlowWithPosition`, `debugFlowState`, `assertPlayerHas`, and `assertElementCount` (vs. e.g. traceAction=11, diffSnapshots=8, toDebugString=8 which are heavily used). These sit alongside the genuinely-used debug helpers, so they are not part of a fully-dead file.",
+          "fixPaths": "Confirm against any private downstream consumers, then remove the unused functions from src/testing/debug.ts and src/testing/assertions.ts and drop them from the export blocks in src/testing/index.ts."
+        },
+        {
+          "fid": "F47",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "assertFlowState treats expected `actions` as a subset, not the exact set",
+          "whyConcern": "A test asserting `actions: ['move']` passes even when the engine actually offers `['move','attack','win_instantly']`. Tests meant to lock down which actions are legal in a given flow state silently accept extra (possibly illegal) actions — the exact regression these assertions exist to catch slips through green.",
+          "evidence": "src/testing/assertions.ts:96-101 — for expected.actions it only computes `missingActions = expected.actions.filter(a => !actual.actions?.includes(a))` and fails únicamente if something expected is missing. Extra available actions never fail the assertion. The doc example (assertions.ts:58-62) lists `actions: ['move','attack']` implying the complete available set.",
+          "fixPaths": "src/testing/assertions.ts:96-101 — also report unexpected extras (set-equality), or add an explicit `exactActions` vs `includesActions` distinction so exact matching is the default/obvious choice."
+        }
+      ]
+    },
+    {
+      "unit": "U6",
+      "maxSeverity": "medium",
+      "categories": [
+        "dead-code",
+        "pit-of-success"
+      ],
+      "fids": [
+        "F3",
+        "F52"
+      ],
+      "namedFiles": [
+        "src/types/protocol.ts",
+        "src/session/types.ts",
+        "docs/consolidation.md"
+      ],
+      "findings": [
+        {
+          "fid": "F3",
+          "category": "dead-code",
+          "severity": "medium",
+          "easeOfFix": "moderate",
+          "title": "Game option metadata types duplicated across boardsmith/session and boardsmith/types (two sources of truth)",
+          "whyConcern": "The same option-definition contract exists twice. If one copy gains a field (e.g. a new validation key on NumberOption) and the other does not, the two structurally diverge; TS will treat values typed against different copies as incompatible in nominal-ish positions, and consumers get inconsistent IntelliSense depending on the import path.",
+          "evidence": "src/session/types.ts:117 `NumberOption`, :131 `SelectOption`, :151 `BooleanOption`, :153 `GameOptionDefinition` are byte-for-byte identical to src/types/protocol.ts:104 `NumberOption`, :115 `SelectOption`, :127 `BooleanOption`, :134 `GameOptionDefinition`. Both are public: src/session/index.ts:59-60 re-exports `GameOptionDefinition`/`NumberOption`, and src/types/index.ts:11 `export * from './protocol.js'`. session/types.ts:4 even carries a header comment: 'Protocol types are also available from boardsmith/types for new code. See docs/consolidation.md' — but docs/consolidation.md does not exist (ls returned nothing). jscpd flagged 3 clones (~130 lines) between these two files.",
+          "fixPaths": "Make src/types/protocol.ts the single owner of the option-metadata types and have src/session/types.ts `import type`/re-export them instead of redefining (it already imports LobbyState et al. from ../types/protocol.js at line 10). Either create the referenced docs/consolidation.md or drop the stale comment."
+        },
+        {
+          "fid": "F52",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "moderate",
+          "title": "WebSocketMessage is a stringly-typed bag where every payload field is optional",
+          "whyConcern": "Invalid messages are fully representable and type-check clean: `{type:'action'}` (no action), `{type:'kickPlayer'}` (no seat), `{type:'claimSeat'}` (no name/seat). The types provide zero help that each message kind has required fields, pushing all validation to runtime on the server.",
+          "evidence": "src/types/protocol.ts:227-265 — a single interface with a 17-value `type` union and every other field optional (`action?`, `seat?`, `name?`, `ready?`, `isAI?`, `gameOptions?`, ...). Nothing ties `type:'action'` to a required `action`, or `type:'claimSeat'` to a required `seat`/`name`.",
+          "fixPaths": "src/types/protocol.ts:227-265 — replace the single interface with a discriminated union: one interface per `type` literal carrying exactly its required fields (e.g. `{type:'action';action:string;args:Record<string,unknown>;requestId?:string}` | `{type:'claimSeat';seat:number;name:string}` | ...)."
+        }
+      ]
+    },
+    {
+      "unit": "U7",
+      "maxSeverity": "high",
+      "categories": [
+        "dead-code",
+        "pit-of-success"
+      ],
+      "fids": [
+        "F7",
+        "F44"
+      ],
+      "namedFiles": [
+        "src/session/stateless-ops.ts",
+        "src/session/state-history.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F44",
+          "category": "pit-of-success",
+          "severity": "high",
+          "easeOfFix": "easy",
+          "title": "Undo computes the turn-start index with the heuristic the code itself flags as broken, while the displayed canUndo/turnStartActionIndex use the authoritative moveCount — they disagree",
+          "whyConcern": "When moveCount is present (exactly the phase-transition case it was added to fix, e.g. MERC where a player acts at end of Day 1 and start of Day 2), the display says the turn started at index X but undo rewinds to an earlier index Y found by scanning back past the phase boundary. fromCheckpoint(Y) succeeds (a checkpoint exists there), so undo silently restores too far — discarding committed actions from the previous phase/turn that were never meant to be undoable. The user clicks 'undo my turn' and loses a prior turn's work.",
+          "evidence": "buildPlayerState feeds the client's canUndo / turnStartActionIndex / actionsThisTurn by calling computeUndoInfo WITH flowState.moveCount (src/session/utils.ts:365-369). But both undo execution paths call computeUndoInfo WITHOUT moveCount: StateHistory.undoToTurnStart (src/session/state-history.ts:270-273) and the stateless undo op (src/session/stateless-ops.ts:345). computeUndoInfo's no-moveCount branch is the backward-scan fallback whose own comment warns: 'This heuristic can fail for games with phases where the same player acts at the end of one phase and start of the next' (src/session/utils.ts:315-318, 296-313).",
+          "fixPaths": "Pass flowState.moveCount into computeUndoInfo at src/session/state-history.ts:270 and src/session/stateless-ops.ts:345 so undo execution uses the identical turn-boundary the UI displayed. Better: make computeUndoInfo require an explicit moveCount/flowState argument (no silent fallback) so a caller cannot accidentally select the broken heuristic."
+        },
+        {
+          "fid": "F7",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "moderate",
+          "title": "Session module imports its own barrel, creating circular dependencies",
+          "whyConcern": "Value-level import cycles through a barrel are an initialization-order hazard: depending on load order, one of the imported symbols can be `undefined` at module-evaluation time, producing intermittent 'X is not a function' failures that are hard to reproduce.",
+          "evidence": "fallow reports 2 cycles in session: src/session/index.ts -> src/session/snapshot-session-host.ts -> src/session/stateless-ops.ts, and src/session/index.ts -> src/session/stateless-ops.ts. Root cause: src/session/stateless-ops.ts:16 does `import { PickHandler, buildSingleActionMetadata, buildPlayerState, computeUndoInfo } from './index.js'` — i.e. it imports value symbols from the package's own barrel, which in turn re-exports stateless-ops. (A third cycle, src/engine/element/game.ts:107 importing checkForVolatileState from volatile-state.js while src/engine/element/volatile-state.ts:3 imports the value PersistentMap back from game.js, exists in engine.)",
+          "fixPaths": "In src/session/stateless-ops.ts:16 import PickHandler/buildSingleActionMetadata/buildPlayerState/computeUndoInfo directly from their defining modules (e.g. ./pick-handler.js and the metadata/player-state source files) instead of ./index.js. For the engine cycle, move PersistentMap or checkForVolatileState into a shared leaf module so game.ts and volatile-state.ts no longer import each other."
+        }
+      ]
+    },
+    {
+      "unit": "U8",
+      "maxSeverity": "low",
+      "categories": [
+        "pit-of-success"
+      ],
+      "fids": [
+        "F37",
+        "F41"
+      ],
+      "namedFiles": [
+        "src/ui/composables/useDragDrop.ts",
+        "src/ui/components/auto-ui/AutoElement.vue"
+      ],
+      "findings": [
+        {
+          "fid": "F37",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "useDragDrop silently no-ops outside a GameShell provider while its sibling useBoardInteraction throws",
+          "whyConcern": "A custom board that renders outside the GameShell provider (or in a test harness) gets completely non-functional drag-and-drop with zero diagnostics — no thrown error, no warning. The two sibling injection APIs fail in opposite ways.",
+          "evidence": "`useDragDrop` resolves the provider via `tryUseBoardInteraction()` (src/ui/composables/useDragDrop.ts:176) and every handler early-returns when it is absent: dragProps `if (!boardInteraction) return` (line 181), dropProps `if (!boardInteraction?.isDragging) return` (lines 229-253), and isDragging/isDropTarget/isOver return false (lines 259-272). By contrast `useBoardInteraction()` throws a descriptive error when no provider exists (src/ui/composables/useBoardInteraction.ts:404-414).",
+          "fixPaths": "Make useDragDrop call useBoardInteraction() (throwing) by default, or emit a one-time devWarn the first time a drag handler runs with no provider. File: src/ui/composables/useDragDrop.ts:175-272."
+        },
+        {
+          "fid": "F41",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "moderate",
+          "title": "AutoUI native drag image is clipped for transformed elements; custom-UI useDragDrop is not — visual parity break",
+          "whyConcern": "The same element dragged from the AutoUI board versus a custom board produces visibly different drag ghosts, contradicting the parity expectation between the two interaction surfaces.",
+          "evidence": "`useDragDrop.dragProps` detects a CSS transform on the source and builds a transform-stripped clone for a clean drag ghost (src/ui/composables/useDragDrop.ts:186-213). AutoElement's own `handleDragStart` sets the drag data and calls startDrag but never sets a custom drag image or strips transforms (src/ui/components/auto-ui/AutoElement.vue:811-829), so a hovered/translated element drags with a clipped ghost.",
+          "fixPaths": "Extract the transform-aware setDragImage logic from useDragDrop into a shared helper and call it from AutoElement.handleDragStart. Files: src/ui/composables/useDragDrop.ts:186-213, src/ui/components/auto-ui/AutoElement.vue:811-829."
+        }
+      ]
+    },
+    {
+      "unit": "U9",
+      "maxSeverity": "low",
+      "categories": [
+        "pit-of-success"
+      ],
+      "fids": [
+        "F38",
+        "F39"
+      ],
+      "namedFiles": [
+        "src/ui/composables/useBoardInteraction.ts",
+        "src/ui/components/auto-ui/ActionPanel.vue",
+        "src/ui/composables/useActionController.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F38",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "moderate",
+          "title": "triggerChoiceSelect (the documented custom-UI choice path) silently no-ops unless an action is already active AND the pick name matches",
+          "whyConcern": "A custom UI that calls `boardInteraction.triggerChoiceSelect('suit','H')` to begin or out-of-order-fill a choice gets a silent no-op, while the element-click equivalent auto-starts the action. The 'shared state' contract implies either side can drive selection, but choices only work when ActionPanel has pre-armed the callback for exactly the current pick.",
+          "evidence": "`triggerChoiceSelect` only fires if `state.onChoiceSelect` is set (src/ui/composables/useBoardInteraction.ts:370-374). That callback is installed solely by ActionPanel's `watch(currentAction)` and only when an action is truthy; when null it sets the callback to null (ActionPanel.vue:649-668). The installed callback further guards `if (currentPick.value?.name === selectionName)` before doing anything (ActionPanel.vue:660-663). In contrast, clicking an element on the board CAN auto-start an action via the selectedElement watch (ActionPanel.vue:686-750).",
+          "fixPaths": "Either auto-start the matching action when triggerChoiceSelect is called with no active action (mirroring the element auto-start), or have triggerChoiceSelect surface a devWarn when onChoiceSelect is null / pick name mismatches. Files: src/ui/composables/useBoardInteraction.ts:370-374, src/ui/components/auto-ui/ActionPanel.vue:649-668."
+        },
+        {
+          "fid": "F39",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "moderate",
+          "title": "actionController.cancel() (the slot-exposed cancel) leaves board-interaction selection/highlight state stale",
+          "whyConcern": "After a custom-UI cancel, a board piece can remain visually 'selected'/highlighted via boardInteraction.selectedElement and hoveredChoice, desynced from the now-cleared action.",
+          "evidence": "`cancel()` clears only controller state — currentAction, args, advanced state — and never touches board interaction (src/ui/composables/useActionController.ts:1368-1381); the controller has no reference to it. ActionPanel only fully resets board interaction in its own `cancelAction`/`clearSelection`/`executeAction` (which call `boardInteraction?.clear()`, ActionPanel.vue:1167,443,1255). When a custom UI calls `actionController.cancel()` directly, currentAction goes null: the `watch([currentPick, filteredValidElements])` clears validElements/draggableSelectedElement (ActionPanel.vue:544-548) and `watch(currentAction)` nulls currentAction + choice callback (ActionPanel.vue:664-667), but `selectedElement` and `hoveredChoice` are never cleared, and the availableActions watch's `boardInteraction?.clear()` only runs when the action set actually changes (ActionPanel.vue:497-525), which a manual cancel does not.",
+          "fixPaths": "Have the controller own a reference to (or emit an event consumed to) clear board interaction on cancel, or make ActionPanel's currentAction watch call boardInteraction.clear() (not just setCurrentAction(null)) when the action transitions to null. Files: src/ui/composables/useActionController.ts:1368-1381, src/ui/components/auto-ui/ActionPanel.vue:649-668."
+        }
+      ]
+    },
+    {
+      "unit": "U10",
+      "maxSeverity": "medium",
+      "categories": [
+        "pit-of-success"
+      ],
+      "fids": [
+        "F49",
+        "F50"
+      ],
+      "namedFiles": [
+        "src/testing/random-simulation.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F49",
+          "category": "pit-of-success",
+          "severity": "medium",
+          "easeOfFix": "hard",
+          "title": "simulateRandomGames cannot generate action arguments and silently swallows failed actions",
+          "whyConcern": "Any game whose actions take arguments (i.e. nearly all real games) will have every doAction() fail because args are always empty. Because the loop keeps re-selecting the same failing no-arg actions while isAwaitingInput stays true, the game neither progresses nor errors — it spins until the timeout and reports completed:0 / timedOut. The harness thus produces a confident-looking pass/fail signal that is meaningless for arg-based games.",
+          "evidence": "src/testing/random-simulation.ts:204 — getAvailableActions returns every action with `args: {}` (comment: \"real impl would generate valid args\"). simulateSingleGame at random-simulation.ts:147-152 increments only on success and does nothing on failure (comment: \"This is simplified\"). The doc example at random-simulation.ts:229 asserts `expect(results.completed).toBe(100)`.",
+          "fixPaths": "src/testing/random-simulation.ts:191-209 — either drive argument generation through the engine's action-introspection/pick metadata (ActionMetadata/PickMetadata in types/protocol.ts) so valid args are produced, or fail loudly when an action requires args instead of silently retrying. At minimum, track consecutive failures and surface them rather than masking via timeout."
+        },
+        {
+          "fid": "F50",
+          "category": "pit-of-success",
+          "severity": "medium",
+          "easeOfFix": "moderate",
+          "title": "Random-simulation reports a 'seed' that cannot reproduce the failure it found",
+          "whyConcern": "The point of seeding a fuzz/simulation harness is that when a crash is found you can replay that exact game by its seed. Because the seed includes wall-clock time and the public API accepts no seed input, re-running simulateRandomGames with identical parameters produces entirely different games, and the reported seed string has no public entry point to replay it. Found bugs are effectively non-reproducible.",
+          "evidence": "src/testing/random-simulation.ts:254 — `const seed = `sim-${playerCount}-${i}-${Date.now()}``. The seed embeds Date.now(), and SimulateRandomGamesOptions (random-simulation.ts:17-28) exposes no way to feed a seed back in. The per-game seed is surfaced on SingleGameResult.seed (random-simulation.ts:51).",
+          "fixPaths": "src/testing/random-simulation.ts:17-28 add a `seed`/`baseSeed` option, and at line 254 derive per-game seeds deterministically from it (e.g. `${baseSeed}-${playerCount}-${i}`) with no Date.now(); expose a single-seed replay entry point."
+        }
+      ]
+    },
+    {
+      "unit": "U11",
+      "maxSeverity": "medium",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F1"
+      ],
+      "namedFiles": [
+        "src/ai-trainer/feature-templates.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F1",
+          "category": "dead-code",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "Dead, divergent duplicate of generateCandidateFeatures() in feature-templates.ts (different logic, identical name)",
+          "whyConcern": "Two exported functions share one name but implement different filtering/dedup semantics. The feature-templates.ts copy is never called, so any maintenance applied there (e.g. adding a new template-applicability rule) silently has zero effect while looking correct.",
+          "evidence": "src/ai-trainer/feature-templates.ts:2446 exports `generateCandidateFeatures(structure)`. A SECOND function with the same name lives at src/ai-trainer/feature-generator.ts:7. Every real consumer imports the feature-generator version: src/ai-trainer/index.ts:15 re-exports from './feature-generator.js'; benchmark-worker.ts:10, simulation-worker.ts:14, parallel-trainer.ts:20 all `import { generateCandidateFeatures } from './feature-generator.js'`. Nothing imports `from './feature-templates'` except `FEATURE_TEMPLATES`/`FeatureTemplate` (feature-generator.ts:2, index.ts:22). The two bodies differ substantively: feature-generator dedups via `seenIds` and uses `templateApplies()`; feature-templates.ts:2452 filters on `matchesGameType(...winConditionInfo.gameType)` and does NO dedup.",
+          "fixPaths": "Delete the unused `generateCandidateFeatures` (and any helpers it alone uses, e.g. matchesGameType if unreferenced elsewhere) from src/ai-trainer/feature-templates.ts:2446. Confirm the live feature-generator version covers the gameType filtering the templates copy intended; if it does not, that is a behavior gap to reconcile, not just a deletion."
+        }
+      ]
+    },
+    {
+      "unit": "U12",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F4"
+      ],
+      "namedFiles": [
+        "src/ai-trainer/code-generator.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F4",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "saveAICode() is an exported no-op stub",
+          "whyConcern": "An exported function named saveAICode that silently does nothing violates fail-fast. If anything ever wires it up expecting a save, generated AI code is silently discarded with no error.",
+          "evidence": "src/ai-trainer/code-generator.ts:387 `export function saveAICode(code: string, outputPath: string): void` has an empty body containing only comments: 'This would be called by the CLI / For now, just export the function / The actual file writing happens in the CLI command'. It takes a path and writes nothing. It is not re-exported from src/ai-trainer/index.ts (the code-generation block at index.ts:57-62 exports only generateAICode/updateAIWeights/types) and has zero callers in src, ~/BoardSmithGames, or ~/Dropbox/MERC.",
+          "fixPaths": "Delete src/ai-trainer/code-generator.ts:387-394. If a save entry point is genuinely wanted, implement it with real fs writes (fail loudly on error) rather than leaving a stub."
+        }
+      ]
+    },
+    {
+      "unit": "U13",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F5"
+      ],
+      "namedFiles": [
+        "src/ai-trainer/simulator.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F5",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "runSimulationsWithProgress() is a dead, never-exported thin wrapper",
+          "whyConcern": "Pure dead code that merely forwards to runSimulations after folding `features` into options — adds API surface and a maintenance target with no behavior.",
+          "evidence": "src/ai-trainer/simulator.ts:309 `export async function runSimulationsWithProgress<G>(GameClass, gameType, options, features)` simply returns `runSimulations(GameClass, gameType, { ...options, features })`. It is not in the simulator re-export block (src/ai-trainer/index.ts:24-32 lists runSimulations, simulateSingleGame, serialize/deserializeGameStructure but not this) and has no callers in src or the external game repos.",
+          "fixPaths": "Delete src/ai-trainer/simulator.ts:309 and its function body."
+        }
+      ]
+    },
+    {
+      "unit": "U14",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F6"
+      ],
+      "namedFiles": [],
+      "findings": [
+        {
+          "fid": "F6",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "Orphaned dependency better-sqlite3 (and its @types) after server/SQLite-store removal",
+          "whyConcern": "better-sqlite3 is a native-compiled package; carrying it as a hard dependency forces every consumer of the boardsmith library to build/install a native module that nothing uses, slowing installs and risking build failures on platforms without build tooling.",
+          "evidence": "package.json:78 declares `better-sqlite3` in dependencies and package.json:91 `@types/better-sqlite3` in devDependencies, but no source imports it: grep for better-sqlite3 / Database across src returns nothing, and no file references sqlite/SQLite. fallow reports it as an unused dependency. This aligns with MEMORY.md noting the server/worker modules (which held the SQLite game store) were deleted in F8/F9.",
+          "fixPaths": "Remove `better-sqlite3` (package.json:78) and `@types/better-sqlite3` (package.json:91) from package.json and update the lockfile."
+        }
+      ]
+    },
+    {
+      "unit": "U15",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F10"
+      ],
+      "namedFiles": [
+        "src/engine/action/action.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F10",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "Two dead private helpers in action.ts (choicesContain, getChoiceFilterValue)",
+          "whyConcern": "Pure dead private methods left after the choice-matching code converged on `annotatedChoicesContain`/`valuesEqual` and on `ChoiceSelection.filterBy.selectionName`. They add surface to an already 1600-line file.",
+          "evidence": "src/engine/action/action.ts:457 `private choicesContain(...)` has zero `this.choicesContain` call sites in the file (only `annotatedChoicesContain` is used). src/engine/action/action.ts:1013 `private getChoiceFilterValue(...)` has zero `this.getChoiceFilterValue` call sites and no references anywhere in src (grep returns only the definition).",
+          "fixPaths": "src/engine/action/action.ts: remove the `choicesContain` (line ~457) and `getChoiceFilterValue` (line ~1013) method bodies and their doc comments."
+        }
+      ]
+    },
+    {
+      "unit": "U16",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F12"
+      ],
+      "namedFiles": [
+        "src/cli/cli.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F12",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "CLI flags accepted but silently ignored: `validate --fix`, `validate --skip-simulation`, `lint --fix`",
+          "whyConcern": "Three user-facing flags are parsed and then discarded. `boardsmith validate --fix` claims it will 'Attempt to auto-fix issues' and exits with the same failures unfixed. `boardsmith validate --skip-simulation` implies a random-simulation step exists that can be skipped — it does not. A user trusting these flags gets a silent no-op, the opposite of fail-fast/loud.",
+          "evidence": "src/cli/cli.ts:67-68 registers `--fix` and `--skip-simulation` on the validate command; src/cli/cli.ts:75 registers `--fix` on lint. But validate.ts:20 `validateCommand(options)` never reads `options` anywhere in the function body (only reference to `options` is the parameter declaration — confirmed by `grep -n options src/cli/commands/validate.ts` returning only line 20). lint.ts:263 `lintCommand(options)` likewise never reads `options` (grep returns only line 263; `grep -n 'options\\.' src/cli/commands/lint.ts` returns nothing). validateCommand additionally runs no simulation at all (validateMetadata/TypeScript/Security/AssetPaths/BundleSize/RequiredFiles only), so `--skip-simulation` controls behavior that does not exist.",
+          "fixPaths": "Either implement the flags or remove them. Cleanest: delete the three `.option(...)` lines in src/cli/cli.ts (67,68,75) and the unused `fix`/`skipSimulation` fields in ValidateOptions (validate.ts:8-11) and LintOptions (lint.ts). If auto-fix is genuinely planned, gate it behind a clear 'not yet implemented' error rather than a silent no-op."
+        }
+      ]
+    },
+    {
+      "unit": "U17",
+      "maxSeverity": "medium",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F13"
+      ],
+      "namedFiles": [
+        "src/ai-trainer/index.ts",
+        "docs/api/ai-trainer.md"
+      ],
+      "findings": [
+        {
+          "fid": "F13",
+          "category": "dead-code",
+          "severity": "medium",
+          "easeOfFix": "moderate",
+          "title": "Orphaned ParallelTrainer training subtree — exported and documented as the primary training API, but no command or consumer drives it",
+          "whyConcern": "~565 lines of trainer plus parallel-simulator.ts and simulation-worker.ts (and runSimulations/simulateSingleGame in simulator.ts) are dead: nothing in the repo, example games, or MERC instantiates ParallelTrainer or calls the parallel/serial simulation runners. The phase docs show a `train-ai` command was removed but the class it powered was left behind.",
+          "evidence": "src/ai-trainer/index.ts:2 exports `ParallelTrainer`. The only reference to the class anywhere in src/, all 8 example games, and the MERC game is its own definition file (`grep ParallelTrainer` outside index.ts/docs matches only src/ai-trainer/parallel-trainer.ts). No `train-ai` CLI command exists (grep for train-ai/'train' in src/cli is empty); the only AI command is `evolve-ai-weights` (cli.ts:88) which uses `WeightEvolver` (evolve-ai-weights.ts:109,142), not ParallelTrainer. parallel-trainer.ts is 565 lines. Its dependency `runParallelSimulations` (parallel-simulator.ts → spawns simulation-worker.ts) has no non-test consumer except parallel-trainer.ts; `runSimulations`/`simulateSingleGame` (simulator.ts) are reachable only via that same dead chain (benchmark-worker.ts imports only deserializeGameStructure, not the simulation runners). The live evolve path is weight-evolver → parallel-benchmark → benchmark-worker. Meanwhile docs/api/ai-trainer.md:220-223 instructs users `import { ParallelTrainer } from 'boardsmith/ai-trainer'` as the training entry point.",
+          "fixPaths": "Remove parallel-trainer.ts, parallel-simulator.ts, simulation-worker.ts, and the unused runSimulations/simulateSingleGame in simulator.ts (keep serializeGameStructure/deserializeGameStructure used by the benchmark workers); drop their exports from src/ai-trainer/index.ts; and update docs/api/ai-trainer.md to document WeightEvolver/evolve-ai-weights as the training API. Verify `evolve-ai-weights` still runs end-to-end afterward."
+        }
+      ]
+    },
+    {
+      "unit": "U18",
+      "maxSeverity": "low",
+      "categories": [
+        "dead-code"
+      ],
+      "fids": [
+        "F15"
+      ],
+      "namedFiles": [
+        "src/ui/composables/useHoverHighlight.ts",
+        "src/ui/index.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F15",
+          "category": "dead-code",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "Unused `useHoverHighlight` composable exported from boardsmith/ui",
+          "whyConcern": "The composable is presented as a supported public API for 'custom UI element highlighting' but is exercised by nothing in the repo or the known downstream games, so it could silently rot (no test/usage to catch regressions).",
+          "evidence": "src/ui/index.ts:255-259 exports `useHoverHighlight, UseHoverHighlightOptions, UseHoverHighlightReturn` from './composables/useHoverHighlight.js'. Grep for `useHoverHighlight`/`HoverHighlight` across src/, all example games, and MERC src+tests matches only the composable's own file and the index re-export — no internal component, no example game, and no MERC UI consumes it (the MERC UI is the heaviest custom-UI consumer and uses useFlyingElements/useFLIP/useDragDrop instead).",
+          "fixPaths": "Either add a usage in an example game / GameShell to make it a real supported path, or remove src/ui/composables/useHoverHighlight.ts and its export block in src/ui/index.ts:255-259."
+        }
+      ]
+    },
+    {
+      "unit": "U19",
+      "maxSeverity": "medium",
+      "categories": [
+        "docs-mismatch"
+      ],
+      "fids": [
+        "F25"
+      ],
+      "namedFiles": [
+        "docs/dice-and-scoring.md",
+        "src/engine/scoring/track.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F25",
+          "category": "docs-mismatch",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "dice-and-scoring.md shows UniqueTrack pointsPerEntry as a function, but the API only accepts number[]",
+          "whyConcern": "Passing a function is a TypeScript error, and at runtime `this.pointsPerEntry[position]` on a function is `undefined`, so `add()` returns the `?? 0` fallback — every entry silently scores 0. The 'Function-based points' comment is doubly misleading because no such feature exists.",
+          "evidence": "docs/dice-and-scoring.md:382-387 constructs `new UniqueTrack({ id: 'ones', name: 'Ones', maxEntries: 1, pointsPerEntry: (value) => value, // Function-based points })`. The config type forbids this: src/engine/scoring/track.ts:55 `pointsPerEntry?: number[]`, stored at :87 `this.pointsPerEntry = config.pointsPerEntry ?? new Array(...).fill(0)` and indexed as an array at :121/:137 (`this.pointsPerEntry[position]`). `UniqueTrackConfig` (track.ts:304-307) extends TrackConfig and adds only `validRange` — it does NOT widen `pointsPerEntry` to a function.",
+          "fixPaths": "docs/dice-and-scoring.md:382-387 — change to `pointsPerEntry: [1]` (or the appropriate numeric array) and drop the 'Function-based points' claim; or, if function-based points are desired, implement and type it in src/engine/scoring/track.ts before documenting it."
+        }
+      ]
+    },
+    {
+      "unit": "U20",
+      "maxSeverity": "medium",
+      "categories": [
+        "docs-mismatch"
+      ],
+      "fids": [
+        "F27"
+      ],
+      "namedFiles": [
+        "docs/api/runtime.md",
+        "src/runtime/runner.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F27",
+          "category": "docs-mismatch",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "runtime.md GameRunner examples use executeAction/getActionHistory/getStateAt — none exist; real method is performAction with positional args",
+          "whyConcern": "The headline 'Using GameRunner' example is wrong on both the method name and the calling convention. runner.executeAction({action:'move',player:0,args:{}}) fails, and the correct call is runner.performAction('move', 0, {}). getActionHistory/getStateAt simply don't exist.",
+          "evidence": "docs/api/runtime.md line 78 and lines 217-219 call runner.executeAction({ action, player, args }); line 222 calls runner.getActionHistory(); line 226 calls runner.getStateAt(2). Grep of src/runtime/runner.ts for executeAction|getActionHistory|getStateAt returns 0. The actual signature is performAction(actionName: string, player: Player|number, args: Record<string,unknown>): ActionExecutionResult (src/runtime/runner.ts:121-124) — positional arguments, not an object literal. Public methods are start, captureCheckpoint, performAction, getFlowState, getSnapshot, getPlayerView, getAllPlayerViews, isComplete, getWinners (runner.ts:93-258).",
+          "fixPaths": "docs/api/runtime.md: replace executeAction({action,player,args}) with performAction(actionName, player, args) everywhere; remove or replace getActionHistory()/getStateAt() with real methods (getSnapshot/getFlowState) per src/runtime/runner.ts."
+        }
+      ]
+    },
+    {
+      "unit": "U21",
+      "maxSeverity": "low",
+      "categories": [
+        "pit-of-success"
+      ],
+      "fids": [
+        "F34"
+      ],
+      "namedFiles": [],
+      "findings": [
+        {
+          "fid": "F34",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "moderate",
+          "title": "'unordered' visibility mode is documented and typed but silently behaves identically to 'hidden'",
+          "whyConcern": "A designer who calls `setZoneVisibility('unordered')` (or a piece's equivalent) expecting players to see card identities in a randomized order instead gets fully-hidden placeholders — the exact opposite of the documented contract — with no error or warning.",
+          "evidence": "VisibilityMode includes 'unordered' documented as 'Players can see contents but not order (e.g., shuffled deck peek)' (command/visibility.ts:8-10). But canPlayerSee returns false for 'unordered' (command/visibility.ts:51-53, grouped with 'hidden'/'count-only'), and toJSONForPlayer special-cases only 'hidden', 'count-only', and 'owner' zone modes (element/game.ts:2236, 2265) — there is no 'unordered' branch, so children inherit the 'unordered' zone, hit `!element.isVisibleTo(...)` and are replaced with `{ __hidden: true }` placeholders (game.ts:2222-2228). grep confirms 'unordered' appears in no logic outside visibility.ts.",
+          "fixPaths": "Either implement 'unordered' in toJSONForPlayer (element/game.ts) — emit real child contents but in shuffled/order-stripped form — and adjust canPlayerSee accordingly, or remove 'unordered' from VisibilityMode (command/visibility.ts:10) until it's supported so it can't be selected."
+        }
+      ]
+    },
+    {
+      "unit": "U22",
+      "maxSeverity": "medium",
+      "categories": [
+        "pit-of-success"
+      ],
+      "fids": [
+        "F45"
+      ],
+      "namedFiles": [],
+      "findings": [
+        {
+          "fid": "F45",
+          "category": "pit-of-success",
+          "severity": "medium",
+          "easeOfFix": "easy",
+          "title": "GameSession re-derives errorCode by substring-matching the runner's error string, losing structured codes the runner already knew — NOT_YOUR_TURN is never produced",
+          "whyConcern": "The runner distinguishes these cases internally but discards the distinction, and GameSession can't reliably reconstruct it from prose. A turn violation therefore returns no NOT_YOUR_TURN code, and a player-not-found returns ACTION_NOT_FOUND. The types.ts doc example (src/session/types.ts:27-37) literally tells clients to `switch (result.errorCode) { case ErrorCode.NOT_YOUR_TURN: ... }` — that case is dead code for real turn errors.",
+          "evidence": "GameRunner.performAction returns precise failure reasons as plain strings: 'Player not found' (src/runtime/runner.ts:131-133), 'Game is not awaiting input' (runner.ts:142-145), `Not ${name}'s turn` (runner.ts:148-152) — but no errorCode. GameSession.performAction then guesses the code by substring: .includes('not available') → ACTION_NOT_AVAILABLE, .includes('not found') → ACTION_NOT_FOUND, .includes('Invalid selection') → INVALID_PICK (src/session/game-session.ts:824-834). 'Not Alice's turn' matches none → errorCode stays undefined; 'Player not found' matches 'not found' → mislabeled ACTION_NOT_FOUND.",
+          "fixPaths": "Have GameRunner.performAction return a structured errorCode alongside the message (it already knows the exact branch), and have GameSession pass it through instead of re-inferring. Make ErrorCode the single source of truth from the point the error originates."
+        }
+      ]
+    },
+    {
+      "unit": "U23",
+      "maxSeverity": "low",
+      "categories": [
+        "pit-of-success"
+      ],
+      "fids": [
+        "F48"
+      ],
+      "namedFiles": [
+        "src/utils/random.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F48",
+          "category": "pit-of-success",
+          "severity": "low",
+          "easeOfFix": "easy",
+          "title": "createSeededRandom() silently falls back to Math.random() when no seed is given",
+          "whyConcern": "The entire purpose of this module (random.ts:1-19) is deterministic, reproducible randomness for replay/testing/AI cloning. Making the seed optional with a Math.random() fallback means the no-argument call produces a generator that is NOT reproducible — a different sequence every run — while still being named/typed as a SeededRandom. This also directly violates the repo rule \"Never use dummy data, fallbacks, or other hacks\" (CLAUDE.md).",
+          "evidence": "src/utils/random.ts:189-191 — `export function createSeededRandom(seed?: string) { const instance = new SeededRandom(seed ?? Math.random().toString(36).substring(2)); ... }`. The seed parameter is optional and the fallback seed is non-deterministic.",
+          "fixPaths": "src/utils/random.ts:189 — make seed required (remove the `?` and the Math.random() fallback). Callers that want a fresh seed must pass one explicitly. ai-trainer already always passes a seed, so the breakage surface is small."
+        }
+      ]
+    },
+    {
+      "unit": "U24",
+      "maxSeverity": "medium",
+      "categories": [
+        "pit-of-success"
+      ],
+      "fids": [
+        "F51"
+      ],
+      "namedFiles": [
+        "src/eslint-plugin/rules/no-network.ts"
+      ],
+      "findings": [
+        {
+          "fid": "F51",
+          "category": "pit-of-success",
+          "severity": "medium",
+          "easeOfFix": "moderate",
+          "title": "no-network eslint rule misses all module-import network paths (node:http/https/net/dgram)",
+          "whyConcern": "A game can perform real network I/O via `import https from 'node:https'` / `node:http` / `node:net` / `node:dgram` / `node:http2`, or `window.fetch(...)` (member expression), and neither rule fires — yet sandbox-scan.ts and validateSecurity advertise these rules as the single source of truth that 'a fetch() in a shared module is caught.' The enforcement the docs claim does not actually exist for these vectors, so non-deterministic/network code passes `boardsmith validate` and `boardsmith lint`.",
+          "evidence": "src/eslint-plugin/rules/no-network.ts:24-56 only flags a bare `fetch()` Identifier call and `new XMLHttpRequest()/new WebSocket()`. It has no ImportDeclaration/require/ImportExpression handling. The companion no-filesystem rule does check imports (no-filesystem.ts:40-69) but its forbidden list (no-filesystem.ts:25: `['fs','fs/promises','path','child_process','os']`) excludes every networking module.",
+          "fixPaths": "src/eslint-plugin/rules/no-network.ts — add ImportDeclaration/ImportExpression/require handling mirroring no-filesystem.ts, blocking `http`,`https`,`net`,`dgram`,`http2`,`tls`,`dns` (with and without `node:` prefix); also flag member-expression `fetch` (e.g. window.fetch/globalThis.fetch) like no-timers.ts already does for timers."
+        }
+      ]
+    }
+  ]
+}

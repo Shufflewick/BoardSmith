@@ -1,0 +1,9 @@
+{
+  "unit": "U24",
+  "fids": [
+    "F51"
+  ],
+  "status": "merged",
+  "sha": "b78a643",
+  "desc": "no-network eslint rule now catches networking module imports and member-expression fetch"
+}

@@ -1,0 +1,9 @@
+{
+  "unit": "U16",
+  "fids": [
+    "F12"
+  ],
+  "status": "merged",
+  "sha": "df6ac25",
+  "desc": "Remove silently-ignored validate/lint CLI flags (--fix, --skip-simulation) and unused options interfaces"
+}

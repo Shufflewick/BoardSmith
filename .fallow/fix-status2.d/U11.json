@@ -1,0 +1,9 @@
+{
+  "unit": "U11",
+  "fids": [
+    "F1"
+  ],
+  "status": "merged",
+  "sha": "9e0b212",
+  "desc": "Remove dead duplicate generateCandidateFeatures from feature-templates.ts; port its gameType filtering into the live feature-generator version"
+}

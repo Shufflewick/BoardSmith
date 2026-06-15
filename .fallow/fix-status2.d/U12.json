@@ -1,0 +1,9 @@
+{
+  "unit": "U12",
+  "fids": [
+    "F4"
+  ],
+  "status": "merged",
+  "sha": "f6e32f7",
+  "desc": "Remove no-op saveAICode() stub from ai-trainer/code-generator.ts (F4)"
+}

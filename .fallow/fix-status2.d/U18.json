@@ -1,0 +1,9 @@
+{
+  "unit": "U18",
+  "fids": [
+    "F15"
+  ],
+  "status": "merged",
+  "sha": "a3cf544",
+  "desc": "Remove unused useHoverHighlight composable and its ui barrel export (F15)"
+}

@@ -1,0 +1,10 @@
+{
+  "unit": "U10",
+  "fids": [
+    "F49",
+    "F50"
+  ],
+  "status": "merged",
+  "sha": "67fe647",
+  "desc": "Random simulation generates valid action args via engine introspection and reports reproducible seeds (F49, F50)"
+}

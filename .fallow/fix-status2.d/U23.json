@@ -1,0 +1,9 @@
+{
+  "unit": "U23",
+  "fids": [
+    "F48"
+  ],
+  "status": "merged",
+  "sha": "aa6be2f",
+  "desc": "Make createSeededRandom seed required, removing non-deterministic Math.random() fallback"
+}

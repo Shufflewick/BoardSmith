@@ -1,0 +1,9 @@
+{
+  "unit": "U22",
+  "fids": [
+    "F45"
+  ],
+  "status": "merged",
+  "sha": "94b5359",
+  "desc": "Emit structured ErrorCode at runner origin (NOT_YOUR_TURN/INVALID_PLAYER) instead of substring-inferring in GameSession"
+}

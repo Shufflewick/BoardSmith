@@ -1,0 +1,10 @@
+{
+  "unit": "U9",
+  "fids": [
+    "F38",
+    "F39"
+  ],
+  "status": "merged",
+  "sha": "9c5274d",
+  "desc": "U9 (F38,F39): fail-loud devWarn on no-op triggerChoiceSelect; clear board-interaction state when action ends"
+}
