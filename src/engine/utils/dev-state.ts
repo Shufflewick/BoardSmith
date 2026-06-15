@@ -47,14 +47,6 @@ export interface DevSnapshot {
   /** Current flow state (for additional context) */
   flowState: FlowState | undefined;
 
-  /** Current random generator seed state (for continued determinism) */
-  randomState: {
-    /** Original seed used to create the game */
-    seed: string;
-    /** Number of times random() has been called (to fast-forward) */
-    callCount: number;
-  };
-
   /** Timestamp when snapshot was taken */
   timestamp: number;
 
@@ -74,37 +66,6 @@ export interface RestoreDevStateOptions {
 
   /** Class registry mapping class names to element classes */
   classRegistry: Map<string, ElementClass>;
-}
-
-/**
- * Counter to track random calls during game execution.
- * Used to restore random state after HMR.
- */
-let randomCallCounter = 0;
-
-/**
- * Create a tracked random function that counts calls.
- * This allows us to restore the random state by fast-forwarding.
- */
-export function createTrackedRandom(baseRandom: () => number): () => number {
-  return () => {
-    randomCallCounter++;
-    return baseRandom();
-  };
-}
-
-/**
- * Get the current random call count.
- */
-export function getRandomCallCount(): number {
-  return randomCallCounter;
-}
-
-/**
- * Reset the random call counter (for testing).
- */
-export function resetRandomCallCounter(): void {
-  randomCallCounter = 0;
 }
 
 /**
@@ -130,20 +91,10 @@ export function captureDevState<G extends Game>(game: G): DevSnapshot {
   // Get the current sequence for ID restoration
   const sequence = game._ctx.sequence;
 
-  // Note: We can't easily capture the exact random state, but we can
-  // record the seed. The caller (GameSession) should track random call count.
-  // For now, we store placeholder - actual implementation will need
-  // GameSession to track this via a wrapper.
-  const randomState = {
-    seed: (game.settings.playerCount ? String(game.settings.seed || '') : ''),
-    callCount: randomCallCounter,
-  };
-
   return {
     elements,
     flowPosition,
     flowState,
-    randomState,
     timestamp: Date.now(),
     registeredClasses,
     sequence,

@@ -693,20 +693,7 @@ filter: (element, ctx) => {
 
 ### The Solution
 
-Use the `resolveElementArg()` helper to handle both cases:
-
-```typescript
-import { resolveElementArg } from 'boardsmith';
-
-// In collectEquipment filter():
-filter: (element, ctx) => {
-  const sector = resolveElementArg<Sector>(game, ctx.args.sectorId);
-  if (!sector) return false;
-  return element.container === sector;
-}
-```
-
-Or handle both cases manually:
+Handle both the numeric-ID and already-resolved-element cases:
 
 ```typescript
 function getSector(ctx: any): Sector | undefined {
@@ -717,6 +704,13 @@ function getSector(ctx: any): Sector | undefined {
     return sectorArg as Sector;
   }
   return undefined;
+}
+
+// In collectEquipment filter():
+filter: (element, ctx) => {
+  const sector = getSector(ctx);
+  if (!sector) return false;
+  return element.container === sector;
 }
 ```
 

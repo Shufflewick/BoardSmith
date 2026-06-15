@@ -34,16 +34,6 @@ export function sequence(...steps: FlowNode[]): FlowNode {
 }
 
 /**
- * Create a sequence with a name
- */
-export function namedSequence(name: string, ...steps: FlowNode[]): FlowNode {
-  return {
-    type: 'sequence',
-    config: { name, steps },
-  };
-}
-
-/**
  * Create a named game phase
  *
  * Phases are named sections of the flow that can be displayed in the UI

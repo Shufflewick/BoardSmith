@@ -36,10 +36,6 @@ export type {
 // Filter helpers for multi-step selections
 export {
   dependentFilter,
-  adjacentToSelection,
-  excludeAlreadySelected,
-  allOf,
-  anyOf,
   not,
   type DependentFilterOptions,
 } from './helpers.js';

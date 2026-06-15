@@ -26,23 +26,6 @@ export type {
   PlayerStateView,
 } from './snapshot.js';
 
-// Replay system
-export {
-  createReplayFile,
-  validateReplayFile,
-  parseReplayFile,
-} from './replay.js';
-
-export type {
-  ReplayFile,
-} from './replay.js';
-
-// Action helpers
-export {
-  resolveElementArg,
-  isResolvedElement,
-} from './action-helpers.js';
-
 // Dev state transfer (for HMR)
 export {
   captureDevState,
@@ -52,9 +35,6 @@ export {
   validateFlowPosition,
   formatFlowRecovery,
   getSnapshotElementCount,
-  createTrackedRandom,
-  getRandomCallCount,
-  resetRandomCallCounter,
   // Dev checkpoints for fast HMR recovery
   createDevCheckpoint,
   restoreFromDevCheckpoint,

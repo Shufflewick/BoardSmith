@@ -110,10 +110,6 @@ export { Action, ActionExecutor, evaluateCondition } from './action/index.js';
 // Filter helpers for multi-step selections
 export {
   dependentFilter,
-  adjacentToSelection,
-  excludeAlreadySelected,
-  allOf,
-  anyOf,
   not,
 } from './action/index.js';
 
@@ -157,7 +153,6 @@ export type {
 export {
   FlowEngine,
   sequence,
-  namedSequence,
   phase,
   loop,
   repeat,
@@ -214,11 +209,6 @@ export {
   createActionCheckpoint,
   createPlayerView,
   createAllPlayerViews,
-  createReplayFile,
-  validateReplayFile,
-  parseReplayFile,
-  resolveElementArg,
-  isResolvedElement,
   // Dev state transfer (for HMR)
   captureDevState,
   restoreDevState,
@@ -227,9 +217,6 @@ export {
   validateFlowPosition,
   formatFlowRecovery,
   getSnapshotElementCount,
-  createTrackedRandom,
-  getRandomCallCount,
-  resetRandomCallCounter,
   // Dev checkpoints for fast HMR recovery
   createDevCheckpoint,
   restoreFromDevCheckpoint,
@@ -241,7 +228,6 @@ export type {
   GameStateSnapshot,
   ActionCheckpoint,
   PlayerStateView,
-  ReplayFile,
   // Dev state types
   DevSnapshot,
   RestoreDevStateOptions,

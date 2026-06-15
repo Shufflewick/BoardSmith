@@ -76,10 +76,6 @@ import {
 ### Filter Helpers
 
 - `dependentFilter()` - Filter based on previous selections
-- `adjacentToSelection()` - Filter to adjacent elements
-- `excludeAlreadySelected()` - Exclude previously selected
-- `allOf()` - Combine filters with AND
-- `anyOf()` - Combine filters with OR
 - `not()` - Negate a filter
 
 ### Action State
@@ -90,7 +86,6 @@ import {
 
 - `FlowEngine` - Run game flow definitions
 - `sequence()` - Execute steps in sequence
-- `namedSequence()` - Named sequence for debugging
 - `phase()` - Define a game phase
 - `loop()` - Loop until condition
 - `repeat()` - Repeat N times
@@ -118,11 +113,6 @@ import {
 - `createSnapshot()` - Create game state snapshot
 - `createPlayerView()` - Create player-specific view
 - `createAllPlayerViews()` - Create all player views
-- `createReplayFile()` - Create replay file format
-- `validateReplayFile()` - Validate replay file
-- `parseReplayFile()` - Parse replay file
-- `resolveElementArg()` - Resolve element argument
-- `isResolvedElement()` - Check if element is resolved
 - `captureDevState()` - Capture state for HMR
 - `restoreDevState()` - Restore state after HMR
 - `validateDevSnapshot()` - Validate dev snapshot
@@ -130,9 +120,6 @@ import {
 - `validateFlowPosition()` - Validate flow position
 - `formatFlowRecovery()` - Format flow recovery info
 - `getSnapshotElementCount()` - Count elements in snapshot
-- `createTrackedRandom()` - Create deterministic random
-- `getRandomCallCount()` - Get random call count
-- `resetRandomCallCounter()` - Reset random counter
 - `createDevCheckpoint()` - Create dev HMR checkpoint
 - `restoreFromDevCheckpoint()` - Restore from dev checkpoint
 

@@ -18,14 +18,6 @@ export {
   type PlayerStateView,
 } from '../engine/index.js';
 
-// Re-export replay types from engine
-export {
-  createReplayFile,
-  validateReplayFile,
-  parseReplayFile,
-  type ReplayFile,
-} from '../engine/index.js';
-
 // Game runner (runtime-specific)
 export {
   GameRunner,
