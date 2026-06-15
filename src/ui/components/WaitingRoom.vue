@@ -613,7 +613,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
             <div class="slot-content">
               <span class="connection-dot online" title="Connected"></span>
               <span class="slot-name">{{ slot.name }}</span>
-              <span v-if="slot.playerId === lobby.creatorId" class="slot-badge host-badge">Host</span>
+              <span v-if="slot.isHost" class="slot-badge host-badge">Host</span>
               <span class="slot-badge you-badge">You</span>
             </div>
             <button
@@ -630,7 +630,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
             <div class="slot-content">
               <span class="connection-dot" :class="slot.connected ? 'online' : 'offline'" :title="slot.connected ? 'Connected' : 'Disconnected'"></span>
               <span class="slot-name" :class="{ 'disconnected': !slot.connected }">{{ slot.name }}</span>
-              <span v-if="slot.playerId === lobby.creatorId" class="slot-badge host-badge">Host</span>
+              <span v-if="slot.isHost" class="slot-badge host-badge">Host</span>
               <span
                 class="ready-indicator"
                 :class="slot.ready ? 'ready' : 'not-ready'"

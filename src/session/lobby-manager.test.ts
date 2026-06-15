@@ -311,7 +311,7 @@ describe('Ready-state preservation across unrelated lobby operations', () => {
     expect(result.success).toBe(true);
 
     // Player 1 should still be ready
-    const aliceSlot = result.lobby!.slots.find(s => s.playerId === 'creator-123');
+    const aliceSlot = result.lobby!.slots.find(s => s.seat === 1); // creator-123
     expect(aliceSlot!.ready).toBe(true);
   });
 
@@ -323,8 +323,8 @@ describe('Ready-state preservation across unrelated lobby operations', () => {
     const result = await session.claimSeat(3, 'player-3', 'Charlie');
 
     // Both existing players should still be ready
-    const aliceSlot = result.lobby!.slots.find(s => s.playerId === 'creator-123');
-    const bobSlot = result.lobby!.slots.find(s => s.playerId === 'player-2');
+    const aliceSlot = result.lobby!.slots.find(s => s.seat === 1); // creator-123
+    const bobSlot = result.lobby!.slots.find(s => s.seat === 2); // player-2
     expect(aliceSlot!.ready).toBe(true);
     expect(bobSlot!.ready).toBe(true);
   });
@@ -337,7 +337,7 @@ describe('Ready-state preservation across unrelated lobby operations', () => {
     expect(result.success).toBe(true);
 
     // Player 2 should still be ready
-    const bobSlot = result.lobby!.slots.find(s => s.playerId === 'player-2');
+    const bobSlot = result.lobby!.slots.find(s => s.seat === 2); // player-2
     expect(bobSlot!.ready).toBe(true);
   });
 });

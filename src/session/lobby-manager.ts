@@ -96,19 +96,41 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
   }
 
   /**
-   * Get full lobby information for clients
+   * Get client-facing lobby information.
+   *
+   * SECURITY: playerId is a per-seat capability (it proves identity on
+   * WebSocket connect and gates host-only operations). This view therefore
+   * never exposes another player's id: only the slot belonging to
+   * `viewerPlayerId` keeps its playerId, every other slot has it stripped, and
+   * the creator's secret id is never included. The host's seat is marked with
+   * a `isHost` boolean instead so clients can still render a "Host" badge.
+   *
+   * @param viewerPlayerId The id of the player this view is being sent to.
+   *   Omit for an anonymous/spectator view (all playerIds stripped).
    */
-  getLobbyInfo(): LobbyInfo | null {
+  getLobbyInfo(viewerPlayerId?: string): LobbyInfo | null {
     if (!this.#storedState.lobbySlots) {
       return null;
     }
 
-    const slots = this.#storedState.lobbySlots;
-    const openSlots = slots.filter(s => s.status === 'open').length;
+    const creatorId = this.#storedState.creatorId;
+    const rawSlots = this.#storedState.lobbySlots;
+    const openSlots = rawSlots.filter(s => s.status === 'open').length;
 
     // All ready = no open slots AND all filled slots are ready (AI always ready)
     const allReady = openSlots === 0 &&
-      slots.every(s => s.status === 'ai' || s.ready);
+      rawSlots.every(s => s.status === 'ai' || s.ready);
+
+    const slots: LobbySlot[] = rawSlots.map(slot => {
+      const isOwn = viewerPlayerId !== undefined && slot.playerId === viewerPlayerId;
+      return {
+        ...slot,
+        // Only the recipient sees their own playerId; everyone else is masked.
+        playerId: isOwn ? slot.playerId : undefined,
+        // Non-identifying flag so the host can be badged without leaking the id.
+        isHost: slot.status === 'claimed' && slot.playerId === creatorId,
+      };
+    });
 
     return {
       state: this.#storedState.lobbyState ?? 'playing',
@@ -117,7 +139,8 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
       slots,
       gameOptions: this.#storedState.gameOptions,
       gameOptionsDefinitions: this.#storedState.gameOptionsDefinitions,
-      creatorId: this.#storedState.creatorId,
+      // creatorId intentionally omitted: it is a secret host capability and
+      // must never be broadcast (see isHost on each slot instead).
       openSlots,
       isReady: allReady,
       minPlayers: this.#storedState.minPlayers,
@@ -237,7 +260,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Note: Game doesn't auto-start from claimSeat anymore
     // Players must use setReady() after claiming their seat
 
-    return { success: true, lobby: this.getLobbyInfo()! };
+    return { success: true, lobby: this.getLobbyInfo(playerId)! };
   }
 
   /**
@@ -311,7 +334,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo()!, seat };
+    return { success: true, lobby: this.getLobbyInfo(playerId)!, seat };
   }
 
   /**
@@ -389,7 +412,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo()!, gameStarted };
+    return { success: true, lobby: this.getLobbyInfo(playerId)!, gameStarted };
   }
 
   /**
@@ -440,7 +463,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo()! };
+    return { success: true, lobby: this.getLobbyInfo(playerId)! };
   }
 
   /**
@@ -509,7 +532,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo()! };
+    return { success: true, lobby: this.getLobbyInfo(playerId)! };
   }
 
   /**
@@ -607,7 +630,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo()!, gameStarted };
+    return { success: true, lobby: this.getLobbyInfo(playerId)!, gameStarted };
   }
 
   /**
@@ -653,7 +676,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+    return { success: true, lobby: this.getLobbyInfo(playerId) ?? undefined };
   }
 
   /**
@@ -790,7 +813,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+    return { success: true, lobby: this.getLobbyInfo(hostPlayerId) ?? undefined };
   }
 
   /**
@@ -853,7 +876,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+    return { success: true, lobby: this.getLobbyInfo(playerId) ?? undefined };
   }
 
   /**
@@ -916,7 +939,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+    return { success: true, lobby: this.getLobbyInfo(hostPlayerId) ?? undefined };
   }
 
   /**
@@ -957,7 +980,7 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
     // Broadcast lobby update
     this.broadcastLobby();
 
-    return { success: true, lobby: this.getLobbyInfo() ?? undefined };
+    return { success: true, lobby: this.getLobbyInfo(hostPlayerId) ?? undefined };
   }
 
   // ============================================
@@ -1013,14 +1036,16 @@ export class LobbyManager<TSession extends SessionInfo = SessionInfo> {
    */
   broadcastLobby(): void {
     if (!this.#broadcaster) return;
-
-    const lobby = this.getLobbyInfo();
-    if (!lobby) return;
+    if (!this.#storedState.lobbySlots) return;
 
     const sessions = this.#broadcaster.getSessions();
-    const update: LobbyUpdate = { type: 'lobby', lobby };
 
+    // Build a per-recipient view: each session only ever sees its own playerId,
+    // never another player's secret seat capability.
     for (const session of sessions) {
+      const lobby = this.getLobbyInfo(session.playerId);
+      if (!lobby) continue;
+      const update: LobbyUpdate = { type: 'lobby', lobby };
       try {
         this.#broadcaster.send(session, update);
       } catch (error) {

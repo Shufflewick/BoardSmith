@@ -40,7 +40,15 @@ export interface LobbySlot {
   status: SlotStatus;
   /** Player name (set by creator for AI, by joiner for humans) */
   name: string;
-  /** Player ID who claimed this slot (for humans) */
+  /**
+   * Player ID who claimed this slot (for humans).
+   *
+   * SECURITY: playerId is a per-seat capability — it is used as the identity
+   * proof on WebSocket connect and for host-only authorization checks. In
+   * client-facing LobbyInfo it is therefore masked: only the recipient's OWN
+   * slot carries a playerId; every other slot has it stripped. Never rely on
+   * seeing another player's id here.
+   */
   playerId?: string;
   /** AI level if this is an AI slot */
   aiLevel?: string;
@@ -50,6 +58,13 @@ export interface LobbySlot {
   ready: boolean;
   /** Whether this player is currently connected via WebSocket (for humans) */
   connected?: boolean;
+  /**
+   * Whether this slot belongs to the game's creator/host.
+   *
+   * Derived server-side so clients can render a "Host" badge without ever
+   * receiving the creator's secret playerId. Viewer-independent.
+   */
+  isHost?: boolean;
 }
 
 /**
@@ -68,8 +83,6 @@ export interface LobbyInfo {
   gameOptions?: Record<string, unknown>;
   /** Game options definitions (for host to modify) */
   gameOptionsDefinitions?: Record<string, GameOptionDefinition>;
-  /** Creator's player ID */
-  creatorId?: string;
   /** Number of human slots still open */
   openSlots: number;
   /** Whether all slots are filled AND all humans are ready */
