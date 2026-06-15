@@ -599,6 +599,7 @@ Or use your own class names alongside the library classes:
 
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.
+- Matching is **precedence-based**, not OR-based: if `id` is present it is the sole criterion (`name`/`notation` are ignored); otherwise `notation` is tried, then `name`. This prevents duplicate-named elements (e.g. several `'Militia'` pieces) from cross-talking — a ref carrying a precise `id` always resolves to exactly that element. Use `id` for unambiguous selection; reserve bare `name`/`notation` refs for when you genuinely want to match every element sharing that property.
 
 #### Migration from Verbose Pattern
 
