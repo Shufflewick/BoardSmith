@@ -154,15 +154,15 @@
     being a <em>pit of success</em> for game designers and the AI agents building games with them.</p>
     <p class="meta-line">Generated <strong>2026-06-14</strong> &middot; updated <strong>2026-06-15</strong> with fix status &middot;
     29 confirmed findings + 2 rejected &middot;
-    <strong style="color:var(--low)">28 fixed</strong>, 0 blocked, 1 open</p>
+    <strong style="color:var(--low)">29 fixed</strong>, 0 blocked, 0 open</p>
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">28</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">29</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">1</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">0</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">0</div><div class="l">High (active)</div></div>
-    <div class="stat s-medium"><div class="n">1</div><div class="l">Medium (active)</div></div>
+    <div class="stat s-medium"><div class="n">0</div><div class="l">Medium (active)</div></div>
     <div class="stat s-low"><div class="n">0</div><div class="l">Low (active)</div></div>
   </div>
 
@@ -264,10 +264,10 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 1 of 29)</span></h2>
-  <p class="section-note">The 28 fixed-and-merged findings have been moved to the
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(all resolved · 0 of 29)</span></h2>
+  <p class="section-note">The 29 fixed-and-merged findings have been moved to the
   <a href="#completed" style="color:var(--accent)">Completed</a> section at the bottom. What remains here are the
-  0 blocked + 1 open problems that still need attention.</p>
+  0 blocked + 0 open problems — nothing remains open.</p>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -301,13 +301,21 @@
   </div>
 
   <div id="findings">
+    <p class="section-note" style="margin-top:8px;">No open findings remain. The last active item — <span class="fid">F13</span> — was re-investigated and resolved on <strong>2026-06-15</strong>; see it in the <a href="#completed" style="color:var(--accent)">Completed</a> section below.</p>
+  </div>
+
+  <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(29 fixed — no longer active, kept for the record)</span></span></h2>
+  <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
+  zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
+  <div id="completed-list">
     
-  <article class="card fx-open" data-cat="security" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
+  <article class="card fx-merged" data-cat="security" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="merged">
     <div class="card-head">
-      <div class="rank"><span class="fid">F13</span>#1</div>
+      <div class="rank"><span class="fid">F13</span><span class="rank-done">✓</span></div>
       <div class="head-main">
         <div class="badges">
-          <span class="badge fx-open">○ Open</span>
+          <span class="badge fx-merged" title="Re-investigated &amp; resolved 2026-06-15">✅ Resolved · 2026-06-15</span>
           <span class="badge sev-medium">Medium</span>
           <span class="badge cat cat-security">Security</span>
           <span class="badge ease-hard">hard</span>
@@ -317,10 +325,16 @@
         </div>
         <h3>Advertised 'sandbox' has no runtime enforcement — game code runs with full host privileges</h3>
         <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Re-investigated &amp; resolved <code>2026-06-15</code> — re-categorized DX/dead-code, not a runtime security defect. Dead sandbox module deleted; runtime isolation is the deployment host’s job and the production host (ShufflewickPub <code>executor</code>) already provides it.</div>
         
       </div>
     </div>
     <div class="card-body">
+      <div class="field" style="border-left:3px solid var(--low);padding-left:10px;"><span class="flabel">Resolution &nbsp;<span style="color:var(--low);font-weight:400;">(2026-06-15)</span></span><div class="ftext">Re-investigated against the current tree and the production deployment; this is <strong>not a runtime security defect</strong>, and the three sub-problems are now closed.
+<br><br><strong>(1) The over-promising claim is already gone.</strong> <code>src/worker/index.ts</code> (the &quot;running board games in a sandboxed environment&quot; comment this finding cited) was removed wholesale in the F8/F9 server/worker removal, so BoardSmith no longer advertises in-process isolation.
+<br><br><strong>(2) The dead sandbox module is now removed.</strong> <code>src/engine/sandbox/index.ts</code> (<code>ExecutionContext</code>/<code>withLimits</code>/<code>withLimitsAsync</code>/<code>guard</code>/<code>validateCode</code>/<code>DEFAULT_LIMITS</code>) had zero call sites — only a barrel re-export in <code>engine/index.ts</code> — and <code>validateCode</code> was a trivially-bypassable regex scan. Deleted along with its re-export and the stale <code>docs/api/index.md</code> entry. Wiring it up was deliberately rejected: a regex scan or in-process op-counter posing as a security boundary would be a false guarantee (Pit-of-Failure).
+<br><br><strong>(3) Real isolation is the deployment host’s responsibility — and the production host already provides it.</strong> ShufflewickPub’s <code>executor</code> runs each untrusted game bundle in a per-request V8 isolate (Cloudflare dynamic worker) with network egress severed (<code>globalOutbound:null</code> + a dedicated outbound-blocker), zero bindings/secrets, and a CPU-time ceiling. So <code>fetch</code>/<code>eval</code>/secret-access/runaway-loops are contained two isolate boundaries away from the host DO — exactly the boundary the unwired in-engine &quot;sandbox&quot; never provided. The eslint-plugin guardrails (now live across all of <code>src/</code> via <code>boardsmith lint</code>/<code>validate</code>) are the author-time advisory layer that keeps game code within what that sandbox permits and what deterministic replay requires. This responsibility split is now documented in <code>docs/architecture.md</code> &rarr; &quot;Runtime Isolation &amp; the Sandbox.&quot;
+<br><br>The residual determinism concern (<code>Math.random</code>/<code>Date.now</code> corrupting replay) is a correctness property, not a privilege one, and is covered by the now-live determinism lint; the per-game <code>src/ui</code> matrix rows below were UI animation code that legitimately uses those APIs and are not scanned as rules.</div></div>
       <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Game definitions are ordinary imported JS modules executed in-process. They can call fetch, fs, eval, setTimeout, Math.random, read process.env/secrets, or loop forever (no action timeout is enforced). The 'no-network/no-eval/no-timers/no-nondeterministic' guarantees exist only as advisory lint, not isolation.</div></div>
       <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The framework markets sandboxing and ships eslint rules that imply enforcement, leading authors (and AI agents importing third-party game packages) to trust untrusted game code. The easy path (just import a game) is the unsafe path; there is no hard boundary. Determinism guarantees (critical for replay/undo correctness) are also unenforced at runtime, so Math.random/Date.now in a game silently corrupts replays.</div></div>
       <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(hard)</span></span><div class="ftext">Either wire ExecutionContext/withLimitsAsync around runner.performAction (src/runtime + <code>src/session/game-session.ts</code>) and run game code in a real isolate (worker/V8 isolate, vm with frozen globals), or stop advertising 'sandbox' and document that game code is fully trusted. Remove/clarify the dead validateCode if not enforced.</div></div>
@@ -379,14 +393,6 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
       </details>
     </div>
   </article>
-  </div>
-
-  <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(28 fixed — no longer active, kept for the record)</span></span></h2>
-  <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
-  zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
-  <div id="completed-list">
-    
   <article class="card fx-merged" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="merged">
     <div class="card-head">
       <div class="rank"><span class="fid">F8</span><span class="rank-done">✓</span></div>
