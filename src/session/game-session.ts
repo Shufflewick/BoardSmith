@@ -766,14 +766,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const result = this.#runner.performAction(action, player, args);
 
     if (!result.success) {
-      // Pass through error, try to infer errorCode from common patterns
-      let errorCode: ErrorCode | undefined;
-      if (result.error?.includes('not available')) {
-        errorCode = ErrorCode.ACTION_NOT_AVAILABLE;
-      } else if (result.error?.includes('not found')) {
-        errorCode = ErrorCode.ACTION_NOT_FOUND;
-      } else if (result.error?.includes('Invalid selection')) {
-        errorCode = ErrorCode.INVALID_PICK;
+      // Prefer the structured code the runner emitted at the point of failure.
+      // Only fall back to inferring from the message for errors that originate
+      // deeper in the engine's flow (which still surface as plain strings).
+      let errorCode = result.errorCode;
+      if (!errorCode) {
+        if (result.error?.includes('not available')) {
+          errorCode = ErrorCode.ACTION_NOT_AVAILABLE;
+        } else if (result.error?.includes('not found')) {
+          errorCode = ErrorCode.ACTION_NOT_FOUND;
+        } else if (result.error?.includes('Invalid selection')) {
+          errorCode = ErrorCode.INVALID_PICK;
+        }
       }
       return { success: false, error: result.error, errorCode };
     }

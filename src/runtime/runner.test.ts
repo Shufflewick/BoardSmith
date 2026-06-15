@@ -13,6 +13,7 @@ import {
 } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/index.js';
 import { GameRunner } from './runner.js';
+import { ErrorCode } from '../types/protocol.js';
 import { createHeadlessSession } from '../session/testing/headless-harness.js';
 import {
   collectFixtureDefinition,
@@ -164,6 +165,18 @@ describe('GameRunner', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('turn');
+      // The runner emits a structured code at the point of failure so callers
+      // never have to re-infer NOT_YOUR_TURN from the message prose.
+      expect(result.errorCode).toBe(ErrorCode.NOT_YOUR_TURN);
+    });
+
+    it('should report INVALID_PLAYER for an unknown seat', () => {
+      runner.start();
+
+      const result = runner.performAction('draw', 99, {});
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.INVALID_PLAYER);
     });
 
     it('should provide player views after action', () => {

@@ -11,6 +11,72 @@
  */
 
 // ============================================
+// Error Codes
+// ============================================
+
+/**
+ * Standard error codes for programmatic error handling.
+ * Use these instead of matching error strings.
+ *
+ * This is the single source of truth for error codes across all layers
+ * (runtime, session, server). The error originates where it is detected and
+ * carries its own `ErrorCode` outward — never re-inferred from prose.
+ *
+ * @example
+ * ```typescript
+ * import { ErrorCode } from 'boardsmith/session';
+ *
+ * const result = await session.performAction('move', player, args);
+ * if (!result.success) {
+ *   switch (result.errorCode) {
+ *     case ErrorCode.NOT_YOUR_TURN:
+ *       showToast('Please wait for your turn');
+ *       break;
+ *     case ErrorCode.ACTION_NOT_AVAILABLE:
+ *       refreshActions();
+ *       break;
+ *     default:
+ *       showToast(result.error || 'An error occurred');
+ *   }
+ * }
+ * ```
+ */
+export enum ErrorCode {
+  // Player/Turn errors
+  INVALID_PLAYER = 'INVALID_PLAYER',
+  NOT_YOUR_TURN = 'NOT_YOUR_TURN',
+
+  // Action errors
+  ACTION_NOT_FOUND = 'ACTION_NOT_FOUND',
+  ACTION_NOT_AVAILABLE = 'ACTION_NOT_AVAILABLE',
+  // Pick errors
+  INVALID_PICK = 'INVALID_PICK',
+  PICK_NOT_FOUND = 'PICK_NOT_FOUND',
+
+  // State errors
+  NOT_AWAITING_INPUT = 'NOT_AWAITING_INPUT',
+  INVALID_ACTION_INDEX = 'INVALID_ACTION_INDEX',
+  NO_ACTIONS_TO_UNDO = 'NO_ACTIONS_TO_UNDO',
+  CANNOT_REWIND_FORWARD = 'CANNOT_REWIND_FORWARD',
+
+  // Lobby errors
+  SEAT_ALREADY_CLAIMED = 'SEAT_ALREADY_CLAIMED',
+  INVALID_SEAT = 'INVALID_SEAT',
+  NOT_AUTHORIZED = 'NOT_AUTHORIZED',
+  GAME_ALREADY_STARTED = 'GAME_ALREADY_STARTED',
+  LOBBY_NOT_READY = 'LOBBY_NOT_READY',
+  COLOR_ALREADY_TAKEN = 'COLOR_ALREADY_TAKEN',
+
+  // Evaluation errors
+  CHOICES_EVALUATION_ERROR = 'CHOICES_EVALUATION_ERROR',
+  ELEMENTS_EVALUATION_ERROR = 'ELEMENTS_EVALUATION_ERROR',
+
+  // Generic errors
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  REPLAY_FAILED = 'REPLAY_FAILED',
+}
+
+// ============================================
 // Lobby Types
 // ============================================
 
