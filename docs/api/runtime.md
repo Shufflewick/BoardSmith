@@ -38,12 +38,6 @@ import {
 - `createPlayerView()` - Create player-specific state view
 - `createAllPlayerViews()` - Create views for all players
 
-### Replay
-
-- `createReplayFile()` - Create a replay file from game history
-- `validateReplayFile()` - Validate replay file format
-- `parseReplayFile()` - Parse replay file content
-
 ### Types
 
 - `GameRunnerOptions` - Runner configuration
@@ -52,7 +46,6 @@ import {
 - `SerializeOptions` - Serialization options
 - `GameStateSnapshot` - Full game state snapshot
 - `PlayerStateView` - Player-specific view
-- `ReplayFile` - Replay file format
 
 ## Examples
 
@@ -136,42 +129,6 @@ const allViews = createAllPlayerViews(game);
 // Views hide information the player shouldn't see
 console.log(player0View.elements);
 // Cards in opponent's hand show as { type: 'card', faceDown: true }
-```
-
-### Working with Replays
-
-```typescript
-import { createReplayFile, validateReplayFile, parseReplayFile } from 'boardsmith/runtime';
-
-// Create a replay file from completed game
-const replay = createReplayFile({
-  gameType: 'checkers',
-  playerCount: 2,
-  playerNames: ['Alice', 'Bob'],
-  actionHistory: session.getHistory().actionHistory,
-  initialSeed: session.getSeed(),
-  result: {
-    winner: 0,
-    reason: 'checkmate',
-  },
-});
-
-// Save to file
-const replayJson = JSON.stringify(replay, null, 2);
-fs.writeFileSync('game-replay.json', replayJson);
-
-// Later, load and validate
-const loaded = JSON.parse(fs.readFileSync('game-replay.json', 'utf-8'));
-const validation = validateReplayFile(loaded);
-
-if (validation.valid) {
-  const parsed = parseReplayFile(loaded);
-  console.log(`Replay: ${parsed.playerNames.join(' vs ')}`);
-  console.log(`Actions: ${parsed.actionHistory.length}`);
-  console.log(`Winner: ${parsed.result.winner}`);
-} else {
-  console.error('Invalid replay:', validation.errors);
-}
 ```
 
 ### Serialization Details

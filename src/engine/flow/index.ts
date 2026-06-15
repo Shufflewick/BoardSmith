@@ -4,7 +4,6 @@ export { FlowEngine } from './engine.js';
 // Builder functions
 export {
   sequence,
-  namedSequence,
   phase,
   loop,
   repeat,
