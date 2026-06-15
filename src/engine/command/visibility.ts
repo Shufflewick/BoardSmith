@@ -5,9 +5,8 @@
  * - 'owner': Visible only to the element's owner
  * - 'hidden': Not visible to any player
  * - 'count-only': Players can see count but not contents (e.g., opponent's hand)
- * - 'unordered': Players can see contents but not order (e.g., shuffled deck peek)
  */
-export type VisibilityMode = 'all' | 'owner' | 'hidden' | 'count-only' | 'unordered';
+export type VisibilityMode = 'all' | 'owner' | 'hidden' | 'count-only';
 
 /**
  * Complete visibility state for an element
@@ -49,7 +48,6 @@ export function canPlayerSee(
       return ownerPosition !== undefined && playerPosition === ownerPosition;
     case 'hidden':
     case 'count-only':
-    case 'unordered':
       return false;
     default:
       return true;
