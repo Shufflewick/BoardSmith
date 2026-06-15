@@ -361,4 +361,73 @@ describe('GameRunner', () => {
       expect(hand1_2).toBe(hand1_1);
     });
   });
+
+  describe('checkpoint memory (F16)', () => {
+    it('does not copy commandHistory into any retained per-action checkpoint', () => {
+      // Regression for F16: each retained per-action undo checkpoint used to carry
+      // a full `commandHistory: [...game.commandHistory]` copy. Since commandHistory
+      // grows O(N) over a game and one checkpoint is kept per action, that produced
+      // O(N^2) command-entry copies retained for the game lifetime — pure dead
+      // weight, because restore (GameRunner.fromSnapshot) is state-authoritative and
+      // NEVER reads commandHistory. The fix drops commandHistory from snapshots, so
+      // no checkpoint may carry it.
+      const runner = new GameRunner({
+        GameClass: TestGame,
+        gameType: 'test-game',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'cp' },
+      });
+      runner.start();
+
+      // Grow the LIVE game's commandHistory with real invertible commands, so the
+      // pre-fix copy would have been non-trivial (this is the O(N) array that used
+      // to be cloned into EACH retained checkpoint).
+      for (const card of runner.game.deck.all(Card).slice(0, 4)) {
+        runner.game.execute({ type: 'MOVE', elementId: card.id, destinationId: runner.game.hands[0].id });
+      }
+      expect(runner.game.commandHistory.length).toBe(4);
+
+      // Drive several actions, refreshing the per-action checkpoint after each one
+      // exactly as GameSession does from its broadcast funnel (game-session.ts).
+      // This is what accumulates one retained full snapshot per action.
+      for (const [action, seat] of [['draw', 1], ['draw', 2], ['draw', 1], ['draw', 2]] as const) {
+        expect(runner.performAction(action, seat, {}).success).toBe(true);
+        runner.captureCheckpoint();
+      }
+
+      const snapshot = runner.getSnapshot();
+      // The LIVE game still has its commandHistory (untouched); the SNAPSHOT must
+      // not carry a copy.
+      expect(runner.game.commandHistory.length).toBeGreaterThan(0);
+      expect('commandHistory' in snapshot).toBe(false);
+
+      const checkpoints = snapshot.actionCheckpoints ?? [];
+      expect(checkpoints.length).toBeGreaterThan(1);
+      for (const checkpoint of checkpoints) {
+        expect('commandHistory' in checkpoint).toBe(false);
+      }
+    });
+
+    it('still restores authoritatively from a checkpoint without commandHistory', () => {
+      // The functional contract must survive the memory fix: a checkpoint that no
+      // longer carries commandHistory must still reconstruct the exact tree, flow
+      // position, sequence, and RNG via the state-authoritative restore path.
+      const runner = new GameRunner({
+        GameClass: TestGame,
+        gameType: 'test-game',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'cp2' },
+      });
+      runner.start();
+      runner.performAction('draw', 1, {});
+      runner.performAction('pass', 2, {});
+
+      const handCountBefore = runner.game.hands[0].count(Card);
+      const snapshot = runner.getSnapshot();
+      expect('commandHistory' in snapshot).toBe(false);
+
+      const restored = GameRunner.fromSnapshot(snapshot, TestGame);
+      expect(restored.actionHistory).toHaveLength(2);
+      expect(restored.game.hands[0].count(Card)).toBe(handCountBefore);
+      expect(restored.getFlowState()).toBeDefined();
+    });
+  });
 });

@@ -69,7 +69,10 @@ describe('GameStateSnapshot', () => {
       // Players are now children of the game element tree
       const playerChildren = (snapshot.state as unknown as { children?: Array<{ className: string }> }).children?.filter((c: { className: string }) => c.className === 'Player') ?? [];
       expect(playerChildren.length).toBe(2);
-      expect(snapshot.commandHistory).toBeDefined();
+      // Snapshots are state-authoritative: restore never replays command history,
+      // so a per-action checkpoint must NOT carry a commandHistory copy (that copy
+      // is what made retained checkpoints O(N^2) in memory). See F16.
+      expect('commandHistory' in snapshot).toBe(false);
       expect(snapshot.actionHistory).toEqual([]);
     });
 
