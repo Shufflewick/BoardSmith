@@ -60,7 +60,7 @@ describe('F10: lobby identity is not leaked to other clients', () => {
     const info = session.getLobbyInfo('victim-secret')!;
     expect(info).toBeDefined();
     // creatorId must not be present on the client-facing payload at all.
-    expect((info as Record<string, unknown>).creatorId).toBeUndefined();
+    expect((info as unknown as Record<string, unknown>).creatorId).toBeUndefined();
     // The host is still identifiable via a non-identifying boolean.
     const hostSlot = info.slots.find(s => s.seat === 1)!;
     expect(hostSlot.isHost).toBe(true);
@@ -88,7 +88,7 @@ describe('F10: lobby identity is not leaked to other clients', () => {
     for (const slot of anon.slots) {
       expect(slot.playerId).toBeUndefined();
     }
-    expect((anon as Record<string, unknown>).creatorId).toBeUndefined();
+    expect((anon as unknown as Record<string, unknown>).creatorId).toBeUndefined();
   });
 });
 

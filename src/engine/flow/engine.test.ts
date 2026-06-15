@@ -12,6 +12,7 @@ import {
   eachPlayer,
   forEach,
   actionStep,
+  simultaneousActionStep,
   playerActions,
   switchOn,
   ifThen,
@@ -1833,10 +1834,7 @@ describe('Unknown action warning (F20)', () => {
 
   it('simultaneous-action-step warning also points to the real API', () => {
     const flow = defineFlow({
-      root: eachPlayer({
-        simultaneous: true,
-        do: actionStep({ actions: ['missing'] }),
-      }),
+      root: simultaneousActionStep({ actions: ['missing'] }),
     });
 
     new FlowEngine(game, flow).start();
