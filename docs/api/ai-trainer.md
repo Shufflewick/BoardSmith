@@ -4,12 +4,13 @@
 
 ## When to Use
 
-Import from `boardsmith/ai-trainer` when you want to train AI weights for your game, analyze game features, or generate AI code. The training entry point is `WeightEvolver` (also driven by the `evolve-ai-weights` CLI command), which evolves optimal AI strategies in parallel.
+Import from `boardsmith/ai-trainer` when you want to train AI weights for your game, analyze game features, or generate AI code. This package provides parallel training infrastructure for evolving optimal AI strategies.
 
 ## Usage
 
 ```typescript
 import {
+  ParallelTrainer,
   WeightEvolver,
   introspectGame,
   generateCandidateFeatures,
@@ -21,7 +22,8 @@ import {
 
 ### Training
 
-- `WeightEvolver` - Evolve optimal AI weights (the training entry point)
+- `ParallelTrainer` - Multi-threaded AI training
+- `WeightEvolver` - Evolve optimal weights
 - `DEFAULT_TRAINING_CONFIG` - Default training configuration
 
 ### Introspection
@@ -42,10 +44,16 @@ import {
 
 - `FEATURE_TEMPLATES` - Built-in feature templates
 
-### Game Structure Serialization
+### Simulation
 
-- `serializeGameStructure()` - Serialize a game structure for worker threads
-- `deserializeGameStructure()` - Deserialize a game structure from workers
+- `runSimulations()` - Run game simulations
+- `simulateSingleGame()` - Simulate one game
+- `serializeGameStructure()` - Serialize for workers
+- `deserializeGameStructure()` - Deserialize from workers
+
+### Parallel Simulation
+
+- `runParallelSimulations()` - Run simulations in parallel
 
 ### Benchmarking
 
@@ -97,11 +105,15 @@ import {
 - `TrainingResult` - Training result
 - `TrainingConfig` - Training configuration
 - `TrainingProgress` - Training progress
+- `ParallelTrainingConfig` - Parallel training config
 - `WeightEvolverConfig` - Weight evolver config
 - `WeightEvolutionResult` - Evolution result
 - `BenchmarkConfig` - Benchmark configuration
 - `BenchmarkResult` - Benchmark result
 - `PlayerConfig` - Player configuration
+- `SimulationOptions` - Simulation options
+- `SimulationResults` - Simulation results
+- `ParallelSimulatorOptions` - Parallel simulation options
 - `ParallelBenchmarkOptions` - Parallel benchmark options
 - `IndividualFitness` - Individual fitness score
 - `CodeGeneratorOptions` - Code generator options
@@ -134,19 +146,50 @@ console.log('Best weights:', result.bestWeights);
 console.log('Final fitness:', result.fitness);
 ```
 
-### Training via the CLI
+### Full Training Pipeline
 
-Run from a game project that already has an `ai.ts`. The `evolve-ai-weights` CLI
-command drives `WeightEvolver` through evolutionary self-play and rewrites the AI
-file's weights in place:
+```typescript
+import {
+  introspectGame,
+  generateCandidateFeatures,
+  runParallelSimulations,
+  analyzeFeatures,
+  selectTopFeatures,
+  generateAICode,
+} from 'boardsmith/ai-trainer';
+import { MyGame } from './game';
 
-```bash
-npx boardsmith evolve-ai-weights --generations 5 --population 20 --workers 4
+// 1. Analyze game structure
+const structure = introspectGame(MyGame);
+console.log(`Found ${structure.elementTypes.length} element types`);
+
+// 2. Generate candidate features
+const features = generateCandidateFeatures(structure);
+console.log(`Generated ${features.length} candidate features`);
+
+// 3. Run simulations to gather data
+const simResults = await runParallelSimulations({
+  GameClass: MyGame,
+  gameType: 'my-game',
+  gameCount: 1000,
+  workers: 4,
+});
+
+// 4. Analyze feature correlations
+const analysis = analyzeFeatures(simResults.gameData, features);
+
+// 5. Select top performing features
+const topFeatures = selectTopFeatures(analysis, 10);
+
+// 6. Generate AI code
+const aiCode = generateAICode({
+  features: topFeatures,
+  gameType: 'my-game',
+});
+
+// Write to file
+writeFileSync('./src/ai.ts', aiCode);
 ```
-
-Under the hood this is the same `WeightEvolver` API shown in *Quick Weight
-Evolution* above; reach for the programmatic form when you need custom progress
-handling or to embed training in your own tooling.
 
 ### Updating Existing AI
 
@@ -169,6 +212,30 @@ const updated = updateAIWeights({
 });
 
 writeFileSync('./src/ai.ts', updated);
+```
+
+### Parallel Training
+
+```typescript
+import { ParallelTrainer } from 'boardsmith/ai-trainer';
+import { MyGame } from './game';
+
+const trainer = new ParallelTrainer({
+  GameClass: MyGame,
+  gameType: 'my-game',
+  workers: 8,
+  gamesPerGeneration: 100,
+  generations: 100,
+  populationSize: 50,
+});
+
+trainer.on('generation', (gen, stats) => {
+  console.log(`Generation ${gen}:`);
+  console.log(`  Best: ${stats.bestFitness}`);
+  console.log(`  Average: ${stats.averageFitness}`);
+});
+
+const result = await trainer.train();
 ```
 
 ### Benchmarking AI Versions
