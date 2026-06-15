@@ -95,6 +95,14 @@
     "F29": {
       "sha": "76a4f26fc1dd24bbfeef6d8088576fffbef3ded1",
       "desc": "Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths"
+    },
+    "F23": {
+      "sha": "4643d54bb34376d1bcc4c660dd0e56f4f92cce16",
+      "desc": "Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance"
+    },
+    "F28": {
+      "sha": "4643d54bb34376d1bcc4c660dd0e56f4f92cce16",
+      "desc": "Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance"
     }
   },
   "blocked": [
@@ -126,6 +134,8 @@
     "F25": "merged",
     "F26": "merged",
     "F29": "merged",
+    "F23": "merged",
+    "F28": "merged",
     "F8": "blocked",
     "F9": "blocked"
   }

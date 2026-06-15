@@ -154,16 +154,16 @@
     being a <em>pit of success</em> for game designers and the AI agents building games with them.</p>
     <p class="meta-line">Generated <strong>2026-06-14</strong> &middot; updated <strong>2026-06-15</strong> with fix status &middot;
     29 confirmed findings + 2 rejected &middot;
-    <strong style="color:var(--low)">24 fixed</strong>, 2 blocked, 3 open</p>
+    <strong style="color:var(--low)">26 fixed</strong>, 2 blocked, 1 open</p>
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">24</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">26</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">2</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">3</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">1</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
     <div class="stat s-medium"><div class="n">1</div><div class="l">Medium (active)</div></div>
-    <div class="stat s-low"><div class="n">2</div><div class="l">Low (active)</div></div>
+    <div class="stat s-low"><div class="n">0</div><div class="l">Low (active)</div></div>
   </div>
 
   <details class="method">
@@ -264,10 +264,10 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 5 of 29)</span></h2>
-  <p class="section-note">The 24 fixed-and-merged findings have been moved to the
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 3 of 29)</span></h2>
+  <p class="section-note">The 26 fixed-and-merged findings have been moved to the
   <a href="#completed" style="color:var(--accent)">Completed</a> section at the bottom. What remains here are the
-  2 blocked + 3 open problems that still need attention.</p>
+  2 blocked + 1 open problems that still need attention.</p>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -458,182 +458,10 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
       </details>
     </div>
   </article>
-
-  <article class="card fx-open" data-cat="usability" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F23</span>#4</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-low">Low</span>
-          <span class="badge cat cat-usability">Usability</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">8 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance</h3>
-        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Two of the three methods select elements with substantial overlap, and the guidance both pushes away from chooseElement and toward fromElements while chooseElement itself still accepts a precomputed `elements` array. There is no single obvious 'right' method, and the distinction (board-click vs buttons) isn't enforced by the method you pick — both produce the same selection type.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">Designers and especially AI agents must make a non-obvious choice among three similar methods, and the docs contradict each other about which is canonical. This is decision-paralysis / inconsistent-codebase risk: different actions in the same game will use different methods for the same purpose, and agents may pick the deprecated-in-spirit chooseElement.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Collapse to one canonical element-selection method (fromElements) and make chooseElement either a thin documented alias or remove it (<code>CLAUDE.md</code>: 'No Backward Compatibility ... remove the bad thing'); ensure docstrings agree on the single recommended path. <code>action-builder.ts:254-412</code>.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 8 affected, 0 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Migrate the 'destination' selection off chooseFrom. Either re-express it as a Square chooseElement (element-ID encoding) and recompute capture/king metadata inside <code>execute()</code> from piece+target, or keep a value selection if chooseFrom survives. Update <code>CheckersBoard.vue</code> executeMove to send element IDs instead of the DestinationChoice object. filterBy{key:'pieceId',selectionName:'piece'} also needs an ID-based equivalent.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:81</code> `.chooseElement&lt;CheckerPiece&gt;('piece', {...})` (canonical, kept) but <code>src/rules/actions.ts:114</code> `.chooseFrom&lt;DestinationChoice&gt;('destination', {choices, display, boardRefs, filterBy})`. execute reads it as a non-ID object: <code>actions.ts:173</code> `const destination = args.destination as DestinationChoice;` then uses `destination.toNotation` (179,239). The custom UI also builds and sends the object: <code>src/ui/components/CheckersBoard.vue:564-575</code> `const destination = { pieceId, fromNotation, toNotation, isCapture, becomesKing }; await props.actionController.execute('move', { piece: move.pieceId, destination })`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Rename the discard builder from `.fromElements('cards', ...)` to the canonical `.chooseElements('cards', ...)`, keeping the multiSelect/min-max config. No value-encoding change needed (already IDs). chooseElement('card') stays as-is.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:17</code> `.fromElements&lt;Card&gt;('cards', { ... multiSelect: { min: 2, max: 2 } })` for the discard action (initial grep missed it due to the `&lt;Card&gt;` type param). <code>src/rules/actions.ts:68</code> `.chooseElement('card', {...})` is the canonical kept form. Selection encoding is already element IDs: UI sends `{ cards: selectedCards.value }` (<code>CribbageBoard.vue:520-522</code>) and `{ card: cardId }` (<code>CribbageBoard.vue:572-573</code>), and execute reads `args.cards as Card[]` (<code>actions.ts:42</code>).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">demo-action-panel</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">If chooseFrom is removed/aliased, all 5 call sites must migrate to the surviving value-selection API (these select strings/player-seats, not elements, so they need whatever replaces value choices). Separately, if selection encoding unifies to element IDs, the chooseElement consumer must resolve the ID to a Unit instead of casting args.chooseElement directly to a live element, and the value-selection consumers (enemy names, player seat) must be checked against the new encoding.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:31</code> `.chooseFrom&lt;string&gt;('multiSelect', {`, :104 `.chooseFrom&lt;string&gt;('optional', {`, :127 `.chooseFrom&lt;string&gt;('disabled', {`, :193 `.chooseFrom&lt;string&gt;('repeatUntil', {`, :220 `.chooseFrom('player', {` — five chooseFrom sites. Also :21 `.chooseElement&lt;Unit&gt;('chooseElement', {` whose result is consumed as a live element instance: :57 `const unit = args.chooseElement as Unit; ... unit.hasAttacked = true` and :40 `const unit = ctx.args.chooseElement as Unit`. Selection results are read as non-ID encodings: :73 enemies matched by name (`args.multiSelect` strings) and :227 `const seat = args.player as number`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Rename all 10 .fromElements('card'|'targetZone',...) calls to .chooseElement (all are single-element picks). Redesign flipReorder's .chooseFrom&lt;string&gt; to .chooseElement&lt;Zone&gt; selecting a Zone element directly (string-choice form has no element-only replacement). If selection encoding is unified to element IDs, update execute bodies that currently consume resolved element objects (args.card as Card) to resolve IDs instead. UI already passes IDs via actionController.fill(name, card.id) so the UI side is mostly fine.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses .fromElements at lines 25,59,93,183,219,249,265,319,357 (e.g. line 25 `.fromElements&lt;Card&gt;('card', {`) and .chooseFrom at line 134 `.chooseFrom&lt;string&gt;('zone', {`. No .chooseElement/.chooseElements anywhere. flipReorder (line 134) selects by arbitrary string ('zone-a'..'zone-d') via <code>choices()</code>, not elements, then maps string-&gt;Zone in execute (lines 156-167). Execute bodies read resolved elements, e.g. line 44 `const card = args.card as Card;` and line 153 `const zoneName = args.zone as string;`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">demo-complex-ui</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Migrate the 3 fromElements card pickers to chooseElement (boardRef already returns {id}, so element encoding is close). Replace the 3 chooseFrom usages: the suit and player-position choices are not element selections, so they need whatever general/value-choice API survives the consolidation (or a chooseElement over the target Hand element + reading its owner). Update <code>execute()</code> to read the new ID/value encoding and update the two trade/gift tests that send { value, display } objects.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:54</code> &quot;.fromElements&lt;Card&gt;('card', {&quot;, :92 &quot;.fromElements&lt;Card&gt;('myCard', {&quot;, :155 &quot;.fromElements&lt;Card&gt;('card', {&quot;; :101 &quot;.chooseFrom('targetPlayer', {&quot;, :164 &quot;.chooseFrom('recipient', {&quot;, :206 &quot;.chooseFrom&lt;string&gt;('suit', {&quot;. chooseFrom is also used for NON-element choices: :103 &quot;choices: (ctx) =&gt; game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player })&quot; and :208 suit strings. Execute reads assume non-ID encoding: <code>actions.ts:122</code> &quot;const targetPosition = args.targetPlayer as number;&quot; and <code>tests/game.test.ts:35</code> &quot;targetPlayer: { value: 2, display: 'Player 2' }&quot;.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">go-fish</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-large">large</span></td>
-          <td class="gi-change">If chooseFrom is removed/aliased and selection values are unified to element IDs, the 'ask' action must be redesigned: a rank is a string and a target is a player, neither maps to an element ID. Either chooseFrom must be preserved for non-element value choices, or the action must be reworked (e.g. choose a representative card element for rank, choose the opponent's Hand element for target) and the rules/UI/tests must be rewritten to read element IDs. At minimum a rename if chooseFrom is aliased.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:35</code> &quot;.chooseFrom('target', {&quot; and :48 &quot;.chooseFrom&lt;string&gt;('rank', {&quot; — both are generic value choices (player position number, rank string), NOT element selections. Value encoding is leaked everywhere: <code>actions.ts:80-83</code> &quot;const targetPosition = args.target as number&quot; / &quot;const rank = args.rank as string&quot;; UI <code>src/ui/components/GameTable.vue:308-356</code> (isSelectingPlayer/isSelectingRank treat picks as type==='choice', handleOpponentClick fills 'target' with playerChoice.value {value,display}, handleCardClick fills 'rank' with a string, isOpponentHandSelectable reads (c.value as any)?.value===position); <code>tests/complete-game.test.ts:49-51</code>,175-176,235-236 &quot;target: { value: opponentPosition, display: opponent.name }, rank: rankToAsk&quot;.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-large">large</span></td>
-          <td class="gi-change">Migrate all 92 chooseFrom/fromElements call sites to the canonical chooseElement/chooseElements (for element selections) and to whatever primitive-choice replacement the library keeps (for the many string/number/enum choices). Rewrite the asSector/asSquad/asCombatantModel decoders (and all 27 call sites) to resolve element IDs via game.getElementById, since unified ID encoding means execute args arrive as numeric IDs rather than element instances.<details class="gi-ev"><summary>evidence</summary><div class="mono">90 .<code>chooseFrom()</code> + 2 .<code>fromElements()</code> call sites across src/rules/actions/. e.g. <code>src/rules/actions/rebel-movement.ts:169</code> '.chooseFrom&lt;number&gt;(\'militiaCount\', {', :526 '.chooseFrom&lt;\'primary\' | \'secondary\'&gt;(\'squadType\'', :784 '.chooseFrom&lt;string&gt;(\'combatantName\'); <code>src/rules/actions/rebel-equipment.ts:574</code> '.fromElements&lt;CombatantModel&gt;(\'actingMerc\'), :582 '.fromElements&lt;Equipment&gt;(\'equipment\'); plus <code>dictator-actions.ts</code> (~50 chooseFrom), <code>day-one-actions.ts</code>, <code>rebel-combat.ts</code>, <code>rebel-economy.ts</code>. Also 25 .<code>chooseElement()</code> (e.g. <code>rebel-movement.ts:125</code> '.chooseElement&lt;Sector&gt;(\'destination\')) whose results are decoded by INSTANCE-assuming helpers: <code>src/rules/actions/helpers.ts:381</code> 'export function asSector(element: unknown){ if (element instanceof Sector) return element; ...throw }' (also asSquad:393, asCombatantModel:369), called 27x. Many chooseFrom values are primitives (numbers/strings/yes-no like <code>rebel-economy.ts:1342</code> \'confirm\'), not element IDs.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">polyhedral-potions</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Replace all 6 <code>chooseFrom()</code> calls. The 5 scalar string choices (operation/adjustment/track/newValue/keepDrafted) need a kept scalar primitive (e.g. enterText/number or whatever replaces chooseFrom for non-element values). The draft 'die' selection must be re-modeled as an element selection (chooseElement/fromElements with IDs); the D10 0-or-10 choice can no longer ride on a string suffix and needs a separate scalar selection or post-draft step. Reading args.die as a parsed string also goes away.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses chooseFrom 6x: line 20 .chooseFrom&lt;string&gt;('die', ...) (draft), line 99 'operation', line 119 'adjustment', line 169 'track', line 382 'newValue', line 450 'keepDrafted'. The draft action encodes element selection as a NON-ID string with a value suffix — <code>actions.ts:30-32</code> 'choices.push(`${die.name}:0`); choices.push(`${die.name}:10`)' and execute parses it back: <code>actions.ts:62-65</code> 'const parts = choice.split(&quot;:&quot;); const dieName = parts[0]; const overrideValue = parts[1] ? parseInt(parts[1],10):undefined'. chooseElement is used 3x (die1/die2/die at <code>actions.ts:263</code>,274,368) and would survive, but every chooseFrom site breaks if chooseFrom is removed/aliased.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>action-builder.ts:113-118</code> chooseFrom doc: 'For selecting game elements, prefer fromElements instead.' chooseElement doc:216-221 'Uses the board for selection... For choices shown as buttons/dropdowns, prefer fromElements instead.' fromElements doc:301-305 'This is the &quot;pit of success&quot; method for element-based choices.' Internally fromElements single-select even delegates to the SAME 'element' selection type as chooseElement (lines 391-409), so chooseElement(with elements) and fromElements(single) are near-duplicates.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Verified at /<code>Users/jtsmith/BoardSmith/src/engine/action/action-builder.ts</code>. The three cited doc comments exist verbatim: chooseFrom (line 115) says prefer fromElements for game elements; chooseElement (lines 219-220) says prefer fromElements for button/dropdown choices; fromElements (line 304) calls itself the &quot;pit of success&quot; method. And fromElements single-select does delegate to the same internal type:'element' selection as chooseElement (lines 391-409). So the surface-level facts hold and there is genuine API-surface redundancy with somewhat contradictory &quot;prefer X&quot; guidance — confirmed by usage showing chooseElement is still the more-used method (26 vs 16 fromElements in src; 9 vs 4 in example games) despite docs steering away from it.\n\nHowever, the finding's central claim is overstated and partly wrong. It asserts &quot;chooseElement itself still accepts a precomputed `elements` array,&quot; making it a &quot;near-duplicate&quot; of fromElements. The public chooseElement options object (<code>action-builder.ts:256-279</code>) has NO `elements` field — it only exposes elementClass/from/filter (board-derived candidates). The `elements` property exists only on the internal ElementSelection type (<code>types.ts:223</code>) and is set exclusively by fromElements. So the two methods take genuinely different inputs (board class/filter vs. an explicit precomputed array) and converge only at the internal selection-type level. That split is a deliberate design choice, not accidental duplication. Likewise, lumping chooseFrom (the value/string/number selector) in as a third &quot;element-selection method&quot; is a stretch.\n\nNet: a real but minor documentation/API-clarity usability nit (redundant element-selection paths + mildly contradictory guidance), not the structural duplication with functional impact the finding implies. No bug, no incorrect behavior. Severity adjusted down from medium to low.</div>
-      </details>
-    </div>
-  </article>
-
-  <article class="card fx-open" data-cat="dx" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F28</span>#5</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-low">Low</span>
-          <span class="badge cat cat-dx">DX / Agent-XP</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">8 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Three overlapping element-selection methods (chooseFrom / chooseElement / fromElements) with no obvious 'right' choice</h3>
-        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">When three methods do nearly-the-same thing with undocumented behavioral deltas, there is no discoverable 'correct' choice. The inconsistent usage across the reference games (the very examples agents are told to study) proves even the authors don't apply a consistent rule.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">An agent picks one of the three semi-randomly; if it picks the one whose value-encoding doesn't match what the custom UI sends, it gets a runtime resolution mismatch rather than a compile error. The reference games teach contradictory patterns, so few-shot imitation produces inconsistent code.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Collapse to a single obvious pair: `chooseElement` (one) / `chooseElements` (many), unify value encoding (always element IDs), and either remove `fromElements` or make it an alias documented as deprecated-and-removed. Update the reference games to the single canonical form. Files: <code>src/engine/action/action-builder.ts</code>, example games.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 8 affected, 0 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Migrate the 'destination' selection off chooseFrom. Either re-express it as a Square chooseElement (element-ID encoding) and recompute capture/king metadata inside <code>execute()</code> from piece+target, or keep a value selection if chooseFrom survives. Update <code>CheckersBoard.vue</code> executeMove to send element IDs instead of the DestinationChoice object. filterBy{key:'pieceId',selectionName:'piece'} also needs an ID-based equivalent.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:81</code> `.chooseElement&lt;CheckerPiece&gt;('piece', {...})` (canonical, kept) but <code>src/rules/actions.ts:114</code> `.chooseFrom&lt;DestinationChoice&gt;('destination', {choices, display, boardRefs, filterBy})`. execute reads it as a non-ID object: <code>actions.ts:173</code> `const destination = args.destination as DestinationChoice;` then uses `destination.toNotation` (179,239). The custom UI also builds and sends the object: <code>src/ui/components/CheckersBoard.vue:564-575</code> `const destination = { pieceId, fromNotation, toNotation, isCapture, becomesKing }; await props.actionController.execute('move', { piece: move.pieceId, destination })`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Rename the discard builder from `.fromElements('cards', ...)` to the canonical `.chooseElements('cards', ...)`, keeping the multiSelect/min-max config. No value-encoding change needed (already IDs). chooseElement('card') stays as-is.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:17</code> `.fromElements&lt;Card&gt;('cards', { ... multiSelect: { min: 2, max: 2 } })` for the discard action (initial grep missed it due to the `&lt;Card&gt;` type param). <code>src/rules/actions.ts:68</code> `.chooseElement('card', {...})` is the canonical kept form. Selection encoding is already element IDs: UI sends `{ cards: selectedCards.value }` (<code>CribbageBoard.vue:520-522</code>) and `{ card: cardId }` (<code>CribbageBoard.vue:572-573</code>), and execute reads `args.cards as Card[]` (<code>actions.ts:42</code>).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">demo-action-panel</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">If chooseFrom is removed/aliased, all 5 call sites must migrate to the surviving value-selection API (these select strings/player-seats, not elements, so they need whatever replaces value choices). Separately, if selection encoding unifies to element IDs, the chooseElement consumer must resolve the ID to a Unit instead of casting args.chooseElement directly to a live element, and the value-selection consumers (enemy names, player seat) must be checked against the new encoding.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:31</code> `.chooseFrom&lt;string&gt;('multiSelect', {`, :104 `.chooseFrom&lt;string&gt;('optional', {`, :127 `.chooseFrom&lt;string&gt;('disabled', {`, :193 `.chooseFrom&lt;string&gt;('repeatUntil', {`, :220 `.chooseFrom('player', {` — five chooseFrom sites. Also :21 `.chooseElement&lt;Unit&gt;('chooseElement', {` whose result is consumed as a live element instance: :57 `const unit = args.chooseElement as Unit; ... unit.hasAttacked = true` and :40 `const unit = ctx.args.chooseElement as Unit`. Selection results are read as non-ID encodings: :73 enemies matched by name (`args.multiSelect` strings) and :227 `const seat = args.player as number`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Rename all 10 .fromElements('card'|'targetZone',...) calls to .chooseElement (all are single-element picks). Redesign flipReorder's .chooseFrom&lt;string&gt; to .chooseElement&lt;Zone&gt; selecting a Zone element directly (string-choice form has no element-only replacement). If selection encoding is unified to element IDs, update execute bodies that currently consume resolved element objects (args.card as Card) to resolve IDs instead. UI already passes IDs via actionController.fill(name, card.id) so the UI side is mostly fine.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses .fromElements at lines 25,59,93,183,219,249,265,319,357 (e.g. line 25 `.fromElements&lt;Card&gt;('card', {`) and .chooseFrom at line 134 `.chooseFrom&lt;string&gt;('zone', {`. No .chooseElement/.chooseElements anywhere. flipReorder (line 134) selects by arbitrary string ('zone-a'..'zone-d') via <code>choices()</code>, not elements, then maps string-&gt;Zone in execute (lines 156-167). Execute bodies read resolved elements, e.g. line 44 `const card = args.card as Card;` and line 153 `const zoneName = args.zone as string;`.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">demo-complex-ui</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Migrate the 3 fromElements card pickers to chooseElement (boardRef already returns {id}, so element encoding is close). Replace the 3 chooseFrom usages: the suit and player-position choices are not element selections, so they need whatever general/value-choice API survives the consolidation (or a chooseElement over the target Hand element + reading its owner). Update <code>execute()</code> to read the new ID/value encoding and update the two trade/gift tests that send { value, display } objects.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:54</code> &quot;.fromElements&lt;Card&gt;('card', {&quot;, :92 &quot;.fromElements&lt;Card&gt;('myCard', {&quot;, :155 &quot;.fromElements&lt;Card&gt;('card', {&quot;; :101 &quot;.chooseFrom('targetPlayer', {&quot;, :164 &quot;.chooseFrom('recipient', {&quot;, :206 &quot;.chooseFrom&lt;string&gt;('suit', {&quot;. chooseFrom is also used for NON-element choices: :103 &quot;choices: (ctx) =&gt; game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player })&quot; and :208 suit strings. Execute reads assume non-ID encoding: <code>actions.ts:122</code> &quot;const targetPosition = args.targetPlayer as number;&quot; and <code>tests/game.test.ts:35</code> &quot;targetPlayer: { value: 2, display: 'Player 2' }&quot;.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">go-fish</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-large">large</span></td>
-          <td class="gi-change">If chooseFrom is removed/aliased and selection values are unified to element IDs, the 'ask' action must be redesigned: a rank is a string and a target is a player, neither maps to an element ID. Either chooseFrom must be preserved for non-element value choices, or the action must be reworked (e.g. choose a representative card element for rank, choose the opponent's Hand element for target) and the rules/UI/tests must be rewritten to read element IDs. At minimum a rename if chooseFrom is aliased.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:35</code> &quot;.chooseFrom('target', {&quot; and :48 &quot;.chooseFrom&lt;string&gt;('rank', {&quot; — both are generic value choices (player position number, rank string), NOT element selections. Value encoding is leaked everywhere: <code>actions.ts:80-83</code> &quot;const targetPosition = args.target as number&quot; / &quot;const rank = args.rank as string&quot;; UI <code>src/ui/components/GameTable.vue:308-356</code> (isSelectingPlayer/isSelectingRank treat picks as type==='choice', handleOpponentClick fills 'target' with playerChoice.value {value,display}, handleCardClick fills 'rank' with a string, isOpponentHandSelectable reads (c.value as any)?.value===position); <code>tests/complete-game.test.ts:49-51</code>,175-176,235-236 &quot;target: { value: opponentPosition, display: opponent.name }, rank: rankToAsk&quot;.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-large">large</span></td>
-          <td class="gi-change">Migrate all 92 chooseFrom/fromElements call sites to the canonical chooseElement/chooseElements (for element selections) and to whatever primitive-choice replacement the library keeps (for the many string/number/enum choices). Rewrite the asSector/asSquad/asCombatantModel decoders (and all 27 call sites) to resolve element IDs via game.getElementById, since unified ID encoding means execute args arrive as numeric IDs rather than element instances.<details class="gi-ev"><summary>evidence</summary><div class="mono">90 .<code>chooseFrom()</code> + 2 .<code>fromElements()</code> call sites across src/rules/actions/. e.g. <code>src/rules/actions/rebel-movement.ts:169</code> '.chooseFrom&lt;number&gt;(\'militiaCount\', {', :526 '.chooseFrom&lt;\'primary\' | \'secondary\'&gt;(\'squadType\'', :784 '.chooseFrom&lt;string&gt;(\'combatantName\'); <code>src/rules/actions/rebel-equipment.ts:574</code> '.fromElements&lt;CombatantModel&gt;(\'actingMerc\'), :582 '.fromElements&lt;Equipment&gt;(\'equipment\'); plus <code>dictator-actions.ts</code> (~50 chooseFrom), <code>day-one-actions.ts</code>, <code>rebel-combat.ts</code>, <code>rebel-economy.ts</code>. Also 25 .<code>chooseElement()</code> (e.g. <code>rebel-movement.ts:125</code> '.chooseElement&lt;Sector&gt;(\'destination\')) whose results are decoded by INSTANCE-assuming helpers: <code>src/rules/actions/helpers.ts:381</code> 'export function asSector(element: unknown){ if (element instanceof Sector) return element; ...throw }' (also asSquad:393, asCombatantModel:369), called 27x. Many chooseFrom values are primitives (numbers/strings/yes-no like <code>rebel-economy.ts:1342</code> \'confirm\'), not element IDs.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">polyhedral-potions</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">Replace all 6 <code>chooseFrom()</code> calls. The 5 scalar string choices (operation/adjustment/track/newValue/keepDrafted) need a kept scalar primitive (e.g. enterText/number or whatever replaces chooseFrom for non-element values). The draft 'die' selection must be re-modeled as an element selection (chooseElement/fromElements with IDs); the D10 0-or-10 choice can no longer ride on a string suffix and needs a separate scalar selection or post-draft step. Reading args.die as a parsed string also goes away.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses chooseFrom 6x: line 20 .chooseFrom&lt;string&gt;('die', ...) (draft), line 99 'operation', line 119 'adjustment', line 169 'track', line 382 'newValue', line 450 'keepDrafted'. The draft action encodes element selection as a NON-ID string with a value suffix — <code>actions.ts:30-32</code> 'choices.push(`${die.name}:0`); choices.push(`${die.name}:10`)' and execute parses it back: <code>actions.ts:62-65</code> 'const parts = choice.split(&quot;:&quot;); const dieName = parts[0]; const overrideValue = parts[1] ? parseInt(parts[1],10):undefined'. chooseElement is used 3x (die1/die2/die at <code>actions.ts:263</code>,274,368) and would survive, but every chooseFrom site breaks if chooseFrom is removed/aliased.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">The builder exposes `chooseFrom&lt;T&gt;` (`<code>src/engine/action/action-builder.ts:153</code>`), `chooseElement&lt;T extends GameElement&gt;` (`:254`), and `fromElements&lt;T extends GameElement&gt;` (`:323`) — plus `enterText`/`enterNumber`. `chooseElement` and `fromElements` both produce single-element selections (fromElements branches to ElementSelection vs ElementsSelection internally) but differ subtly in value encoding — `fromElements`' JSDoc (`:305-307`) stresses 'Custom UIs send the element ID directly', implying `chooseElement` differs. The naming mixes three verb conventions (`choose*`, `from*`, `enter*`) and inconsistent plurality (`chooseElement` singular, `fromElements` plural-but-often-single). Real games pick inconsistently for the same concept: checkers uses `chooseElement&lt;CheckerPiece&gt;('piece')`; cribbage/go-fish use `fromElements&lt;Card&gt;('card')`; polyhedral mixes `chooseElement&lt;IngredientDie&gt;` and `fromElements&lt;Zone&gt;` in the same file.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Verified all cited lines in /<code>Users/jtsmith/BoardSmith/src/engine/action/action-builder.ts</code>. The three methods exist (chooseFrom :153, chooseElement :254, fromElements :323) and fromElements single-select does collapse to the same internal type:'element' as chooseElement (lines 372-409 vs 281-297). So there IS real API-surface overlap and mixed naming conventions (choose*/from*/enter*, singular vs plural) — a legitimate minor DX nit. However the finding is substantially overstated: (1) The claimed 'subtle value encoding differences' between chooseElement and fromElements do not exist — both emit type:'element' and share the same resolution path; the finding inferred a delta from one JSDoc phrase. (2) The methods ARE documented with explicit guidance: chooseElement JSDoc (:220) says board-click selection 'For choices shown as buttons/dropdowns, prefer fromElements instead,' and fromElements cross-references back — contradicting 'no discoverable correct choice' / 'undocumented behavioral deltas.' (3) Game-usage evidence is factually wrong: polyhedral-potions uses only chooseElement (3x), zero fromElements — it does not mix with fromElements&lt;Zone&gt;; go-fish has neither method. Cribbage's mix (chooseElement single click-to-play at :68 vs fromElements multiSelect discard at :17) actually follows the documented guidance. The underlying observation is real but minor; the medium severity and most of the supporting evidence are exaggerated/incorrect.</div>
-      </details>
-    </div>
-  </article>
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(24 fixed — no longer active, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(26 fixed — no longer active, kept for the record)</span></span></h2>
   <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
   zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
   <div id="completed-list">
@@ -1515,6 +1343,178 @@ Real mechanism, but the supporting facts are partly incorrect and the severity/f
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Confirmed by reading the cited code. FlowState carries two representations of &quot;who can act&quot;: awaitingPlayers[] (simultaneous) and currentPlayer (sequential), defined at <code>src/engine/flow/types.ts:252</code>, produced by <code>src/engine/flow/engine.ts</code>. The &quot;awaitingPlayers first, else currentPlayer&quot; branch is genuinely re-derived across consumers: <code>src/session/stateless-ops.ts:171-188</code> and 625-636; <code>src/session/state-history.ts:281-293</code> (nearly verbatim copy of <code>stateless-ops.ts:625-636</code>, both computing isMyTurn + flowAllowedActions); <code>src/session/utils.ts:28-31</code> and 369-374; <code>src/session/ai-controller.ts:90-104</code> and 127-128; <code>src/ai/mcts-bot.ts:744-766</code>/849-886. So the duplication claim holds.\n\nTwo corrections to the finding's framing: (1) Canonical predicates DO exist — <code>Game.canPlayerAct()</code> at <code>src/engine/element/game.ts:1682-1694</code> and <code>isPlayersTurn()</code> at <code>src/session/utils.ts:24-35</code> — but they are themselves duplicates of each other and only return a boolean, so consumers needing flowAllowedActions re-inline anyway. (2) The 'silent mishandling' risk is theoretical: every consumer I inspected correctly checks awaitingPlayers before falling back to currentPlayer, and several of the 9 files (<code>types.ts</code>, <code>engine.ts</code>, <code>snapshot.ts</code>) are engine internals that define/produce the state rather than re-branch it, so the consumer count is inflated.\n\nNet: a genuine duplication/drift maintainability issue (verbatim-duplicated derivation logic + two redundant boolean predicates + a duplicated AI-seat selector) with no demonstrated correctness bug. The two-representation split is also partly intentional state-machine design. Real but lower impact than medium; rate low.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="usability" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F23</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — 4643d54bb34376d1bcc4c660dd0e56f4f92cce16">✅ Fixed · 4643d54bb34376d1bcc4c660dd0e56f4f92cce16</span>
+          <span class="badge sev-low">Low</span>
+          <span class="badge cat cat-usability">Usability</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">8 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance</h3>
+        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>4643d54bb34376d1bcc4c660dd0e56f4f92cce16</code> — Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Two of the three methods select elements with substantial overlap, and the guidance both pushes away from chooseElement and toward fromElements while chooseElement itself still accepts a precomputed `elements` array. There is no single obvious 'right' method, and the distinction (board-click vs buttons) isn't enforced by the method you pick — both produce the same selection type.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">Designers and especially AI agents must make a non-obvious choice among three similar methods, and the docs contradict each other about which is canonical. This is decision-paralysis / inconsistent-codebase risk: different actions in the same game will use different methods for the same purpose, and agents may pick the deprecated-in-spirit chooseElement.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Collapse to one canonical element-selection method (fromElements) and make chooseElement either a thin documented alias or remove it (<code>CLAUDE.md</code>: 'No Backward Compatibility ... remove the bad thing'); ensure docstrings agree on the single recommended path. <code>action-builder.ts:254-412</code>.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 8 affected, 0 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Migrate the 'destination' selection off chooseFrom. Either re-express it as a Square chooseElement (element-ID encoding) and recompute capture/king metadata inside <code>execute()</code> from piece+target, or keep a value selection if chooseFrom survives. Update <code>CheckersBoard.vue</code> executeMove to send element IDs instead of the DestinationChoice object. filterBy{key:'pieceId',selectionName:'piece'} also needs an ID-based equivalent.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:81</code> `.chooseElement&lt;CheckerPiece&gt;('piece', {...})` (canonical, kept) but <code>src/rules/actions.ts:114</code> `.chooseFrom&lt;DestinationChoice&gt;('destination', {choices, display, boardRefs, filterBy})`. execute reads it as a non-ID object: <code>actions.ts:173</code> `const destination = args.destination as DestinationChoice;` then uses `destination.toNotation` (179,239). The custom UI also builds and sends the object: <code>src/ui/components/CheckersBoard.vue:564-575</code> `const destination = { pieceId, fromNotation, toNotation, isCapture, becomesKing }; await props.actionController.execute('move', { piece: move.pieceId, destination })`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Rename the discard builder from `.fromElements('cards', ...)` to the canonical `.chooseElements('cards', ...)`, keeping the multiSelect/min-max config. No value-encoding change needed (already IDs). chooseElement('card') stays as-is.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:17</code> `.fromElements&lt;Card&gt;('cards', { ... multiSelect: { min: 2, max: 2 } })` for the discard action (initial grep missed it due to the `&lt;Card&gt;` type param). <code>src/rules/actions.ts:68</code> `.chooseElement('card', {...})` is the canonical kept form. Selection encoding is already element IDs: UI sends `{ cards: selectedCards.value }` (<code>CribbageBoard.vue:520-522</code>) and `{ card: cardId }` (<code>CribbageBoard.vue:572-573</code>), and execute reads `args.cards as Card[]` (<code>actions.ts:42</code>).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">demo-action-panel</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">If chooseFrom is removed/aliased, all 5 call sites must migrate to the surviving value-selection API (these select strings/player-seats, not elements, so they need whatever replaces value choices). Separately, if selection encoding unifies to element IDs, the chooseElement consumer must resolve the ID to a Unit instead of casting args.chooseElement directly to a live element, and the value-selection consumers (enemy names, player seat) must be checked against the new encoding.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:31</code> `.chooseFrom&lt;string&gt;('multiSelect', {`, :104 `.chooseFrom&lt;string&gt;('optional', {`, :127 `.chooseFrom&lt;string&gt;('disabled', {`, :193 `.chooseFrom&lt;string&gt;('repeatUntil', {`, :220 `.chooseFrom('player', {` — five chooseFrom sites. Also :21 `.chooseElement&lt;Unit&gt;('chooseElement', {` whose result is consumed as a live element instance: :57 `const unit = args.chooseElement as Unit; ... unit.hasAttacked = true` and :40 `const unit = ctx.args.chooseElement as Unit`. Selection results are read as non-ID encodings: :73 enemies matched by name (`args.multiSelect` strings) and :227 `const seat = args.player as number`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Rename all 10 .fromElements('card'|'targetZone',...) calls to .chooseElement (all are single-element picks). Redesign flipReorder's .chooseFrom&lt;string&gt; to .chooseElement&lt;Zone&gt; selecting a Zone element directly (string-choice form has no element-only replacement). If selection encoding is unified to element IDs, update execute bodies that currently consume resolved element objects (args.card as Card) to resolve IDs instead. UI already passes IDs via actionController.fill(name, card.id) so the UI side is mostly fine.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses .fromElements at lines 25,59,93,183,219,249,265,319,357 (e.g. line 25 `.fromElements&lt;Card&gt;('card', {`) and .chooseFrom at line 134 `.chooseFrom&lt;string&gt;('zone', {`. No .chooseElement/.chooseElements anywhere. flipReorder (line 134) selects by arbitrary string ('zone-a'..'zone-d') via <code>choices()</code>, not elements, then maps string-&gt;Zone in execute (lines 156-167). Execute bodies read resolved elements, e.g. line 44 `const card = args.card as Card;` and line 153 `const zoneName = args.zone as string;`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">demo-complex-ui</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Migrate the 3 fromElements card pickers to chooseElement (boardRef already returns {id}, so element encoding is close). Replace the 3 chooseFrom usages: the suit and player-position choices are not element selections, so they need whatever general/value-choice API survives the consolidation (or a chooseElement over the target Hand element + reading its owner). Update <code>execute()</code> to read the new ID/value encoding and update the two trade/gift tests that send { value, display } objects.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:54</code> &quot;.fromElements&lt;Card&gt;('card', {&quot;, :92 &quot;.fromElements&lt;Card&gt;('myCard', {&quot;, :155 &quot;.fromElements&lt;Card&gt;('card', {&quot;; :101 &quot;.chooseFrom('targetPlayer', {&quot;, :164 &quot;.chooseFrom('recipient', {&quot;, :206 &quot;.chooseFrom&lt;string&gt;('suit', {&quot;. chooseFrom is also used for NON-element choices: :103 &quot;choices: (ctx) =&gt; game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player })&quot; and :208 suit strings. Execute reads assume non-ID encoding: <code>actions.ts:122</code> &quot;const targetPosition = args.targetPlayer as number;&quot; and <code>tests/game.test.ts:35</code> &quot;targetPlayer: { value: 2, display: 'Player 2' }&quot;.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">go-fish</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-large">large</span></td>
+          <td class="gi-change">If chooseFrom is removed/aliased and selection values are unified to element IDs, the 'ask' action must be redesigned: a rank is a string and a target is a player, neither maps to an element ID. Either chooseFrom must be preserved for non-element value choices, or the action must be reworked (e.g. choose a representative card element for rank, choose the opponent's Hand element for target) and the rules/UI/tests must be rewritten to read element IDs. At minimum a rename if chooseFrom is aliased.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:35</code> &quot;.chooseFrom('target', {&quot; and :48 &quot;.chooseFrom&lt;string&gt;('rank', {&quot; — both are generic value choices (player position number, rank string), NOT element selections. Value encoding is leaked everywhere: <code>actions.ts:80-83</code> &quot;const targetPosition = args.target as number&quot; / &quot;const rank = args.rank as string&quot;; UI <code>src/ui/components/GameTable.vue:308-356</code> (isSelectingPlayer/isSelectingRank treat picks as type==='choice', handleOpponentClick fills 'target' with playerChoice.value {value,display}, handleCardClick fills 'rank' with a string, isOpponentHandSelectable reads (c.value as any)?.value===position); <code>tests/complete-game.test.ts:49-51</code>,175-176,235-236 &quot;target: { value: opponentPosition, display: opponent.name }, rank: rankToAsk&quot;.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-large">large</span></td>
+          <td class="gi-change">Migrate all 92 chooseFrom/fromElements call sites to the canonical chooseElement/chooseElements (for element selections) and to whatever primitive-choice replacement the library keeps (for the many string/number/enum choices). Rewrite the asSector/asSquad/asCombatantModel decoders (and all 27 call sites) to resolve element IDs via game.getElementById, since unified ID encoding means execute args arrive as numeric IDs rather than element instances.<details class="gi-ev"><summary>evidence</summary><div class="mono">90 .<code>chooseFrom()</code> + 2 .<code>fromElements()</code> call sites across src/rules/actions/. e.g. <code>src/rules/actions/rebel-movement.ts:169</code> '.chooseFrom&lt;number&gt;(\'militiaCount\', {', :526 '.chooseFrom&lt;\'primary\' | \'secondary\'&gt;(\'squadType\'', :784 '.chooseFrom&lt;string&gt;(\'combatantName\'); <code>src/rules/actions/rebel-equipment.ts:574</code> '.fromElements&lt;CombatantModel&gt;(\'actingMerc\'), :582 '.fromElements&lt;Equipment&gt;(\'equipment\'); plus <code>dictator-actions.ts</code> (~50 chooseFrom), <code>day-one-actions.ts</code>, <code>rebel-combat.ts</code>, <code>rebel-economy.ts</code>. Also 25 .<code>chooseElement()</code> (e.g. <code>rebel-movement.ts:125</code> '.chooseElement&lt;Sector&gt;(\'destination\')) whose results are decoded by INSTANCE-assuming helpers: <code>src/rules/actions/helpers.ts:381</code> 'export function asSector(element: unknown){ if (element instanceof Sector) return element; ...throw }' (also asSquad:393, asCombatantModel:369), called 27x. Many chooseFrom values are primitives (numbers/strings/yes-no like <code>rebel-economy.ts:1342</code> \'confirm\'), not element IDs.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">polyhedral-potions</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Replace all 6 <code>chooseFrom()</code> calls. The 5 scalar string choices (operation/adjustment/track/newValue/keepDrafted) need a kept scalar primitive (e.g. enterText/number or whatever replaces chooseFrom for non-element values). The draft 'die' selection must be re-modeled as an element selection (chooseElement/fromElements with IDs); the D10 0-or-10 choice can no longer ride on a string suffix and needs a separate scalar selection or post-draft step. Reading args.die as a parsed string also goes away.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses chooseFrom 6x: line 20 .chooseFrom&lt;string&gt;('die', ...) (draft), line 99 'operation', line 119 'adjustment', line 169 'track', line 382 'newValue', line 450 'keepDrafted'. The draft action encodes element selection as a NON-ID string with a value suffix — <code>actions.ts:30-32</code> 'choices.push(`${die.name}:0`); choices.push(`${die.name}:10`)' and execute parses it back: <code>actions.ts:62-65</code> 'const parts = choice.split(&quot;:&quot;); const dieName = parts[0]; const overrideValue = parts[1] ? parseInt(parts[1],10):undefined'. chooseElement is used 3x (die1/die2/die at <code>actions.ts:263</code>,274,368) and would survive, but every chooseFrom site breaks if chooseFrom is removed/aliased.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>action-builder.ts:113-118</code> chooseFrom doc: 'For selecting game elements, prefer fromElements instead.' chooseElement doc:216-221 'Uses the board for selection... For choices shown as buttons/dropdowns, prefer fromElements instead.' fromElements doc:301-305 'This is the &quot;pit of success&quot; method for element-based choices.' Internally fromElements single-select even delegates to the SAME 'element' selection type as chooseElement (lines 391-409), so chooseElement(with elements) and fromElements(single) are near-duplicates.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Verified at /<code>Users/jtsmith/BoardSmith/src/engine/action/action-builder.ts</code>. The three cited doc comments exist verbatim: chooseFrom (line 115) says prefer fromElements for game elements; chooseElement (lines 219-220) says prefer fromElements for button/dropdown choices; fromElements (line 304) calls itself the &quot;pit of success&quot; method. And fromElements single-select does delegate to the same internal type:'element' selection as chooseElement (lines 391-409). So the surface-level facts hold and there is genuine API-surface redundancy with somewhat contradictory &quot;prefer X&quot; guidance — confirmed by usage showing chooseElement is still the more-used method (26 vs 16 fromElements in src; 9 vs 4 in example games) despite docs steering away from it.\n\nHowever, the finding's central claim is overstated and partly wrong. It asserts &quot;chooseElement itself still accepts a precomputed `elements` array,&quot; making it a &quot;near-duplicate&quot; of fromElements. The public chooseElement options object (<code>action-builder.ts:256-279</code>) has NO `elements` field — it only exposes elementClass/from/filter (board-derived candidates). The `elements` property exists only on the internal ElementSelection type (<code>types.ts:223</code>) and is set exclusively by fromElements. So the two methods take genuinely different inputs (board class/filter vs. an explicit precomputed array) and converge only at the internal selection-type level. That split is a deliberate design choice, not accidental duplication. Likewise, lumping chooseFrom (the value/string/number selector) in as a third &quot;element-selection method&quot; is a stretch.\n\nNet: a real but minor documentation/API-clarity usability nit (redundant element-selection paths + mildly contradictory guidance), not the structural duplication with functional impact the finding implies. No bug, no incorrect behavior. Severity adjusted down from medium to low.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="dx" data-sev="low" data-ease="moderate" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F28</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — 4643d54bb34376d1bcc4c660dd0e56f4f92cce16">✅ Fixed · 4643d54bb34376d1bcc4c660dd0e56f4f92cce16</span>
+          <span class="badge sev-low">Low</span>
+          <span class="badge cat cat-dx">DX / Agent-XP</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">8 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Three overlapping element-selection methods (chooseFrom / chooseElement / fromElements) with no obvious 'right' choice</h3>
+        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>4643d54bb34376d1bcc4c660dd0e56f4f92cce16</code> — Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">When three methods do nearly-the-same thing with undocumented behavioral deltas, there is no discoverable 'correct' choice. The inconsistent usage across the reference games (the very examples agents are told to study) proves even the authors don't apply a consistent rule.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">An agent picks one of the three semi-randomly; if it picks the one whose value-encoding doesn't match what the custom UI sends, it gets a runtime resolution mismatch rather than a compile error. The reference games teach contradictory patterns, so few-shot imitation produces inconsistent code.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Collapse to a single obvious pair: `chooseElement` (one) / `chooseElements` (many), unify value encoding (always element IDs), and either remove `fromElements` or make it an alias documented as deprecated-and-removed. Update the reference games to the single canonical form. Files: <code>src/engine/action/action-builder.ts</code>, example games.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 8 affected, 0 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Migrate the 'destination' selection off chooseFrom. Either re-express it as a Square chooseElement (element-ID encoding) and recompute capture/king metadata inside <code>execute()</code> from piece+target, or keep a value selection if chooseFrom survives. Update <code>CheckersBoard.vue</code> executeMove to send element IDs instead of the DestinationChoice object. filterBy{key:'pieceId',selectionName:'piece'} also needs an ID-based equivalent.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:81</code> `.chooseElement&lt;CheckerPiece&gt;('piece', {...})` (canonical, kept) but <code>src/rules/actions.ts:114</code> `.chooseFrom&lt;DestinationChoice&gt;('destination', {choices, display, boardRefs, filterBy})`. execute reads it as a non-ID object: <code>actions.ts:173</code> `const destination = args.destination as DestinationChoice;` then uses `destination.toNotation` (179,239). The custom UI also builds and sends the object: <code>src/ui/components/CheckersBoard.vue:564-575</code> `const destination = { pieceId, fromNotation, toNotation, isCapture, becomesKing }; await props.actionController.execute('move', { piece: move.pieceId, destination })`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Rename the discard builder from `.fromElements('cards', ...)` to the canonical `.chooseElements('cards', ...)`, keeping the multiSelect/min-max config. No value-encoding change needed (already IDs). chooseElement('card') stays as-is.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:17</code> `.fromElements&lt;Card&gt;('cards', { ... multiSelect: { min: 2, max: 2 } })` for the discard action (initial grep missed it due to the `&lt;Card&gt;` type param). <code>src/rules/actions.ts:68</code> `.chooseElement('card', {...})` is the canonical kept form. Selection encoding is already element IDs: UI sends `{ cards: selectedCards.value }` (<code>CribbageBoard.vue:520-522</code>) and `{ card: cardId }` (<code>CribbageBoard.vue:572-573</code>), and execute reads `args.cards as Card[]` (<code>actions.ts:42</code>).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">demo-action-panel</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">If chooseFrom is removed/aliased, all 5 call sites must migrate to the surviving value-selection API (these select strings/player-seats, not elements, so they need whatever replaces value choices). Separately, if selection encoding unifies to element IDs, the chooseElement consumer must resolve the ID to a Unit instead of casting args.chooseElement directly to a live element, and the value-selection consumers (enemy names, player seat) must be checked against the new encoding.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:31</code> `.chooseFrom&lt;string&gt;('multiSelect', {`, :104 `.chooseFrom&lt;string&gt;('optional', {`, :127 `.chooseFrom&lt;string&gt;('disabled', {`, :193 `.chooseFrom&lt;string&gt;('repeatUntil', {`, :220 `.chooseFrom('player', {` — five chooseFrom sites. Also :21 `.chooseElement&lt;Unit&gt;('chooseElement', {` whose result is consumed as a live element instance: :57 `const unit = args.chooseElement as Unit; ... unit.hasAttacked = true` and :40 `const unit = ctx.args.chooseElement as Unit`. Selection results are read as non-ID encodings: :73 enemies matched by name (`args.multiSelect` strings) and :227 `const seat = args.player as number`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Rename all 10 .fromElements('card'|'targetZone',...) calls to .chooseElement (all are single-element picks). Redesign flipReorder's .chooseFrom&lt;string&gt; to .chooseElement&lt;Zone&gt; selecting a Zone element directly (string-choice form has no element-only replacement). If selection encoding is unified to element IDs, update execute bodies that currently consume resolved element objects (args.card as Card) to resolve IDs instead. UI already passes IDs via actionController.fill(name, card.id) so the UI side is mostly fine.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses .fromElements at lines 25,59,93,183,219,249,265,319,357 (e.g. line 25 `.fromElements&lt;Card&gt;('card', {`) and .chooseFrom at line 134 `.chooseFrom&lt;string&gt;('zone', {`. No .chooseElement/.chooseElements anywhere. flipReorder (line 134) selects by arbitrary string ('zone-a'..'zone-d') via <code>choices()</code>, not elements, then maps string-&gt;Zone in execute (lines 156-167). Execute bodies read resolved elements, e.g. line 44 `const card = args.card as Card;` and line 153 `const zoneName = args.zone as string;`.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">demo-complex-ui</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Migrate the 3 fromElements card pickers to chooseElement (boardRef already returns {id}, so element encoding is close). Replace the 3 chooseFrom usages: the suit and player-position choices are not element selections, so they need whatever general/value-choice API survives the consolidation (or a chooseElement over the target Hand element + reading its owner). Update <code>execute()</code> to read the new ID/value encoding and update the two trade/gift tests that send { value, display } objects.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:54</code> &quot;.fromElements&lt;Card&gt;('card', {&quot;, :92 &quot;.fromElements&lt;Card&gt;('myCard', {&quot;, :155 &quot;.fromElements&lt;Card&gt;('card', {&quot;; :101 &quot;.chooseFrom('targetPlayer', {&quot;, :164 &quot;.chooseFrom('recipient', {&quot;, :206 &quot;.chooseFrom&lt;string&gt;('suit', {&quot;. chooseFrom is also used for NON-element choices: :103 &quot;choices: (ctx) =&gt; game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player })&quot; and :208 suit strings. Execute reads assume non-ID encoding: <code>actions.ts:122</code> &quot;const targetPosition = args.targetPlayer as number;&quot; and <code>tests/game.test.ts:35</code> &quot;targetPlayer: { value: 2, display: 'Player 2' }&quot;.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">go-fish</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-large">large</span></td>
+          <td class="gi-change">If chooseFrom is removed/aliased and selection values are unified to element IDs, the 'ask' action must be redesigned: a rank is a string and a target is a player, neither maps to an element ID. Either chooseFrom must be preserved for non-element value choices, or the action must be reworked (e.g. choose a representative card element for rank, choose the opponent's Hand element for target) and the rules/UI/tests must be rewritten to read element IDs. At minimum a rename if chooseFrom is aliased.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts:35</code> &quot;.chooseFrom('target', {&quot; and :48 &quot;.chooseFrom&lt;string&gt;('rank', {&quot; — both are generic value choices (player position number, rank string), NOT element selections. Value encoding is leaked everywhere: <code>actions.ts:80-83</code> &quot;const targetPosition = args.target as number&quot; / &quot;const rank = args.rank as string&quot;; UI <code>src/ui/components/GameTable.vue:308-356</code> (isSelectingPlayer/isSelectingRank treat picks as type==='choice', handleOpponentClick fills 'target' with playerChoice.value {value,display}, handleCardClick fills 'rank' with a string, isOpponentHandSelectable reads (c.value as any)?.value===position); <code>tests/complete-game.test.ts:49-51</code>,175-176,235-236 &quot;target: { value: opponentPosition, display: opponent.name }, rank: rankToAsk&quot;.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-large">large</span></td>
+          <td class="gi-change">Migrate all 92 chooseFrom/fromElements call sites to the canonical chooseElement/chooseElements (for element selections) and to whatever primitive-choice replacement the library keeps (for the many string/number/enum choices). Rewrite the asSector/asSquad/asCombatantModel decoders (and all 27 call sites) to resolve element IDs via game.getElementById, since unified ID encoding means execute args arrive as numeric IDs rather than element instances.<details class="gi-ev"><summary>evidence</summary><div class="mono">90 .<code>chooseFrom()</code> + 2 .<code>fromElements()</code> call sites across src/rules/actions/. e.g. <code>src/rules/actions/rebel-movement.ts:169</code> '.chooseFrom&lt;number&gt;(\'militiaCount\', {', :526 '.chooseFrom&lt;\'primary\' | \'secondary\'&gt;(\'squadType\'', :784 '.chooseFrom&lt;string&gt;(\'combatantName\'); <code>src/rules/actions/rebel-equipment.ts:574</code> '.fromElements&lt;CombatantModel&gt;(\'actingMerc\'), :582 '.fromElements&lt;Equipment&gt;(\'equipment\'); plus <code>dictator-actions.ts</code> (~50 chooseFrom), <code>day-one-actions.ts</code>, <code>rebel-combat.ts</code>, <code>rebel-economy.ts</code>. Also 25 .<code>chooseElement()</code> (e.g. <code>rebel-movement.ts:125</code> '.chooseElement&lt;Sector&gt;(\'destination\')) whose results are decoded by INSTANCE-assuming helpers: <code>src/rules/actions/helpers.ts:381</code> 'export function asSector(element: unknown){ if (element instanceof Sector) return element; ...throw }' (also asSquad:393, asCombatantModel:369), called 27x. Many chooseFrom values are primitives (numbers/strings/yes-no like <code>rebel-economy.ts:1342</code> \'confirm\'), not element IDs.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">polyhedral-potions</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">Replace all 6 <code>chooseFrom()</code> calls. The 5 scalar string choices (operation/adjustment/track/newValue/keepDrafted) need a kept scalar primitive (e.g. enterText/number or whatever replaces chooseFrom for non-element values). The draft 'die' selection must be re-modeled as an element selection (chooseElement/fromElements with IDs); the D10 0-or-10 choice can no longer ride on a string suffix and needs a separate scalar selection or post-draft step. Reading args.die as a parsed string also goes away.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/actions.ts</code> uses chooseFrom 6x: line 20 .chooseFrom&lt;string&gt;('die', ...) (draft), line 99 'operation', line 119 'adjustment', line 169 'track', line 382 'newValue', line 450 'keepDrafted'. The draft action encodes element selection as a NON-ID string with a value suffix — <code>actions.ts:30-32</code> 'choices.push(`${die.name}:0`); choices.push(`${die.name}:10`)' and execute parses it back: <code>actions.ts:62-65</code> 'const parts = choice.split(&quot;:&quot;); const dieName = parts[0]; const overrideValue = parts[1] ? parseInt(parts[1],10):undefined'. chooseElement is used 3x (die1/die2/die at <code>actions.ts:263</code>,274,368) and would survive, but every chooseFrom site breaks if chooseFrom is removed/aliased.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">The builder exposes `chooseFrom&lt;T&gt;` (`<code>src/engine/action/action-builder.ts:153</code>`), `chooseElement&lt;T extends GameElement&gt;` (`:254`), and `fromElements&lt;T extends GameElement&gt;` (`:323`) — plus `enterText`/`enterNumber`. `chooseElement` and `fromElements` both produce single-element selections (fromElements branches to ElementSelection vs ElementsSelection internally) but differ subtly in value encoding — `fromElements`' JSDoc (`:305-307`) stresses 'Custom UIs send the element ID directly', implying `chooseElement` differs. The naming mixes three verb conventions (`choose*`, `from*`, `enter*`) and inconsistent plurality (`chooseElement` singular, `fromElements` plural-but-often-single). Real games pick inconsistently for the same concept: checkers uses `chooseElement&lt;CheckerPiece&gt;('piece')`; cribbage/go-fish use `fromElements&lt;Card&gt;('card')`; polyhedral mixes `chooseElement&lt;IngredientDie&gt;` and `fromElements&lt;Zone&gt;` in the same file.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Verified all cited lines in /<code>Users/jtsmith/BoardSmith/src/engine/action/action-builder.ts</code>. The three methods exist (chooseFrom :153, chooseElement :254, fromElements :323) and fromElements single-select does collapse to the same internal type:'element' as chooseElement (lines 372-409 vs 281-297). So there IS real API-surface overlap and mixed naming conventions (choose*/from*/enter*, singular vs plural) — a legitimate minor DX nit. However the finding is substantially overstated: (1) The claimed 'subtle value encoding differences' between chooseElement and fromElements do not exist — both emit type:'element' and share the same resolution path; the finding inferred a delta from one JSDoc phrase. (2) The methods ARE documented with explicit guidance: chooseElement JSDoc (:220) says board-click selection 'For choices shown as buttons/dropdowns, prefer fromElements instead,' and fromElements cross-references back — contradicting 'no discoverable correct choice' / 'undocumented behavioral deltas.' (3) Game-usage evidence is factually wrong: polyhedral-potions uses only chooseElement (3x), zero fromElements — it does not mix with fromElements&lt;Zone&gt;; go-fish has neither method. Cribbage's mix (chooseElement single click-to-play at :68 vs fromElements multiSelect discard at :17) actually follows the documented guidance. The underlying observation is real but minor; the medium severity and most of the supporting evidence are exaggerated/incorrect.</div>
       </details>
     </div>
   </article>
