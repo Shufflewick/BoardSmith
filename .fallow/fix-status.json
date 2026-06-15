@@ -1,0 +1,97 @@
+{
+  "merged": {
+    "F4": {
+      "sha": "9538f7f",
+      "desc": "extract dev-only volatile-state machinery off Game"
+    },
+    "F2": {
+      "sha": "2e4d720",
+      "desc": "disambiguate dev-HMR vs action-undo checkpoint naming"
+    },
+    "F14": {
+      "sha": "e966719",
+      "desc": "bound in-memory game store to cap memory DoS"
+    },
+    "F11": {
+      "sha": "408ac6f",
+      "desc": "fail closed on empty host identity in lobby authorization gates"
+    },
+    "F10": {
+      "sha": "dc82fc9",
+      "desc": "authenticate WS seats and stop leaking lobby identity"
+    },
+    "F17": {
+      "sha": "2c0b866",
+      "desc": "store lean per-action checkpoints, not full snapshots (O(N^2) persisted snapshot)"
+    },
+    "F16": {
+      "sha": "ee875f8",
+      "desc": "drop dead commandHistory copy from state snapshots (O(N^2) memory)"
+    },
+    "F24": {
+      "sha": "f2b0128",
+      "desc": "warn when ctx.get reads an unset flow variable"
+    },
+    "F5": {
+      "sha": "b6e03e6",
+      "desc": "centralize 'who can act now?' into one flow predicate"
+    },
+    "F1": {
+      "sha": "68c6a16",
+      "desc": "route debug time-travel/rewind through authoritative checkpoints"
+    },
+    "F18": {
+      "sha": "b2c7ea2",
+      "desc": "make SHUFFLE invertible for MCTS incremental undo"
+    },
+    "F21": {
+      "sha": "0c6d3f5",
+      "desc": "board interaction injection fails loudly outside GameShell"
+    },
+    "F12": {
+      "sha": "c24e503",
+      "desc": "gate debug/integrity server routes behind development env"
+    },
+    "F6": {
+      "sha": "ef1c82f",
+      "desc": "share one element-diff algorithm across session diffs"
+    },
+    "F15": {
+      "sha": "3794c86",
+      "desc": "stop leaking internal exception messages to clients"
+    },
+    "F27": {
+      "sha": "7e84f88",
+      "desc": "use real boardsmith package paths, not @boardsmith/* scope"
+    },
+    "F20": {
+      "sha": "43e1a91",
+      "desc": "point unknown-action flow warning at the real registration API"
+    }
+  },
+  "blocked": [
+    "F8",
+    "F9"
+  ],
+  "status": {
+    "F4": "merged",
+    "F2": "merged",
+    "F14": "merged",
+    "F11": "merged",
+    "F10": "merged",
+    "F17": "merged",
+    "F16": "merged",
+    "F24": "merged",
+    "F5": "merged",
+    "F1": "merged",
+    "F18": "merged",
+    "F21": "merged",
+    "F12": "merged",
+    "F6": "merged",
+    "F15": "merged",
+    "F27": "merged",
+    "F20": "merged",
+    "F8": "blocked",
+    "F9": "blocked"
+  }
+}

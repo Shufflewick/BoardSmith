@@ -37,3 +37,6 @@ Thumbs.db
 
 # resources
 Vector Cards (Version 3.2)
+
+# Fallow tool binary caches
+.fallow/*.bin
