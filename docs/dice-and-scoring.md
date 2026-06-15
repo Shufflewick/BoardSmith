@@ -383,7 +383,7 @@ const upperSection = new UniqueTrack({
   id: 'ones',
   name: 'Ones',
   maxEntries: 1,
-  pointsPerEntry: (value) => value,  // Function-based points
+  pointsPerEntry: [3],  // Points by position (array index = entry position)
 });
 
 // Will reject if value already used
