@@ -71,8 +71,8 @@ import {
 - `LobbySlot` - Lobby slot data
 - `LobbyInfo` - Lobby information
 - `LobbyUpdate` - Lobby update message
-- `ClaimPositionRequest` - Claim position request
-- `ClaimPositionResponse` - Claim position response
+- `ClaimSeatRequest` - Claim seat request
+- `ClaimSeatResponse` - Claim seat response
 - `UpdateNameRequest` - Update name request
 - `GameSessionOptions` - Session constructor options
 - `ActionResult` - Action execution result

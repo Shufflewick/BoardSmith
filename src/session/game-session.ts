@@ -42,7 +42,7 @@ import {
 import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
-import { LobbyManager } from './lobby-manager.js';
+import { LobbyManager, type LobbyManagerCallbacks } from './lobby-manager.js';
 import { PickHandler } from './pick-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
@@ -243,6 +243,118 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   // ============================================
 
   /**
+   * Build the lobby-to-game handoff callbacks shared by `create` and `restore`.
+   *
+   * Both factory paths need identical behavior when the lobby transitions to
+   * playing (recreate the runner from the current slots, sync player names/colors,
+   * schedule AI) and when the AI config changes. Keeping a single implementation
+   * here is the source of truth so a fix to one path can never silently miss the other.
+   *
+   * `getSession` defers the GameSession reference because the session is constructed
+   * after the LobbyManager that holds these callbacks.
+   */
+  static #buildLobbyCallbacks<G extends Game>(params: {
+    GameClass: GameClass<G>;
+    storedState: StoredGameState;
+    botAIConfig: BotAIConfig | undefined;
+    getSession: () => GameSession<G>;
+  }): LobbyManagerCallbacks {
+    const { GameClass, storedState, botAIConfig, getSession } = params;
+    return {
+      onGameStart: () => {
+        const session = getSession();
+
+        // Build playerConfigs from lobby slots for game constructor access
+        // This allows games to access player options via options.playerConfigs[seat-1]
+        const playerConfigs = storedState.lobbySlots?.map(slot => ({
+          name: slot.name,
+          isAI: slot.status === 'ai',
+          aiLevel: slot.aiLevel,
+          ...slot.playerOptions,
+        }));
+
+        // Check if player count changed in lobby (host added/removed players)
+        const currentSlotCount = storedState.lobbySlots?.length ?? 0;
+
+        // Always recreate the game to pass playerConfigs from lobby
+        // The game needs access to playerConfigs for per-player options like isDictator
+        if (storedState.lobbySlots) {
+          const newPlayerNames = storedState.lobbySlots.map(s => s.name);
+          const newGameOptions = {
+            playerCount: currentSlotCount,
+            playerNames: newPlayerNames,
+            seed: storedState.seed,
+            ...storedState.gameOptions,
+            ...(storedState.colors ? { colors: storedState.colors } : {}),
+            playerConfigs,
+          };
+
+          const newRunner = new GameRunner<G>({
+            GameClass,
+            gameType: storedState.gameType,
+            gameOptions: newGameOptions,
+          });
+          newRunner.start();
+
+          // Replace the session's runner
+          session.#runner = newRunner;
+          session.#pickHandler = new PickHandler(newRunner, currentSlotCount);
+          session.#pendingActionManager.updateRunner(newRunner);
+
+          // Update storedState to reflect actual counts
+          storedState.playerCount = currentSlotCount;
+          storedState.playerNames = newPlayerNames;
+        }
+
+        // Apply player names and colors from lobby selections
+        // Players may have changed names or selected different colors than the auto-assigned ones
+        if (storedState.lobbySlots) {
+          for (const slot of storedState.lobbySlots) {
+            const player = session.#runner.game.getPlayer(slot.seat);
+            if (player) {
+              // Sync player name from lobby slot
+              if (slot.name && player.name !== slot.name) {
+                player.name = slot.name;
+              }
+              // Sync player color from lobby slot
+              const selectedColor = slot.playerOptions?.color as string | undefined;
+              if (selectedColor) {
+                player.color = selectedColor;
+              }
+            }
+          }
+        }
+
+        // Trigger AI check when game starts
+        if (session.#aiController?.hasAIPlayers()) {
+          session.#scheduleAICheck();
+        }
+      },
+      onAIConfigChanged: (aiSlots: LobbySlot[]) => {
+        const session = getSession();
+        if (aiSlots.length === 0) {
+          storedState.aiConfig = undefined;
+          session.#aiController = undefined;
+        } else {
+          const aiPlayers = aiSlots.map(s => s.seat);
+          const aiLevel = aiSlots[0].aiLevel || 'medium';
+          storedState.aiConfig = {
+            players: aiPlayers,
+            level: aiLevel as 'easy' | 'medium' | 'hard',
+          };
+          session.#aiController = new AIController(
+            GameClass,
+            storedState.gameType,
+            storedState.playerCount,
+            storedState.aiConfig,
+            botAIConfig
+          );
+        }
+      },
+    };
+  }
+
+  /**
    * Create a new game session
    */
   static create<G extends Game = Game>(options: GameSessionOptions<G>): GameSession<G> {
@@ -416,97 +528,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Create lobby manager if using lobby flow
     let lobbyManager: LobbyManager | undefined;
     if (useLobby && lobbySlots) {
-      // Create a temporary session ref for the callbacks (will be replaced after construction)
-      const callbacks = {
-        onGameStart: () => {
-          // Build playerConfigs from lobby slots for game constructor access
-          // This allows games to access player options via options.playerConfigs[seat-1]
-          const playerConfigs = storedState.lobbySlots?.map(slot => ({
-            name: slot.name,
-            isAI: slot.status === 'ai',
-            aiLevel: slot.aiLevel,
-            ...slot.playerOptions,
-          }));
-
-          // Check if player count changed in lobby (host added/removed players)
-          const currentSlotCount = storedState.lobbySlots?.length ?? 0;
-          const enginePlayerCount = session.#runner.game.players.length;
-
-          // Always recreate the game to pass playerConfigs from lobby
-          // The game needs access to playerConfigs for per-player options like isDictator
-          if (storedState.lobbySlots) {
-            const newPlayerNames = storedState.lobbySlots.map(s => s.name);
-            const newGameOptions = {
-              playerCount: currentSlotCount,
-              playerNames: newPlayerNames,
-              seed: storedState.seed,
-              ...storedState.gameOptions,
-              ...(storedState.colors ? { colors: storedState.colors } : {}),
-              playerConfigs,
-            };
-
-            const newRunner = new GameRunner<G>({
-              GameClass,
-              gameType,
-              gameOptions: newGameOptions,
-            });
-            newRunner.start();
-
-            // Replace the session's runner
-            session.#runner = newRunner;
-            session.#pickHandler = new PickHandler(newRunner, currentSlotCount);
-            session.#pendingActionManager.updateRunner(newRunner);
-
-            // Update storedState to reflect actual counts
-            storedState.playerCount = currentSlotCount;
-            storedState.playerNames = newPlayerNames;
-          }
-
-          // Apply player names and colors from lobby selections
-          // Players may have changed names or selected different colors than the auto-assigned ones
-          if (storedState.lobbySlots) {
-            for (const slot of storedState.lobbySlots) {
-              const player = session.#runner.game.getPlayer(slot.seat);
-              if (player) {
-                // Sync player name from lobby slot
-                if (slot.name && player.name !== slot.name) {
-                  player.name = slot.name;
-                }
-                // Sync player color from lobby slot
-                const selectedColor = slot.playerOptions?.color as string | undefined;
-                if (selectedColor) {
-                  player.color = selectedColor;
-                }
-              }
-            }
-          }
-
-          // Trigger AI check when game starts
-          if (session.#aiController?.hasAIPlayers()) {
-            session.#scheduleAICheck();
-          }
-        },
-        onAIConfigChanged: (aiSlots: LobbySlot[]) => {
-          if (aiSlots.length === 0) {
-            storedState.aiConfig = undefined;
-            session.#aiController = undefined;
-          } else {
-            const aiPlayers = aiSlots.map(s => s.seat);
-            const aiLevel = aiSlots[0].aiLevel || 'medium';
-            storedState.aiConfig = {
-              players: aiPlayers,
-              level: aiLevel as 'easy' | 'medium' | 'hard',
-            };
-            session.#aiController = new AIController(
-              GameClass,
-              gameType,
-              storedState.playerCount,
-              storedState.aiConfig,
-              botAIConfig
-            );
-          }
-        },
-      };
+      // Session is constructed after the LobbyManager, so the callbacks read it lazily.
+      const callbacks = GameSession.#buildLobbyCallbacks<G>({
+        GameClass,
+        storedState,
+        botAIConfig,
+        getSession: () => session,
+      });
       lobbyManager = new LobbyManager(storedState, storage, callbacks, displayName);
     }
 
@@ -552,97 +580,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Create lobby manager if stored state has lobby slots
     let lobbyManager: LobbyManager | undefined;
     if (storedState.lobbySlots) {
-      // Need session reference for callbacks, will be set after construction
-      const callbacks = {
-        onGameStart: () => {
-          // Build playerConfigs from lobby slots for game constructor access
-          // This allows games to access player options via options.playerConfigs[seat-1]
-          const playerConfigs = storedState.lobbySlots?.map(slot => ({
-            name: slot.name,
-            isAI: slot.status === 'ai',
-            aiLevel: slot.aiLevel,
-            ...slot.playerOptions,
-          }));
-
-          // Check if player count changed in lobby (host added/removed players)
-          const currentSlotCount = storedState.lobbySlots?.length ?? 0;
-          const enginePlayerCount = session.#runner.game.players.length;
-
-          // Always recreate the game to pass playerConfigs from lobby
-          // The game needs access to playerConfigs for per-player options like isDictator
-          if (storedState.lobbySlots) {
-            const newPlayerNames = storedState.lobbySlots.map(s => s.name);
-            const newGameOptions = {
-              playerCount: currentSlotCount,
-              playerNames: newPlayerNames,
-              seed: storedState.seed,
-              ...storedState.gameOptions,
-              ...(storedState.colors ? { colors: storedState.colors } : {}),
-              playerConfigs,
-            };
-
-            const newRunner = new GameRunner<G>({
-              GameClass,
-              gameType: storedState.gameType,
-              gameOptions: newGameOptions,
-            });
-            newRunner.start();
-
-            // Replace the session's runner
-            session.#runner = newRunner;
-            session.#pickHandler = new PickHandler(newRunner, currentSlotCount);
-            session.#pendingActionManager.updateRunner(newRunner);
-
-            // Update storedState to reflect actual counts
-            storedState.playerCount = currentSlotCount;
-            storedState.playerNames = newPlayerNames;
-          }
-
-          // Apply player names and colors from lobby selections
-          // Players may have changed names or selected different colors than the auto-assigned ones
-          if (storedState.lobbySlots) {
-            for (const slot of storedState.lobbySlots) {
-              const player = session.#runner.game.getPlayer(slot.seat);
-              if (player) {
-                // Sync player name from lobby slot
-                if (slot.name && player.name !== slot.name) {
-                  player.name = slot.name;
-                }
-                // Sync player color from lobby slot
-                const selectedColor = slot.playerOptions?.color as string | undefined;
-                if (selectedColor) {
-                  player.color = selectedColor;
-                }
-              }
-            }
-          }
-
-          // Trigger AI check when game starts
-          if (session.#aiController?.hasAIPlayers()) {
-            session.#scheduleAICheck();
-          }
-        },
-        onAIConfigChanged: (aiSlots: LobbySlot[]) => {
-          if (aiSlots.length === 0) {
-            storedState.aiConfig = undefined;
-            session.#aiController = undefined;
-          } else {
-            const aiPlayers = aiSlots.map(s => s.seat);
-            const aiLevel = aiSlots[0].aiLevel || 'medium';
-            storedState.aiConfig = {
-              players: aiPlayers,
-              level: aiLevel as 'easy' | 'medium' | 'hard',
-            };
-            session.#aiController = new AIController(
-              GameClass,
-              storedState.gameType,
-              storedState.playerCount,
-              storedState.aiConfig,
-              botAIConfig
-            );
-          }
-        },
-      };
+      // Session is constructed after the LobbyManager, so the callbacks read it lazily.
+      const callbacks = GameSession.#buildLobbyCallbacks<G>({
+        GameClass,
+        storedState,
+        botAIConfig,
+        getSession: () => session,
+      });
       lobbyManager = new LobbyManager(storedState, storage, callbacks);
     }
 

@@ -45,8 +45,8 @@ import { MeepleClient, GameConnection, audioService } from 'boardsmith/client';
 - `SlotStatus` - Lobby slot status
 - `LobbySlot` - Lobby slot data
 - `LobbyInfo` - Lobby information
-- `ClaimPositionRequest` - Claim position request
-- `ClaimPositionResponse` - Claim position response
+- `ClaimSeatRequest` - Claim seat request
+- `ClaimSeatResponse` - Claim seat response
 - `AudioServiceOptions` - Audio service options
 
 ## Examples
@@ -103,25 +103,24 @@ const match = await client.findMatch('go-fish', {
   playerName: 'Alice',
 });
 
-if (match.status === 'matched') {
+if (match.matched) {
   // Matched with other players!
   const connection = client.connect(match.gameId!, {
     playerSeat: match.playerSeat!,
-    playerId: 'user-123',
   });
-} else if (match.status === 'waiting') {
+} else {
   // Waiting for more players
   console.log(`Position ${match.position} in queue`);
 
-  // Poll for match status
-  const status = await client.matchmakingStatus('user-123');
+  // Poll for match status (uses the client's playerId)
+  const status = await client.getMatchStatus();
   if (status.status === 'matched') {
     // Now matched!
   }
 }
 
 // Cancel matchmaking
-await client.leaveMatchmaking('user-123');
+await client.leaveMatchmaking();
 ```
 
 ### Connection Event Handling
@@ -137,14 +136,12 @@ connection.onStateChange((state) => {
   updateUI(state);
 });
 
-// Connection status
-connection.onConnect(() => {
-  console.log('Connected to game');
-});
-
-connection.onDisconnect(() => {
-  console.log('Disconnected from game');
-  showReconnectButton();
+// Connection status (called immediately with the current status, then on change)
+connection.onConnectionChange((status) => {
+  console.log('Connection status:', status); // 'connected' | 'connecting' | 'disconnected' | ...
+  if (status === 'disconnected') {
+    showReconnectButton();
+  }
 });
 
 // Errors
@@ -153,12 +150,11 @@ connection.onError((error) => {
   showErrorMessage(error.message);
 });
 
-// Action results
-connection.onActionResult((result) => {
-  if (!result.success) {
-    showActionError(result.error);
-  }
-});
+// Action results are returned by awaiting the action itself
+const result = await connection.action('draw');
+if (!result.success) {
+  showActionError(result.error);
+}
 ```
 
 ### Performing Actions
@@ -188,18 +184,17 @@ try {
 }
 ```
 
-### Game History and Replay
+### Game History
+
+History is fetched from the client (keyed by game id), not the connection:
 
 ```typescript
-// Get action history
-const history = await connection.getHistory();
+const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
+
+// Get action history for a game
+const history = await client.getHistory(gameId);
 console.log(`${history.actionHistory.length} actions played`);
-
-// Get state at specific action
-const pastState = await connection.getStateAt(10, 0);
-
-// Get state diff between two points
-const diff = await connection.getStateDiff(5, 10, 0);
+console.log('Created at:', new Date(history.createdAt));
 ```
 
 ### Lobby Management
@@ -214,36 +209,27 @@ const { gameId } = await client.createGame({
   withLobby: true,
 });
 
-// Connect as spectator to lobby
+// Connect to the lobby (lobby updates arrive over the connection)
 const connection = client.connect(gameId, {
-  playerId: 'user-123',
   spectator: true,
 });
 
-// Claim a position
-await connection.claimPosition({
-  position: 0,
-  playerId: 'user-123',
-  name: 'Alice',
-});
-
-// Update name
-await connection.updateName({
-  playerId: 'user-123',
-  name: 'Alice the Great',
-});
-
-// Set ready status
-await connection.setReady({
-  playerId: 'user-123',
-  ready: true,
-});
-
 // Listen for lobby updates
-connection.onLobbyUpdate((lobby) => {
+connection.onLobbyChange((lobby) => {
   console.log('Lobby state:', lobby.state);
   console.log('Slots:', lobby.slots);
 });
+
+// Lobby mutations are performed on the client, keyed by game id
+
+// Claim a seat (seats are 1-indexed)
+await client.claimSeat(gameId, 1, 'Alice');
+
+// Update your display name
+await client.updateLobbyName(gameId, 'Alice the Great');
+
+// Set ready status
+await client.setReady(gameId, true);
 ```
 
 ### Audio Service
@@ -271,18 +257,15 @@ audioService.unmute();
 audioService.setVolume(0.5);
 ```
 
-### Undo and Restart
+### Restart
+
+Restart creates a fresh game state while keeping the same game id and players:
 
 ```typescript
-// Undo last move (if allowed)
-const undoResult = await connection.undo(0);
+const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
 
-if (!undoResult.success) {
-  console.log('Cannot undo:', undoResult.error);
-}
-
-// Restart game
-await connection.restart();
+// Restart the game
+const { flowState, state } = await client.restartGame(gameId);
 ```
 
 ### Spectator Mode

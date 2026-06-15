@@ -570,10 +570,23 @@ export class MeepleClient {
   }
 
   private generatePlayerId(): string {
-    // Generate a random ID with timestamp prefix for uniqueness
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 10);
-    return `${timestamp}-${random}`;
+    // The playerId is the per-seat capability/identity proof (see types/protocol.ts),
+    // so it MUST be cryptographically unguessable — never Math.random().
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    throw new Error(
+      'No cryptographically secure RNG available to mint a playerId. ' +
+        'Provide an explicit playerId in MeepleClientConfig, or run in an environment ' +
+        'with the Web Crypto API (modern browser or Node 16+).'
+    );
   }
 
   private sleep(ms: number): Promise<void> {
