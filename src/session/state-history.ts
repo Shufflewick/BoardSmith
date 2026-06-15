@@ -115,23 +115,20 @@ export class StateHistory<G extends Game = Game> {
       return { success: false, error: `Invalid action index: ${actionIndex}. History has ${history.length} actions.` };
     }
 
-    const checkpoints = this.#getRunner().getSnapshot().actionCheckpoints;
-    const checkpoint = checkpoints?.[actionIndex];
-    if (!checkpoint) {
+    const snapshot = this.#getRunner().getSnapshot();
+    const tempRunner = GameRunner.fromCheckpoint<G>(snapshot, actionIndex, this.#GameClass);
+    if (!tempRunner) {
       return {
         success: false,
         error: `Cannot view state at action index ${actionIndex}: no checkpoint ` +
-          `(have ${checkpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
+          `(have ${snapshot.actionCheckpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
           `it runs; a session cold-restored from action history alone cannot time-travel across ` +
           `pending mutations.`,
       };
     }
 
     try {
-      // Restore the checkpoint authoritatively. No replay.
-      const tempRunner = GameRunner.fromSnapshot<G>(checkpoint, this.#GameClass);
-
-      // Build state for the requested player
+      // Build state for the requested player (restored authoritatively above; no replay).
       const state = buildPlayerState(
         tempRunner,
         this.#storedState.playerNames,
@@ -287,24 +284,20 @@ export class StateHistory<G extends Game = Game> {
     // it loses prior-turn equipment and mis-positions the flow (a later action by
     // another player then throws "Not Player N's turn"). The runner accumulates
     // these checkpoints via GameSession's broadcast funnel.
-    const checkpoints = runner.getSnapshot().actionCheckpoints;
-    const turnStart = checkpoints?.[turnStartActionIndex];
-    if (!turnStart) {
-      return {
-        success: false,
-        error: `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
-          `(have ${checkpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
-          `it runs; a session cold-restored from action history alone cannot undo across pending mutations.`,
-        errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
-      };
-    }
+    const snapshot = runner.getSnapshot();
 
     try {
       // Restore the checkpoint, carrying its prefix forward so further undos work.
-      const newRunner = GameRunner.fromSnapshot<G>(
-        { ...turnStart, actionCheckpoints: checkpoints!.slice(0, turnStartActionIndex + 1) },
-        this.#GameClass,
-      );
+      const newRunner = GameRunner.fromCheckpoint<G>(snapshot, turnStartActionIndex, this.#GameClass);
+      if (!newRunner) {
+        return {
+          success: false,
+          error: `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
+            `(have ${snapshot.actionCheckpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
+            `it runs; a session cold-restored from action history alone cannot undo across pending mutations.`,
+          errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
+        };
+      }
 
       // Replace the current runner via callback
       this.#callbacks.replaceRunner(newRunner);
@@ -364,24 +357,20 @@ export class StateHistory<G extends Game = Game> {
     // mis-positions the flow, so rewind would resurrect a corrupted/mis-positioned
     // live game. This shares the single restore primitive (GameRunner.fromSnapshot
     // + actionCheckpoints) with undoToTurnStart and the stateless undo op.
-    const checkpoints = this.#getRunner().getSnapshot().actionCheckpoints;
-    const checkpoint = checkpoints?.[targetActionIndex];
-    if (!checkpoint) {
-      return {
-        success: false,
-        error: `Cannot rewind to action index ${targetActionIndex}: no checkpoint ` +
-          `(have ${checkpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
-          `it runs; a session cold-restored from action history alone cannot rewind across ` +
-          `pending mutations.`,
-      };
-    }
+    const snapshot = this.#getRunner().getSnapshot();
 
     try {
       // Restore the checkpoint, carrying its prefix forward so further undos/rewinds work.
-      const newRunner = GameRunner.fromSnapshot<G>(
-        { ...checkpoint, actionCheckpoints: checkpoints!.slice(0, targetActionIndex + 1) },
-        this.#GameClass,
-      );
+      const newRunner = GameRunner.fromCheckpoint<G>(snapshot, targetActionIndex, this.#GameClass);
+      if (!newRunner) {
+        return {
+          success: false,
+          error: `Cannot rewind to action index ${targetActionIndex}: no checkpoint ` +
+            `(have ${snapshot.actionCheckpoints?.length ?? 0}). The session accumulates per-action checkpoints as ` +
+            `it runs; a session cold-restored from action history alone cannot rewind across ` +
+            `pending mutations.`,
+        };
+      }
 
       // Replace current runner via callback
       this.#callbacks.replaceRunner(newRunner);

@@ -211,6 +211,7 @@ export {
   deserializeAction,
   isSerializedReference,
   createSnapshot,
+  createActionCheckpoint,
   createPlayerView,
   createAllPlayerViews,
   createReplayFile,
@@ -238,6 +239,7 @@ export type {
   SerializedReference,
   SerializeOptions,
   GameStateSnapshot,
+  ActionCheckpoint,
   PlayerStateView,
   ReplayFile,
   // Dev state types

@@ -15,12 +15,14 @@ export type {
 // State snapshots
 export {
   createSnapshot,
+  createActionCheckpoint,
   createPlayerView,
   createAllPlayerViews,
 } from './snapshot.js';
 
 export type {
   GameStateSnapshot,
+  ActionCheckpoint,
   PlayerStateView,
 } from './snapshot.js';
 

@@ -2,6 +2,7 @@ import {
   serializeAction,
   deserializeAction,
   createSnapshot,
+  createActionCheckpoint,
   createPlayerView,
   createAllPlayerViews,
   ActionExecutor,
@@ -13,6 +14,7 @@ import {
   type FlowState,
   type SerializeOptions,
   type GameStateSnapshot,
+  type ActionCheckpoint,
   type PlayerStateView,
 } from '../engine/index.js';
 
@@ -62,11 +64,14 @@ export class GameRunner<G extends Game = Game> {
 
   /**
    * Per-action authoritative undo checkpoints. `actionCheckpoints[k]` is the
-   * latest full snapshot observed while `k` actions were recorded. Carried
-   * across the stateless snapshot boundary (loaded in `fromSnapshot`, emitted
-   * by `getSnapshot`) and read by the undo op. See `GameStateSnapshot`.
+   * latest LEAN checkpoint (`ActionCheckpoint`: element tree, flow position,
+   * sequence, RNG only) observed while `k` actions were recorded. Carried across
+   * the stateless snapshot boundary (loaded in `fromSnapshot`, emitted by
+   * `getSnapshot`) and restored via `fromCheckpoint`, which rehydrates the
+   * snapshot-wide invariants + action-history prefix from the enclosing snapshot.
+   * See `GameStateSnapshot.actionCheckpoints`.
    */
-  private actionCheckpoints: GameStateSnapshot[] = [];
+  private actionCheckpoints: ActionCheckpoint[] = [];
 
   /** Random seed (for deterministic replay) */
   readonly seed?: string;
@@ -105,10 +110,9 @@ export class GameRunner<G extends Game = Game> {
    * stateful `GameSession` calls it from its broadcast funnel.
    */
   captureCheckpoint(): void {
-    const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
     const len = this.actionHistory.length;
     this.actionCheckpoints = this.actionCheckpoints.slice(0, len);
-    this.actionCheckpoints[len] = base;
+    this.actionCheckpoints[len] = createActionCheckpoint(this.game);
   }
 
   /**
@@ -223,7 +227,7 @@ export class GameRunner<G extends Game = Game> {
    */
   getSnapshot(): GameStateSnapshot {
     this.captureCheckpoint();
-    const base = this.actionCheckpoints[this.actionHistory.length];
+    const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
     return { ...base, actionCheckpoints: [...this.actionCheckpoints] };
   }
 
@@ -365,5 +369,51 @@ export class GameRunner<G extends Game = Game> {
     }
 
     return runner;
+  }
+
+  /**
+   * Restore a runner at a historical action index from an enclosing snapshot's
+   * per-action checkpoints — the SINGLE sanctioned way to restore a checkpoint.
+   *
+   * `actionCheckpoints[k]` is a LEAN `ActionCheckpoint` (element tree, flow
+   * position, sequence, RNG only). Restoring it requires the snapshot-wide
+   * invariants (`gameType`, `seed`, `gameOptions`, `version`) and the
+   * action-history PREFIX — none of which are duplicated per entry. This method
+   * rehydrates them from the enclosing `snapshot` and hands a full, restorable
+   * `GameStateSnapshot` to `fromSnapshot`. Keeping that rehydration here (instead
+   * of at each call site) is what makes the lean checkpoints safe: a lean entry
+   * can never be passed to `fromSnapshot` directly.
+   *
+   * The restored runner carries the checkpoint prefix `[0..actionIndex]` forward
+   * so subsequent undos/rewinds from it still resolve authoritatively, and its
+   * `actionHistory` is the matching prefix `[0..actionIndex)`.
+   *
+   * Returns `null` when no checkpoint exists at `actionIndex` (the caller decides
+   * how to surface that).
+   */
+  static fromCheckpoint<G extends Game>(
+    snapshot: GameStateSnapshot,
+    actionIndex: number,
+    GameClass: new (options: GameOptions) => G
+  ): GameRunner<G> | null {
+    const checkpoints = snapshot.actionCheckpoints;
+    const checkpoint = checkpoints?.[actionIndex];
+    if (!checkpoint) return null;
+
+    return GameRunner.fromSnapshot<G>(
+      {
+        version: snapshot.version,
+        gameType: snapshot.gameType,
+        state: checkpoint.state,
+        flowState: checkpoint.flowState,
+        actionHistory: snapshot.actionHistory.slice(0, actionIndex),
+        seed: snapshot.seed,
+        sequence: checkpoint.sequence,
+        randomState: checkpoint.randomState,
+        gameOptions: snapshot.gameOptions,
+        actionCheckpoints: checkpoints!.slice(0, actionIndex + 1),
+      },
+      GameClass,
+    );
   }
 }

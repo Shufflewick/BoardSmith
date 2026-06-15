@@ -355,22 +355,21 @@ function handleUndo(
   // action by another player then throws "Not Player N's turn"). The checkpoint
   // is the exact serialized state at the turn boundary, so restoring it keeps
   // every prior mutation and the correct flow position.
-  const checkpoints = snapshot.actionCheckpoints;
-  const turnStart = checkpoints?.[turnStartActionIndex];
-  if (!turnStart) {
+  // Restore from the per-action checkpoint authoritatively. fromCheckpoint
+  // rehydrates the lean checkpoint and carries the prefix `[0..turnStartActionIndex]`
+  // forward so further undos (e.g. undoing the now-current turn) still resolve.
+  const restored = GameRunner.fromCheckpoint(
+    snapshot,
+    turnStartActionIndex,
+    def.gameClass as GameRunnerOptions<never>['GameClass'],
+  );
+  if (!restored) {
     return errorResult(
       `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
-      `(snapshot carries ${checkpoints?.length ?? 0} checkpoint(s)). The snapshot must be ` +
+      `(snapshot carries ${snapshot.actionCheckpoints?.length ?? 0} checkpoint(s)). The snapshot must be ` +
       `produced by GameRunner.getSnapshot so per-action checkpoints are present.`,
     );
   }
-
-  // Carry the checkpoints up to and including the restore point so further undos
-  // (e.g. undoing the now-current turn) still resolve authoritatively.
-  const restored = GameRunner.fromSnapshot(
-    { ...turnStart, actionCheckpoints: checkpoints.slice(0, turnStartActionIndex + 1) },
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
 
   return {
     success: true,
@@ -456,15 +455,9 @@ function runnerFromCheckpoint(
   snap: GameStateSnapshot,
   actionIndex: number,
 ): GameRunner | null {
-  const checkpoints = snap.actionCheckpoints;
-  const checkpoint = checkpoints?.[actionIndex];
-  if (!checkpoint) return null;
   // Carry checkpoints up to and including the restore point so a later getSnapshot
   // keeps the linear history coherent (mirrors the undo op).
-  return GameRunner.fromSnapshot(
-    { ...checkpoint, actionCheckpoints: checkpoints.slice(0, actionIndex + 1) },
-    gameClassOf(def),
-  );
+  return GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def));
 }
 
 function handleDebugHistory(
