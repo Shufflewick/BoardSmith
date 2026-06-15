@@ -2029,4 +2029,108 @@ describe('Element selection API (F23/F28)', () => {
 
     expect((action.selections[0] as { multiSelect?: unknown }).multiSelect).toEqual({ min: 0, max: 2 });
   });
+
+  // F31: multiSelect min/max constraints must be enforced server-side, and
+  // invalid element IDs must be rejected loudly (not silently dropped).
+  it('rejects a submission with too few elements (below multiSelect min)', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards, multiSelect: { min: 2, max: 2 } })
+      .execute(() => {});
+    const player = game.getPlayer(1)!;
+
+    const resolved = executor.resolveArgs(action, { cards: [cards[0].id] }, player);
+    const result = executor.validateAction(action, player, resolved);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('at least 2 elements, got 1');
+  });
+
+  it('rejects a submission with too many elements (above multiSelect max)', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards, multiSelect: { min: 2, max: 2 } })
+      .execute(() => {});
+    const player = game.getPlayer(1)!;
+
+    const resolved = executor.resolveArgs(
+      action,
+      { cards: [cards[0].id, cards[1].id, cards[2].id] },
+      player,
+    );
+    const result = executor.validateAction(action, player, resolved);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('at most 2 elements, got 3');
+  });
+
+  it('rejects an unresolved element ID instead of silently dropping it', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards, multiSelect: { min: 1, max: 3 } })
+      .execute(() => {});
+    const player = game.getPlayer(1)!;
+
+    const resolved = executor.resolveArgs(action, { cards: [cards[0].id, 99999] }, player);
+    // The unresolved ID is preserved, not dropped, so validation can reject it.
+    expect((resolved.cards as unknown[]).length).toBe(2);
+
+    const result = executor.validateAction(action, player, resolved);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('Element ID 99999 not found');
+  });
+
+  it('accepts a submission whose count is within multiSelect bounds', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards, multiSelect: { min: 1, max: 2 } })
+      .execute(() => {});
+    const player = game.getPlayer(1)!;
+
+    const resolved = executor.resolveArgs(action, { cards: [cards[0].id, cards[1].id] }, player);
+    const result = executor.validateAction(action, player, resolved);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('enforces bounds for the number multiSelect form (max only)', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards, multiSelect: 2 })
+      .execute(() => {});
+    const player = game.getPlayer(1)!;
+
+    const resolved = executor.resolveArgs(
+      action,
+      { cards: [cards[0].id, cards[1].id, cards[2].id] },
+      player,
+    );
+    const result = executor.validateAction(action, player, resolved);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('at most 2 elements, got 3');
+  });
+
+  it('enforces bounds for the function multiSelect form', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards, multiSelect: () => ({ min: 2, max: 2 }) })
+      .execute(() => {});
+    const player = game.getPlayer(1)!;
+
+    const resolved = executor.resolveArgs(action, { cards: [cards[0].id] }, player);
+    const result = executor.validateAction(action, player, resolved);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('at least 2 elements, got 1');
+  });
+
+  it('rejects an empty array against the default chooseElements min of 1', () => {
+    const cards = [...game.all(Card)];
+    const action = Action.create('test')
+      .chooseElements('cards', { elements: () => cards })
+      .execute(() => {});
+    const player = game.getPlayer(1)!;
+
+    const resolved = executor.resolveArgs(action, { cards: [] }, player);
+    const result = executor.validateAction(action, player, resolved);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('at least 1 element, got 0');
+  });
 });

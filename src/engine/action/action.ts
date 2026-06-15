@@ -184,17 +184,19 @@ export class ActionExecutor {
               resolved[selection.name] = element;
             }
           } else if (Array.isArray(value)) {
-            // Multi-select: array of element IDs or serialized elements
-            const elements = value
-              .map(v => {
-                if (typeof v === 'number') {
-                  return this.game.getElementById(v);
-                } else if (this.looksLikeSerializedElement(v)) {
-                  return this.game.getElementById((v as { id: number }).id);
-                }
-                return null;
-              })
-              .filter((el): el is GameElement => el !== null);
+            // Multi-select: array of element IDs or serialized elements.
+            // Keep unresolved IDs (don't silently drop them) so validateSelection
+            // can reject the submission with an actionable error instead of
+            // letting an invalid ID vanish.
+            const elements = value.map(v => {
+              if (typeof v === 'number') {
+                return this.game.getElementById(v) ?? v;
+              } else if (this.looksLikeSerializedElement(v)) {
+                const id = (v as { id: number }).id;
+                return this.game.getElementById(id) ?? id;
+              }
+              return v;
+            });
             resolved[selection.name] = elements;
           }
           break;
@@ -682,6 +684,11 @@ export class ActionExecutor {
             return `Selection disabled: ${disabledMatch.disabled}`;
           }
           if (!validIds.includes(elem)) {
+            // An ID that doesn't resolve to any element at all is "not found";
+            // an ID that resolves but isn't an offered choice is "not valid".
+            if (!this.game.getElementById(elem)) {
+              return `Element ID ${elem} not found for "${selection.name}".`;
+            }
             const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
             return `Element ID ${elem} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
           }
@@ -700,6 +707,23 @@ export class ActionExecutor {
         // Single selection
         const error = validateElement(value);
         if (error) errors.push(error);
+      }
+
+      // Enforce multiSelect min/max bounds on the submitted count.
+      // multiSelect can be a number (max, with implicit min 1), a { min, max }
+      // config, or a function returning either. Mirror pick-handler.ts resolution.
+      const multiSelect = (selection as ElementsSelection).multiSelect;
+      const multiSelectConfig = typeof multiSelect === 'function' ? multiSelect(context) : multiSelect;
+      if (multiSelectConfig !== undefined) {
+        const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
+        const max = typeof multiSelectConfig === 'number' ? multiSelectConfig : multiSelectConfig.max;
+        const count = Array.isArray(value) ? value.length : 1;
+        if (count < min) {
+          errors.push(`Selection "${selection.name}" requires at least ${min} element${min === 1 ? '' : 's'}, got ${count}`);
+        }
+        if (max !== undefined && count > max) {
+          errors.push(`Selection "${selection.name}" requires at most ${max} element${max === 1 ? '' : 's'}, got ${count}`);
+        }
       }
     }
 
