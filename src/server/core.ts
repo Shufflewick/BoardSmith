@@ -598,7 +598,7 @@ export class GameServerCore {
           return;
         }
 
-        const lobbyInfo = gameSession.getLobbyInfo();
+        const lobbyInfo = gameSession.getLobbyInfo(session.playerId);
         if (lobbyInfo) {
           session.ws.send({ type: 'lobby', lobby: lobbyInfo });
         } else {

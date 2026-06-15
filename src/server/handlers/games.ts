@@ -158,8 +158,9 @@ export async function handleCreateGame(
   // Get initial state from player 1's perspective
   const state = session.getState(1);
 
-  // Include lobby info if using lobby flow
-  const lobby = useLobby ? session.getLobbyInfo() : undefined;
+  // Include lobby info if using lobby flow (the creator is the recipient here,
+  // so unmask their own slot).
+  const lobby = useLobby ? session.getLobbyInfo(creatorId) : undefined;
 
   return success(
     {

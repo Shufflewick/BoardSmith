@@ -1586,8 +1586,29 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /**
    * Get full lobby information for clients
    */
-  getLobbyInfo(): LobbyInfo | null {
-    return this.#lobbyManager?.getLobbyInfo() ?? null;
+  getLobbyInfo(viewerPlayerId?: string): LobbyInfo | null {
+    return this.#lobbyManager?.getLobbyInfo(viewerPlayerId) ?? null;
+  }
+
+  /**
+   * Resolve the seat for an authenticated player connection.
+   *
+   * Identity MUST be derived from a claimed lobby slot or the game's
+   * registered playerIds — never from a self-asserted seat parameter. Returns
+   * -1 (spectator) when the playerId is missing or cannot be matched, so an
+   * unknown or absent id can never be granted another player's seat or
+   * private view.
+   */
+  resolveSeatForPlayer(playerId: string | undefined): number {
+    if (!playerId) return -1;
+    const lobbySeat = this.getSeatForPlayer(playerId);
+    if (lobbySeat !== undefined) return lobbySeat;
+    const ids = this.#storedState.playerIds;
+    if (ids) {
+      const idx = ids.indexOf(playerId);
+      if (idx >= 0) return idx;
+    }
+    return -1;
   }
 
   /**

@@ -874,30 +874,19 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
 
-      const playerParam = url.searchParams.get('player');
       const playerId = url.searchParams.get('playerId');
       const isSpectator = url.searchParams.get('spectator') === 'true';
 
-      let playerPosition = playerParam ? parseInt(playerParam, 10) : -1;
-
       await this.#ensureLoaded();
 
-      // Check if playerId maps to a player position (from lobby slots or playerIds)
-      if (playerId && this.#gameSession) {
-        const storedState = this.#gameSession.storedState;
-
-        // First check lobby slots
-        const lobbyPosition = this.#gameSession.getSeatForPlayer(playerId);
-        if (lobbyPosition !== undefined) {
-          playerPosition = lobbyPosition;
-        } else if (storedState.playerIds) {
-          // Fallback to playerIds array
-          const foundPosition = storedState.playerIds.indexOf(playerId);
-          if (foundPosition >= 0) {
-            playerPosition = foundPosition;
-          }
-        }
-      }
+      // Identity is NEVER self-asserted. The seat is derived solely from the
+      // playerId (matched against a claimed lobby slot or the game's registered
+      // playerIds). A `?player=N` query is deliberately ignored — trusting it
+      // would let any client seat themselves as another player and read that
+      // player's private view. Unknown/missing id -> spectator (-1).
+      const playerPosition = this.#gameSession
+        ? this.#gameSession.resolveSeatForPlayer(playerId ?? undefined)
+        : -1;
 
       const sessionData: WebSocketSession = {
         playerId: playerId ?? undefined,
@@ -917,7 +906,7 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
       // Send initial state or lobby info
       if (this.#gameSession) {
-        const lobbyInfo = this.#gameSession.getLobbyInfo();
+        const lobbyInfo = this.#gameSession.getLobbyInfo(playerId ?? undefined);
 
         // If in lobby waiting state, send lobby info
         if (lobbyInfo && lobbyInfo.state === 'waiting') {
@@ -1302,7 +1291,9 @@ export function createGameStateDurableObject(gameRegistry: GameRegistry) {
 
       // GET lobby info
       if (action === 'GET') {
-        const lobbyInfo = this.#gameSession.getLobbyInfo();
+        // Viewer id (if supplied) only ever unmasks the caller's own slot.
+        const viewerPlayerId = new URL(request.url).searchParams.get('playerId') ?? undefined;
+        const lobbyInfo = this.#gameSession.getLobbyInfo(viewerPlayerId);
         if (!lobbyInfo) {
           return Response.json(
             { success: false, error: 'Game does not have a lobby' },
