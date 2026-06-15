@@ -4,6 +4,18 @@
 
 import { GameSession, type BroadcastAdapter, type GameDefinition, type SessionInfo } from '../../session/index.js';
 import type { GameStore, GameRegistry, CreateGameOptions } from '../types.js';
+import { GameStoreCapacityError } from '../errors.js';
+
+/**
+ * Default upper bound on concurrent games for an in-memory store.
+ *
+ * The store holds every game in a Map for the lifetime of the process, so an
+ * unbounded store lets any client exhaust memory by spamming `POST /games`.
+ * This default is high enough that a healthy local/self-hosted deployment never
+ * trips it, while still capping the blast radius of an abusive client. Hosts
+ * that legitimately need more can raise it via the constructor.
+ */
+export const DEFAULT_MAX_GAMES = 1000;
 
 // ============================================
 // Simple Game Registry Implementation
@@ -61,13 +73,23 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
   readonly #games: Map<string, GameSessionWithBroadcaster<TSession>> = new Map();
   readonly #registry: GameRegistry;
   readonly #broadcasterFactory: BroadcasterFactory<TSession>;
+  readonly #maxGames: number;
 
   constructor(
     registry: GameRegistry,
-    broadcasterFactory: BroadcasterFactory<TSession>
+    broadcasterFactory: BroadcasterFactory<TSession>,
+    options?: { maxGames?: number }
   ) {
     this.#registry = registry;
     this.#broadcasterFactory = broadcasterFactory;
+
+    const maxGames = options?.maxGames ?? DEFAULT_MAX_GAMES;
+    if (!Number.isInteger(maxGames) || maxGames < 1) {
+      throw new Error(
+        `InMemoryGameStore maxGames must be a positive integer, got ${maxGames}.`
+      );
+    }
+    this.#maxGames = maxGames;
   }
 
   async getGame(gameId: string): Promise<GameSession | null> {
@@ -76,6 +98,13 @@ export class InMemoryGameStore<TSession extends SessionInfo = SessionInfo> imple
   }
 
   async createGame(gameId: string, options: CreateGameOptions): Promise<GameSession> {
+    // Reject new games once the store is full. Replacing an existing id (e.g. a
+    // restart that deletes-then-recreates the same game) does not grow the map,
+    // so it is allowed through.
+    if (!this.#games.has(gameId) && this.#games.size >= this.#maxGames) {
+      throw new GameStoreCapacityError(this.#maxGames);
+    }
+
     const definition = this.#registry.get(options.gameType);
     if (!definition) {
       throw new Error(`Unknown game type: ${options.gameType}`);

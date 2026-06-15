@@ -3,6 +3,7 @@
  */
 
 import { generateGameId } from '../../session/index.js';
+import { GameStoreCapacityError } from '../errors.js';
 import type {
   ServerResponse,
   GameStore,
@@ -141,19 +142,29 @@ export async function handleCreateGame(
     effectiveGameOptions.playerConfigs = playerConfigs;
   }
 
-  const session = await store.createGame(gameId, {
-    gameType,
-    playerCount: effectivePlayerCount,
-    playerNames: names,
-    playerIds,
-    seed,
-    aiConfig: effectiveAiConfig,
-    gameOptions: effectiveGameOptions,
-    displayName: definition.displayName,
-    playerConfigs,
-    creatorId,
-    useLobby,
-  });
+  let session;
+  try {
+    session = await store.createGame(gameId, {
+      gameType,
+      playerCount: effectivePlayerCount,
+      playerNames: names,
+      playerIds,
+      seed,
+      aiConfig: effectiveAiConfig,
+      gameOptions: effectiveGameOptions,
+      displayName: definition.displayName,
+      playerConfigs,
+      creatorId,
+      useLobby,
+    });
+  } catch (err) {
+    // Capacity is a normal, recoverable condition (the store is full), not a
+    // server fault — surface it as an actionable 503 rather than an opaque 500.
+    if (err instanceof GameStoreCapacityError) {
+      return error(err.message, 503);
+    }
+    throw err;
+  }
 
   // Get initial state from player 1's perspective
   const state = session.getState(1);

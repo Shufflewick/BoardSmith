@@ -52,9 +52,13 @@ export type {
 export {
   InMemoryGameStore,
   SimpleGameRegistry,
+  DEFAULT_MAX_GAMES,
   type GameSessionWithBroadcaster,
   type BroadcasterFactory,
 } from './stores/in-memory-games.js';
+
+// Errors
+export { GameStoreCapacityError } from './errors.js';
 
 export { InMemoryMatchmakingStore } from './stores/in-memory-matchmaking.js';
 

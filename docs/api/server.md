@@ -26,7 +26,12 @@ import {
 
 ### Storage Implementations
 
-- `InMemoryGameStore` - In-memory game storage
+- `InMemoryGameStore` - In-memory game storage. Bounded: it holds at most
+  `DEFAULT_MAX_GAMES` (1000) concurrent games by default so a client cannot
+  exhaust memory by spamming game creation. Pass `{ maxGames }` as the third
+  constructor argument to raise or lower the limit. When full, `createGame()`
+  throws `GameStoreCapacityError` and `handleCreateGame()` returns a `503`.
+- `DEFAULT_MAX_GAMES` - Default concurrent-game cap for `InMemoryGameStore`.
 - `SimpleGameRegistry` - Simple game registry
 - `InMemoryMatchmakingStore` - In-memory matchmaking
 - `SqliteGameStore` - SQLite game storage
@@ -51,6 +56,11 @@ import {
 - `handleMatchmakingJoin()` - Handle join matchmaking
 - `handleMatchmakingStatus()` - Handle matchmaking status check
 - `handleMatchmakingLeave()` - Handle leave matchmaking
+
+### Errors
+
+- `GameStoreCapacityError` - Thrown by a store's `createGame()` when it is at
+  its concurrent-game cap. `handleCreateGame()` translates it into a `503`.
 
 ### Types
 
