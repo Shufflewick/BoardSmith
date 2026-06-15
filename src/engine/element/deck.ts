@@ -53,6 +53,11 @@ export class Deck<G extends Game = any, P extends Player = any> extends Space<G,
     this.$direction = 'vertical';
     this.$overlap = 0.95;
     this.$align = 'center';
+
+    // Secure by default: a draw pile's contents (faces AND order) are hidden
+    // from all players. Designers can opt into more visibility afterward via
+    // contentsVisible(), contentsCountOnly(), etc.
+    this.setZoneVisibility('hidden');
   }
 
   /**

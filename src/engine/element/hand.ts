@@ -48,5 +48,10 @@ export class Hand<G extends Game = any, P extends Player = any> extends Space<G,
     this.$fanAngle = 30;
     this.$overlap = 0.5;
     this.$align = 'center';
+
+    // Secure by default: a hand's contents are visible only to its owner.
+    // Opponents see count-only/nothing unless the designer opts into more
+    // visibility afterward via contentsVisible(), contentsCountOnly(), etc.
+    this.setZoneVisibility('owner');
   }
 }
