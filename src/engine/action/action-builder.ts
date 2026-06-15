@@ -1,4 +1,5 @@
 import type { GameElement } from '../element/game-element.js';
+import type { Game } from '../element/game.js';
 import type {
   ActionDefinition,
   ActionContext,
@@ -17,6 +18,19 @@ import type {
   ConditionConfig,
   OnSelectContext,
 } from './types.js';
+
+/**
+ * The args record for an action with no selections yet. Using an empty key set
+ * (rather than `{}`) keeps `AddArg` clean: `AddArg<NoArgs, 'card', Card>` is
+ * exactly `{ card: Card }`, with no leftover index signature.
+ */
+type NoArgs = Record<never, never>;
+
+/**
+ * Accumulates a new named selection into the args record threaded through the
+ * builder chain. `AddArg<A, 'card', Card>` produces `A & { card: Card }`.
+ */
+type AddArg<A, K extends string, T> = A & { [P in K]: T };
 
 /**
  * Builder class for creating game actions with a fluent API.
@@ -38,13 +52,22 @@ import type {
  *     prompt: 'Choose a rank',
  *     choices: (ctx) => getPlayerRanks(ctx.player)
  *   })
- *   .condition((ctx) => ctx.player.hand.count() > 0)
+ *   .condition({ 'has cards': (ctx) => ctx.player.hand.count() > 0 })
  *   .execute((args, ctx) => {
  *     // Handle the ask action
  *   });
  * ```
+ *
+ * @typeParam G - The concrete Game subclass. Supply it via
+ *   `Action.create<MyGame>('name')` so `ctx.game` is typed in every callback.
+ * @typeParam A - The accumulated args record. Each selection method adds its
+ *   `{ name: type }` so the `execute` handler receives a fully-typed args object
+ *   with no casts required.
  */
-export class Action {
+export class Action<
+  G extends Game = Game,
+  A extends Record<string, unknown> = NoArgs,
+> {
   private definition: ActionDefinition;
 
   private constructor(name: string) {
@@ -56,10 +79,14 @@ export class Action {
   }
 
   /**
-   * Create a new action builder
+   * Create a new action builder.
+   *
+   * Supply the concrete game type to thread it through the whole chain:
+   * `Action.create<MyGame>('move')` makes `ctx.game` typed as `MyGame` in every
+   * selection callback, condition, and the final `execute` handler.
    */
-  static create(name: string): Action {
-    return new Action(name);
+  static create<G extends Game = Game>(name: string): Action<G, NoArgs> {
+    return new Action<G, NoArgs>(name);
   }
 
   /**
@@ -93,8 +120,9 @@ export class Action {
    *   .execute(() => { ... });
    * ```
    */
-  condition(config: ConditionConfig): this {
-    this.definition.condition = config;
+  condition(config: ConditionConfig<G>): this {
+    // Stored as the base ConditionConfig; G extends Game so this is sound.
+    this.definition.condition = config as ConditionConfig;
     return this;
   }
 
@@ -150,16 +178,16 @@ export class Action {
    *   });
    * ```
    */
-  chooseFrom<T>(
-    name: string,
+  chooseFrom<K extends string, T>(
+    name: K,
     options: {
       prompt?: string;
-      choices: T[] | ((context: ActionContext) => T[]);
+      choices: T[] | ((context: ActionContext<G>) => T[]);
       display?: (choice: T) => string;
       optional?: boolean;
-      validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Get board element references for highlighting (source/target) */
-      boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;
+      boardRefs?: (choice: T, context: ActionContext<G>) => ChoiceBoardRefs;
       /** Filter choices based on a previous selection value */
       filterBy?: DependentFilter;
       /**
@@ -182,16 +210,16 @@ export class Action {
        * Enable multi-select mode with checkboxes instead of radio buttons.
        * Can be a static config or dynamic function evaluated per context.
        */
-      multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+      multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
       /** Check if choice should be disabled. Returns reason string or false. */
-      disabled?: (choice: T, context: ActionContext) => string | false;
+      disabled?: (choice: T, context: ActionContext<G>) => string | false;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: T, context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     }
-  ): this {
-    const selection: ChoiceSelection<T> = {
+  ): Action<G, AddArg<A, K, T>> {
+    const selection = {
       type: 'choice',
       name,
       prompt: options.prompt,
@@ -208,9 +236,9 @@ export class Action {
       disabled: options.disabled,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
-    };
+    } as ChoiceSelection<T>;
     this.definition.selections.push(selection as Selection);
-    return this;
+    return this as unknown as Action<G, AddArg<A, K, T>>;
   }
 
   /**
@@ -251,19 +279,19 @@ export class Action {
    *   });
    * ```
    */
-  chooseElement<T extends GameElement>(
-    name: string,
+  chooseElement<K extends string, T extends GameElement>(
+    name: K,
     options: {
       prompt?: string;
       elementClass?: ElementClass<T>;
-      from?: GameElement | ((context: ActionContext) => GameElement);
-      filter?: (element: GameElement, context: ActionContext) => boolean;
+      from?: GameElement | ((context: ActionContext<G>) => GameElement);
+      filter?: (element: GameElement, context: ActionContext<G>) => boolean;
       optional?: boolean;
-      validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Display function for elements (for UI buttons) */
-      display?: (element: T, context: ActionContext) => string;
+      display?: (element: T, context: ActionContext<G>) => string;
       /** Get board element reference for highlighting */
-      boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+      boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
       /**
        * Name of a previous selection this depends on.
        * When specified, availability checking will verify that at least one
@@ -271,14 +299,14 @@ export class Action {
        */
       dependsOn?: string;
       /** Check if element should be disabled. Returns reason string or false. */
-      disabled?: (element: T, context: ActionContext) => string | false;
+      disabled?: (element: T, context: ActionContext<G>) => string | false;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: T, context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     } = {}
-  ): this {
-    const selection: ElementSelection<T> = {
+  ): Action<G, AddArg<A, K, T>> {
+    const selection = {
       type: 'element',
       name,
       prompt: options.prompt,
@@ -293,9 +321,9 @@ export class Action {
       disabled: options.disabled,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
-    };
+    } as ElementSelection<T>;
     this.definition.selections.push(selection as Selection);
-    return this;
+    return this as unknown as Action<G, AddArg<A, K, T>>;
   }
 
   /**
@@ -320,28 +348,28 @@ export class Action {
    *   });
    * ```
    */
-  fromElements<T extends GameElement>(
-    name: string,
+  fromElements<K extends string, T extends GameElement>(
+    name: K,
     options: {
       prompt?: string;
       /**
        * Elements to choose from - can be static array or function.
        * Custom UIs send the element ID directly.
        */
-      elements: T[] | ((context: ActionContext) => T[]);
+      elements: T[] | ((context: ActionContext<G>) => T[]);
       /**
        * Custom display function. If not provided, uses element.name with
        * automatic disambiguation when multiple elements have the same name.
        */
-      display?: (element: T, context: ActionContext, allElements: T[]) => string;
+      display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
       optional?: boolean;
-      validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Get board element reference for highlighting */
-      boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+      boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
       /**
        * Enable multi-select mode. Result will be an array of elements.
        */
-      multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+      multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
       /**
        * Name of a previous selection this element selection depends on.
        * When specified, elements are computed for each possible value of the
@@ -360,17 +388,17 @@ export class Action {
        */
       repeatUntil?: T;
       /** Check if element should be disabled. Returns reason string or false. */
-      disabled?: (element: T, context: ActionContext) => string | false;
+      disabled?: (element: T, context: ActionContext<G>) => string | false;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: T, context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     }
-  ): this {
+  ): Action<G, AddArg<A, K, T>> {
     // For single-select (no multiSelect), use 'element' type to leverage existing code paths
     // For multi-select, use 'elements' type
     if (options.multiSelect !== undefined) {
-      const selection: ElementsSelection<T> = {
+      const selection = {
         type: 'elements',
         name,
         prompt: options.prompt,
@@ -386,11 +414,11 @@ export class Action {
         disabled: options.disabled,
         onSelect: options.onSelect,
         onCancel: options.onCancel,
-      };
+      } as ElementsSelection<T>;
       this.definition.selections.push(selection as Selection);
     } else {
       // Single-select: use 'element' type with elements array
-      const selection: ElementSelection<T> = {
+      const selection = {
         type: 'element',
         name,
         prompt: options.prompt,
@@ -405,10 +433,10 @@ export class Action {
         disabled: options.disabled,
         onSelect: options.onSelect,
         onCancel: options.onCancel,
-      };
+      } as ElementSelection<T>;
       this.definition.selections.push(selection as Selection);
     }
-    return this;
+    return this as unknown as Action<G, AddArg<A, K, T>>;
   }
 
   /**
@@ -438,22 +466,22 @@ export class Action {
    *   });
    * ```
    */
-  enterText(
-    name: string,
+  enterText<K extends string>(
+    name: K,
     options: {
       prompt?: string;
       pattern?: RegExp;
       minLength?: number;
       maxLength?: number;
       optional?: boolean;
-      validate?: (value: string, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      validate?: (value: string, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: string, context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     } = {}
-  ): this {
-    const selection: TextSelection = {
+  ): Action<G, AddArg<A, K, string>> {
+    const selection = {
       type: 'text',
       name,
       prompt: options.prompt,
@@ -464,9 +492,9 @@ export class Action {
       validate: options.validate,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
-    };
+    } as TextSelection;
     this.definition.selections.push(selection);
-    return this;
+    return this as unknown as Action<G, AddArg<A, K, string>>;
   }
 
   /**
@@ -497,22 +525,22 @@ export class Action {
    *   });
    * ```
    */
-  enterNumber(
-    name: string,
+  enterNumber<K extends string>(
+    name: K,
     options: {
       prompt?: string;
       min?: number;
       max?: number;
       integer?: boolean;
       optional?: boolean;
-      validate?: (value: number, args: Record<string, unknown>, context: ActionContext) => boolean | string;
+      validate?: (value: number, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: number, context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     } = {}
-  ): this {
-    const selection: NumberSelection = {
+  ): Action<G, AddArg<A, K, number>> {
+    const selection = {
       type: 'number',
       name,
       prompt: options.prompt,
@@ -523,9 +551,9 @@ export class Action {
       validate: options.validate,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
-    };
+    } as NumberSelection;
     this.definition.selections.push(selection);
-    return this;
+    return this as unknown as Action<G, AddArg<A, K, number>>;
   }
 
   /**
@@ -552,9 +580,12 @@ export class Action {
    * ```
    */
   execute(
-    fn: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void
+    fn: (args: A, context: ActionContext<G>) => ActionResult | void
   ): ActionDefinition {
-    this.definition.execute = fn;
+    // The accumulated args type A and game type G are erased at the storage
+    // boundary (ActionDefinition is non-generic); both are sound because the
+    // runtime always passes the args/game this chain declared.
+    this.definition.execute = fn as ActionDefinition['execute'];
     return this.definition;
   }
 

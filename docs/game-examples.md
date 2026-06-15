@@ -79,7 +79,7 @@ export function createHexFlow(game: HexGame): FlowDefinition {
 ```typescript
 // actions.ts
 Action.create('placeStone')
-  .chooseElement<Cell>('cell', {
+  .chooseElement('cell', {
     filter: (cell) => cell.isEmpty(),
     boardRef: (cell) => ({
       id: cell.id,
@@ -263,7 +263,7 @@ constructor(options) {
 ```typescript
 // actions.ts - Handling jump chains
 Action.create('move')
-  .chooseElement<Piece>('piece', {
+  .chooseElement('piece', {
     filter: (piece, ctx) => {
       const game = ctx.game as CheckersGame;
       // If there's a pending jump, only that piece can continue
@@ -273,7 +273,7 @@ Action.create('move')
       return piece.player === ctx.player && game.hasValidMoves(piece);
     },
   })
-  .chooseElement<Cell>('destination', {
+  .chooseElement('destination', {
     filter: (cell, ctx) => {
       const piece = ctx.args.piece as Piece;
       return game.isValidMove(piece, cell);

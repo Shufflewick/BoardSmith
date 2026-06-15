@@ -75,7 +75,7 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
     this.registerAction(
       Action.create('collect')
         .condition({ 'has sector arg': (ctx) => ctx.args?.sectorId != null })
-        .chooseElement<Equipment>('item', {
+        .chooseElement('item', {
           optional: true,
           elementClass: Equipment,
           filter: (el) => el.parent === this.stash,

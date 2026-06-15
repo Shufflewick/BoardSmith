@@ -211,8 +211,8 @@ export interface DependentFilterOptions<T, TPrev> {
  * @example
  * ```typescript
  * Action.create('move')
- *   .chooseElement<Squad>('squad', { ... })
- *   .chooseElement<Sector>('destination', {
+ *   .chooseElement('squad', { ... })
+ *   .chooseElement('destination', {
  *     filter: dependentFilter({
  *       dependsOn: 'squad',
  *       whenUndefined: (sector, ctx) => {
@@ -249,7 +249,7 @@ export function dependentFilter<T, TPrev>(
  *
  * @example
  * ```typescript
- * .chooseElement<Cell>('destination', {
+ * .chooseElement('destination', {
  *   filter: adjacentToSelection({
  *     dependsOn: 'piece',
  *     getPosition: (piece) => piece.cell,
@@ -292,7 +292,7 @@ export function adjacentToSelection<TDest, TSrc>(options: {
  *
  * @example
  * ```typescript
- * .chooseElement<Card>('cards', {
+ * .chooseElement('cards', {
  *   repeat: { max: 3 },
  *   filter: excludeAlreadySelected('cards'),
  * })

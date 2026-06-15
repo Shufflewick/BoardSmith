@@ -646,10 +646,10 @@ describe('Dependent Selection Filtering (filterBy)', () => {
     // 1. Extracting the value from the previous selection (if object)
     // 2. Matching against the choice property
     const action = Action.create('move')
-      .chooseFrom<{ pieceId: number }>('piece', {
+      .chooseFrom('piece', {
         choices: [{ pieceId: 1 }, { pieceId: 2 }, { pieceId: 3 }],
       })
-      .chooseFrom<{ pieceId: number; dest: string }>('destination', {
+      .chooseFrom('destination', {
         choices: [
           { pieceId: 1, dest: 'A' },
           { pieceId: 1, dest: 'B' },
@@ -715,10 +715,10 @@ describe('Dependent Selection Filtering (filterBy)', () => {
   it('should hide action when no valid selection path exists', () => {
     // Piece 3 has no valid destinations
     const action = Action.create('move')
-      .chooseFrom<{ pieceId: number }>('piece', {
+      .chooseFrom('piece', {
         choices: [{ pieceId: 3 }],
       })
-      .chooseFrom<{ pieceId: number; dest: string }>('destination', {
+      .chooseFrom('destination', {
         choices: [
           { pieceId: 1, dest: 'A' },
           { pieceId: 2, dest: 'B' },
@@ -733,10 +733,10 @@ describe('Dependent Selection Filtering (filterBy)', () => {
 
   it('should show action when at least one valid path exists', () => {
     const action = Action.create('move')
-      .chooseFrom<{ pieceId: number }>('piece', {
+      .chooseFrom('piece', {
         choices: [{ pieceId: 1 }, { pieceId: 3 }], // 1 has destinations, 3 doesn't
       })
-      .chooseFrom<{ pieceId: number; dest: string }>('destination', {
+      .chooseFrom('destination', {
         choices: [
           { pieceId: 1, dest: 'A' },
           { pieceId: 1, dest: 'B' },
@@ -751,10 +751,10 @@ describe('Dependent Selection Filtering (filterBy)', () => {
 
   it('should handle multiple levels of dependent selections', () => {
     const action = Action.create('complex')
-      .chooseFrom<{ categoryId: number }>('category', {
+      .chooseFrom('category', {
         choices: [{ categoryId: 1 }, { categoryId: 2 }],
       })
-      .chooseFrom<{ categoryId: number; itemId: number }>('item', {
+      .chooseFrom('item', {
         choices: [
           { categoryId: 1, itemId: 10 },
           { categoryId: 1, itemId: 11 },
@@ -762,7 +762,7 @@ describe('Dependent Selection Filtering (filterBy)', () => {
         ],
         filterBy: { key: 'categoryId', selectionName: 'category' },
       })
-      .chooseFrom<{ itemId: number; action: string }>('action', {
+      .chooseFrom('action', {
         choices: [
           { itemId: 10, action: 'buy' },
           { itemId: 10, action: 'sell' },

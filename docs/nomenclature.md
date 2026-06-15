@@ -337,7 +337,7 @@ Terms for player decisions and their execution.
 
 **Definition:** A pick from a predefined list of options. Choices present named options for the player to select from.
 
-**In Code:** `chooseFrom<T>('name', { choices: [...] })`
+**In Code:** `chooseFrom('name', { choices: [...] })` (the choice type is inferred from `choices`)
 **Related Terms:** Pick, Action, Execute
 **Usage:**
 - "Choose a color: Red, Blue, or Green"

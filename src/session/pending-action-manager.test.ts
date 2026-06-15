@@ -15,7 +15,7 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
 
     this.registerAction(
       Action.create('pick')
-        .chooseFrom<string>('color', {
+        .chooseFrom('color', {
           choices: ['red', 'blue', 'green'],
           onSelect: (value, ctx) => {
             ctx.animate('color-picked', { color: value });
@@ -47,13 +47,13 @@ class EquipGame extends Game<EquipGame, Player> {
 
     this.registerAction(
       Action.create('reEquip')
-        .chooseFrom<string>('unit', {
+        .chooseFrom('unit', {
           choices: ['warrior', 'archer'],
           onSelect: (value, ctx) => {
             ctx.animate('equip-start', { unit: value });
           },
         })
-        .chooseElement<Equipment>('equipment', {
+        .chooseElement('equipment', {
           elementClass: Equipment,
           filter: (element) => (element as Equipment).slot === 'weapon',
         })
@@ -67,7 +67,7 @@ class EquipGame extends Game<EquipGame, Player> {
 
     this.registerAction(
       Action.create('reEquipContinue')
-        .chooseFrom<string>('slot', { choices: ['weapon', 'armor'] })
+        .chooseFrom('slot', { choices: ['weapon', 'armor'] })
         .execute(() => {})
     );
 
@@ -91,7 +91,7 @@ class OptionalGame extends Game<OptionalGame, Player> {
 
     this.registerAction(
       Action.create('collect')
-        .chooseElement<Equipment>('item', {
+        .chooseElement('item', {
           optional: true,
           elementClass: Equipment,
         })

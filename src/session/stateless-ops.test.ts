@@ -91,10 +91,10 @@ class TwoStepGame extends Game<TwoStepGame, Player> {
 
     this.registerAction(
       Action.create('pick')
-        .chooseFrom<string>('color', {
+        .chooseFrom('color', {
           choices: ['red', 'blue', 'green'],
         })
-        .chooseFrom<string>('size', { choices: ['S', 'M', 'L'] })
+        .chooseFrom('size', { choices: ['S', 'M', 'L'] })
         .execute(() => ({ success: true }))
     );
 

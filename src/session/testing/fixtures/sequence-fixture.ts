@@ -63,7 +63,7 @@ class SequenceGame extends Game<SequenceGame, RebelPlayer> {
         .condition({
           'has not landed yet': (ctx) => !(ctx.player as RebelPlayer).landed,
         })
-        .chooseElement<Sector>('sector', {
+        .chooseElement('sector', {
           elementClass: Sector,
           filter: (el) => el.parent === this.board,
         })

@@ -215,7 +215,7 @@ export function createDrawAction(game: ${pascal}Game): ActionDefinition {
 export function createPlayAction(game: ${pascal}Game): ActionDefinition {
   return Action.create('play')
     .prompt('Play a card from your hand')
-    .chooseFrom<Card>('card', {
+    .chooseFrom('card', {
       prompt: 'Select a card to play',
       choices: (ctx) => {
         const player = ctx.player as ${pascal}Player;
