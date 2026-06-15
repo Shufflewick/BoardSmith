@@ -5,11 +5,6 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 
-interface ValidateOptions {
-  fix?: boolean;
-  skipSimulation?: boolean;
-}
-
 interface ValidationResult {
   name: string;
   passed: boolean;
@@ -17,7 +12,7 @@ interface ValidationResult {
   details?: string[];
 }
 
-export async function validateCommand(options: ValidateOptions): Promise<void> {
+export async function validateCommand(): Promise<void> {
   const cwd = process.cwd();
 
   // Validate project exists
