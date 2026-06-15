@@ -136,16 +136,6 @@ import {
 - `createDevCheckpoint()` - Create dev HMR checkpoint
 - `restoreFromDevCheckpoint()` - Restore from dev checkpoint
 
-### Sandbox
-
-- `ExecutionContext` - Execution context with limits
-- `ExecutionLimitError` - Error for exceeded limits
-- `withLimits()` - Run with execution limits
-- `withLimitsAsync()` - Run async with limits
-- `guard()` - Guard execution
-- `validateCode()` - Validate code safety
-- `DEFAULT_LIMITS` - Default execution limits
-
 ### Types
 
 - `ElementClass` - Element class constructor

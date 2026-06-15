@@ -254,18 +254,3 @@ export type {
   RestoreFromDevCheckpointOptions,
   DevCheckpointRestoreResult,
 } from './utils/index.js';
-
-// Sandbox (execution limits and security)
-export {
-  ExecutionContext,
-  ExecutionLimitError,
-  withLimits,
-  withLimitsAsync,
-  guard,
-  validateCode,
-  DEFAULT_LIMITS,
-} from './sandbox/index.js';
-
-export type {
-  ExecutionLimits,
-} from './sandbox/index.js';
