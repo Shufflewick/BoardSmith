@@ -93,6 +93,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   /** Attributes that should not be serialized */
   static unserializableAttributes = ['_ctx', '_t', 'game', '_visibility'];
 
+  /** Maximum nesting depth allowed when serializing an attribute value. */
+  static MAX_SERIALIZE_DEPTH = 100;
+
   /** Attributes visible to all players (undefined = all visible) */
   static visibleAttributes: string[] | undefined;
 
@@ -705,7 +708,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       if (!unserializable.has(key) && !key.startsWith('_')) {
         const value = (this as Record<string, unknown>)[key];
         if (value !== undefined) {
-          attributes[key] = this.serializeValue(value);
+          attributes[key] = this.serializeValue(value, key);
         }
       }
     }
@@ -734,16 +737,26 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
   /**
    * Serialize a value for JSON.
-   * @param visited - Set of already-visited objects to detect circular references
-   * @param depth - Current recursion depth (safety limit)
+   *
+   * Fails loud on values that cannot be represented as JSON: a circular
+   * reference (an object that contains itself, directly or via a back-reference)
+   * or a structure nested past {@link GameElement.MAX_SERIALIZE_DEPTH} levels
+   * throws an actionable error naming the offending property path. Silently
+   * dropping the subtree would partially corrupt every snapshot/undo/network
+   * payload built from it, so we surface the problem at serialization time.
+   *
+   * @param value - The value to serialize.
+   * @param path - Dotted property path to `value` (for error messages).
+   * @param ancestors - Objects currently open on the recursion stack, used to
+   *   detect true cycles. Shared (non-cyclic) nodes are serialized normally.
+   * @param depth - Current recursion depth (safety limit).
    */
-  protected serializeValue(value: unknown, visited: Set<object> = new Set(), depth = 0): unknown {
-    // Safety limit to prevent stack overflow from deep/circular structures
-    if (depth > 100) {
-      console.warn('[BoardSmith] Serialization depth exceeded 100, truncating. This may indicate circular references.');
-      return undefined;
-    }
-
+  protected serializeValue(
+    value: unknown,
+    path: string,
+    ancestors: Set<object> = new Set(),
+    depth = 0
+  ): unknown {
     // Handle primitives and null/undefined first
     if (value === null || value === undefined || typeof value !== 'object') {
       return value;
@@ -767,22 +780,40 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       return { __elementRef: value.branch() };
     }
 
-    // Detect circular references for all objects (including arrays)
-    if (visited.has(value)) {
-      return undefined;
+    // Detect true circular references: a value that is an ancestor of itself on
+    // the current recursion path can never be represented as JSON.
+    if (ancestors.has(value)) {
+      throw new Error(
+        `Cannot serialize ${this.constructor.name}: circular reference detected at property '${path}'. ` +
+          `Element attributes must be a tree of serializable values, not an object graph with back-references. ` +
+          `Store an element reference (a GameElement, which serializes to a stable ref) or a plain serializable shape instead.`
+      );
     }
-    visited.add(value);
 
-    if (Array.isArray(value)) {
-      return value.map((v) => this.serializeValue(v, visited, depth + 1));
+    // Safety limit against pathologically deep structures.
+    if (depth > GameElement.MAX_SERIALIZE_DEPTH) {
+      throw new Error(
+        `Cannot serialize ${this.constructor.name}: nesting exceeded ${GameElement.MAX_SERIALIZE_DEPTH} levels at property '${path}'. ` +
+          `Use element children or a flatter serializable shape instead of deeply nested objects.`
+      );
     }
 
-    // Plain object
-    const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      result[k] = this.serializeValue(v, visited, depth + 1);
+    ancestors.add(value);
+    try {
+      if (Array.isArray(value)) {
+        return value.map((v, i) => this.serializeValue(v, `${path}[${i}]`, ancestors, depth + 1));
+      }
+
+      // Plain object
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value)) {
+        result[k] = this.serializeValue(v, `${path}.${k}`, ancestors, depth + 1);
+      }
+      return result;
+    } finally {
+      // Remove on the way back up so shared (non-cyclic) siblings serialize fine.
+      ancestors.delete(value);
     }
-    return result;
   }
 
   /**
