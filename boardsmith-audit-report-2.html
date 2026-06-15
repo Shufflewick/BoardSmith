@@ -150,10 +150,10 @@
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">45</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">46</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">7</div><div class="l">○ Open</div></div>
-    <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
+    <div class="stat s-open"><div class="n">6</div><div class="l">○ Open</div></div>
+    <div class="stat s-high"><div class="n">1</div><div class="l">High (active)</div></div>
     <div class="stat s-medium"><div class="n">4</div><div class="l">Medium (active)</div></div>
     <div class="stat s-gi"><div class="n">8</div><div class="l">Impact games</div></div>
   </div>
@@ -240,7 +240,7 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 7 of 52 — 45 fixed, moved to bottom)</span></h2>
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 6 of 52 — 46 fixed, moved to bottom)</span></h2>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -273,59 +273,9 @@
 
   <div id="findings">
     
-  <article class="card fx-open" data-cat="pit-of-success" data-sev="high" data-ease="easy" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F32</span>#1</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-high">High</span>
-          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
-          <span class="badge ease-easy">easy</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">2 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Deck and Hand default to fully-visible contents (opt-in security), so hidden information leaks unless the designer remembers an extra call</h3>
-        
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">`Deck` and `Hand` are the library's canonical containers for hidden information (draw piles, player hands). Creating one the obvious way — `game.create(Deck, 'draw')` then populate/shuffle — yields a deck whose card identities AND shuffle order are visible to all opponents. Single-player/dev testing looks fine; the leak only manifests in real multiplayer and is invisible to the designer because nothing errors.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">Directly violates the project's stated rule 'Secure defaults, not opt-in security.' The element name promises secrecy but the default behavior is full disclosure; correctness requires remembering a separate, easy-to-forget call. Wrong (leaky) usage is the path of least resistance.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Default Deck contents to hidden and Hand contents to owner-only in their constructors (<code>element/deck.ts</code>, <code>element/hand.ts</code>) via setZoneVisibility, letting designers opt into more visibility explicitly. This makes the secure configuration the zero-effort default while keeping override methods (<code>contentsVisible()</code>, etc.) available.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 1 affected, 1 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">MERC relies on the permissive default (decks/hands fully visible). After the fix flips Deck-&gt;hidden and Hand-&gt;owner-only, MERC must explicitly opt the zones it displays back into the needed visibility (e.g. make TacticsDeck count visible for useVictoryCalculations, ensure TacticsHand visibility matches intended viewers) and re-verify every UI panel that reads deck/hand contents from per-player snapshots. Then re-pack the vendored tarball and re-install.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/elements.ts:1449-1461</code> declares MercDeck/EquipmentDeck/TacticsDeck extends BaseDeck and TacticsHand extends BaseHand; <code>src/rules/game.ts:894-904</code> creates merc/weapons/armor/accessories decks; grep shows ZERO setZoneVisibility/contentsVisible calls anywhere in src/rules. UI reads contents from per-player state: <code>src/ui/components/GameTable.vue:466-478</code> (findByClassName('TacticsHand')), <code>src/ui/components/DictatorPanel.vue:472</code>/563-565 (renders tacticsHand cards), <code>src/ui/composables/useVictoryCalculations.ts:140-145</code> (counts TacticsDeck/TacticsHand cards).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-complex-ui</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">After Hand defaults to owner-only, the explicit <code>hand.contentsVisibleToOwner()</code> call becomes redundant and can be removed (no break). After Deck defaults to hidden, the deck's contents become hidden in gameView where they are currently fully visible; the custom UI is fine (GameTable shows only deckCount via getElementCount, and hidden zones still emit placeholder children + childCount, verified in <code>engine/element/game.ts:2236-2264</code>), but the side-by-side AutoUI panel will now render the deck face-down. Confirm that visual change is acceptable for the demo; no functional code change is forced.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/demo-complex-ui/src/rules/game.ts:537</code> calls <code>player.hand.contentsVisibleToOwner()</code>; deck created at <code>game.ts:541</code> with NO visibility set (relies on current fully-visible default)</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">Deck (<code>element/deck.ts:44-56</code>) and Hand (<code>element/hand.ts:40-51</code>) constructors set only layout properties ($direction/$fan/$overlap) and never set zone visibility. The default visibility is `DEFAULT_VISIBILITY = { mode: 'all' }` (<code>command/visibility.ts:62-65</code>), and resolveVisibility falls back to that 'all' default for any element/zone without explicit visibility (<code>command/visibility.ts:97-99</code>). So a Deck/Hand's children serialize fully (faces and order) into every player's `toJSONForPlayer` (<code>element/game.ts:2231</code> onward only hides zones whose mode is explicitly hidden/owner/count-only). The docstrings themselves show the required follow-up calls `<code>deck.contentsHidden()</code>` (<code>deck.ts:24</code>) and `<code>hand.contentsVisibleToOwner()</code>` (<code>hand.ts:21</code>) as separate steps.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Verified on current source (paths are under src/engine/, which the finding omitted, but files are correctly identified). Deck constructor (<code>src/engine/element/deck.ts:44-56</code>) sets only order and layout ($direction/$overlap/$align); Hand constructor (<code>src/engine/element/hand.ts:40-51</code>) sets only fan/layout. Neither calls setZoneVisibility, so <code>getZoneVisibility()</code> returns the unset this._zoneVisibility (<code>space.ts:140</code>). DEFAULT_VISIBILITY = {mode:'all'} (<code>command/visibility.ts:62-65</code>) and resolveVisibility falls back to it (<code>visibility.ts:97-99</code>). In toJSONForPlayer (<code>element/game.ts:2231-2307</code>), children are only anonymized when zoneVisibility mode is hidden/count-only/owner (lines 2235-2288); with no zone visibility set, control reaches the 'Filter children normally' branch (2291-2307) that serializes full child names and order to every player. The helper methods <code>contentsHidden()</code>/<code>contentsVisibleToOwner()</code> exist (<code>space.ts:153-162</code>) and are shown in the docstrings (<code>deck.ts:23</code>, <code>hand.ts:20</code>) as separate, easy-to-forget steps. This is a genuine pit-of-success violation: Deck (draw pile) and Hand are the canonical hidden-information containers, yet creating them the obvious way leaks card identities and shuffle order to opponents, with no error — a silent multiplayer-only leak that directly contradicts the project's stated 'Secure defaults, not opt-in security' rule. Severity high: the named subclasses semantically promise secrecy but default to full disclosure, and the failure is invisible during single-player/dev testing. (Slightly below critical only because the library does provide and document the mitigating calls and base-Space 'all' default is defensible for visible zones like discard piles.)</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="pit-of-success" data-sev="high" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F43</span>#2</div>
+      <div class="rank"><span class="fid">F43</span>#1</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -369,7 +319,7 @@
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F33</span>#3</div>
+      <div class="rank"><span class="fid">F33</span>#2</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -455,7 +405,7 @@
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F42</span>#4</div>
+      <div class="rank"><span class="fid">F42</span>#3</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -515,7 +465,7 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F36</span>#5</div>
+      <div class="rank"><span class="fid">F36</span>#4</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -565,7 +515,7 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F35</span>#6</div>
+      <div class="rank"><span class="fid">F35</span>#5</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -619,7 +569,7 @@ Severity medium rather than high: triggering requires a bug inside user-supplied
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F40</span>#7</div>
+      <div class="rank"><span class="fid">F40</span>#6</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -669,7 +619,7 @@ Severity medium rather than high: triggering requires a bug inside user-supplied
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(45 fixed — moved here, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(46 fixed — moved here, kept for the record)</span></span></h2>
   <p class="section-note">Each was fixed in an isolated worktree (self-verified with <code>tsc</code> + <code>vitest run</code> + lint), gated against all 9 game suites for zero impact, and merged to <code>main</code> with docs updated inline.</p>
   <div id="completed-list">
     
@@ -817,6 +767,56 @@ Severity medium rather than high: triggering requires a bug inside user-supplied
 5. The correct form is documented in <code>docs/api/session.md:93</code>: `GameSession.create({ gameType, GameClass: MyGame, playerCount, playerNames: [...] })`. Confirmed.
 
 The entire canonical AI-integration snippet cannot compile: private constructor + three invented option keys + nonexistent <code>start()</code>. Since <code>ai-system.md</code> is the primary guide for wiring AI into a session and a copy-paste of this example fails on four distinct counts, high severity is warranted (docs-only, but the flagship example for the feature is fully broken).</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="pit-of-success" data-sev="high" data-ease="easy" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F32</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Fixed &amp; merged to main — e8b555f">✅ Fixed · e8b555f</span>
+          <span class="badge sev-high">High</span>
+          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
+          <span class="badge ease-easy">easy</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">2 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Deck and Hand default to fully-visible contents (opt-in security), so hidden information leaks unless the designer remembers an extra call</h3>
+        
+        <div class="merge-note">Fixed &amp; merged to <code>main</code> as <code>e8b555f</code> — Flip Deck contents to hidden and Hand to owner-only (secure-by-default). Games: demo-complex-ui removed redundant call (1aafce6); MERC opted TacticsHand into owner visibility, fixing a latent no-owner bug (aaa60b9); cribbage/go-fish verified correct under new default.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">`Deck` and `Hand` are the library's canonical containers for hidden information (draw piles, player hands). Creating one the obvious way — `game.create(Deck, 'draw')` then populate/shuffle — yields a deck whose card identities AND shuffle order are visible to all opponents. Single-player/dev testing looks fine; the leak only manifests in real multiplayer and is invisible to the designer because nothing errors.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">Directly violates the project's stated rule 'Secure defaults, not opt-in security.' The element name promises secrecy but the default behavior is full disclosure; correctness requires remembering a separate, easy-to-forget call. Wrong (leaky) usage is the path of least resistance.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Default Deck contents to hidden and Hand contents to owner-only in their constructors (<code>element/deck.ts</code>, <code>element/hand.ts</code>) via setZoneVisibility, letting designers opt into more visibility explicitly. This makes the secure configuration the zero-effort default while keeping override methods (<code>contentsVisible()</code>, etc.) available.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 1 affected, 1 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">MERC relies on the permissive default (decks/hands fully visible). After the fix flips Deck-&gt;hidden and Hand-&gt;owner-only, MERC must explicitly opt the zones it displays back into the needed visibility (e.g. make TacticsDeck count visible for useVictoryCalculations, ensure TacticsHand visibility matches intended viewers) and re-verify every UI panel that reads deck/hand contents from per-player snapshots. Then re-pack the vendored tarball and re-install.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/elements.ts:1449-1461</code> declares MercDeck/EquipmentDeck/TacticsDeck extends BaseDeck and TacticsHand extends BaseHand; <code>src/rules/game.ts:894-904</code> creates merc/weapons/armor/accessories decks; grep shows ZERO setZoneVisibility/contentsVisible calls anywhere in src/rules. UI reads contents from per-player state: <code>src/ui/components/GameTable.vue:466-478</code> (findByClassName('TacticsHand')), <code>src/ui/components/DictatorPanel.vue:472</code>/563-565 (renders tacticsHand cards), <code>src/ui/composables/useVictoryCalculations.ts:140-145</code> (counts TacticsDeck/TacticsHand cards).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-complex-ui</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">After Hand defaults to owner-only, the explicit <code>hand.contentsVisibleToOwner()</code> call becomes redundant and can be removed (no break). After Deck defaults to hidden, the deck's contents become hidden in gameView where they are currently fully visible; the custom UI is fine (GameTable shows only deckCount via getElementCount, and hidden zones still emit placeholder children + childCount, verified in <code>engine/element/game.ts:2236-2264</code>), but the side-by-side AutoUI panel will now render the deck face-down. Confirm that visual change is acceptable for the demo; no functional code change is forced.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/demo-complex-ui/src/rules/game.ts:537</code> calls <code>player.hand.contentsVisibleToOwner()</code>; deck created at <code>game.ts:541</code> with NO visibility set (relies on current fully-visible default)</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">Deck (<code>element/deck.ts:44-56</code>) and Hand (<code>element/hand.ts:40-51</code>) constructors set only layout properties ($direction/$fan/$overlap) and never set zone visibility. The default visibility is `DEFAULT_VISIBILITY = { mode: 'all' }` (<code>command/visibility.ts:62-65</code>), and resolveVisibility falls back to that 'all' default for any element/zone without explicit visibility (<code>command/visibility.ts:97-99</code>). So a Deck/Hand's children serialize fully (faces and order) into every player's `toJSONForPlayer` (<code>element/game.ts:2231</code> onward only hides zones whose mode is explicitly hidden/owner/count-only). The docstrings themselves show the required follow-up calls `<code>deck.contentsHidden()</code>` (<code>deck.ts:24</code>) and `<code>hand.contentsVisibleToOwner()</code>` (<code>hand.ts:21</code>) as separate steps.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Verified on current source (paths are under src/engine/, which the finding omitted, but files are correctly identified). Deck constructor (<code>src/engine/element/deck.ts:44-56</code>) sets only order and layout ($direction/$overlap/$align); Hand constructor (<code>src/engine/element/hand.ts:40-51</code>) sets only fan/layout. Neither calls setZoneVisibility, so <code>getZoneVisibility()</code> returns the unset this._zoneVisibility (<code>space.ts:140</code>). DEFAULT_VISIBILITY = {mode:'all'} (<code>command/visibility.ts:62-65</code>) and resolveVisibility falls back to it (<code>visibility.ts:97-99</code>). In toJSONForPlayer (<code>element/game.ts:2231-2307</code>), children are only anonymized when zoneVisibility mode is hidden/count-only/owner (lines 2235-2288); with no zone visibility set, control reaches the 'Filter children normally' branch (2291-2307) that serializes full child names and order to every player. The helper methods <code>contentsHidden()</code>/<code>contentsVisibleToOwner()</code> exist (<code>space.ts:153-162</code>) and are shown in the docstrings (<code>deck.ts:23</code>, <code>hand.ts:20</code>) as separate, easy-to-forget steps. This is a genuine pit-of-success violation: Deck (draw pile) and Hand are the canonical hidden-information containers, yet creating them the obvious way leaks card identities and shuffle order to opponents, with no error — a silent multiplayer-only leak that directly contradicts the project's stated 'Secure defaults, not opt-in security' rule. Severity high: the named subclasses semantically promise secrecy but default to full disclosure, and the failure is invisible during single-player/dev testing. (Slightly below critical only because the library does provide and document the mitigating calls and base-Space 'all' default is defensible for visible zones like discard piles.)</div>
       </details>
     </div>
   </article>

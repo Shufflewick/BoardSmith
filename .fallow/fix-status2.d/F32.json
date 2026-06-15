@@ -1,0 +1,7 @@
+{
+  "unit": "F32",
+  "fids": ["F32"],
+  "status": "merged",
+  "sha": "e8b555f",
+  "desc": "Flip Deck contents to hidden and Hand to owner-only (secure-by-default). Games: demo-complex-ui removed redundant call (1aafce6); MERC opted TacticsHand into owner visibility, fixing a latent no-owner bug (aaa60b9); cribbage/go-fish verified correct under new default."
+}
