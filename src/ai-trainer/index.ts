@@ -1,6 +1,3 @@
-// Trainer (parallel-only)
-export { ParallelTrainer, type ParallelTrainingConfig } from './parallel-trainer.js';
-
 // Introspection
 export {
   introspectGame,
@@ -21,21 +18,11 @@ export {
 // Feature templates
 export { FEATURE_TEMPLATES, type FeatureTemplate } from './feature-templates.js';
 
-// Simulation
+// Game structure serialization (for worker threads)
 export {
-  runSimulations,
-  simulateSingleGame,
   serializeGameStructure,
   deserializeGameStructure,
-  type SimulationOptions,
-  type SimulationResults,
 } from './simulator.js';
-
-// Parallel simulation
-export {
-  runParallelSimulations,
-  type ParallelSimulatorOptions,
-} from './parallel-simulator.js';
 
 // Parallel benchmarks
 export {
@@ -113,10 +100,8 @@ export type {
   TrainingConfig,
   TrainingProgress,
   // Serializable types for worker thread communication
-  SingleGameOptions,
   SerializableElementTypeInfo,
   SerializableGameStructure,
-  SerializableSimulationOptions,
 } from './types.js';
 
 export { DEFAULT_TRAINING_CONFIG } from './types.js';
