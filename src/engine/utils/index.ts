@@ -55,9 +55,9 @@ export {
   createTrackedRandom,
   getRandomCallCount,
   resetRandomCallCounter,
-  // Checkpoints for fast HMR recovery
-  createCheckpoint,
-  restoreFromCheckpoint,
+  // Dev checkpoints for fast HMR recovery
+  createDevCheckpoint,
+  restoreFromDevCheckpoint,
 } from './dev-state.js';
 
 export type {
@@ -69,8 +69,8 @@ export type {
   ValidationErrorType,
   ValidationWarningType,
   FlowPositionValidation,
-  // Checkpoint types
+  // Dev checkpoint types
   DevCheckpoint,
-  RestoreFromCheckpointOptions,
-  CheckpointRestoreResult,
+  RestoreFromDevCheckpointOptions,
+  DevCheckpointRestoreResult,
 } from './dev-state.js';

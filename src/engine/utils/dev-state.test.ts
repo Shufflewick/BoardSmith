@@ -8,7 +8,7 @@ import {
   restoreDevState,
   validateDevSnapshot,
   getSnapshotElementCount,
-  createCheckpoint,
+  createDevCheckpoint,
   defineFlow,
   loop,
   eachPlayer,
@@ -505,7 +505,7 @@ describe('Dev State Transfer', () => {
         rank: i + 1,
       }));
 
-      const checkpoint = createCheckpoint(game, 5);
+      const checkpoint = createDevCheckpoint(game, 5);
 
       expect(checkpoint.actionIndex).toBe(5);
       expect(checkpoint.actionCount).toBe(5);
@@ -518,7 +518,7 @@ describe('Dev State Transfer', () => {
       game.setup();
       game.settings.testValue = 42;
 
-      const checkpoint = createCheckpoint(game, 10);
+      const checkpoint = createDevCheckpoint(game, 10);
 
       // Checkpoint should have all DevSnapshot properties
       expect(checkpoint.timestamp).toBeLessThanOrEqual(Date.now());

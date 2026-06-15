@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CheckpointManager } from './checkpoint-manager.js';
+import { DevCheckpointManager } from './dev-checkpoint-manager.js';
 import {
   Game,
   Space,
   Piece,
   Player,
-  createCheckpoint,
+  createDevCheckpoint,
   type DevCheckpoint,
 } from '../engine/index.js';
 
@@ -34,12 +34,12 @@ class TestCard extends Piece<TestGame> {
 // Tests
 // ============================================
 
-describe('CheckpointManager', () => {
-  let manager: CheckpointManager<TestGame>;
+describe('DevCheckpointManager', () => {
+  let manager: DevCheckpointManager<TestGame>;
   let game: TestGame;
 
   beforeEach(() => {
-    manager = new CheckpointManager<TestGame>({ interval: 5, maxCheckpoints: 3 });
+    manager = new DevCheckpointManager<TestGame>({ interval: 5, maxCheckpoints: 3 });
     game = new TestGame({ playerCount: 2, playerNames: ['Alice', 'Bob'] });
     game.setup();
   });
@@ -67,14 +67,14 @@ describe('CheckpointManager', () => {
     });
 
     it('should respect custom interval', () => {
-      const customManager = new CheckpointManager<TestGame>({ interval: 3 });
+      const customManager = new DevCheckpointManager<TestGame>({ interval: 3 });
       expect(customManager.shouldCheckpoint(3)).toBe(true);
       expect(customManager.shouldCheckpoint(6)).toBe(true);
       expect(customManager.shouldCheckpoint(5)).toBe(false);
     });
 
     it('should use default interval of 10', () => {
-      const defaultManager = new CheckpointManager<TestGame>();
+      const defaultManager = new DevCheckpointManager<TestGame>();
       expect(defaultManager.interval).toBe(10);
       expect(defaultManager.shouldCheckpoint(10)).toBe(true);
       expect(defaultManager.shouldCheckpoint(5)).toBe(false);
@@ -245,7 +245,7 @@ describe('CheckpointManager', () => {
     });
   });
 
-  describe('integration with createCheckpoint', () => {
+  describe('integration with createDevCheckpoint', () => {
     it('should store valid DevCheckpoint', () => {
       vi.spyOn(console, 'log').mockImplementation(() => {});
 

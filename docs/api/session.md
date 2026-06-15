@@ -12,7 +12,7 @@ Import from `boardsmith/session` when managing game sessions, handling AI oppone
 import {
   GameSession,
   AIController,
-  CheckpointManager,
+  DevCheckpointManager,
   generateGameId,
   type GameDefinition,
   type StorageAdapter,
@@ -25,7 +25,7 @@ import {
 
 - `GameSession` - Main session manager for game state
 - `AIController` - Manages AI player turns
-- `CheckpointManager` - Manages state checkpoints for HMR
+- `DevCheckpointManager` - Manages dev state checkpoints for HMR recovery
 
 ### Utilities
 
@@ -77,7 +77,7 @@ import {
 - `GameSessionOptions` - Session constructor options
 - `ActionResult` - Action execution result
 - `UndoResult` - Undo operation result
-- `CheckpointManagerOptions` - Checkpoint manager options
+- `DevCheckpointManagerOptions` - Dev checkpoint manager options
 - `ColorChoice` - Color choice option
 - `ColorOptionDefinition` - Color option definition
 

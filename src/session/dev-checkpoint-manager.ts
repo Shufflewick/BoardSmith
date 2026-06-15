@@ -1,20 +1,25 @@
 /**
- * CheckpointManager - Auto-checkpoint management for HMR recovery.
+ * DevCheckpointManager - Auto-checkpoint management for HMR recovery.
  *
- * Creates periodic checkpoints during gameplay so that when HMR fails,
+ * Creates periodic dev checkpoints during gameplay so that when HMR fails,
  * recovery can restore from the nearest checkpoint and replay only
  * recent actions instead of all actions from the beginning.
  *
  * Dev-only: checkpoints are kept in memory, not persisted.
+ *
+ * NOTE: This is the every-N-actions, in-memory HMR mechanism built on the
+ * `DevCheckpoint` family. It is UNRELATED to the per-action undo
+ * `ActionCheckpoint` carried inside the authoritative GameStateSnapshot
+ * (see runner.ts / utils/snapshot.ts). The `Dev` qualifier keeps the two apart.
  */
 
 import type { Game, DevCheckpoint } from '../engine/index.js';
-import { createCheckpoint } from '../engine/index.js';
+import { createDevCheckpoint } from '../engine/index.js';
 
 /**
- * Options for creating a CheckpointManager.
+ * Options for creating a DevCheckpointManager.
  */
-export interface CheckpointManagerOptions {
+export interface DevCheckpointManagerOptions {
   /**
    * How often to create checkpoints (every N actions).
    * Default: 10 actions.
@@ -30,16 +35,16 @@ export interface CheckpointManagerOptions {
 }
 
 /**
- * CheckpointManager handles automatic checkpoint creation and retrieval
+ * DevCheckpointManager handles automatic checkpoint creation and retrieval
  * for fast HMR recovery in development.
  *
  * When HMR fails and dev state transfer cannot restore the game,
- * the CheckpointManager provides the nearest checkpoint so that only
+ * the DevCheckpointManager provides the nearest checkpoint so that only
  * a subset of actions need to be replayed instead of all actions.
  *
  * @example
  * ```typescript
- * const manager = new CheckpointManager({ interval: 10, maxCheckpoints: 5 });
+ * const manager = new DevCheckpointManager({ interval: 10, maxCheckpoints: 5 });
  *
  * // After each action
  * if (manager.shouldCheckpoint(actionIndex)) {
@@ -53,7 +58,7 @@ export interface CheckpointManagerOptions {
  * }
  * ```
  */
-export class CheckpointManager<G extends Game = Game> {
+export class DevCheckpointManager<G extends Game = Game> {
   /** Checkpoints stored in memory, keyed by action index */
   #checkpoints: Map<number, DevCheckpoint> = new Map();
 
@@ -63,7 +68,7 @@ export class CheckpointManager<G extends Game = Game> {
   /** Maximum number of checkpoints to keep (rolling window) */
   #maxCheckpoints: number;
 
-  constructor(options?: CheckpointManagerOptions) {
+  constructor(options?: DevCheckpointManagerOptions) {
     this.#interval = options?.interval ?? 10;
     this.#maxCheckpoints = options?.maxCheckpoints ?? 5;
   }
@@ -89,7 +94,7 @@ export class CheckpointManager<G extends Game = Game> {
    * @param actionIndex - The action index at which this checkpoint is taken
    */
   capture(game: G, actionIndex: number): void {
-    const checkpoint = createCheckpoint(game, actionIndex);
+    const checkpoint = createDevCheckpoint(game, actionIndex);
     this.#checkpoints.set(actionIndex, checkpoint);
 
     // Prune old checkpoints if over limit
