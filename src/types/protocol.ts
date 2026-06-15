@@ -221,48 +221,148 @@ export interface JoinLobbyResponse {
 // ============================================
 
 /**
- * WebSocket message from client.
- * Unified message type for all client-to-server communication.
+ * WebSocket messages from client to server.
+ *
+ * This is a discriminated union keyed on `type`: each message variant carries
+ * exactly the fields it requires and nothing else. Narrowing on `message.type`
+ * gives you the precise payload shape, so invalid messages (e.g. an `action`
+ * with no `action` name, or a `claimSeat` with no `seat`) are unrepresentable.
  */
-export interface WebSocketMessage {
-  type:
-    | 'action'
-    | 'ping'
-    | 'getState'
-    | 'getLobby'
-    | 'claimSeat'
-    | 'joinLobby'
-    | 'updateName'
-    | 'setReady'
-    | 'addSlot'
-    | 'removeSlot'
-    | 'setSlotAI'
-    | 'leaveSeat'
-    | 'kickPlayer'
-    | 'updatePlayerOptions'
-    | 'updateSlotPlayerOptions'
-    | 'updateGameOptions';
-  /** For action messages: action name */
-  action?: string;
-  /** For action messages: action arguments */
-  args?: Record<string, unknown>;
+
+/** Perform a game action. */
+export interface ActionMessage {
+  type: 'action';
+  /** Action name */
+  action: string;
+  /** Action arguments */
+  args: Record<string, unknown>;
   /** Request ID for action request/response correlation */
   requestId?: string;
-  /** For claimSeat/kickPlayer: which seat to target */
-  seat?: number;
-  /** For updateName/claimSeat: player's name */
-  name?: string;
-  /** For setReady: ready state */
-  ready?: boolean;
-  /** For setSlotAI: whether slot should be AI */
-  isAI?: boolean;
-  /** For setSlotAI: AI difficulty level */
-  aiLevel?: string;
-  /** For updatePlayerOptions: the options to set */
-  playerOptions?: Record<string, unknown>;
-  /** For updateGameOptions: the game options to set (host only) */
-  gameOptions?: Record<string, unknown>;
 }
+
+/** Heartbeat ping. */
+export interface PingMessage {
+  type: 'ping';
+}
+
+/** Request the current game state. */
+export interface GetStateMessage {
+  type: 'getState';
+}
+
+/** Request the current lobby info. */
+export interface GetLobbyMessage {
+  type: 'getLobby';
+}
+
+/** Claim a specific seat in the lobby. */
+export interface ClaimSeatMessage {
+  type: 'claimSeat';
+  /** Seat to claim (1-indexed) */
+  seat: number;
+  /** Player's name */
+  name: string;
+}
+
+/** Join the lobby; the server assigns a seat. */
+export interface JoinLobbyMessage {
+  type: 'joinLobby';
+  /** Player's name */
+  name: string;
+}
+
+/** Update the calling player's display name. */
+export interface UpdateNameMessage {
+  type: 'updateName';
+  /** New name */
+  name: string;
+}
+
+/** Set the calling player's ready state. */
+export interface SetReadyMessage {
+  type: 'setReady';
+  /** Ready state */
+  ready: boolean;
+}
+
+/** Host adds an open slot to the lobby. */
+export interface AddSlotMessage {
+  type: 'addSlot';
+}
+
+/** Host removes a slot from the lobby. */
+export interface RemoveSlotMessage {
+  type: 'removeSlot';
+  /** Seat to remove (1-indexed) */
+  seat: number;
+}
+
+/** Host toggles a slot between AI and open. */
+export interface SetSlotAIMessage {
+  type: 'setSlotAI';
+  /** Seat to target (1-indexed) */
+  seat: number;
+  /** Whether the slot should be AI */
+  isAI: boolean;
+  /** AI difficulty level (when isAI is true) */
+  aiLevel?: string;
+}
+
+/** The calling player leaves their seat. */
+export interface LeaveSeatMessage {
+  type: 'leaveSeat';
+}
+
+/** Host kicks the player occupying a seat. */
+export interface KickPlayerMessage {
+  type: 'kickPlayer';
+  /** Seat to kick (1-indexed) */
+  seat: number;
+}
+
+/** The calling player updates their own per-player options. */
+export interface UpdatePlayerOptionsMessage {
+  type: 'updatePlayerOptions';
+  /** The options to set */
+  playerOptions: Record<string, unknown>;
+}
+
+/** Host updates the per-player options of a specific slot. */
+export interface UpdateSlotPlayerOptionsMessage {
+  type: 'updateSlotPlayerOptions';
+  /** Seat to target (1-indexed) */
+  seat: number;
+  /** The options to set */
+  playerOptions: Record<string, unknown>;
+}
+
+/** Host updates the game-level options. */
+export interface UpdateGameOptionsMessage {
+  type: 'updateGameOptions';
+  /** The game options to set */
+  gameOptions: Record<string, unknown>;
+}
+
+/**
+ * WebSocket message from client.
+ * Unified discriminated union for all client-to-server communication.
+ */
+export type WebSocketMessage =
+  | ActionMessage
+  | PingMessage
+  | GetStateMessage
+  | GetLobbyMessage
+  | ClaimSeatMessage
+  | JoinLobbyMessage
+  | UpdateNameMessage
+  | SetReadyMessage
+  | AddSlotMessage
+  | RemoveSlotMessage
+  | SetSlotAIMessage
+  | LeaveSeatMessage
+  | KickPlayerMessage
+  | UpdatePlayerOptionsMessage
+  | UpdateGameOptionsMessage;
 
 // ============================================
 // Element Reference Types
