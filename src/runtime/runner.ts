@@ -17,6 +17,7 @@ import {
   type ActionCheckpoint,
   type PlayerStateView,
 } from '../engine/index.js';
+import { ErrorCode } from '../types/protocol.js';
 
 /**
  * Options for creating a game runner
@@ -40,6 +41,12 @@ export interface ActionExecutionResult {
   success: boolean;
   /** Error message if failed */
   error?: string;
+  /**
+   * Structured error code when a failure originates inside the runner.
+   * Set at the point the error is detected so callers never have to re-infer
+   * it from the message prose.
+   */
+  errorCode?: ErrorCode;
   /** The serialized action (for history) */
   serializedAction?: SerializedAction;
   /** Updated flow state */
@@ -131,6 +138,7 @@ export class GameRunner<G extends Game = Game> {
       return {
         success: false,
         error: `Player not found`,
+        errorCode: ErrorCode.INVALID_PLAYER,
       };
     }
 
@@ -141,6 +149,7 @@ export class GameRunner<G extends Game = Game> {
       return {
         success: false,
         error: 'Game is not awaiting input',
+        errorCode: ErrorCode.NOT_AWAITING_INPUT,
       };
     }
 
@@ -149,6 +158,7 @@ export class GameRunner<G extends Game = Game> {
       return {
         success: false,
         error: `Not ${playerObj.name}'s turn`,
+        errorCode: ErrorCode.NOT_YOUR_TURN,
       };
     }
 

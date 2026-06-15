@@ -15,60 +15,12 @@ import type { LobbyState, SlotStatus, LobbySlot, LobbyInfo } from '../types/prot
 
 /**
  * Standard error codes for programmatic error handling.
- * Use these instead of matching error strings.
  *
- * @example
- * ```typescript
- * import { ErrorCode } from 'boardsmith/session';
- *
- * const result = await session.performAction('move', player, args);
- * if (!result.success) {
- *   switch (result.errorCode) {
- *     case ErrorCode.NOT_YOUR_TURN:
- *       showToast('Please wait for your turn');
- *       break;
- *     case ErrorCode.ACTION_NOT_AVAILABLE:
- *       refreshActions();
- *       break;
- *     default:
- *       showToast(result.error || 'An error occurred');
- *   }
- * }
- * ```
+ * Re-exported from the protocol layer (`boardsmith/types`), which is the single
+ * source of truth so that lower layers (runtime) can emit codes at the point an
+ * error originates and higher layers pass them through unchanged.
  */
-export enum ErrorCode {
-  // Player/Turn errors
-  INVALID_PLAYER = 'INVALID_PLAYER',
-  NOT_YOUR_TURN = 'NOT_YOUR_TURN',
-
-  // Action errors
-  ACTION_NOT_FOUND = 'ACTION_NOT_FOUND',
-  ACTION_NOT_AVAILABLE = 'ACTION_NOT_AVAILABLE',
-  // Pick errors
-  INVALID_PICK = 'INVALID_PICK',
-  PICK_NOT_FOUND = 'PICK_NOT_FOUND',
-
-  // State errors
-  INVALID_ACTION_INDEX = 'INVALID_ACTION_INDEX',
-  NO_ACTIONS_TO_UNDO = 'NO_ACTIONS_TO_UNDO',
-  CANNOT_REWIND_FORWARD = 'CANNOT_REWIND_FORWARD',
-
-  // Lobby errors
-  SEAT_ALREADY_CLAIMED = 'SEAT_ALREADY_CLAIMED',
-  INVALID_SEAT = 'INVALID_SEAT',
-  NOT_AUTHORIZED = 'NOT_AUTHORIZED',
-  GAME_ALREADY_STARTED = 'GAME_ALREADY_STARTED',
-  LOBBY_NOT_READY = 'LOBBY_NOT_READY',
-  COLOR_ALREADY_TAKEN = 'COLOR_ALREADY_TAKEN',
-
-  // Evaluation errors
-  CHOICES_EVALUATION_ERROR = 'CHOICES_EVALUATION_ERROR',
-  ELEMENTS_EVALUATION_ERROR = 'ELEMENTS_EVALUATION_ERROR',
-
-  // Generic errors
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-  REPLAY_FAILED = 'REPLAY_FAILED',
-}
+export { ErrorCode } from '../types/protocol.js';
 
 // Re-export debug tracing types from engine for convenience
 export type { ActionTrace, PickTrace, ConditionDetail } from '../engine/index.js';
