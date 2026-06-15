@@ -132,7 +132,7 @@ Terms related to game participants and their roles.
 
 **Definition:** The player whose turn it is and who can currently take actions. Only one player is active at a time in turn-based games.
 
-**In Code:** `game.players.current` or `ctx.player` in action context
+**In Code:** `game.currentPlayer` or `ctx.player` in action context
 **Related Terms:** Player, Turn, Action
 **Usage:**
 - "The active player may draw or pass"
