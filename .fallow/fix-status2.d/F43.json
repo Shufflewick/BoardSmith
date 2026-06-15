@@ -1,0 +1,7 @@
+{
+  "unit": "F43",
+  "fids": ["F43"],
+  "status": "merged",
+  "sha": "fcc8259",
+  "desc": "Record completed pending/multi-step selection actions in actionHistory via a single serialize/record funnel (fixes replay/undo-count/AI-history gap). Games: MERC re-vendored, no real bug — its MCTS clone already uses state-authoritative restore (866197b), stale comment updated."
+}
