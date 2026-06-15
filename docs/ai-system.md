@@ -81,7 +81,8 @@ For games where win/loss isn't sufficient guidance, you can define objectives th
 ### Defining Objectives
 
 ```typescript
-import type { AIConfig, Game } from 'boardsmith/ai';
+import type { AIConfig } from 'boardsmith/ai';
+import type { Game } from 'boardsmith';
 
 const aiConfig: AIConfig = {
   objectives: (game: Game, playerIndex: number) => ({
@@ -134,7 +135,8 @@ Terminal states always use actual win/loss (1.0/0.0).
 From Checkers ai.ts:
 
 ```typescript
-import type { AIConfig, Game } from 'boardsmith/ai';
+import type { AIConfig } from 'boardsmith/ai';
+import type { Game } from 'boardsmith';
 
 export const checkersAIConfig: AIConfig = {
   objectives: (game: Game, playerIndex: number) => ({
@@ -181,18 +183,20 @@ import { GameSession } from 'boardsmith/session';
 import { MyGame } from './game.js';
 import { myGameAIConfig } from './ai.js';
 
-const session = new GameSession({
-  gameClass: MyGame,
+const session = GameSession.create({
+  GameClass: MyGame,
   gameType: 'my-game',
   playerCount: 2,
-  aiPlayers: [1],           // Player 1 is AI
-  aiLevel: 'hard',
-  aiConfig: myGameAIConfig,  // Optional custom objectives
+  playerNames: ['You', 'Computer'],
+  aiConfig: { players: [1], level: 'hard' }, // Player 1 is AI at 'hard' level
+  botAIConfig: myGameAIConfig,                // Optional custom objectives
 });
 
 // AI will automatically play when it's player 1's turn
-session.start();
 ```
+
+> `aiConfig` declares which seats are AI (`players`) and the difficulty (`level`).
+> The game's custom objectives/threat hooks go in `botAIConfig`.
 
 ## BotConfig Options
 
