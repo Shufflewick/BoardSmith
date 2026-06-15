@@ -452,13 +452,6 @@ export class ActionExecutor {
   }
 
   /**
-   * Check if a value exists in a choices array (handles object comparison)
-   */
-  private choicesContain(choices: unknown[], value: unknown): boolean {
-    return choices.some(choice => this.valuesEqual(choice, value));
-  }
-
-  /**
    * Check if a value exists in annotated choices (compares against .value)
    */
   private annotatedChoicesContain(choices: AnnotatedChoice<unknown>[], value: unknown): boolean {
@@ -1005,16 +998,6 @@ export class ActionExecutor {
     // For simple path checking, just continue with no value
     // (full path validation would be too expensive for traces)
     return this.traceSelectionPath(selections, player, args, index + 1, selectionTraces);
-  }
-
-  /**
-   * Extract the value used for matching from a choice (for filterBy)
-   */
-  private getChoiceFilterValue(choice: unknown, key: string): unknown {
-    if (typeof choice === 'object' && choice !== null) {
-      return (choice as Record<string, unknown>)[key];
-    }
-    return choice;
   }
 
   /**
