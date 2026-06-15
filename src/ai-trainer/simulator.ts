@@ -304,21 +304,6 @@ function createObjectivesFunction(
 }
 
 /**
- * Run simulations with progress reporting
- */
-export async function runSimulationsWithProgress<G extends Game>(
-  GameClass: GameClass<G>,
-  gameType: string,
-  options: SimulationOptions,
-  features: CandidateFeature[]
-): Promise<SimulationResults> {
-  return runSimulations(GameClass, gameType, {
-    ...options,
-    features,
-  });
-}
-
-/**
  * Serialize a GameStructure for worker thread communication.
  * Converts Map and Set to plain objects/arrays for structured cloning.
  */
