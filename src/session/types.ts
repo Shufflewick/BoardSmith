@@ -1,13 +1,24 @@
 /**
- * Shared types for game hosting
+ * Shared types for game hosting.
  *
- * Note: Protocol types are also available from 'boardsmith/types' for new code.
- * See docs/consolidation.md for migration guidance.
+ * Protocol-level types (lobby, game options, WebSocket messages) are owned by
+ * '../types/protocol.js' (boardsmith/types) and re-exported here for the
+ * session surface — they are defined once, in one place.
  */
 
 import type { FlowState, SerializedAction, Game, AnimationEvent } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
-import type { LobbyState, SlotStatus, LobbySlot, LobbyInfo } from '../types/protocol.js';
+import type {
+  LobbyState,
+  SlotStatus,
+  LobbySlot,
+  LobbyInfo,
+  NumberOption,
+  SelectOption,
+  BooleanOption,
+  GameOptionDefinition,
+  WebSocketMessage,
+} from '../types/protocol.js';
 
 // ============================================
 // Error Codes
@@ -112,44 +123,9 @@ export interface GameDefinition {
 // Game Option Metadata Types
 // ============================================
 
-/**
- * Number option definition
- */
-export interface NumberOption {
-  type: 'number';
-  label: string;
-  description?: string;
-  default?: number;
-  min?: number;
-  max?: number;
-  step?: number;
-}
-
-/**
- * Select option definition
- */
-export interface SelectOption {
-  type: 'select';
-  label: string;
-  description?: string;
-  default?: string | number;
-  choices: Array<{ value: string | number; label: string }>;
-}
-
-/**
- * Boolean option definition
- */
-export interface BooleanOption {
-  type: 'boolean';
-  label: string;
-  description?: string;
-  default?: boolean;
-}
-
-/**
- * Union type for game-level options
- */
-export type GameOptionDefinition = NumberOption | SelectOption | BooleanOption;
+// Game option definitions are owned by ../types/protocol.js (single source of
+// truth) and re-exported here for the session surface.
+export type { NumberOption, SelectOption, BooleanOption, GameOptionDefinition };
 
 /**
  * Standard per-player option definition (shown for each player slot)
@@ -527,30 +503,9 @@ export interface ActionRequest {
   args: Record<string, unknown>;
 }
 
-/**
- * WebSocket message from client
- */
-export interface WebSocketMessage {
-  type: 'action' | 'ping' | 'getState' | 'getLobby' | 'claimSeat' | 'joinLobby' | 'updateName' | 'setReady' | 'addSlot' | 'removeSlot' | 'setSlotAI' | 'leaveSeat' | 'kickPlayer' | 'updatePlayerOptions' | 'updateSlotPlayerOptions' | 'updateGameOptions';
-  action?: string;
-  args?: Record<string, unknown>;
-  /** Request ID for action request/response correlation */
-  requestId?: string;
-  /** For claimSeat/kickPlayer: which seat to target */
-  seat?: number;
-  /** For updateName/claimSeat: player's name */
-  name?: string;
-  /** For setReady: ready state */
-  ready?: boolean;
-  /** For setSlotAI: whether slot should be AI */
-  isAI?: boolean;
-  /** For setSlotAI: AI difficulty level */
-  aiLevel?: string;
-  /** For updatePlayerOptions: the options to set */
-  playerOptions?: Record<string, unknown>;
-  /** For updateGameOptions: the game options to set (host only) */
-  gameOptions?: Record<string, unknown>;
-}
+// WebSocketMessage (a discriminated union) is owned by ../types/protocol.js
+// (single source of truth) and re-exported here for the session surface.
+export type { WebSocketMessage };
 
 // ============================================
 // Lobby Request/Response Types
