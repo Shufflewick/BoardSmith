@@ -64,15 +64,12 @@ program
 program
   .command('validate')
   .description('Validate game before publishing')
-  .option('--fix', 'Attempt to auto-fix issues')
-  .option('--skip-simulation', 'Skip random game simulation')
   .action(validateCommand);
 
 // Linting
 program
   .command('lint')
   .description('Check for common BoardSmith pitfalls and issues')
-  .option('--fix', 'Attempt to auto-fix issues (coming soon)')
   .action(lintCommand);
 
 // Analysis

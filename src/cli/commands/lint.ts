@@ -3,10 +3,6 @@ import { join, relative } from 'node:path';
 import chalk from 'chalk';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 
-interface LintOptions {
-  fix?: boolean;
-}
-
 interface LintIssue {
   file: string;
   line: number;
@@ -260,7 +256,7 @@ function checkUnusedActions(filePath: string, content: string, allFiles: Map<str
   return issues;
 }
 
-export async function lintCommand(options: LintOptions): Promise<void> {
+export async function lintCommand(): Promise<void> {
   const cwd = process.cwd();
   const configPath = join(cwd, 'boardsmith.json');
 
