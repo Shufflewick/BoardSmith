@@ -154,14 +154,14 @@
     being a <em>pit of success</em> for game designers and the AI agents building games with them.</p>
     <p class="meta-line">Generated <strong>2026-06-14</strong> &middot; updated <strong>2026-06-15</strong> with fix status &middot;
     29 confirmed findings + 2 rejected &middot;
-    <strong style="color:var(--low)">26 fixed</strong>, 2 blocked, 1 open</p>
+    <strong style="color:var(--low)">28 fixed</strong>, 0 blocked, 1 open</p>
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">26</div><div class="l">✅ Fixed &amp; merged</div></div>
-    <div class="stat s-blocked"><div class="n">2</div><div class="l">⛔ Blocked</div></div>
+    <div class="stat s-fixed"><div class="n">28</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
     <div class="stat s-open"><div class="n">1</div><div class="l">○ Open</div></div>
-    <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
+    <div class="stat s-high"><div class="n">0</div><div class="l">High (active)</div></div>
     <div class="stat s-medium"><div class="n">1</div><div class="l">Medium (active)</div></div>
     <div class="stat s-low"><div class="n">0</div><div class="l">Low (active)</div></div>
   </div>
@@ -264,10 +264,10 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 3 of 29)</span></h2>
-  <p class="section-note">The 26 fixed-and-merged findings have been moved to the
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 1 of 29)</span></h2>
+  <p class="section-note">The 28 fixed-and-merged findings have been moved to the
   <a href="#completed" style="color:var(--accent)">Completed</a> section at the bottom. What remains here are the
-  2 blocked + 1 open problems that still need attention.</p>
+  0 blocked + 1 open problems that still need attention.</p>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -302,88 +302,9 @@
 
   <div id="findings">
     
-  <article class="card fx-blocked" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="blocked">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F8</span>#1</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-blocked" title="Needs a design decision before it can be fixed">⛔ Blocked — needs decision</span>
-          <span class="badge sev-high">High</span>
-          <span class="badge cat cat-security">Security</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-zero">0 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>HTTP action endpoint trusts client-supplied player identity (no authn) — act as any player</h3>
-        <div class="sevnote">judge said <em>critical</em>, verifier set <strong>high</strong></div>
-        <div class="merge-note blocked-note">Blocked: a correct fix needs a design decision (see verifier note &amp; the auth-token gap), so it was intentionally not merged.</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">There is no binding between the network caller and the `player` they claim to be. A `curl -X POST /games/&lt;id&gt;/action -d '{&quot;action&quot;:&quot;...&quot;,&quot;player&quot;:2,&quot;args&quot;:{...}}'` submits moves on behalf of player 2. The WebSocket path correctly uses the server-tracked `session.playerSeat` (<code>core.ts:505-509</code>), but the HTTP route — shipped in both the standalone server and the production worker — bypasses that entirely.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A designer/AI agent who builds a game and deploys it on the provided server or worker gets an authoritative-looking server that is actually trivially cheatable: opponents can play your turns, force passes, or grief. The framework gives the impression of enforcing turns/seats while the easy HTTP path silently ignores identity. Wrong usage is the default.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext"><code>src/server/handlers/games.ts</code> (handleAction), <code>src/worker/index.ts</code> (#handleAction). Derive `player` from an authenticated session/token bound at connect/create time (e.g. a per-seat secret returned from claim-seat/join), not from request.player. Reject if the bound identity != requested player.</div></div>
-      <div class="field gi"><span class="flabel">Game impact</span><div class="ftext gi-none">No games affected — fixing this requires no changes to any current game (9 games checked).</div></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>src/server/handlers/games.ts:199-216</code> `handleAction` does `await session.performAction(request.action, request.player, request.args)` — `request.player` comes straight from the POST body. <code>src/session/game-session.ts:813-820</code> `performAction` only validates range: `if (player &lt; 1 || player &gt; this.#storedState.playerCount) return {... INVALID_PLAYER}` — it never checks the caller IS that player. The worker repeats this: <code>src/worker/index.ts:1105-1118</code> `#handleAction` reads `const { action, player, args } = body` and calls `performAction(action, player, args)`.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Confirmed in source. <code>src/server/handlers/games.ts:209</code> — `handleAction` calls `session.performAction(request.action, request.player, request.args)` where `request.player` is taken directly from the POST body (route wired at <code>core.ts:152-155</code>). <code>src/session/game-session.ts:813-820</code> — `performAction` only validates the player is in range (`player &lt; 1 || player &gt; playerCount`), with no binding to the network caller. The worker repeats the pattern: <code>src/worker/index.ts:1115-1118</code> reads `const { action, player, args } = body` and passes `player` straight to `performAction` (and the public worker route at 415-431 forwards the raw body to the Durable Object). By contrast the WebSocket path at <code>core.ts:505-509</code> correctly uses the server-tracked `session.playerSeat`, never a client-supplied value. I grepped src/server and src/worker for auth/token/bearer/cookie middleware and found none — there is no authentication layer wrapping these HTTP routes, so a `curl -X POST /games/&lt;id&gt;/action -d '{\&quot;action\&quot;:...,\&quot;player\&quot;:2,...}'` does submit moves as player 2. The vulnerability is real and shipped in both the standalone server and the production worker.\n\nSeverity: This is a genuine authorization/impersonation bypass — any client can act as any seat over HTTP. In the context of a board-game framework the concrete impact is cheating/impersonation (manipulating game outcomes), not RCE or PII exfiltration, and the codebase appears to lack a broader authn model generally (even WS seat assignment via matchmaking findIndex on a client-provided playerId is not strongly verified). Still, the HTTP path is strictly worse because the actor identity is fully client-controlled per request while the WS path at least anchors to a server-tracked seat. I rate it high rather than critical: it is a clear, real authz gap in production code, but its blast radius is game integrity within an active-development library rather than system/data compromise.</div>
-      </details>
-    </div>
-  </article>
-
-  <article class="card fx-blocked" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="blocked">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F9</span>#2</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-blocked" title="Needs a design decision before it can be fixed">⛔ Blocked — needs decision</span>
-          <span class="badge sev-high">High</span>
-          <span class="badge cat cat-security">Security</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-zero">0 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Hidden-information leak: GET state accepts arbitrary ?player= and returns that player's private view</h3>
-        <div class="sevnote">judge said <em>critical</em>, verifier set <strong>high</strong></div>
-        <div class="merge-note blocked-note">Blocked: a correct fix needs a design decision (see verifier note &amp; the auth-token gap), so it was intentionally not merged.</div>
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The engine's per-player filtering is correct, but the transport lets anyone pick whose perspective to render. `GET /games/&lt;id&gt;?player=2` returns player 2's hand/hidden cards to any caller. This defeats hidden information for every card/secret game over HTTP.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">Hidden-information is the single hardest thing to get right in a digital board game, and the framework's whole value proposition is doing it for you. A game author reasonably assumes 'the server only sends me my own view.' Instead, any spectator/opponent can read everyone's secrets with a query string. Silent, invisible, catastrophic for game integrity.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext"><code>src/server/handlers/games.ts</code> (handleGetGame/handleGetStateAt/handleGetStateDiff/handleGetPendingAction/handleGetActionTraces/handleGetSelectionChoices) and <code>src/worker/index.ts</code> equivalents: derive playerPosition from authenticated identity; spectators get position 0 (public view) only.</div></div>
-      <div class="field gi"><span class="flabel">Game impact</span><div class="ftext gi-none">No games affected — fixing this requires no changes to any current game (9 games checked).</div></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>src/server/handlers/games.ts:179-194</code> `handleGetGame(store, gameId, playerPosition)` uses `const player = playerPosition ?? 1; const result = session.getState(player)`; the value is parsed unauthenticated from the query in <code>core.ts:147</code> `query.player ? parseInt(query.player, 10) : undefined`. getState -&gt; buildPlayerState -&gt; <code>src/session/utils.ts:360</code> `const playerView = runner.getPlayerView(playerPosition)` which produces that player's privileged (hidden-info-revealing) view. Worker: <code>src/worker/index.ts:591-594</code> + #handleGetState(player). The same unauthenticated player param feeds state-at (<code>core.ts:170</code>), state-diff (<code>core.ts:180</code>), pending-action (<code>core.ts:225</code>), action-traces (<code>core.ts:189</code>), and selection-choices (<code>core.ts:281-287</code>).</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Verified at the cited locations (paths corrected: handlers in <code>src/server/handlers/games.ts</code>, routing in <code>src/server/core.ts</code>, not <code>core.ts</code> under handlers). The claim is factually accurate.
-
-- <code>src/server/core.ts:147</code> parses `query.player` straight from the unauthenticated query string and passes it to handleGetGame. The same untrusted param feeds state-at (170), state-diff (180), action-traces (189), pending-action (225), and selection-choices reads `player` from the POST body (281-287).
-- <code>src/server/handlers/games.ts:190-191</code> `const player = playerPosition ?? 1; const result = session.getState(player)` — no check that the caller is that player.
-- session.getState -&gt; buildPlayerState (<code>src/session/utils.ts:351-361</code>) calls `runner.getPlayerView(playerPosition)`, which is the player-specific privileged view (the truthView includes that player's hidden info). The engine filtering is per the requested position, so requesting player=2 returns player 2's private view.
-- <code>src/worker/index.ts:591-594</code> has the identical pattern for the Cloudflare deployment target.
-
-Critically, I searched for any auth layer (Authorization/Bearer/token/secret/player verification) across src/server/*.ts and <code>src/worker/index.ts</code> and found NONE. The server trusts client-supplied player identity everywhere — handleAction (<code>core.ts:209</code>) likewise forwards request.player unverified, so a caller can also act AS any player, not just read their view. So the hidden-info leak is one facet of a complete absence of an authentication/authorization model on the transport.
-
-So `GET /games/&lt;id&gt;?player=2` does return player 2's hand/hidden cards to any caller. This genuinely defeats hidden information for any card/secret game served over HTTP.
-
-Severity: I rate it high rather than critical. It is a real unauthenticated information-disclosure that breaks the core hidden-information guarantee, which would be critical for any publicly exposed deployment. I temper to high because (a) it reflects an across-the-board missing-auth posture (the action endpoint trusts client identity identically) rather than a single broken filter, consistent with an in-development library not yet shown to be deployed to untrusted users, and (b) the action-traces route even carries a comment acknowledging it's a debug endpoint. The fix is architectural: introduce per-player session/token auth so the transport binds the caller to a verified seat instead of trusting the query param. If this server is intended to be reachable by untrusted players as-is, critical is fully defensible.</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="security" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F13</span>#3</div>
+      <div class="rank"><span class="fid">F13</span>#1</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -461,11 +382,90 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(26 fixed — no longer active, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(28 fixed — no longer active, kept for the record)</span></span></h2>
   <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
   zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
   <div id="completed-list">
     
+  <article class="card fx-merged" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F8</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — f74f4a9">✅ Fixed · f74f4a9</span>
+          <span class="badge sev-high">High</span>
+          <span class="badge cat cat-security">Security</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-zero">0 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>HTTP action endpoint trusts client-supplied player identity (no authn) — act as any player</h3>
+        <div class="sevnote">judge said <em>critical</em>, verifier set <strong>high</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>f74f4a9</code> — removed vestigial unauthenticated server/worker surfaces</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">There is no binding between the network caller and the `player` they claim to be. A `curl -X POST /games/&lt;id&gt;/action -d '{&quot;action&quot;:&quot;...&quot;,&quot;player&quot;:2,&quot;args&quot;:{...}}'` submits moves on behalf of player 2. The WebSocket path correctly uses the server-tracked `session.playerSeat` (<code>core.ts:505-509</code>), but the HTTP route — shipped in both the standalone server and the production worker — bypasses that entirely.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A designer/AI agent who builds a game and deploys it on the provided server or worker gets an authoritative-looking server that is actually trivially cheatable: opponents can play your turns, force passes, or grief. The framework gives the impression of enforcing turns/seats while the easy HTTP path silently ignores identity. Wrong usage is the default.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext"><code>src/server/handlers/games.ts</code> (handleAction), <code>src/worker/index.ts</code> (#handleAction). Derive `player` from an authenticated session/token bound at connect/create time (e.g. a per-seat secret returned from claim-seat/join), not from request.player. Reject if the bound identity != requested player.</div></div>
+      <div class="field gi"><span class="flabel">Game impact</span><div class="ftext gi-none">No games affected — fixing this requires no changes to any current game (9 games checked).</div></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>src/server/handlers/games.ts:199-216</code> `handleAction` does `await session.performAction(request.action, request.player, request.args)` — `request.player` comes straight from the POST body. <code>src/session/game-session.ts:813-820</code> `performAction` only validates range: `if (player &lt; 1 || player &gt; this.#storedState.playerCount) return {... INVALID_PLAYER}` — it never checks the caller IS that player. The worker repeats this: <code>src/worker/index.ts:1105-1118</code> `#handleAction` reads `const { action, player, args } = body` and calls `performAction(action, player, args)`.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Confirmed in source. <code>src/server/handlers/games.ts:209</code> — `handleAction` calls `session.performAction(request.action, request.player, request.args)` where `request.player` is taken directly from the POST body (route wired at <code>core.ts:152-155</code>). <code>src/session/game-session.ts:813-820</code> — `performAction` only validates the player is in range (`player &lt; 1 || player &gt; playerCount`), with no binding to the network caller. The worker repeats the pattern: <code>src/worker/index.ts:1115-1118</code> reads `const { action, player, args } = body` and passes `player` straight to `performAction` (and the public worker route at 415-431 forwards the raw body to the Durable Object). By contrast the WebSocket path at <code>core.ts:505-509</code> correctly uses the server-tracked `session.playerSeat`, never a client-supplied value. I grepped src/server and src/worker for auth/token/bearer/cookie middleware and found none — there is no authentication layer wrapping these HTTP routes, so a `curl -X POST /games/&lt;id&gt;/action -d '{\&quot;action\&quot;:...,\&quot;player\&quot;:2,...}'` does submit moves as player 2. The vulnerability is real and shipped in both the standalone server and the production worker.\n\nSeverity: This is a genuine authorization/impersonation bypass — any client can act as any seat over HTTP. In the context of a board-game framework the concrete impact is cheating/impersonation (manipulating game outcomes), not RCE or PII exfiltration, and the codebase appears to lack a broader authn model generally (even WS seat assignment via matchmaking findIndex on a client-provided playerId is not strongly verified). Still, the HTTP path is strictly worse because the actor identity is fully client-controlled per request while the WS path at least anchors to a server-tracked seat. I rate it high rather than critical: it is a clear, real authz gap in production code, but its blast radius is game integrity within an active-development library rather than system/data compromise.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F9</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — f74f4a9">✅ Fixed · f74f4a9</span>
+          <span class="badge sev-high">High</span>
+          <span class="badge cat cat-security">Security</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-zero">0 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Hidden-information leak: GET state accepts arbitrary ?player= and returns that player's private view</h3>
+        <div class="sevnote">judge said <em>critical</em>, verifier set <strong>high</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>f74f4a9</code> — removed vestigial unauthenticated server/worker surfaces</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">The engine's per-player filtering is correct, but the transport lets anyone pick whose perspective to render. `GET /games/&lt;id&gt;?player=2` returns player 2's hand/hidden cards to any caller. This defeats hidden information for every card/secret game over HTTP.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">Hidden-information is the single hardest thing to get right in a digital board game, and the framework's whole value proposition is doing it for you. A game author reasonably assumes 'the server only sends me my own view.' Instead, any spectator/opponent can read everyone's secrets with a query string. Silent, invisible, catastrophic for game integrity.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext"><code>src/server/handlers/games.ts</code> (handleGetGame/handleGetStateAt/handleGetStateDiff/handleGetPendingAction/handleGetActionTraces/handleGetSelectionChoices) and <code>src/worker/index.ts</code> equivalents: derive playerPosition from authenticated identity; spectators get position 0 (public view) only.</div></div>
+      <div class="field gi"><span class="flabel">Game impact</span><div class="ftext gi-none">No games affected — fixing this requires no changes to any current game (9 games checked).</div></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>src/server/handlers/games.ts:179-194</code> `handleGetGame(store, gameId, playerPosition)` uses `const player = playerPosition ?? 1; const result = session.getState(player)`; the value is parsed unauthenticated from the query in <code>core.ts:147</code> `query.player ? parseInt(query.player, 10) : undefined`. getState -&gt; buildPlayerState -&gt; <code>src/session/utils.ts:360</code> `const playerView = runner.getPlayerView(playerPosition)` which produces that player's privileged (hidden-info-revealing) view. Worker: <code>src/worker/index.ts:591-594</code> + #handleGetState(player). The same unauthenticated player param feeds state-at (<code>core.ts:170</code>), state-diff (<code>core.ts:180</code>), pending-action (<code>core.ts:225</code>), action-traces (<code>core.ts:189</code>), and selection-choices (<code>core.ts:281-287</code>).</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Verified at the cited locations (paths corrected: handlers in <code>src/server/handlers/games.ts</code>, routing in <code>src/server/core.ts</code>, not <code>core.ts</code> under handlers). The claim is factually accurate.
+
+- <code>src/server/core.ts:147</code> parses `query.player` straight from the unauthenticated query string and passes it to handleGetGame. The same untrusted param feeds state-at (170), state-diff (180), action-traces (189), pending-action (225), and selection-choices reads `player` from the POST body (281-287).
+- <code>src/server/handlers/games.ts:190-191</code> `const player = playerPosition ?? 1; const result = session.getState(player)` — no check that the caller is that player.
+- session.getState -&gt; buildPlayerState (<code>src/session/utils.ts:351-361</code>) calls `runner.getPlayerView(playerPosition)`, which is the player-specific privileged view (the truthView includes that player's hidden info). The engine filtering is per the requested position, so requesting player=2 returns player 2's private view.
+- <code>src/worker/index.ts:591-594</code> has the identical pattern for the Cloudflare deployment target.
+
+Critically, I searched for any auth layer (Authorization/Bearer/token/secret/player verification) across src/server/*.ts and <code>src/worker/index.ts</code> and found NONE. The server trusts client-supplied player identity everywhere — handleAction (<code>core.ts:209</code>) likewise forwards request.player unverified, so a caller can also act AS any player, not just read their view. So the hidden-info leak is one facet of a complete absence of an authentication/authorization model on the transport.
+
+So `GET /games/&lt;id&gt;?player=2` does return player 2's hand/hidden cards to any caller. This genuinely defeats hidden information for any card/secret game served over HTTP.
+
+Severity: I rate it high rather than critical. It is a real unauthenticated information-disclosure that breaks the core hidden-information guarantee, which would be critical for any publicly exposed deployment. I temper to high because (a) it reflects an across-the-board missing-auth posture (the action endpoint trusts client identity identically) rather than a single broken filter, consistent with an in-development library not yet shown to be deployed to untrusted users, and (b) the action-traces route even carries a comment acknowledging it's a debug endpoint. The fix is architectural: introduce per-player session/token auth so the transport binds the caller to a verified seat instead of trusting the query param. If this server is intended to be reachable by untrusted players as-is, critical is fully defensible.</div>
+      </details>
+    </div>
+  </article>
+
   <article class="card fx-merged" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="merged">
     <div class="card-head">
       <div class="rank"><span class="fid">F10</span><span class="rank-done">✓</span></div>

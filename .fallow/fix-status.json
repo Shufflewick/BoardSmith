@@ -103,12 +103,17 @@
     "F28": {
       "sha": "4643d54bb34376d1bcc4c660dd0e56f4f92cce16",
       "desc": "Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance"
+    },
+    "F8": {
+      "sha": "f74f4a9",
+      "desc": "removed vestigial unauthenticated server/worker surfaces"
+    },
+    "F9": {
+      "sha": "f74f4a9",
+      "desc": "removed vestigial unauthenticated server/worker surfaces"
     }
   },
-  "blocked": [
-    "F8",
-    "F9"
-  ],
+  "blocked": [],
   "status": {
     "F4": "merged",
     "F2": "merged",
@@ -136,7 +141,7 @@
     "F29": "merged",
     "F23": "merged",
     "F28": "merged",
-    "F8": "blocked",
-    "F9": "blocked"
+    "F8": "merged",
+    "F9": "merged"
   }
 }

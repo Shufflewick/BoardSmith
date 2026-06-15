@@ -1,0 +1,401 @@
+[
+  {
+    "unitId": "F22",
+    "fids": [
+      "F22"
+    ],
+    "title": "Element matching uses OR across id/name/notation — can select/highlight the WRONG element when names or notations collide",
+    "severity": "low",
+    "findings": [
+      {
+        "fid": "F22",
+        "category": "usability",
+        "sev": "low",
+        "title": "Element matching uses OR across id/name/notation — can select/highlight the WRONG element when names or notations collide",
+        "why": "Identifier precedence is silently wrong: when a precise id is present it should win, and name/notation should only be fallbacks when id is absent. As written, any duplicate-named elements (very common: 'Militia', 'Pawn', 'Worker') create cross-talk between board clicks/highlights and the action being built.",
+        "evidence": "useBoardInteraction.ts:206-211 `matchesRef`: `if (ref.id !== undefined && element.id === ref.id) return true; if (ref.name && element.name === ref.name) return true; if (ref.notation && element.notation === ref.notation) return true;`. Because branches are independent ORs, a ref that carries BOTH id and name (e.g. boardRef returns `{ id: 5, name: 'Militia' }`) will match a DIFFERENT element with id 8 but name 'Militia' via the name branch. triggerElementSelect (line 279-285) then fires `state.onElementSelect(validElem.id)` using the ref's id (5), so clicking piece 8 selects piece 5.",
+        "fix": "Make matchesRef precedence-based: if ref.id !== undefined, match by id ONLY; else fall back to notation, then name. useBoardInteraction.ts:206-211."
+      }
+    ],
+    "games": [
+      {
+        "name": "checkers",
+        "path": "/Users/jtsmith/BoardSmithGames/checkers",
+        "branch": "master",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "Confirm exact precedence semantics. If id takes precedence over notation in matchesRef, the board's isHighlighted/isSelected (which pass notation only) will stop matching id-bearing action refs, breaking panel→board highlight/selection sync. Fix by passing the element id in those checks, or having the action emit notation-only refs for squares.",
+        "evidence": "Board checks panel state by notation ONLY: CheckersBoard.vue:442 `boardInteraction.isHighlighted({ notation })` and :449 `boardInteraction.isSelected({ notation })`. But the action registers refs that carry id: src/rules/actions.ts:106-111 boardRef `{ id: piece.id, notation }` and :136-146 boardRefs sourceRef/targetRef with `{ id: ..., notation }`. Current matchesRef (src/ui/composables/useBoardInteraction.ts:206-209) ORs id||name||notation; precedence (id wins) means a notation-only element compared against an id-bearing ref would no longer fall through to notation. selectElement also passes both: CheckersBoard.vue:457 `{ id: pieceId, notation }`."
+      }
+    ]
+  },
+  {
+    "unitId": "F7",
+    "fids": [
+      "F7"
+    ],
+    "title": "serializeValue silently drops circular references and over-deep objects, partially corrupting saved state",
+    "severity": "medium",
+    "findings": [
+      {
+        "fid": "F7",
+        "category": "architecture",
+        "sev": "medium",
+        "title": "serializeValue silently drops circular references and over-deep objects, partially corrupting saved state",
+        "why": "Serialization is the foundation of every restore/undo/checkpoint/network path. Silently emitting `undefined` for cyclic or deep state means a snapshot can omit real game state with no thrown error; the loss only manifests later as a wrong board after restore.",
+        "evidence": "game-element.ts:740-786. On a cycle: `if (visited.has(value)) return undefined` (771-772). On depth>100: `console.warn(...); return undefined` (742-744). toJSON (game-element.ts:704-711) serializes EVERY own enumerable non-'_' property of every element through this, so any designer object graph with a back-reference or shared node loses the offending subtree to `undefined` with at most a console.warn.",
+        "fix": "Fail loud: throw an actionable error naming the property path on cycle/over-depth during serialization (the right path is 'use element children or a serializable shape'), rather than returning undefined. Reserve silent truncation, if any, for a clearly opt-in mode."
+      }
+    ],
+    "games": [
+      {
+        "name": "MERC",
+        "path": "/Users/jtsmith/Dropbox/MERC/BoardSmith/MERC",
+        "branch": "main",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "If serializeValue reaches these fields, fail-loud serialization will throw on the Set/Map. Convert _pinochetControlledSnapshot (Set) and beforeAttackHealingProcessed to arrays, and ensure _rebelActionCounts (Map) is genuinely excluded from serialization or converted. Confirm whether private fields are serialized in the new engine.",
+        "evidence": "Set/Map held in game state: src/rules/game.ts:669 '_pinochetControlledSnapshot: Set<string> | null = null;' (public field), :595 'private _rebelActionCounts: Map<number, number> = new Map();' (commented 'private = ephemeral, not serialized'), and a Set in a state object type at game.ts:495 'beforeAttackHealingProcessed?: Set<string>'. Combatant arrays (combat-types.ts:14 'export interface Combatant') are plain data, fine."
+      }
+    ]
+  },
+  {
+    "unitId": "F3",
+    "fids": [
+      "F3"
+    ],
+    "title": "Declared array state is silently replaced by a dev-only Proxy backed by a magic settings key — dual source of truth + dev/prod snapshot divergence",
+    "severity": "medium",
+    "findings": [
+      {
+        "fid": "F3",
+        "category": "architecture",
+        "sev": "medium",
+        "title": "Declared array state is silently replaced by a dev-only Proxy backed by a magic settings key — dual source of truth + dev/prod snapshot divergence",
+        "why": "The same array now lives twice in a dev snapshot (attributes.<key> AND settings.__autoSync_<key>) with settings silently winning on restore, and zero times in settings for a production snapshot (the proxy is never installed). The declared property's runtime identity (plain Array vs Proxy) and the serialized snapshot's shape both depend on NODE_ENV.",
+        "evidence": "game.ts:485-488 runs _checkForVolatileState only when `process.env?.NODE_ENV !== 'production'`. That walks own properties and, for any array, calls _autoSyncArray (game.ts:548-551) which via _autoSyncArrayOnTarget (598-721) replaces the property with an Object.defineProperty getter returning a `new Proxy(...)` whose mutations write to `this.settings['__autoSync_'+key]` (623,653,675). Meanwhile toJSON serializes the SAME array as an ordinary attribute (game-element.ts:704-711 iterates all own non-'_' keys). On restore, the proxy prefers the settings copy over the attribute copy: `if (storedData && Array.isArray(storedData)) backingArray = [...storedData]` (game.ts:614-617).",
+        "fix": "Make persistence environment-independent: either always install the sync wrapper or never (prefer never — persist arrays solely via toJSON attributes). If HMR survival is needed, fold it into the one serialization path rather than a parallel settings shadow. Don't mutate the shape of designer-declared properties at runtime."
+      }
+    ],
+    "games": [
+      {
+        "name": "cribbage",
+        "path": "/Users/jtsmith/BoardSmithGames/cribbage",
+        "branch": "master",
+        "status": "affected",
+        "effort": "moderate",
+        "requiredChange": "If the audit changes how declared array/object state persists (away from a settings shadow toward serializable shapes / element children), migrate currentPlayCards, playerSaidGo, and originalHandCardIds off `this.settings`/`this.game.settings` to whatever the new sanctioned mechanism is (plain declared serializable properties or element-backed state). Verify scoringAnimation/roundSummary still persist across save/HMR without the dev-only Proxy.",
+        "evidence": "Game subclass stores mutable array state via a settings shadow: src/rules/game.ts:67-72 `get/set currentPlayCards` -> `this.settings._currentPlayCards as string[]`; game.ts:75-80 `get/set playerSaidGo` -> `this.settings._playerSaidGo`. Element does the same: src/rules/elements.ts:86-95 `originalHandCardIds` -> `this.game.settings[\\`_originalHandCardIds_${this.seat}\\`]`. Comment at game.ts:64 'HMR-safe state (stored in settings)' shows this is a deliberate workaround for array persistence. Also two declared deep plain-object props holding mutable round state: game.ts:88-114 `scoringAnimation` and game.ts:116-148 `roundSummary` (reassigned wholesale, but nested arrays)."
+      },
+      {
+        "name": "polyhedral-potions",
+        "path": "/Users/jtsmith/BoardSmithGames/polyhedral-potions",
+        "branch": "master",
+        "status": "likely",
+        "effort": "moderate",
+        "requiredChange": "If the engine stops Proxy-wrapping declared arrays / changes settings-shadow persistence, verify draftedDice/draftedValues still round-trip and the player's in-place mutations of ingredientTracks/potionsCrafted still persist across save/HMR; may need to move these to a serializable shape or element children.",
+        "evidence": "Game stores array state in a manual settings shadow: src/rules/game.ts:70-76 get/set draftedDice via 'this.settings._draftedDiceIds' and game.ts:79-84 draftedValues via 'this.settings._draftedValues' (comment line 67: 'HMR-safe state (stored in settings)'). Player declares plain mutable array/object state mutated in place: src/rules/elements.ts:181 'ingredientTracks: Record<string, IngredientBox[]> = {}' (mutated at elements.ts:438 'box.marked = true') and elements.ts:186 'potionsCrafted: boolean[] = new Array(32).fill(false)' (mutated at elements.ts:495 'this.potionsCrafted[value-1] = true')."
+      },
+      {
+        "name": "MERC",
+        "path": "/Users/jtsmith/Dropbox/MERC/BoardSmith/MERC",
+        "branch": "main",
+        "status": "likely",
+        "effort": "moderate",
+        "requiredChange": "Re-home settings-shadow data and mutable declared array/object state onto a supported serializable shape (element children or persistentMap/persistentArray-style APIs, as already done for pendingLootMap), since F3 stops Proxy-wrapping declared arrays and changes settings-shadow persistence. Verify save/HMR survival for each pending* field.",
+        "evidence": "Heavy this.settings shadow store in src/rules/game.ts:764-795 (combatantData/equipmentData/sectorData/tacticsData/setupConfigurations getters+setters via '(this.settings as Record<string, unknown>).combatantData = data'), and game.ts:740 'const settings = this.settings as Record<string, unknown>'. Plus many declared plain object/array state fields mutated at runtime: game.ts:597 pendingArtilleryAllocation object, :626 pendingGeneralissimoHire {drawnMercIds:number[]}, :636 pendingLockdownMilitia, :1498 declinedPlayers:[]. Note pendingLootMap (game.ts:721) already uses the correct this.persistentMap API."
+      }
+    ]
+  },
+  {
+    "unitId": "F19_F25",
+    "fids": [
+      "F19",
+      "F25"
+    ],
+    "title": "Action execute() args are Record<string, unknown> — no type inference from declared selections, forcing manual casts on every action",
+    "severity": "medium/medium",
+    "findings": [
+      {
+        "fid": "F19",
+        "category": "usability",
+        "sev": "medium",
+        "title": "Action execute() args are Record<string, unknown> — no type inference from declared selections, forcing manual casts on every action",
+        "why": "The most frequently used authoring API gives no type safety between the selection name/type declared in the builder and the args received in execute(). A wrong cast (e.g. `args.piece as Square`) compiles cleanly and crashes at runtime; a renamed/typo'd selection key (`args.peice`) is `unknown` with no error. This directly violates the CLAUDE.md goal 'impossible to represent invalid states in types.'",
+        "evidence": "action-builder.ts:554-556 `execute(fn: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void)` and types.ts:436 `execute: (args: Record<string, unknown>, context: ActionContext) => ...`. Each chooseFrom/chooseElement/fromElements is generic over <T> but the type is discarded (returns `this`, not an accumulated arg map). Real game code proves the cost: checkers/src/rules/actions.ts:172-173 `const piece = args.piece as CheckerPiece; const destination = args.destination as DestinationChoice;`. The builder docstrings show `.execute(({ target }) => target.takeDamage(10))` as if `target` were typed, but it is `unknown`.",
+        "fix": "Accumulate an args type through the fluent chain: make each builder method return `Action<Args & { [name]: T }>` so execute() infers a fully-typed args object. Standard TS builder pattern; would remove every `as` cast in execute bodies."
+      },
+      {
+        "fid": "F25",
+        "category": "dx",
+        "sev": "medium",
+        "title": "Action handlers are completely untyped: ctx.game is Game<any> and every arg is unknown, forcing unchecked casts everywhere",
+        "why": "Casts (`as`) are unchecked assertions. If an agent renames a selection, changes its type, or typos an arg name, TypeScript stays silent and the bug surfaces only at runtime (or as `undefined` propagating into game logic). The library's own motto is 'impossible to represent invalid states in types' — here the opposite is true: the type system actively certifies wrong code as correct.",
+        "evidence": "The single most-written API for an agent — the action `.execute()` handler — has zero type safety. `ActionContext` is non-generic: `src/engine/action/types.ts:368` `game: Game;` and `:372` `args: Record<string, unknown>;`. `Game` itself defaults its generics to `any`: `src/engine/element/game.ts:286-288` `export class Game<G extends Game = any, P extends Player = any>`. The builder's execute signature discards all accumulated selection types: `src/engine/action/action-builder.ts:554-556` `execute(fn: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void)` — even though `chooseFrom<T>`, `chooseElement<T>` capture `T`, that `T` never threads into `args`. There is no generic `ActionContext<G>` anywhere (grep confirms only one non-generic declaration). The result in EVERY real game: `~/BoardSmithGames/cribbage/src/rules/actions.ts:20` `const game = ctx.game as CribbageGame;` (repeated in ~10 actions), `:98` `const card = args.card as Card;`, `~/BoardSmithGames/checkers/src/rules/actions.ts:172-173` `const piece = args.piece as CheckerPiece;` / `args.destination as DestinationChoice;`. The project's own MEMORY.md records this as a known papercut: \"ctx.game in action .execute() callbacks has type Game<any,any> — cast to specific game class\".",
+        "fix": "Make `ActionContext` generic (`ActionContext<G extends Game = Game>`) and make the `Action`/builder generic over an accumulating args record so `chooseFrom<T>('card', ...)` adds `{ card: T }` to the execute args type. Thread the game type from `Game<G>` into `registerAction`/`Action.create<G>()`. At minimum, type `args` per-selection so `execute(({ card }) => ...)` infers `card`'s type. Files: src/engine/action/types.ts, src/engine/action/action-builder.ts, src/engine/element/game.ts (registerAction signature)."
+      }
+    ],
+    "games": [
+      {
+        "name": "checkers",
+        "path": "/Users/jtsmith/BoardSmithGames/checkers",
+        "branch": "master",
+        "status": "likely",
+        "effort": "trivial",
+        "requiredChange": "Cleanup only: once execute() args are typed from declared selections, the `as CheckerPiece`/`as DestinationChoice` casts are unnecessary; `ctx.player` casts may also tighten. Low risk of new compile errors.",
+        "evidence": "src/rules/actions.ts is full of casts that typed args/ctx would make redundant: `ctx.player as CheckersPlayer` (lines 16,22,86,117,156,163,171), `element as CheckerPiece` (85), `game.getElementById(id) as CheckerPiece` (76), and in execute `args.piece as CheckerPiece` (172) and `args.destination as DestinationChoice` (173). No `(ctx.game as ...)` casts (game is captured via closure)."
+      },
+      {
+        "name": "cribbage",
+        "path": "/Users/jtsmith/BoardSmithGames/cribbage",
+        "branch": "master",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "Optional cleanup: drop the now-redundant `ctx.game as CribbageGame` / `ctx.player` / `args.* as` casts once context and selection args are generically typed. Mostly additive; watch for any cast that no longer matches the inferred type and may newly error.",
+        "evidence": "src/rules/actions.ts is dense with casts that become unnecessary under generic ActionContext<G> and typed execute args: e.g. `const game = ctx.game as CribbageGame` (lines 20,33,39,72,77,89,95,151,192,197), `ctx.player as CribbagePlayer` (21,34,40,...), and arg casts `args.cards as Card[]` (42), `args.card as Card` (98). Condition predicates also use `(ctx.game as CribbageGame)` (31,87,138,190)."
+      },
+      {
+        "name": "demo-action-panel",
+        "path": "/Users/jtsmith/BoardSmithGames/demo-action-panel",
+        "branch": "master",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "Mostly additive: once execute args are typed from declared selections, several `as` casts become unnecessary cleanup. Some casts (notably `args.chooseElement as Unit` and the string-based value casts) may newly conflict with the new generated types — needs a compile check, but low effort.",
+        "evidence": "src/rules/actions.ts uses untyped ActionContext and many arg casts inside execute bodies: :35/:39 `(ctx: ActionContext)`, :40 `ctx.args.chooseElement as Unit`, :56 `ctx.player as TestPlayer`, :57 `args.chooseElement as Unit`, :61-64 `args.multiSelect as string[]` / `as string`, :110 `args.optional as string | undefined`, :199 `args.repeatUntil as string[]`, :227 `args.player as number`. No `(ctx.game as ...)` casts present."
+      },
+      {
+        "name": "demo-animation",
+        "path": "/Users/jtsmith/BoardSmithGames/demo-animation",
+        "branch": "master",
+        "status": "likely",
+        "effort": "trivial",
+        "requiredChange": "Optional cleanup: remove now-redundant `args.x as T` casts once selection typing is generic. Low risk of new compile errors since the casts narrow from unknown/element to the correct concrete types; `args.zone as string` would only break if the redesigned flipReorder selection no longer yields a string.",
+        "evidence": "src/rules/actions.ts contains ~18 casts inside execute bodies (e.g. line 44 `args.card as Card`, line 45 `card.parent as Zone`, line 153 `args.zone as string`, flyToStat `ctx.player as DemoPlayer`). No `(ctx.game as` casts found (game is captured via closure, not ctx). These casts on selection args become unnecessary once execute() args are typed from declared selections."
+      },
+      {
+        "name": "demo-complex-ui",
+        "path": "/Users/jtsmith/BoardSmithGames/demo-complex-ui",
+        "branch": "master",
+        "status": "likely",
+        "effort": "trivial",
+        "requiredChange": "With typed execute args (from declared selections) and generic ActionContext<G>, the 'args.* as ...' and 'ctx.player as DemoPlayer' casts become unnecessary; redundant casts can be removed and any that conflict with the new inferred types adjusted. Optional cleanup, no functional break expected.",
+        "evidence": "Casts inside execute/condition bodies in src/rules/actions.ts: :30/:69/:118/:181/:208/:232 \"ctx.player as DemoPlayer\"; :72 \"args.card as Card\"; :122 \"args.targetPlayer as number\"; :123 \"game.getPlayer(...) as DemoPlayer\"; :183 \"args.card as Card\"; :185 \"args.recipient as number\"; :233 \"args.suit as string\"."
+      },
+      {
+        "name": "go-fish",
+        "path": "/Users/jtsmith/BoardSmithGames/go-fish",
+        "branch": "master",
+        "status": "likely",
+        "effort": "trivial",
+        "requiredChange": "Optional cleanup: drop now-redundant 'as number'/'as string' casts once execute args are typed from the declared selections. Note these casts are also entangled with the F23+F28 redesign (the arg types/shape will change there).",
+        "evidence": "src/rules/actions.ts execute body uses casts that the new typed-args/ActionContext<G> may make unnecessary or could newly conflict: :81 \"args.target as number\", :83 \"args.rank as string\", :79 \"ctx.player as GoFishPlayer\", :82 \"game.getPlayer(targetPosition) as GoFishPlayer\". (flow.ts also uses 'ctx.game as GoFishGame' and 'player as any' but that is flow context, additive.) No 'ctx.game as' cast in the action since game is closure-captured."
+      },
+      {
+        "name": "hex",
+        "path": "/Users/jtsmith/BoardSmithGames/hex",
+        "branch": "master",
+        "status": "likely",
+        "effort": "trivial",
+        "requiredChange": "Optional: drop now-unnecessary `as Cell` / `as HexPlayer` casts in actions.ts execute once selections are typed; AI `game as HexGame` casts remain because those helpers receive the base Game type from gameDefinition.ai hooks.",
+        "evidence": "execute body uses casts that become redundant once args/ctx are generically typed: src/rules/actions.ts:30 `const player = ctx.player as HexPlayer;` and :31 `const cell = args.cell as Cell;`. AI helpers cast game repeatedly, e.g. src/rules/ai.ts:349 `const hexGame = game as HexGame;` and read `move.args.cell as number` (ai.ts:389, 424, 461, 713, 907). All are correct widening/narrowing casts, so they should still compile; this is cleanup, not breakage."
+      },
+      {
+        "name": "polyhedral-potions",
+        "path": "/Users/jtsmith/BoardSmithGames/polyhedral-potions",
+        "branch": "master",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "Cleanup: drop redundant ctx.game/ctx.player casts once ActionContext<G> is generic; revisit the 'typeof args.dieN === object ? .id : ...' shims once chooseElement args are typed as resolved elements/IDs.",
+        "evidence": "Pervasive manual casts in execute bodies become unnecessary or could conflict with newly-typed args: src/rules/actions.ts:59 'ctx.player as PolyPotionsPlayer', :60 'args.die as string', :290 'ctx.game as PolyPotionsGame', and defensive object-or-id handling at :294-297 'const die1Id = typeof args.die1 === \"object\" ? (args.die1 as any).id : args.die1 as number' (also :396). Same 'ctx.game as PolyPotionsGame' pattern throughout flow.ts (e.g. flow.ts:61,100,111,127)."
+      },
+      {
+        "name": "MERC",
+        "path": "/Users/jtsmith/Dropbox/MERC/BoardSmith/MERC",
+        "branch": "main",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "Mostly cleanup once ctx.game is generic (ActionContext<G>) and execute args are typed from declared selections: many 'ctx.game as MERCGame' and 'args.x as' casts become unnecessary and a few wrong casts may newly fail to compile. Tightly coupled to the F23+F28 migration.",
+        "evidence": "Casts in execute/condition bodies in src/rules: 8 'ctx.game as' (e.g. rebel-equipment.ts:512 'const g = ctx.game as MERCGame;', :563 'isNotInActiveCombat(ctx.game as MERCGame)'), 44 'ctx.player as', and 92 'args.<x> as' casts (used because chooseFrom returns untyped primitives that get cast before use)."
+      }
+    ]
+  },
+  {
+    "unitId": "F26_F29",
+    "fids": [
+      "F26",
+      "F29"
+    ],
+    "title": "Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths",
+    "severity": "medium/low",
+    "findings": [
+      {
+        "fid": "F26",
+        "category": "dx",
+        "sev": "medium",
+        "title": "Sandbox eslint-plugin is dead code — never wired into scaffolded games, not dogfooded, with a legacy config format and three duplicate enforcement paths",
+        "why": "The whole point of the sandbox rules is to keep agents from writing nondeterministic/networked/timer code that silently breaks replays, MCTS cloning, and multiplayer sync. If they never run, they protect no one. The AST-based plugin (accurate) is abandoned in favor of weaker regex duplicates (false positives/negatives, naive comment stripping).",
+        "evidence": "The eslint-plugin defines the sandbox guardrails (`src/eslint-plugin/index.ts:14-19`: no-network, no-filesystem, no-timers, no-nondeterministic, no-eval). But the scaffold never emits an eslint config or dependency: `src/cli/lib/project-scaffold.ts:472-482` lists every generated file (boardsmith.json, package.json, tsconfig, vite, etc.) — no `.eslintrc`/`eslint.config.*` — and `generatePackageJson` produces scripts `{dev, build, test, validate}` with devDeps `{@vitejs/plugin-vue, typescript, vitest}` — no eslint, no lint script. The repo doesn't even dogfood it: `eslint.config.mjs:2` imports `@typescript-eslint/eslint-plugin`, not the boardsmith plugin (grep finds zero references to the plugin's rules outside its own dir). Its `configs.recommended` (`src/eslint-plugin/index.ts:23-31`) uses the legacy `.eslintrc` shape `plugins: ['boardsmith']`, which is incompatible with ESLint 9 flat config. Enforcement is instead reimplemented twice as regex: `src/cli/commands/validate.ts:189-198` (network/fs/timers/determinism/eval) and `src/cli/commands/lint.ts` (element-comparison bugs only). The two regex sets don't even agree on coverage.",
+        "fix": "Pick ONE enforcement path. Wire the eslint-plugin into the scaffold (emit eslint.config.js using flat-config, add eslint + the plugin to devDeps, add a `lint` script), convert `configs.recommended` to flat-config shape, and delete the duplicate regex scanners in validate.ts/lint.ts (or have them delegate to eslint). Files: src/cli/lib/project-scaffold.ts, src/eslint-plugin/index.ts, src/cli/commands/validate.ts, src/cli/commands/lint.ts."
+      },
+      {
+        "fid": "F29",
+        "category": "dx",
+        "sev": "low",
+        "title": "boardsmith validate's sandbox scan only covers src/rules — Math.random/fetch/timers in src/ui or helpers pass silently",
+        "why": "Determinism violations anywhere reachable from game state break replays, undo, AI cloning, and multiplayer — not just those in src/rules. A `Math.random()` in a UI helper that feeds a board ref or a derived value is just as corrupting but invisible to validate.",
+        "evidence": "`validateSecurity` hardcodes `const rulesDir = join(cwd, 'src/rules')` (`src/cli/commands/validate.ts:179-185`) and scans only that directory for the forbidden patterns (`:189-198` fetch/XHR/fs/setTimeout/setInterval/Date.now/Math.random/eval/Function). Game logic, however, routinely lives outside src/rules — custom UI components in `src/ui/` (the scaffold generates `src/ui/components/GameTable.vue`, `src/cli/lib/project-scaffold.ts:481`) and shared helper modules. Since the eslint-plugin (which would catch these everywhere) isn't wired in (see separate finding), this regex scan is the only active determinism guard, and it's blind outside src/rules.",
+        "fix": "Scan all source under src/ (excluding node_modules/dist) for the forbidden patterns, or better, delegate to the AST eslint-plugin once it's wired in. File: src/cli/commands/validate.ts."
+      }
+    ],
+    "games": [
+      {
+        "name": "checkers",
+        "path": "/Users/jtsmith/BoardSmithGames/checkers",
+        "branch": "master",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "If 'boardsmith validate' is expanded to scan all of src/ (not just src/rules) or eslint sandbox rules are wired in, these two src/ui patterns would be flagged. They are legitimate UI concerns (unique animation id, animation debounce); needs allowance for src/ui or a non-Date.now id source. No rules-code change required.",
+        "evidence": "src/rules is clean (grep for Math.random/Date.now/new Date/fetch/WebSocket/setTimeout/eval/Function/crypto/process/require over src/rules returned nothing; only Math.abs used in game.ts/ai.ts). src/ui hits: CheckersBoard.vue:187 `id: `capture-fly-${pieceId}-${Date.now()}`` and CheckersBoard.vue:583 `setTimeout(() => { isMoving.value = false; }, 300)`."
+      },
+      {
+        "name": "cribbage",
+        "path": "/Users/jtsmith/BoardSmithGames/cribbage",
+        "branch": "master",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "Rules code already compliant — no change. If 'boardsmith validate' is expanded to scan all of src/ and the lint rules treat setTimeout/Date.now as violations even in UI, the UI animation timers and the Date.now-based fly key would need allowlisting or replacement (e.g. a monotonic counter / crypto-free unique key). Confirm whether the expanded scan exempts src/ui.",
+        "evidence": "src/rules/** is clean of forbidden host APIs — randomness uses the engine RNG (game.ts:193 `this.random() < 0.5`); grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing. src/ui hits: src/ui/components/RoundSummary.vue:58,89,117,124,129,152 use setTimeout for reveal animations; src/ui/components/CribbageBoard.vue:538 `id: \\`discard-${card.id}-${Date.now()}\\``. These are UI-only."
+      },
+      {
+        "name": "demo-animation",
+        "path": "/Users/jtsmith/BoardSmithGames/demo-animation",
+        "branch": "master",
+        "status": "likely",
+        "effort": "small",
+        "requiredChange": "No rules changes needed. If the expanded `boardsmith validate` / wired eslint sandbox rules scan all of src/ (not just src/rules), the two UI-only uses (setTimeout for animation timing, Date.now for a unique DOM key) may be flagged and need allow-listing or replacement (e.g. a counter instead of Date.now). UI animation timing is legitimate, so likely a lint-config/exception decision rather than a behavioral fix.",
+        "evidence": "src/rules is sandbox-clean: grep for Math.random/Date.now/fetch/setTimeout/etc in src/rules returned nothing; game.ts shuffles via engine RNG (`Math.floor(this.random() * (i + 1))`) which is deterministic. However src/ui/components/GameTable.vue:90 `const timer = setTimeout(resolve, 5000);` (inside the demo animation-event handler) and GameTable.vue:263 `id: \\`fly-stat-${cardId}-${Date.now()}\\`` use host APIs."
+      },
+      {
+        "name": "go-fish",
+        "path": "/Users/jtsmith/BoardSmithGames/go-fish",
+        "branch": "master",
+        "status": "likely",
+        "effort": "trivial",
+        "requiredChange": "If 'boardsmith validate' is expanded to scan all of src/ and the sandbox lint is wired in, the setTimeout in src/ui/components/GameTable.vue:419 would flag. It is UI animation code (legitimately not deterministic rules), so it likely needs a lint allowance/exclusion for src/ui or a refactor to nextTick rather than a determinism fix. Rules code needs no change.",
+        "evidence": "src/rules grep is clean (src/rules/ai.ts uses only Math.max/min/exp/sqrt — deterministic; no Math.random/Date/fetch/timers). One hit in UI: src/ui/components/GameTable.vue:419 \"await new Promise(r => setTimeout(r, 10))\" used to wait for Vue DOM update during book-formation animation."
+      },
+      {
+        "name": "MERC",
+        "path": "/Users/jtsmith/Dropbox/MERC/BoardSmith/MERC",
+        "branch": "main",
+        "status": "affected",
+        "effort": "small",
+        "requiredChange": "Remove the Date.now() debug throttle in dictator-actions.ts (use engine RNG/clock or just drop debug). For UI, replace Date.now()/Math.random() id-generation with a deterministic counter and confirm setTimeout animation usage is permitted by the expanded validate scan (or whitelist src/ui). Add the scaffolded eslint sandbox config.",
+        "evidence": "RULES (determinism violation): src/rules/actions/dictator-actions.ts:86-87 'if (!g.__tacticsDbgAt || Date.now() - g.__tacticsDbgAt > 1500) { g.__tacticsDbgAt = Date.now();' inside a [TACTICS-DEBUG] throttle. No Math.random/timers/network found in src/rules otherwise. UI (would newly fail expanded validate/lint): src/ui/components/MapGrid.vue:351 'id: `death-${Date.now()}-...`', src/ui/components/AssignToSquadPanel.vue:123 'return id ? String(id) : Math.random().toString();', and 20 setTimeout uses across src/ui (animations). No eslint config present in the game (.eslintrc*/eslint.config.* absent)."
+      }
+    ]
+  },
+  {
+    "unitId": "F23_F28",
+    "fids": [
+      "F23",
+      "F28"
+    ],
+    "title": "Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance",
+    "severity": "low/low",
+    "findings": [
+      {
+        "fid": "F23",
+        "category": "usability",
+        "sev": "low",
+        "title": "Three overlapping element-selection builder methods (chooseFrom / chooseElement / fromElements) with contradictory 'prefer X' guidance",
+        "why": "Two of the three methods select elements with substantial overlap, and the guidance both pushes away from chooseElement and toward fromElements while chooseElement itself still accepts a precomputed `elements` array. There is no single obvious 'right' method, and the distinction (board-click vs buttons) isn't enforced by the method you pick — both produce the same selection type.",
+        "evidence": "action-builder.ts:113-118 chooseFrom doc: 'For selecting game elements, prefer fromElements instead.' chooseElement doc:216-221 'Uses the board for selection... For choices shown as buttons/dropdowns, prefer fromElements instead.' fromElements doc:301-305 'This is the \"pit of success\" method for element-based choices.' Internally fromElements single-select even delegates to the SAME 'element' selection type as chooseElement (lines 391-409), so chooseElement(with elements) and fromElements(single) are near-duplicates.",
+        "fix": "Collapse to one canonical element-selection method (fromElements) and make chooseElement either a thin documented alias or remove it (CLAUDE.md: 'No Backward Compatibility ... remove the bad thing'); ensure docstrings agree on the single recommended path. action-builder.ts:254-412."
+      },
+      {
+        "fid": "F28",
+        "category": "dx",
+        "sev": "low",
+        "title": "Three overlapping element-selection methods (chooseFrom / chooseElement / fromElements) with no obvious 'right' choice",
+        "why": "When three methods do nearly-the-same thing with undocumented behavioral deltas, there is no discoverable 'correct' choice. The inconsistent usage across the reference games (the very examples agents are told to study) proves even the authors don't apply a consistent rule.",
+        "evidence": "The builder exposes `chooseFrom<T>` (`src/engine/action/action-builder.ts:153`), `chooseElement<T extends GameElement>` (`:254`), and `fromElements<T extends GameElement>` (`:323`) — plus `enterText`/`enterNumber`. `chooseElement` and `fromElements` both produce single-element selections (fromElements branches to ElementSelection vs ElementsSelection internally) but differ subtly in value encoding — `fromElements`' JSDoc (`:305-307`) stresses 'Custom UIs send the element ID directly', implying `chooseElement` differs. The naming mixes three verb conventions (`choose*`, `from*`, `enter*`) and inconsistent plurality (`chooseElement` singular, `fromElements` plural-but-often-single). Real games pick inconsistently for the same concept: checkers uses `chooseElement<CheckerPiece>('piece')`; cribbage/go-fish use `fromElements<Card>('card')`; polyhedral mixes `chooseElement<IngredientDie>` and `fromElements<Zone>` in the same file.",
+        "fix": "Collapse to a single obvious pair: `chooseElement` (one) / `chooseElements` (many), unify value encoding (always element IDs), and either remove `fromElements` or make it an alias documented as deprecated-and-removed. Update the reference games to the single canonical form. Files: src/engine/action/action-builder.ts, example games."
+      }
+    ],
+    "games": [
+      {
+        "name": "checkers",
+        "path": "/Users/jtsmith/BoardSmithGames/checkers",
+        "branch": "master",
+        "status": "affected",
+        "effort": "moderate",
+        "requiredChange": "Migrate the 'destination' selection off chooseFrom. Either re-express it as a Square chooseElement (element-ID encoding) and recompute capture/king metadata inside execute() from piece+target, or keep a value selection if chooseFrom survives. Update CheckersBoard.vue executeMove to send element IDs instead of the DestinationChoice object. filterBy{key:'pieceId',selectionName:'piece'} also needs an ID-based equivalent.",
+        "evidence": "src/rules/actions.ts:81 `.chooseElement<CheckerPiece>('piece', {...})` (canonical, kept) but src/rules/actions.ts:114 `.chooseFrom<DestinationChoice>('destination', {choices, display, boardRefs, filterBy})`. execute reads it as a non-ID object: actions.ts:173 `const destination = args.destination as DestinationChoice;` then uses `destination.toNotation` (179,239). The custom UI also builds and sends the object: src/ui/components/CheckersBoard.vue:564-575 `const destination = { pieceId, fromNotation, toNotation, isCapture, becomesKing }; await props.actionController.execute('move', { piece: move.pieceId, destination })`."
+      },
+      {
+        "name": "cribbage",
+        "path": "/Users/jtsmith/BoardSmithGames/cribbage",
+        "branch": "master",
+        "status": "affected",
+        "effort": "small",
+        "requiredChange": "Rename the discard builder from `.fromElements('cards', ...)` to the canonical `.chooseElements('cards', ...)`, keeping the multiSelect/min-max config. No value-encoding change needed (already IDs). chooseElement('card') stays as-is.",
+        "evidence": "src/rules/actions.ts:17 `.fromElements<Card>('cards', { ... multiSelect: { min: 2, max: 2 } })` for the discard action (initial grep missed it due to the `<Card>` type param). src/rules/actions.ts:68 `.chooseElement('card', {...})` is the canonical kept form. Selection encoding is already element IDs: UI sends `{ cards: selectedCards.value }` (CribbageBoard.vue:520-522) and `{ card: cardId }` (CribbageBoard.vue:572-573), and execute reads `args.cards as Card[]` (actions.ts:42)."
+      },
+      {
+        "name": "demo-action-panel",
+        "path": "/Users/jtsmith/BoardSmithGames/demo-action-panel",
+        "branch": "master",
+        "status": "affected",
+        "effort": "moderate",
+        "requiredChange": "If chooseFrom is removed/aliased, all 5 call sites must migrate to the surviving value-selection API (these select strings/player-seats, not elements, so they need whatever replaces value choices). Separately, if selection encoding unifies to element IDs, the chooseElement consumer must resolve the ID to a Unit instead of casting args.chooseElement directly to a live element, and the value-selection consumers (enemy names, player seat) must be checked against the new encoding.",
+        "evidence": "src/rules/actions.ts:31 `.chooseFrom<string>('multiSelect', {`, :104 `.chooseFrom<string>('optional', {`, :127 `.chooseFrom<string>('disabled', {`, :193 `.chooseFrom<string>('repeatUntil', {`, :220 `.chooseFrom('player', {` — five chooseFrom sites. Also :21 `.chooseElement<Unit>('chooseElement', {` whose result is consumed as a live element instance: :57 `const unit = args.chooseElement as Unit; ... unit.hasAttacked = true` and :40 `const unit = ctx.args.chooseElement as Unit`. Selection results are read as non-ID encodings: :73 enemies matched by name (`args.multiSelect` strings) and :227 `const seat = args.player as number`."
+      },
+      {
+        "name": "demo-animation",
+        "path": "/Users/jtsmith/BoardSmithGames/demo-animation",
+        "branch": "master",
+        "status": "affected",
+        "effort": "moderate",
+        "requiredChange": "Rename all 10 .fromElements('card'|'targetZone',...) calls to .chooseElement (all are single-element picks). Redesign flipReorder's .chooseFrom<string> to .chooseElement<Zone> selecting a Zone element directly (string-choice form has no element-only replacement). If selection encoding is unified to element IDs, update execute bodies that currently consume resolved element objects (args.card as Card) to resolve IDs instead. UI already passes IDs via actionController.fill(name, card.id) so the UI side is mostly fine.",
+        "evidence": "src/rules/actions.ts uses .fromElements at lines 25,59,93,183,219,249,265,319,357 (e.g. line 25 `.fromElements<Card>('card', {`) and .chooseFrom at line 134 `.chooseFrom<string>('zone', {`. No .chooseElement/.chooseElements anywhere. flipReorder (line 134) selects by arbitrary string ('zone-a'..'zone-d') via choices(), not elements, then maps string->Zone in execute (lines 156-167). Execute bodies read resolved elements, e.g. line 44 `const card = args.card as Card;` and line 153 `const zoneName = args.zone as string;`."
+      },
+      {
+        "name": "demo-complex-ui",
+        "path": "/Users/jtsmith/BoardSmithGames/demo-complex-ui",
+        "branch": "master",
+        "status": "affected",
+        "effort": "moderate",
+        "requiredChange": "Migrate the 3 fromElements card pickers to chooseElement (boardRef already returns {id}, so element encoding is close). Replace the 3 chooseFrom usages: the suit and player-position choices are not element selections, so they need whatever general/value-choice API survives the consolidation (or a chooseElement over the target Hand element + reading its owner). Update execute() to read the new ID/value encoding and update the two trade/gift tests that send { value, display } objects.",
+        "evidence": "src/rules/actions.ts:54 \".fromElements<Card>('card', {\", :92 \".fromElements<Card>('myCard', {\", :155 \".fromElements<Card>('card', {\"; :101 \".chooseFrom('targetPlayer', {\", :164 \".chooseFrom('recipient', {\", :206 \".chooseFrom<string>('suit', {\". chooseFrom is also used for NON-element choices: :103 \"choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player })\" and :208 suit strings. Execute reads assume non-ID encoding: actions.ts:122 \"const targetPosition = args.targetPlayer as number;\" and tests/game.test.ts:35 \"targetPlayer: { value: 2, display: 'Player 2' }\"."
+      },
+      {
+        "name": "go-fish",
+        "path": "/Users/jtsmith/BoardSmithGames/go-fish",
+        "branch": "master",
+        "status": "affected",
+        "effort": "large",
+        "requiredChange": "If chooseFrom is removed/aliased and selection values are unified to element IDs, the 'ask' action must be redesigned: a rank is a string and a target is a player, neither maps to an element ID. Either chooseFrom must be preserved for non-element value choices, or the action must be reworked (e.g. choose a representative card element for rank, choose the opponent's Hand element for target) and the rules/UI/tests must be rewritten to read element IDs. At minimum a rename if chooseFrom is aliased.",
+        "evidence": "src/rules/actions.ts:35 \".chooseFrom('target', {\" and :48 \".chooseFrom<string>('rank', {\" — both are generic value choices (player position number, rank string), NOT element selections. Value encoding is leaked everywhere: actions.ts:80-83 \"const targetPosition = args.target as number\" / \"const rank = args.rank as string\"; UI src/ui/components/GameTable.vue:308-356 (isSelectingPlayer/isSelectingRank treat picks as type==='choice', handleOpponentClick fills 'target' with playerChoice.value {value,display}, handleCardClick fills 'rank' with a string, isOpponentHandSelectable reads (c.value as any)?.value===position); tests/complete-game.test.ts:49-51,175-176,235-236 \"target: { value: opponentPosition, display: opponent.name }, rank: rankToAsk\"."
+      },
+      {
+        "name": "polyhedral-potions",
+        "path": "/Users/jtsmith/BoardSmithGames/polyhedral-potions",
+        "branch": "master",
+        "status": "affected",
+        "effort": "moderate",
+        "requiredChange": "Replace all 6 chooseFrom() calls. The 5 scalar string choices (operation/adjustment/track/newValue/keepDrafted) need a kept scalar primitive (e.g. enterText/number or whatever replaces chooseFrom for non-element values). The draft 'die' selection must be re-modeled as an element selection (chooseElement/fromElements with IDs); the D10 0-or-10 choice can no longer ride on a string suffix and needs a separate scalar selection or post-draft step. Reading args.die as a parsed string also goes away.",
+        "evidence": "src/rules/actions.ts uses chooseFrom 6x: line 20 .chooseFrom<string>('die', ...) (draft), line 99 'operation', line 119 'adjustment', line 169 'track', line 382 'newValue', line 450 'keepDrafted'. The draft action encodes element selection as a NON-ID string with a value suffix — actions.ts:30-32 'choices.push(`${die.name}:0`); choices.push(`${die.name}:10`)' and execute parses it back: actions.ts:62-65 'const parts = choice.split(\":\"); const dieName = parts[0]; const overrideValue = parts[1] ? parseInt(parts[1],10):undefined'. chooseElement is used 3x (die1/die2/die at actions.ts:263,274,368) and would survive, but every chooseFrom site breaks if chooseFrom is removed/aliased."
+      },
+      {
+        "name": "MERC",
+        "path": "/Users/jtsmith/Dropbox/MERC/BoardSmith/MERC",
+        "branch": "main",
+        "status": "affected",
+        "effort": "large",
+        "requiredChange": "Migrate all 92 chooseFrom/fromElements call sites to the canonical chooseElement/chooseElements (for element selections) and to whatever primitive-choice replacement the library keeps (for the many string/number/enum choices). Rewrite the asSector/asSquad/asCombatantModel decoders (and all 27 call sites) to resolve element IDs via game.getElementById, since unified ID encoding means execute args arrive as numeric IDs rather than element instances.",
+        "evidence": "90 .chooseFrom() + 2 .fromElements() call sites across src/rules/actions/. e.g. src/rules/actions/rebel-movement.ts:169 '.chooseFrom<number>(\\'militiaCount\\', {', :526 '.chooseFrom<\\'primary\\' | \\'secondary\\'>(\\'squadType\\'', :784 '.chooseFrom<string>(\\'combatantName\\'); src/rules/actions/rebel-equipment.ts:574 '.fromElements<CombatantModel>(\\'actingMerc\\'), :582 '.fromElements<Equipment>(\\'equipment\\'); plus dictator-actions.ts (~50 chooseFrom), day-one-actions.ts, rebel-combat.ts, rebel-economy.ts. Also 25 .chooseElement() (e.g. rebel-movement.ts:125 '.chooseElement<Sector>(\\'destination\\')) whose results are decoded by INSTANCE-assuming helpers: src/rules/actions/helpers.ts:381 'export function asSector(element: unknown){ if (element instanceof Sector) return element; ...throw }' (also asSquad:393, asCombatantModel:369), called 27x. Many chooseFrom values are primitives (numbers/strings/yes-no like rebel-economy.ts:1342 \\'confirm\\'), not element IDs."
+      }
+    ]
+  }
+]
