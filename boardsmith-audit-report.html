@@ -154,16 +154,16 @@
     being a <em>pit of success</em> for game designers and the AI agents building games with them.</p>
     <p class="meta-line">Generated <strong>2026-06-14</strong> &middot; updated <strong>2026-06-15</strong> with fix status &middot;
     29 confirmed findings + 2 rejected &middot;
-    <strong style="color:var(--low)">17 fixed</strong>, 2 blocked, 10 open</p>
+    <strong style="color:var(--low)">18 fixed</strong>, 2 blocked, 9 open</p>
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">19</div><div class="l">✅ Fixed &amp; merged</div></div>
-    <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">10</div><div class="l">○ Open</div></div>
-    <div class="stat s-high"><div class="n">0</div><div class="l">High (active)</div></div>
+    <div class="stat s-fixed"><div class="n">18</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-blocked"><div class="n">2</div><div class="l">⛔ Blocked</div></div>
+    <div class="stat s-open"><div class="n">9</div><div class="l">○ Open</div></div>
+    <div class="stat s-high"><div class="n">2</div><div class="l">High (active)</div></div>
     <div class="stat s-medium"><div class="n">6</div><div class="l">Medium (active)</div></div>
-    <div class="stat s-low"><div class="n">4</div><div class="l">Low (active)</div></div>
+    <div class="stat s-low"><div class="n">3</div><div class="l">Low (active)</div></div>
   </div>
 
   <details class="method">
@@ -264,10 +264,10 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 12 of 29)</span></h2>
-  <p class="section-note">The 17 fixed-and-merged findings have been moved to the
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(still relevant — worst first · 11 of 29)</span></h2>
+  <p class="section-note">The 18 fixed-and-merged findings have been moved to the
   <a href="#completed" style="color:var(--accent)">Completed</a> section at the bottom. What remains here are the
-  2 blocked + 10 open problems that still need attention.</p>
+  2 blocked + 9 open problems that still need attention.</p>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -302,12 +302,12 @@
 
   <div id="findings">
     
-  <article class="card fx-merged" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="merged">
+  <article class="card fx-blocked" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="blocked">
     <div class="card-head">
-      <div class="rank"><span class="fid">F8</span><span class="rank-done">✓</span></div>
+      <div class="rank"><span class="fid">F8</span>#1</div>
       <div class="head-main">
         <div class="badges">
-          <span class="badge fx-merged" title="Resolved by removal — 77d1e85">✅ Fixed · 77d1e85</span>
+          <span class="badge fx-blocked" title="Needs a design decision before it can be fixed">⛔ Blocked — needs decision</span>
           <span class="badge sev-high">High</span>
           <span class="badge cat cat-security">Security</span>
           <span class="badge ease-moderate">moderate</span>
@@ -317,7 +317,7 @@
         </div>
         <h3>HTTP action endpoint trusts client-supplied player identity (no authn) — act as any player</h3>
         <div class="sevnote">judge said <em>critical</em>, verifier set <strong>high</strong></div>
-        <div class="merge-note">Resolved on <code>main</code> as <code>77d1e85</code> — removed the vestigial <code>boardsmith/server</code> + <code>boardsmith/worker</code> surfaces (zero consumers; ShufflewickPub prod + <code>boardsmith dev</code> both use SnapshotSessionHost with server-derived seats). The unauthenticated HTTP action endpoint no longer exists.</div>
+        <div class="merge-note blocked-note">Blocked: a correct fix needs a design decision (see verifier note &amp; the auth-token gap), so it was intentionally not merged.</div>
       </div>
     </div>
     <div class="card-body">
@@ -336,12 +336,12 @@
     </div>
   </article>
 
-  <article class="card fx-merged" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="merged">
+  <article class="card fx-blocked" data-cat="security" data-sev="high" data-ease="moderate" data-gi="no" data-fix="blocked">
     <div class="card-head">
-      <div class="rank"><span class="fid">F9</span><span class="rank-done">✓</span></div>
+      <div class="rank"><span class="fid">F9</span>#2</div>
       <div class="head-main">
         <div class="badges">
-          <span class="badge fx-merged" title="Resolved by removal — 77d1e85">✅ Fixed · 77d1e85</span>
+          <span class="badge fx-blocked" title="Needs a design decision before it can be fixed">⛔ Blocked — needs decision</span>
           <span class="badge sev-high">High</span>
           <span class="badge cat cat-security">Security</span>
           <span class="badge ease-moderate">moderate</span>
@@ -351,7 +351,7 @@
         </div>
         <h3>Hidden-information leak: GET state accepts arbitrary ?player= and returns that player's private view</h3>
         <div class="sevnote">judge said <em>critical</em>, verifier set <strong>high</strong></div>
-        <div class="merge-note">Resolved on <code>main</code> as <code>77d1e85</code> — removed the vestigial <code>boardsmith/server</code> + <code>boardsmith/worker</code> surfaces (zero consumers; ShufflewickPub prod + <code>boardsmith dev</code> both use SnapshotSessionHost with server-derived seats). The unauthenticated GET-state endpoint no longer exists.</div>
+        <div class="merge-note blocked-note">Blocked: a correct fix needs a design decision (see verifier note &amp; the auth-token gap), so it was intentionally not merged.</div>
       </div>
     </div>
     <div class="card-body">
@@ -1050,58 +1050,10 @@ So the gap is genuinely present: the &quot;sandbox&quot; is advisory lint plus a
       </details>
     </div>
   </article>
-
-  <article class="card fx-open" data-cat="usability" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F22</span>#12</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-low">Low</span>
-          <span class="badge cat cat-usability">Usability</span>
-          <span class="badge ease-easy">easy</span>
-          <span class="badge conf-medium">conf: medium</span>
-          <span class="badge gi-count">1 game impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Element matching uses OR across id/name/notation — can select/highlight the WRONG element when names or notations collide</h3>
-        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Identifier precedence is silently wrong: when a precise id is present it should win, and name/notation should only be fallbacks when id is absent. As written, any duplicate-named elements (very common: 'Militia', 'Pawn', 'Worker') create cross-talk between board clicks/highlights and the action being built.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A designer who follows the docs and returns a rich `{ id, name }` boardRef (more info = better, they'd assume) actually introduces a selection bug that's intermittent and hard to trace — the board highlights/acts on the wrong piece only when names collide. The 'more descriptive' path is the buggy path.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Make matchesRef precedence-based: if ref.id !== undefined, match by id ONLY; else fall back to notation, then name. <code>useBoardInteraction.ts:206-211</code>.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 0 affected, 1 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">Confirm exact precedence semantics. If id takes precedence over notation in matchesRef, the board's isHighlighted/isSelected (which pass notation only) will stop matching id-bearing action refs, breaking panel→board highlight/selection sync. Fix by passing the element id in those checks, or having the action emit notation-only refs for squares.<details class="gi-ev"><summary>evidence</summary><div class="mono">Board checks panel state by notation ONLY: <code>CheckersBoard.vue:442</code> `boardInteraction.isHighlighted({ notation })` and :449 `boardInteraction.isSelected({ notation })`. But the action registers refs that carry id: <code>src/rules/actions.ts:106-111</code> boardRef `{ id: piece.id, notation }` and :136-146 boardRefs sourceRef/targetRef with `{ id: ..., notation }`. Current matchesRef (<code>src/ui/composables/useBoardInteraction.ts:206-209</code>) ORs id||name||notation; precedence (id wins) means a notation-only element compared against an id-bearing ref would no longer fall through to notation. selectElement also passes both: <code>CheckersBoard.vue:457</code> `{ id: pieceId, notation }`.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>useBoardInteraction.ts:206-211</code> `matchesRef`: `if (ref.id !== undefined &amp;&amp; element.id === ref.id) return true; if (ref.name &amp;&amp; element.name === ref.name) return true; if (ref.notation &amp;&amp; element.notation === ref.notation) return true;`. Because branches are independent ORs, a ref that carries BOTH id and name (e.g. boardRef returns `{ id: 5, name: 'Militia' }`) will match a DIFFERENT element with id 8 but name 'Militia' via the name branch. triggerElementSelect (line 279-285) then fires `state.onElementSelect(validElem.id)` using the ref's id (5), so clicking piece 8 selects piece 5.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">The cited code is accurate. `matchesRef` (<code>useBoardInteraction.ts:206-211</code>) is a flat OR across id/name/notation with no precedence: `if (ref.id !== undefined &amp;&amp; element.id === ref.id) return true; if (ref.name &amp;&amp; element.name === ref.name) return true; if (ref.notation &amp;&amp; element.notation === ref.notation) return true;`. It is used by isHighlighted, isSelected, isValidTarget, isSelectableElement, isDisabledElement, triggerElementSelect (line 281), and isDropTarget — so a false match affects selection, highlight, disabled, and drop logic. triggerElementSelect uses `state.validElements.find(ve =&gt; matchesRef(element, ve.ref))` then fires `state.onElementSelect(validElem.id)`, so a name/notation match on a ref belonging to a different element does cause selection of the wrong element id.
-
-The claim's two premises both hold in this codebase: (1) duplicate names are a normal, common pattern — `createMany` (<code>game-element.ts:328-342</code>) assigns the SAME `name` to every element it creates, and names are not enforced unique (<code>game-element.ts:53</code>, just an optional field). (2) boardRef returning BOTH id and name is a real, used pattern: <code>BoardSmithGames/polyhedral-potions/src/rules/actions.ts:272</code>,285,380 literally do `boardRef: (die) =&gt; ({ id: die.id, name: die.name })`. With such a ref plus duplicate names, the name branch matches a different-id element, and <code>find()</code> returns the wrong validElem (or the first colliding one), so id is silently not authoritative — exactly the described cross-talk.
-
-Caveats reducing severity: the specific example is partly hypothetical. No shipping example game actually triggers it — polyhedral-potions uses {id,name} refs but its 7 dice all have unique names ('d4','d6',...), so no collision occurs; the default ref (<code>pick-handler.ts:387-390</code>) is {id} or {id,notation} and never adds name. The bug requires an author to opt into a multi-identifier ref where a non-id identifier collides. So it is a genuine latent logic/Pit-of-Success defect (a natural ref shape becomes a footgun, id should win when present) but is conditional and not currently producing wrong behavior in any existing game.</div>
-      </details>
-    </div>
-  </article>
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(17 fixed — no longer active, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(18 fixed — no longer active, kept for the record)</span></span></h2>
   <p class="section-note">These were fixed in isolated worktrees (each self-verified, regression-tested, and re-checked for
   zero game impact) and merged to <code>main</code>, with affected docs updated in the same commit.</p>
   <div id="completed-list">
@@ -1597,6 +1549,54 @@ Real mechanism, but the supporting facts are partly incorrect and the severity/f
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Every factual claim checks out against the source. <code>src/engine/element/game.ts</code> is exactly 2684 lines (wc -l). `export class Game&lt;G,P&gt; extends Space&lt;G,P&gt;` confirmed at <code>game.ts:286-289</code>. All ~24 cited method locations are accurate to the line: getElementById:862, execute:885, replayCommands:900, undoLastCommand:918, undoCommands:944, registerAction:962, getActionExecutor:1027, getSelectionChoices:1035, debugAllActions:1193, debugElementTree:1216, setFlow:1499, startFlow:1513, continueFlow:1538, restoreFlowState:1611, getRandomState:1632, setRandomState:1641, get players:1755, setCurrentPlayer:1923, nextPlayer:1964, animate:2404, pushAnimationEvent:2415, override toJSON:2445, loadSerializedState:2612, registerElements:825. The dev-only proxy machinery (_checkForVolatileState/createSyncProxy) is real in the 519-721 range. The class does cohabit element-registry, command exec/undo, action registry, flow control, RNG, player mgmt, serialization, debugging, and animation concerns, and via `extends Space` designer subclasses do inherit the full container surface (create/all/first/etc). So the description is accurate, not exaggerated.\n\nHowever, this is a maintainability/architecture observation, not a defect: nothing here causes incorrect behavior, data loss, or security issues. Two points temper the claimed 'medium' severity: (1) `Game extends Space` is an intentional and idiomatic design for board-game engines — the game IS the root container/space, so inheriting the container API is by design, not accidental leakage; (2) the responsibilities are documented with extensive JSDoc and the override surface is signposted (static playerView/PlayerClass, registerElements, setFlow). The strongest legitimate extraction candidate is the dev-only proxy/volatile-state machinery (519-721), which is genuinely orthogonal plumbing. Real concern, but its impact is stylistic/long-term-maintenance rather than functional, so I rate it low.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="usability" data-sev="low" data-ease="easy" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F22</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Merged to main — 70641c7107c13cbbfc7e67ef5731d21e3c21eec7">✅ Fixed · 70641c7107c13cbbfc7e67ef5731d21e3c21eec7</span>
+          <span class="badge sev-low">Low</span>
+          <span class="badge cat cat-usability">Usability</span>
+          <span class="badge ease-easy">easy</span>
+          <span class="badge conf-medium">conf: medium</span>
+          <span class="badge gi-count">1 game impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Element matching uses OR across id/name/notation — can select/highlight the WRONG element when names or notations collide</h3>
+        <div class="sevnote">judge said <em>medium</em>, verifier set <strong>low</strong></div>
+        <div class="merge-note">Merged to <code>main</code> as <code>70641c7107c13cbbfc7e67ef5731d21e3c21eec7</code> — Element matching uses OR across id/name/notation — can select/highlight the WRONG element when names or notations collide</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">Identifier precedence is silently wrong: when a precise id is present it should win, and name/notation should only be fallbacks when id is absent. As written, any duplicate-named elements (very common: 'Militia', 'Pawn', 'Worker') create cross-talk between board clicks/highlights and the action being built.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A designer who follows the docs and returns a rich `{ id, name }` boardRef (more info = better, they'd assume) actually introduces a selection bug that's intermittent and hard to trace — the board highlights/acts on the wrong piece only when names collide. The 'more descriptive' path is the buggy path.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Make matchesRef precedence-based: if ref.id !== undefined, match by id ONLY; else fall back to notation, then name. <code>useBoardInteraction.ts:206-211</code>.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 0 affected, 1 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">Confirm exact precedence semantics. If id takes precedence over notation in matchesRef, the board's isHighlighted/isSelected (which pass notation only) will stop matching id-bearing action refs, breaking panel→board highlight/selection sync. Fix by passing the element id in those checks, or having the action emit notation-only refs for squares.<details class="gi-ev"><summary>evidence</summary><div class="mono">Board checks panel state by notation ONLY: <code>CheckersBoard.vue:442</code> `boardInteraction.isHighlighted({ notation })` and :449 `boardInteraction.isSelected({ notation })`. But the action registers refs that carry id: <code>src/rules/actions.ts:106-111</code> boardRef `{ id: piece.id, notation }` and :136-146 boardRefs sourceRef/targetRef with `{ id: ..., notation }`. Current matchesRef (<code>src/ui/composables/useBoardInteraction.ts:206-209</code>) ORs id||name||notation; precedence (id wins) means a notation-only element compared against an id-bearing ref would no longer fall through to notation. selectElement also passes both: <code>CheckersBoard.vue:457</code> `{ id: pieceId, notation }`.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>useBoardInteraction.ts:206-211</code> `matchesRef`: `if (ref.id !== undefined &amp;&amp; element.id === ref.id) return true; if (ref.name &amp;&amp; element.name === ref.name) return true; if (ref.notation &amp;&amp; element.notation === ref.notation) return true;`. Because branches are independent ORs, a ref that carries BOTH id and name (e.g. boardRef returns `{ id: 5, name: 'Militia' }`) will match a DIFFERENT element with id 8 but name 'Militia' via the name branch. triggerElementSelect (line 279-285) then fires `state.onElementSelect(validElem.id)` using the ref's id (5), so clicking piece 8 selects piece 5.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">The cited code is accurate. `matchesRef` (<code>useBoardInteraction.ts:206-211</code>) is a flat OR across id/name/notation with no precedence: `if (ref.id !== undefined &amp;&amp; element.id === ref.id) return true; if (ref.name &amp;&amp; element.name === ref.name) return true; if (ref.notation &amp;&amp; element.notation === ref.notation) return true;`. It is used by isHighlighted, isSelected, isValidTarget, isSelectableElement, isDisabledElement, triggerElementSelect (line 281), and isDropTarget — so a false match affects selection, highlight, disabled, and drop logic. triggerElementSelect uses `state.validElements.find(ve =&gt; matchesRef(element, ve.ref))` then fires `state.onElementSelect(validElem.id)`, so a name/notation match on a ref belonging to a different element does cause selection of the wrong element id.
+
+The claim's two premises both hold in this codebase: (1) duplicate names are a normal, common pattern — `createMany` (<code>game-element.ts:328-342</code>) assigns the SAME `name` to every element it creates, and names are not enforced unique (<code>game-element.ts:53</code>, just an optional field). (2) boardRef returning BOTH id and name is a real, used pattern: <code>BoardSmithGames/polyhedral-potions/src/rules/actions.ts:272</code>,285,380 literally do `boardRef: (die) =&gt; ({ id: die.id, name: die.name })`. With such a ref plus duplicate names, the name branch matches a different-id element, and <code>find()</code> returns the wrong validElem (or the first colliding one), so id is silently not authoritative — exactly the described cross-talk.
+
+Caveats reducing severity: the specific example is partly hypothetical. No shipping example game actually triggers it — polyhedral-potions uses {id,name} refs but its 7 dice all have unique names ('d4','d6',...), so no collision occurs; the default ref (<code>pick-handler.ts:387-390</code>) is {id} or {id,notation} and never adds name. The bug requires an author to opt into a multi-identifier ref where a non-id identifier collides. So it is a genuine latent logic/Pit-of-Success defect (a natural ref shape becomes a footgun, id should win when present) but is conditional and not currently producing wrong behavior in any existing game.</div>
       </details>
     </div>
   </article>

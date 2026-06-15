@@ -67,6 +67,10 @@
     "F20": {
       "sha": "43e1a91",
       "desc": "point unknown-action flow warning at the real registration API"
+    },
+    "F22": {
+      "sha": "70641c7107c13cbbfc7e67ef5731d21e3c21eec7",
+      "desc": "Element matching uses OR across id/name/notation — can select/highlight the WRONG element when names or notations collide"
     }
   },
   "blocked": [
@@ -91,6 +95,7 @@
     "F15": "merged",
     "F27": "merged",
     "F20": "merged",
+    "F22": "merged",
     "F8": "blocked",
     "F9": "blocked"
   }
