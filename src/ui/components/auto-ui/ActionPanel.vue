@@ -13,7 +13,7 @@
  * Requires: ActionPanel must be used inside a GameShell context where the
  * action controller is provided via inject('actionController').
  */
-import { ref, computed, watch, inject } from 'vue';
+import { ref, computed, watch, inject, nextTick } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import type {
@@ -677,15 +677,24 @@ watch(currentAction, (action) => {
 }, { immediate: true });
 
 // Watch for external cancellation via boardInteraction.clear() from custom UI
-// This syncs ActionPanel's internal state when custom UI calls cancelAction
+// This syncs ActionPanel's internal state when custom UI calls cancelAction.
 watch(() => boardInteraction?.currentAction, (boardAction) => {
-  // If boardInteraction action was cleared but we still have an action, sync the cancel
-  if (boardAction === null && currentAction.value !== null) {
-    // This was externally cleared (e.g., by custom UI cancel button)
-    // Reset ActionPanel's internal state to match (cancel also clears the draft)
-    actionController.cancel();
-    emit('cancelSelection');
-  }
+  if (boardAction !== null || currentAction.value === null) return;
+
+  // boardInteraction.currentAction went null while the controller still holds an action.
+  // This looks like an external/custom-UI cancel — BUT it ALSO happens transiently during
+  // a normal action-end → next-action-start transition (the controller→board sync clears
+  // then re-establishes boardInteraction.currentAction across batched watcher flushes).
+  // Cancelling here on the transient wipes a freshly auto-started action (the cribbage
+  // "second play won't auto-advance" bug). Defer to nextTick and re-check once the reactive
+  // state has settled: only a GENUINE external cancel leaves the board still cleared.
+  const actionAtClear = currentAction.value;
+  void nextTick(() => {
+    if (currentAction.value === actionAtClear && boardInteraction?.currentAction == null) {
+      actionController.cancel();
+      emit('cancelSelection');
+    }
+  });
 });
 
 // Watch for board element selection - handle element selection from board clicks

@@ -167,6 +167,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // === State ===
   const currentAction = ref<string | null>(null);
+  // Monotonic id bumped whenever an action begins. Guards against a stale async
+  // execute()/executeCurrentAction cleanup clearing a NEWER action that was started
+  // during its await — the cross-turn auto-start race that left the started action
+  // (and its fetched choices) wiped, so the panel could never render the picker.
+  let actionStartSeq = 0;
 
   // Args storage for the in-progress action.
   // Use fill/start/clear to keep collectedPicks snapshot and args in sync.
@@ -630,6 +635,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return currentPick.value === null;
   });
 
+
   /**
    * Reactive valid elements for the current pick.
    * This is the "pit of success" for custom UIs - just use this computed directly.
@@ -767,6 +773,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const actionName = currentAction.value;
     const args = buildServerArgs();
+    const seq = actionStartSeq;
 
     isExecuting.value = true;
     lastError.value = null;
@@ -778,10 +785,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         lastError.value = result.error || 'Action failed';
       }
 
-      // Clear state on success or failure
-      currentAction.value = null;
-      clearArgs();
-      clearAdvancedState();
+      // Clear state on success or failure — but only if no NEWER action started
+      // during the await (otherwise we'd clobber a freshly auto-started action).
+      if (actionStartSeq === seq) {
+        currentAction.value = null;
+        clearArgs();
+        clearAdvancedState();
+      }
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
@@ -806,6 +816,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!availableActions.value?.includes(actionName)) {
       return { success: false, error: `Action "${actionName}" is not available` };
     }
+
+    // Snapshot the action-start seq so the post-send cleanup below won't clobber a
+    // newer action that auto-started during the await (cross-turn race).
+    const seq = actionStartSeq;
 
     const meta = getActionMetadata(actionName);
 
@@ -835,10 +849,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (!result.success) {
           lastError.value = result.error || 'Action failed';
         }
-        // Executing resolves the action — clear in-progress state (see note below).
-        currentAction.value = null;
-        clearArgs();
-        clearAdvancedState();
+        // Executing resolves the action — clear in-progress state, unless a newer
+        // action started during the await (see note below).
+        if (actionStartSeq === seq) {
+          currentAction.value = null;
+          clearArgs();
+          clearAdvancedState();
+        }
         return result;
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Action failed';
@@ -900,11 +917,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Executing an action resolves it — clear any in-progress action state, exactly
       // like executeCurrentAction(). Without this, a custom UI that calls execute()
       // while the ActionPanel auto-started the SAME action (e.g. cribbage's play card)
-      // leaves currentAction stale, which blocks the next auto-start (the action never
-      // "ends" from the controller's perspective).
-      currentAction.value = null;
-      clearArgs();
-      clearAdvancedState();
+      // leaves currentAction stale, which blocks the next auto-start. But only clear if
+      // no newer action started during the await, or we'd wipe a freshly-started one.
+      if (actionStartSeq === seq) {
+        currentAction.value = null;
+        clearArgs();
+        clearAdvancedState();
+      }
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
@@ -943,6 +962,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     currentAction.value = actionName;
+    actionStartSeq++;
     clearArgs();
     clearAdvancedState();
     // A followUp action is, by definition, NOT in availableActions (it's gated by
@@ -1030,6 +1050,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     currentAction.value = actionName;
+    actionStartSeq++;
     clearArgs();
     clearAdvancedState();
     Object.assign(currentArgs.value, initialArgs);
