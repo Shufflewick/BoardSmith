@@ -316,13 +316,18 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
 
     // DEV: Track visited elements to detect tree corruption (only at top level)
     const visitedIds = isDevMode() ? new Set<number>() : null;
-    const duplicates: Array<{ id: number; name: string; depth: number }> = [];
+    // Record where each id was first seen so a duplicate can report BOTH tree
+    // locations (the two parents an element is wrongly reachable from, or the two
+    // colliding instances) — name/id alone can't tell you where to fix it.
+    const firstSeenUnder = isDevMode() ? new Map<number, string>() : null;
+    const duplicates: Array<{ id: number; name: string; depth: number; firstPath: string; dupPath: string }> = [];
 
     // Convert finders to predicate functions
     const predicates = finders.map((finder) => this.finderToPredicate<F>(finder));
 
-    // Recursive traversal function
-    const traverse = (elements: GameElement[], order: 'asc' | 'desc', depth: number) => {
+    // Recursive traversal function. `parentPath` labels the container the current
+    // elements live under, so a detected duplicate can name both occurrences.
+    const traverse = (elements: GameElement[], order: 'asc' | 'desc', depth: number, parentPath: string) => {
       const items = order === 'desc' ? [...elements].reverse() : elements;
 
       for (const el of items) {
@@ -331,10 +336,17 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
         // DEV: Check for tree corruption (element visited multiple times)
         if (visitedIds) {
           if (visitedIds.has(el.id)) {
-            duplicates.push({ id: el.id, name: el.name ?? el.constructor.name, depth });
+            duplicates.push({
+              id: el.id,
+              name: el.name ?? el.constructor.name,
+              depth,
+              firstPath: firstSeenUnder!.get(el.id) ?? '?',
+              dupPath: parentPath,
+            });
             continue; // Skip duplicate to prevent infinite loops
           }
           visitedIds.add(el.id);
+          firstSeenUnder!.set(el.id, parentPath);
         }
 
         // Check if element matches class and all predicates
@@ -351,12 +363,12 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
 
         // Recurse into children unless disabled
         if (!options.noRecursive && el._t.children.length > 0) {
-          traverse(el._t.children, order, depth + 1);
+          traverse(el._t.children, order, depth + 1, `${el.name ?? el.constructor.name}#${el.id}`);
         }
       }
     };
 
-    traverse(this as unknown as GameElement[], options.order ?? 'asc', 0);
+    traverse(this as unknown as GameElement[], options.order ?? 'asc', 0, '<root>');
 
     // DEV: Log if duplicates were found (indicates tree corruption)
     if (visitedIds && duplicates.length > 0) {
@@ -365,9 +377,9 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
       const more = duplicates.length > 5 ? ` (and ${duplicates.length - 5} more)` : '';
       console.error(
         `[BoardSmith] 🚨 TREE CORRUPTION: ${duplicates.length} duplicate element visits detected!\n` +
-        shown.map(d => `  - ${d.name} (id: ${d.id}) at depth ${d.depth}`).join('\n') + more + '\n' +
-        `  This indicates elements exist in multiple places in the tree.\n` +
-        `  Call game.validateTree() to diagnose.`
+        shown.map(d => `  - ${d.name} (id: ${d.id}) reachable under BOTH "${d.firstPath}" and "${d.dupPath}" (depth ${d.depth})`).join('\n') + more + '\n' +
+        `  An element is parented in two places (or two elements share an id).\n` +
+        `  The two container labels above are where to look.`
       );
     }
 

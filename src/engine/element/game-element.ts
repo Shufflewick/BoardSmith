@@ -804,6 +804,25 @@ export class GameElement<G extends Game = any, P extends Player = any> {
         return value.map((v, i) => this.serializeValue(v, `${path}[${i}]`, ancestors, depth + 1));
       }
 
+      // Map / Set: Object.entries() returns [] for these, so a naive "plain
+      // object" pass would silently serialize them to {} — losing every entry and
+      // their methods on restore. Encode as tagged shapes that deserializeValue
+      // rebuilds back into a real Map/Set. Keys and values recurse so element /
+      // player references inside them still resolve.
+      if (value instanceof Map) {
+        return {
+          __map: [...value.entries()].map(([k, v], i) => [
+            this.serializeValue(k, `${path}.<key:${i}>`, ancestors, depth + 1),
+            this.serializeValue(v, `${path}.<val:${i}>`, ancestors, depth + 1),
+          ]),
+        };
+      }
+      if (value instanceof Set) {
+        return {
+          __set: [...value].map((v, i) => this.serializeValue(v, `${path}.<item:${i}>`, ancestors, depth + 1)),
+        };
+      }
+
       // Plain object
       const result: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
@@ -872,6 +891,18 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Handle already-resolved GameElements (return as-is, don't walk their properties)
     if (value instanceof GameElement) {
       return value;
+    }
+
+    // Rebuild Map / Set from the tagged shapes serializeValue produced.
+    if (typeof value === 'object' && value !== null && '__map' in value) {
+      const entries = (value as { __map: [unknown, unknown][] }).__map;
+      return new Map(
+        entries.map(([k, v]) => [this.deserializeValue(k, game), this.deserializeValue(v, game)]),
+      );
+    }
+    if (typeof value === 'object' && value !== null && '__set' in value) {
+      const items = (value as { __set: unknown[] }).__set;
+      return new Set(items.map((item) => this.deserializeValue(item, game)));
     }
 
     // Handle arrays
