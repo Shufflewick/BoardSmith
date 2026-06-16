@@ -18,6 +18,7 @@ import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
+import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useToast } from '../composables/useToast';
@@ -442,6 +443,17 @@ async function handleUndo(): Promise<void> {
 // Board interaction state (shared between ActionPanel and game board)
 const boardInteraction = createBoardInteraction();
 provideBoardInteraction(boardInteraction);
+
+// Drag-and-drop orchestration (audit F36): derive drop targets generically from
+// the action controller's current pick for ANY action shape, wired once here so
+// the Action Panel AND custom UIs consume the same targets via useBoardInteraction.
+setupDragDropOrchestration({
+  boardInteraction,
+  actionController,
+  availableActions,
+  actionMetadata,
+  isMyTurn,
+});
 
 // Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards
 const { previewState } = useZoomPreview();

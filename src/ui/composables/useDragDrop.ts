@@ -2,7 +2,23 @@
  * useDragDrop - Composable for drag-and-drop in custom UIs
  *
  * Call once at setup, returns functions that work with any element.
- * ActionPanel's existing watch on isDragging handles orchestration automatically.
+ *
+ * Drop targets are wired automatically: GameShell sets up a single shared
+ * drag-drop orchestration (see {@link ./useDragDropTargets}) that watches
+ * `isDragging` and derives drop targets generically from the action controller's
+ * CURRENT pick — for ANY action shape, and identically for the Action Panel and
+ * custom UIs (which both read targets through `useBoardInteraction`). You only
+ * mark what is draggable (`drag`) and what can receive a drop (`drop`); the
+ * orchestration decides which drops are valid based on the in-progress action.
+ *
+ * Supported action shapes (a drag completes an action by dropping onto a board
+ * target):
+ *   - element -> element            (drag piece, drop onto a valid target element)
+ *   - element -> elements           (drop onto any valid element of a multi-pick)
+ *   - element -> choice WITH filterBy    (destinations narrowed by the dragged piece)
+ *   - element -> choice WITHOUT filterBy (any choice carrying a targetRef)
+ * For choice destinations, each choice must carry a `targetRef` so the board
+ * knows which element the choice maps to.
  *
  * ## Quick Start (Pit of Success API)
  *
