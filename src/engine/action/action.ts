@@ -850,14 +850,33 @@ export class ActionExecutor {
       };
     }
 
-    // Fire onSelect for each selection that has it (before execute)
+    // Fire onSelect for each selection that has it (before execute).
+    // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
+    // any selections whose onSelect already ran, then return failure WITHOUT
+    // committing the action via execute().
     const onSelectCtx = this.createOnSelectContext();
+    const firedSelections: Selection[] = [];
     for (const selection of action.selections) {
       if (selection.onSelect && resolvedArgs[selection.name] != null) {
         try {
           (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx);
+          firedSelections.push(selection);
         } catch (error) {
-          console.error(`[BoardSmith] onSelect for '${selection.name}' in action '${action.name}' threw:`, error);
+          const message = error instanceof Error ? error.message : String(error);
+          // Compensate: run onCancel for selections whose onSelect already fired.
+          for (const fired of firedSelections) {
+            if (fired.onCancel) {
+              try {
+                fired.onCancel(onSelectCtx);
+              } catch (cancelError) {
+                console.error(`[BoardSmith] onCancel for '${fired.name}' threw during abort:`, cancelError);
+              }
+            }
+          }
+          return {
+            success: false,
+            error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
+          };
         }
       }
     }
@@ -1336,7 +1355,14 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
       } catch (error) {
-        console.error(`[BoardSmith] onSelect for '${selection.name}' threw:`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
+        // selections whose onSelect already fired, then return an error.
+        this.fireOnCancelCallbacks(action, pendingState);
+        return {
+          done: false,
+          error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
+        };
       }
     }
 
@@ -1535,7 +1561,10 @@ export class ActionExecutor {
     // Store the resolved value so downstream dependsOn filters see GameElements, not raw IDs
     pendingState.collectedArgs[selectionName] = resolvedValue;
 
-    // Fire onSelect if defined
+    // Fire onSelect if defined.
+    // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
+    // any selections whose onSelect already ran, then return failure. The caller
+    // discards the pending action rather than committing it.
     if (selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
@@ -1547,7 +1576,13 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(selectionIndex);
       } catch (error) {
-        console.error(`[BoardSmith] onSelect for '${selection.name}' threw:`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        // Compensate: run onCancel for selections whose onSelect already fired.
+        this.fireOnCancelCallbacks(action, pendingState);
+        return {
+          success: false,
+          error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
+        };
       }
     }
 

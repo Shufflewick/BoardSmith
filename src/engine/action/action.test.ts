@@ -1957,6 +1957,99 @@ describe('onSelect in executeAction', () => {
   });
 });
 
+// Regression test for audit2 F35: a throwing onSelect must FAIL LOUD — abort the
+// action, fire onCancel for selections whose onSelect already fired, and never
+// commit (execute() must not run).
+describe('onSelect throwing aborts the action (F35)', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  it('aborts execute(), returns an actionable error, and fires onCancel (executeAction path)', () => {
+    const events: string[] = [];
+    let executed = false;
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: () => { events.push('onSelect:color'); },
+        onCancel: () => { events.push('onCancel:color'); },
+      })
+      .chooseFrom('size', {
+        choices: ['S', 'M', 'L'],
+        onSelect: () => { throw new Error('size hook blew up'); },
+        onCancel: () => { events.push('onCancel:size'); },
+      })
+      .execute(() => { executed = true; });
+
+    const player = game.getPlayer(1)!;
+    const result = executor.executeAction(action, player, { color: 'red', size: 'M' });
+
+    expect(result.success).toBe(false);
+    // Actionable: names the offending selection, the action, and the original message.
+    expect(result.error).toContain("'size'");
+    expect(result.error).toContain("'test'");
+    expect(result.error).toContain('size hook blew up');
+    // execute() must NOT run (action not committed).
+    expect(executed).toBe(false);
+    // onCancel fired for the selection whose onSelect already ran; the throwing
+    // selection's own onSelect never completed so its onCancel does not fire.
+    expect(events).toEqual(['onSelect:color', 'onCancel:color']);
+  });
+
+  it('a normal (non-throwing) onSelect still proceeds and commits', () => {
+    const events: string[] = [];
+    let executed = false;
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: () => { events.push('onSelect:color'); },
+        onCancel: () => { events.push('onCancel:color'); },
+      })
+      .execute(() => { executed = true; });
+
+    const player = game.getPlayer(1)!;
+    const result = executor.executeAction(action, player, { color: 'red' });
+
+    expect(result.success).toBe(true);
+    expect(executed).toBe(true);
+    expect(events).toEqual(['onSelect:color']); // onCancel NOT fired
+  });
+
+  it('aborts and fires onCancel when a later step onSelect throws (step path)', () => {
+    const events: string[] = [];
+    const action = Action.create('test')
+      .chooseFrom('color', {
+        choices: ['red', 'blue'],
+        onSelect: () => { events.push('onSelect:color'); },
+        onCancel: () => { events.push('onCancel:color'); },
+      })
+      .chooseFrom('size', {
+        choices: ['S', 'M', 'L'],
+        onSelect: () => { throw new Error('size hook blew up'); },
+        onCancel: () => { events.push('onCancel:size'); },
+      })
+      .execute(() => {});
+
+    const player = game.getPlayer(1)!;
+    const pendingState = executor.createPendingActionState('test', 1);
+
+    // First selection succeeds (onSelect:color fires).
+    const step1 = executor.processSelectionStep(action, player, pendingState, 'color', 'red');
+    expect(step1.success).toBe(true);
+
+    // Second selection's onSelect throws → abort with actionable error + onCancel.
+    const step2 = executor.processSelectionStep(action, player, pendingState, 'size', 'M');
+    expect(step2.success).toBe(false);
+    expect(step2.error).toContain("'size'");
+    expect(step2.error).toContain('size hook blew up');
+    expect(events).toEqual(['onSelect:color', 'onCancel:color']);
+  });
+});
+
 // Regression test for F23/F28: the three overlapping element-selection methods
 // (chooseFrom / chooseElement / fromElements) collapsed to a single canonical
 // pair — chooseElement (one) and chooseElements (many). fromElements is removed.
