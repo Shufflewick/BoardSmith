@@ -150,11 +150,11 @@
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">47</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">48</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">5</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">4</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">0</div><div class="l">High (active)</div></div>
-    <div class="stat s-medium"><div class="n">4</div><div class="l">Medium (active)</div></div>
+    <div class="stat s-medium"><div class="n">3</div><div class="l">Medium (active)</div></div>
     <div class="stat s-gi"><div class="n">8</div><div class="l">Impact games</div></div>
   </div>
 
@@ -240,7 +240,7 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 5 of 52 — 47 fixed, moved to bottom)</span></h2>
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 4 of 52 — 48 fixed, moved to bottom)</span></h2>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -273,95 +273,9 @@
 
   <div id="findings">
     
-  <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="easy" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F33</span>#1</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-medium">Medium</span>
-          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
-          <span class="badge ease-easy">easy</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">8 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>loop()'s maxIterations safety limit silently completes the loop instead of failing loud</h3>
-        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A designer follows the documented advice and adds `maxIterations: 100` to silence the warning. If their `while` predicate has a bug and never becomes false, the loop stops silently at 100 and the flow proceeds as though the loop finished normally — producing an invalid game state (e.g. a round that should have continued just ends) with zero diagnostics.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The recommended 'safety limit' converts a loud, debuggable infinite-loop into a silent wrong-state. The guidance leads designers toward the value that hides the bug; the loud global guard (10000 iters) is the only thing that ever surfaces a problem, and an explicit small maxIterations suppresses even that.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">In executeLoop (<code>flow/engine.ts:1035</code>), when the limit is hit, throw (or at minimum devWarn loudly) with the loop name and iteration count — only treat `while` returning false as clean completion. Distinguish 'hit safety cap' from 'condition satisfied' so the cap behaves like an assertion, not a normal exit.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 0 affected, 8 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">checkers</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">After the fix, hitting a loop's maxIterations cap throws/devWarns loudly instead of silently completing. The move-loop (cap 20) is safe under normal play (max ~9 multi-jumps + endTurn). The game-loop (cap 500 rounds) is the real exposure: checkers implements no draw/repetition rule, so a king-shuffle stalemate (notably in AI self-play) could run past 500 rounds and would now throw a runtime error instead of quietly ending. Verify by running long/AI-vs-AI games; if the cap can trip, add a real termination condition (draw-by-repetition / no-progress detection) so the now-loud cap behaves as a true assertion rather than a normal exit, or consciously raise/remove the cap. No API signature change — maxIterations is still accepted.<details class="gi-ev"><summary>evidence</summary><div class="mono">/<code>Users/jtsmith/BoardSmithGames/checkers/src/rules/flow.ts:103</code> (game-loop maxIterations: 500) and :63 (move-loop maxIterations: 20)</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">cribbage</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">No code change expected: both loops terminate via their `while` condition (game finished / all cards played) far below 100 iterations, so the new throw-on-cap behavior is never reached in normal play. Confirm no edge case (e.g., a Go-handling stall) can spin the play-loop to the cap, since hitting it will now throw instead of silently completing.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/cribbage/src/rules/flow.ts:1250</code> (play-loop maxIterations: 100) and <code>flow.ts:1427</code> (game-loop maxIterations: 100)</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-action-panel</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">After the fix, hitting the maxIterations safety cap throws (or loudly warns) instead of silently completing the loop. This game's whole purpose is letting a user repeatedly click through demo actions (optionalDemo, disabledDemo, enterNumber, etc.) that do NOT defeat enemies, so <code>isFinished()</code> can stay false for well over 100 player-actions. Under the new behavior that exploratory session would now error out at iteration 100. Mitigate by raising maxIterations substantially (or removing the cap / restructuring the while-condition) so the demo's open-ended clicking does not trip the assertion.<details class="gi-ev"><summary>evidence</summary><div class="mono">/<code>Users/jtsmith/BoardSmithGames/demo-action-panel/src/rules/flow.ts:26</code> (loop({ name: 'game-loop', while: () =&gt; !<code>game.isFinished()</code>, maxIterations: 100, ... }))</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">F33 changes the maxIterations cap from a silent clean completion into a thrown error. This sandbox relies on the cap as its only terminator, so after 10000 actions the game would throw instead of quietly ending. Reaching that count is improbable in a demo, but the design depends on the silent-cap behavior; the game should give a real termination condition (or raise/relocate the bound) rather than rely on the cap.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/flow.ts</code>: loop({ name:'game-loop', while: () =&gt; !<code>game.isFinished()</code>, maxIterations: 10000, ... }) combined with <code>src/rules/game.ts</code> <code>isFinished()</code> which always returns false, so the loop is intentionally infinite and bounded only by the maxIterations safety cap.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-complex-ui</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">The game relies on <code>isFinished()</code> as the real terminator and treats maxIterations:1000 as a silent safety cap. After the fix the cap throws instead of completing cleanly. Normal 2-player play ends well under the cap, but pathological loops (e.g. players repeatedly trading without depleting the deck) that currently end silently would now raise. Confirm the demo always terminates via <code>isFinished()</code> before 1000 iterations, or raise/justify the cap.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/demo-complex-ui/src/rules/flow.ts:191-194</code> — loop({ name:'game-loop', while:()=&gt;!<code>game.isFinished()</code>, maxIterations:1000, ... }); engine currently silently completes at the cap (<code>flow/engine.ts:1034-1037</code>)</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">go-fish</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Behavior of <code>loop()</code>'s maxIterations changes from silent completion to throwing/loud-warning when the cap is hit (<code>engine/flow/engine.ts:1035</code>). Go-fish must confirm both loops always exit via their while-condition (turn-loop: turnEnded/isFinished/empty-hand; game-loop: !isFinished) before the cap — which they do in correct play, so most likely no code change is needed, but the safety caps now behave like assertions rather than graceful exits and should be treated as unreachable. No edit required unless a degenerate game (e.g. pond+hands exhausted without 13 books) could legitimately run a loop to its cap, in which case the thrown error would need handling.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/go-fish/src/rules/flow.ts:581</code> (turn-loop maxIterations: 52) and <code>flow.ts:615</code> (game-loop maxIterations: 1000)</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">hex</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">After the fix makes <code>loop()</code> throw (instead of silently completing) when maxIterations is hit, confirm hex's game-loop still exits cleanly via while=false. It does in normal play: a size-N board fills at N*N cells (49 for default 7x7) -&gt; ~25 loop iterations, far under the 100 cap, so <code>isFinished()</code> returns true and while returns false before the cap. No code change expected; this is a verify-only item. Optionally the now-redundant maxIterations:100 could stay as a harmless safety net.<details class="gi-ev"><summary>evidence</summary><div class="mono">/<code>Users/jtsmith/BoardSmithGames/hex/src/rules/flow.ts</code> loop({ name: 'game-loop', while: ctx =&gt; !<code>game.isFinished()</code>, maxIterations: 100, ... })</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">F33 makes a hit maxIterations cap THROW instead of silently completing. MERC must audit every capped loop in <code>flow.ts</code> to confirm none reach the cap as a normal exit (especially the maxIterations:1 coordinated-attack loop), and raise/restructure any that do. Re-pack and re-install the vendored tarball after the engine change.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/flow.ts</code> has 20+ loops with safety caps (maxIterations: 50/20/10/5/1000/200), and at least one where the cap doubles as control flow: <code>flow.ts:744-747</code> coordinated-attack-response loop has while: () =&gt; game.coordinatedAttack !== null with maxIterations: 1; <code>flow.ts:749-751</code> epinephrine loop maxIterations: 10.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">executeLoop (<code>flow/engine.ts:1031-1038</code>): when `iteration &gt;= maxIterations` it sets `frame.completed = true` and returns `{ continue: true }` with no warning or error — identical handling to the normal `while`-became-false termination at <code>engine.ts:1040-1043</code>. By contrast the global runaway guard in <code>run()</code> (<code>engine.ts:907-927</code>) throws a detailed error. Designers are actively nudged to add maxIterations: <code>builders.ts:95-104</code> warns 'loop(...) has no maxIterations set' and tells them to 'Add maxIterations to set a safety limit: loop({ maxIterations: 100, ... })'.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">All citations verified on current source. executeLoop (<code>engine.ts:1035-1038</code>) silently sets frame.completed=true and returns {continue:true} when iteration&gt;=maxIterations — identical handling to the natural while-false termination at 1040-1043, with no warning or error. The global guard in <code>run()</code> (<code>engine.ts:907-927</code>) DOES throw a detailed infinite-loop error at iterations&gt;DEFAULT_MAX_ITERATIONS (=10000, <code>engine.ts:30</code>). <code>builders.ts:95-106</code> emits a devWarn telling designers to add maxIterations:100 as a 'safety limit'. The pit-of-success concern is real: because each loop iteration consumes several <code>run()</code> iterations, the loud global guard normally fires first when no explicit maxIterations is set; but once a designer follows the documented advice and sets a small explicit maxIterations, executeLoop terminates silently before the global guard can trip. A buggy while predicate that never goes false then stops silently at the limit and the flow proceeds with invalid state and zero diagnostics — the recommended remedy converts a loud failure into a silent one. I lower severity from high to medium: it only manifests when the while condition is already buggy, and loop legitimately supports maxIterations-as-count (so unconditionally throwing isn't trivially correct), making this a debuggability/observability defect rather than a correctness regression of well-written code. A distinct log/warning when the explicit maxIterations safety limit is actually reached would resolve it.</div>
-      </details>
-    </div>
-  </article>
-
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F42</span>#2</div>
+      <div class="rank"><span class="fid">F42</span>#1</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -421,7 +335,7 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F36</span>#3</div>
+      <div class="rank"><span class="fid">F36</span>#2</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -471,7 +385,7 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F35</span>#4</div>
+      <div class="rank"><span class="fid">F35</span>#3</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -525,7 +439,7 @@ Severity medium rather than high: triggering requires a bug inside user-supplied
 
   <article class="card fx-open" data-cat="pit-of-success" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
     <div class="card-head">
-      <div class="rank"><span class="fid">F40</span>#5</div>
+      <div class="rank"><span class="fid">F40</span>#4</div>
       <div class="head-main">
         <div class="badges">
           <span class="badge fx-open">○ Open</span>
@@ -575,7 +489,7 @@ Severity medium rather than high: triggering requires a bug inside user-supplied
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(47 fixed — moved here, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(48 fixed — moved here, kept for the record)</span></span></h2>
   <p class="section-note">Each was fixed in an isolated worktree (self-verified with <code>tsc</code> + <code>vitest run</code> + lint), gated against all 9 game suites for zero impact, and merged to <code>main</code> with docs updated inline.</p>
   <div id="completed-list">
     
@@ -1037,6 +951,92 @@ The entire canonical AI-integration snippet cannot compile: private constructor 
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Confirmed against current source. <code>docs/api/runtime.md:78</code> and 217-219 call runner.executeAction({ action, player, args }) with an object literal; line 222 calls <code>runner.getActionHistory()</code>; line 226 calls runner.getStateAt(2). Grep of <code>src/runtime/runner.ts</code> for executeAction|getActionHistory|getStateAt returns 0 hits — the only match is performAction (line 121) and an internal usage (line 274). The real signature at <code>runner.ts:121-125</code> is performAction(actionName: string, player: Player | number, args: Record&lt;string, unknown&gt;): ActionExecutionResult — positional arguments, not an object literal, and the method is named performAction not executeAction. getActionHistory and getStateAt do not exist on GameRunner. Both 'Using GameRunner' and 'Runner with Action History' examples are fully broken: wrong method name, wrong calling convention, and two phantom methods. Finding is real and accurately cited. I lower severity from high to medium: this is documentation-only (no shipped code bug), and the doc itself notes runtime is consumed internally by client/server, so the direct-integrator audience is narrow; still a genuine copy-paste-fails reference error.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="pit-of-success" data-sev="medium" data-ease="easy" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F33</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Fixed &amp; merged to main — e2eec8e">✅ Fixed · e2eec8e</span>
+          <span class="badge sev-medium">Medium</span>
+          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
+          <span class="badge ease-easy">easy</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">8 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>loop()'s maxIterations safety limit silently completes the loop instead of failing loud</h3>
+        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Fixed &amp; merged to <code>main</code> as <code>e2eec8e</code> — <code>loop()</code> now throws an actionable error when the maxIterations safety cap is hit instead of silently completing (fail loud). All 8 games terminate via real while conditions (no change). MERC re-vendored: caught a real bug — extra-militia-loop abused the cap as terminator, fixed (3ab264a).</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A designer follows the documented advice and adds `maxIterations: 100` to silence the warning. If their `while` predicate has a bug and never becomes false, the loop stops silently at 100 and the flow proceeds as though the loop finished normally — producing an invalid game state (e.g. a round that should have continued just ends) with zero diagnostics.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The recommended 'safety limit' converts a loud, debuggable infinite-loop into a silent wrong-state. The guidance leads designers toward the value that hides the bug; the loud global guard (10000 iters) is the only thing that ever surfaces a problem, and an explicit small maxIterations suppresses even that.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">In executeLoop (<code>flow/engine.ts:1035</code>), when the limit is hit, throw (or at minimum devWarn loudly) with the loop name and iteration count — only treat `while` returning false as clean completion. Distinguish 'hit safety cap' from 'condition satisfied' so the cap behaves like an assertion, not a normal exit.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 0 affected, 8 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">checkers</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">After the fix, hitting a loop's maxIterations cap throws/devWarns loudly instead of silently completing. The move-loop (cap 20) is safe under normal play (max ~9 multi-jumps + endTurn). The game-loop (cap 500 rounds) is the real exposure: checkers implements no draw/repetition rule, so a king-shuffle stalemate (notably in AI self-play) could run past 500 rounds and would now throw a runtime error instead of quietly ending. Verify by running long/AI-vs-AI games; if the cap can trip, add a real termination condition (draw-by-repetition / no-progress detection) so the now-loud cap behaves as a true assertion rather than a normal exit, or consciously raise/remove the cap. No API signature change — maxIterations is still accepted.<details class="gi-ev"><summary>evidence</summary><div class="mono">/<code>Users/jtsmith/BoardSmithGames/checkers/src/rules/flow.ts:103</code> (game-loop maxIterations: 500) and :63 (move-loop maxIterations: 20)</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">cribbage</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">No code change expected: both loops terminate via their `while` condition (game finished / all cards played) far below 100 iterations, so the new throw-on-cap behavior is never reached in normal play. Confirm no edge case (e.g., a Go-handling stall) can spin the play-loop to the cap, since hitting it will now throw instead of silently completing.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/cribbage/src/rules/flow.ts:1250</code> (play-loop maxIterations: 100) and <code>flow.ts:1427</code> (game-loop maxIterations: 100)</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-action-panel</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">After the fix, hitting the maxIterations safety cap throws (or loudly warns) instead of silently completing the loop. This game's whole purpose is letting a user repeatedly click through demo actions (optionalDemo, disabledDemo, enterNumber, etc.) that do NOT defeat enemies, so <code>isFinished()</code> can stay false for well over 100 player-actions. Under the new behavior that exploratory session would now error out at iteration 100. Mitigate by raising maxIterations substantially (or removing the cap / restructuring the while-condition) so the demo's open-ended clicking does not trip the assertion.<details class="gi-ev"><summary>evidence</summary><div class="mono">/<code>Users/jtsmith/BoardSmithGames/demo-action-panel/src/rules/flow.ts:26</code> (loop({ name: 'game-loop', while: () =&gt; !<code>game.isFinished()</code>, maxIterations: 100, ... }))</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">F33 changes the maxIterations cap from a silent clean completion into a thrown error. This sandbox relies on the cap as its only terminator, so after 10000 actions the game would throw instead of quietly ending. Reaching that count is improbable in a demo, but the design depends on the silent-cap behavior; the game should give a real termination condition (or raise/relocate the bound) rather than rely on the cap.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/flow.ts</code>: loop({ name:'game-loop', while: () =&gt; !<code>game.isFinished()</code>, maxIterations: 10000, ... }) combined with <code>src/rules/game.ts</code> <code>isFinished()</code> which always returns false, so the loop is intentionally infinite and bounded only by the maxIterations safety cap.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-complex-ui</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">The game relies on <code>isFinished()</code> as the real terminator and treats maxIterations:1000 as a silent safety cap. After the fix the cap throws instead of completing cleanly. Normal 2-player play ends well under the cap, but pathological loops (e.g. players repeatedly trading without depleting the deck) that currently end silently would now raise. Confirm the demo always terminates via <code>isFinished()</code> before 1000 iterations, or raise/justify the cap.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/demo-complex-ui/src/rules/flow.ts:191-194</code> — loop({ name:'game-loop', while:()=&gt;!<code>game.isFinished()</code>, maxIterations:1000, ... }); engine currently silently completes at the cap (<code>flow/engine.ts:1034-1037</code>)</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">go-fish</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Behavior of <code>loop()</code>'s maxIterations changes from silent completion to throwing/loud-warning when the cap is hit (<code>engine/flow/engine.ts:1035</code>). Go-fish must confirm both loops always exit via their while-condition (turn-loop: turnEnded/isFinished/empty-hand; game-loop: !isFinished) before the cap — which they do in correct play, so most likely no code change is needed, but the safety caps now behave like assertions rather than graceful exits and should be treated as unreachable. No edit required unless a degenerate game (e.g. pond+hands exhausted without 13 books) could legitimately run a loop to its cap, in which case the thrown error would need handling.<details class="gi-ev"><summary>evidence</summary><div class="mono">~/<code>BoardSmithGames/go-fish/src/rules/flow.ts:581</code> (turn-loop maxIterations: 52) and <code>flow.ts:615</code> (game-loop maxIterations: 1000)</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">hex</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">After the fix makes <code>loop()</code> throw (instead of silently completing) when maxIterations is hit, confirm hex's game-loop still exits cleanly via while=false. It does in normal play: a size-N board fills at N*N cells (49 for default 7x7) -&gt; ~25 loop iterations, far under the 100 cap, so <code>isFinished()</code> returns true and while returns false before the cap. No code change expected; this is a verify-only item. Optionally the now-redundant maxIterations:100 could stay as a harmless safety net.<details class="gi-ev"><summary>evidence</summary><div class="mono">/<code>Users/jtsmith/BoardSmithGames/hex/src/rules/flow.ts</code> loop({ name: 'game-loop', while: ctx =&gt; !<code>game.isFinished()</code>, maxIterations: 100, ... })</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">F33 makes a hit maxIterations cap THROW instead of silently completing. MERC must audit every capped loop in <code>flow.ts</code> to confirm none reach the cap as a normal exit (especially the maxIterations:1 coordinated-attack loop), and raise/restructure any that do. Re-pack and re-install the vendored tarball after the engine change.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/flow.ts</code> has 20+ loops with safety caps (maxIterations: 50/20/10/5/1000/200), and at least one where the cap doubles as control flow: <code>flow.ts:744-747</code> coordinated-attack-response loop has while: () =&gt; game.coordinatedAttack !== null with maxIterations: 1; <code>flow.ts:749-751</code> epinephrine loop maxIterations: 10.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">executeLoop (<code>flow/engine.ts:1031-1038</code>): when `iteration &gt;= maxIterations` it sets `frame.completed = true` and returns `{ continue: true }` with no warning or error — identical handling to the normal `while`-became-false termination at <code>engine.ts:1040-1043</code>. By contrast the global runaway guard in <code>run()</code> (<code>engine.ts:907-927</code>) throws a detailed error. Designers are actively nudged to add maxIterations: <code>builders.ts:95-104</code> warns 'loop(...) has no maxIterations set' and tells them to 'Add maxIterations to set a safety limit: loop({ maxIterations: 100, ... })'.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">All citations verified on current source. executeLoop (<code>engine.ts:1035-1038</code>) silently sets frame.completed=true and returns {continue:true} when iteration&gt;=maxIterations — identical handling to the natural while-false termination at 1040-1043, with no warning or error. The global guard in <code>run()</code> (<code>engine.ts:907-927</code>) DOES throw a detailed infinite-loop error at iterations&gt;DEFAULT_MAX_ITERATIONS (=10000, <code>engine.ts:30</code>). <code>builders.ts:95-106</code> emits a devWarn telling designers to add maxIterations:100 as a 'safety limit'. The pit-of-success concern is real: because each loop iteration consumes several <code>run()</code> iterations, the loud global guard normally fires first when no explicit maxIterations is set; but once a designer follows the documented advice and sets a small explicit maxIterations, executeLoop terminates silently before the global guard can trip. A buggy while predicate that never goes false then stops silently at the limit and the flow proceeds with invalid state and zero diagnostics — the recommended remedy converts a loud failure into a silent one. I lower severity from high to medium: it only manifests when the while condition is already buggy, and loop legitimately supports maxIterations-as-count (so unconditionally throwing isn't trivially correct), making this a debuggability/observability defect rather than a correctness regression of well-written code. A distinct log/warning when the explicit maxIterations safety limit is actually reached would resolve it.</div>
       </details>
     </div>
   </article>

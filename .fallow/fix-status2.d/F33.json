@@ -1,0 +1,7 @@
+{
+  "unit": "F33",
+  "fids": ["F33"],
+  "status": "merged",
+  "sha": "e2eec8e",
+  "desc": "loop() now throws an actionable error when the maxIterations safety cap is hit instead of silently completing (fail loud). All 8 games terminate via real while conditions (no change). MERC re-vendored: caught a real bug — extra-militia-loop abused the cap as terminator, fixed (3ab264a)."
+}
