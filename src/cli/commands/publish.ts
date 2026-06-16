@@ -99,7 +99,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
 
   // -- Validate (exits process on failure) --
   console.log(chalk.cyan('Running pre-publish validation...\n'));
-  await validateCommand({ fix: false, skipSimulation: false });
+  await validateCommand();
 
   // -- Build --
   console.log(chalk.cyan('\nBuilding for production...\n'));

@@ -137,6 +137,7 @@ function tokenNames(space: Space<CollectGame>): string[] {
   return space
     .all(Token)
     .map((t) => t.name)
+    .filter((n): n is string => n !== undefined)
     .sort();
 }
 

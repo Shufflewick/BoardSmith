@@ -543,7 +543,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       lobbyManager = new LobbyManager(storedState, storage, callbacks, displayName);
     }
 
-    const session = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager);
+    // Explicit annotation breaks the type-inference cycle: the lobby callbacks
+    // capture `getSession: () => session` above, so `session` must have a known
+    // type independent of its own initializer.
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager);
 
     // Persist initial state (fire-and-forget to keep create synchronous)
     if (storage) {
@@ -607,7 +610,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       lobbyManager = new LobbyManager(storedState, storage, callbacks);
     }
 
-    const session = new GameSession(runner, storedState, GameClass, storage, aiController, undefined, lobbyManager);
+    // Explicit annotation breaks the type-inference cycle with the lobby
+    // callbacks' `getSession: () => session` capture above.
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, undefined, lobbyManager);
     return session;
   }
 

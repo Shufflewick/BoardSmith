@@ -31,7 +31,10 @@ import type {
  * source of truth so that lower layers (runtime) can emit codes at the point an
  * error originates and higher layers pass them through unchanged.
  */
-export { ErrorCode } from '../types/protocol.js';
+// Import locally (so ErrorCode is usable as a type in this module) AND re-export
+// it, keeping the protocol layer as the single source of truth.
+import { ErrorCode } from '../types/protocol.js';
+export { ErrorCode };
 
 // Re-export debug tracing types from engine for convenience
 export type { ActionTrace, PickTrace, ConditionDetail } from '../engine/index.js';

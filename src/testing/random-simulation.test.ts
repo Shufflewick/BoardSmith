@@ -10,7 +10,7 @@ import {
   type GameOptions,
   type FlowContext,
 } from '../engine/index.js';
-import { simulateRandomGames, replayRandomGame } from './random-simulation.js';
+import { simulateRandomGames, replayRandomGame, type SimulateRandomGamesOptions } from './random-simulation.js';
 
 /**
  * Minimal game whose only action takes an argument (a numeric choice). The
@@ -65,12 +65,12 @@ describe('simulateRandomGames', () => {
   });
 
   it('is deterministic and reproducible from the base seed (F50)', async () => {
-    const opts = {
+    const opts: SimulateRandomGamesOptions = {
       count: 6,
       playerCounts: [2],
       seed: 'repro-seed',
       timeout: 5000,
-    } as const;
+    };
 
     const a = await simulateRandomGames(PickGame, opts);
     const b = await simulateRandomGames(PickGame, opts);
