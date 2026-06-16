@@ -714,6 +714,11 @@ function disposeWebGL() {
 
   if (renderer) {
     renderer.dispose();
+    // dispose() frees GPU resources but does NOT release the WebGL context — the
+    // browser holds it until GC, so disposed dice accumulate contexts and trip
+    // the "too many active WebGL contexts" limit. forceContextLoss() releases the
+    // context immediately (via WEBGL_lose_context) so it's reclaimed now.
+    renderer.forceContextLoss();
     if (containerRef.value && renderer.domElement.parentNode === containerRef.value) {
       containerRef.value.removeChild(renderer.domElement);
     }
@@ -936,25 +941,13 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  // Cancel any pending queued renders from this component
+  // Cancel any pending queued renders from this component, then release ALL
+  // WebGL/GPU resources through the single disposal path. Routing through
+  // disposeWebGL() (instead of duplicating cleanup here) guarantees
+  // forceContextLoss() runs on unmount too — otherwise an unmounted-mid-render
+  // die would leak its context and re-trip the context limit.
   cancelComponentRenders(myComponentId);
-
-  if (animationId) {
-    cancelAnimationFrame(animationId);
-  }
-  if (renderer) {
-    renderer.dispose();
-    if (containerRef.value && renderer.domElement.parentNode === containerRef.value) {
-      containerRef.value.removeChild(renderer.domElement);
-    }
-  }
-  if (mesh) {
-    mesh.geometry.dispose();
-    materials.forEach(m => {
-      if (m.map) m.map.dispose();
-      m.dispose();
-    });
-  }
+  disposeWebGL();
 });
 </script>
 

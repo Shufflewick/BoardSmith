@@ -924,31 +924,39 @@ export function useFlyingElements(
           const oldContainer = elementLocations.get(id);
 
           if (oldContainer && newContainer && oldContainer !== newContainer) {
-            // Skip animation for elements that were just drag-dropped
-            // (the drag gesture already moved them visually)
-            if (lastDroppedElementId === id) continue;
+            // Skip the fly animation for an element that was just drag-dropped
+            // (the drag gesture already moved it visually). CRITICAL: skip ONLY the
+            // animation, never the location-tracking update below. If we skipped
+            // tracking too, elementLocations would keep the element's PRE-drop
+            // container, and the next gameView change would mis-detect a phantom
+            // move FROM that stale container — replaying the previous drag's
+            // direction. So the move is recorded; only its animation is suppressed.
+            if (lastDroppedElementId !== id) {
+              // Element moved between containers - trigger fly animation
+              const fromContainerConfig = getContainers().find((c) => c.name === oldContainer);
+              const toContainerConfig = getContainers().find((c) => c.name === newContainer);
 
-            // Element moved between containers - trigger fly animation
-            const fromContainerConfig = getContainers().find((c) => c.name === oldContainer);
-            const toContainerConfig = getContainers().find((c) => c.name === newContainer);
+              if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
+                const shouldFlipFn = shouldFlip ?? defaultShouldFlip;
+                const flip = shouldFlipFn(oldContainer, newContainer, element);
+                const elementData = autoWatchGetElementData(element);
 
-            if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
-              const shouldFlipFn = shouldFlip ?? defaultShouldFlip;
-              const flip = shouldFlipFn(oldContainer, newContainer, element);
-              const elementData = autoWatchGetElementData(element);
-
-              flyConfigs.push({
-                id: `auto-fly-${id}-${Date.now()}`,
-                startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-                endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-                elementData,
-                flip,
-                duration: autoWatchDuration,
-              });
+                flyConfigs.push({
+                  id: `auto-fly-${id}-${Date.now()}`,
+                  startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
+                  endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
+                  elementData,
+                  flip,
+                  duration: autoWatchDuration,
+                });
+              }
             }
           }
 
-          // Update tracking
+          // Update tracking — ALWAYS, including drag-dropped elements whose
+          // animation we just skipped. Their container genuinely changed, so the
+          // tracked location must follow or the staleness described above leaks
+          // into the next update.
           if (newContainer) {
             elementLocations.set(id, newContainer);
           }

@@ -292,6 +292,64 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
     expect(boardInteraction.dropTargets.map(t => t.id).sort()).toEqual([10, 11]);
   });
 
+  it('DRAG-TO-SELECT: dragging a valid element for the CURRENT (first) element pick fills it and wires the NEXT pick', async () => {
+    // Models demo-animation `dragDrop`: the UI arms the action first (the "Drag &
+    // Drop" button calls start() with no args), so the current pick is the FIRST
+    // element pick when the drag begins. Dragging one of its valid elements must be
+    // treated as SELECTING that element — advancing to the second pick, whose
+    // elements become the real drop targets — exactly like the drag-to-start path.
+    const fetchPickChoices = vi.fn().mockImplementation((_action: string, selection: string) => {
+      if (selection === 'card') {
+        return Promise.resolve({
+          success: true,
+          validElements: [
+            { id: 10, display: 'Card 10', ref: { id: 10 } },
+            { id: 11, display: 'Card 11', ref: { id: 11 } },
+          ],
+        });
+      }
+      // targetZone — boardRef by name (no id), mirroring the demo's zones.
+      return Promise.resolve({
+        success: true,
+        validElements: [
+          { id: 20, display: 'Zone A', ref: { name: 'zone-a' } },
+          { id: 21, display: 'Zone B', ref: { name: 'zone-b' } },
+        ],
+      });
+    });
+    const metadata: Record<string, ActionMetadata> = {
+      dragDrop: {
+        name: 'dragDrop',
+        selections: [
+          { name: 'card', type: 'element' },
+          { name: 'targetZone', type: 'element' },
+        ],
+      },
+    };
+    const { controller, availableActions, actionMetadata, isMyTurn, sendAction } = makeController(metadata, fetchPickChoices);
+
+    setupDragDropOrchestration({ boardInteraction, actionController: controller, availableActions, actionMetadata, isMyTurn });
+
+    // Arm the action (as the "Drag & Drop" button does). Current pick is 'card'.
+    await controller.start('dragDrop');
+    await flushAll();
+    expect(controller.currentPick.value?.name).toBe('card');
+
+    // Drag a valid card: it selects that card, advances to 'targetZone'.
+    boardInteraction.startDrag({ id: 10 });
+    await flushAll();
+
+    expect(controller.currentPick.value?.name).toBe('targetZone');
+    expect(boardInteraction.dropTargets.map(t => t.ref.name).sort()).toEqual(['zone-a', 'zone-b']);
+    expect(boardInteraction.isDropTarget({ name: 'zone-a' })).toBe(true);
+    expect(boardInteraction.isDropTarget({ name: 'zone-c' })).toBe(false);
+
+    // Dropping on a zone completes the action with both picks filled.
+    boardInteraction.triggerDrop({ name: 'zone-a' });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('dragDrop', { card: 10, targetZone: 20 });
+  });
+
   it('does not wire drop targets when it is not the player\'s turn', async () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({ success: true, choices: [] });
     const metadata: Record<string, ActionMetadata> = {

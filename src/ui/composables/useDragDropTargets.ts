@@ -196,6 +196,21 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
     return true;
   }
 
+  /** Is the dragged element one of the (enabled) valid elements for this pick? */
+  function pickAcceptsDragged(pick: PickMetadata, dragged: ElementRef): boolean {
+    return actionController
+      .getValidElements(pick)
+      .some(el => !el.disabled && matchesDragged({ id: el.id, ref: el.ref }, dragged));
+  }
+
+  /** Mirror the controller's current pick into board-interaction state so AutoUI boards react. */
+  function syncCurrentActionPick(actionName: string): void {
+    const nextPick = actionController.currentPick.value;
+    const selections = actionMetadata.value?.[actionName]?.selections ?? [];
+    const pickIndex = nextPick ? selections.findIndex(s => s.name === nextPick.name) : 0;
+    boardInteraction.setCurrentAction(actionName, pickIndex >= 0 ? pickIndex : 0, nextPick?.name ?? null);
+  }
+
   /** Loud, shape-specific dev warning when a drag can't be wired to any drop target. */
   function warnNoTargets(dragged: ElementRef, matchedAction: string | null): void {
     const pick = actionController.currentPick.value;
@@ -231,12 +246,30 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
       // current pick generically (handles element, elements and choice picks,
       // with filterBy already applied by the controller).
       if (actionController.currentAction.value) {
+        const actionName = actionController.currentAction.value;
         const pick = actionController.currentPick.value;
+
+        // DRAG-TO-SELECT: if the current pick is a single element pick and the
+        // dragged element is one of its valid choices, the drag is SELECTING that
+        // element — not dropping onto it. Fill the pick (advancing the action) and
+        // derive drop targets from the resulting NEXT pick, mirroring the
+        // drag-to-start path below. This is what makes "drag the source card, drop
+        // it on the destination zone" work when a custom UI arms the action first
+        // (e.g. via an action button) before the drag begins.
+        if (pick?.type === 'element' && dragged.id !== undefined && pickAcceptsDragged(pick, dragged)) {
+          await actionController.fill(pick.name, dragged.id);
+          // Filling may have been the action's final input (auto-executed) — done.
+          if (!actionController.currentAction.value) return;
+          syncCurrentActionPick(actionName);
+          if (!wireCurrentPick()) warnNoTargets(dragged, actionName);
+          return;
+        }
+
         const wired = wireCurrentPick();
         // Only warn for pick types that CAN be drop targets but produced none —
         // dragging during a number/text pick is legitimately a no-op.
         if (!wired && (pick?.type === 'element' || pick?.type === 'elements' || pick?.type === 'choice')) {
-          warnNoTargets(dragged, actionController.currentAction.value);
+          warnNoTargets(dragged, actionName);
         }
         return;
       }
@@ -262,11 +295,7 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
       }
 
       // Sync the current-action signal so custom boards can react.
-      const nextPick = actionController.currentPick.value;
-      const pickIndex = nextPick
-        ? match.action.selections.findIndex(s => s.name === nextPick.name)
-        : 0;
-      boardInteraction.setCurrentAction(match.action.name, pickIndex >= 0 ? pickIndex : 0, nextPick?.name ?? null);
+      syncCurrentActionPick(match.action.name);
 
       // The action may have auto-completed (single-option pick auto-filled then
       // auto-executed). If so there is nothing to drop onto — done.
