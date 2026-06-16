@@ -1,0 +1,7 @@
+{
+  "unit": "F36",
+  "fids": ["F36"],
+  "status": "merged",
+  "sha": "31a7a9e",
+  "desc": "Move drag-drop target derivation out of ActionPanel into a shared useDragDropTargets module wired once in GameShell, consumed by both ActionPanel and custom UIs for ANY action shape (parity preserved; two existing cases unchanged). Games: demo-animation + MERC verified compatible (mount GameShell, public useDragDrop API unchanged); MERC re-vendored (d4104a5). NOTE: live DOM drag-drop not exercised by unit tests — browser smoke-test advisable."
+}

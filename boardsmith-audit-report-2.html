@@ -150,11 +150,11 @@
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">50</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">51</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">2</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">1</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">0</div><div class="l">High (active)</div></div>
-    <div class="stat s-medium"><div class="n">2</div><div class="l">Medium (active)</div></div>
+    <div class="stat s-medium"><div class="n">1</div><div class="l">Medium (active)</div></div>
     <div class="stat s-gi"><div class="n">8</div><div class="l">Impact games</div></div>
   </div>
 
@@ -240,7 +240,7 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 2 of 52 — 50 fixed, moved to bottom)</span></h2>
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 1 of 52 — 51 fixed, moved to bottom)</span></h2>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -332,60 +332,10 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
       </details>
     </div>
   </article>
-
-  <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F36</span>#2</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-medium">Medium</span>
-          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
-          <span class="badge ease-hard">hard</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">2 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>Drag-and-drop only auto-wires for two hard-coded action shapes, but useDragDrop presents itself as a general API</h3>
-        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A custom UI built with useDragDrop works for chess-like (element-&gt;filterBy-choice) and card-to-zone (element-&gt;element) actions but silently fails for every other action shape, even though the ActionPanel renders working buttons for the exact same action. This directly violates the <code>CLAUDE.md</code> hard rule 'All UI interactions must work in a Custom UI and Action Panel in parity through useBoardInteraction.'</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A game designer wires `useDragDrop` against the documented general API, sees it work for one action, then a structurally different action's drag does nothing with only a console devWarn. The easy path (use the published drag API) is not the right path unless the action happens to match one of two undocumented internal patterns.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(hard)</span></span><div class="ftext">Move drop-target derivation out of ActionPanel into the shared controller/board-interaction layer so any action's current pick exposes drop targets (e.g., derive dropTargets from the current element/choice pick's validElements/choices regardless of ordering or filterBy), and have useDragDrop/AutoElement consume that. Alternatively, document the two supported patterns explicitly and make the devWarn enumerate the unsupported shape. Files: <code>src/ui/components/auto-ui/ActionPanel.vue</code>, <code>src/ui/composables/useBoardInteraction.ts</code>, <code>src/ui/composables/useDragDrop.ts</code>.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 0 affected, 2 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
-          <td class="gi-change">The fix moves drop-target derivation out of ActionPanel into the shared board-interaction/controller layer. This game is the primary custom-UI drag-drop consumer and depends on the element-&gt;element auto-wiring path being relocated. If the new derivation still exposes drop targets from the targetZone pick's validElements, no code change is needed but the drag-drop demo must be re-verified end-to-end; if semantics shift, the targetZone selection/boardRef wiring may need adjustment.<details class="gi-ev"><summary>evidence</summary><div class="mono">createDragDropAction in <code>src/rules/actions.ts</code> (chooseElement('card') then chooseElement('targetZone')) is an element-&gt;element drag-drop, the exact 'Case 3' shape ActionPanel hard-codes (<code>src/ui/components/auto-ui/ActionPanel.vue:879</code>+). <code>GameTable.vue:393</code> uses useDragDrop and binds drop({name:'zone-a'})/drag({id}) throughout the zone grid, relying on ActionPanel's isDragging watch to derive drop targets and trigger the action.</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">F36 moves drop-target derivation into the shared controller/board-interaction layer that useDragDrop consumes. MERC's custom drag panels do not use AutoUI's ActionPanel (the hard-coded path), but they do consume useDragDrop/useBoardInteraction directly, so MERC must re-verify that AssignToSquadPanel drag/drop still highlights and accepts the correct targets under the refactored derivation. Re-pack/re-install and exercise the drag UI.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/ui/components/AssignToSquadPanel.vue:3</code>,41 uses <code>useDragDrop()</code> (drag, drop, isOver) for custom drag-and-drop; <code>src/ui/components/GameTable.vue:52</code> uses <code>useBoardInteraction()</code>.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">All drop-target wiring lives exclusively in ActionPanel's `watch(() =&gt; boardInteraction?.isDragging)` (<code>src/ui/components/auto-ui/ActionPanel.vue:753</code>). It recognizes only Case 2 — element-type first selection + choice second selection WITH filterBy (<code>ActionPanel.vue:809-827</code>) — and Case 3 — element + element (<code>ActionPanel.vue:886-890</code>). Any other valid shape (element-&gt;choice WITHOUT filterBy, 'elements' multi types, choice-&gt;element, single chooseElement onto a zone) falls through to a devWarn and the drag silently does nothing (<code>ActionPanel.vue:892-906</code>). Meanwhile `useDragDrop`'s docstring and `drag({id})`/`drop({name})` API (<code>src/ui/composables/useDragDrop.ts:7-29</code>, 160-168) present drag as fully general, and `setDropTargets` is never called anywhere except those three ActionPanel branches (grep: only <code>ActionPanel.vue:795</code>,870,934).</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">All factual citations verified against current source. <code>ActionPanel.vue:753</code> holds the sole drag orchestrator (`watch(() =&gt; boardInteraction?.isDragging)`). Grep confirms `setDropTargets` is called nowhere in consumer code except <code>ActionPanel.vue:795</code>, 870, 934 (the rest are the interface declaration/implementation in <code>useBoardInteraction.ts:136</code>/307 and one test). The branch conditions confirm only two action shapes auto-wire: element→choice WITH filterBy (Case 1 line 767-770, Case 2 line 826 requires `secondSel.filterBy`) and element→element (Case 3 line 889). I traced each shape the finder lists as unsupported and confirmed they all fall through to the `devWarn` at <code>ActionPanel.vue:894-906</code>: element→choice without filterBy (Case 2 line 826 rejects), 'elements' multi-type first-select with no action in progress (Case 2 line 814 and Case 3 line 889 both require `=== 'element'`), choice→element (both require firstSel element), and single-selection-onto-zone (both require a secondSel). The <code>useDragDrop.ts</code> docstring (lines 4-5, 7-29, 160-168) does advertise the API as working with 'any element' with automatic orchestration and does NOT disclose the two-pattern restriction, so the parity gap with ActionPanel buttons (<code>CLAUDE.md</code> hard rule) is real for unsupported shapes. The finding is genuine and the citations are accurate. I lowered severity from high to medium because two of the finder's framing claims are overstated: (1) the limitation is explicitly documented — <code>docs/common-pitfalls.md</code> section 19 is dedicated to it and <code>docs/ui-components.md:507</code>/660 list the two patterns; (2) the failure is not silent — the devWarn at <code>ActionPanel.vue:894</code> emits an actionable message naming both supported patterns plus current/available actions. The two supported patterns also cover the most common board-game cases (move piece to square, drag card to zone). The un-mitigated core remains: the composable's own IDE-facing docstring claims generality with no type-level enforcement, a legitimate pit-of-success concern, but the documentation and dev-warning mitigations make medium the appropriate severity.</div>
-      </details>
-    </div>
-  </article>
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(50 fixed — moved here, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(51 fixed — moved here, kept for the record)</span></span></h2>
   <p class="section-note">Each was fixed in an isolated worktree (self-verified with <code>tsc</code> + <code>vitest run</code> + lint), gated against all 9 game suites for zero impact, and merged to <code>main</code> with docs updated inline.</p>
   <div id="completed-list">
     
@@ -1035,6 +985,56 @@ The entire canonical AI-integration snippet cannot compile: private constructor 
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Verified every citation against current source. (1) `src/server` and `src/worker` directories are absent (`ls` -&gt; No such file or directory), and `grep -rn 'GameServerCore|createGameWorker' src` returns zero matches — so those modules and named exports truly no longer exist. (2) <code>architecture.md</code> still documents them as first-class modules in all three cited locations: the dependency graph at lines 52-66 draws `server`/`worker` boxes feeding `client` (lines 53-54, 64-66); the data-flow at line 108 routes `<code>GameConnection.action()</code> -&gt; WebSocket -&gt; Server/Worker`; the platform-adapters diagram at lines 192-196 shows `Express WS` and `Durable Object WS`; and the Package Responsibilities table at lines 206-207 lists `server | GameServerCore, handlers` and `worker | createGameWorker, adapters`. This is consistent with the recorded F8/F9 fix in <code>MEMORY.md</code> (server/worker modules removed). The doc is genuinely half-migrated — it advertises two deleted packages and two non-importable exports. Finding is real and accurately cited. I lower severity from high to medium: it is a documentation-only inaccuracy with no runtime/security impact, but it does materially mislead anyone reading the primary architecture map about how to deploy/extend hosting, so it is more than cosmetic.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="pit-of-success" data-sev="medium" data-ease="hard" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F36</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Fixed &amp; merged to main — 31a7a9e">✅ Fixed · 31a7a9e</span>
+          <span class="badge sev-medium">Medium</span>
+          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
+          <span class="badge ease-hard">hard</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">2 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>Drag-and-drop only auto-wires for two hard-coded action shapes, but useDragDrop presents itself as a general API</h3>
+        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Fixed &amp; merged to <code>main</code> as <code>31a7a9e</code> — Move drag-drop target derivation out of ActionPanel into a shared useDragDropTargets module wired once in GameShell, consumed by both ActionPanel and custom UIs for ANY action shape (parity preserved; two existing cases unchanged). Games: demo-animation + MERC verified compatible (mount GameShell, public useDragDrop API unchanged); MERC re-vendored (d4104a5). NOTE: live DOM drag-drop not exercised by unit tests — browser smoke-test advisable.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A custom UI built with useDragDrop works for chess-like (element-&gt;filterBy-choice) and card-to-zone (element-&gt;element) actions but silently fails for every other action shape, even though the ActionPanel renders working buttons for the exact same action. This directly violates the <code>CLAUDE.md</code> hard rule 'All UI interactions must work in a Custom UI and Action Panel in parity through useBoardInteraction.'</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">A game designer wires `useDragDrop` against the documented general API, sees it work for one action, then a structurally different action's drag does nothing with only a console devWarn. The easy path (use the published drag API) is not the right path unless the action happens to match one of two undocumented internal patterns.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(hard)</span></span><div class="ftext">Move drop-target derivation out of ActionPanel into the shared controller/board-interaction layer so any action's current pick exposes drop targets (e.g., derive dropTargets from the current element/choice pick's validElements/choices regardless of ordering or filterBy), and have useDragDrop/AutoElement consume that. Alternatively, document the two supported patterns explicitly and make the devWarn enumerate the unsupported shape. Files: <code>src/ui/components/auto-ui/ActionPanel.vue</code>, <code>src/ui/composables/useBoardInteraction.ts</code>, <code>src/ui/composables/useDragDrop.ts</code>.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 0 affected, 2 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-moderate">moderate</span></td>
+          <td class="gi-change">The fix moves drop-target derivation out of ActionPanel into the shared board-interaction/controller layer. This game is the primary custom-UI drag-drop consumer and depends on the element-&gt;element auto-wiring path being relocated. If the new derivation still exposes drop targets from the targetZone pick's validElements, no code change is needed but the drag-drop demo must be re-verified end-to-end; if semantics shift, the targetZone selection/boardRef wiring may need adjustment.<details class="gi-ev"><summary>evidence</summary><div class="mono">createDragDropAction in <code>src/rules/actions.ts</code> (chooseElement('card') then chooseElement('targetZone')) is an element-&gt;element drag-drop, the exact 'Case 3' shape ActionPanel hard-codes (<code>src/ui/components/auto-ui/ActionPanel.vue:879</code>+). <code>GameTable.vue:393</code> uses useDragDrop and binds drop({name:'zone-a'})/drag({id}) throughout the zone grid, relying on ActionPanel's isDragging watch to derive drop targets and trigger the action.</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">F36 moves drop-target derivation into the shared controller/board-interaction layer that useDragDrop consumes. MERC's custom drag panels do not use AutoUI's ActionPanel (the hard-coded path), but they do consume useDragDrop/useBoardInteraction directly, so MERC must re-verify that AssignToSquadPanel drag/drop still highlights and accepts the correct targets under the refactored derivation. Re-pack/re-install and exercise the drag UI.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/ui/components/AssignToSquadPanel.vue:3</code>,41 uses <code>useDragDrop()</code> (drag, drop, isOver) for custom drag-and-drop; <code>src/ui/components/GameTable.vue:52</code> uses <code>useBoardInteraction()</code>.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">All drop-target wiring lives exclusively in ActionPanel's `watch(() =&gt; boardInteraction?.isDragging)` (<code>src/ui/components/auto-ui/ActionPanel.vue:753</code>). It recognizes only Case 2 — element-type first selection + choice second selection WITH filterBy (<code>ActionPanel.vue:809-827</code>) — and Case 3 — element + element (<code>ActionPanel.vue:886-890</code>). Any other valid shape (element-&gt;choice WITHOUT filterBy, 'elements' multi types, choice-&gt;element, single chooseElement onto a zone) falls through to a devWarn and the drag silently does nothing (<code>ActionPanel.vue:892-906</code>). Meanwhile `useDragDrop`'s docstring and `drag({id})`/`drop({name})` API (<code>src/ui/composables/useDragDrop.ts:7-29</code>, 160-168) present drag as fully general, and `setDropTargets` is never called anywhere except those three ActionPanel branches (grep: only <code>ActionPanel.vue:795</code>,870,934).</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">All factual citations verified against current source. <code>ActionPanel.vue:753</code> holds the sole drag orchestrator (`watch(() =&gt; boardInteraction?.isDragging)`). Grep confirms `setDropTargets` is called nowhere in consumer code except <code>ActionPanel.vue:795</code>, 870, 934 (the rest are the interface declaration/implementation in <code>useBoardInteraction.ts:136</code>/307 and one test). The branch conditions confirm only two action shapes auto-wire: element→choice WITH filterBy (Case 1 line 767-770, Case 2 line 826 requires `secondSel.filterBy`) and element→element (Case 3 line 889). I traced each shape the finder lists as unsupported and confirmed they all fall through to the `devWarn` at <code>ActionPanel.vue:894-906</code>: element→choice without filterBy (Case 2 line 826 rejects), 'elements' multi-type first-select with no action in progress (Case 2 line 814 and Case 3 line 889 both require `=== 'element'`), choice→element (both require firstSel element), and single-selection-onto-zone (both require a secondSel). The <code>useDragDrop.ts</code> docstring (lines 4-5, 7-29, 160-168) does advertise the API as working with 'any element' with automatic orchestration and does NOT disclose the two-pattern restriction, so the parity gap with ActionPanel buttons (<code>CLAUDE.md</code> hard rule) is real for unsupported shapes. The finding is genuine and the citations are accurate. I lowered severity from high to medium because two of the finder's framing claims are overstated: (1) the limitation is explicitly documented — <code>docs/common-pitfalls.md</code> section 19 is dedicated to it and <code>docs/ui-components.md:507</code>/660 list the two patterns; (2) the failure is not silent — the devWarn at <code>ActionPanel.vue:894</code> emits an actionable message naming both supported patterns plus current/available actions. The two supported patterns also cover the most common board-game cases (move piece to square, drag card to zone). The un-mitigated core remains: the composable's own IDE-facing docstring claims generality with no type-level enforcement, a legitimate pit-of-success concern, but the documentation and dev-warning mitigations make medium the appropriate severity.</div>
       </details>
     </div>
   </article>
