@@ -32,26 +32,54 @@ describe('scanSandboxViolations', () => {
     expect(violations[0].line).toBe(1);
   });
 
-  // F29: determinism violations outside src/rules must be caught too.
-  it('flags violations in UI helpers outside src/rules', () => {
+  // Security rules (network/filesystem/eval) are enforced everywhere, including
+  // UI helpers outside src/rules.
+  it('flags security violations in UI helpers outside src/rules', () => {
     write('src/ui/helper.ts', 'export function load(): Promise<Response> {\n  return fetch("/data");\n}\n');
     const violations = scanSandboxViolations(dir);
     expect(violations.map((v) => v.ruleId)).toContain('boardsmith/no-network');
     expect(violations.find((v) => v.ruleId === 'boardsmith/no-network')?.file).toBe('src/ui/helper.ts');
   });
 
-  // F29: .vue single-file components are scanned, with correct line numbers.
+  // .vue single-file components are scanned, with correct line numbers.
   it('flags violations inside .vue <script> blocks with correct line numbers', () => {
     write(
       'src/ui/components/Board.vue',
-      '<template>\n  <div />\n</template>\n\n<script setup lang="ts">\nconst id = setInterval(() => {}, 1000);\n</script>\n',
+      '<template>\n  <div />\n</template>\n\n<script setup lang="ts">\nconst data = fetch("/data");\n</script>\n',
     );
     const violations = scanSandboxViolations(dir);
-    const timer = violations.find((v) => v.ruleId === 'boardsmith/no-timers');
-    expect(timer).toBeDefined();
-    expect(timer?.file).toBe('src/ui/components/Board.vue');
-    // setInterval is on line 6 of the SFC.
-    expect(timer?.line).toBe(6);
+    const net = violations.find((v) => v.ruleId === 'boardsmith/no-network');
+    expect(net).toBeDefined();
+    expect(net?.file).toBe('src/ui/components/Board.vue');
+    // fetch() is on line 6 of the SFC.
+    expect(net?.line).toBe(6);
+  });
+
+  // Determinism rules are scoped to executor code. Timers and randomness in the
+  // browser-only UI bundle are legitimate (e.g. requestAnimationFrame-driven
+  // animations) and must NOT be flagged; the same APIs in src/rules still are.
+  it('does not flag determinism APIs in src/ui but does in src/rules', () => {
+    write(
+      'src/ui/anim.ts',
+      'export function go() {\n  requestAnimationFrame(() => {});\n  setTimeout(() => {}, 16);\n  return Math.random();\n}\n',
+    );
+    write('src/rules/logic.ts', 'export const r = Math.random();\n');
+    const violations = scanSandboxViolations(dir);
+    expect(violations.some((v) => v.file === 'src/ui/anim.ts')).toBe(false);
+    expect(
+      violations.some(
+        (v) => v.file === 'src/rules/logic.ts' && v.ruleId === 'boardsmith/no-nondeterministic',
+      ),
+    ).toBe(true);
+  });
+
+  // Security rules remain enforced inside src/ui even though determinism is not.
+  it('still flags security APIs in src/ui', () => {
+    write('src/ui/net.ts', 'export function go() { return fetch("/x"); }\n');
+    const violations = scanSandboxViolations(dir);
+    expect(
+      violations.some((v) => v.file === 'src/ui/net.ts' && v.ruleId === 'boardsmith/no-network'),
+    ).toBe(true);
   });
 
   // AST accuracy: commented-out / string occurrences must NOT trip the scanner
@@ -78,7 +106,7 @@ describe('scanSandboxViolations', () => {
     write('src/rules/a.ts', 'export const r = Math.random();\n');
     write('src/rules/b.ts', "import fs from 'node:fs';\nexport const _ = fs;\n");
     write('src/ui/c.ts', 'export function go() { return fetch("/x"); }\n');
-    write('src/ui/d.ts', 'export function go() { setTimeout(() => {}, 1); }\n');
+    write('src/rules/d.ts', 'export function go() { setTimeout(() => {}, 1); }\n');
     write('src/ui/e.ts', 'export const v = eval("1");\n');
     const rules = new Set(scanSandboxViolations(dir).map((v) => v.ruleId));
     expect(rules).toContain('boardsmith/no-nondeterministic');

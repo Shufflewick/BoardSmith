@@ -27,13 +27,32 @@ export interface SandboxViolation {
   message: string;
 }
 
-/** The forbidden-API rules enforced for every game. */
-const SANDBOX_RULES: Linter.RulesRecord = {
+/**
+ * Security rules — enforced for EVERY game source file, including UI. These
+ * guard capabilities no game should have regardless of where the code runs:
+ * network access, filesystem access, and eval.
+ */
+const SECURITY_RULES: Linter.RulesRecord = {
   'boardsmith/no-network': 'error',
   'boardsmith/no-filesystem': 'error',
+  'boardsmith/no-eval': 'error',
+};
+
+/**
+ * Determinism rules — enforced only for code that runs inside the executor
+ * sandbox: the rules bundle (built from `src/rules`) and any shared modules it
+ * imports. The executor must be deterministic and synchronous so games can be
+ * replayed for undo and explored by the MCTS AI, and because Workers freeze the
+ * clock during sync execution (so timers never fire there anyway).
+ *
+ * These are deliberately NOT applied to `src/ui`: the UI bundle runs in the
+ * browser iframe, never in the executor, so timers and randomness there (e.g.
+ * `requestAnimationFrame`-driven animations) are legitimate and cannot affect
+ * game-state determinism.
+ */
+const DETERMINISM_RULES: Linter.RulesRecord = {
   'boardsmith/no-timers': 'error',
   'boardsmith/no-nondeterministic': 'error',
-  'boardsmith/no-eval': 'error',
 };
 
 const FLAT_CONFIG: Linter.Config[] = [
@@ -52,7 +71,16 @@ const FLAT_CONFIG: Linter.Config[] = [
     plugins: {
       boardsmith: plugin as unknown as NonNullable<Linter.Config['plugins']>[string],
     },
-    rules: SANDBOX_RULES,
+    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES },
+  },
+  {
+    // UI runs in the browser, not the executor sandbox: relax the determinism
+    // rules here while keeping the security rules above in force.
+    files: ['src/ui/**'],
+    rules: {
+      'boardsmith/no-timers': 'off',
+      'boardsmith/no-nondeterministic': 'off',
+    },
   },
 ];
 
@@ -120,9 +148,11 @@ export function scanSandboxViolations(cwd: string): SandboxViolation[] {
     const relPath = relative(cwd, filePath);
     const messages = linter.verify(code, FLAT_CONFIG, relPath);
     for (const m of messages) {
-      // Skip parser errors from exotic syntax — we only enforce sandbox rules,
-      // TypeScript compilation is validated separately.
-      if (!m.ruleId) continue;
+      // Only report violations of our own sandbox rules. ESLint also emits
+      // messages for parser errors and for unknown rules referenced in inline
+      // `eslint-disable` comments (e.g. `@typescript-eslint/no-unused-vars`);
+      // neither is a sandbox violation. TypeScript is validated separately.
+      if (!m.ruleId?.startsWith('boardsmith/')) continue;
       violations.push({
         file: relPath,
         line: m.line,

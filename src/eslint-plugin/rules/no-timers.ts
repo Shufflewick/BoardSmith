@@ -35,7 +35,7 @@ const rule: Rule.RuleModule = {
       CallExpression(node) {
         if (node.callee.type === 'Identifier') {
           const name = node.callee.name;
-          if (name in forbiddenFunctions) {
+          if (Object.hasOwn(forbiddenFunctions, name)) {
             context.report({
               node,
               messageId: forbiddenFunctions[name],
@@ -49,7 +49,7 @@ const rule: Rule.RuleModule = {
           node.callee.property.type === 'Identifier'
         ) {
           const name = node.callee.property.name;
-          if (name in forbiddenFunctions) {
+          if (Object.hasOwn(forbiddenFunctions, name)) {
             context.report({
               node,
               messageId: forbiddenFunctions[name],
