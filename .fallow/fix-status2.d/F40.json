@@ -1,0 +1,7 @@
+{
+  "unit": "F40",
+  "fids": ["F40"],
+  "status": "merged",
+  "sha": "998996c",
+  "desc": "Rename registerBeforeAutoExecute -> setBeforeAutoExecute so the single-hook-slot semantics are honest. Games: demo-animation renamed + removed a redundant duplicate registration (2c74f28); MERC re-vendored + call site renamed (1ff240d)."
+}

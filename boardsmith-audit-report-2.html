@@ -150,9 +150,9 @@
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">49</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">50</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">3</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">2</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">0</div><div class="l">High (active)</div></div>
     <div class="stat s-medium"><div class="n">2</div><div class="l">Medium (active)</div></div>
     <div class="stat s-gi"><div class="n">8</div><div class="l">Impact games</div></div>
@@ -240,7 +240,7 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 3 of 52 — 49 fixed, moved to bottom)</span></h2>
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 2 of 52 — 50 fixed, moved to bottom)</span></h2>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -382,60 +382,10 @@ Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</c
       </details>
     </div>
   </article>
-
-  <article class="card fx-open" data-cat="pit-of-success" data-sev="low" data-ease="easy" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F40</span>#3</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-low">Low</span>
-          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
-          <span class="badge ease-easy">easy</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">2 games impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>registerBeforeAutoExecute overwrites instead of registering, silently dropping earlier hooks</h3>
-        
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">If more than one component registers a before-auto-execute hook (e.g., separate boards each capturing element positions for FLIP/flying animations), only the last registration runs; the others are silently discarded, so some animations won't capture start positions.</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The verb 'register' plus the 'can be added' comment imply additive subscription, leading a developer to assume both hooks fire. The single-slot overwrite is a quiet footgun that only manifests as missing animations.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Either store hooks in an array and await them in sequence, or rename to setBeforeAutoExecute and update the comment to say it replaces. File: <code>src/ui/composables/useActionController.ts:154-156</code>,738-742,711-719.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 1 affected, 1 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">demo-animation</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
-          <td class="gi-change">Today the duplicate registration is harmless because the second call overwrites the first. If the fix renames to setBeforeAutoExecute, both call sites break (method no longer exists). If the fix switches to array-append, the same hook runs twice per action and fires the action animation twice. Either way the game must change: register the hook exactly once (drop the onMounted call or the watch) and/or rename the call.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/ui/components/GameTable.vue:341</code> and :350 both call props.actionController.registerBeforeAutoExecute(actionAnimations.onBeforeAutoExecute) with the same hook (once in onMounted, once in an immediate watch). Engine confirms overwrite semantics at <code>src/ui/composables/useActionController.ts:741</code> (beforeAutoExecuteHook.value = hook).</div></details></td>
-        </tr>
-        <tr class="gi-row gi-row-likely">
-          <td class="gi-game">MERC</td>
-          <td><span class="badge gi-likely">likely</span></td>
-          <td><span class="badge ease-wrap eff-small">small</span></td>
-          <td class="gi-change">If the fix renames registerBeforeAutoExecute -&gt; setBeforeAutoExecute (the suggested cleanest option), MERC must rename its single call site in <code>App.vue</code>. If instead it becomes array-based, MERC is unaffected. Trivial code edit but still requires re-packing/re-installing the vendored tarball.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/ui/App.vue:126</code> calls actionController.registerBeforeAutoExecute(async (actionName, args) =&gt; { ... }) exactly once.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono">The field comment says hooks 'can be added after creation via registerBeforeAutoExecute' (<code>src/ui/composables/useActionController.ts:154</code>), but the function body simply assigns `beforeAutoExecuteHook.value = hook` (<code>useActionController.ts:738-742</code>), and the auto-execute watch invokes only that single ref (<code>useActionController.ts:711-719</code>). The slot exposes one shared actionController to all custom board components.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">All citations confirmed on current source. <code>useActionController.ts:154</code> comment reads &quot;Registered hooks (can be added after creation via registerBeforeAutoExecute)&quot; — implying additive registration. But the function body at lines 738-742 simply does `beforeAutoExecuteHook.value = hook`, a single-slot overwrite (the ref is declared singular at line 156, not an array). The auto-execute watch at lines 711-719 invokes exactly one ref (`beforeAutoExecuteHook.value`), so only the last registered hook fires. The verb &quot;register&quot; plus the &quot;can be added&quot; comment genuinely imply additive subscription semantics, which the implementation does not provide. This is a real pit-of-success / API-contract mismatch: a second caller silently clobbers the first with no warning, and the symptom (missing FLIP/flying-animation start-position capture) is quiet. The shared actionController is exposed via slot and is used externally (<code>BoardSmithGames/demo-animation/src/ui/components/GameTable.vue:341</code>,350 both call registerBeforeAutoExecute). The multi-component collision scenario is somewhat speculative — current real games register a single hook — so impact is limited, justifying low severity rather than higher. Not an invalid/false-positive: the code does exactly what the finding claims and the naming/comment misleads.</div>
-      </details>
-    </div>
-  </article>
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(49 fixed — moved here, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(50 fixed — moved here, kept for the record)</span></span></h2>
   <p class="section-note">Each was fixed in an isolated worktree (self-verified with <code>tsc</code> + <code>vitest run</code> + lint), gated against all 9 game suites for zero impact, and merged to <code>main</code> with docs updated inline.</p>
   <div id="completed-list">
     
@@ -2060,6 +2010,56 @@ However, I downgrade severity from medium to low because the problem is purely l
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Verified against current source. grep across src/ shows `choicesContain` appears only at its definition (<code>src/engine/action/action.ts:457</code>) with zero `this.choicesContain` call sites — the actually-used helper is the sibling `annotatedChoicesContain` (defined 464, called at 633, 646, 1304). `getChoiceFilterValue` (<code>src/engine/action/action.ts:1013</code>) appears only at its definition with no other reference anywhere in src/. Both are `private` methods (read confirms `private choicesContain(...)` at 457 and `private getChoiceFilterValue(...)` at 1013), so the &quot;used by external game&quot; false-positive escape does not apply — private members cannot be consumed externally. Both are genuine pure dead code. Severity low is appropriate: no runtime/correctness/security impact, just unused surface in a large file.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="pit-of-success" data-sev="low" data-ease="easy" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F40</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Fixed &amp; merged to main — 998996c">✅ Fixed · 998996c</span>
+          <span class="badge sev-low">Low</span>
+          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
+          <span class="badge ease-easy">easy</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">2 games impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>registerBeforeAutoExecute overwrites instead of registering, silently dropping earlier hooks</h3>
+        
+        <div class="merge-note">Fixed &amp; merged to <code>main</code> as <code>998996c</code> — Rename registerBeforeAutoExecute -&gt; setBeforeAutoExecute so the single-hook-slot semantics are honest. Games: demo-animation renamed + removed a redundant duplicate registration (2c74f28); MERC re-vendored + call site renamed (1ff240d).</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">If more than one component registers a before-auto-execute hook (e.g., separate boards each capturing element positions for FLIP/flying animations), only the last registration runs; the others are silently discarded, so some animations won't capture start positions.</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">The verb 'register' plus the 'can be added' comment imply additive subscription, leading a developer to assume both hooks fire. The single-slot overwrite is a quiet footgun that only manifests as missing animations.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(easy)</span></span><div class="ftext">Either store hooks in an array and await them in sequence, or rename to setBeforeAutoExecute and update the comment to say it replaces. File: <code>src/ui/composables/useActionController.ts:154-156</code>,738-742,711-719.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 1 affected, 1 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">demo-animation</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-trivial">trivial</span></td>
+          <td class="gi-change">Today the duplicate registration is harmless because the second call overwrites the first. If the fix renames to setBeforeAutoExecute, both call sites break (method no longer exists). If the fix switches to array-append, the same hook runs twice per action and fires the action animation twice. Either way the game must change: register the hook exactly once (drop the onMounted call or the watch) and/or rename the call.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/ui/components/GameTable.vue:341</code> and :350 both call props.actionController.registerBeforeAutoExecute(actionAnimations.onBeforeAutoExecute) with the same hook (once in onMounted, once in an immediate watch). Engine confirms overwrite semantics at <code>src/ui/composables/useActionController.ts:741</code> (beforeAutoExecuteHook.value = hook).</div></details></td>
+        </tr>
+        <tr class="gi-row gi-row-likely">
+          <td class="gi-game">MERC</td>
+          <td><span class="badge gi-likely">likely</span></td>
+          <td><span class="badge ease-wrap eff-small">small</span></td>
+          <td class="gi-change">If the fix renames registerBeforeAutoExecute -&gt; setBeforeAutoExecute (the suggested cleanest option), MERC must rename its single call site in <code>App.vue</code>. If instead it becomes array-based, MERC is unaffected. Trivial code edit but still requires re-packing/re-installing the vendored tarball.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/ui/App.vue:126</code> calls actionController.registerBeforeAutoExecute(async (actionName, args) =&gt; { ... }) exactly once.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono">The field comment says hooks 'can be added after creation via registerBeforeAutoExecute' (<code>src/ui/composables/useActionController.ts:154</code>), but the function body simply assigns `beforeAutoExecuteHook.value = hook` (<code>useActionController.ts:738-742</code>), and the auto-execute watch invokes only that single ref (<code>useActionController.ts:711-719</code>). The slot exposes one shared actionController to all custom board components.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">All citations confirmed on current source. <code>useActionController.ts:154</code> comment reads &quot;Registered hooks (can be added after creation via registerBeforeAutoExecute)&quot; — implying additive registration. But the function body at lines 738-742 simply does `beforeAutoExecuteHook.value = hook`, a single-slot overwrite (the ref is declared singular at line 156, not an array). The auto-execute watch at lines 711-719 invokes exactly one ref (`beforeAutoExecuteHook.value`), so only the last registered hook fires. The verb &quot;register&quot; plus the &quot;can be added&quot; comment genuinely imply additive subscription semantics, which the implementation does not provide. This is a real pit-of-success / API-contract mismatch: a second caller silently clobbers the first with no warning, and the symptom (missing FLIP/flying-animation start-position capture) is quiet. The shared actionController is exposed via slot and is used externally (<code>BoardSmithGames/demo-animation/src/ui/components/GameTable.vue:341</code>,350 both call registerBeforeAutoExecute). The multi-component collision scenario is somewhat speculative — current real games register a single hook — so impact is limited, justifying low severity rather than higher. Not an invalid/false-positive: the code does exactly what the finding claims and the naming/comment misleads.</div>
       </details>
     </div>
   </article>
