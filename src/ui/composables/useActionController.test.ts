@@ -84,6 +84,26 @@ describe('useActionController', () => {
       expect(sendAction).toHaveBeenCalledWith('playCard', { card: 2 });
     });
 
+    it('clears currentAction after execute() of an already-started action (auto-start can resume next turn)', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+      });
+
+      // The ActionPanel auto-starts the action (sets currentAction)...
+      await controller.start('playCard');
+      expect(controller.currentAction.value).toBe('playCard');
+
+      // ...then a custom UI plays via direct execute(). The in-progress action must
+      // be cleared so the next auto-start isn't blocked by a stale currentAction.
+      const result = await controller.execute('playCard', { card: 2 });
+      expect(result.success).toBe(true);
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+    });
+
     it('should auto-fill single-choice selections', async () => {
       const controller = useActionController({
         sendAction,

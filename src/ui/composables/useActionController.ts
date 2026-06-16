@@ -835,6 +835,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (!result.success) {
           lastError.value = result.error || 'Action failed';
         }
+        // Executing resolves the action — clear in-progress state (see note below).
+        currentAction.value = null;
+        clearArgs();
+        clearAdvancedState();
         return result;
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Action failed';
@@ -892,6 +896,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (!result.success) {
         lastError.value = result.error || 'Action failed';
       }
+
+      // Executing an action resolves it — clear any in-progress action state, exactly
+      // like executeCurrentAction(). Without this, a custom UI that calls execute()
+      // while the ActionPanel auto-started the SAME action (e.g. cribbage's play card)
+      // leaves currentAction stale, which blocks the next auto-start (the action never
+      // "ends" from the controller's perspective).
+      currentAction.value = null;
+      clearArgs();
+      clearAdvancedState();
 
       // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
