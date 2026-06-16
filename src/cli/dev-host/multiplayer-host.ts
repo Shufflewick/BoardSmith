@@ -124,7 +124,17 @@ export class MultiplayerHost {
       const info = this.seats.get(existing);
       if (info) info.connected = true;
       if (this.phase === 'playing') {
-        this.reinitSeat(clientId, existing);
+        // A reconnecting follower (e.g. after a page reload / HMR) resumes
+        // follow-mode: restore its button state and show it the ACTIVE seat,
+        // not its own seat.
+        if (clientId === this.followerClientId) {
+          const active = this.effectiveActiveSeat();
+          this.lastFollowerSeat = active;
+          this.send(clientId, { type: 'follow', enabled: true, seat: active });
+          this.reinitSeat(clientId, active);
+        } else {
+          this.reinitSeat(clientId, existing);
+        }
         this.broadcastLobby();
         return;
       }
@@ -154,13 +164,11 @@ export class MultiplayerHost {
       // Keep the seat reserved for reconnect (a page reload mustn't lose it); the
       // game pauses on an away player's turn until they return or explicitly leave.
     }
-    if (this.followerClientId === clientId) {
-      // The follower drove every seat; resume AI so the game isn't stuck on it.
-      this.followerClientId = null;
-      this.lastFollowerSeat = null;
-      this.rebuildAiSeats();
-      void this.session?.host.runAITurns();
-    }
+    // Follow-mode PERSISTS across a disconnect: page reloads / HMR are constant in
+    // dev, and dropping follow on every reload makes it unusable. It is restored on
+    // the follower's reconnect (see `hello`). While the follower is away the game
+    // pauses on its turn — identical to any away player. An explicit `leave`,
+    // `restart`, or follow-toggle is the only way to end follow-mode.
     this.broadcastLobby();
   }
 
@@ -254,6 +262,13 @@ export class MultiplayerHost {
 
   /** Give up a seat mid-game → it reverts to AI so the game continues for others. */
   private async handleLeave(clientId: string): Promise<void> {
+    // Explicitly leaving ends follow-mode (unlike a transient disconnect/reload).
+    if (clientId === this.followerClientId) {
+      this.followerClientId = null;
+      this.lastFollowerSeat = null;
+      this.rebuildAiSeats();
+      this.send(clientId, { type: 'follow', enabled: false, seat: 0 });
+    }
     const seat = this.clientSeat.get(clientId);
     this.releaseSeat(clientId);
     if (seat !== undefined && this.phase === 'playing') {

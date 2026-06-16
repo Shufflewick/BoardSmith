@@ -227,18 +227,27 @@ describe('MultiplayerHost — follow active seat', () => {
     expect(lastOfType('B', 'error').message).toMatch(/take a seat/i);
   });
 
-  it('the follower disconnecting resumes AI so the game is not stuck', async () => {
+  it('follow-mode survives a follower reconnect (page reload)', async () => {
     const { host, lastOfType, pass, clear } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('A', { type: 'follow', enabled: true });
-    await pass('A', 'r1'); // seat 2 active, AI paused
-    host.disconnect('A'); // follower gone → AI should resume and finish
-    // Let the fire-and-forget AI pump settle.
-    await new Promise((r) => setTimeout(r, 0));
+    await pass('A', 'r1'); // seat 2 active, A is the follower
+    host.disconnect('A'); // page reload: WS closes...
     clear();
-    // Reconnect to observe the now-complete state.
+    await host.handleMessage('A', { type: 'hello' }); // ...then reconnects (same id)
+    // Follow is restored: A is told follow is on and re-shown the ACTIVE seat (2),
+    // with seat 2's own view (isMyTurn true) — not its own seat 1.
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: true, seat: 2 });
+    expect(lastOfType('A', 'init').seat).toBe(2);
+    expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
+  });
+
+  it('explicitly leaving ends follow-mode', async () => {
+    const { host, lastOfType } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' });
-    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await host.handleMessage('A', { type: 'leave' });
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
   });
 
   it('restart resets follow-mode and echoes it disabled', async () => {
@@ -247,5 +256,19 @@ describe('MultiplayerHost — follow active seat', () => {
     await host.handleMessage('A', { type: 'follow', enabled: true });
     await host.handleMessage('A', { type: 'restart' });
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
+  });
+
+  it('with a SECOND human seated, the follower still borrows the active seat', async () => {
+    const { host, lastOfType, pass, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1
+    await host.handleMessage('B', { type: 'hello' }); // B unseated
+    await host.handleMessage('B', { type: 'join', seat: 2 }); // B = seat 2 (human)
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    clear();
+    await pass('A', 'r1'); // A ends seat 1's turn -> seat 2 active
+    // The follower (A) must be handed seat 2 AND seat 2's own view (isMyTurn true).
+    expect(lastOfType('A', 'init').seat).toBe(2);
+    const gs = lastOfType('A', 'game_state');
+    expect((gs.view as any).state.isMyTurn).toBe(true);
   });
 });
