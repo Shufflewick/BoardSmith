@@ -17,6 +17,7 @@
 
 import { createDevSession, type DevSession } from './bridge.js';
 import type { Op, OpResult } from '../../session/index.js';
+import { dueSeats, type SeatActivityState } from '../../engine/index.js';
 
 /** A fresh random 32-bit seed for a new game. */
 function defaultSeed(): string {
@@ -41,7 +42,8 @@ export type HostOutbound =
   | { type: 'error'; message: string }
   | { type: 'init'; seat: number }
   | { type: 'game_state'; view: unknown; isComplete: boolean; winners: number[] }
-  | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> };
+  | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> }
+  | { type: 'follow'; enabled: boolean; seat: number };
 
 /** Messages a client sends to the host. */
 export type ClientInbound =
@@ -49,7 +51,8 @@ export type ClientInbound =
   | { type: 'join'; seat: number; name?: string; color?: string }
   | { type: 'leave' }
   | { type: 'restart' }
-  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> };
+  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> }
+  | { type: 'follow'; enabled: boolean };
 
 export interface MultiplayerHostOptions {
   playerCount: number;
@@ -93,6 +96,11 @@ export class MultiplayerHost {
   private session: DevSession | null = null;
   /** Live AI-seat list passed to the session; mutated as humans take/leave seats. */
   private aiSeats: Array<{ seat: number; level?: string }> = [];
+  /** The client (if any) that follows the active seat — it controls whichever
+   *  seat is currently awaiting input, and AI is paused while it is set. */
+  private followerClientId: string | null = null;
+  /** The active seat last shown to the follower, to re-init only on change. */
+  private lastFollowerSeat: number | null = null;
 
   constructor(private readonly opts: MultiplayerHostOptions) {
     for (let seat = 1; seat <= opts.playerCount; seat++) {
@@ -146,6 +154,13 @@ export class MultiplayerHost {
       // Keep the seat reserved for reconnect (a page reload mustn't lose it); the
       // game pauses on an away player's turn until they return or explicitly leave.
     }
+    if (this.followerClientId === clientId) {
+      // The follower drove every seat; resume AI so the game isn't stuck on it.
+      this.followerClientId = null;
+      this.lastFollowerSeat = null;
+      this.rebuildAiSeats();
+      void this.session?.host.runAITurns();
+    }
     this.broadcastLobby();
   }
 
@@ -163,6 +178,8 @@ export class MultiplayerHost {
         return this.handleRestart(clientId);
       case 'server_request':
         return this.handleServerRequest(clientId, msg);
+      case 'follow':
+        return this.handleFollow(clientId, msg);
     }
   }
 
@@ -171,8 +188,50 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }
+    // A restart is a clean slate: reset follow-mode (the new game's AI seats are
+    // rebuilt by startGame) and untoggle the follower's button.
+    if (this.followerClientId !== null) {
+      const ex = this.followerClientId;
+      this.followerClientId = null;
+      this.lastFollowerSeat = null;
+      this.send(ex, { type: 'follow', enabled: false, seat: this.clientSeat.get(ex) ?? 0 });
+    }
     // Rebuild the session with the same seats and a fresh seed.
     await this.startGame();
+  }
+
+  /** Toggle "follow active seat" for a client (must be seated and in a game). */
+  private async handleFollow(
+    clientId: string,
+    msg: Extract<ClientInbound, { type: 'follow' }>,
+  ): Promise<void> {
+    if (!msg.enabled) {
+      // Disable: only the current follower can turn it off.
+      if (this.followerClientId !== clientId) return;
+      this.followerClientId = null;
+      this.lastFollowerSeat = null;
+      this.rebuildAiSeats();
+      const own = this.clientSeat.get(clientId);
+      this.send(clientId, { type: 'follow', enabled: false, seat: own ?? 0 });
+      if (own !== undefined && this.phase === 'playing') this.reinitSeat(clientId, own);
+      await this.session?.host.runAITurns(); // resume AI for the seats it covered
+      return;
+    }
+    // Enable.
+    if (this.phase !== 'playing' || !this.session) {
+      this.send(clientId, { type: 'error', message: 'Start a game before enabling follow-active-seat.' });
+      return;
+    }
+    if (!this.clientSeat.has(clientId)) {
+      this.send(clientId, { type: 'error', message: 'Take a seat before enabling follow-active-seat.' });
+      return;
+    }
+    this.followerClientId = clientId;
+    this.aiSeats.length = 0; // pause AI for every seat the follower now covers
+    const active = this.effectiveActiveSeat();
+    this.lastFollowerSeat = active;
+    this.send(clientId, { type: 'follow', enabled: true, seat: active });
+    this.reinitSeat(clientId, active);
   }
 
   /** Take over a seat (works mid-game: claim an open/AI seat → it stops being AI). */
@@ -216,7 +275,9 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'Game has not started.' });
       return;
     }
-    const seat = this.clientSeat.get(clientId);
+    // A follower acts as whichever seat is currently due, not its own seat.
+    const seat =
+      clientId === this.followerClientId ? this.effectiveActiveSeat() : this.clientSeat.get(clientId);
     if (seat === undefined) {
       this.send(clientId, { type: 'error', message: 'You are not seated in this game.' });
       return;
@@ -246,6 +307,30 @@ export class MultiplayerHost {
   private addAiSeat(seat: number): void {
     if (seat >= 1 && seat <= this.opts.playerCount && !this.aiSeats.some((s) => s.seat === seat)) {
       this.aiSeats.push({ seat, level: this.opts.aiLevel });
+    }
+  }
+
+  /**
+   * The seat a follower acts as / sees right now: the first seat awaiting input,
+   * falling back to the follower's own seat when nothing is due (execute blocks,
+   * game over). The follower steals every active seat unconditionally.
+   */
+  private effectiveActiveSeat(): number {
+    const due = this.session
+      ? dueSeats(this.session.host.flowState as SeatActivityState | null)[0]
+      : undefined;
+    const own =
+      this.followerClientId !== null ? this.clientSeat.get(this.followerClientId) : undefined;
+    return due ?? own ?? 1;
+  }
+
+  /** Rebuild the shared AI-seat list in place from currently open seats. */
+  private rebuildAiSeats(): void {
+    this.aiSeats.length = 0;
+    for (let seat = 1; seat <= this.opts.playerCount; seat++) {
+      const info = this.seats.get(seat);
+      const heldByConnectedHuman = info?.clientId && info.connected;
+      if (!heldByConnectedHuman) this.aiSeats.push({ seat, level: this.opts.aiLevel });
     }
   }
 
@@ -282,13 +367,7 @@ export class MultiplayerHost {
       playerCount,
       aiSeats: this.aiSeats,
       executeOp,
-      postGameState: (seat, view, meta) =>
-        this.sendToSeat(seat, {
-          type: 'game_state',
-          view,
-          isComplete: meta.isComplete,
-          winners: meta.winners,
-        }),
+      postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
       postServerResponse: (seat, requestId, result) =>
         this.sendToSeat(seat, { type: 'server_response', requestId, result }),
     });
@@ -358,6 +437,41 @@ export class MultiplayerHost {
   private sendToSeat(seat: number, message: HostOutbound): void {
     const info = this.seats.get(seat);
     if (info?.clientId && info.connected) this.send(info.clientId, message);
+  }
+
+  /**
+   * Send a `game_state` frame to the seat's client. For the follower, override
+   * the seat with the currently-active seat: re-`init` when it changes, and send
+   * that seat's freshly-computed view (so the follower drives whoever is due).
+   */
+  private deliverGameState(
+    seat: number,
+    view: unknown,
+    meta: { isComplete: boolean; winners: number[] },
+  ): void {
+    const info = this.seats.get(seat);
+    if (!info?.clientId || !info.connected) return;
+    if (info.clientId === this.followerClientId) {
+      const active = this.effectiveActiveSeat();
+      if (active !== this.lastFollowerSeat) {
+        this.send(info.clientId, { type: 'init', seat: active });
+        this.lastFollowerSeat = active;
+      }
+      const activeView = this.session?.viewForSeat(active);
+      this.send(info.clientId, {
+        type: 'game_state',
+        view: activeView ?? view,
+        isComplete: meta.isComplete,
+        winners: meta.winners,
+      });
+      return;
+    }
+    this.send(info.clientId, {
+      type: 'game_state',
+      view,
+      isComplete: meta.isComplete,
+      winners: meta.winners,
+    });
   }
 
   private send(clientId: string, message: HostOutbound): void {
