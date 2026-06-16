@@ -362,6 +362,30 @@ export interface UseActionControllerReturn {
   /** Cancel the current action */
   cancel: () => void;
 
+  // === Multi-select draft (shared in-progress selection) ===
+  /**
+   * In-progress multiSelect "draft" — the shared source of truth for an accumulating
+   * multiSelect selection, observed by both the auto ActionPanel and custom UIs so
+   * they stay in parity. SEPARATE from currentArgs: currentArgs[name] stays undefined
+   * until confirmMultiSelect() runs the fill() path with the complete array.
+   */
+  multiSelectDraft: Ref<{ selectionName: string; values: unknown[] } | null>;
+  /**
+   * Toggle a value in the in-progress multiSelect draft for a selection.
+   * Respects the selection's max; auto-confirms when min === max and the exact count
+   * is reached (running fill → auto-execute). No-op (with devWarn) if the selection
+   * isn't active or isn't a multiSelect.
+   */
+  toggleMultiSelect: (selectionName: string, value: unknown) => Promise<void>;
+  /**
+   * Confirm the in-progress multiSelect draft — the only place currentArgs receives
+   * the multiSelect array (via the existing fill() path). Returns the fill result, or
+   * void if there is no draft.
+   */
+  confirmMultiSelect: () => Promise<ValidationResult | void>;
+  /** Whether a value is currently in the multiSelect draft for the given selection. */
+  isMultiSelectSelected: (selectionName: string, value: unknown) => boolean;
+
   // === Utility ===
   /** Get available choices for a pick (handles filterBy, dependsOn) */
   getChoices: (pick: PickMetadata) => Array<{ value: unknown; display: string; disabled?: string }>;

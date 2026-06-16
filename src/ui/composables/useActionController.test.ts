@@ -1676,4 +1676,185 @@ describe('useActionController', () => {
     });
   });
 
+  describe('multiSelect draft (shared in-progress selection)', () => {
+    // 'discardMultiple' from createTestMetadata is a choice multiSelect { min: 2, max: 3 }.
+
+    it('toggleMultiSelect accumulates in the draft, NOT in currentArgs', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('discardMultiple');
+
+      await controller.toggleMultiSelect('cards', 1);
+      await controller.toggleMultiSelect('cards', 2);
+
+      // Draft holds the in-progress values...
+      expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [1, 2] });
+      // ...but currentArgs stays undefined until confirm (MERC relies on this).
+      expect(controller.currentArgs.value.cards).toBeUndefined();
+      expect(controller.isReady.value).toBe(false);
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('toggling an already-selected value removes it from the draft', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
+      });
+      await controller.start('discardMultiple');
+
+      await controller.toggleMultiSelect('cards', 1);
+      await controller.toggleMultiSelect('cards', 2);
+      await controller.toggleMultiSelect('cards', 1); // remove 1
+
+      expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [2] });
+    });
+
+    it('respects max — additions beyond max are ignored', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
+      });
+      await controller.start('discardMultiple'); // max: 3
+
+      await controller.toggleMultiSelect('cards', 1);
+      await controller.toggleMultiSelect('cards', 2);
+      await controller.toggleMultiSelect('cards', 3);
+      await controller.toggleMultiSelect('cards', 4); // exceeds max — ignored
+
+      expect(controller.multiSelectDraft.value?.values).toEqual([1, 2, 3]);
+    });
+
+    it('isMultiSelectSelected reflects the draft', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
+      });
+      await controller.start('discardMultiple');
+
+      expect(controller.isMultiSelectSelected('cards', 1)).toBe(false);
+      await controller.toggleMultiSelect('cards', 1);
+      expect(controller.isMultiSelectSelected('cards', 1)).toBe(true);
+      expect(controller.isMultiSelectSelected('cards', 2)).toBe(false);
+    });
+
+    it('confirmMultiSelect fills currentArgs with the full array and clears the draft', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
+      });
+      await controller.start('discardMultiple');
+
+      await controller.toggleMultiSelect('cards', 1);
+      await controller.toggleMultiSelect('cards', 2);
+      await controller.confirmMultiSelect();
+
+      expect(controller.currentArgs.value.cards).toEqual([1, 2]);
+      expect(controller.multiSelectDraft.value).toBeNull();
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    it('min === max auto-confirms: fills currentArgs and the action becomes ready', async () => {
+      // Local action with an exact-count (min === max) multiSelect.
+      actionMetadata.value = {
+        ...createTestMetadata(),
+        discardExactly2: {
+          name: 'discardExactly2',
+          prompt: 'Discard exactly 2',
+          selections: [
+            {
+              name: 'cards',
+              type: 'choice',
+              prompt: 'Pick 2',
+              multiSelect: { min: 2, max: 2 },
+              choices: [
+                { value: 1, display: 'Card 1' },
+                { value: 2, display: 'Card 2' },
+                { value: 3, display: 'Card 3' },
+              ],
+            },
+          ],
+        },
+      };
+      availableActions.value = [...(availableActions.value ?? []), 'discardExactly2'];
+
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
+      });
+      await controller.start('discardExactly2');
+
+      await controller.toggleMultiSelect('cards', 1);
+      // currentArgs still undefined after first pick
+      expect(controller.currentArgs.value.cards).toBeUndefined();
+
+      // Second pick reaches min === max → auto-confirm runs fill()
+      await controller.toggleMultiSelect('cards', 3);
+
+      expect(controller.currentArgs.value.cards).toEqual([1, 3]);
+      expect(controller.multiSelectDraft.value).toBeNull();
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    it('min === max auto-confirm triggers auto-execute (fill → execute)', async () => {
+      actionMetadata.value = {
+        ...createTestMetadata(),
+        discardExactly2: {
+          name: 'discardExactly2',
+          prompt: 'Discard exactly 2',
+          selections: [
+            {
+              name: 'cards',
+              type: 'choice',
+              prompt: 'Pick 2',
+              multiSelect: { min: 2, max: 2 },
+              choices: [
+                { value: 1, display: 'Card 1' },
+                { value: 2, display: 'Card 2' },
+              ],
+            },
+          ],
+        },
+      };
+      availableActions.value = [...(availableActions.value ?? []), 'discardExactly2'];
+
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: true,
+      });
+      await controller.start('discardExactly2');
+
+      await controller.toggleMultiSelect('cards', 1);
+      await controller.toggleMultiSelect('cards', 2);
+      await nextTick();
+      await nextTick();
+
+      expect(sendAction).toHaveBeenCalledWith('discardExactly2', { cards: [1, 2] });
+    });
+
+    it('cancel() clears the in-progress draft', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
+      });
+      await controller.start('discardMultiple');
+      await controller.toggleMultiSelect('cards', 1);
+      expect(controller.multiSelectDraft.value).not.toBeNull();
+
+      controller.cancel();
+      expect(controller.multiSelectDraft.value).toBeNull();
+    });
+
+    it('toggleMultiSelect on a non-multiSelect selection is a no-op (does not touch currentArgs)', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
+      });
+      // 'playCard' has a single 'card' choice selection (not multiSelect).
+      await controller.start('playCard');
+
+      await controller.toggleMultiSelect('card', 1);
+
+      expect(controller.multiSelectDraft.value).toBeNull();
+      expect(controller.currentArgs.value.card).toBeUndefined();
+    });
+  });
+
 });

@@ -112,11 +112,12 @@ const repeatingState = computed(() => {
 });
 
 
-// Multi-select state: tracks selected values for current multiSelect selection
-const multiSelectState = ref<{
-  selectionName: string;
-  selectedValues: unknown[];
-} | null>(null);
+// Multi-select draft now lives in the shared controller (actionController.multiSelectDraft)
+// so the auto ActionPanel and custom UIs share one source of truth and stay in parity.
+// Convenience accessor for the current draft's selected values.
+const multiSelectValues = computed<unknown[]>(
+  () => actionController.multiSelectDraft.value?.values ?? []
+);
 
 // Track current input values for number/text inputs (so Done button can submit them)
 const numberInputValue = ref<number | null>(null);
@@ -518,8 +519,7 @@ watch(() => props.availableActions, (actions, oldActions) => {
     // so it slipped past dev. Never clear while the action is server-pending.
     const serverPending = actionController.pendingOnServer?.value ?? false;
     if (!serverPending) {
-      actionController.cancel();
-      multiSelectState.value = null;
+      actionController.cancel(); // also clears the multiSelect draft
       boardInteraction?.clear();
     }
   }
@@ -682,9 +682,8 @@ watch(() => boardInteraction?.currentAction, (boardAction) => {
   // If boardInteraction action was cleared but we still have an action, sync the cancel
   if (boardAction === null && currentAction.value !== null) {
     // This was externally cleared (e.g., by custom UI cancel button)
-    // Reset ActionPanel's internal state to match
+    // Reset ActionPanel's internal state to match (cancel also clears the draft)
     actionController.cancel();
-    multiSelectState.value = null;
     emit('cancelSelection');
   }
 });
@@ -814,48 +813,20 @@ function isRepeatingSelection(sel: PickMetadata): boolean {
 }
 
 /**
- * Check if a value is currently selected in multi-select mode
+ * Check if a value is currently selected in multi-select mode (reads shared draft)
  */
 function isMultiSelectValueSelected(value: unknown): boolean {
-  if (!multiSelectState.value) return false;
-  return multiSelectState.value.selectedValues.some(v => v === value);
+  return actionController.isMultiSelectSelected(currentPick.value?.name ?? '', value);
 }
 
 /**
- * Toggle a value in multi-select mode
+ * Toggle a value in multi-select mode.
+ * Delegates the draft to the shared controller (so custom UIs stay in parity), then
+ * refreshes board highlights. The controller owns max-enforcement and min===max
+ * auto-confirm (which runs fill → auto-execute).
  */
-function toggleMultiSelectValue(selectionName: string, value: unknown, display?: string) {
-  const multiSelect = currentMultiSelect.value;
-  if (!currentPick.value || !multiSelect) return;
-
-  // Initialize state if needed
-  if (!multiSelectState.value || multiSelectState.value.selectionName !== selectionName) {
-    multiSelectState.value = {
-      selectionName,
-      selectedValues: [],
-    };
-  }
-
-  const state = multiSelectState.value;
-  const index = state.selectedValues.findIndex(v => v === value);
-
-  if (index >= 0) {
-    // Already selected - remove it
-    state.selectedValues.splice(index, 1);
-  } else {
-    // Not selected - add it if we haven't hit max
-    const max = multiSelect.max;
-    if (max === undefined || state.selectedValues.length < max) {
-      state.selectedValues.push(value);
-      // Note: Display stored via controller's fill() when multi-select is confirmed
-
-      // Auto-confirm when min === max and we've reached exact count (no Done button needed)
-      if (multiSelect.min === multiSelect.max && state.selectedValues.length === multiSelect.min) {
-        void confirmMultiSelect();
-        return;
-      }
-    }
-  }
+async function toggleMultiSelectValue(selectionName: string, value: unknown, _display?: string) {
+  await actionController.toggleMultiSelect(selectionName, value);
 
   // Update AutoUI board highlighting for selected items
   updateMultiSelectBoardHighlights();
@@ -866,12 +837,11 @@ function toggleMultiSelectValue(selectionName: string, value: unknown, display?:
  * This makes the AutoUI highlight the selected elements
  */
 function updateMultiSelectBoardHighlights() {
-  if (!boardInteraction || !multiSelectState.value || multiSelectState.value.selectedValues.length === 0) {
+  const selectedValues = multiSelectValues.value;
+  if (!boardInteraction || selectedValues.length === 0) {
     boardInteraction?.setHoveredChoice(null);
     return;
   }
-
-  const selectedValues = multiSelectState.value.selectedValues;
 
   // Collect all boardRefs for selected values from filteredChoices
   const sourceRefs: ElementRef[] = [];
@@ -896,20 +866,13 @@ function updateMultiSelectBoardHighlights() {
 }
 
 /**
- * Confirm multi-select and move to next selection or execute action
+ * Confirm multi-select and move to next selection or execute action.
+ * Delegates to the controller, which runs the fill() path (currentArgs → readiness →
+ * auto-execute) with the complete array.
  */
 async function confirmMultiSelect() {
-  if (!currentPick.value) return;
-
-  const selectionName = currentPick.value.name;
-  const values = multiSelectState.value?.selectedValues ? [...multiSelectState.value.selectedValues] : [];
-
-  // Clear multi-select state and board highlights
-  multiSelectState.value = null;
+  await actionController.confirmMultiSelect();
   boardInteraction?.setHoveredChoice(null);
-
-  // Delegate to controller so snapshot/display/execution state stays consistent
-  await setSelectionValue(selectionName, values);
 }
 
 /**
@@ -918,7 +881,7 @@ async function confirmMultiSelect() {
 const isMultiSelectReady = computed(() => {
   if (!currentMultiSelect.value) return false;
   const min = currentMultiSelect.value.min;
-  const selectedCount = multiSelectState.value?.selectedValues?.length ?? 0;
+  const selectedCount = multiSelectValues.value.length;
   return selectedCount >= min;
 });
 
@@ -936,8 +899,8 @@ const showMultiSelectDoneButton = computed(() => {
  * Get display text for multi-select count (e.g., "Selected: 1/2")
  */
 const multiSelectCountDisplay = computed(() => {
-  if (!multiSelectState.value || !currentMultiSelect.value) return '';
-  const count = multiSelectState.value.selectedValues.length;
+  if (!currentMultiSelect.value) return '';
+  const count = multiSelectValues.value.length;
   const max = currentMultiSelect.value.max;
   if (max !== undefined) {
     return `Selected: ${count}/${max}`;
@@ -960,10 +923,9 @@ async function startAction(
 
   // Delegate to controller for core start logic
   // Controller handles: clearing args, fetching choices for first selection
-  await actionController.start(actionName, options);
+  await actionController.start(actionName, options); // start clears any prior draft
 
   // ActionPanel-specific state cleanup (controller doesn't know about these)
-  multiSelectState.value = null;
   boardInteraction?.clear();
 
   // Notify board interaction of action start (for custom GameBoard components)
@@ -975,11 +937,10 @@ async function startAction(
 }
 
 function cancelAction() {
-  // Delegate cancel to controller (handles repeating selection cleanup too)
+  // Delegate cancel to controller (handles repeating selection + multiSelect draft cleanup)
   actionController.cancel();
 
   // Clear ActionPanel-specific state
-  multiSelectState.value = null;
   boardInteraction?.clear();
   emit('cancelSelection');
 }
@@ -1067,7 +1028,6 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   } catch (err) {
     console.error('Execute action error:', err);
   } finally {
-    multiSelectState.value = null;
     boardInteraction?.clear();
     emit('cancelSelection');
   }
@@ -1086,7 +1046,7 @@ function handleChoiceHover(choice: ChoiceWithRefs) {
 
 function handleChoiceLeave() {
   // Don't clear hover if we have multiSelect items selected - keep them highlighted
-  if (multiSelectState.value && multiSelectState.value.selectedValues.length > 0) {
+  if (multiSelectValues.value.length > 0) {
     // Re-apply the multiSelect highlights instead of clearing
     updateMultiSelectBoardHighlights();
     return;
@@ -1215,7 +1175,7 @@ function clearBoardSelection() {
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(element.id)"
                 @change="toggleMultiSelectValue(currentPick.name, element.id, element.display)"
-                :disabled="!!element.disabled || (!isMultiSelectValueSelected(element.id) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max)"
+                :disabled="!!element.disabled || (!isMultiSelectValueSelected(element.id) && currentMultiSelect?.max !== undefined && multiSelectValues.length >= currentMultiSelect.max)"
               />
               <span class="checkbox-label">{{ element.display || element.id }}</span>
             </label>
@@ -1279,7 +1239,7 @@ function clearBoardSelection() {
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
                 @change="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
-                :disabled="!!choice.disabled || (!isMultiSelectValueSelected(choice.value) && currentMultiSelect?.max !== undefined && (multiSelectState?.selectedValues?.length ?? 0) >= currentMultiSelect.max)"
+                :disabled="!!choice.disabled || (!isMultiSelectValueSelected(choice.value) && currentMultiSelect?.max !== undefined && multiSelectValues.length >= currentMultiSelect.max)"
               />
               <span class="checkbox-label">{{ choice.display }}</span>
             </label>

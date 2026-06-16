@@ -199,6 +199,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // This enables reactive computeds that depend on snapshot data (Maps aren't reactive)
   const snapshotVersion = ref(0);
 
+  // === Multi-select draft (shared source of truth) ===
+  // In-progress multiSelect selection, shared between the auto ActionPanel and custom
+  // UIs so they stay in parity. This is SEPARATE from currentArgs — currentArgs[name]
+  // stays undefined until confirmMultiSelect() runs the fill() path with the COMPLETE
+  // array (a MERC composable relies on currentArgs[name] === undefined mid-selection).
+  const multiSelectDraft = ref<{ selectionName: string; values: unknown[] } | null>(null);
+
   // === Element Enrichment ===
   // Creates functions to enrich validElements with full element data from gameView
   const { enrichElementsList, enrichValidElements } = createEnrichment(gameView, currentArgs);
@@ -213,6 +220,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     for (const key of Object.keys(args)) {
       delete args[key];
     }
+    // Drop any in-progress multiSelect draft — this is the central reset point hit by
+    // start/startFollowUp/executeCurrentAction/cancel, so a stale draft can't leak
+    // between actions.
+    multiSelectDraft.value = null;
   }
 
   /** Clear all selection state */
@@ -1365,6 +1376,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (actionSnapshot.value) {
       actionSnapshot.value.collectedPicks.delete(selectionName);
     }
+
+    // Drop an in-progress draft for this selection, if any
+    if (multiSelectDraft.value?.selectionName === selectionName) {
+      multiSelectDraft.value = null;
+    }
   }
 
   function cancel(): void {
@@ -1377,9 +1393,112 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     currentAction.value = null;
-    clearArgs();
+    clearArgs(); // also clears multiSelectDraft
     clearAdvancedState();
     lastError.value = null;
+  }
+
+  // === Multi-select draft methods ===
+
+  /**
+   * Resolve the multiSelect config for a selection, handling dependsOn-based configs.
+   * Mirrors ActionPanel's `currentMultiSelect` computed: for selections with
+   * dependsOn + multiSelectByDependentValue, looks up the config from the current
+   * value of the dependent selection; otherwise returns the static `multiSelect`.
+   */
+  function resolveMultiSelectConfig(
+    selection: PickMetadata
+  ): { min?: number; max?: number } | undefined {
+    if (selection.dependsOn && selection.multiSelectByDependentValue) {
+      const depValue = currentArgs.value[selection.dependsOn];
+      if (depValue !== undefined) {
+        return selection.multiSelectByDependentValue[String(depValue)];
+      }
+      return undefined;
+    }
+    return selection.multiSelect;
+  }
+
+  /**
+   * Toggle a value in the in-progress multiSelect draft.
+   * The draft is shared between the auto ActionPanel and custom UIs so they stay
+   * in parity. currentArgs is NOT touched until confirmMultiSelect() (which uses
+   * the fill() path with the complete array).
+   *
+   * When min === max, reaching the exact count auto-confirms (no Done button).
+   */
+  async function toggleMultiSelect(selectionName: string, value: unknown): Promise<void> {
+    const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);
+    if (!selection) {
+      devWarn(
+        `multiselect-no-selection:${selectionName}`,
+        `toggleMultiSelect('${selectionName}', ...) was ignored: no active action exposes a selection named '${selectionName}'. ` +
+          `Start the action (and reach this selection) before toggling its values.`
+      );
+      return;
+    }
+
+    const cfg = resolveMultiSelectConfig(selection);
+    if (!cfg) {
+      devWarn(
+        `multiselect-not-multi:${selectionName}`,
+        `toggleMultiSelect('${selectionName}', ...) was ignored: '${selectionName}' is not a multiSelect selection. ` +
+          `Use fill('${selectionName}', value) for single-value selections.`
+      );
+      return;
+    }
+
+    // Start a fresh draft for this selection if needed
+    const current =
+      multiSelectDraft.value && multiSelectDraft.value.selectionName === selectionName
+        ? multiSelectDraft.value.values
+        : [];
+
+    const index = current.findIndex(v => v === value);
+    let newValues: unknown[];
+    if (index >= 0) {
+      // Already selected - remove it
+      newValues = current.filter((_, i) => i !== index);
+    } else {
+      // Not selected - add it (respecting max)
+      if (cfg.max !== undefined && current.length >= cfg.max) {
+        // At max capacity - ignore the add
+        return;
+      }
+      newValues = [...current, value];
+
+      // Auto-confirm when exact count required (min === max) and reached.
+      if (cfg.min === cfg.max && newValues.length === cfg.min) {
+        multiSelectDraft.value = { selectionName, values: newValues };
+        await confirmMultiSelect();
+        return;
+      }
+    }
+
+    // Reassign so Vue reactivity fires
+    multiSelectDraft.value = { selectionName, values: [...newValues] };
+  }
+
+  /**
+   * Confirm the in-progress multiSelect draft.
+   * This is the ONLY place currentArgs receives the multiSelect array — it runs the
+   * existing fill() path (currentArgs → readiness → auto-execute) with the COMPLETE
+   * array.
+   */
+  async function confirmMultiSelect(): Promise<ValidationResult | void> {
+    const draft = multiSelectDraft.value;
+    if (!draft) return;
+
+    const { selectionName, values } = draft;
+    multiSelectDraft.value = null;
+    return await fill(selectionName, [...values]);
+  }
+
+  /** Whether a value is currently in the multiSelect draft for the given selection. */
+  function isMultiSelectSelected(selectionName: string, value: unknown): boolean {
+    const draft = multiSelectDraft.value;
+    if (!draft || draft.selectionName !== selectionName) return false;
+    return draft.values.some(v => v === value);
   }
 
   // === Public API for Snapshot Access ===
@@ -1466,6 +1585,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     skip,
     clear,
     cancel,
+
+    // Multi-select draft (shared source of truth for in-progress multiSelect)
+    multiSelectDraft,
+    toggleMultiSelect,
+    confirmMultiSelect,
+    isMultiSelectSelected,
 
     // Utility
     getChoices,
