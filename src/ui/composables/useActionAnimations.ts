@@ -28,7 +28,7 @@
  * ## Usage with GameShell (Recommended)
  *
  * When using GameShell, the action controller is created internally. Use the
- * `registerBeforeAutoExecute` method to register the hook after creation:
+ * `setBeforeAutoExecute` method to set the hook after creation:
  *
  * ```vue
  * <script setup lang="ts">
@@ -64,7 +64,7 @@
  * // Call this once when you get actionController from slot props
  * function setupAnimations(actionController, gameView) {
  *   gameViewRef.value = gameView;
- *   actionController.registerBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
+ *   actionController.setBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
  * }
  * </script>
  *

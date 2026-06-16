@@ -399,10 +399,12 @@ export interface UseActionControllerReturn {
    * });
    *
    * // Register the hook after getting actionController from slot props
-   * actionController.registerBeforeAutoExecute(onBeforeAutoExecute);
+   * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
    * ```
+   *
+   * Replaces any previously set hook (single-slot, not accumulated).
    */
-  registerBeforeAutoExecute: (
+  setBeforeAutoExecute: (
     hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
   ) => void;
 

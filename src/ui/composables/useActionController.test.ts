@@ -468,6 +468,56 @@ describe('useActionController', () => {
       expect(sendAction).not.toHaveBeenCalled();
       expect(controller.isReady.value).toBe(true);
     });
+
+    it('should run setBeforeAutoExecute hook before auto-execute', async () => {
+      const calls: string[] = [];
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      controller.setBeforeAutoExecute((actionName) => {
+        calls.push(`hook:${actionName}`);
+      });
+      // sendAction records execution order via the calls array too
+      sendAction.mockImplementation(async (name: string) => {
+        calls.push(`send:${name}`);
+        return { success: true };
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      // Hook must run before the action is sent
+      expect(calls).toEqual(['hook:forcedPlay', 'send:forcedPlay']);
+    });
+
+    it('setBeforeAutoExecute replaces the previous hook (single-slot)', async () => {
+      const calls: string[] = [];
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      controller.setBeforeAutoExecute(() => { calls.push('first'); });
+      controller.setBeforeAutoExecute(() => { calls.push('second'); });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      // Only the most recently set hook fires
+      expect(calls).toEqual(['second']);
+    });
   });
 
   describe('getChoices utility', () => {

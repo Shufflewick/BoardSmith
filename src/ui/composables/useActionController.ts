@@ -151,8 +151,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     onBeforeAutoExecute: initialBeforeAutoExecute,
   } = options;
 
-  // Registered hooks (can be added after creation via registerBeforeAutoExecute)
-  // Stored as ref to allow dynamic registration
+  // Single before-auto-execute hook (REPLACED, not accumulated, via setBeforeAutoExecute)
+  // Stored as ref to allow setting/replacing after creation
   const beforeAutoExecuteHook = ref<((actionName: string, args: Record<string, unknown>) => void | Promise<void>) | undefined>(
     initialBeforeAutoExecute
   );
@@ -732,10 +732,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * });
    *
    * // Register the hook after getting actionController from slot props
-   * actionController.registerBeforeAutoExecute(onBeforeAutoExecute);
+   * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
    * ```
+   *
+   * Note: this REPLACES any previously set hook (single-slot, not accumulated).
    */
-  function registerBeforeAutoExecute(
+  function setBeforeAutoExecute(
     hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
   ): void {
     beforeAutoExecuteHook.value = hook;
@@ -1479,7 +1481,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     getCollectedPicks,
 
     // Hook registration (for GameShell users who can't pass options at creation)
-    registerBeforeAutoExecute,
+    setBeforeAutoExecute,
 
     // Animation gating (soft continuation pattern)
     animationsPending,       // True when animations are playing
