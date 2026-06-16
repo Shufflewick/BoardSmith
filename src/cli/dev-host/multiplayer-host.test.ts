@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 
@@ -24,6 +24,51 @@ const def: GameDefinitionLike = {
   minPlayers: 1,
   maxPlayers: 4,
 };
+
+// Each seat passes exactly once (no outer loop), then the flow completes →
+// game over. Lets tests observe whether AI played the open seat (isComplete)
+// and whether the follower borrows the active seat as it rotates.
+class AlternateGame extends Game<AlternateGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow(
+      defineFlow({
+        root: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+      }),
+    );
+  }
+}
+
+const altDef: GameDefinitionLike = {
+  gameClass: AlternateGame as new (...args: unknown[]) => unknown,
+  gameType: 'alternate',
+  minPlayers: 2,
+  maxPlayers: 2,
+};
+
+function makeAltHost() {
+  const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+  const host = new MultiplayerHost({
+    playerCount: 2,
+    minPlayers: 2,
+    makeSeed: () => 'alt',
+    executeOp: (gameOptions, snap, pend, op) => executeOp(altDef, gameOptions, snap, pend, op),
+    send: (clientId, msg) => sent.push({ clientId, msg }),
+  });
+  const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
+  const has = (clientId: string, type: HostOutbound['type']) => to(clientId).some((m) => m.type === type);
+  const lastOfType = (clientId: string, type: HostOutbound['type']) =>
+    [...to(clientId)].reverse().find((m) => m.type === type) as any;
+  const pass = (clientId: string, requestId: string) =>
+    host.handleMessage(clientId, {
+      type: 'server_request',
+      requestId,
+      op: 'action',
+      payload: { actionName: 'pass', args: {} },
+    });
+  return { host, sent, to, has, lastOfType, pass, clear: () => (sent.length = 0) };
+}
 
 function makeHost(opts: { designatedAiSeats?: number[] } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
@@ -127,5 +172,80 @@ describe('MultiplayerHost (always-live)', () => {
     await host.handleMessage('B', { type: 'leave' });
     const seat2 = lastOfType('A', 'lobby').seats.find((s: any) => s.seat === 2);
     expect(seat2.clientId).toBe(null);
+  });
+});
+
+describe('MultiplayerHost — follow active seat', () => {
+  it('baseline: without follow, AI plays the open seat and the game completes', async () => {
+    const { host, lastOfType, pass } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = AI
+    await pass('A', 'r1'); // A passes seat 1 → AI passes seat 2 → flow completes
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+  });
+
+  it('enabling follow pauses AI and lets one client drive both seats', async () => {
+    const { host, lastOfType, pass, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = AI
+    clear();
+
+    // Enable follow while seat 1 (A's own seat) is active.
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: true, seat: 1 });
+
+    // A passes as seat 1. AI must NOT play seat 2 — instead the follower is
+    // handed seat 2 (init seat 2) and the game is NOT complete.
+    clear();
+    await pass('A', 'r1');
+    expect(lastOfType('A', 'init').seat).toBe(2);
+    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+
+    // A now passes as seat 2 (attributed to the active seat) → flow completes.
+    clear();
+    await pass('A', 'r2');
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+  });
+
+  it('disabling follow mid-game resumes AI for the open seat', async () => {
+    const { host, lastOfType, pass, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await pass('A', 'r1'); // seat 1 passed; now seat 2 is active, AI paused
+    clear();
+
+    // Disable while seat 2 is active → seat 2 reverts to AI, which passes →
+    // flow completes.
+    await host.handleMessage('A', { type: 'follow', enabled: false });
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+  });
+
+  it('rejects enabling follow when the client holds no seat', async () => {
+    const { host, lastOfType } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A seated, game live
+    await host.handleMessage('B', { type: 'hello' }); // B unseated (seat-picker)
+    await host.handleMessage('B', { type: 'follow', enabled: true });
+    expect(lastOfType('B', 'error').message).toMatch(/take a seat/i);
+  });
+
+  it('the follower disconnecting resumes AI so the game is not stuck', async () => {
+    const { host, lastOfType, pass, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await pass('A', 'r1'); // seat 2 active, AI paused
+    host.disconnect('A'); // follower gone → AI should resume and finish
+    // Let the fire-and-forget AI pump settle.
+    await new Promise((r) => setTimeout(r, 0));
+    clear();
+    // Reconnect to observe the now-complete state.
+    await host.handleMessage('A', { type: 'hello' });
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+  });
+
+  it('restart resets follow-mode and echoes it disabled', async () => {
+    const { host, lastOfType } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await host.handleMessage('A', { type: 'restart' });
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
   });
 });
