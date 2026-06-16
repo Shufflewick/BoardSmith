@@ -1,0 +1,7 @@
+{
+  "unit": "F35",
+  "fids": ["F35"],
+  "status": "merged",
+  "sha": "c30c520",
+  "desc": "A throwing onSelect now aborts the action and fires onCancel instead of swallowing and committing (fail loud); fixed all three call sites. MERC re-vendored, all onSelect handlers verified throw-safe (9935d70)."
+}
