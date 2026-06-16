@@ -195,11 +195,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       storedState,
       storage,
       {
-        save: async () => {
-          if (this.#storage) {
-            await this.#storage.save(this.#storedState);
-          }
-        },
+        save: () => this.#save(),
         broadcast: () => this.broadcast(),
         scheduleAICheck: () => this.#scheduleAICheck(),
       }
@@ -217,11 +213,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
           this.#pendingActionManager.updateRunner(newRunner);
         },
-        save: async () => {
-          if (this.#storage) {
-            await this.#storage.save(this.#storedState);
-          }
-        },
+        save: () => this.#save(),
         broadcast: () => this.broadcast(),
       }
     );
@@ -324,6 +316,15 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             }
           }
         }
+
+        // Refresh the authoritative snapshot now that the playing runner exists.
+        // onGameStart recreates the runner (with playerConfigs) when the lobby
+        // transitions waiting -> playing, so the snapshot captured at create()
+        // (the waiting runner) is stale. Restore reconstructs from this snapshot,
+        // so it must reflect the real, started game even before the first action
+        // is taken (and before any storage.save). Updated in place so the next
+        // #save / restore reads the correct started state.
+        storedState.snapshot = session.#runner.getSnapshot();
 
         // Trigger AI check when game starts
         if (session.#aiController?.hasAIPlayers()) {
@@ -507,6 +508,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       playerIds,
       seed: gameSeed,
       actionHistory: [],
+      // Authoritative snapshot of the freshly-started runner. Restore reconstructs
+      // from this (never by replay); it is refreshed on every persist via #save and
+      // when a lobby game transitions to playing (onGameStart recreates the runner).
+      snapshot: runner.getSnapshot(),
       createdAt: Date.now(),
       aiConfig,
       gameOptions: customGameOptions,
@@ -564,14 +569,26 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     storage?: StorageAdapter,
     botAIConfig?: BotAIConfig
   ): GameSession<G> {
-    const runner = GameRunner.replay<G>(
-      {
-        GameClass,
-        gameType: storedState.gameType,
-        gameOptions: GameSession.#buildGameOptionsFromState(storedState),
-      },
-      storedState.actionHistory
-    );
+    // Snapshot-authoritative restore (audit F42). Reconstruct game state directly
+    // from the persisted snapshot via GameRunner.fromSnapshot — NOT by replaying
+    // actionHistory. Replay is unsound: selection-step / pending-completed actions
+    // are recorded in neither command nor action history, so replaying an
+    // incomplete actionHistory mis-positions the flow and crashes real games
+    // ("Player N is not awaiting action"). fromSnapshot restores the element tree,
+    // flow position, sequence, RNG, and per-action undo checkpoints authoritatively.
+    if (!storedState.snapshot) {
+      throw new Error(
+        `Cannot restore game "${storedState.gameType}": the stored state has no snapshot. ` +
+        `Snapshot-authoritative restore reconstructs game state from runner.getSnapshot(); ` +
+        `it does NOT replay action history, because selection-step and pending-completed ` +
+        `mutations are recorded in neither command nor action history and replaying them ` +
+        `mis-positions the flow. This stored state predates the snapshot field (or was not ` +
+        `produced through GameSession's save funnel). Start a new game so a snapshot is ` +
+        `captured, or re-save the existing state under the current library version.`
+      );
+    }
+
+    const runner = GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass);
 
     const aiController = storedState.aiConfig
       ? new AIController(GameClass, storedState.gameType, storedState.playerCount, storedState.aiConfig, botAIConfig)
@@ -791,10 +808,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       this.#checkpointManager.capture(this.#runner.game, actionIndex);
     }
 
-    // Persist if storage adapter is provided
-    if (this.#storage) {
-      await this.#storage.save(this.#storedState);
-    }
+    // Persist if storage adapter is provided (refreshes the authoritative
+    // snapshot first — see #save).
+    await this.#save();
 
     // Broadcast to all connected clients
     this.broadcast();
@@ -1173,29 +1189,6 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     return options;
   }
 
-  /**
-   * Static version of #buildGameOptions for use in static factory methods.
-   */
-  static #buildGameOptionsFromState(storedState: StoredGameState): GameOptions & Record<string, unknown> {
-    const options: GameOptions & Record<string, unknown> = {
-      playerCount: storedState.playerCount,
-      playerNames: storedState.playerNames,
-      seed: storedState.seed,
-      ...storedState.gameOptions,
-    };
-
-    if (storedState.lobbySlots && storedState.lobbyState === 'playing') {
-      options.playerConfigs = storedState.lobbySlots.map(slot => ({
-        name: slot.name,
-        isAI: slot.status === 'ai',
-        aiLevel: slot.aiLevel,
-        ...slot.playerOptions,
-      }));
-    }
-
-    return options;
-  }
-
   // ============================================
   // Undo Methods
   // ============================================
@@ -1400,6 +1393,27 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   // ============================================
 
   /**
+   * Persist the stored state, refreshing the authoritative snapshot first.
+   *
+   * The snapshot (`runner.getSnapshot()`) is the SINGLE source of truth that
+   * `GameSession.restore()` reconstructs from via `GameRunner.fromSnapshot` — it
+   * carries the element tree, flow position, sequence counter, RNG state, original
+   * constructor options, and the per-action undo checkpoints. Producing it here,
+   * at the exact moment of persistence, guarantees the saved snapshot can never
+   * drift from the live runner state.
+   *
+   * This is the single funnel for every GameSession save path (direct actions, AI
+   * moves, pending/selection steps, undo, rewind), so no caller can persist a
+   * stale or snapshot-less stored state. No-ops without a storage adapter (there
+   * is nothing to restore from when state is never persisted).
+   */
+  async #save(): Promise<void> {
+    if (!this.#storage) return;
+    this.#storedState.snapshot = this.#runner.getSnapshot();
+    await this.#storage.save(this.#storedState);
+  }
+
+  /**
    * Broadcast current state to all connected sessions
    */
   broadcast(): void {
@@ -1472,9 +1486,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           const result = this.#runner.performAction(action, player, args);
           if (result.success) {
             this.#storedState.actionHistory = this.#runner.actionHistory;
-            if (this.#storage) {
-              await this.#storage.save(this.#storedState);
-            }
+            await this.#save();
             this.broadcast();
             return true;
           }

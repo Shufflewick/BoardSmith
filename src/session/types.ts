@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, SerializedAction, Game, AnimationEvent } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import type {
   LobbyState,
@@ -170,6 +170,25 @@ export interface StoredGameState {
   playerIds?: string[];
   seed?: string;
   actionHistory: SerializedAction[];
+  /**
+   * Authoritative game-state snapshot — the SINGLE source of truth that
+   * {@link StoredGameState} reconstructs from on cold restore.
+   *
+   * Produced by `runner.getSnapshot()`, it carries the full element tree, flow
+   * position, sequence counter, RNG state, original constructor options, and the
+   * per-action undo checkpoints. `GameSession.restore()` rebuilds via
+   * `GameRunner.fromSnapshot(snapshot)` — it does NOT replay `actionHistory`,
+   * because selection-step and pending-completed mutations are recorded in
+   * neither command nor action history and replaying them mis-positions the flow.
+   *
+   * `actionHistory` is still persisted alongside it, but ONLY for undo
+   * turn-detection (`computeUndoInfo`) — never for state reconstruction.
+   *
+   * Optional only so the type can model stored state loaded from older
+   * persistence that predates this field; `restore()` fails loud when it is
+   * absent rather than silently falling back to unsound replay.
+   */
+  snapshot?: GameStateSnapshot;
   createdAt: number;
   aiConfig?: AIConfig;
   /** Game-specific options (for restart) */
