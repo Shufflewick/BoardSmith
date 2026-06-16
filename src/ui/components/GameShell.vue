@@ -25,7 +25,7 @@ import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
 import type { ActionMetadata } from '../composables/useActionControllerTypes';
 import turnNotificationSound from '../assets/turn-notification.mp3';
-import { assertCloneable } from './platformRequestClone.js';
+import { toCloneablePayload } from './platformRequestClone.js';
 
 // Generate or retrieve persistent player ID
 // Session-specific IDs (for same-browser scenarios) are stored in sessionStorage
@@ -232,7 +232,10 @@ let platformRequestSeq = 0;
 const pendingPlatformRequests = new Map<string, (r: Record<string, unknown>) => void>();
 
 function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
-  assertCloneable(op, payload);
+  // Strip Vue reactivity (a reactive proxy / ref is not structured-cloneable) so the
+  // natural `someRef.value` arg survives postMessage; a genuine live-element leak
+  // still fails loud via assertCloneable inside toCloneablePayload.
+  const cloneable = toCloneablePayload(op, payload);
   return new Promise((resolve) => {
     const requestId = `req-${platformRequestSeq++}`;
     const timer = setTimeout(() => {
@@ -249,7 +252,7 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
       type: 'server_request',
       requestId,
       op,
-      payload,
+      payload: cloneable,
     }, '*');
   });
 }
