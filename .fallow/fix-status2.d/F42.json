@@ -1,0 +1,7 @@
+{
+  "unit": "F42",
+  "fids": ["F42"],
+  "status": "merged",
+  "sha": "abff179",
+  "desc": "Make GameSession.restore snapshot-authoritative: persist a GameStateSnapshot in StoredGameState via a unified #save() funnel and reconstruct via GameRunner.fromSnapshot instead of unsound action-replay (fail loud if no snapshot). Restores undo/time-travel after cold restart. Games: polyhedral-potions (large) — Track/AbilityManager now serialize, derived getters recompute, snapshot round-trip test added (fb1c7f5); MERC re-vendored, custom state confirmed snapshot-safe (432ecd0)."
+}

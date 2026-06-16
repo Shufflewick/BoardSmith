@@ -150,11 +150,11 @@
   </header>
 
   <div class="stats">
-    <div class="stat s-fixed"><div class="n">51</div><div class="l">✅ Fixed &amp; merged</div></div>
+    <div class="stat s-fixed"><div class="n">52</div><div class="l">✅ Fixed &amp; merged</div></div>
     <div class="stat s-blocked"><div class="n">0</div><div class="l">⛔ Blocked</div></div>
-    <div class="stat s-open"><div class="n">1</div><div class="l">○ Open</div></div>
+    <div class="stat s-open"><div class="n">0</div><div class="l">○ Open</div></div>
     <div class="stat s-high"><div class="n">0</div><div class="l">High (active)</div></div>
-    <div class="stat s-medium"><div class="n">1</div><div class="l">Medium (active)</div></div>
+    <div class="stat s-medium"><div class="n">0</div><div class="l">Medium (active)</div></div>
     <div class="stat s-gi"><div class="n">8</div><div class="l">Impact games</div></div>
   </div>
 
@@ -240,7 +240,7 @@
     <div class="mx-legend"><span class="mx-affected">●</span> affected (will break / must change) &nbsp;&nbsp; <span class="mx-likely">○</span> likely (confirm) &nbsp;&nbsp; · not affected &nbsp;&nbsp; letter = effort (t·rivial / s·mall / m·oderate / l·arge)</div>
   </div>
 
-  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 1 of 52 — 51 fixed, moved to bottom)</span></h2>
+  <h2 class="section-title">Active findings <span style="color:var(--muted);font-size:14px;font-weight:400;">(worst first · 0 of 52 — 52 fixed, moved to bottom)</span></h2>
   <div class="controls">
     <span class="lbl">Severity:</span>
     <div class="grp" id="sevFilters">
@@ -273,69 +273,10 @@
 
   <div id="findings">
     
-  <article class="card fx-open" data-cat="pit-of-success" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="open">
-    <div class="card-head">
-      <div class="rank"><span class="fid">F42</span>#1</div>
-      <div class="head-main">
-        <div class="badges">
-          <span class="badge fx-open">○ Open</span>
-          <span class="badge sev-medium">Medium</span>
-          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
-          <span class="badge ease-moderate">moderate</span>
-          <span class="badge conf-high">conf: high</span>
-          <span class="badge gi-count">1 game impacted</span>
-          <span class="badge verified">✓ verified vs source</span>
-        </div>
-        <h3>GameSession.restore() rebuilds state via action-replay, which the runtime itself documents as unsound — two hosting worlds with opposite correctness guarantees</h3>
-        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
-        
-      </div>
-    </div>
-    <div class="card-body">
-      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A server restart / cold reload of any game that uses multi-step or repeating selections (the entire processSelectionStep path) restores via replay, which omits those mutations and mis-positions the flow — silently producing a board that never existed, or throwing 'not awaiting action'. The exact same library has a sound restore primitive that this path ignores. Additionally, because only actionHistory is persisted, undo/time-travel/rewind are silently dead after any restore (their own error strings admit 'a session cold-restored from action history alone cannot undo across pending mutations', <code>src/session/state-history.ts:295-298</code>).</div></div>
-      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">GameSession is the prominently exported, documented session API (<code>src/session/index.ts</code> example shows GameSession.create/restore). A developer integrating BoardSmith reaches for the obvious GameSession.restore and gets the worse-guarantee replay path, while the correct snapshot-authoritative restore is only wired into the newer stateless host. The easy path is the wrong path.</div></div>
-      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Persist a GameStateSnapshot (<code>runner.getSnapshot()</code>, which already carries state+flowState+randomState+actionCheckpoints) in StoredGameState, and make <code>GameSession.restore()</code> call <code>GameRunner.fromSnapshot()</code> instead of <code>GameRunner.replay()</code>. Keep actionHistory only for undo turn-detection. This unifies both hosting worlds on the single authoritative restore primitive.</div></div>
-      <div class="field gi"><span class="flabel">Game impact — 1 affected, 0 likely</span>
-    <table class="gi-table">
-      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
-      <tbody>
-        <tr class="gi-row gi-row-affected">
-          <td class="gi-game">polyhedral-potions</td>
-          <td><span class="badge gi-affected">affected</span></td>
-          <td><span class="badge ease-wrap eff-large">large</span></td>
-          <td class="gi-change">Make the game survive a toJSON/fromJSON snapshot round-trip without action/command replay. Stop serializing getter-only derived values (score/abilities/distillations/fulminates/poisonSkulls) into attributes, and add real (de)serialization for the Track and AbilityManager objects so their entries are restored from the snapshot instead of from replayed TRACK_ADD commands. Today none of that survives fromSnapshot, so the game must change before F42's snapshot-authoritative GameSession.restore can host it.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/elements.ts:1045-1063</code> <code>PolyPotionsPlayer.toJSON()</code> writes getter-only derived props (json.attributes.score/abilities/distillations/fulminates/poisonSkulls); private Track/AbilityManager state is _-prefixed (_poisonTrack/_distillationTracks/_fulminateTrack/_abilityManager) and only rebuilt via TRACK_ADD commands in <code>src/rules/elements.ts:1019-1036</code>; plain game state (round/craftedValue/craftedPoison/gameEndTriggered in <code>src/rules/game.ts:66</code>,88-97) is rebuilt by re-running action.execute. Verified: GameRunner.fromSnapshot of a fresh game throws 'Cannot set property score of [object Object] which has only a getter' at <code>game-element.ts:934</code>.</div></details></td>
-        </tr></tbody>
-    </table></div>
-      <details class="evidence">
-        <summary>Evidence (source-cited)</summary>
-        <div class="ftext mono"><code>GameSession.restore()</code> reconstructs the game with <code>GameRunner.replay()</code> (<code>src/session/game-session.ts:539-546</code>), and StoredGameState (<code>src/session/types.ts:238-266</code>) persists only `actionHistory` — no snapshot, no state, no actionCheckpoints. But GameRunner's own docs (<code>src/runtime/runner.ts:296-303</code>) state replay 'was also unsound: selection-step / pending-completed actions are recorded in NEITHER command nor action history, so replaying an incomplete actionHistory mis-positioned the flow and crashed real games (e.g. MERC's AI dictator Day-1 turn: &quot;Player N is not awaiting action&quot;)'. The authoritative, state-direct path GameRunner.fromSnapshot exists and is used by the stateless executor (<code>src/session/stateless-ops.ts:207</code>, 251, 287, 335, 386) and SnapshotSessionHost (persists the full `snapshot` incl. actionCheckpoints, <code>src/session/snapshot-session-host.ts:36</code>), but GameSession never uses it for restore.</div>
-      </details>
-      <details class="verifier">
-        <summary>Adversarial verifier's independent check</summary>
-        <div class="ftext">Every citation checks out against current source.
-
-1. <code>GameSession.restore()</code> (<code>src/session/game-session.ts:533-546</code>) reconstructs the game via GameRunner.replay(...storedState.actionHistory) — confirmed, the unsound replay path, not fromSnapshot.
-
-2. StoredGameState (<code>src/session/types.ts:238-266</code>) persists only actionHistory (line 244) plus lobby/options metadata — no `snapshot`, no `state`, no `actionCheckpoints`, no `flowState`. So a cold restore HAS no choice but to replay. Confirmed.
-
-3. GameRunner's own doc comment (<code>src/runtime/runner.ts:294-305</code>) explicitly states replay &quot;was also unsound: selection-step / pending-completed actions are recorded in NEITHER command nor action history, so replaying an incomplete actionHistory mis-positioned the flow and crashed real games (e.g. MERC's AI dictator Day-1 turn: 'Player N is not awaiting action').&quot; fromSnapshot was created specifically to sidestep this. Confirmed verbatim.
-
-4. fromSnapshot is the state-authoritative primitive (<code>runner.ts:307-349</code>, loads serialized state, restores sequence/RNG/checkpoints, no replay) and is used throughout the stateless executor (<code>src/session/stateless-ops.ts</code>: fromSnapshot at lines 207, 251, 287, 315, 335, 386, 468, 482, 507, 541, 570, 591) and the snapshot host persists the full snapshot incl. actionCheckpoints (<code>src/session/snapshot-session-host.ts:36</code>). Confirmed.
-
-5. <code>state-history.ts:295-298</code> error string admits &quot;a session cold-restored from action history alone cannot undo across pending mutations.&quot; Confirmed.
-
-6. GameSession is a prominently exported, documented public API (<code>src/session/index.ts:110-115</code> exports it; the file-level example at lines 18-31 leads with GameSession.create). <code>restore()</code> is part of that public surface. The dev-host bridge comment (<code>src/cli/dev-host/bridge.ts:2</code>) describes itself as &quot;the in-process stand-in for ShufflewickPub's GameSession,&quot; indicating an external consumer uses GameSession.
-
-The finding is real and well-evidenced: two coexisting, fully-exported session worlds with opposite correctness guarantees, where the obvious/documented one (GameSession.restore) silently takes the replay path the library's own code documents as unsound and proven to crash, while the sound primitive (fromSnapshot) exists but is wired only into the newer snapshot host. That is a genuine pit-of-success violation — the easy path is the wrong path.
-
-Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</code> has NO non-test caller (grep shows only tests in src/session/*.<code>test.ts</code> invoke it), and the codebase is visibly mid-migration toward the snapshot host (stateless-ops + snapshot-session-host now drive dev and the executor). The blast radius is therefore limited to external integrators who choose GameSession over the newer host. Real correctness/trap concern, but not actively breaking an in-repo production path, so medium rather than high.</div>
-      </details>
-    </div>
-  </article>
   </div>
 
   <h2 class="section-title" id="completed"><span class="completed-header">✅ Completed &amp; merged
-    <span style="color:var(--muted);font-size:14px;font-weight:400;">(51 fixed — moved here, kept for the record)</span></span></h2>
+    <span style="color:var(--muted);font-size:14px;font-weight:400;">(52 fixed — moved here, kept for the record)</span></span></h2>
   <p class="section-note">Each was fixed in an isolated worktree (self-verified with <code>tsc</code> + <code>vitest run</code> + lint), gated against all 9 game suites for zero impact, and merged to <code>main</code> with docs updated inline.</p>
   <div id="completed-list">
     
@@ -985,6 +926,66 @@ The entire canonical AI-integration snippet cannot compile: private constructor 
       <details class="verifier">
         <summary>Adversarial verifier's independent check</summary>
         <div class="ftext">Verified every citation against current source. (1) `src/server` and `src/worker` directories are absent (`ls` -&gt; No such file or directory), and `grep -rn 'GameServerCore|createGameWorker' src` returns zero matches — so those modules and named exports truly no longer exist. (2) <code>architecture.md</code> still documents them as first-class modules in all three cited locations: the dependency graph at lines 52-66 draws `server`/`worker` boxes feeding `client` (lines 53-54, 64-66); the data-flow at line 108 routes `<code>GameConnection.action()</code> -&gt; WebSocket -&gt; Server/Worker`; the platform-adapters diagram at lines 192-196 shows `Express WS` and `Durable Object WS`; and the Package Responsibilities table at lines 206-207 lists `server | GameServerCore, handlers` and `worker | createGameWorker, adapters`. This is consistent with the recorded F8/F9 fix in <code>MEMORY.md</code> (server/worker modules removed). The doc is genuinely half-migrated — it advertises two deleted packages and two non-importable exports. Finding is real and accurately cited. I lower severity from high to medium: it is a documentation-only inaccuracy with no runtime/security impact, but it does materially mislead anyone reading the primary architecture map about how to deploy/extend hosting, so it is more than cosmetic.</div>
+      </details>
+    </div>
+  </article>
+
+  <article class="card fx-merged" data-cat="pit-of-success" data-sev="medium" data-ease="moderate" data-gi="yes" data-fix="merged">
+    <div class="card-head">
+      <div class="rank"><span class="fid">F42</span><span class="rank-done">✓</span></div>
+      <div class="head-main">
+        <div class="badges">
+          <span class="badge fx-merged" title="Fixed &amp; merged to main — abff179">✅ Fixed · abff179</span>
+          <span class="badge sev-medium">Medium</span>
+          <span class="badge cat cat-pit-of-success">Pit-of-Success</span>
+          <span class="badge ease-moderate">moderate</span>
+          <span class="badge conf-high">conf: high</span>
+          <span class="badge gi-count">1 game impacted</span>
+          <span class="badge verified">✓ verified vs source</span>
+        </div>
+        <h3>GameSession.restore() rebuilds state via action-replay, which the runtime itself documents as unsound — two hosting worlds with opposite correctness guarantees</h3>
+        <div class="sevnote">judge said <em>high</em>, verifier set <strong>medium</strong></div>
+        <div class="merge-note">Fixed &amp; merged to <code>main</code> as <code>abff179</code> — Make GameSession.restore snapshot-authoritative: persist a GameStateSnapshot in StoredGameState via a unified #<code>save()</code> funnel and reconstruct via GameRunner.fromSnapshot instead of unsound action-replay (fail loud if no snapshot). Restores undo/time-travel after cold restart. Games: polyhedral-potions (large) — Track/AbilityManager now serialize, derived getters recompute, snapshot round-trip test added (fb1c7f5); MERC re-vendored, custom state confirmed snapshot-safe (432ecd0).</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="field"><span class="flabel">Why it's a concern</span><div class="ftext">A server restart / cold reload of any game that uses multi-step or repeating selections (the entire processSelectionStep path) restores via replay, which omits those mutations and mis-positions the flow — silently producing a board that never existed, or throwing 'not awaiting action'. The exact same library has a sound restore primitive that this path ignores. Additionally, because only actionHistory is persisted, undo/time-travel/rewind are silently dead after any restore (their own error strings admit 'a session cold-restored from action history alone cannot undo across pending mutations', <code>src/session/state-history.ts:295-298</code>).</div></div>
+      <div class="field pit"><span class="flabel">Pit-of-Success impact</span><div class="ftext">GameSession is the prominently exported, documented session API (<code>src/session/index.ts</code> example shows GameSession.create/restore). A developer integrating BoardSmith reaches for the obvious GameSession.restore and gets the worse-guarantee replay path, while the correct snapshot-authoritative restore is only wired into the newer stateless host. The easy path is the wrong path.</div></div>
+      <div class="field fix"><span class="flabel">Path(s) to fix &nbsp;<span class="ease-inline">(moderate)</span></span><div class="ftext">Persist a GameStateSnapshot (<code>runner.getSnapshot()</code>, which already carries state+flowState+randomState+actionCheckpoints) in StoredGameState, and make <code>GameSession.restore()</code> call <code>GameRunner.fromSnapshot()</code> instead of <code>GameRunner.replay()</code>. Keep actionHistory only for undo turn-detection. This unifies both hosting worlds on the single authoritative restore primitive.</div></div>
+      <div class="field gi"><span class="flabel">Game impact — 1 affected, 0 likely</span>
+    <table class="gi-table">
+      <thead><tr><th>Game</th><th>Status</th><th>Effort</th><th>What must change</th></tr></thead>
+      <tbody>
+        <tr class="gi-row gi-row-affected">
+          <td class="gi-game">polyhedral-potions</td>
+          <td><span class="badge gi-affected">affected</span></td>
+          <td><span class="badge ease-wrap eff-large">large</span></td>
+          <td class="gi-change">Make the game survive a toJSON/fromJSON snapshot round-trip without action/command replay. Stop serializing getter-only derived values (score/abilities/distillations/fulminates/poisonSkulls) into attributes, and add real (de)serialization for the Track and AbilityManager objects so their entries are restored from the snapshot instead of from replayed TRACK_ADD commands. Today none of that survives fromSnapshot, so the game must change before F42's snapshot-authoritative GameSession.restore can host it.<details class="gi-ev"><summary>evidence</summary><div class="mono"><code>src/rules/elements.ts:1045-1063</code> <code>PolyPotionsPlayer.toJSON()</code> writes getter-only derived props (json.attributes.score/abilities/distillations/fulminates/poisonSkulls); private Track/AbilityManager state is _-prefixed (_poisonTrack/_distillationTracks/_fulminateTrack/_abilityManager) and only rebuilt via TRACK_ADD commands in <code>src/rules/elements.ts:1019-1036</code>; plain game state (round/craftedValue/craftedPoison/gameEndTriggered in <code>src/rules/game.ts:66</code>,88-97) is rebuilt by re-running action.execute. Verified: GameRunner.fromSnapshot of a fresh game throws 'Cannot set property score of [object Object] which has only a getter' at <code>game-element.ts:934</code>.</div></details></td>
+        </tr></tbody>
+    </table></div>
+      <details class="evidence">
+        <summary>Evidence (source-cited)</summary>
+        <div class="ftext mono"><code>GameSession.restore()</code> reconstructs the game with <code>GameRunner.replay()</code> (<code>src/session/game-session.ts:539-546</code>), and StoredGameState (<code>src/session/types.ts:238-266</code>) persists only `actionHistory` — no snapshot, no state, no actionCheckpoints. But GameRunner's own docs (<code>src/runtime/runner.ts:296-303</code>) state replay 'was also unsound: selection-step / pending-completed actions are recorded in NEITHER command nor action history, so replaying an incomplete actionHistory mis-positioned the flow and crashed real games (e.g. MERC's AI dictator Day-1 turn: &quot;Player N is not awaiting action&quot;)'. The authoritative, state-direct path GameRunner.fromSnapshot exists and is used by the stateless executor (<code>src/session/stateless-ops.ts:207</code>, 251, 287, 335, 386) and SnapshotSessionHost (persists the full `snapshot` incl. actionCheckpoints, <code>src/session/snapshot-session-host.ts:36</code>), but GameSession never uses it for restore.</div>
+      </details>
+      <details class="verifier">
+        <summary>Adversarial verifier's independent check</summary>
+        <div class="ftext">Every citation checks out against current source.
+
+1. <code>GameSession.restore()</code> (<code>src/session/game-session.ts:533-546</code>) reconstructs the game via GameRunner.replay(...storedState.actionHistory) — confirmed, the unsound replay path, not fromSnapshot.
+
+2. StoredGameState (<code>src/session/types.ts:238-266</code>) persists only actionHistory (line 244) plus lobby/options metadata — no `snapshot`, no `state`, no `actionCheckpoints`, no `flowState`. So a cold restore HAS no choice but to replay. Confirmed.
+
+3. GameRunner's own doc comment (<code>src/runtime/runner.ts:294-305</code>) explicitly states replay &quot;was also unsound: selection-step / pending-completed actions are recorded in NEITHER command nor action history, so replaying an incomplete actionHistory mis-positioned the flow and crashed real games (e.g. MERC's AI dictator Day-1 turn: 'Player N is not awaiting action').&quot; fromSnapshot was created specifically to sidestep this. Confirmed verbatim.
+
+4. fromSnapshot is the state-authoritative primitive (<code>runner.ts:307-349</code>, loads serialized state, restores sequence/RNG/checkpoints, no replay) and is used throughout the stateless executor (<code>src/session/stateless-ops.ts</code>: fromSnapshot at lines 207, 251, 287, 315, 335, 386, 468, 482, 507, 541, 570, 591) and the snapshot host persists the full snapshot incl. actionCheckpoints (<code>src/session/snapshot-session-host.ts:36</code>). Confirmed.
+
+5. <code>state-history.ts:295-298</code> error string admits &quot;a session cold-restored from action history alone cannot undo across pending mutations.&quot; Confirmed.
+
+6. GameSession is a prominently exported, documented public API (<code>src/session/index.ts:110-115</code> exports it; the file-level example at lines 18-31 leads with GameSession.create). <code>restore()</code> is part of that public surface. The dev-host bridge comment (<code>src/cli/dev-host/bridge.ts:2</code>) describes itself as &quot;the in-process stand-in for ShufflewickPub's GameSession,&quot; indicating an external consumer uses GameSession.
+
+The finding is real and well-evidenced: two coexisting, fully-exported session worlds with opposite correctness guarantees, where the obvious/documented one (GameSession.restore) silently takes the replay path the library's own code documents as unsound and proven to crash, while the sound primitive (fromSnapshot) exists but is wired only into the newer snapshot host. That is a genuine pit-of-success violation — the easy path is the wrong path.
+
+Severity downgraded from high to medium: in-repo, <code>GameSession.restore()</code> has NO non-test caller (grep shows only tests in src/session/*.<code>test.ts</code> invoke it), and the codebase is visibly mid-migration toward the snapshot host (stateless-ops + snapshot-session-host now drive dev and the executor). The blast radius is therefore limited to external integrators who choose GameSession over the newer host. Real correctness/trap concern, but not actively breaking an in-repo production path, so medium rather than high.</div>
       </details>
     </div>
   </article>
