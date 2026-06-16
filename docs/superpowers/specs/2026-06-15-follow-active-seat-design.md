@@ -106,17 +106,21 @@ dev-host auto-seats the first client, so the agent already satisfies this.
   rebuild `aiSeats` from open seats, `resumeAI()`, re-`init` the (ex-)follower
   to its own seat, echo `{ type: 'follow', enabled: false, seat: ownSeat }`.
 
-### New dev-session accessors (`createDevSession`, `bridge.ts`)
+### No new session accessors needed
 
-To avoid the host reaching into view internals for `flowState`:
-- `activeSeats(): number[]` — wraps `dueSeats(runner.getFlowState())`.
-- `resumeAI(): void` — re-kicks the AI pump (runs due AI turns now).
+The host computes the active seat from `session.host.flowState` — a public field
+on `SnapshotSessionHost` that `apply()` sets *before* each broadcast, so it
+already reflects the post-op state during the `postGameState` callback. AI is
+resumed with the existing `session.host.runAITurns()` (already used by the host
+on seat-leave and game start). So this feature touches only `multiplayer-host.ts`
+plus the DevHost UI — `bridge.ts` is unchanged.
 
 ## Control surface (both button + WS op)
 
 - **WS op**: add `{ type: 'follow'; enabled: boolean }` to `ClientInbound` and
-  `{ type: 'follow'; enabled: boolean; seat: number }` to `HostOutbound` in
-  `src/types/protocol.ts` (single source of truth). Handled in
+  `{ type: 'follow'; enabled: boolean; seat: number }` to `HostOutbound` —
+  these live in `src/cli/dev-host/multiplayer-host.ts` (the dev-host WS protocol
+  is defined there, not in `src/types/protocol.ts`). Handled in
   `MultiplayerHost.handleMessage`.
 - **Button**: a "Follow active seat" toggle in the DevHost host-chrome toolbar
   (`src/cli/dev-host/DevHost.vue`). Sends the WS op; reflects the echoed state.
@@ -134,7 +138,10 @@ and action panel. Parity is preserved by reuse.
   rebuild `aiSeats`, `resumeAI()` — never leave the game stuck on a gone client.
 - **Game over / execute blocks**: `activeSeats()` empty → follower sees
   own-seat/final state; toggle still functions.
-- **Restart**: follow-mode persists across restart (repeated test runs).
+- **Restart**: resets follow-mode (fresh game = clean slate). The host clears
+  the follower and echoes `{ follow, enabled: false }` so the toolbar untoggles;
+  the agent re-enables it if it wants to drive the new game. Simpler and
+  less error-prone than re-pausing AI mid-(re)start.
 - **Simultaneous-action steps** (`dueSeats` returns multiple): follower acts
   for the first due seat; it completes; the next becomes effective. Multiple
   `init` flips, correct result.
@@ -155,9 +162,9 @@ and action panel. Parity is preserved by reuse.
 
 ## Files touched
 
-- `src/types/protocol.ts` — `ClientInbound` / `HostOutbound` `follow` messages.
-- `src/cli/dev-host/multiplayer-host.ts` — follower state, three hook points,
-  enable/disable/disconnect handling.
+- `src/cli/dev-host/multiplayer-host.ts` — `ClientInbound` / `HostOutbound`
+  `follow` messages (the dev-host protocol lives here), follower state, three
+  hook points, enable/disable/disconnect handling.
 - `src/cli/dev-host/bridge.ts` — `activeSeats()` + `resumeAI()` accessors.
 - `src/cli/dev-host/DevHost.vue` — toolbar toggle + echoed-state reflection.
 - Tests as above.
