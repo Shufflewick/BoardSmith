@@ -43,6 +43,7 @@ const connected = ref(false);
 const seats = ref<SeatInfo[]>([]);
 const mySeat = ref<number | null>(null);
 const errorMsg = ref<string | null>(null);
+const followActive = ref(false);
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
@@ -123,6 +124,9 @@ function onHostMessage(msg: Record<string, unknown>): void {
     case 'server_response':
       postToGame({ type: 'server_response', requestId: msg.requestId, result: msg.result });
       break;
+    case 'follow':
+      followActive.value = msg.enabled as boolean;
+      break;
   }
 }
 
@@ -167,6 +171,9 @@ function leaveSeat(): void {
 }
 function newGame(): void {
   wsSend({ type: 'restart' });
+}
+function toggleFollow(): void {
+  wsSend({ type: 'follow', enabled: !followActive.value });
 }
 
 function seatLabel(seat: SeatInfo): string {
@@ -273,6 +280,15 @@ onUnmounted(() => {
             <span class="dev-chrome__badge">seat {{ mySeat }}</span>
           </div>
           <div class="dev-chrome__bar-actions">
+            <button
+              type="button"
+              class="btn"
+              :class="{ 'btn--on': followActive }"
+              :aria-pressed="followActive"
+              @click="toggleFollow"
+            >
+              {{ followActive ? 'Following active seat' : 'Follow active seat' }}
+            </button>
             <button type="button" class="btn btn--start" @click="newGame">New game</button>
           </div>
         </div>
@@ -442,6 +458,12 @@ onUnmounted(() => {
 .btn--start:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.btn--on {
+  border-color: #00d9ff;
+  background: rgba(0, 217, 255, 0.15);
+  color: #00d9ff;
 }
 
 /* ── In-game chrome ── */
