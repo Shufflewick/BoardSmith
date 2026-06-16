@@ -175,6 +175,74 @@ describe('MultiplayerHost (always-live)', () => {
   });
 });
 
+describe('MultiplayerHost — player configs', () => {
+  it('passes playerConfigs with per-seat isAI to the game (production parity, drives in-flow AI)', async () => {
+    // Games like MERC read options.playerConfigs[seat-1].isAI to decide whether a
+    // seat is AI-controlled in their own flow. The production lobby supplies this;
+    // the dev host must too, or the game treats the bot seat as a human and the
+    // dev host's MCTS later finds "No available moves".
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let startOptions: any = null;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      makeSeed: () => 'mp',
+      aiLevel: 'hard',
+      executeOp: (gameOptions, snap, pend, op) => {
+        if (op.type === 'start') startOptions = gameOptions;
+        return executeOp(altDef, gameOptions, snap, pend, op);
+      },
+      send: (clientId, msg) => sent.push({ clientId, msg }),
+    });
+
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1 (human); seat 2 open → AI
+
+    const configs = startOptions?.playerConfigs as Array<{ isAI: boolean; aiLevel?: string }> | undefined;
+    expect(configs).toBeDefined();
+    expect(configs?.[0].isAI).toBe(false); // seat 1 = human (A)
+    expect(configs?.[1].isAI).toBe(true); // seat 2 = AI
+    expect(configs?.[1].aiLevel).toBe('hard');
+  });
+});
+
+describe('MultiplayerHost — seat stability on reconnect', () => {
+  it('a seated client reconnecting after a failed start keeps its seat (not reassigned to the AI)', async () => {
+    // Repro: the dev auto-seats into seat 1, the first start fails (or hasn't
+    // finished), then the browser reconnects. The reconnecting client must NOT be
+    // bumped to another seat — otherwise seat 1 is released and played by a bot
+    // while the dev is asked to take seat 2.
+    let failNextStart = true;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      makeSeed: () => 'mp',
+      executeOp: (gameOptions, snap, pend, op) => {
+        if (op.type === 'start' && failNextStart) {
+          failNextStart = false;
+          throw new Error('simulated transient start failure');
+        }
+        return executeOp(altDef, gameOptions, snap, pend, op);
+      },
+      send: (clientId, msg) => sent.push({ clientId, msg }),
+    });
+
+    await host.handleMessage('A', { type: 'hello' }); // auto-seat seat 1, start FAILS
+    await host.handleMessage('A', { type: 'hello' }); // reconnect → must stay in seat 1
+
+    const lastLobby = [...sent]
+      .reverse()
+      .find((e) => e.clientId === 'A' && e.msg.type === 'lobby')?.msg as
+      | { seats: Array<{ seat: number; clientId: string | null }> }
+      | undefined;
+    const seat1 = lastLobby?.seats.find((s) => s.seat === 1);
+    const seat2 = lastLobby?.seats.find((s) => s.seat === 2);
+    expect(seat1?.clientId).toBe('A'); // still A's seat, not handed to the bot
+    expect(seat2?.clientId).toBe(null); // A was NOT bumped to seat 2
+  });
+});
+
 describe('MultiplayerHost — follow active seat', () => {
   it('baseline: without follow, AI plays the open seat and the game completes', async () => {
     const { host, lastOfType, pass } = makeAltHost();
@@ -203,6 +271,24 @@ describe('MultiplayerHost — follow active seat', () => {
     clear();
     await pass('A', 'r2');
     expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+  });
+
+  it('routes a follower\'s server_response back to the follower, not the empty acting seat', async () => {
+    const { host, to, pass } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, seat 2 = open
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await pass('A', 'r1'); // A passes as seat 1 → seat 2 becomes the active seat
+
+    // A now acts as seat 2 — a seat it does NOT occupy. Its server_response must
+    // route back to A (by requestId), not to seat 2's (empty) client. Before the
+    // fix it was posted to the acting seat and silently dropped, which left
+    // element-pick resolve_choices (and thus validElements) empty in the
+    // follower's UI even though game_state broadcasts still arrived.
+    await pass('A', 'r2');
+    const resp = to('A').find(
+      (m) => m.type === 'server_response' && (m as { requestId?: string }).requestId === 'r2',
+    );
+    expect(resp).toBeDefined();
   });
 
   it('disabling follow mid-game resumes AI for the open seat', async () => {

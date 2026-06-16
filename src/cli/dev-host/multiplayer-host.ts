@@ -101,6 +101,15 @@ export class MultiplayerHost {
   private followerClientId: string | null = null;
   /** The active seat last shown to the follower, to re-init only on change. */
   private lastFollowerSeat: number | null = null;
+  /**
+   * Maps an in-flight requestId to the client that issued it, so the matching
+   * `server_response` is routed back to the REQUESTING client — not the acting
+   * seat. A follower acts as a seat it does not occupy (the active seat), so
+   * routing the response by seat would post it to that seat's (empty) client and
+   * silently drop it (e.g. element-pick `resolve_choices`, leaving validElements
+   * empty). Keyed by requestId; cleared when the response is delivered.
+   */
+  private requestOrigin = new Map<string, string>();
 
   constructor(private readonly opts: MultiplayerHostOptions) {
     for (let seat = 1; seat <= opts.playerCount; seat++) {
@@ -138,6 +147,19 @@ export class MultiplayerHost {
         this.broadcastLobby();
         return;
       }
+      // Holds a seat but the game isn't live yet (reconnected mid-start, or a
+      // prior start failed). NEVER fall through to the auto-seat/seat-picker
+      // block below: that path RELEASES this seat and reassigns the client to
+      // another open seat, handing its original seat to the AI (the dev ends up
+      // bumped to seat 2 with seat 1 played by a bot). Keep the seat — if a start
+      // is already in flight it will reinit this client when it finishes;
+      // otherwise (re)start the game with this client in its existing seat.
+      if (this.starting) {
+        this.broadcastLobby();
+        return;
+      }
+      await this.startGame();
+      return;
     }
 
     // First arrival → auto-seat + start so the dev is immediately in the game.
@@ -297,6 +319,9 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'You are not seated in this game.' });
       return;
     }
+    // Remember who asked so the response routes back to THIS client, even when a
+    // follower is acting as a seat it does not occupy.
+    if (msg.requestId) this.requestOrigin.set(msg.requestId, clientId);
     await this.session.handleServerRequest(seat, msg.requestId, msg.op, msg.payload);
   }
 
@@ -367,12 +392,25 @@ export class MultiplayerHost {
 
     // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
     // a fresh seed, each seat's chosen/default color, and which seats are AI.
+    const perSeatOptions = this.buildPerSeatOptions();
     const startGameOptions = {
       playerCount,
       seed: (this.opts.makeSeed ?? defaultSeed)(),
       ...this.opts.baseGameOptions,
-      playerOptions: this.buildPerSeatOptions(),
+      playerOptions: perSeatOptions,
       playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
+      // Mirror the production lobby's playerConfigs (game-session.ts builds the
+      // same shape from lobby slots) so games that read
+      // options.playerConfigs[seat-1] — e.g. per-seat isAI to drive in-flow AI —
+      // behave identically in dev. Without this an AI seat is invisible to such
+      // games: they treat the bot seat as a human, build an interactive turn, and
+      // the dev host's MCTS bot then finds "No available moves" and locks up.
+      playerConfigs: Array.from({ length: playerCount }, (_, i) => ({
+        name: this.seats.get(i + 1)?.name ?? `Player ${i + 1}`,
+        isAI: !humanSeats.has(i + 1),
+        aiLevel: this.opts.aiLevel,
+        ...perSeatOptions[i],
+      })),
     };
     const baseOptions = { playerCount };
     const executeOp = (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) =>
@@ -384,7 +422,7 @@ export class MultiplayerHost {
       executeOp,
       postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
       postServerResponse: (seat, requestId, result) =>
-        this.sendToSeat(seat, { type: 'server_response', requestId, result }),
+        this.deliverServerResponse(seat, requestId, result),
     });
 
     // Only commit to 'playing' if the game actually starts — otherwise a failed
@@ -452,6 +490,27 @@ export class MultiplayerHost {
   private sendToSeat(seat: number, message: HostOutbound): void {
     const info = this.seats.get(seat);
     if (info?.clientId && info.connected) this.send(info.clientId, message);
+  }
+
+  /**
+   * Route a `server_response` back to the client that issued the request (looked
+   * up by requestId), falling back to the acting seat's client. Without the
+   * requestId mapping, a follower's responses would be posted to the seat it is
+   * acting as — which it does not occupy — and dropped.
+   */
+  private deliverServerResponse(
+    seat: number,
+    requestId: string | null,
+    result: Record<string, unknown>,
+  ): void {
+    const message: HostOutbound = { type: 'server_response', requestId, result };
+    const origin = requestId ? this.requestOrigin.get(requestId) : undefined;
+    if (requestId) this.requestOrigin.delete(requestId);
+    if (origin && this.connected.has(origin)) {
+      this.send(origin, message);
+      return;
+    }
+    this.sendToSeat(seat, message);
   }
 
   /**
