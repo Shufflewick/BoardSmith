@@ -63,7 +63,7 @@
   4. All existing `useActionController`, `useBoardInteraction`, drag-drop, FLIP, and flying-element tests remain green — the interaction substrate is provably unchanged.
   5. Animation events (deal, flip, reveal) fire and play during an auto-UI game session; the old auto path's silence on animations is gone.
 **Plans**: 7 plans
-- [ ] 93-01-PLAN.md — Wave 1: ranked-tester registry + archetype selector + ElementRenderer dispatch (RENDER-02, RENDER-03, RENDER-04)
+- [x] 93-01-PLAN.md — Wave 1: ranked-tester registry + archetype selector + ElementRenderer dispatch (RENDER-02, RENDER-03, RENDER-04)
 - [ ] 93-02-PLAN.md — Wave 2: card-family renderers — Card/Hand/Deck (RENDER-01)
 - [ ] 93-03-PLAN.md — Wave 2: board-family renderers — GridBoard/HexBoard/Piece via closed-form math (RENDER-01, RENDER-04)
 - [ ] 93-04-PLAN.md — Wave 2: leaf renderers — Die/Space (RENDER-01)
@@ -127,7 +127,7 @@
 |-------|----------------|--------|-----------|
 | 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
 | 92. Piece & Grid Rendering Fixes | 3/3 | Complete    | 2026-06-21 |
-| 93. Renderer Rebuild | 0/7 | Planned | - |
+| 93. Renderer Rebuild | 1/7 | In Progress|  |
 | 94. Interaction, Presentation & Playability Gate | 0/? | Not started | - |
 | 95. Ship & Reframe | 0/? | Not started | - |
 | 96. Migration & Cleanup | 0/? | Not started | - |
