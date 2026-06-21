@@ -493,17 +493,19 @@ if (!rowCoord || !colCoord) {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Empty-board edge case in resolveGridSize**
+1. **Empty-board edge case in resolveGridSize** — RESOLVED
    - What we know: Current `boardSize` returns 8×8 when `visibleChildren.length === 0` (line 608–610)
    - What's unclear: Should an empty-but-declared grid return `{ ok: true, rows: 0, cols: 0 }` or wait until children appear?
    - Recommendation: Return `{ ok: true, rows: 0, cols: 0 }` when `$rowCoord`/`$colCoord` are declared (board is validly configured); show error only when children exist but no coord system can be determined.
+   - RESOLVED: An empty-but-declared grid returns `{ ok: true, rows: 0, cols: 0 }`; explicit `$rowCoord`/`$colCoord` coords are checked BEFORE the children-length guard so a validly-configured empty board never shows a spurious error. The plans implement this recommendation fully (Plan 01 `resolveGridSize` + must-have truth "returns {ok:true,rows:0,cols:0} for an explicitly-declared but empty grid"; consumed by Plan 02).
 
-2. **console.error placement for `!gridResult.ok`**
+2. **console.error placement for `!gridResult.ok`** — RESOLVED
    - What we know: D-03 requires `console.error` in addition to the panel
    - What's unclear: Whether to use `watchEffect` (may fire multiple times) or one-shot detection
    - Recommendation: Use `watchEffect` with a guard so it only logs once per unique error message.
+   - RESOLVED: `console.error` is placed in a `watchEffect` with a `ref<string | null>` last-error guard so it logs once per unique error message — never inside a computed getter (Pitfall 2). The plans implement this recommendation fully (Plan 02 Task 1).
 
 ---
 
