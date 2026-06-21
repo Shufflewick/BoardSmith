@@ -11,9 +11,9 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 - [ ] **SEC-02**: The `$`-attribute whitelist in `toJSONForPlayer` is audited and constrained to genuine layout descriptors, so no value-bearing data can ride the `$`-prefix to unauthorized players.
 
 ### Piece & Element Rendering (PIECE)
-- [ ] **PIECE-01**: A piece renders its `$image`/`$images` as an image rather than a text label.
-- [ ] **PIECE-02**: A piece with no image renders as a labeled token with owner color/shape — not a bare text box.
-- [ ] **PIECE-03**: Grid boards size from declared coordinates (`$rowCoord`/`$colCoord`); the hardcoded 8×8 fallback is removed and missing coordinates fail loudly with an actionable message.
+- [x] **PIECE-01**: A piece renders its `$image`/`$images` as an image rather than a text label.
+- [x] **PIECE-02**: A piece with no image renders as a labeled token with owner color/shape — not a bare text box.
+- [x] **PIECE-03**: Grid boards size from declared coordinates (`$rowCoord`/`$colCoord`); the hardcoded 8×8 fallback is removed and missing coordinates fail loudly with an actionable message.
 
 ### Renderer Rebuild (RENDER)
 - [ ] **RENDER-01**: A new renderer replaces `AutoElement.vue` + `AutoGameBoard.vue` while reusing the interaction substrate (`useActionController`, `useBoardInteraction`, drag orchestration, FLIP/flying primitives) unchanged except where INTERACT requires.
@@ -65,9 +65,9 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 |-------------|-------|--------|
 | SEC-01 | Phase 91 | Pending |
 | SEC-02 | Phase 91 | Pending |
-| PIECE-01 | Phase 92 | Pending |
-| PIECE-02 | Phase 92 | Pending |
-| PIECE-03 | Phase 92 | Pending |
+| PIECE-01 | Phase 92 | Complete |
+| PIECE-02 | Phase 92 | Complete |
+| PIECE-03 | Phase 92 | Complete |
 | RENDER-01 | Phase 93 | Pending |
 | RENDER-02 | Phase 93 | Pending |
 | RENDER-03 | Phase 93 | Pending |
