@@ -8,6 +8,22 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
+## Current Milestone: v3.1 Dynamic Auto-UI
+
+**Goal:** Replace the current Auto UI — which can show what components exist but can't actually play a game — with a dynamically-generated UI good enough to *play* a basic game before any custom UI is written, so designers focus on rules in the early days.
+
+**Target features:**
+- Replace the auto-UI renderer (`AutoElement.vue` + `AutoGameBoard.vue`) — keep the interaction substrate (`useActionController`, `useBoardInteraction`, drag orchestration, FLIP), with the specific plumbing edits a good board UI requires.
+- Hierarchy-bearing archetype templates (grid-board / card / tableau) selected by introspection, with closed-form grid/hex layout — **not** a general percentage-relative solver (deferred until a game needs it).
+- Pieces render with images/labels (re-targeted from cards, which are already `$images`-driven); fix the 8×8 grid fallback.
+- Board-centric interaction: board-anchored actions by default, suppressible footer ActionPanel, multi-ref highlight metadata, new renderer consumes `useAnimationEvents`.
+- Per-UI presentation overlay in the `ui` layer (sibling file per UI), resolved *after* visibility filtering — **no** value-bearing `$`-annotations on engine elements.
+- Auto-UI as a selectable, shippable peer + single-UI production export (remove the scaffold's static `AutoUI` import so tree-shaking drops it); reframe the scaffold away from split-screen. (Defer the N-UI registry + live dev switcher.)
+- Fix the `$images.face` information leak (face-down card face URLs ship to all players via the `$`-whitelist in `toJSONForPlayer`).
+- Migrate all games to the new auto-UI and delete the old paths — nothing left half-broken (No Backward Compatibility).
+
+**Key context:** Locked design decisions (2026-06-20) — (1) templates now, general solver later; (2) presentation lives in a per-UI overlay in the `ui` layer, not on engine `$`-props. Full research and red-team verdict: `docs/auto-ui-redesign-research.md` (§0 is authoritative). Games are cross-repo (`~/BoardSmithGames/`, MERC at `~/Dropbox/MERC/BoardSmith/MERC`); migration follows the prior cross-repo re-vendor pattern, with MERC as the canary for any shared-plumbing change.
+
 ## Previous: v3.0 Shipped
 
 Animation Timeline — replaced v2.9 theatre view and mutation capture with a client-side animation timeline. Animation events are a pure data channel, playback is 100% client-owned, server never waits on animation state.
@@ -204,13 +220,25 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-(None — planning next milestone)
+v3.1 Dynamic Auto-UI requirements (see `.planning/REQUIREMENTS.md`):
+- Renderer rebuild (archetype templates + ranked dispatch + closed-form layout)
+- Piece image/label rendering + grid-fallback fix
+- Board-centric interaction (suppressible panel, multi-ref highlight, animation events)
+- Per-UI presentation overlay in the `ui` layer
+- Auto-UI as shippable peer + single-UI export + scaffold reframe
+- `$images.face` leak fix
+- Cross-repo migration of all games + old-path deletion
 
 ### Out of Scope
 
 - Backward compatibility — no fallbacks, clean break to v2.0
 - Multiple package versions — single version for entire library
 - Games in main repo — games are separate repos at `~/BoardSmithGames/`
+- General percentage-relative layout solver — deferred; archetype templates ship first, solver earns its way in when a real game's topology can't be templated (v3.1 decision)
+- Value-bearing `$`-annotations on engine elements (`$image`/`$stats`/`$label`/`$render`/`$owner`) — security leak + can't be per-UI; presentation lives in the `ui` layer (v3.1 decision)
+- N-UI registry + live dev-time UI switcher — deferred; YAGNI for now, and "v1 vs v2" comparison fights the evolving gameView contract
+- Touch/mobile polish, accessibility (screen-reader/keyboard/colorblind), i18n of author strings — named gaps for a future milestone
+- Engine model additions (spatial adjacency graph, free-form positioning, z-order) — separate rules-layer decision; not needed for the templated topologies
 
 ## Constraints
 
@@ -301,5 +329,22 @@ One external team using BoardSmith — migration guide at `docs/migration-guide.
 
 **Terminology:** Authoritative reference at `docs/nomenclature.md` with 33 terms across 7 categories.
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-02-08 after v3.0 milestone*
+*Last updated: 2026-06-20 — started v3.1 Dynamic Auto-UI milestone*

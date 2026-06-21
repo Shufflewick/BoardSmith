@@ -1,3 +1,18 @@
+---
+gsd_state_version: 1.0
+milestone: v3.1
+milestone_name: Dynamic Auto-UI
+status: planning
+last_updated: "2026-06-21T03:32:57.605Z"
+last_activity: 2026-06-21
+progress:
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+---
+
 # Project State
 
 ## Project Reference
@@ -9,16 +24,15 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 
 ## Current Position
 
-Phase: 90 of 90 (last phase of v3.0)
-Plan: Complete
-Status: Ready to plan next milestone
-Last activity: 2026-02-08 -- v3.0 milestone complete
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-21 — Milestone v3.1 started
 
 ## Milestones
 
 **Completed:**
+
 - v0.1 Large File Refactoring (Phases 1-4) -- shipped 2026-01-08
 - v0.2 Concerns Cleanup (Phases 5-8) -- shipped 2026-01-09
 - v0.3 Flow Engine Docs (Phase 9) -- shipped 2026-01-09
@@ -44,6 +58,7 @@ Progress: [██████████] 100%
 - v3.0 Animation Timeline (Phases 85-90) -- shipped 2026-02-08
 
 **In Progress:**
+
 - (none)
 
 ## Accumulated Context
