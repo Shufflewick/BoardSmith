@@ -736,9 +736,12 @@ Not applicable — this is a frontend-only feature phase. No rename, no data mig
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three resolved during planning; answers are encoded in the Phase 94 plans (94-03, 94-05).
 
 1. **Does notation surface on GameElement nodes in the renderer tree?**
+   - **RESOLVED:** Use a local `elementIdentity(el) = { id, name, notation: el.attributes?.notation }` helper consistently in all renderers (plan 94-03, Tasks 1-2). Notation lives in attributes, not top-level.
    - What we know: `matchesRef` checks `element.notation`; `GameElement.notation` is not a standard
      field in the auto-ui type (`id`, `name`, `className`, `attributes`, `children`, `childCount`).
      Notations for board squares come from `element.attributes?.notation` or from coordinated refs.
@@ -749,6 +752,7 @@ Not applicable — this is a frontend-only feature phase. No rename, no data mig
      `getElementIdentity(el): { id, name, notation }` used consistently in all renderers.
 
 2. **Does Phase 93's HexBoardRenderer use `HexBoardTemplate` or `GridBoardTemplate`?**
+   - **RESOLVED:** Plan 94-03 Task 1 targets `HexBoardRenderer.vue` directly (per-renderer path), which owns the "click a hex cell" event.
    - What we know: `GridBoardTemplate` filters on `$layout === 'hex-grid'` (it catches both grid
      and hex layouts at the archetype level). But there is a dedicated `HexBoardRenderer.vue`.
    - What's unclear: Whether the hex renderer is dispatched via the registry (per-element) or via
@@ -759,6 +763,7 @@ Not applicable — this is a frontend-only feature phase. No rename, no data mig
      a hex cell" event.
 
 3. **Does Checkers `DestinationChoice` have `capturedNotations` for multi-jump?**
+   - **RESOLVED:** Plan 94-05 Task 3 extends `DestinationChoice` with `capturedNotations?: string[]` (game-side change); the D-01 protocol infrastructure carries the resulting `refs` without Checkers-specific knowledge.
    - What we know: The current `DestinationChoice` interface has only `pieceId`, `fromNotation`,
      `toNotation`, `isCapture`, `becomesKing` (lines 38-44 of actions.ts).
    - What's unclear: Whether multi-jump intermediate squares are tracked or just implied.
