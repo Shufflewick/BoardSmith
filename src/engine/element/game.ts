@@ -2318,12 +2318,18 @@ export class Game<
           // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
           const hiddenChildren: ElementJSON[] = [];
           if (json.children) {
-            for (const childJson of json.children) {
+            for (let i = 0; i < json.children.length; i++) {
+              const childJson = json.children[i];
               // Redact identity-bearing image refs; keep only safe layout $-keys.
+              // Use negative index-based IDs to prevent correlation with real
+              // element IDs (matches the hidden/count-only branch above). Leaking
+              // the real, stable id lets a non-owner track a face-down card across
+              // zones and reveals.
               hiddenChildren.push({
                 className: childJson.className,
-                id: childJson.id,
+                id: -(element._t.id * 1000 + i),
                 attributes: { __hidden: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
+                // Don't include name - could reveal card identity
               });
             }
           }
