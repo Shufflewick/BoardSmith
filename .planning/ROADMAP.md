@@ -11,7 +11,7 @@
 ## Phases
 
 - [x] **Phase 91: Security Leak Fix** — Filter `$images.face` and audit the `$`-whitelist in `toJSONForPlayer` so no value-bearing data reaches unauthorized players. (completed 2026-06-21)
-- [ ] **Phase 92: Piece & Grid Rendering Fixes** — Pieces render with images/labels; labeled-token fallback for no-image pieces; grid boards size from declared coordinates; hardcoded 8×8 fallback removed.
+- [x] **Phase 92: Piece & Grid Rendering Fixes** — Pieces render with images/labels; labeled-token fallback for no-image pieces; grid boards size from declared coordinates; hardcoded 8×8 fallback removed. (completed 2026-06-21)
 - [ ] **Phase 93: Renderer Rebuild** — Replace `AutoElement.vue` + `AutoGameBoard.vue` with a ranked-tester dispatcher, archetype templates (grid-board/card/tableau), closed-form grid/hex layout, and animation event wiring — reusing the interaction substrate unchanged.
 - [ ] **Phase 94: Interaction, Presentation & Playability Gate** — Wire board-centric interaction (suppressible ActionPanel, multi-ref highlight, protocol extension), implement the per-UI presentation overlay, then prove Hex + Go Fish + Checkers are playable end-to-end in the browser.
 - [ ] **Phase 95: Ship & Reframe** — Auto-UI as a shippable production peer; single-UI production export via static-import removal; scaffold reframed away from split-screen.
@@ -47,7 +47,7 @@
 **Plans**: 3 plans
 - [x] 92-01-PLAN.md — Wave 1 (TDD): extract resolvePieceVisual + resolveGridSize pure helpers with unit tests (PIECE-01, PIECE-02, PIECE-03)
 - [x] 92-02-PLAN.md — Wave 2: wire helpers into AutoElement.vue (piece dispatch, gridResult layout, error panel, CSS); 8×8 fallback removed (PIECE-01, PIECE-02, PIECE-03)
-- [ ] 92-03-PLAN.md — Wave 3: browser verification of image/token pieces, declared grid, and error panel (PIECE-01, PIECE-02, PIECE-03)
+- [x] 92-03-PLAN.md — Wave 3: browser verification of image/token pieces, declared grid, and error panel (PIECE-01, PIECE-02, PIECE-03)
 **UI hint**: yes
 
 ---
@@ -119,7 +119,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
-| 92. Piece & Grid Rendering Fixes | 2/3 | In Progress|  |
+| 92. Piece & Grid Rendering Fixes | 3/3 | Complete    | 2026-06-21 |
 | 93. Renderer Rebuild | 0/? | Not started | - |
 | 94. Interaction, Presentation & Playability Gate | 0/? | Not started | - |
 | 95. Ship & Reframe | 0/? | Not started | - |

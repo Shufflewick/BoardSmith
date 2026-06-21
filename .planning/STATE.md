@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Dynamic Auto-UI
-status: executing
-stopped_at: Phase 93 context gathered; Phase 92 ready to execute
-last_updated: "2026-06-21T15:28:18.161Z"
+status: ready_to_plan
+stopped_at: Phase 92 complete (3/3) — ready to discuss Phase 93
+last_updated: 2026-06-21T15:50:44.566Z
 last_activity: 2026-06-21
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 167
   percent: 17
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 92 — piece-grid-rendering-fixes
+**Current focus:** Phase 93 — renderer rebuild
 
 ## Current Position
 
-Phase: 92 (piece-grid-rendering-fixes) — EXECUTING
-Plan: 3 of 3
-Status: Ready to execute
+Phase: 93
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-21
 
 Progress: [████████░░] 80%
