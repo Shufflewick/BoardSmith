@@ -16,11 +16,11 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 - [x] **PIECE-03**: Grid boards size from declared coordinates (`$rowCoord`/`$colCoord`); the hardcoded 8×8 fallback is removed and missing coordinates fail loudly with an actionable message.
 
 ### Renderer Rebuild (RENDER)
-- [ ] **RENDER-01**: A new renderer replaces `AutoElement.vue` + `AutoGameBoard.vue` while reusing the interaction substrate (`useActionController`, `useBoardInteraction`, drag orchestration, FLIP/flying primitives) unchanged except where INTERACT requires.
-- [ ] **RENDER-02**: Element renderers are dispatched via a ranked-tester registry (replacing the brittle `elementType` if/else cascade); a higher-priority renderer can be registered to upgrade the auto-UI in place.
-- [ ] **RENDER-03**: The board is laid out by an introspection-selected archetype template (grid-board / card / tableau) that encodes visual hierarchy (focal board, docked hand, peripheral chrome) — not equal-space subdivision.
-- [ ] **RENDER-04**: Grid and hex layouts use closed-form math (`useGameGrid`/`useHexGrid`); the auto-UI's scope is bounded to coordinate-addressable topologies (grid/hex/stack/hand) and fails honestly outside it.
-- [ ] **RENDER-05**: The new renderer consumes `useAnimationEvents` so deal/flip/reveal choreography plays (the old auto path never did).
+- [x] **RENDER-01**: A new renderer replaces `AutoElement.vue` + `AutoGameBoard.vue` while reusing the interaction substrate (`useActionController`, `useBoardInteraction`, drag orchestration, FLIP/flying primitives) unchanged except where INTERACT requires.
+- [x] **RENDER-02**: Element renderers are dispatched via a ranked-tester registry (replacing the brittle `elementType` if/else cascade); a higher-priority renderer can be registered to upgrade the auto-UI in place.
+- [x] **RENDER-03**: The board is laid out by an introspection-selected archetype template (grid-board / card / tableau) that encodes visual hierarchy (focal board, docked hand, peripheral chrome) — not equal-space subdivision.
+- [x] **RENDER-04**: Grid and hex layouts use closed-form math (`useGameGrid`/`useHexGrid`); the auto-UI's scope is bounded to coordinate-addressable topologies (grid/hex/stack/hand) and fails honestly outside it.
+- [x] **RENDER-05**: The new renderer consumes `useAnimationEvents` so deal/flip/reveal choreography plays (the old auto path never did).
 
 ### Board-Centric Interaction (INTERACT)
 - [ ] **INTERACT-01**: Action choices that carry a board anchor are actioned directly on the board by default; the footer panel is the fallback when there is no anchor.
@@ -68,11 +68,11 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 | PIECE-01 | Phase 92 | Complete |
 | PIECE-02 | Phase 92 | Complete |
 | PIECE-03 | Phase 92 | Complete |
-| RENDER-01 | Phase 93 | Pending |
-| RENDER-02 | Phase 93 | Pending |
-| RENDER-03 | Phase 93 | Pending |
-| RENDER-04 | Phase 93 | Pending |
-| RENDER-05 | Phase 93 | Pending |
+| RENDER-01 | Phase 93 | Complete |
+| RENDER-02 | Phase 93 | Complete |
+| RENDER-03 | Phase 93 | Complete |
+| RENDER-04 | Phase 93 | Complete |
+| RENDER-05 | Phase 93 | Complete |
 | INTERACT-01 | Phase 94 | Pending |
 | INTERACT-02 | Phase 94 | Pending |
 | INTERACT-03 | Phase 94 | Pending |

@@ -12,7 +12,7 @@
 
 - [x] **Phase 91: Security Leak Fix** — Filter `$images.face` and audit the `$`-whitelist in `toJSONForPlayer` so no value-bearing data reaches unauthorized players. (completed 2026-06-21)
 - [x] **Phase 92: Piece & Grid Rendering Fixes** — Pieces render with images/labels; labeled-token fallback for no-image pieces; grid boards size from declared coordinates; hardcoded 8×8 fallback removed. (completed 2026-06-21)
-- [ ] **Phase 93: Renderer Rebuild** — Replace `AutoElement.vue` + `AutoGameBoard.vue` with a ranked-tester dispatcher, archetype templates (grid-board/card/tableau), closed-form grid/hex layout, and animation event wiring — reusing the interaction substrate unchanged.
+- [x] **Phase 93: Renderer Rebuild** — Replace `AutoElement.vue` + `AutoGameBoard.vue` with a ranked-tester dispatcher, archetype templates (grid-board/card/tableau), closed-form grid/hex layout, and animation event wiring — reusing the interaction substrate unchanged. (completed 2026-06-21)
 - [ ] **Phase 94: Interaction, Presentation & Playability Gate** — Wire board-centric interaction (suppressible ActionPanel, multi-ref highlight, protocol extension), implement the per-UI presentation overlay, then prove Hex + Go Fish + Checkers are playable end-to-end in the browser.
 - [ ] **Phase 95: Ship & Reframe** — Auto-UI as a shippable production peer; single-UI production export via static-import removal; scaffold reframed away from split-screen.
 - [ ] **Phase 96: Migration & Cleanup** — Migrate all 9 `~/BoardSmithGames/` games + MERC canary verification; delete old renderer + scaffold; docs updated; `npm run audit` clean.
@@ -69,7 +69,7 @@
 - [x] 93-04-PLAN.md — Wave 2: leaf renderers — Die/Space (RENDER-01)
 - [x] 93-05-PLAN.md — Wave 2: archetype templates + honest-fail panel (RENDER-03, RENDER-04)
 - [x] 93-06-PLAN.md — Wave 3: AutoRenderer host + animation wiring + AutoUI swap + DELETE old renderer (RENDER-01, RENDER-05)
-- [ ] 93-07-PLAN.md — Wave 4: browser smoke-test gate games (render + animation) (RENDER-03, RENDER-05)
+- [x] 93-07-PLAN.md — Wave 4: browser smoke-test gate games (render + animation) (RENDER-03, RENDER-05)
 **UI hint**: yes
 
 ---
@@ -127,7 +127,7 @@
 |-------|----------------|--------|-----------|
 | 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
 | 92. Piece & Grid Rendering Fixes | 3/3 | Complete    | 2026-06-21 |
-| 93. Renderer Rebuild | 6/7 | In Progress|  |
+| 93. Renderer Rebuild | 7/7 | Complete    | 2026-06-21 |
 | 94. Interaction, Presentation & Playability Gate | 0/? | Not started | - |
 | 95. Ship & Reframe | 0/? | Not started | - |
 | 96. Migration & Cleanup | 0/? | Not started | - |
