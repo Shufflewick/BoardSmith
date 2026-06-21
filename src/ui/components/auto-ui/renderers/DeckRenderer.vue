@@ -46,23 +46,37 @@ const boardInteraction = tryUseBoardInteraction();
 const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
 const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
 
+// Element identity helper — passes notation from attributes (Pitfall 6)
+function elementIdentity() {
+  return {
+    id: props.element.id,
+    name: props.element.name,
+    notation: props.element.attributes?.notation as string | undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Board state computeds — defensive guard
+// Board state computeds — defensive guard (all six required states)
 // ---------------------------------------------------------------------------
 const isBoardHighlighted = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isHighlighted(elementIdentity());
 });
 
 const isBoardSelected = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isSelected({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isSelected(elementIdentity());
 });
 
 const isActionSelectable = computed(() => {
   if (!boardInteraction) return false;
   if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isSelectableElement(elementIdentity());
+});
+
+const isDisabled = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
 });
 
 // ---------------------------------------------------------------------------
@@ -88,7 +102,8 @@ const isEmpty = computed(() => childCount.value === 0);
 function handleClick(event: MouseEvent) {
   event.stopPropagation();
   if (!boardInteraction || !isActionSelectable.value) return;
-  boardInteraction.triggerElementSelect({ id: props.element.id, name: props.element.name });
+  if (isDisabled.value) return;
+  boardInteraction.triggerElementSelect(elementIdentity());
 }
 </script>
 
@@ -102,6 +117,7 @@ function handleClick(event: MouseEvent) {
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
+        'is-disabled': isDisabled,
       },
     ]"
     :data-zone="element.name"
@@ -192,6 +208,17 @@ function handleClick(event: MouseEvent) {
 
 .deck-container.is-board-selected {
   background: rgba(0, 255, 136, 0.2);
+}
+
+/* Disabled state */
+.deck-container.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.deck-container.is-disabled:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Header */
