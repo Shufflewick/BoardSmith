@@ -88,7 +88,7 @@
   7. **Playability Gate — Go Fish**: A complete game of Go Fish (deal, ask, draw, collect sets, end game) is played from start to finish in the browser using only the auto-UI, with no custom UI code.
   8. **Playability Gate — Checkers**: A complete game of Checkers (move pieces, single capture, multi-jump, king promotion) is played from start to finish in the browser using only the auto-UI, with no custom UI code.
 **Plans**: 6 plans
-- [ ] 94-01-PLAN.md — Wave 1: D-01 atomic multi-ref protocol migration (refs[] across 7 layers) (INTERACT-03)
+- [x] 94-01-PLAN.md — Wave 1: D-01 atomic multi-ref protocol migration (refs[] across 7 layers) (INTERACT-03)
 - [ ] 94-02-PLAN.md — Wave 2: D-02 auto-absent + suppressible footer + D-03 hybrid panel filter (INTERACT-01, INTERACT-02)
 - [ ] 94-03-PLAN.md — Wave 2: D-03 board-centric click/highlight affordances in 8 renderers (INTERACT-01)
 - [ ] 94-04-PLAN.md — Wave 3: D-04 presentation overlay chain + __hidden security guard (PRESENT-01, PRESENT-02, PRESENT-03)
@@ -134,7 +134,7 @@
 | 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
 | 92. Piece & Grid Rendering Fixes | 3/3 | Complete    | 2026-06-21 |
 | 93. Renderer Rebuild | 7/7 | Complete    | 2026-06-21 |
-| 94. Interaction, Presentation & Playability Gate | 0/6 | Planned | - |
+| 94. Interaction, Presentation & Playability Gate | 1/6 | In Progress|  |
 | 95. Ship & Reframe | 0/? | Not started | - |
 | 96. Migration & Cleanup | 0/? | Not started | - |
 
