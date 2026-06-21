@@ -643,22 +643,24 @@ Phase 93 is pure code/config changes within the existing repo. No external tools
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All three questions are resolved for planning. Q1/Q2 resolve to executor-read steps already encoded in the plans (93-06 T2 `read_first`) plus a browser gate (93-07 T2); Q3 resolves to the UI-SPEC CSS prescription. None require additional research before execution.
 
 1. **What does `game.animate('deal', data)` send for Go Fish?**
    - What we know: `AnimationEvent` has `{id, type, data: Record<string, unknown>, timestamp}`. The `type` can be anything the game passes to `game.animate()`.
    - What's unclear: Whether Go Fish uses 'deal', 'flip', 'reveal' as types, and what `data` keys it passes (source element ID? destination zone name? card value?).
-   - Recommendation: Executor reads `~/BoardSmithGames/go-fish/` source before writing animation handlers. If the gate games don't use 'deal'/'flip'/'reveal', RENDER-05 is still satisfied by wiring the composable and registering handlers for whatever types the games DO emit.
+   - **RESOLVED (A1):** Executor reads `~/BoardSmithGames/go-fish|checkers|hex|demo-animation` source in 93-06 T2 `read_first` before writing handlers; handlers use defensive `data` access and unit tests cover the wiring mechanism regardless of the event-type strings. If no gate game emits semantic 'deal'/'flip'/'reveal' types, 93-07 T2 uses `demo-animation` (which emits `game.animate('demo')`) as the browser animation vehicle. RENDER-05 is satisfied by wiring the composable + registering handlers for whatever types the games emit.
 
 2. **Does GameShell already provide `animationEvents` to the auto-UI slot?**
    - What we know: `useAnimationEvents()` returns `undefined` if not provided; the composable exists since v2.4.
    - What's unclear: Whether GameShell's `#game-board` slot is inside the `provideAnimationEvents` call's provide scope.
-   - Recommendation: Executor reads `src/ui/components/GameShell.vue` to confirm provide scope before writing the handler wiring.
+   - **RESOLVED (A3):** `AutoRenderer.vue` guards `useAnimationEvents() === undefined` (inject-only, no-ops gracefully); unit tests cover the undefined path. Executor reads `src/ui/components/GameShell.vue` in 93-06 T2 `read_first` to confirm provide scope. If GameShell does NOT provide animationEvents in the auto-UI slot, 93-07 T2 browser verification surfaces the gap before `/gsd:verify-work` — no silent failure.
 
 3. **Archetype template CSS: how does focal-board vs docked-hand hierarchy express visually?**
    - What we know: D-02 requires "focal board, docked hand, peripheral chrome" — NOT equal-space subdivision.
    - What's unclear: Exact CSS approach (CSS grid areas? flexbox with `flex-grow`? `clamp()` sizing?). This is Claude's Discretion.
-   - Recommendation: GridBoardTemplate.vue uses CSS grid-template-areas with named areas: `"board board" / "hand hand"` with `fr` units giving the board the dominant area.
+   - **RESOLVED:** Locked by the UI-SPEC CSS prescription — `GridBoardTemplate.vue` uses CSS `grid-template-areas` with named areas (`chrome` / `board` / `hand`) and `grid-template-rows: auto 1fr auto` giving the board the dominant `1fr` area; hand is `auto` (max 30vh), absent entirely if no hand exists. This is the explicit anti-equal-space-subdivision prescription.
 
 ---
 
