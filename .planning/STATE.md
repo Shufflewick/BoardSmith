@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Dynamic Auto-UI
 status: executing
-stopped_at: Phases 93+94 context gathered; Phase 92 complete; ready to plan Phase 93
-last_updated: "2026-06-21T18:31:01.755Z"
+stopped_at: Phase 95 context gathered; Phases 91-93 complete; Phase 94 planned and ready to execute
+last_updated: "2026-06-21T20:58:39.344Z"
 last_activity: 2026-06-21 -- Phase 94 planning complete
 progress:
   total_phases: 6
@@ -91,7 +91,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-21T15:54:33.076Z
-Stopped at: Phases 93+94 context gathered; Phase 92 complete; ready to plan Phase 93
-Resume file: .planning/phases/93-renderer-rebuild/93-CONTEXT.md
+Last session: 2026-06-21T20:58:39.337Z
+Stopped at: Phase 95 context gathered; Phases 91-93 complete; Phase 94 planned and ready to execute
+Resume file: .planning/phases/94-interaction-presentation-playability/94-CONTEXT.md
 Next action: `/gsd:plan-phase 91`
