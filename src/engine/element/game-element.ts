@@ -713,6 +713,24 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       }
     }
 
+    // Serialize a `notation` getter into attributes. `notation` is a
+    // framework-recognized board-coordinate key (BoardElementRef.notation): the
+    // auto-UI renderers read element.attributes.notation and ref-matching keys on
+    // it (Pitfall 6). Getters live on the prototype, so the own-key loop above
+    // never captures them — without this, notation-only board refs (e.g. Checkers
+    // squares, Hex cells) can never match the client element and the board is
+    // unplayable. Only added when the author defined a non-empty string getter.
+    if (attributes.notation === undefined) {
+      try {
+        const notation = (this as { notation?: unknown }).notation;
+        if (typeof notation === 'string' && notation.length > 0) {
+          attributes.notation = notation;
+        }
+      } catch {
+        // A notation getter that depends on not-yet-set state may throw; ignore.
+      }
+    }
+
     const json: ElementJSON = {
       className,
       id: this._t.id,

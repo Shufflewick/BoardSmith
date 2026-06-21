@@ -1,0 +1,180 @@
+/**
+ * Regression test for the Phase-94 board-centric playability bug.
+ *
+ * Bug: the controller→board sync (auto-start + setValidElements + click
+ * dispatch) lived inside ActionPanel, which GameShell makes ABSENT from the DOM
+ * for board-anchored element picks (D-02). With the panel absent the board's
+ * `validElements` was never populated, so clicking a hex/cell/piece only
+ * highlighted it and never executed the action ("Stones placed: 0").
+ *
+ * useBoardActionBridge lifts that sync into GameShell so it runs unconditionally.
+ * These tests exercise the bridge directly against a real board-interaction
+ * substrate and a fake controller — NO ActionPanel involved.
+ */
+import { describe, it, expect, vi } from 'vitest';
+import { ref, computed } from 'vue';
+import { createBoardInteraction } from './useBoardInteraction.js';
+import { useBoardActionBridge } from './useBoardActionBridge.js';
+import type { UseActionControllerReturn, PickMetadata, ValidElement } from './useActionControllerTypes.js';
+
+/** Build a minimal fake action controller backed by real refs. */
+function makeController(opts: {
+  pick?: PickMetadata | null;
+  action?: string | null;
+  validElements?: ValidElement[];
+}) {
+  const currentAction = ref<string | null>(opts.action ?? null);
+  const currentPick = computed<PickMetadata | null>(() => opts.pick ?? null);
+  const currentArgs = ref<Record<string, unknown>>({});
+  const isExecuting = ref(false);
+  const multiSelectDraft = ref(null);
+  const actionSnapshot = ref(null);
+  const pendingFollowUp = ref(false);
+  const pendingOnServer = ref(false);
+
+  const fill = vi.fn(async () => ({ valid: true }));
+  const start = vi.fn(async () => {});
+  const execute = vi.fn(async () => ({ success: true }));
+  const cancel = vi.fn(() => {});
+  const toggleMultiSelect = vi.fn(async () => {});
+
+  const controller = {
+    currentAction,
+    currentPick,
+    currentArgs,
+    isExecuting,
+    multiSelectDraft,
+    actionSnapshot,
+    pendingFollowUp,
+    pendingOnServer,
+    getCurrentChoices: () => [],
+    getValidElements: () => opts.validElements ?? [],
+    fill,
+    start,
+    execute,
+    cancel,
+    toggleMultiSelect,
+  } as unknown as UseActionControllerReturn;
+
+  return { controller, fill, start, execute, currentAction, currentPick };
+}
+
+const cellPick: PickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
+
+describe('useBoardActionBridge', () => {
+  it('populates board validElements for an active element pick (no ActionPanel)', () => {
+    const board = createBoardInteraction();
+    // Hex-style validElement: boardRef provides { id, notation }; notation comes
+    // from a getter so it is NOT serialized client-side — id must carry matching.
+    const validElements: ValidElement[] = [
+      { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
+      { id: 6, refs: [{ ref: { id: 6, notation: '1,0' }, role: 'highlight' }] },
+    ];
+    const { controller } = makeController({ pick: cellPick, action: 'placeStone', validElements });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
+      availableActions: ref(['placeStone']),
+    });
+
+    // The board cell (client identity has no notation — getter not serialized)
+    // must be selectable, matched by id.
+    expect(board.isSelectableElement({ id: 5, name: 'A1' })).toBe(true);
+    expect(board.isSelectableElement({ id: 6, name: 'B1' })).toBe(true);
+    expect(board.isSelectableElement({ id: 99 })).toBe(false);
+  });
+
+  it('dispatches the action when a selectable cell is clicked', () => {
+    const board = createBoardInteraction();
+    const validElements: ValidElement[] = [
+      { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
+    ];
+    const { controller, fill } = makeController({ pick: cellPick, action: 'placeStone', validElements });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
+      availableActions: ref(['placeStone']),
+    });
+
+    board.triggerElementSelect({ id: 5, name: 'A1' });
+    expect(fill).toHaveBeenCalledWith('cell', 5);
+  });
+
+  it('matches a notation-only element ref against a notation-keyed square (Checkers piece)', () => {
+    const board = createBoardInteraction();
+    // Checkers selects a PIECE but the player clicks the SQUARE it sits on. The
+    // boardRef is notation-only (no id) so the square's serialized notation matches.
+    const validElements: ValidElement[] = [
+      { id: 42 /* piece id */, refs: [{ ref: { notation: 'd4' }, role: 'highlight' }] },
+    ];
+    const { controller, fill } = makeController({ pick: cellPick, action: 'move', validElements });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ move: { name: 'move', selections: [cellPick] } }),
+      availableActions: ref(['move']),
+    });
+
+    // The rendered square (its own id is 7, notation 'd4') is selectable by notation.
+    expect(board.isSelectableElement({ id: 7, name: 'd4', notation: 'd4' })).toBe(true);
+    board.triggerElementSelect({ id: 7, name: 'd4', notation: 'd4' });
+    // onElementSelect routes back to the piece id, not the clicked square id.
+    expect(fill).toHaveBeenCalledWith('cell', 42);
+  });
+
+  it('makes notation-only target choices clickable on the board (Checkers destination)', () => {
+    const board = createBoardInteraction();
+    const destPick: PickMetadata = {
+      name: 'destination',
+      type: 'choice',
+      choices: [
+        { value: 'm1', display: 'd4→e5', refs: [{ ref: { notation: 'e5' }, role: 'target' }] },
+        { value: 'm2', display: 'd4→c5', refs: [{ ref: { notation: 'c5' }, role: 'target' }] },
+      ],
+    };
+    const { controller, fill } = makeController({ pick: destPick, action: 'move' });
+    // Choice picks read choices via getCurrentChoices().
+    (controller as unknown as { getCurrentChoices: () => unknown }).getCurrentChoices = () => destPick.choices!;
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
+      availableActions: ref(['move']),
+    });
+
+    expect(board.isSelectableElement({ id: 21, name: 'e5', notation: 'e5' })).toBe(true);
+    expect(board.isSelectableElement({ id: 22, name: 'c5', notation: 'c5' })).toBe(true);
+    board.triggerElementSelect({ id: 21, name: 'e5', notation: 'e5' });
+    expect(fill).toHaveBeenCalledWith('destination', 'm1');
+  });
+
+  it('auto-starts the sole available action when none is in progress', () => {
+    const board = createBoardInteraction();
+    const { controller, start } = makeController({ pick: null, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
+      availableActions: ref(['placeStone']),
+    });
+
+    expect(start).toHaveBeenCalledWith('placeStone', undefined);
+  });
+});

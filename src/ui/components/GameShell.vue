@@ -20,6 +20,7 @@ import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
+import { useBoardActionBridge } from '../composables/useBoardActionBridge';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useToast } from '../composables/useToast';
@@ -464,6 +465,21 @@ setupDragDropOrchestration({
   isMyTurn,
 });
 
+// Board-centric playability bridge (Phase 94): feeds the board-interaction
+// substrate (selectable elements, click dispatch, auto-start, choice callback)
+// from the action controller UNCONDITIONALLY — independent of whether the footer
+// ActionPanel is mounted. This is what makes clicking the board execute actions
+// when the panel is absent (D-02 board-centric default). The ActionPanel is now
+// purely presentational; this is the single source that drives the board.
+useBoardActionBridge({
+  controller: actionController,
+  boardInteraction,
+  isMyTurn,
+  autoEndTurn,
+  actionMetadata,
+  availableActions,
+});
+
 // Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards
 const { previewState } = useZoomPreview();
 
@@ -577,16 +593,9 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     }
   };
   window.addEventListener('message', platformMessageHandler);
-
-  // Auto-execute endTurn in platform mode when it's the only available action.
-  // Without ActionPanel, there's no UI for endTurn. The game flow requires it
-  // to advance after a move, so auto-execute it transparently.
-  watch([isMyTurn, availableActions], ([myTurn, actions]) => {
-    if (!myTurn || !actions?.length) return;
-    if (actions.length === 1 && actions[0] === 'endTurn') {
-      actionController.execute('endTurn', {});
-    }
-  });
+  // NOTE: auto-executing a sole endTurn (and auto-starting any single action) is
+  // now owned by useBoardActionBridge, which runs unconditionally above — so it
+  // works whether or not the footer ActionPanel is mounted.
 }
 
 // Update URL when entering a game
