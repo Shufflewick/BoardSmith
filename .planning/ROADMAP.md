@@ -30,7 +30,7 @@
   2. The `$`-attribute whitelist in `toJSONForPlayer` is constrained to genuine abstract topology descriptors (`$type`, `$layout`, coords, `$zone` as validated enum); any test or inspection confirms no value-bearing key (e.g. `$images.face`, `$stats`, `$label`) is present on hidden/owner-only/count-only elements for unauthorized players.
   3. A unit test directly covers the filtered `$images` path on a visibility-restricted element.
 **Plans**: 2 plans
-- [ ] 91-01-PLAN.md — Wave 0: failing leak test proving $images.face / $image / unknown-$-key leak (SEC-01, SEC-02)
+- [x] 91-01-PLAN.md — Wave 0: failing leak test proving $images.face / $image / unknown-$-key leak (SEC-01, SEC-02)
 - [ ] 91-02-PLAN.md — Wave 1: redactHiddenElementAttrs helper + three branch swaps; suite green (SEC-01, SEC-02)
 
 ---
@@ -115,7 +115,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 91. Security Leak Fix | 0/? | Not started | - |
+| 91. Security Leak Fix | 1/2 | In Progress|  |
 | 92. Piece & Grid Rendering Fixes | 0/? | Not started | - |
 | 93. Renderer Rebuild | 0/? | Not started | - |
 | 94. Interaction, Presentation & Playability Gate | 0/? | Not started | - |
