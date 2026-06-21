@@ -19,6 +19,7 @@ import { computed, inject, provide, ref, watchEffect, type Ref } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { setTransformAwareDragImage } from '../../composables/dragImage';
 import { Die3D } from '../dice';
+import { resolveGridSize } from './auto-ui-helpers.js';
 
 export interface GameElement {
   id: number;
@@ -602,58 +603,22 @@ function handleCellClick() {
   }
 }
 
-// Board size detection (for dynamic grid rendering)
-// Uses $rowCoord and $colCoord from Grid element to find correct attributes
-const boardSize = computed(() => {
-  if (elementType.value !== 'board' || !visibleChildren.value.length) {
-    return { rows: 8, columns: 8 }; // Default fallback
+// Board grid resolution — replaces the previous hardcoded-fallback computed.
+// Delegates to the pure helper so the same logic is reusable by the Phase 93 renderer.
+// Guards on elementType so cards/hands/pieces never trigger resolveGridSize.
+const gridResult = computed(() =>
+  elementType.value === 'board' ? resolveGridSize(props.element) : null
+);
+
+// One-shot side-effect: emit a console.error when the grid cannot resolve.
+// Lives in watchEffect (not inside the computed) to avoid repeated calls per reactive tick.
+const _lastGridError = ref<string | null>(null);
+watchEffect(() => {
+  const result = gridResult.value;
+  if (result && !result.ok && result.error !== _lastGridError.value) {
+    console.error(`[BoardSmith] ${result.error}`);
+    _lastGridError.value = result.error;
   }
-
-  const attrs = props.element.attributes ?? {};
-  const rowCoord = attrs.$rowCoord as string | undefined;
-  const colCoord = attrs.$colCoord as string | undefined;
-
-  // Fall back to gridCoordNames if $rowCoord/$colCoord not specified
-  if (!rowCoord || !colCoord) {
-    if (!gridCoordNames.value) {
-      return { rows: 8, columns: 8 };
-    }
-    const { first, second } = gridCoordNames.value;
-    let maxFirst = 0;
-    let maxSecond = 0;
-
-    for (const child of visibleChildren.value) {
-      const childAttrs = child.attributes ?? {};
-      const firstVal = childAttrs[first];
-      const secondVal = childAttrs[second];
-
-      if (typeof firstVal === 'number') maxFirst = Math.max(maxFirst, firstVal);
-      if (typeof secondVal === 'number') maxSecond = Math.max(maxSecond, secondVal);
-    }
-
-    return {
-      rows: maxFirst + 1,
-      columns: maxSecond + 1,
-    };
-  }
-
-  // Use explicit $rowCoord and $colCoord
-  let maxRow = 0;
-  let maxCol = 0;
-
-  for (const child of visibleChildren.value) {
-    const childAttrs = child.attributes ?? {};
-    const rowVal = childAttrs[rowCoord];
-    const colVal = childAttrs[colCoord];
-
-    if (typeof rowVal === 'number') maxRow = Math.max(maxRow, rowVal);
-    if (typeof colVal === 'number') maxCol = Math.max(maxCol, colVal);
-  }
-
-  return {
-    rows: maxRow + 1,
-    columns: maxCol + 1,
-  };
 });
 
 // Hex grid properties
@@ -1129,20 +1094,26 @@ const cardBackPreviewData = computed(() => {
 
     <!-- BOARD RENDERING -->
     <template v-else-if="elementType === 'board'">
-      <div class="board-container">
+      <!-- Error path: grid coords undeclared/unresolvable -->
+      <div v-if="gridResult && !gridResult.ok" class="grid-error-panel">
+        <span class="grid-error-panel__heading">Grid "{{ element.name ?? element.id }}" can't render</span>
+        <span class="grid-error-panel__hint">Declare $rowCoord and $colCoord on this Grid element</span>
+      </div>
+      <!-- Happy path: board renders when gridResult resolves successfully -->
+      <div v-else class="board-container">
         <div class="board-header">{{ displayLabel }}</div>
         <div class="board-with-labels">
           <!-- Column labels (from game designer or numeric indices) -->
           <div class="board-column-labels">
             <span class="board-label corner"></span>
-            <span v-for="(label, index) in (element.attributes?.$columnLabels as string[] || Array.from({length: boardSize.columns}, (_, i) => String(i)))" :key="index" class="board-label">{{ label }}</span>
+            <span v-for="(label, index) in (element.attributes?.$columnLabels as string[] || Array.from({length: gridResult?.cols ?? 0}, (_, i) => String(i)))" :key="index" class="board-label">{{ label }}</span>
           </div>
           <div class="board-row-wrapper">
             <!-- Row labels (from game designer or numeric indices) -->
             <div class="board-row-labels">
-              <span v-for="(label, index) in (element.attributes?.$rowLabels as string[] || Array.from({length: boardSize.rows}, (_, i) => String(i)))" :key="index" class="board-label">{{ label }}</span>
+              <span v-for="(label, index) in (element.attributes?.$rowLabels as string[] || Array.from({length: gridResult?.rows ?? 0}, (_, i) => String(i)))" :key="index" class="board-label">{{ label }}</span>
             </div>
-            <div class="board-grid" :style="{ 'grid-template-columns': `repeat(${boardSize.columns}, 1fr)` }">
+            <div class="board-grid" :style="{ 'grid-template-columns': `repeat(${gridResult?.cols ?? 0}, 1fr)` }">
               <AutoElement
                 v-for="child in visibleChildren"
                 :key="child.id"
@@ -2285,5 +2256,31 @@ const cardBackPreviewData = computed(() => {
   flex-direction: var(--layout-direction, row);
   align-items: var(--layout-align, center);
   justify-content: flex-start;
+}
+
+/* GRID ERROR PANEL — shown when $rowCoord/$colCoord cannot be resolved (D-03) */
+.grid-error-panel {
+  background: rgba(231, 76, 60, 0.12);
+  border: 1px solid rgba(231, 76, 60, 0.5);
+  border-radius: 8px;
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: inherit;
+}
+
+.grid-error-panel__heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e74c3c;
+  line-height: 1.3;
+}
+
+.grid-error-panel__hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
 }
 </style>
