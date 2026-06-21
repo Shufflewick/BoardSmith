@@ -83,8 +83,9 @@ export function deriveDropTargetsForPick(
     const targets: ValidElement[] = [];
     for (const el of controller.getValidElements(pick)) {
       if (el.disabled) continue;
-      if (el.id === undefined || !el.ref) continue;
-      targets.push({ id: el.id, ref: el.ref });
+      const highlightRef = (el.refs ?? []).find(r => r.role === 'highlight')?.ref;
+      if (el.id === undefined || !highlightRef) continue;
+      targets.push({ id: el.id, ref: highlightRef });
     }
     return {
       targets,
@@ -102,7 +103,7 @@ export function deriveDropTargetsForPick(
     const valueByTargetId = new Map<number, unknown>();
     for (const choice of controller.getChoices(pick) as ChoiceWithRefs[]) {
       if (choice.disabled) continue;
-      const ref = choice.targetRef;
+      const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref;
       if (!ref || ref.id === undefined) continue;
       targets.push({ id: ref.id, ref });
       valueByTargetId.set(ref.id, choice.value);
@@ -200,7 +201,7 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
   function pickAcceptsDragged(pick: PickMetadata, dragged: ElementRef): boolean {
     return actionController
       .getValidElements(pick)
-      .some(el => !el.disabled && matchesDragged({ id: el.id, ref: el.ref }, dragged));
+      .some(el => !el.disabled && matchesDragged({ id: el.id, ref: (el.refs ?? [])[0]?.ref }, dragged));
   }
 
   /** Mirror the controller's current pick into board-interaction state so AutoUI boards react. */

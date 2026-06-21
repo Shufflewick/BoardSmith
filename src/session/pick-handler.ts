@@ -229,9 +229,8 @@ export class PickHandler<G extends Game = Game> {
           // Add board refs if provided (pass the original rawValue for compatibility)
           if (choiceSel.boardRefs) {
             try {
-              const refs = choiceSel.boardRefs(rawValue, ctx);
-              if (refs.sourceRef) choice.sourceRef = refs.sourceRef;
-              if (refs.targetRef) choice.targetRef = refs.targetRef;
+              const result = choiceSel.boardRefs(rawValue, ctx);
+              choice.refs = result.refs;
             } catch (e) {
               console.error('boardRefs() error (ignored):', e);
             }
@@ -375,20 +374,11 @@ export class PickHandler<G extends Game = Game> {
         }
       }
 
-      // Add board ref if provided
-      if (elemSel.boardRef) {
-        try {
-          validElem.ref = elemSel.boardRef(element, ctx);
-        } catch {
-          // Ignore errors
-        }
-      } else {
-        // Default ref: use element ID and notation if available
-        validElem.ref = { id: element.id };
-        if (element.notation) {
-          validElem.ref.notation = element.notation;
-        }
-      }
+      // Add board refs — always emit refs: [{ ref, role: 'highlight' }]
+      const rawRef = elemSel.boardRef
+        ? (() => { try { return elemSel.boardRef!(element, ctx); } catch { return { id: element.id }; } })()
+        : { id: element.id, ...(element.notation ? { notation: element.notation } : {}) };
+      validElem.refs = [{ ref: rawRef, role: 'highlight' }];
 
       if (disabled !== false) {
         validElem.disabled = disabled;
