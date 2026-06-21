@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Dynamic Auto-UI
 status: executing
-stopped_at: Phase 95 context gathered; Phases 91-93 complete; Phase 94 planned and ready to execute
-last_updated: "2026-06-21T21:49:55.918Z"
+stopped_at: "PAUSED: Phase 94 delivered refs[]/overlay/PRESENT-02 security/render/Hex-playable; Go Fish+Checkers playability gates split to inserted Phase 94.1 (interaction not converging without component test infra). main green at e46d450."
+last_updated: "2026-06-21T23:31:44.435Z"
 last_activity: 2026-06-21
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 3
   total_plans: 18
   completed_plans: 17
-  percent: 50
+  percent: 43
 ---
 
 # Project State
@@ -66,6 +66,10 @@ Progress: [█████████░] 94%
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 94.1 inserted after Phase 94: Auto-UI Interaction Completion — split out of Phase 94 (Go Fish/Checkers playability gates deferred; test infra first) (URGENT)
+
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
@@ -91,7 +95,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-21T21:49:55.911Z
-Stopped at: Phase 95 context gathered; Phases 91-93 complete; Phase 94 planned and ready to execute
-Resume file: None
+Last session: 2026-06-21T23:31:44.426Z
+Stopped at: PAUSED: Phase 94 delivered refs[]/overlay/PRESENT-02 security/render/Hex-playable; Go Fish+Checkers playability gates split to inserted Phase 94.1 (interaction not converging without component test infra). main green at e46d450.
+Resume file: .planning/phases/94.1-auto-ui-interaction-completion/94.1-CONTEXT.md
 Next action: `/gsd:plan-phase 91`

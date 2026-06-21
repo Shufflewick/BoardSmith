@@ -98,6 +98,16 @@
 
 ---
 
+### Phase 94.1: Auto-UI Interaction Completion (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 94
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 94.1 to break down)
+
 ### Phase 95: Ship & Reframe
 **Goal**: The auto-UI is a legitimate, shippable production peer; a production build emits only the chosen UI; new game scaffolds open in a single UI without a split-screen comparison.
 **Depends on**: Phase 94 (playability must be proven before "shippable" is credible)
