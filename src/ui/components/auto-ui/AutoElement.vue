@@ -19,7 +19,7 @@ import { computed, inject, provide, ref, watchEffect, type Ref } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { setTransformAwareDragImage } from '../../composables/dragImage';
 import { Die3D } from '../dice';
-import { resolveGridSize } from './auto-ui-helpers.js';
+import { resolvePieceVisual, resolveGridSize } from './auto-ui-helpers.js';
 
 export interface GameElement {
   id: number;
@@ -608,6 +608,11 @@ function handleCellClick() {
 // Guards on elementType so cards/hands/pieces never trigger resolveGridSize.
 const gridResult = computed(() =>
   elementType.value === 'board' ? resolveGridSize(props.element) : null
+);
+
+// Piece visual dispatch — guards on elementType so boards/cards/hands never call the helper.
+const pieceVisual = computed(() =>
+  elementType.value === 'piece' ? resolvePieceVisual(props.element) : null
 );
 
 // One-shot side-effect: emit a console.error when the grid cannot resolve.
@@ -1255,7 +1260,30 @@ const cardBackPreviewData = computed(() => {
         @dragstart="handleDragStart"
         @dragend="handleDragEnd"
       >
-        {{ displayLabel }}
+        <img
+          v-if="pieceVisual && pieceVisual.kind === 'image'"
+          class="piece-image"
+          :src="pieceVisual.src"
+          alt=""
+          aria-hidden="true"
+        />
+        <div
+          v-else-if="pieceVisual && pieceVisual.kind === 'sprite'"
+          class="piece-sprite"
+          :style="{
+            backgroundImage: `url(${pieceVisual.sprite})`,
+            backgroundPosition: `-${pieceVisual.x}px -${pieceVisual.y}px`,
+            backgroundSize: `${pieceVisual.width}px ${pieceVisual.height}px`,
+            backgroundRepeat: 'no-repeat',
+          }"
+        />
+        <div
+          v-else-if="pieceVisual"
+          class="piece-token"
+          :style="{ background: pieceVisual.color }"
+        >
+          <span class="piece-token-label">{{ pieceVisual.label }}</span>
+        </div>
       </div>
     </template>
 
@@ -1873,7 +1901,7 @@ const cardBackPreviewData = computed(() => {
 .piece {
   width: 40px;
   height: 40px;
-  background: #e74c3c;
+  background: transparent;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1883,6 +1911,46 @@ const cardBackPreviewData = computed(() => {
   font-weight: bold;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.piece-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.piece-sprite {
+  width: 100%;
+  height: 100%;
+  background-repeat: no-repeat;
+  border-radius: 50%;
+}
+
+.piece-token {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.piece-token-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  max-width: 36px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Vue transition for hex pieces - start invisible */
