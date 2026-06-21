@@ -92,7 +92,7 @@
 - [x] 94-02-PLAN.md — Wave 2: D-02 auto-absent + suppressible footer + D-03 hybrid panel filter (INTERACT-01, INTERACT-02)
 - [x] 94-03-PLAN.md — Wave 2: D-03 board-centric click/highlight affordances in 8 renderers (INTERACT-01)
 - [x] 94-04-PLAN.md — Wave 3: D-04 presentation overlay chain + __hidden security guard (PRESENT-01, PRESENT-02, PRESENT-03)
-- [ ] 94-05-PLAN.md — Wave 4: game-side prep — refs migration + AutoUI-only App.vue + per-game overlays (INTERACT-01, INTERACT-03, PRESENT-01, PRESENT-03)
+- [x] 94-05-PLAN.md — Wave 4: game-side prep — refs migration + AutoUI-only App.vue + per-game overlays (INTERACT-01, INTERACT-03, PRESENT-01, PRESENT-03)
 - [ ] 94-06-PLAN.md — Wave 5: playability gates — Hex, Go Fish, Checkers (human-verify) (all 6 reqs)
 **UI hint**: yes
 
@@ -134,7 +134,7 @@
 | 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
 | 92. Piece & Grid Rendering Fixes | 3/3 | Complete    | 2026-06-21 |
 | 93. Renderer Rebuild | 7/7 | Complete    | 2026-06-21 |
-| 94. Interaction, Presentation & Playability Gate | 4/6 | In Progress|  |
+| 94. Interaction, Presentation & Playability Gate | 5/6 | In Progress|  |
 | 95. Ship & Reframe | 0/? | Not started | - |
 | 96. Migration & Cleanup | 0/? | Not started | - |
 

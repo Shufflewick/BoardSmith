@@ -23,14 +23,14 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 - [x] **RENDER-05**: The new renderer consumes `useAnimationEvents` so deal/flip/reveal choreography plays (the old auto path never did).
 
 ### Board-Centric Interaction (INTERACT)
-- [ ] **INTERACT-01**: Action choices that carry a board anchor are actioned directly on the board by default; the footer panel is the fallback when there is no anchor.
+- [x] **INTERACT-01**: Action choices that carry a board anchor are actioned directly on the board by default; the footer panel is the fallback when there is no anchor.
 - [ ] **INTERACT-02**: The footer ActionPanel is suppressible by the board UI (GameShell no longer mounts it unconditionally).
-- [ ] **INTERACT-03**: An action choice can express multiple source/target board elements (multi-ref highlight metadata) — `protocol.ts` and `buildActionMetadata` extended beyond singular `sourceRef`/`targetRef`/`ref`.
+- [x] **INTERACT-03**: An action choice can express multiple source/target board elements (multi-ref highlight metadata) — `protocol.ts` and `buildActionMetadata` extended beyond singular `sourceRef`/`targetRef`/`ref`.
 
 ### Presentation Overlay (PRESENT)
-- [ ] **PRESENT-01**: A UI declares a presentation overlay (a sibling file it imports) mapping element class/name/attribute → visuals (image, label, stat block, render hint).
+- [x] **PRESENT-01**: A UI declares a presentation overlay (a sibling file it imports) mapping element class/name/attribute → visuals (image, label, stat block, render hint).
 - [ ] **PRESENT-02**: The overlay is resolved *after* engine visibility filtering, so it cannot expose data the viewer is not allowed to see.
-- [ ] **PRESENT-03**: The auto-UI reads the overlay for visuals beyond defaults; custom UIs supply their own; engine elements carry no value-bearing `$`-presentation props (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected — ownership stays on `.player`).
+- [x] **PRESENT-03**: The auto-UI reads the overlay for visuals beyond defaults; custom UIs supply their own; engine elements carry no value-bearing `$`-presentation props (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected — ownership stays on `.player`).
 
 ### Shippable Peer & Single-UI Export (SHIP)
 - [ ] **SHIP-01**: The auto-UI is a selectable, shippable production UI (a fine choice for simple games), not merely a dev/debug panel.
@@ -73,12 +73,12 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 | RENDER-03 | Phase 93 | Complete |
 | RENDER-04 | Phase 93 | Complete |
 | RENDER-05 | Phase 93 | Complete |
-| INTERACT-01 | Phase 94 | Pending |
+| INTERACT-01 | Phase 94 | Complete |
 | INTERACT-02 | Phase 94 | Pending |
-| INTERACT-03 | Phase 94 | Pending |
-| PRESENT-01 | Phase 94 | Pending |
+| INTERACT-03 | Phase 94 | Complete |
+| PRESENT-01 | Phase 94 | Complete |
 | PRESENT-02 | Phase 94 | Pending |
-| PRESENT-03 | Phase 94 | Pending |
+| PRESENT-03 | Phase 94 | Complete |
 | SHIP-01 | Phase 95 | Pending |
 | SHIP-02 | Phase 95 | Pending |
 | SHIP-03 | Phase 95 | Pending |
