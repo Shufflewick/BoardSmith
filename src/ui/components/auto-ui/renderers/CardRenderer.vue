@@ -208,7 +208,7 @@ const backImageFallback = computed((): ImageInfo | null => {
 const displayLabel = computed(() => props.element.name || props.element.className);
 
 // ---------------------------------------------------------------------------
-// Drag handlers (same calls as AutoElement.vue)
+// Drag handlers
 // ---------------------------------------------------------------------------
 function handleDragStart(event: DragEvent) {
   if (!boardInteraction || !isActionSelectable.value) {

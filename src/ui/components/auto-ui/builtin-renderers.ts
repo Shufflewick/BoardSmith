@@ -8,7 +8,7 @@
  * Priority band 1–10 (D-03): built-in renderers occupy this band.
  * Consumer overrides must register at 100+ to win over built-ins.
  *
- * test() functions are derived from AutoElement.vue elementType detection (lines 109–138).
+ * test() functions are derived from the elementType detection logic (card/$type, die/$type, grid/$layout, etc.).
  * Ordering: specific types (card/hand/deck/die/grid/hex) first at higher priorities;
  * piece (leaf node) second at priority 2; space (catch-all) last at priority 1.
  *

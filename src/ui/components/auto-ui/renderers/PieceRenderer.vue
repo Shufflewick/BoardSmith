@@ -6,7 +6,7 @@
  * Three render branches: image / sprite / labeled token.
  *
  * Carry-forward requirements (Phase 92 review):
- *   #1: .piece:hover { transform: scale(1.05) } — was missing in AutoElement.vue, MUST be here.
+ *   #1: .piece:hover { transform: scale(1.05) } — MUST be present for affordance.
  *   #2: Single shadow on outermost .piece only — no stacking on inner elements.
  */
 
@@ -127,7 +127,7 @@ function handleDragEnd() {
 /*
  * .piece: outermost element.
  *
- * Carry-forward #1: .piece:hover { transform: scale(1.05) } — was missing in AutoElement.vue.
+ * Carry-forward #1: .piece:hover { transform: scale(1.05) } — required affordance.
  * Carry-forward #2: single shadow here — never on inner .piece-token or image element.
  */
 .piece {

@@ -11,7 +11,7 @@
  *   :player-seat="playerSeat"
  * />
  */
-import AutoGameBoard from './AutoGameBoard.vue';
+import AutoRenderer from './AutoRenderer.vue';
 import type { GameElement } from './index';
 
 interface FlowState {
@@ -39,7 +39,7 @@ defineProps<{
     </div>
 
     <!-- Game board -->
-    <AutoGameBoard
+    <AutoRenderer
       v-else
       :game-view="gameView"
       :player-seat="playerSeat"

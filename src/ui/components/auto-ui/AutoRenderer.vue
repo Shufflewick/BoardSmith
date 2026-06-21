@@ -2,7 +2,7 @@
 /**
  * AutoRenderer — Host component for the auto-UI renderer system.
  *
- * Replaces AutoGameBoard.vue (D-01 single source of truth, no dual path).
+ * Single source of truth for auto-UI rendering (D-01 — no dual path).
  * Responsibilities:
  *   1. Side-effect import of builtin-renderers.ts (registers all 8 built-ins once)
  *   2. Provide the full context chain expected by per-element renderers
@@ -77,8 +77,7 @@ provide('selectableElements', ref(new Set<number>()));
 provide('selectedElements', ref(new Set<number>()));
 
 // ---------------------------------------------------------------------------
-// findDefaultBackImage — verbatim from AutoGameBoard.vue lines 74-105
-// Scans the element tree for the first card back image to use as default back.
+// findDefaultBackImage — scans element tree for the first card back image
 // ---------------------------------------------------------------------------
 function findDefaultBackImage(element: GameElement | null | undefined): ImageInfo | null {
   if (!element) return null;
@@ -125,7 +124,7 @@ const topLevelChildren = computed(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Archetype selection — replaces heuristic layoutClass from AutoGameBoard.vue
+// Archetype selection
 // ---------------------------------------------------------------------------
 const archetype = computed(() => selectArchetype(topLevelChildren.value));
 

@@ -32,14 +32,17 @@ export {
 // Auto-UI components (automatic game UI generation)
 export {
   AutoUI,
-  AutoGameBoard,
-  AutoElement,
+  AutoRenderer,
   ActionPanel,
   type GameElement,
   type Pick,
   type ActionMetadata,
   type Player,
 } from './components/auto-ui/index.js';
+
+// Renderer registry (public extension API per D-03)
+// Game authors register custom renderers at priority 100+ to upgrade auto-UI in place.
+export { registerRenderer } from './components/auto-ui/renderer-registry.js';
 
 // Composables
 export {

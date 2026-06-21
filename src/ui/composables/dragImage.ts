@@ -7,8 +7,8 @@
  * transform-stripped clone so the drag ghost matches the element's
  * untransformed bounds.
  *
- * Used by both `useDragDrop` (custom UIs) and `AutoElement` (AutoUI) so the two
- * interaction surfaces produce identical drag ghosts (visual parity).
+ * Used by both `useDragDrop` (custom UIs) and the auto-UI element renderers so
+ * the two interaction surfaces produce identical drag ghosts (visual parity).
  */
 
 /**
