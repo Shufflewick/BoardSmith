@@ -303,6 +303,12 @@ export interface UseActionControllerReturn {
    * Returns empty array if current selection is not an element type or choices haven't loaded.
    */
   validElements: ComputedRef<ValidElement[]>;
+  /**
+   * Reactive choices for the current pick (re-runs when async-fetched choices arrive).
+   * Prefer this over getCurrentChoices() in reactive contexts — the latter does not
+   * track the snapshot fetch version, so it can return stale (empty) choices.
+   */
+  currentChoices: ComputedRef<ChoiceWithRefs[]>;
   /** Whether all selections are filled and action is ready */
   isReady: ComputedRef<boolean>;
   /** Whether an action is currently executing */

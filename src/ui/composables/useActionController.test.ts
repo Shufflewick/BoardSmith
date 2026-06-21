@@ -1883,9 +1883,23 @@ describe('useActionController', () => {
     beforeEach(() => {
       anchoredActionMetadata = ref({
         ...createTestMetadata(),
-        // All choices are board-anchored (every choice has refs.length > 0)
+        // All choices are board-anchored: every choice's clickable ref is a NOTATION
+        // ref (a board cell the grid renders + makes clickable — e.g. Checkers squares).
         allAnchored: {
           name: 'allAnchored',
+          selections: [{
+            name: 'targets',
+            type: 'choice' as const,
+            choices: [
+              { value: 1, display: 'Target A', refs: [{ ref: { notation: 'a5' }, role: 'target' as const }] },
+              { value: 2, display: 'Target B', refs: [{ ref: { notation: 'c5' }, role: 'target' as const }] },
+            ],
+          }],
+        },
+        // Choices carry refs, but they are id-only HIGHLIGHT hints (Go Fish hand/card
+        // refs) — NOT a reliable board click surface. Must NOT count as anchored.
+        idHintAnchored: {
+          name: 'idHintAnchored',
           selections: [{
             name: 'targets',
             type: 'choice' as const,
@@ -1955,7 +1969,7 @@ describe('useActionController', () => {
       expect(controller.allCurrentChoicesAnchored.value).toBe(false);
     });
 
-    it('returns true when pick.type is choice and every choice has refs.length > 0', async () => {
+    it('returns true when pick.type is choice and every choice has a NOTATION ref (board cell)', async () => {
       const extendedAvailable = ref([...(availableActions.value ?? []), 'allAnchored']);
       const controller = useActionController({
         sendAction,
@@ -1969,6 +1983,80 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('choice');
+      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+    });
+
+    it('returns false when choices carry only id refs (highlight hints, not board cells — Go Fish ask)', async () => {
+      const extendedAvailable = ref([...(availableActions.value ?? []), 'idHintAnchored']);
+      const controller = useActionController({
+        sendAction,
+        availableActions: extendedAvailable,
+        actionMetadata: anchoredActionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+      await controller.start('idHintAnchored');
+      await nextTick();
+
+      expect(controller.currentPick.value?.type).toBe('choice');
+      // id-only refs are NOT a reliable board click surface → footer must remain.
+      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+    });
+
+    it('becomes anchored reactively when async-fetched notation choices arrive (Checkers destination step)', async () => {
+      // Two-step action: step 1 element pick (piece), step 2 choice pick (destination)
+      // whose notation choices come from the server fetch AFTER step 1 is filled.
+      const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) => {
+        if (selectionName === 'piece') {
+          return { success: true, validElements: [{ id: 77 }, { id: 78 }] };
+        }
+        // destination: notation-anchored choices (like Checkers move destinations)
+        return {
+          success: true,
+          choices: [
+            { value: { pieceId: 77, toNotation: 'a5' }, display: 'a5', refs: [{ ref: { notation: 'a5' }, role: 'target' as const }] },
+            { value: { pieceId: 77, toNotation: 'c5' }, display: 'c5', refs: [{ ref: { notation: 'c5' }, role: 'target' as const }] },
+          ],
+        };
+      });
+
+      const twoStepMeta: Record<string, ActionMetadata> = {
+        twoStepMove: {
+          name: 'twoStepMove',
+          prompt: 'Move',
+          selections: [
+            { name: 'piece', type: 'element' as const, prompt: 'Pick piece' },
+            { name: 'destination', type: 'choice' as const, prompt: 'Pick destination', filterBy: { key: 'pieceId', selectionName: 'piece' } },
+          ],
+        },
+      };
+
+      const extendedAvailable = ref([...(availableActions.value ?? []), 'twoStepMove']);
+      const controller = useActionController({
+        sendAction,
+        availableActions: extendedAvailable,
+        actionMetadata: ref({ ...createTestMetadata(), ...twoStepMeta }),
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+        fetchPickChoices,
+      });
+
+      await controller.start('twoStepMove');
+      await nextTick();
+      // Step 1 is an element pick → always anchored.
+      expect(controller.currentPick.value?.name).toBe('piece');
+      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+
+      // Fill the piece → advances to the destination choice pick and fetches its choices.
+      await controller.fill('piece', 77);
+      await nextTick();
+
+      expect(controller.currentPick.value?.name).toBe('destination');
+      // The reactive currentChoices must reflect the freshly-fetched destination choices...
+      expect(controller.currentChoices.value).toHaveLength(2);
+      // ...and the notation refs make the step board-anchored (footer suppressed, board shows squares).
       expect(controller.allCurrentChoicesAnchored.value).toBe(true);
     });
   });

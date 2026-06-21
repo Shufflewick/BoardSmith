@@ -637,18 +637,53 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   });
 
   /**
-   * True when every available choice for the current pick has at least one refs entry.
-   * When true, GameShell omits the ActionPanel footer entirely (D-02).
-   * MUST return false when currentPick === null (no action in progress = show panel so player
-   * can start one). This is Pitfall 4: never default to true when no action is in progress.
+   * Reactive choices for the current pick. Unlike the bare getCurrentChoices()
+   * function, this reads snapshotVersion so it RE-RUNS when choices arrive from an
+   * async server fetch (the pickSnapshots Map is not reactive on its own — F: the
+   * Checkers destination step landed choices after the watcher had already run, so
+   * the board never registered the destination squares). Custom UIs and the board
+   * bridge should depend on this, not call getCurrentChoices() directly.
+   */
+  const currentChoices = computed((): ChoiceWithRefs[] => {
+    const _version = snapshotVersion.value; // reactive dependency (Maps aren't reactive)
+    if (!currentPick.value) return [];
+    return getCurrentChoices() as ChoiceWithRefs[];
+  });
+
+  /**
+   * True when the board can offer EVERY current choice as a real, clickable board
+   * target. When true, GameShell omits the ActionPanel footer entirely (D-02).
+   *
+   * Anchoring rules:
+   * - No action in progress (currentPick === null) → false. Show the panel so the
+   *   player can start an action (Pitfall 4 guard).
+   * - element / elements picks → true. Board selection is the native surface.
+   * - choice picks → anchored ONLY when there are choices AND every choice's
+   *   clickable ref (the `target`-role ref, else the first ref) identifies a board
+   *   cell by NOTATION. A notation ref denotes board geometry the AutoUI grid
+   *   renders and makes clickable (Checkers destination squares). id-only refs
+   *   (e.g. Go Fish's hand/card refs) are highlight HINTS, not a reliable click
+   *   surface — clicking lands on child elements and selects nothing — so the
+   *   footer MUST remain as the fallback selection surface.
+   * - empty choices → false (vacuous case must not suppress the panel).
+   * - number / text picks → false (panel only).
+   *
+   * Reactive to snapshotVersion via currentChoices so it updates when async-fetched
+   * choices arrive.
    */
   const allCurrentChoicesAnchored = computed((): boolean => {
     const pick = currentPick.value;
     if (!pick) return false;                                          // no action → show panel (Pitfall 4 guard)
     if (pick.type === 'element' || pick.type === 'elements') return true;  // always anchored
     if (pick.type !== 'choice') return false;                        // number/text → panel only
-    const choices = getCurrentChoices() as ChoiceWithRefs[];
-    return choices.length > 0 && choices.every(c => (c.refs ?? []).length > 0);
+    const choices = currentChoices.value;
+    if (choices.length === 0) return false;                          // vacuous case → don't suppress
+    return choices.every(c => {
+      const refs = c.refs ?? [];
+      if (refs.length === 0) return false;
+      const clickable = refs.find(r => r.role === 'target')?.ref ?? refs[0]?.ref;
+      return clickable?.notation !== undefined;
+    });
   });
 
   /**
@@ -1628,6 +1663,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     pendingOnServer: readonly(pendingOnServer),
     // True when every choice for the current pick is board-anchored → GameShell hides footer (D-02).
     allCurrentChoicesAnchored,
+    // Reactive choices for the current pick (re-runs when async-fetched choices arrive).
+    currentChoices,
 
     // Methods
     execute,

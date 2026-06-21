@@ -121,7 +121,13 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // the board needs the anchored choices, those are exactly the clickable ones).
   const choicesForBoard = computed<ChoiceWithRefs[]>(() => {
     if (!currentPick.value) return [];
-    let choices = controller.getCurrentChoices() as ChoiceWithRefs[];
+    // Use the controller's REACTIVE currentChoices (reads snapshotVersion) so this
+    // recomputes when async-fetched choices arrive. getCurrentChoices() is a bare
+    // function that does not track the fetch version — depending on it meant the
+    // board never registered choices that landed after the watcher first ran (the
+    // Checkers destination step: pick a piece → destinations never became
+    // selectable because their choices arrived after the watcher had run once).
+    let choices = controller.currentChoices.value.slice();
     const meta = currentActionMeta.value;
     if (meta) {
       const alreadySelected = new Set<unknown>();
@@ -141,7 +147,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const filteredValidElements = computed<ValidElement[]>(() => {
     const sel = currentPick.value;
     if (!sel || (sel.type !== 'element' && sel.type !== 'elements')) return [];
-    const validElements = controller.getValidElements(sel);
+    // controller.validElements is the REACTIVE source for the current pick (it reads
+    // snapshotVersion), so a second-step element pick whose elements are fetched
+    // asynchronously still surfaces on the board. getValidElements() is non-reactive.
+    const validElements = controller.validElements.value;
     if (validElements.length === 0) return [];
 
     const alreadySelectedIds = new Set<number>();

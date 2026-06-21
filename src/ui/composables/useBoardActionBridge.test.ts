@@ -12,7 +12,7 @@
  * substrate and a fake controller — NO ActionPanel involved.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
 import type { UseActionControllerReturn, PickMetadata, ValidElement } from './useActionControllerTypes.js';
@@ -38,6 +38,11 @@ function makeController(opts: {
   const cancel = vi.fn(() => {});
   const toggleMultiSelect = vi.fn(async () => {});
 
+  // Reactive sources the bridge now depends on (mirror the real controller, which
+  // reads snapshotVersion so async-fetched choices/elements surface reactively).
+  const currentChoices = computed(() => opts.pick?.choices ?? []);
+  const validElements = computed(() => opts.validElements ?? []);
+
   const controller = {
     currentAction,
     currentPick,
@@ -47,7 +52,9 @@ function makeController(opts: {
     actionSnapshot,
     pendingFollowUp,
     pendingOnServer,
-    getCurrentChoices: () => [],
+    currentChoices,
+    validElements,
+    getCurrentChoices: () => currentChoices.value,
     getValidElements: () => opts.validElements ?? [],
     fill,
     start,
@@ -143,9 +150,9 @@ describe('useBoardActionBridge', () => {
         { value: 'm2', display: 'd4→c5', refs: [{ ref: { notation: 'c5' }, role: 'target' }] },
       ],
     };
+    // Choice picks read choices via the reactive controller.currentChoices, which
+    // makeController derives from pick.choices.
     const { controller, fill } = makeController({ pick: destPick, action: 'move' });
-    // Choice picks read choices via getCurrentChoices().
-    (controller as unknown as { getCurrentChoices: () => unknown }).getCurrentChoices = () => destPick.choices!;
 
     useBoardActionBridge({
       controller,
@@ -160,6 +167,36 @@ describe('useBoardActionBridge', () => {
     expect(board.isSelectableElement({ id: 22, name: 'c5', notation: 'c5' })).toBe(true);
     board.triggerElementSelect({ id: 21, name: 'e5', notation: 'e5' });
     expect(fill).toHaveBeenCalledWith('destination', 'm1');
+  });
+
+  it('registers destination squares when choices arrive reactively after the watcher first ran (async fetch)', async () => {
+    const board = createBoardInteraction();
+    const destPick: PickMetadata = { name: 'destination', type: 'choice', choices: [] };
+    // Reactive choices source that starts EMPTY (as during the async fetch) then fills.
+    const lateChoices = ref<unknown[]>([]);
+    const { controller } = makeController({ pick: destPick, action: 'move' });
+    (controller as unknown as { currentChoices: { value: unknown[] } }).currentChoices =
+      computed(() => lateChoices.value) as unknown as { value: unknown[] };
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
+      availableActions: ref(['move']),
+    });
+
+    // Before the fetch lands, the destination square is NOT selectable.
+    expect(board.isSelectableElement({ id: 21, name: 'e5', notation: 'e5' })).toBe(false);
+
+    // Fetch lands: choices appear. The board must pick them up reactively.
+    lateChoices.value = [
+      { value: 'm1', display: 'd4→e5', refs: [{ ref: { notation: 'e5' }, role: 'target' }] },
+    ];
+    await nextTick();
+
+    expect(board.isSelectableElement({ id: 21, name: 'e5', notation: 'e5' })).toBe(true);
   });
 
   it('auto-starts the sole available action when none is in progress', () => {
