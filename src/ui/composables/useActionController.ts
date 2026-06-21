@@ -121,6 +121,7 @@ export type {
 
 import type {
   ElementRef,
+  ChoiceWithRefs,
   ValidElement,
   PickMetadata,
   PickSnapshot,

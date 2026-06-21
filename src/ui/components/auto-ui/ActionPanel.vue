@@ -26,6 +26,7 @@ import type {
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
 import { devWarn } from '../../composables/actionControllerHelpers.js';
+import { filterAnchoredChoices } from './action-panel-helpers.js';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
@@ -246,6 +247,10 @@ const filteredChoices = computed(() => {
       choices = choices.filter(choice => !alreadySelectedValues.has(choice.value));
     }
   }
+
+  // D-03: Anchored choices are actioned on the board — exclude them from the panel.
+  // filterAnchoredChoices applies only for 'choice' picks; element picks are unaffected.
+  choices = filterAnchoredChoices(choices, currentPick.value?.type);
 
   return choices;
 });

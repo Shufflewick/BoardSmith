@@ -1928,7 +1928,7 @@ describe('useActionController', () => {
     });
 
     it('returns true when pick.type is elements (always board-anchored)', async () => {
-      const extendedAvailable = ref([...availableActions.value, 'selectMultiple']);
+      const extendedAvailable = ref([...(availableActions.value ?? []), 'selectMultiple']);
       const controller = useActionController({
         sendAction,
         availableActions: extendedAvailable,
@@ -1956,7 +1956,7 @@ describe('useActionController', () => {
     });
 
     it('returns true when pick.type is choice and every choice has refs.length > 0', async () => {
-      const extendedAvailable = ref([...availableActions.value, 'allAnchored']);
+      const extendedAvailable = ref([...(availableActions.value ?? []), 'allAnchored']);
       const controller = useActionController({
         sendAction,
         availableActions: extendedAvailable,
