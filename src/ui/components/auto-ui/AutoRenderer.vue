@@ -23,7 +23,9 @@ import { computed, provide, ref } from 'vue';
 import { useFlyingElements } from '../../composables/useFlyingElements.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
+import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { selectArchetype } from './archetype-selector.js';
+import { useAutoRendererAnimations } from './useAutoRendererAnimations.js';
 import GridBoardTemplate from './archetypes/GridBoardTemplate.vue';
 import CardTemplate from './archetypes/CardTemplate.vue';
 import TableauTemplate from './archetypes/TableauTemplate.vue';
@@ -130,9 +132,14 @@ const archetype = computed(() => selectArchetype(topLevelChildren.value));
 // ---------------------------------------------------------------------------
 // Flying elements — for FlyingCardsOverlay; fly API passed to animation wiring
 // ---------------------------------------------------------------------------
-const { flyingElements, fly: _fly } = useFlyingElements();
+const { flyingElements, fly } = useFlyingElements();
 
-// Animation wiring is added in Task 2 (useAutoRendererAnimations call goes here)
+// ---------------------------------------------------------------------------
+// Animation event wiring (RENDER-05) — inject-only, never createAnimationEvents
+// If GameShell hasn't provided animation events, returns silently (no throw).
+// ---------------------------------------------------------------------------
+const animationEvents = useAnimationEvents();
+useAutoRendererAnimations(animationEvents, { fly });
 </script>
 
 <template>
