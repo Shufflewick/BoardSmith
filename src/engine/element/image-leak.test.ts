@@ -55,6 +55,25 @@ function collectAllHiddenAttrs(json: ElementJSON): Record<string, unknown>[] {
   return result;
 }
 
+/**
+ * Recursive guard (WR-01, iteration 2): collect every __hidden node's `id`.
+ * Used to prove that anonymized zone placeholders never expose a real,
+ * correlatable element id. The CR-01 fix anonymized owner-only zone ids; this
+ * sweep makes a future regression (e.g. restoring `id: childJson.id`) fail
+ * loudly instead of leaving the suite green.
+ *
+ * Returns every collected id paired with whether the node is a child of an
+ * anonymized zone container (count-only / hidden / owner-only). Standalone
+ * individually-hidden elements (WR-02) intentionally keep their real id, so
+ * callers scope assertions to the anonymized-children surfaces.
+ */
+function collectHiddenIds(json: ElementJSON): number[] {
+  const ids: number[] = [];
+  if (json.attributes?.__hidden && typeof json.id === 'number') ids.push(json.id);
+  for (const child of json.children ?? []) ids.push(...collectHiddenIds(child));
+  return ids;
+}
+
 // ---------------------------------------------------------------------------
 // SEC-01: $images.face redaction
 // ---------------------------------------------------------------------------
@@ -74,7 +93,7 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
     const deck = game.create(Deck, 'draw-pile');
     // Deck defaults to contentsHidden(), but make it explicit for clarity.
     deck.contentsHidden();
-    deck.create(TestCard, 'AS', {
+    const realCard = deck.create(TestCard, 'AS', {
       rank: 'A',
       suit: 'S',
       $images: { face: '/cards/AS.svg', back: '/cards/back.svg' },
@@ -89,6 +108,18 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
 
     // Must be marked hidden so the UI knows not to render card details.
     expect(hiddenCard.attributes.__hidden).toBe(true);
+
+    // CR-01 guard (WR-01): the placeholder id must be anonymized, never the
+    // card's real, stable id (which would let a non-owner correlate the card
+    // across moves/reveals). Anonymized zone ids are negative.
+    expect(
+      hiddenCard.id,
+      'hidden deck placeholder id must be anonymized (negative)'
+    ).toBeLessThan(0);
+    expect(
+      hiddenCard.id,
+      'hidden deck placeholder id must not equal the real card id'
+    ).not.toBe(realCard.id);
 
     // RED: face is currently leaked via key.startsWith('$') — this assertion FAILS.
     expect(
@@ -116,7 +147,7 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
     hand.player = game.getPlayer(1)!;
     // Hand defaults to contentsVisibleToOwner(); call explicitly for clarity.
     hand.contentsVisibleToOwner();
-    hand.create(TestCard, 'KH', {
+    const realCard = hand.create(TestCard, 'KH', {
       rank: 'K',
       suit: 'H',
       $images: { face: '/cards/KH.svg', back: '/cards/back.svg' },
@@ -131,6 +162,20 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
     expect(hiddenCard, 'hand must have at least one child placeholder').toBeDefined();
 
     expect(hiddenCard.attributes.__hidden).toBe(true);
+
+    // CR-01 regression guard (WR-01): this is the exact iteration-1 CRITICAL
+    // surface — an owner-only zone leaking a real, stable id to a non-owner.
+    // The id must be anonymized (negative) and must not equal the real card id.
+    // A future edit restoring `id: childJson.id` here would re-open CR-01;
+    // this assertion makes that fail loudly.
+    expect(
+      hiddenCard.id,
+      'owner-only placeholder id must be anonymized (negative) for a non-owner'
+    ).toBeLessThan(0);
+    expect(
+      hiddenCard.id,
+      'owner-only placeholder id must not equal the real card id (CR-01)'
+    ).not.toBe(realCard.id);
 
     // RED: face is currently leaked — this assertion FAILS.
     expect(
@@ -177,7 +222,7 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
     // A Space with count-only visibility: viewers see the count but not which elements.
     const countZone = game.create(Space, 'count-pile');
     countZone.contentsCountOnly();
-    countZone.create(TestCard, 'QD', {
+    const realCard = countZone.create(TestCard, 'QD', {
       rank: 'Q',
       suit: 'D',
       $images: { face: '/cards/QD.svg', back: '/cards/back.svg' },
@@ -192,6 +237,16 @@ describe('SEC-01: toJSONForPlayer must redact $images.face on hidden elements (R
     expect(hiddenCard, 'count-only zone must have at least one child placeholder').toBeDefined();
 
     expect(hiddenCard.attributes.__hidden).toBe(true);
+
+    // CR-01 guard (WR-01): count-only placeholder id must be anonymized.
+    expect(
+      hiddenCard.id,
+      'count-only placeholder id must be anonymized (negative)'
+    ).toBeLessThan(0);
+    expect(
+      hiddenCard.id,
+      'count-only placeholder id must not equal the real card id'
+    ).not.toBe(realCard.id);
 
     // RED: face is currently leaked in the count-only anonymous loop — FAILS.
     expect(
@@ -388,5 +443,123 @@ describe('WR-03: SAFE_LAYOUT_KEYS must stay in sync with engine layout $-keys', 
         `placeholders. Add them to SAFE_LAYOUT_KEYS (or handle them as value-bearing): ` +
         `${missing.join(', ')}`
     ).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-01: placeholder-id anonymization guard (the CR-01 fix is unguarded)
+//
+// CR-01 (iteration 1) was an owner-only zone leaking a real, stable element
+// id, letting a non-owner correlate a face-down card across moves/reveals.
+// The fix anonymizes zone-child ids to negative, position-based values, but no
+// test asserted anything about ids — every prior assertion walked `attributes`.
+// These tests close that gap so a future edit restoring a real id fails loudly.
+// ---------------------------------------------------------------------------
+
+describe('WR-01: anonymized zone placeholders must never expose a real element id', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+  });
+
+  it('cross-surface guard: every __hidden zone-child id in the full player view is anonymized (negative)', () => {
+    // Fixture covers all three anonymized-zone surfaces (hidden deck,
+    // owner-only hand, count-only zone). None of the CONTAINERS are __hidden —
+    // only their fungible children — so every __hidden node collected here is
+    // an anonymized placeholder and MUST carry a negative id.
+    const deck = game.create(Deck, 'guard-deck');
+    deck.contentsHidden();
+    deck.create(TestCard, 'AS', {
+      rank: 'A',
+      suit: 'S',
+      $images: { face: '/cards/AS.svg', back: '/cards/back.svg' },
+    });
+
+    const hand = game.create(Hand, 'guard-hand');
+    hand.player = game.getPlayer(1)!;
+    hand.contentsVisibleToOwner();
+    hand.create(TestCard, 'KH', {
+      rank: 'K',
+      suit: 'H',
+      $images: { face: '/cards/KH.svg', back: '/cards/back.svg' },
+    });
+
+    const countZone = game.create(Space, 'guard-count');
+    countZone.contentsCountOnly();
+    countZone.create(TestCard, 'QD', {
+      rank: 'Q',
+      suit: 'D',
+      $images: { face: '/cards/QD.svg', back: '/cards/back.svg' },
+    });
+
+    const view = game.toJSONForPlayer(2);
+    const hiddenIds = collectHiddenIds(view);
+
+    // One placeholder per fixture surface.
+    expect(
+      hiddenIds.length,
+      'expected one __hidden placeholder per anonymized-zone surface'
+    ).toBeGreaterThanOrEqual(3);
+
+    for (const id of hiddenIds) {
+      expect(
+        id,
+        `every anonymized-zone placeholder id must be negative, found ${id}`
+      ).toBeLessThan(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-02: standalone individually-hidden element keeps its real, stable id
+//
+// This LOCKS IN the iteration-2 accept decision (see the documenting comment in
+// game.ts at the standalone hidden-placeholder branch). A single element hidden
+// via hideFromAll() while sitting in a VISIBLE parent intentionally retains its
+// real id so the FLIP animation layer (useFlyingElements.ts) can correlate the
+// hidden↔visible transition by id and animate the flip. If a future change
+// anonymizes this branch, this test fails and forces a deliberate re-decision
+// (which would also need to revisit the animation requirement).
+// ---------------------------------------------------------------------------
+
+describe('WR-02: standalone hidden element retains a stable id for animation', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+  });
+
+  it('a hideFromAll() card in a visible parent keeps its real id when hidden from a non-viewer', () => {
+    // Visible parent (default visibility), single individually-hidden card.
+    const table = game.create(Space, 'table');
+    const realCard = table.create(TestCard, 'AS', {
+      rank: 'A',
+      suit: 'S',
+      $images: { face: '/cards/AS.svg', back: '/cards/back.svg' },
+    });
+    realCard.hideFromAll();
+
+    const view = game.toJSONForPlayer(2);
+    const tableJson = findByName(view.children, 'table');
+    expect(tableJson, 'visible table must appear in player-2 view').toBeDefined();
+
+    const placeholder = tableJson!.children![0];
+    expect(placeholder, 'table must contain the hidden card placeholder').toBeDefined();
+    expect(placeholder.attributes.__hidden).toBe(true);
+
+    // Intentional: the standalone hidden placeholder keeps the real, stable id
+    // (positive) so the FLIP animation can track it across hidden↔visible.
+    expect(
+      placeholder.id,
+      'standalone hidden element must retain its real (positive) id for animation'
+    ).toBe(realCard.id);
+    expect(placeholder.id).toBeGreaterThan(0);
+
+    // It must still be redacted: no identity-bearing image leaks through.
+    expect(
+      (placeholder.attributes.$images as Record<string, unknown> | undefined)?.face,
+      'standalone hidden element must not leak $images.face'
+    ).toBeUndefined();
   });
 });
