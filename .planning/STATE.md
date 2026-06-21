@@ -2,13 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Dynamic Auto-UI
-status: roadmapped
-last_updated: "2026-06-20T00:00:00.000Z"
-last_activity: 2026-06-20
+status: executing
+stopped_at: Roadmap created; Phase 91 not yet started
+last_updated: "2026-06-21T04:03:16.538Z"
+last_activity: 2026-06-21 -- Phase 91 planning complete
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -26,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 
 Phase: 91 (Security Leak Fix) — not started
 Plan: —
-Status: Roadmap created; ready to begin Phase 91
-Last activity: 2026-06-20 — Roadmap created for v3.1
+Status: Ready to execute
+Last activity: 2026-06-21 -- Phase 91 planning complete
 
 Progress: [░░░░░░░░░░] 0% (0/6 phases)
 
@@ -70,6 +71,7 @@ Progress: [░░░░░░░░░░] 0% (0/6 phases)
 Decisions are logged in PROJECT.md Key Decisions table.
 
 **v3.1 locked decisions (2026-06-20):**
+
 - Layout = archetype templates now, general solver deferred (must be earned by a concrete game no template covers)
 - Presentation metadata = per-UI overlay in the `ui` layer (sibling file), resolved after visibility filtering
 - No value-bearing `$`-props on engine elements (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected)
