@@ -17,9 +17,11 @@
  * element.__hidden is true (T-93-04).
  */
 
-import { computed, inject, ref, type Ref } from 'vue';
+import { computed, inject, ref, type Ref, type ComputedRef } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
+import { resolvePresentation } from '../presentation.js';
+import type { PresentationOverlay } from '../presentation.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -53,6 +55,16 @@ const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(n
 
 // Board interaction — always tryUse (never useBoardInteraction directly)
 const boardInteraction = tryUseBoardInteraction();
+
+// ---------------------------------------------------------------------------
+// Presentation overlay — injected from AutoRenderer (D-04)
+// Resolved AFTER engine visibility filtering; resolvePresentation strips
+// image/stats for __hidden elements (PRESENT-02).
+// ---------------------------------------------------------------------------
+const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const presentationEntry = computed(() =>
+  resolvePresentation(props.element, overlay?.value)
+);
 
 // Suppress unused variable warning for playerSeat and selectableElements/selectedElements
 // (injected for context completeness per interface spec; element-level selectable state
@@ -216,8 +228,21 @@ const backImageFallback = computed((): ImageInfo | null => {
   return defaultBackImage.value;
 });
 
-// Convenience computed for the display label
-const displayLabel = computed(() => props.element.name || props.element.className);
+// Convenience computed for the display label — overlay wins, then engine fallback
+const displayLabel = computed(
+  () => presentationEntry.value?.label ?? props.element.name ?? props.element.className
+);
+
+// Effective image: overlay image overrides for visible cards; hidden cards use engine back logic.
+// resolvePresentation already strips `image` for __hidden elements, so presentationEntry?.image
+// will always be undefined when element.__hidden is true — no additional guard needed here.
+const effectiveCardImage = computed((): ImageInfo | null => {
+  const overlayImage = presentationEntry.value?.image;
+  if (overlayImage) {
+    return { type: 'url', src: overlayImage };
+  }
+  return currentCardImage.value;
+});
 
 // ---------------------------------------------------------------------------
 // Drag handlers
@@ -315,7 +340,7 @@ function handleClick(event: MouseEvent) {
         'is-draggable': isActionSelectable,
         'is-dragging': isDragged,
         'is-drop-target': isDropTarget,
-        'has-image': !!currentCardImage,
+        'has-image': !!(effectiveCardImage || presentationEntry?.image),
       },
     ]"
     :data-element-id="element.id"
@@ -327,10 +352,17 @@ function handleClick(event: MouseEvent) {
     @dragover="handleDragOver"
     @drop="handleDrop"
   >
-    <!-- Baseline 1: URL image -->
+    <!-- Overlay render override: full component replacement (D-04) -->
+    <component
+      v-if="presentationEntry?.render"
+      :is="presentationEntry.render"
+      :element="element"
+    />
+
+    <!-- Baseline 1: URL image (overlay image or engine face/back image) -->
     <img
-      v-if="currentCardImage?.type === 'url'"
-      :src="currentCardImage.src"
+      v-else-if="effectiveCardImage?.type === 'url'"
+      :src="effectiveCardImage.src"
       class="card-image"
       :class="{ 'card-image-back': element.__hidden || element.attributes?.__hidden }"
       :alt="displayLabel"
@@ -338,10 +370,10 @@ function handleClick(event: MouseEvent) {
 
     <!-- Baseline 2: Sprite-sheet image -->
     <div
-      v-else-if="currentCardImage?.type === 'sprite'"
+      v-else-if="effectiveCardImage?.type === 'sprite'"
       class="card-image card-sprite"
       :class="{ 'card-image-back': element.__hidden || element.attributes?.__hidden }"
-      :style="getSpriteStyle(currentCardImage)"
+      :style="getSpriteStyle(effectiveCardImage)"
     ></div>
 
     <!-- Baseline 3 / 4: No image from $images — show face or back fallback -->
@@ -368,6 +400,15 @@ function handleClick(event: MouseEvent) {
         {{ displayLabel }}
       </div>
     </template>
+
+    <!-- Overlay stats block (D-04): only rendered when stats present; resolvePresentation
+         strips stats for __hidden elements so this is never shown for hidden cards -->
+    <dl v-if="presentationEntry?.stats" class="card-stats">
+      <template v-for="(val, key) in presentationEntry.stats" :key="key">
+        <dt>{{ key }}</dt>
+        <dd>{{ val }}</dd>
+      </template>
+    </dl>
   </div>
 </template>
 
@@ -520,5 +561,25 @@ function handleClick(event: MouseEvent) {
   height: 100%;
   border-radius: 8px;
   object-fit: contain;
+}
+
+/* Overlay stats block (D-04) */
+.card-stats {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #ccc;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 8px;
+}
+
+.card-stats dt {
+  font-weight: 700;
+  color: #888;
+}
+
+.card-stats dd {
+  margin: 0;
+  color: #fff;
 }
 </style>

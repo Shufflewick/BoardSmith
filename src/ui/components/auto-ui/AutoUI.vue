@@ -13,6 +13,7 @@
  */
 import AutoRenderer from './AutoRenderer.vue';
 import type { GameElement } from './index';
+import type { PresentationOverlay } from './presentation.js';
 
 interface FlowState {
   complete?: boolean;
@@ -25,6 +26,8 @@ defineProps<{
   flowState?: FlowState;
   /** Current player's seat */
   playerSeat: number;
+  /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
+  presentation?: PresentationOverlay;
 }>();
 </script>
 
@@ -43,6 +46,7 @@ defineProps<{
       v-else
       :game-view="gameView"
       :player-seat="playerSeat"
+      :presentation="presentation"
     />
   </div>
 </template>

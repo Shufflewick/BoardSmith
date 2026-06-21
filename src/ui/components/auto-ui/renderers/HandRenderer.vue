@@ -9,9 +9,11 @@
  * lines 409-453 (named Phase 92 carry-forward; Pitfall 6).
  */
 
-import { computed, inject, type Ref } from 'vue';
+import { computed, inject, type Ref, type ComputedRef } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import ElementRenderer from './ElementRenderer.vue';
+import { resolvePresentation } from '../presentation.js';
+import type { PresentationOverlay } from '../presentation.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -47,6 +49,14 @@ const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage');
 // Board interaction — whole-hand action-selectable state
 // ---------------------------------------------------------------------------
 const boardInteraction = tryUseBoardInteraction();
+
+// ---------------------------------------------------------------------------
+// Presentation overlay injection (D-04)
+// ---------------------------------------------------------------------------
+const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const presentationEntry = computed(() =>
+  resolvePresentation(props.element, overlay?.value)
+);
 
 // ---------------------------------------------------------------------------
 // Selectable / selected state (from injected sets)
@@ -275,11 +285,10 @@ void isBoardSelected;
     @dragover="handleDragOver"
     @drop="handleDrop"
   >
-    <!-- Header: honor game designer's element.name (CF-2: never hardcode "Your Hand") -->
-    <!-- Fall back to ownership label only when element.name is absent -->
+    <!-- Header: overlay label wins, then element.name, then ownership fallback (CF-2 + D-04) -->
     <div class="hand-header">
       <span class="hand-label">
-        {{ element.name ?? (isOwned ? 'Your Hand' : `${playerName}'s Hand`) }}
+        {{ presentationEntry?.label ?? element.name ?? (isOwned ? 'Your Hand' : `${playerName}'s Hand`) }}
       </span>
       <span class="hand-count">({{ childCountDisplay }})</span>
     </div>
