@@ -225,14 +225,14 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
     // Choice pick with boardRefs returning refs array
     this.registerAction(
       Action.create('move')
-        .chooseFrom<MoveChoice>('dest', {
+        .chooseFrom('dest', {
           prompt: 'Choose destination',
           choices: [
-            { from: 'a1', to: 'a2' },
-            { from: 'a1', to: 'a3' },
+            { from: 'a1', to: 'a2' } as MoveChoice,
+            { from: 'a1', to: 'a3' } as MoveChoice,
           ],
-          display: (c) => `${c.from} → ${c.to}`,
-          boardRefs: (choice) => ({
+          display: (c: MoveChoice) => `${c.from} → ${c.to}`,
+          boardRefs: (choice: MoveChoice) => ({
             refs: [
               { ref: { notation: choice.from }, role: 'source' as const },
               { ref: { notation: choice.to }, role: 'target' as const },

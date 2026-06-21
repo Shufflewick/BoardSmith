@@ -355,8 +355,8 @@ function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
     boardInteraction.setHoveredChoice({
       value: choice.value,
       display: choice.display,
-      sourceRefs: choice.sourceRef ? [choice.sourceRef] : [],
-      targetRefs: choice.targetRef ? [choice.targetRef] : [],
+      sourceRefs: (choice.refs ?? []).filter(r => r.role === 'source').map(r => r.ref),
+      targetRefs: (choice.refs ?? []).filter(r => r.role === 'target' || r.role === 'highlight').map(r => r.ref),
     });
   }
 
@@ -368,11 +368,12 @@ function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
 
 // Hover handlers for element buttons (highlight on board)
 function handleElementHover(element: ValidElement) {
-  if (boardInteraction && element.ref) {
+  const highlightRef = (element.refs ?? []).find(r => r.role === 'highlight')?.ref;
+  if (boardInteraction && highlightRef) {
     boardInteraction.setHoveredChoice({
       value: element.id,
       display: element.display || String(element.id),
-      sourceRefs: [element.ref],
+      sourceRefs: [highlightRef],
       targetRefs: [],
     });
   }
@@ -586,15 +587,14 @@ watch([currentPick, filteredValidElements], ([selection]) => {
     // Use filtered choices if there's a filterBy configuration
     const choices = filteredChoices.value.length > 0 ? filteredChoices.value : selection.choices;
 
-    const choicesWithRefs = choices.filter((c: ChoiceWithRefs) => c.sourceRef || c.targetRef);
+    const choicesWithRefs = choices.filter((c: ChoiceWithRefs) => (c.refs ?? []).length > 0);
 
     if (choicesWithRefs.length > 0) {
       const refToChoice = new Map<number, { value: unknown; ref: ElementRef; disabled?: string }>();
 
       choicesWithRefs.forEach((choice: ChoiceWithRefs) => {
-        // Use targetRef for clickable elements (destinations)
-        // sourceRef is only for highlighting the source
-        const ref = choice.targetRef || choice.sourceRef;
+        // Use target role ref for clickable elements (destinations); fall back to first ref
+        const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref ?? (choice.refs ?? [])[0]?.ref;
         if (ref?.id !== undefined) {
           refToChoice.set(ref.id, { value: choice.value, ref, disabled: choice.disabled });
         }
@@ -859,8 +859,10 @@ function updateMultiSelectBoardHighlights() {
   for (const val of selectedValues) {
     const choice = filteredChoices.value.find(c => c.value === val);
     if (choice) {
-      if (choice.sourceRef) sourceRefs.push(choice.sourceRef);
-      if (choice.targetRef) targetRefs.push(choice.targetRef);
+      for (const r of choice.refs ?? []) {
+        if (r.role === 'source') sourceRefs.push(r.ref);
+        else targetRefs.push(r.ref); // 'target' and 'highlight' both highlight as target-side
+      }
     }
   }
 
@@ -986,8 +988,8 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
   // For choice selections with board refs, mark the selected element
   if (selection?.type === 'choice' && selection.choices) {
     const choice = selection.choices.find((c: ChoiceWithRefs) => c.value === value);
-    if (choice && (choice.sourceRef || choice.targetRef)) {
-      const ref = choice.sourceRef || choice.targetRef;
+    if (choice?.refs?.length) {
+      const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref ?? choice.refs[0]?.ref;
       if (ref && boardInteraction) {
         boardInteraction.selectElement(ref);
       }
@@ -1048,8 +1050,8 @@ function handleChoiceHover(choice: ChoiceWithRefs) {
   boardInteraction?.setHoveredChoice({
     value: choice.value,
     display: choice.display,
-    sourceRefs: choice.sourceRef ? [choice.sourceRef] : [],
-    targetRefs: choice.targetRef ? [choice.targetRef] : [],
+    sourceRefs: (choice.refs ?? []).filter(r => r.role === 'source').map(r => r.ref),
+    targetRefs: (choice.refs ?? []).filter(r => r.role === 'target' || r.role === 'highlight').map(r => r.ref),
   });
 }
 
