@@ -4,13 +4,13 @@ milestone: v3.1
 milestone_name: Dynamic Auto-UI
 status: executing
 stopped_at: Phase 93 context gathered; Phase 92 ready to execute
-last_updated: "2026-06-21T15:22:50.069Z"
+last_updated: "2026-06-21T15:28:18.161Z"
 last_activity: 2026-06-21
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 17
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 ## Current Position
 
 Phase: 92 (piece-grid-rendering-fixes) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-06-21
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Milestones
 
@@ -78,6 +78,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - `$images.face` leak filed as a security bug (SEC-01); independent of redesign, lands in Phase 91
 - "Custom renderer in a shared mandatory shell" is the honest framing (GameShell is a mandatory host)
 - Plumbing edits are real work: ActionPanel must be suppressible (INTERACT-02), `protocol.ts` needs multi-ref (INTERACT-03), animation events must be explicitly wired (RENDER-05)
+- [Phase ?]: pieceVisual and gridResult computeds guard on elementType so other element types never invoke the helpers
+- [Phase ?]: console.error fires from watchEffect with _lastGridError dedup ref — never from inside computed getter
 
 ### Pending Todos
 
@@ -89,7 +91,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-21T15:22:50.061Z
+Last session: 2026-06-21T15:28:10.443Z
 Stopped at: Phase 93 context gathered; Phase 92 ready to execute
 Resume file: None
 Next action: `/gsd:plan-phase 91`
