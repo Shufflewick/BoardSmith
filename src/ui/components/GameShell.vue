@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, provide, toRef } from 'vue';
+import type { PresentationOverlay } from './auto-ui/presentation.js';
 import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
@@ -89,6 +90,8 @@ interface GameShellProps {
   defaultAIPlayers?: number[];
   /** Suppress the footer ActionPanel regardless of anchor state (D-02 escape hatch). Default: false. */
   suppressActionPanel?: boolean;
+  /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
+  presentation?: PresentationOverlay;
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -494,6 +497,8 @@ provide('actionController', actionController);
 provide('timeTravelDiff', timeTravelDiff);
 // The debug panel issues its queries/edits through the host bridge (dev only).
 provide('platformRequest', platformRequest);
+// Presentation overlay — provided reactively for AutoRenderer → renderers chain (D-04)
+provide('presentation', toRef(props, 'presentation'));
 
 // Mount: in platform mode the host (ShufflewickPub in prod, the boardsmith dev
 // host locally) manages the session and drives everything via postMessage.

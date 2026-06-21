@@ -20,6 +20,7 @@
 import './builtin-renderers.js';
 
 import { computed, provide, ref } from 'vue';
+import type { PresentationOverlay } from './presentation.js';
 import { useFlyingElements } from '../../composables/useFlyingElements.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
@@ -59,6 +60,8 @@ const props = defineProps<{
   gameView: GameElement | null | undefined;
   /** Current player's seat */
   playerSeat: number;
+  /** Per-UI presentation overlay for visual metadata (D-04) */
+  presentation?: PresentationOverlay;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -75,6 +78,8 @@ provide(DIE_ANIMATION_CONTEXT_KEY, dieAnimationContext);
 provide('playerSeat', props.playerSeat);
 provide('selectableElements', ref(new Set<number>()));
 provide('selectedElements', ref(new Set<number>()));
+// Presentation overlay — provided as computed so injectors re-render when prop changes (D-04)
+provide('presentation', computed(() => props.presentation));
 
 // ---------------------------------------------------------------------------
 // findDefaultBackImage — scans element tree for the first card back image
@@ -145,8 +150,13 @@ useAutoRendererAnimations(animationEvents, { fly });
   <div class="auto-renderer">
     <FlyingCardsOverlay :flying-cards="flyingElements" />
 
+    <!-- CF-3: null gameView empty/loading state — never renders a blank tableau -->
+    <div v-if="!gameView" class="auto-renderer-empty">
+      <p class="auto-renderer-empty-text">Waiting for game state&hellip;</p>
+    </div>
+
     <GridBoardTemplate
-      v-if="archetype === 'grid-board'"
+      v-else-if="archetype === 'grid-board'"
       :top-level-children="topLevelChildren"
       :game-view="gameView"
     />
@@ -158,7 +168,7 @@ useAutoRendererAnimations(animationEvents, { fly });
       v-else-if="archetype === 'unsupported'"
     />
     <TableauTemplate
-      v-else
+      v-else-if="gameView"
       :top-level-children="topLevelChildren"
     />
   </div>
@@ -169,5 +179,19 @@ useAutoRendererAnimations(animationEvents, { fly });
   position: relative;
   height: 100%;
   overflow: hidden;
+}
+
+/* CF-3: null gameView empty/loading state */
+.auto-renderer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.auto-renderer-empty-text {
+  color: #888888;
+  font-size: 14px;
+  font-weight: 400;
 }
 </style>
