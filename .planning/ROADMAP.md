@@ -10,7 +10,7 @@
 
 ## Phases
 
-- [ ] **Phase 91: Security Leak Fix** — Filter `$images.face` and audit the `$`-whitelist in `toJSONForPlayer` so no value-bearing data reaches unauthorized players.
+- [x] **Phase 91: Security Leak Fix** — Filter `$images.face` and audit the `$`-whitelist in `toJSONForPlayer` so no value-bearing data reaches unauthorized players. (completed 2026-06-21)
 - [ ] **Phase 92: Piece & Grid Rendering Fixes** — Pieces render with images/labels; labeled-token fallback for no-image pieces; grid boards size from declared coordinates; hardcoded 8×8 fallback removed.
 - [ ] **Phase 93: Renderer Rebuild** — Replace `AutoElement.vue` + `AutoGameBoard.vue` with a ranked-tester dispatcher, archetype templates (grid-board/card/tableau), closed-form grid/hex layout, and animation event wiring — reusing the interaction substrate unchanged.
 - [ ] **Phase 94: Interaction, Presentation & Playability Gate** — Wire board-centric interaction (suppressible ActionPanel, multi-ref highlight, protocol extension), implement the per-UI presentation overlay, then prove Hex + Go Fish + Checkers are playable end-to-end in the browser.
@@ -31,7 +31,7 @@
   3. A unit test directly covers the filtered `$images` path on a visibility-restricted element.
 **Plans**: 2 plans
 - [x] 91-01-PLAN.md — Wave 0: failing leak test proving $images.face / $image / unknown-$-key leak (SEC-01, SEC-02)
-- [ ] 91-02-PLAN.md — Wave 1: redactHiddenElementAttrs helper + three branch swaps; suite green (SEC-01, SEC-02)
+- [x] 91-02-PLAN.md — Wave 1: redactHiddenElementAttrs helper + three branch swaps; suite green (SEC-01, SEC-02)
 
 ---
 
@@ -115,7 +115,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 91. Security Leak Fix | 1/2 | In Progress|  |
+| 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
 | 92. Piece & Grid Rendering Fixes | 0/? | Not started | - |
 | 93. Renderer Rebuild | 0/? | Not started | - |
 | 94. Interaction, Presentation & Playability Gate | 0/? | Not started | - |
