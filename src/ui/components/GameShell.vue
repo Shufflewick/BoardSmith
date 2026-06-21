@@ -87,6 +87,8 @@ interface GameShellProps {
   showHistory?: boolean;
   /** Player positions that should be AI by default (1-indexed). E.g., [2] makes player 2 AI */
   defaultAIPlayers?: number[];
+  /** Suppress the footer ActionPanel regardless of anchor state (D-02 escape hatch). Default: false. */
+  suppressActionPanel?: boolean;
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -95,6 +97,7 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   playerCount: 2,
   debugMode: true,
   showHistory: true,
+  suppressActionPanel: false,
 });
 
 // Platform mode: embedded inside a host platform's iframe (e.g., ShufflewickPub
@@ -1276,23 +1279,28 @@ if ((import.meta as any).hot) {
         </main>
       </div>
 
-      <!-- Bottom Action Bar -->
-      <footer class="game-shell__action-bar">
-        <ActionPanel
-          :available-actions="isViewingHistory ? [] : availableActions"
-          :action-metadata="isViewingHistory ? {} : actionMetadata"
-          :players="players"
-          :player-seat="playerSeat"
-          :is-my-turn="isMyTurn && !isViewingHistory"
-          :can-undo="canUndo && !isViewingHistory"
-          :auto-end-turn="autoEndTurn"
-          :show-undo="showUndo"
-          :messages="gameMessages"
-          :current-player-name="currentPlayerName"
-          :current-player-color="currentPlayerColor"
-          :awaiting-players="awaitingPlayerNames"
-          @undo="handleUndo"
-        />
+      <!-- Bottom Action Bar — absent when all choices are board-anchored (D-02) -->
+      <footer
+        v-if="!props.suppressActionPanel && !actionController.allCurrentChoicesAnchored.value"
+        class="game-shell__action-bar"
+      >
+        <slot name="action-panel">
+          <ActionPanel
+            :available-actions="isViewingHistory ? [] : availableActions"
+            :action-metadata="isViewingHistory ? {} : actionMetadata"
+            :players="players"
+            :player-seat="playerSeat"
+            :is-my-turn="isMyTurn && !isViewingHistory"
+            :can-undo="canUndo && !isViewingHistory"
+            :auto-end-turn="autoEndTurn"
+            :show-undo="showUndo"
+            :messages="gameMessages"
+            :current-player-name="currentPlayerName"
+            :current-player-color="currentPlayerColor"
+            :awaiting-players="awaitingPlayerNames"
+            @undo="handleUndo"
+          />
+        </slot>
         <!-- Time travel banner -->
         <div v-if="isViewingHistory" class="time-travel-banner">
           <span class="time-travel-icon">⏰</span>
