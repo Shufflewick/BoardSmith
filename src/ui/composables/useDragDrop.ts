@@ -218,7 +218,7 @@ export function useDragDrop(): UseDragDropReturn {
       }
       const target = e.currentTarget as HTMLElement;
 
-      // Transform-aware drag ghost (shared with AutoElement for visual parity).
+      // Transform-aware drag ghost (shared with auto-UI element renderers for visual parity).
       setTransformAwareDragImage(e, target);
 
       e.dataTransfer?.setData('boardsmith/element', JSON.stringify(ref));

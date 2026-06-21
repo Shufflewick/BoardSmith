@@ -1,13 +1,12 @@
 /**
- * auto-ui-helpers — Internal rendering helpers for AutoElement / AutoGameBoard.
+ * auto-ui-helpers — Internal rendering helpers for the auto-UI system.
  *
  * These are pure functions: no Vue reactivity, no DOM access.
- * Designed for use by the current renderer (AutoElement.vue) and the Phase 93 renderer.
- * Lift existing inlined logic from AutoElement.vue rather than duplicating it.
+ * Shared by all per-element renderers (CardRenderer, PieceRenderer, etc.).
  */
 
 // ---------------------------------------------------------------------------
-// Minimal GameElement interface (mirrors AutoElement.vue local definition)
+// Minimal GameElement interface (mirrors ElementRenderer local definition)
 // ---------------------------------------------------------------------------
 interface GameElement {
   id: number;
@@ -37,9 +36,8 @@ export type GridResult =
 // resolvePieceVisual
 //
 // Reads element.attributes.$images and returns a render-ready discriminated
-// union. Lifted from AutoElement.vue getImageInfo (lines 321–341) with the
-// key difference that piece sprites use their own width/height — do NOT fall
-// back to card-native constants (which are only correct for cards, not pieces).
+// union. Piece sprites use their own width/height — do NOT fall back to
+// card-native constants (which are only correct for cards, not pieces).
 // ---------------------------------------------------------------------------
 export function resolvePieceVisual(element: GameElement): PieceVisual {
   const attrs = element.attributes ?? {};
@@ -112,7 +110,7 @@ export function resolvePieceVisual(element: GameElement): PieceVisual {
 //   2. Inferred: first two numeric, non-underscore-prefixed attributes on first child
 //   3. Neither available → {ok:false, error} (D-03): no exceptions emitted
 //
-// Lifted from AutoElement.vue boardSize computed (lines 607–657).
+// Grid size resolution for grid board elements.
 // ---------------------------------------------------------------------------
 export function resolveGridSize(element: GameElement): GridResult {
   const attrs = element.attributes ?? {};

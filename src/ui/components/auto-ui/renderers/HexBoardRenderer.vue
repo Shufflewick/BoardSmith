@@ -68,7 +68,7 @@ const hexPoints = computed(() =>
   getHexPolygonPoints(hexSize.value, orientation.value)
 );
 
-// ── SVG viewBox bounds — same algorithm as AutoElement.vue lines 684-719 ────
+// ── SVG viewBox bounds using hexToPixel ────
 // Uses hexToPixel (not hand-rolled math) for consistency.
 const svgBounds = computed(() => {
   const cells = props.element.children ?? [];

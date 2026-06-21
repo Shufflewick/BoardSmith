@@ -4,7 +4,7 @@
  *
  * Renders a stacked visual (up to 3 offset cards) with a 20px bold name and
  * count. Shows italic "Empty" when childCount/children length is 0.
- * Children are rendered via ElementRenderer (never AutoElement).
+ * Children are rendered via ElementRenderer.
  */
 
 import { computed, inject, type Ref } from 'vue';

@@ -36,7 +36,7 @@ const boardInteraction = tryUseBoardInteraction();
 // Delegate all grid sizing to the Phase 92 helper — DO NOT re-implement
 const gridResult = computed(() => resolveGridSize(props.element));
 
-// One-shot console.error when grid cannot resolve (matches AutoElement.vue pattern)
+// One-shot console.error when grid cannot resolve
 const _lastGridError = ref<string | null>(null);
 watchEffect(() => {
   const result = gridResult.value;
@@ -46,7 +46,7 @@ watchEffect(() => {
   }
 });
 
-// Provide coordinate names to child cells (same pattern as AutoElement.vue lines 76-82)
+// Provide coordinate names to child cells (inherited from parent grid provide pattern)
 // Children use these to set grid-row / grid-column from their own coordinate attributes
 const rowCoord = props.element.attributes?.$rowCoord as string | undefined;
 const colCoord = props.element.attributes?.$colCoord as string | undefined;
