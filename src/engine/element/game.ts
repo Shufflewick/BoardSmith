@@ -2264,11 +2264,13 @@ export class Game<
       // Preserve element name and safe $-prefixed system attributes (like $type) for AutoUI
       // rendering; redact identity-bearing image refs ($image, $images.face).
       if (visibility.mode === 'count-only' && !element.isVisibleTo(visibilityPosition)) {
+        // Drop `name` — for a leaf element (e.g. a Card named "AS") the name is
+        // identity-bearing. Seed __hidden so the SEC-02 regression guard
+        // (collectAllHiddenAttrs) sweeps this surface too.
         return {
           className: json.className,
           id: json.id,
-          name: json.name,
-          attributes: redactHiddenElementAttrs(json.attributes ?? {}),
+          attributes: { __hidden: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
           childCount: element._t.children.length,
         };
       }
