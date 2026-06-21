@@ -6,6 +6,8 @@
  * ignored (element -> choice WITHOUT filterBy, `elements` multi-picks) — while
  * the two previously-supported shapes (element -> choice WITH filterBy, and
  * element -> element) keep working identically.
+ *
+ * D-01 migration: uses refs: [{ ref, role }] instead of singular targetRef / ref.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, nextTick } from 'vue';
@@ -52,15 +54,15 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       choices: [
-        { value: 'a1', display: 'A1', targetRef: { id: 100 } },
-        { value: 'a2', display: 'A2', targetRef: { id: 101 } },
+        { value: 'a1', display: 'A1', refs: [{ ref: { id: 100 }, role: 'target' }] },
+        { value: 'a2', display: 'A2', refs: [{ ref: { id: 101 }, role: 'target' }] },
       ],
     });
     const metadata: Record<string, ActionMetadata> = {
       place: {
         name: 'place',
         selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }, { id: 2, ref: { id: 2 } }] },
+          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
           { name: 'dest', type: 'choice' }, // no filterBy
         ],
       },
@@ -85,16 +87,16 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       choices: [
-        { value: { pieceId: 1, to: 'x' }, display: 'X', targetRef: { id: 100 } },
-        { value: { pieceId: 1, to: 'z' }, display: 'Z', targetRef: { id: 101 } },
-        { value: { pieceId: 2, to: 'y' }, display: 'Y', targetRef: { id: 200 } },
+        { value: { pieceId: 1, to: 'x' }, display: 'X', refs: [{ ref: { id: 100 }, role: 'target' }] },
+        { value: { pieceId: 1, to: 'z' }, display: 'Z', refs: [{ ref: { id: 101 }, role: 'target' }] },
+        { value: { pieceId: 2, to: 'y' }, display: 'Y', refs: [{ ref: { id: 200 }, role: 'target' }] },
       ],
     });
     const metadata: Record<string, ActionMetadata> = {
       move: {
         name: 'move',
         selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }, { id: 2, ref: { id: 2 } }] },
+          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
           { name: 'dest', type: 'choice', filterBy: { key: 'pieceId', selectionName: 'piece' } },
         ],
       },
@@ -111,15 +113,15 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       validElements: [
-        { id: 10, display: 'Goblin', ref: { id: 10 } },
-        { id: 11, display: 'Orc', ref: { id: 11 } },
+        { id: 10, display: 'Goblin', refs: [{ ref: { id: 10 }, role: 'highlight' }] },
+        { id: 11, display: 'Orc', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
       ],
     });
     const metadata: Record<string, ActionMetadata> = {
       attack: {
         name: 'attack',
         selections: [
-          { name: 'attacker', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }] },
+          { name: 'attacker', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }] },
           { name: 'target', type: 'element' },
         ],
       },
@@ -139,8 +141,8 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       validElements: [
-        { id: 20, display: 'Card 20', ref: { id: 20 } },
-        { id: 21, display: 'Card 21', ref: { id: 21 } },
+        { id: 20, display: 'Card 20', refs: [{ ref: { id: 20 }, role: 'highlight' }] },
+        { id: 21, display: 'Card 21', refs: [{ ref: { id: 21 }, role: 'highlight' }] },
       ],
       multiSelect: { min: 1, max: 2 },
     });
@@ -159,20 +161,20 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
     expect(derived!.targets.map(t => t.id).sort()).toEqual([20, 21]);
   });
 
-  it('skips disabled elements and choices without a targetRef', async () => {
+  it('skips disabled elements and choices without a target role ref', async () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       choices: [
-        { value: 'a', display: 'A', targetRef: { id: 100 } },
-        { value: 'b', display: 'B' }, // no targetRef -> not droppable
-        { value: 'c', display: 'C', targetRef: { id: 102 }, disabled: 'blocked' },
+        { value: 'a', display: 'A', refs: [{ ref: { id: 100 }, role: 'target' }] },
+        { value: 'b', display: 'B' }, // no refs -> not droppable
+        { value: 'c', display: 'C', refs: [{ ref: { id: 102 }, role: 'target' }], disabled: 'blocked' },
       ],
     });
     const metadata: Record<string, ActionMetadata> = {
       place: {
         name: 'place',
         selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }] },
+          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }] },
           { name: 'dest', type: 'choice' },
         ],
       },
@@ -204,15 +206,15 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       choices: [
-        { value: 'a1', display: 'A1', targetRef: { id: 100 } },
-        { value: 'a2', display: 'A2', targetRef: { id: 101 } },
+        { value: 'a1', display: 'A1', refs: [{ ref: { id: 100 }, role: 'target' }] },
+        { value: 'a2', display: 'A2', refs: [{ ref: { id: 101 }, role: 'target' }] },
       ],
     });
     const metadata: Record<string, ActionMetadata> = {
       place: {
         name: 'place',
         selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }, { id: 2, ref: { id: 2 } }] },
+          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
           { name: 'dest', type: 'choice' },
         ],
       },
@@ -236,15 +238,15 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       validElements: [
-        { id: 10, display: 'Goblin', ref: { id: 10 } },
-        { id: 11, display: 'Orc', ref: { id: 11 } },
+        { id: 10, display: 'Goblin', refs: [{ ref: { id: 10 }, role: 'highlight' }] },
+        { id: 11, display: 'Orc', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
       ],
     });
     const metadata: Record<string, ActionMetadata> = {
       attack: {
         name: 'attack',
         selections: [
-          { name: 'attacker', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }] },
+          { name: 'attacker', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }] },
           { name: 'target', type: 'element' },
         ],
       },
@@ -264,15 +266,15 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
     const fetchPickChoices = vi.fn().mockResolvedValue({
       success: true,
       validElements: [
-        { id: 10, display: 'Goblin', ref: { id: 10 } },
-        { id: 11, display: 'Orc', ref: { id: 11 } },
+        { id: 10, display: 'Goblin', refs: [{ ref: { id: 10 }, role: 'highlight' }] },
+        { id: 11, display: 'Orc', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
       ],
     });
     const metadata: Record<string, ActionMetadata> = {
       attack: {
         name: 'attack',
         selections: [
-          { name: 'attacker', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }] },
+          { name: 'attacker', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }] },
           { name: 'target', type: 'element' },
         ],
       },
@@ -303,8 +305,8 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         return Promise.resolve({
           success: true,
           validElements: [
-            { id: 10, display: 'Card 10', ref: { id: 10 } },
-            { id: 11, display: 'Card 11', ref: { id: 11 } },
+            { id: 10, display: 'Card 10', refs: [{ ref: { id: 10 }, role: 'highlight' }] },
+            { id: 11, display: 'Card 11', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
           ],
         });
       }
@@ -312,8 +314,8 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
       return Promise.resolve({
         success: true,
         validElements: [
-          { id: 20, display: 'Zone A', ref: { name: 'zone-a' } },
-          { id: 21, display: 'Zone B', ref: { name: 'zone-b' } },
+          { id: 20, display: 'Zone A', refs: [{ ref: { name: 'zone-a' }, role: 'highlight' }] },
+          { id: 21, display: 'Zone B', refs: [{ ref: { name: 'zone-b' }, role: 'highlight' }] },
         ],
       });
     });
@@ -356,7 +358,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
       place: {
         name: 'place',
         selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, ref: { id: 1 } }] },
+          { name: 'piece', type: 'element', validElements: [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' }] }] },
           { name: 'dest', type: 'choice' },
         ],
       },
