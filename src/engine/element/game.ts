@@ -2315,7 +2315,7 @@ export class Game<
             children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
-        } else if (zoneVisibility.mode === 'owner' && element.player?.seat !== visibilityPosition) {
+        } else if (zoneVisibility.mode === 'owner' && element.getEffectiveOwner()?.seat !== visibilityPosition) {
           // Owner-only zone and this player doesn't own it - show hidden placeholders
           // Preserve $-prefixed system attributes (like $type) for proper AutoUI rendering
           const hiddenChildren: ElementJSON[] = [];
