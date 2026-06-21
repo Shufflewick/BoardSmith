@@ -27,16 +27,15 @@
  *
  * - **element / elements pick** → every valid element for that pick. Dropping
  *   onto one fills the pick with that element id.
- * - **choice pick** → every choice that carries a `targetRef` (a board element
- *   the choice maps to, e.g. a destination square). Dropping onto it fills the
- *   pick with that choice's value. `filterBy` is already applied by the
- *   controller's `getChoices`, so destinations are correctly narrowed by the
- *   previously-selected element with no special-casing here.
+ * - **choice pick** → every choice that carries a `refs` entry with role 'target'
+ *   (a board element the choice maps to, e.g. a destination square). Dropping
+ *   onto it fills the pick with that choice's value. `filterBy` is already
+ *   applied by the controller's `getChoices`, so destinations are correctly
+ *   narrowed by the previously-selected element with no special-casing here.
  * - **number / text pick** → not a drop target (no board mapping).
  *
- * The two previously-hard-coded cases are exactly the element-pick and
- * choice-with-targetRef branches above, so they keep working identically; this
- * module only ADDS the other shapes.
+ * D-01 migration: uses refs: [{ ref, role }] arrays instead of singular
+ * targetRef / ref fields. This module only ADDS the other shapes.
  */
 import { watch, type Ref, type WatchStopHandle } from 'vue';
 import type { BoardInteraction, ValidElement, ElementRef } from './useBoardInteraction.js';
@@ -83,8 +82,9 @@ export function deriveDropTargetsForPick(
     const targets: ValidElement[] = [];
     for (const el of controller.getValidElements(pick)) {
       if (el.disabled) continue;
-      if (el.id === undefined || !el.ref) continue;
-      targets.push({ id: el.id, ref: el.ref });
+      const highlightRef = (el.refs ?? []).find(r => r.role === 'highlight')?.ref;
+      if (el.id === undefined || !highlightRef) continue;
+      targets.push({ id: el.id, ref: highlightRef });
     }
     return {
       targets,
@@ -102,7 +102,7 @@ export function deriveDropTargetsForPick(
     const valueByTargetId = new Map<number, unknown>();
     for (const choice of controller.getChoices(pick) as ChoiceWithRefs[]) {
       if (choice.disabled) continue;
-      const ref = choice.targetRef;
+      const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref;
       if (!ref || ref.id === undefined) continue;
       targets.push({ id: ref.id, ref });
       valueByTargetId.set(ref.id, choice.value);
@@ -200,7 +200,7 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
   function pickAcceptsDragged(pick: PickMetadata, dragged: ElementRef): boolean {
     return actionController
       .getValidElements(pick)
-      .some(el => !el.disabled && matchesDragged({ id: el.id, ref: el.ref }, dragged));
+      .some(el => !el.disabled && matchesDragged({ id: el.id, ref: (el.refs ?? [])[0]?.ref }, dragged));
   }
 
   /** Mirror the controller's current pick into board-interaction state so AutoUI boards react. */
@@ -221,15 +221,15 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
         `  1. An available action's FIRST selection must be an 'element' that accepts the dragged element, AND\n` +
         `  2. the NEXT selection must expose board targets, i.e. one of:\n` +
         `       • an 'element' / 'elements' pick  → drop onto any valid element, or\n` +
-        `       • a 'choice' pick whose choices carry a 'targetRef'  → drop onto that destination.\n\n` +
+        `       • a 'choice' pick whose choices carry refs with role 'target'  → drop onto that destination.\n\n` +
         `Observed:\n` +
         `  Dragged element: ${JSON.stringify(dragged)}\n` +
         `  Matched action: ${matchedAction ?? 'none (no action has a first element selection accepting this element)'}\n` +
         `  Current pick: ${pick ? `'${pick.name}' (type '${pick.type}')` : 'none'}\n\n` +
         (pick?.type === 'choice'
-          ? `This choice pick exposed no 'targetRef' on its choices, so the board has nowhere to drop onto. ` +
-            `Provide a targetRef per choice (the board element the choice maps to).`
-          : `If your action uses a choice destination, ensure each choice provides a 'targetRef'.`),
+          ? `This choice pick exposed no refs with role 'target' on its choices, so the board has nowhere to drop onto. ` +
+            `Provide boardRefs() returning refs: [{ ref, role: 'target' }] per choice.`
+          : `If your action uses a choice destination, ensure each choice's boardRefs() returns refs with role 'target'.`),
     );
   }
 

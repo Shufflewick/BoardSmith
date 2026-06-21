@@ -20,14 +20,21 @@ export interface ElementRef {
   className?: string;
 }
 
+/**
+ * A board element reference with a role indicating its highlight purpose.
+ * Declared inline (not imported from engine) — this module is dependency-free.
+ */
+export interface RefWithRole {
+  ref: ElementRef;
+  role: 'source' | 'target' | 'highlight';
+}
+
 /** Choice with optional board element references */
 export interface ChoiceWithRefs {
   value: unknown;
   display: string;
-  /** Source element reference (for move origin highlighting) */
-  sourceRef?: ElementRef;
-  /** Target element reference (for move destination highlighting) */
-  targetRef?: ElementRef;
+  /** Board element references with roles (source/target/highlight) */
+  refs?: RefWithRole[];
   /** Disabled reason string, present only when choice is disabled */
   disabled?: string;
 }
@@ -36,8 +43,8 @@ export interface ChoiceWithRefs {
 export interface ValidElement {
   id: number;
   display?: string;
-  /** Element reference (for board highlighting) */
-  ref?: ElementRef;
+  /** Board element references with roles (typically [{ ref, role: 'highlight' }]) */
+  refs?: RefWithRole[];
   /** Full element data from gameView (auto-enriched by actionController) */
   element?: GameElement;
   /** Disabled reason string, present only when element is disabled */
@@ -141,7 +148,7 @@ export interface PickStepResult {
 /** Result from fetching pick choices */
 export interface PickChoicesResult {
   success: boolean;
-  choices?: Array<{ value: unknown; display: string; sourceRef?: unknown; targetRef?: unknown; disabled?: string }>;
+  choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
   validElements?: ValidElement[];
   multiSelect?: { min: number; max?: number };
   error?: string;
@@ -157,7 +164,7 @@ export interface PickChoicesResult {
  */
 export interface PickSnapshot {
   /** Choices for choice picks */
-  choices?: Array<{ value: unknown; display: string; sourceRef?: ElementRef; targetRef?: ElementRef; disabled?: string }>;
+  choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
   /** Valid elements for element picks */
   validElements?: ValidElement[];
   /** MultiSelect config (evaluated when fetched) */
