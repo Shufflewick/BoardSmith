@@ -1,0 +1,229 @@
+<script setup lang="ts">
+/**
+ * SpaceRenderer — Generic container renderer.
+ *
+ * Renders child elements via ElementRenderer (registry dispatch, not direct recursion).
+ * Drives layout via CSS custom properties on .space-children derived from element
+ * attributes ($direction, $gap, $fan, $fanAngle, $overlap, $align).
+ *
+ * Never-blank guarantee: min-height 60px ensures an empty space is always visible.
+ *
+ * Text content uses {{ }} interpolation only — no v-html (T-93-11 mitigation).
+ */
+
+import { computed } from 'vue';
+import { tryUseBoardInteraction } from '../../composables/useBoardInteraction.js';
+import ElementRenderer from './ElementRenderer.vue';
+
+// ---------------------------------------------------------------------------
+// Local GameElement interface — do NOT import from engine (module is dependency-free)
+// ---------------------------------------------------------------------------
+interface GameElement {
+  id: number;
+  name?: string;
+  className: string;
+  attributes?: Record<string, unknown>;
+  children?: GameElement[];
+  childCount?: number;
+}
+
+const props = defineProps<{
+  element: GameElement;
+  depth: number;
+}>();
+
+// Board interaction for selectable state
+const boardInteraction = tryUseBoardInteraction();
+
+const isBoardSelected = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isSelected({ id: props.element.id, name: props.element.name });
+});
+
+const isActionSelectable = computed(() => {
+  if (!boardInteraction) return false;
+  if (isBoardSelected.value) return false;
+  const elementRef = { id: props.element.id, name: props.element.name };
+  if (boardInteraction.isSelectableElement(elementRef)) return true;
+  if (boardInteraction.isDraggableSelectedElement(elementRef)) return true;
+  return false;
+});
+
+const isBoardHighlighted = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isHighlighted({ id: props.element.id, name: props.element.name });
+});
+
+// Layout CSS vars derived from element attributes
+const layoutStyles = computed(() => {
+  const attrs = props.element.attributes ?? {};
+  const styles: Record<string, string> = {};
+
+  const direction = attrs.$direction as string | undefined;
+  if (direction) {
+    styles['--layout-direction'] = direction === 'vertical' ? 'column' : 'row';
+  }
+
+  const gap = attrs.$gap as string | undefined;
+  if (gap) {
+    styles['--layout-gap'] = gap;
+  }
+
+  const overlap = attrs.$overlap as number | undefined;
+  if (overlap !== undefined) {
+    const overlapPercent = Math.round(overlap * 100);
+    styles['--layout-overlap'] = `${overlapPercent}%`;
+  }
+
+  const fan = attrs.$fan as boolean | undefined;
+  const fanAngle = attrs.$fanAngle as number | undefined;
+  if (fan) {
+    styles['--layout-fan'] = '1';
+    styles['--layout-fan-angle'] = `${fanAngle ?? 30}deg`;
+  }
+
+  const align = attrs.$align as string | undefined;
+  if (align) {
+    const alignMap: Record<string, string> = {
+      start: 'flex-start',
+      center: 'center',
+      end: 'flex-end',
+      stretch: 'stretch',
+    };
+    styles['--layout-align'] = alignMap[align] || 'center';
+  }
+
+  return styles;
+});
+
+const children = computed(() => props.element.children ?? []);
+
+const childCountDisplay = computed(() => {
+  if (children.value.length > 0) return children.value.length;
+  return props.element.childCount ?? 0;
+});
+
+const hasOverlap = computed(() => props.element.attributes?.$overlap !== undefined);
+const hasFan = computed(() => props.element.attributes?.$fan === true);
+</script>
+
+<template>
+  <div
+    class="space-container"
+    :class="{
+      'action-selectable': isActionSelectable,
+      'is-board-highlighted': isBoardHighlighted,
+      'is-board-selected': isBoardSelected,
+    }"
+    :style="layoutStyles"
+    :data-element-id="element.id"
+  >
+    <!-- Optional header — only shown when element has a name -->
+    <div v-if="element.name" class="space-header">
+      <span class="space-label">{{ element.name }}</span>
+      <span v-if="childCountDisplay > 0" class="space-count">({{ childCountDisplay }})</span>
+    </div>
+
+    <!-- Children dispatched via ElementRenderer (registry-based, not direct recursion) -->
+    <div
+      class="space-children"
+      :class="{ 'has-overlap': hasOverlap, 'has-fan': hasFan }"
+    >
+      <ElementRenderer
+        v-for="(child, index) in children"
+        :key="child.id"
+        :element="child"
+        :depth="depth + 1"
+        :style="{ '--card-index': index, '--card-count': children.length }"
+      />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.space-container {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 60px;
+  transition: all 0.2s ease;
+}
+
+.space-container.action-selectable {
+  cursor: pointer;
+  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline-offset: 2px;
+  animation: pulse-space 2s ease-in-out infinite;
+}
+
+.space-container.action-selectable:hover {
+  outline-color: rgba(46, 204, 113, 1);
+  background: rgba(46, 204, 113, 0.05);
+}
+
+.space-container.is-board-highlighted {
+  background: rgba(0, 217, 255, 0.08);
+  border-color: rgba(0, 217, 255, 0.4);
+}
+
+.space-container.is-board-selected {
+  background: rgba(0, 255, 136, 0.08);
+  border-color: rgba(0, 255, 136, 0.4);
+}
+
+@keyframes pulse-space {
+  0%, 100% {
+    outline-color: rgba(46, 204, 113, 0.6);
+  }
+  50% {
+    outline-color: rgba(46, 204, 113, 1);
+  }
+}
+
+.space-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.space-label {
+  font-weight: bold;
+  color: #aaa;
+  font-size: 16px;
+}
+
+.space-count {
+  color: #666;
+  font-size: 13px;
+}
+
+.space-children {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--layout-gap, 8px);
+  flex-direction: var(--layout-direction, row);
+  align-items: var(--layout-align, flex-start);
+  justify-content: var(--layout-align, flex-start);
+}
+
+/* Overlap layout */
+.space-children.has-overlap > * {
+  margin-right: calc(-1 * var(--layout-overlap, 50%) * 70px);
+}
+
+.space-children.has-overlap > *:last-child {
+  margin-right: 0;
+}
+
+/* Fan layout */
+.space-children.has-fan > * {
+  --fan-angle: var(--layout-fan-angle, 30deg);
+  --half-count: calc((var(--card-count, 1) - 1) / 2);
+  --angle-step: calc(var(--fan-angle) / max(var(--card-count, 1) - 1, 1));
+  --rotation: calc((var(--card-index, 0) - var(--half-count)) * var(--angle-step));
+  transform: rotate(var(--rotation));
+  transform-origin: center 150%;
+}
+</style>
