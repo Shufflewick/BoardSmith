@@ -12,7 +12,7 @@
  */
 
 import { computed } from 'vue';
-import { tryUseBoardInteraction } from '../../composables/useBoardInteraction.js';
+import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import ElementRenderer from './ElementRenderer.vue';
 
 // ---------------------------------------------------------------------------

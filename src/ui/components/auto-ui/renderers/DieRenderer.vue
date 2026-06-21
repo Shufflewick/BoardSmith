@@ -9,7 +9,7 @@
 
 import { computed } from 'vue';
 import { Die3D } from '../../dice/index.js';
-import { tryUseBoardInteraction } from '../../composables/useBoardInteraction.js';
+import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
