@@ -36,8 +36,7 @@ Declared values (multiples of 4 only):
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4px | Token label internal padding, icon gaps |
-| sm | 8px | Default `--layout-gap`; gap between grid cells |
-| md | 12px | Space-container padding (existing); error panel internal padding |
+| sm | 8px | Default `--layout-gap`; gap between grid cells; error panel top/bottom padding |
 | lg | 16px | Section padding; error panel horizontal padding |
 | xl | 24px | Major layout gaps |
 | 2xl | 32px | Outer board padding |
@@ -56,12 +55,12 @@ Exceptions:
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
 | Token label (centered on disc) | 12px | 700 (bold) | 1.0 (single line, vertically centered) |
-| Error panel heading | 14px | 600 (semibold) | 1.3 |
+| Error panel heading | 14px | 700 (bold) | 1.3 |
 | Error panel body / prop hint | 12px | 400 (regular) | 1.5 |
 
 Source: existing `.hex-label { font-size: 12px }` and `.piece { font-size: 0.8rem }` (AutoElement.vue).
-Phase 92 uses exactly 2 weights: 400 regular and 700 bold. (600 semibold only for error panel
-heading — collapsed to 700 bold if the renderer cannot express 600 separately.)
+Phase 92 uses exactly 2 weights: 400 (regular) and 700 (bold). Visual hierarchy between the
+error panel heading and body is provided by size (14px vs 12px) and color (#e74c3c vs rgba white).
 
 ---
 
@@ -182,7 +181,7 @@ of heading + 1 line of hint text.
   background: rgba(231, 76, 60, 0.12);
   border: 1px solid rgba(231, 76, 60, 0.5);
   border-radius: 8px;
-  padding: 12px 16px;
+  padding: 8px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -190,7 +189,7 @@ of heading + 1 line of hint text.
 }
 .grid-error-panel__heading {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: #e74c3c;
   line-height: 1.3;
 }
