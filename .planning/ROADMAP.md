@@ -44,7 +44,10 @@
   2. A game piece with no configured image renders as a labeled token using the owning player's color/shape — distinguishable without text alone.
   3. A grid board with `$rowCoord`/`$colCoord` declared lays out using those coordinates; the hardcoded 8×8 default no longer exists.
   4. Attempting to render a grid board whose coordinates are missing or undeclared produces a loud, actionable error message (not a silent fallback to 8×8).
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 92-01-PLAN.md — Wave 1 (TDD): extract resolvePieceVisual + resolveGridSize pure helpers with unit tests (PIECE-01, PIECE-02, PIECE-03)
+- [ ] 92-02-PLAN.md — Wave 2: wire helpers into AutoElement.vue (piece dispatch, gridResult layout, error panel, CSS); 8×8 fallback removed (PIECE-01, PIECE-02, PIECE-03)
+- [ ] 92-03-PLAN.md — Wave 3: browser verification of image/token pieces, declared grid, and error panel (PIECE-01, PIECE-02, PIECE-03)
 **UI hint**: yes
 
 ---
@@ -116,7 +119,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
-| 92. Piece & Grid Rendering Fixes | 0/? | Not started | - |
+| 92. Piece & Grid Rendering Fixes | 0/3 | Planned | - |
 | 93. Renderer Rebuild | 0/? | Not started | - |
 | 94. Interaction, Presentation & Playability Gate | 0/? | Not started | - |
 | 95. Ship & Reframe | 0/? | Not started | - |
