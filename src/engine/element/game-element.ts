@@ -978,8 +978,20 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       element._visibility = json.visibility;
     }
 
-    // Apply attributes
+    // Apply attributes. Skip keys backed by a getter-only accessor (e.g. a
+    // `notation` getter that toJSON serializes for the client): the getter
+    // recomputes the value from restored coordinates, and assigning to it would
+    // throw "Cannot set property ... which has only a getter".
     for (const [key, value] of Object.entries(json.attributes)) {
+      let getterOnly = false;
+      for (let proto: object | null = element; proto; proto = Object.getPrototypeOf(proto)) {
+        const desc = Object.getOwnPropertyDescriptor(proto, key);
+        if (desc) {
+          getterOnly = !!desc.get && !desc.set;
+          break;
+        }
+      }
+      if (getterOnly) continue;
       (element as unknown as Record<string, unknown>)[key] = value;
     }
 
