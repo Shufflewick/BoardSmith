@@ -9,10 +9,12 @@
  * No hand-rolled trig: never re-implement the closed-form functions here.
  */
 
-import { computed } from 'vue';
+import { computed, inject, type ComputedRef } from 'vue';
 import { hexToPixel, getHexPolygonPoints } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import ElementRenderer from './ElementRenderer.vue';
+import { resolvePresentation } from '../presentation.js';
+import type { PresentationOverlay } from '../presentation.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -177,8 +179,18 @@ function handleHexDrop(event: DragEvent, cell: GameElement) {
   boardInteraction.triggerDrop(cellIdentity(cell));
 }
 
-// Display label for the board header
-const displayLabel = computed(() => props.element.name ?? props.element.className);
+// Presentation overlay injection (D-04)
+// HexBoardRenderer is a container — overlay affects the board header label.
+// Hex cell pieces are rendered via ElementRenderer → their renderer handles their own overlay.
+const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const presentationEntry = computed(() =>
+  resolvePresentation(props.element, overlay?.value)
+);
+
+// Display label for the board header — overlay label wins, then engine fallback
+const displayLabel = computed(
+  () => presentationEntry.value?.label ?? props.element.name ?? props.element.className
+);
 </script>
 
 <template>

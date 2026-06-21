@@ -10,10 +10,12 @@
  *   #2: Single shadow on outermost .piece only — no stacking on inner elements.
  */
 
-import { computed } from 'vue';
+import { computed, inject, type ComputedRef } from 'vue';
 import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
+import { resolvePresentation } from '../presentation.js';
+import type { PresentationOverlay } from '../presentation.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -39,6 +41,15 @@ const boardInteraction = tryUseBoardInteraction();
 
 // ── Core: delegate all visual logic to Phase 92 helper ───────────────────────
 const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element));
+
+// ── Presentation overlay injection (D-04) ────────────────────────────────────
+// Resolved AFTER visibility filtering; resolvePresentation strips image/stats
+// for __hidden elements (PRESENT-02). Pieces don't have __hidden but guard is
+// still routed through resolver for correctness.
+const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const presentationEntry = computed(() =>
+  resolvePresentation(props.element, overlay?.value)
+);
 
 // Element identity helper — passes notation from attributes (Pitfall 6).
 // Piece elements may use a notation attribute for board-ref matching.
@@ -130,9 +141,25 @@ function handleDragEnd() {
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
   >
-    <!-- Branch 1: image URL -->
+    <!-- Overlay render override: full component replacement (D-04) -->
+    <component
+      v-if="presentationEntry?.render"
+      :is="presentationEntry.render"
+      :element="element"
+    />
+
+    <!-- Overlay image override for visible pieces (D-04) -->
     <img
-      v-if="pieceVisual.kind === 'image'"
+      v-else-if="presentationEntry?.image"
+      class="piece-image"
+      :src="presentationEntry.image"
+      alt=""
+      aria-hidden="true"
+    />
+
+    <!-- Branch 1: engine image URL -->
+    <img
+      v-else-if="pieceVisual.kind === 'image'"
       class="piece-image"
       :src="pieceVisual.src"
       alt=""
@@ -158,7 +185,8 @@ function handleDragEnd() {
       class="piece-token"
       :style="{ background: pieceVisual.color }"
     >
-      <span class="piece-token-label">{{ pieceVisual.label }}</span>
+      <!-- Overlay label overrides engine label (D-04) -->
+      <span class="piece-token-label">{{ presentationEntry?.label ?? pieceVisual.label }}</span>
     </div>
   </div>
 </template>

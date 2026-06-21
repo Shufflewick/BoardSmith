@@ -7,10 +7,12 @@
  * Provides gridCoords to child cells so they can position via grid-row/grid-column.
  */
 
-import { computed, provide, watchEffect, ref } from 'vue';
+import { computed, provide, watchEffect, ref, inject, type ComputedRef } from 'vue';
 import { resolveGridSize } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import ElementRenderer from './ElementRenderer.vue';
+import { resolvePresentation } from '../presentation.js';
+import type { PresentationOverlay } from '../presentation.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -74,8 +76,18 @@ const rowLabels = computed(() => {
   return declared ?? Array.from({ length: gridResult.value.rows }, (_, i) => String(i));
 });
 
-// Display label for board header
-const displayLabel = computed(() => props.element.name ?? props.element.className);
+// Presentation overlay injection (D-04)
+// GridBoardRenderer is a container — overlay affects the board header label.
+// Individual cells are rendered via ElementRenderer → their renderer handles their own overlay.
+const overlay = inject<ComputedRef<PresentationOverlay | undefined>>('presentation');
+const presentationEntry = computed(() =>
+  resolvePresentation(props.element, overlay?.value)
+);
+
+// Display label for board header — overlay label wins, then engine fallback
+const displayLabel = computed(
+  () => presentationEntry.value?.label ?? props.element.name ?? props.element.className
+);
 
 // All children passed to ElementRenderer for rendering
 const children = computed(() => props.element.children ?? []);
