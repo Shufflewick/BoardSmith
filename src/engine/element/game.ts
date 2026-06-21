@@ -2277,7 +2277,32 @@ export class Game<
 
       // Check if element is visible to this player
       if (!element.isVisibleTo(visibilityPosition)) {
-        // Return a hidden placeholder
+        // Return a hidden placeholder.
+        //
+        // INTENTIONAL ASYMMETRY (WR-02, iteration 2): unlike the zone branches
+        // below (count-only / hidden / owner-only), this branch keeps the real,
+        // stable `json.id`. This branch handles a SINGLE element that is
+        // individually hidden (e.g. a face-down card placed in an otherwise
+        // VISIBLE parent via `hideFromAll()` / `showOnlyTo()`), not a fungible
+        // child of a hidden collection.
+        //
+        // The FLIP animation layer (src/ui/composables/useFlyingElements.ts —
+        // collectElements keys `elementLocations`/`result` by `id`, and
+        // `defaultShouldFlip` correlates the hidden↔visible transition by
+        // `element.id`) requires a STABLE handle to animate this element when it
+        // flips face-up/face-down or moves while face-down. Anonymizing the id
+        // here would make the hidden and revealed views look like two different
+        // elements, degrading the flip into a disappear/reappear.
+        //
+        // The zone branches CAN anonymize because their children are fungible
+        // and rendered as an undifferentiated stack — they are never animated
+        // individually, and position-based anonymization is what defeats
+        // shuffle/reveal correlation inside a hidden collection. A deliberately
+        // placed standalone face-down element already sits in a visible parent,
+        // so its position is observable by design; the only residual signal is
+        // reveal-correlation of a card the viewer watched go face-down, which is
+        // inherent to the game (true of physical play too), not a hidden-
+        // collection leak. Accept decision: keep the stable id for animation.
         return {
           className: json.className,
           id: json.id,
