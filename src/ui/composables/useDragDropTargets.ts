@@ -174,7 +174,7 @@ function findDragStartAction(
  * state. Call once in GameShell (where both the controller and board interaction
  * exist). Returns a stop handle for teardown.
  *
- * When a drag starts (via the board's `AutoElement` or a custom UI's
+ * When a drag starts (via the board's auto-UI element renderers or a custom UI's
  * `useDragDrop`), this:
  *  - if an action is already in progress, derives drop targets for its current
  *    pick; otherwise
