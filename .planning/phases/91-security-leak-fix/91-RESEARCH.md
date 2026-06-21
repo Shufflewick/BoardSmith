@@ -425,16 +425,16 @@ for (const attrs of hiddenAttrs) {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the allowlist be exported or remain file-private?**
    - What we know: The allowlist is currently only needed in `game.ts`; Phase 94 (PRESENT) may need to audit it again when removing `$image`/`$images` from engine elements.
    - What's unclear: Whether having it in an internal constant vs. an exported set is more useful for Phase 94.
-   - Recommendation: Keep it file-private for now (it is an implementation detail of `toJSONForPlayer`). Phase 94 can promote it if needed.
+   - RESOLVED: Keep it file-private for now (it is an implementation detail of `toJSONForPlayer`). Phase 94 can promote it if needed. Plan 91-02 implements it file-private.
 
 2. **Does `count-only` on a non-card container element with `$image` need the same redaction?**
    - What we know: The count-only branch (`:2205-2218`) applies to the element itself (the container), not its children. Go Fish's pond has `$images: { back: ... }` on the Deck container, but no `face` key — so today no leak there. A future game could set `$image: 'board-tile.png'` on a count-only zone; that would currently be broadcast.
-   - Recommendation: Apply `redactHiddenElementAttrs` uniformly to all three branches. Redacting a non-present `face` key is a no-op.
+   - RESOLVED: Apply `redactHiddenElementAttrs` uniformly to all three branches (redacting a non-present `face` key is a no-op). Refinement during planning: the helper is **redact-only** and must NOT inject `__hidden` — the count-only branch keeps its current shape (`childCount`, no `__hidden`); only branches 2/3 seed `__hidden: true` at the call site. See Plan 91-02 action.
 
 ---
 
