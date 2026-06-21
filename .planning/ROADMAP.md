@@ -68,7 +68,7 @@
 - [x] 93-03-PLAN.md — Wave 2: board-family renderers — GridBoard/HexBoard/Piece via closed-form math (RENDER-01, RENDER-04)
 - [x] 93-04-PLAN.md — Wave 2: leaf renderers — Die/Space (RENDER-01)
 - [x] 93-05-PLAN.md — Wave 2: archetype templates + honest-fail panel (RENDER-03, RENDER-04)
-- [ ] 93-06-PLAN.md — Wave 3: AutoRenderer host + animation wiring + AutoUI swap + DELETE old renderer (RENDER-01, RENDER-05)
+- [x] 93-06-PLAN.md — Wave 3: AutoRenderer host + animation wiring + AutoUI swap + DELETE old renderer (RENDER-01, RENDER-05)
 - [ ] 93-07-PLAN.md — Wave 4: browser smoke-test gate games (render + animation) (RENDER-03, RENDER-05)
 **UI hint**: yes
 
@@ -127,7 +127,7 @@
 |-------|----------------|--------|-----------|
 | 91. Security Leak Fix | 2/2 | Complete   | 2026-06-21 |
 | 92. Piece & Grid Rendering Fixes | 3/3 | Complete    | 2026-06-21 |
-| 93. Renderer Rebuild | 5/7 | In Progress|  |
+| 93. Renderer Rebuild | 6/7 | In Progress|  |
 | 94. Interaction, Presentation & Playability Gate | 0/? | Not started | - |
 | 95. Ship & Reframe | 0/? | Not started | - |
 | 96. Migration & Cleanup | 0/? | Not started | - |
