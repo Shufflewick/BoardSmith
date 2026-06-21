@@ -44,6 +44,13 @@ export {
 // Game authors register custom renderers at priority 100+ to upgrade auto-UI in place.
 export { registerRenderer } from './components/auto-ui/renderer-registry.js';
 
+// Presentation overlay (per-UI visual metadata, resolved after visibility filtering)
+export {
+  resolvePresentation,
+  type PresentationEntry,
+  type PresentationOverlay,
+} from './components/auto-ui/presentation.js';
+
 // Composables
 export {
   useToast,
