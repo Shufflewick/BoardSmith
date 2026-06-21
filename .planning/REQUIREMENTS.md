@@ -61,4 +61,28 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 
 ## Traceability
 
-(Filled by roadmap — each requirement maps to exactly one phase.)
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| SEC-01 | Phase 91 | Pending |
+| SEC-02 | Phase 91 | Pending |
+| PIECE-01 | Phase 92 | Pending |
+| PIECE-02 | Phase 92 | Pending |
+| PIECE-03 | Phase 92 | Pending |
+| RENDER-01 | Phase 93 | Pending |
+| RENDER-02 | Phase 93 | Pending |
+| RENDER-03 | Phase 93 | Pending |
+| RENDER-04 | Phase 93 | Pending |
+| RENDER-05 | Phase 93 | Pending |
+| INTERACT-01 | Phase 94 | Pending |
+| INTERACT-02 | Phase 94 | Pending |
+| INTERACT-03 | Phase 94 | Pending |
+| PRESENT-01 | Phase 94 | Pending |
+| PRESENT-02 | Phase 94 | Pending |
+| PRESENT-03 | Phase 94 | Pending |
+| SHIP-01 | Phase 95 | Pending |
+| SHIP-02 | Phase 95 | Pending |
+| SHIP-03 | Phase 95 | Pending |
+| MIGRATE-01 | Phase 96 | Pending |
+| MIGRATE-02 | Phase 96 | Pending |
+| MIGRATE-03 | Phase 96 | Pending |
+| MIGRATE-04 | Phase 96 | Pending |

@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Dynamic Auto-UI
-status: planning
-last_updated: "2026-06-21T03:32:57.605Z"
-last_activity: 2026-06-21
+status: roadmapped
+last_updated: "2026-06-20T00:00:00.000Z"
+last_activity: 2026-06-20
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-08)
+See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Planning next milestone
+**Current focus:** v3.1 Dynamic Auto-UI — roadmap complete, ready for Phase 91
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 91 (Security Leak Fix) — not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-21 — Milestone v3.1 started
+Status: Roadmap created; ready to begin Phase 91
+Last activity: 2026-06-20 — Roadmap created for v3.1
+
+Progress: [░░░░░░░░░░] 0% (0/6 phases)
 
 ## Milestones
 
@@ -59,13 +61,21 @@ Last activity: 2026-06-21 — Milestone v3.1 started
 
 **In Progress:**
 
-- (none)
+- v3.1 Dynamic Auto-UI (Phases 91-96) -- started 2026-06-20
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
+
+**v3.1 locked decisions (2026-06-20):**
+- Layout = archetype templates now, general solver deferred (must be earned by a concrete game no template covers)
+- Presentation metadata = per-UI overlay in the `ui` layer (sibling file), resolved after visibility filtering
+- No value-bearing `$`-props on engine elements (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected)
+- `$images.face` leak filed as a security bug (SEC-01); independent of redesign, lands in Phase 91
+- "Custom renderer in a shared mandatory shell" is the honest framing (GameShell is a mandatory host)
+- Plumbing edits are real work: ActionPanel must be suppressible (INTERACT-02), `protocol.ts` needs multi-ref (INTERACT-03), animation events must be explicitly wired (RENDER-05)
 
 ### Pending Todos
 
@@ -77,6 +87,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-08
-Stopped at: v3.0 milestone archived
-Resume file: None
+Last session: 2026-06-20
+Stopped at: Roadmap created; Phase 91 not yet started
+Resume file: .planning/ROADMAP.md
+Next action: `/gsd:plan-phase 91`
