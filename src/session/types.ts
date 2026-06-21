@@ -42,6 +42,9 @@ export type { ActionTrace, PickTrace, ConditionDetail } from '../engine/index.js
 // Re-export repeating selection types from engine
 export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
 
+import type { RefWithRole } from '../engine/action/types.js';
+export type { RefWithRole };
+
 // ============================================
 // Game Class Types
 // ============================================
@@ -230,10 +233,8 @@ export interface ElementRef {
 export interface ChoiceWithRefs {
   value: unknown;
   display: string;
-  /** Element reference for source highlighting (e.g., piece being moved) */
-  sourceRef?: ElementRef;
-  /** Element reference for target highlighting (e.g., destination square) */
-  targetRef?: ElementRef;
+  /** Board element references with roles (source/target/highlight) */
+  refs?: RefWithRole[];
   /** Disabled reason string, present only when choice is disabled */
   disabled?: string;
 }
@@ -245,8 +246,8 @@ export interface ValidElement {
   id: number;
   /** Display label for this element */
   display?: string;
-  /** Element reference for board highlighting */
-  ref?: ElementRef;
+  /** Board element references with roles (typically [{ ref, role: 'highlight' }]) */
+  refs?: RefWithRole[];
   /** Disabled reason string, present only when element is disabled */
   disabled?: string;
 }

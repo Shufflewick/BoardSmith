@@ -17,6 +17,7 @@ export type {
   SerializedAction,
   ValidationResult,
   BoardElementRef,
+  RefWithRole,
   ChoiceBoardRefs,
   DependentFilter,
   // Debug tracing types

@@ -62,11 +62,18 @@ export interface BoardElementRef {
 }
 
 /**
- * Board references for a choice (source and target elements)
+ * A board element reference with a role indicating its highlight purpose.
+ */
+export interface RefWithRole {
+  ref: BoardElementRef;
+  role: 'source' | 'target' | 'highlight';
+}
+
+/**
+ * Board references for a choice — generalised array form.
  */
 export interface ChoiceBoardRefs {
-  sourceRef?: BoardElementRef;
-  targetRef?: BoardElementRef;
+  refs: RefWithRole[];
 }
 
 /**

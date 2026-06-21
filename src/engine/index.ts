@@ -133,6 +133,7 @@ export type {
   SerializedAction,
   ValidationResult,
   BoardElementRef,
+  RefWithRole,
   ChoiceBoardRefs,
   DependentFilter,
   DependentFilterOptions,
