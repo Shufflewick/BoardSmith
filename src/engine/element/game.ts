@@ -219,6 +219,66 @@ function createSeededRandom(seed: string): SeededRandom {
   return random;
 }
 
+// ---------------------------------------------------------------------------
+// Per-player serialization helpers — module-private (not exported, not class
+// methods).  Placed at module level so they are pure functions with no access
+// to `this`, which keeps them trivially testable and avoids class coupling.
+// ---------------------------------------------------------------------------
+
+/**
+ * Allowlist of pure layout/topology $-keys that are safe to broadcast to a
+ * viewer who cannot see a hidden element's identity.  All other $-keys are
+ * treated as potentially sensitive and dropped (fail-safe).
+ *
+ * Value-bearing keys ($image, $images) are handled separately inside
+ * redactHiddenElementAttrs.
+ *
+ * Verified against src/engine/element/ on 2026-06-20: these are the
+ * complete set of layout-descriptor $-keys declared across the engine.
+ */
+const SAFE_LAYOUT_KEYS = new Set([
+  '$type', '$layout',
+  '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
+  '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
+  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
+  '$hexSize',
+]);
+
+/**
+ * Redact identity-bearing image refs from the attributes of an element that
+ * the viewer is not permitted to fully see.  Returns a new object containing
+ * only safe layout $-keys; the caller is responsible for injecting __hidden
+ * and childCount (their shape contracts differ per branch).
+ *
+ * Rules:
+ *   $image   → dropped unconditionally (single-sided — always identity-bearing)
+ *   $images  → keep only { back } if present; omit $images entirely otherwise
+ *   unknown $-keys → dropped (fail-safe)
+ *   non-$ keys → dropped (callers seed __hidden/childCount themselves)
+ *   SAFE_LAYOUT_KEYS → copied through as-is
+ */
+function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === '$image') continue; // identity-bearing single-sided image — drop
+    if (key === '$images') {
+      const images = value as Record<string, unknown>;
+      if (images?.back !== undefined) {
+        safe.$images = { back: images.back };
+      }
+      // If no 'back' key, omit $images entirely (not even an empty object)
+      continue;
+    }
+    if (SAFE_LAYOUT_KEYS.has(key)) {
+      safe[key] = value;
+    }
+    // Unknown $-keys and all non-$ keys are dropped (fail-safe)
+  }
+
+  return safe;
+}
+
 /**
  * Base Game class. The root of the element tree and container for all game state.
  *
@@ -2201,19 +2261,14 @@ export class Game<
       const visibility = element.getEffectiveVisibility();
 
       // Handle count-only mode: show count but not contents
-      // Preserve element name and $-prefixed system attributes (like $type) for AutoUI rendering
+      // Preserve element name and safe $-prefixed system attributes (like $type) for AutoUI
+      // rendering; redact identity-bearing image refs ($image, $images.face).
       if (visibility.mode === 'count-only' && !element.isVisibleTo(visibilityPosition)) {
-        const systemAttrs: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(json.attributes ?? {})) {
-          if (key.startsWith('$')) {
-            systemAttrs[key] = value;
-          }
-        }
         return {
           className: json.className,
           id: json.id,
           name: json.name,
-          attributes: systemAttrs,
+          attributes: redactHiddenElementAttrs(json.attributes ?? {}),
           childCount: element._t.children.length,
         };
       }
@@ -2241,18 +2296,14 @@ export class Game<
           if (json.children) {
             for (let i = 0; i < json.children.length; i++) {
               const childJson = json.children[i];
-              // Only include $-prefixed system attributes (for rendering info like $images, $type)
-              const systemAttrs: Record<string, unknown> = { __hidden: true };
-              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
-                if (key.startsWith('$')) {
-                  systemAttrs[key] = value;
-                }
-              }
+              // Redact identity-bearing image refs; keep only safe layout $-keys.
+              // __hidden is seeded here (not in the helper) so the count-only
+              // container branch keeps its distinct shape (no __hidden, has childCount).
               hiddenChildren.push({
                 className: childJson.className,
                 // Use negative index-based IDs to prevent correlation with real element IDs
                 id: -(element._t.id * 1000 + i),
-                attributes: systemAttrs,
+                attributes: { __hidden: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
                 // Don't include name - could reveal card identity
               });
             }
@@ -2268,16 +2319,11 @@ export class Game<
           const hiddenChildren: ElementJSON[] = [];
           if (json.children) {
             for (const childJson of json.children) {
-              const systemAttrs: Record<string, unknown> = { __hidden: true };
-              for (const [key, value] of Object.entries(childJson.attributes ?? {})) {
-                if (key.startsWith('$')) {
-                  systemAttrs[key] = value;
-                }
-              }
+              // Redact identity-bearing image refs; keep only safe layout $-keys.
               hiddenChildren.push({
                 className: childJson.className,
                 id: childJson.id,
-                attributes: systemAttrs,
+                attributes: { __hidden: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
               });
             }
           }
