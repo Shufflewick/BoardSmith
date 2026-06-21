@@ -40,17 +40,49 @@ const boardInteraction = tryUseBoardInteraction();
 // ── Core: delegate all visual logic to Phase 92 helper ───────────────────────
 const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element));
 
-// ── Board interaction states ─────────────────────────────────────────────────
+// Element identity helper — passes notation from attributes (Pitfall 6).
+// Piece elements may use a notation attribute for board-ref matching.
+function elementIdentity() {
+  return {
+    id: props.element.id,
+    name: props.element.name,
+    notation: props.element.attributes?.notation as string | undefined,
+  };
+}
+
+// ── Board interaction states (all six required — CF-1: piece MUST get action-selectable) ──
+const isBoardSelected = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isSelected(elementIdentity());
+});
+
 const isActionSelectable = computed(() => {
   if (!boardInteraction) return false;
-  if (boardInteraction.isSelected({ id: props.element.id, name: props.element.name })) return false;
-  return boardInteraction.isSelectableElement({ id: props.element.id, name: props.element.name });
+  if (isBoardSelected.value) return false;
+  return boardInteraction.isSelectableElement(elementIdentity());
+});
+
+const isHighlighted = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isHighlighted(elementIdentity());
+});
+
+const isDisabled = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
 });
 
 const isDragged = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isDraggedElement({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isDraggedElement(elementIdentity());
 });
+
+// ── Click handler — dispatch board action on selectable pieces (CF-1) ─────────
+function handleClick() {
+  if (!boardInteraction || !isActionSelectable.value) return;
+  if (isDisabled.value) return;
+  boardInteraction.triggerElementSelect(elementIdentity());
+}
 
 // ── Drag-and-drop handlers ────────────────────────────────────────────────────
 function handleDragStart(event: DragEvent) {
@@ -64,7 +96,7 @@ function handleDragStart(event: DragEvent) {
     name: props.element.name,
   }));
   event.dataTransfer!.effectAllowed = 'move';
-  boardInteraction.startDrag({ id: props.element.id, name: props.element.name });
+  boardInteraction.startDrag(elementIdentity());
 }
 
 function handleDragEnd() {
@@ -82,11 +114,19 @@ function handleDragEnd() {
   <div
     :class="[
       'piece',
-      { 'is-draggable': isActionSelectable, 'is-dragging': isDragged },
+      {
+        'action-selectable': isActionSelectable,
+        'is-board-highlighted': isHighlighted,
+        'is-board-selected': isBoardSelected,
+        'is-disabled': isDisabled,
+        'is-draggable': isActionSelectable,
+        'is-dragging': isDragged,
+      },
     ]"
     :data-element-id="element.id"
     :data-animatable="true"
     :draggable="isActionSelectable"
+    @click="handleClick"
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
   >
@@ -149,6 +189,44 @@ function handleDragEnd() {
 /* Carry-forward #1: piece hover affordance for non-hex pieces */
 .piece:hover {
   transform: scale(1.05);
+}
+
+/* ── Board interaction states (CF-1: pieces get same six states as all other renderers) ── */
+.piece.action-selectable {
+  cursor: pointer;
+  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline-offset: 2px;
+  animation: pulse-piece 2s ease-in-out infinite;
+}
+
+.piece.action-selectable:hover {
+  outline-color: rgba(46, 204, 113, 1);
+  outline-width: 3px;
+  transform: scale(1.1);
+}
+
+@keyframes pulse-piece {
+  0%, 100% { outline-color: rgba(46, 204, 113, 0.6); }
+  50% { outline-color: rgba(46, 204, 113, 1); }
+}
+
+.piece.is-board-highlighted {
+  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.8), 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: rgba(0, 217, 255, 0.15);
+}
+
+.piece.is-board-selected {
+  box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.8), 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: rgba(0, 255, 136, 0.15);
+}
+
+.piece.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.piece.is-disabled:hover {
+  transform: none;
 }
 
 .piece.is-draggable {

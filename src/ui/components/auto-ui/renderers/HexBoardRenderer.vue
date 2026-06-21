@@ -122,30 +122,59 @@ function getPieceColor(piece: GameElement, pieceIndex: number): string {
 // Effective hex piece circle radius: 35% of hexSize (from UI-SPEC)
 const pieceRadius = computed(() => hexSize.value * 0.35);
 
-// ── Board interaction helpers for hex cells ───────────────────────────────────
+// ── Element identity helper — passes notation from attributes (Pitfall 6) ──────
+// Hex coordinates (q, r) are element attributes, not a top-level `notation` field. However,
+// a game author may declare a string `notation` attribute on hex cells for ref matching;
+// passing it ensures matchesRef works for notation-keyed board refs.
+function cellIdentity(cell: GameElement) {
+  return {
+    id: cell.id,
+    name: cell.name,
+    notation: cell.attributes?.notation as string | undefined,
+  };
+}
+
+// ── Board interaction helpers for hex cells (all six required states) ────────
 function isCellActionSelectable(cell: GameElement): boolean {
   if (!boardInteraction) return false;
-  if (boardInteraction.isSelected({ id: cell.id, name: cell.name })) return false;
-  return boardInteraction.isSelectableElement({ id: cell.id, name: cell.name });
+  if (boardInteraction.isSelected(cellIdentity(cell))) return false;
+  return boardInteraction.isSelectableElement(cellIdentity(cell));
 }
 
 function isCellHighlighted(cell: GameElement): boolean {
   if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted({ id: cell.id, name: cell.name });
+  return boardInteraction.isHighlighted(cellIdentity(cell));
 }
 
 function isCellBoardSelected(cell: GameElement): boolean {
   if (!boardInteraction) return false;
-  return boardInteraction.isSelected({ id: cell.id, name: cell.name });
+  return boardInteraction.isSelected(cellIdentity(cell));
+}
+
+function isCellDropTarget(cell: GameElement): boolean {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDropTarget(cellIdentity(cell));
+}
+
+function isCellDisabled(cell: GameElement): boolean {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement(cellIdentity(cell)) !== false;
 }
 
 function handleHexClick(cell: GameElement) {
   if (!boardInteraction) return;
-  if (boardInteraction.isSelectableElement({ id: cell.id, name: cell.name })) {
-    boardInteraction.triggerElementSelect({ id: cell.id, name: cell.name });
+  if (isCellDisabled(cell)) return;
+  if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
+    boardInteraction.triggerElementSelect(cellIdentity(cell));
   } else if (cell.name) {
-    boardInteraction.selectElement({ id: cell.id, name: cell.name });
+    boardInteraction.selectElement(cellIdentity(cell));
   }
+}
+
+function handleHexDrop(event: DragEvent, cell: GameElement) {
+  if (!boardInteraction?.isDragging) return;
+  event.preventDefault();
+  boardInteraction.triggerDrop(cellIdentity(cell));
 }
 
 // Display label for the board header
@@ -170,8 +199,9 @@ const displayLabel = computed(() => props.element.name ?? props.element.classNam
         class="hex-cell-group"
         :transform="`translate(${getCellPosition(cell).x}, ${getCellPosition(cell).y})`"
         @click="handleHexClick(cell)"
+        @drop="handleHexDrop($event, cell)"
       >
-        <!-- Hex polygon with board-interaction state classes -->
+        <!-- Hex polygon with board-interaction state classes (all six required states) -->
         <polygon
           :points="hexPoints"
           class="hex-polygon"
@@ -180,6 +210,8 @@ const displayLabel = computed(() => props.element.name ?? props.element.classNam
             'action-selectable': isCellActionSelectable(cell),
             'is-board-highlighted': isCellHighlighted(cell),
             'is-board-selected': isCellBoardSelected(cell),
+            'is-drop-target': isCellDropTarget(cell),
+            'is-disabled': isCellDisabled(cell),
           }"
         />
 
@@ -275,6 +307,22 @@ const displayLabel = computed(() => props.element.name ?? props.element.classNam
   fill: rgba(0, 255, 136, 0.3);
   stroke: rgba(0, 255, 136, 0.8);
   stroke-width: 2.5;
+}
+
+.hex-polygon.is-drop-target {
+  fill: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15));
+  stroke: rgba(0, 255, 136, 0.6);
+  stroke-width: 2;
+}
+
+.hex-polygon.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.hex-polygon.is-disabled:hover {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.3);
 }
 
 @keyframes pulse-hex {

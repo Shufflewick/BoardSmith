@@ -80,34 +80,52 @@ const displayLabel = computed(() => props.element.name ?? props.element.classNam
 // All children passed to ElementRenderer for rendering
 const children = computed(() => props.element.children ?? []);
 
-// Per-cell board interaction states
+// Element identity helper — passes notation from attributes (Pitfall 6: notation is not a top-level
+// field on GameElement in renderer context; it lives in attributes for notation-keyed elements
+// like Checkers squares). Routing all interaction calls through this helper ensures matchesRef
+// can match by notation when a boardRef specifies { notation: 'e5' }.
+function cellIdentity(cell: GameElement) {
+  return {
+    id: cell.id,
+    name: cell.name,
+    notation: cell.attributes?.notation as string | undefined,
+  };
+}
+
+// Per-cell board interaction states — all six required states (UI-SPEC Interaction Affordance Contract)
 function isCellHighlighted(cell: GameElement): boolean {
   if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted({ id: cell.id, name: cell.name });
+  return boardInteraction.isHighlighted(cellIdentity(cell));
 }
 
 function isCellSelected(cell: GameElement): boolean {
   if (!boardInteraction) return false;
-  return boardInteraction.isSelected({ id: cell.id, name: cell.name });
+  return boardInteraction.isSelected(cellIdentity(cell));
 }
 
 function isCellActionSelectable(cell: GameElement): boolean {
   if (!boardInteraction) return false;
   if (isCellSelected(cell)) return false;
-  return boardInteraction.isSelectableElement({ id: cell.id, name: cell.name });
+  return boardInteraction.isSelectableElement(cellIdentity(cell));
 }
 
 function isCellDropTarget(cell: GameElement): boolean {
   if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget({ id: cell.id, name: cell.name });
+  return boardInteraction.isDropTarget(cellIdentity(cell));
+}
+
+function isCellDisabled(cell: GameElement): boolean {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement(cellIdentity(cell)) !== false;
 }
 
 function handleCellClick(cell: GameElement) {
   if (!boardInteraction) return;
-  if (boardInteraction.isSelectableElement({ id: cell.id, name: cell.name })) {
-    boardInteraction.triggerElementSelect({ id: cell.id, name: cell.name });
+  if (isCellDisabled(cell)) return;
+  if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
+    boardInteraction.triggerElementSelect(cellIdentity(cell));
   } else if (cell.name) {
-    boardInteraction.selectElement({ id: cell.id, name: cell.name });
+    boardInteraction.selectElement(cellIdentity(cell));
   }
 }
 
@@ -121,7 +139,7 @@ function handleDragOver(event: DragEvent, cell: GameElement) {
 function handleDrop(event: DragEvent, cell: GameElement) {
   if (!boardInteraction?.isDragging) return;
   event.preventDefault();
-  boardInteraction.triggerDrop({ id: cell.id, name: cell.name });
+  boardInteraction.triggerDrop(cellIdentity(cell));
 }
 </script>
 
@@ -166,6 +184,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
               'is-board-highlighted': isCellHighlighted(cell),
               'is-board-selected': isCellSelected(cell),
               'is-drop-target': isCellDropTarget(cell),
+              'is-disabled': isCellDisabled(cell),
             }"
             :title="cell.name ?? undefined"
             @click.stop="handleCellClick(cell)"
@@ -322,6 +341,16 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 
 .grid-cell:hover .cell-notation {
   opacity: 1;
+}
+
+/* ── Disabled state (UI-SPEC: opacity 0.35, cursor not-allowed, no hover effect) ── */
+.grid-cell.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.grid-cell.is-disabled:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ── Error panel ── */
