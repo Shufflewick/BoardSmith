@@ -67,8 +67,11 @@ const isSelected = computed(() => selectedElements?.value?.has(props.element.id)
 
 // ---------------------------------------------------------------------------
 // Element notation (used in all boardInteraction calls)
+// Pitfall 6: prefer attributes.notation if present; fall back to element.name
 // ---------------------------------------------------------------------------
-const elementNotation = computed(() => props.element.name || null);
+const elementNotation = computed(
+  () => (props.element.attributes?.notation as string | undefined) ?? props.element.name ?? null,
+);
 
 // ---------------------------------------------------------------------------
 // Board state computeds — all with defensive !boardInteraction guard
@@ -123,6 +126,15 @@ const isDropTarget = computed(() => {
     name: props.element.name,
     notation: elementNotation.value || undefined,
   });
+});
+
+const isDisabled = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement({
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value || undefined,
+  }) !== false;
 });
 
 // ---------------------------------------------------------------------------
@@ -265,6 +277,7 @@ function handleClick(event: MouseEvent) {
   event.stopPropagation();
 
   if (!boardInteraction) return;
+  if (isDisabled.value) return;
 
   const elementRef = {
     id: props.element.id,
@@ -298,6 +311,7 @@ function handleClick(event: MouseEvent) {
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
         'is-hidden': element.__hidden,
+        'is-disabled': isDisabled,
         'is-draggable': isActionSelectable,
         'is-dragging': isDragged,
         'is-drop-target': isDropTarget,
@@ -415,6 +429,17 @@ function handleClick(event: MouseEvent) {
 /* Hidden cards */
 .card-container.is-hidden {
   opacity: 0.5;
+}
+
+/* Disabled state */
+.card-container.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.card-container.is-disabled:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Dragging state — consume CSS vars from drag-drop.css, never redefine */

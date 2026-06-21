@@ -32,27 +32,67 @@ const props = defineProps<{
   depth: number;
 }>();
 
-// Board interaction for selectable state
+// Board interaction for all six required states + drop-target (zone renderer)
 const boardInteraction = tryUseBoardInteraction();
+
+// Element identity helper — passes notation from attributes (Pitfall 6)
+function elementIdentity() {
+  return {
+    id: props.element.id,
+    name: props.element.name,
+    notation: props.element.attributes?.notation as string | undefined,
+  };
+}
 
 const isBoardSelected = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isSelected({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isSelected(elementIdentity());
 });
 
 const isActionSelectable = computed(() => {
   if (!boardInteraction) return false;
   if (isBoardSelected.value) return false;
-  const elementRef = { id: props.element.id, name: props.element.name };
-  if (boardInteraction.isSelectableElement(elementRef)) return true;
-  if (boardInteraction.isDraggableSelectedElement(elementRef)) return true;
+  if (boardInteraction.isSelectableElement(elementIdentity())) return true;
+  if (boardInteraction.isDraggableSelectedElement(elementIdentity())) return true;
   return false;
 });
 
 const isBoardHighlighted = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isHighlighted(elementIdentity());
 });
+
+const isDropTarget = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDropTarget(elementIdentity());
+});
+
+const isDisabled = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
+});
+
+// Drop handlers — space zones are valid drop targets
+function handleDragOver(event: DragEvent) {
+  if (!boardInteraction?.isDragging) return;
+  if (!isDropTarget.value) return;
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = 'move';
+}
+
+function handleDrop(event: DragEvent) {
+  if (!boardInteraction?.isDragging) return;
+  event.preventDefault();
+  boardInteraction.triggerDrop(elementIdentity());
+}
+
+// Click handler — dispatch board action when space is selectable
+function handleClick(event: MouseEvent) {
+  event.stopPropagation();
+  if (!boardInteraction || !isActionSelectable.value) return;
+  if (isDisabled.value) return;
+  boardInteraction.triggerElementSelect(elementIdentity());
+}
 
 // Layout CSS vars derived from element attributes
 const layoutStyles = computed(() => {
@@ -114,9 +154,14 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
       'action-selectable': isActionSelectable,
       'is-board-highlighted': isBoardHighlighted,
       'is-board-selected': isBoardSelected,
+      'is-drop-target': isDropTarget,
+      'is-disabled': isDisabled,
     }"
     :style="layoutStyles"
     :data-element-id="element.id"
+    @click="handleClick"
+    @dragover="handleDragOver"
+    @drop="handleDrop"
   >
     <!-- Optional header — only shown when element has a name -->
     <div v-if="element.name" class="space-header">
@@ -170,6 +215,24 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 .space-container.is-board-selected {
   background: rgba(0, 255, 136, 0.08);
   border-color: rgba(0, 255, 136, 0.4);
+}
+
+.space-container.is-drop-target {
+  background: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15));
+  border-color: rgba(0, 255, 136, 0.5);
+}
+
+.space-container.is-drop-target:hover {
+  background: var(--bs-drop-hover-bg, rgba(0, 255, 136, 0.3));
+}
+
+.space-container.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.space-container.is-disabled:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 @keyframes pulse-space {

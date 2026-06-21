@@ -54,23 +54,42 @@ const boardInteraction = tryUseBoardInteraction();
 const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
 const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
 
+// Element identity helper — passes notation from attributes (Pitfall 6)
+function elementIdentity() {
+  return {
+    id: props.element.id,
+    name: props.element.name,
+    notation: props.element.attributes?.notation as string | undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Board state computeds — defensive guard on every computed
+// Board state computeds — all six required states + drop-target (zone renderer)
 // ---------------------------------------------------------------------------
 const isBoardHighlighted = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isHighlighted(elementIdentity());
 });
 
 const isBoardSelected = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isSelected({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isSelected(elementIdentity());
 });
 
 const isActionSelectable = computed(() => {
   if (!boardInteraction) return false;
   if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement({ id: props.element.id, name: props.element.name });
+  return boardInteraction.isSelectableElement(elementIdentity());
+});
+
+const isDropTarget = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDropTarget(elementIdentity());
+});
+
+const isDisabled = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
 });
 
 // ---------------------------------------------------------------------------
@@ -211,7 +230,22 @@ const frontRowCards = computed(() => {
 function handleClick(event: MouseEvent) {
   event.stopPropagation();
   if (!boardInteraction || !isActionSelectable.value) return;
-  boardInteraction.triggerElementSelect({ id: props.element.id, name: props.element.name });
+  if (isDisabled.value) return;
+  boardInteraction.triggerElementSelect(elementIdentity());
+}
+
+// Drop handler — hand zones are valid drop targets (Go Fish "ask" target, etc.)
+function handleDragOver(event: DragEvent) {
+  if (!boardInteraction?.isDragging) return;
+  if (!isDropTarget.value) return;
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = 'move';
+}
+
+function handleDrop(event: DragEvent) {
+  if (!boardInteraction?.isDragging) return;
+  event.preventDefault();
+  boardInteraction.triggerDrop(elementIdentity());
 }
 
 // Suppress unused warnings for injected values not used directly
@@ -231,16 +265,21 @@ void isBoardSelected;
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
+        'is-drop-target': isDropTarget,
+        'is-disabled': isDisabled,
       },
     ]"
     :data-zone="element.name"
     :data-zone-id="element.id"
     @click="handleClick"
+    @dragover="handleDragOver"
+    @drop="handleDrop"
   >
-    <!-- Header: name left, count right -->
+    <!-- Header: honor game designer's element.name (CF-2: never hardcode "Your Hand") -->
+    <!-- Fall back to ownership label only when element.name is absent -->
     <div class="hand-header">
       <span class="hand-label">
-        {{ isOwned ? 'Your Hand' : `${playerName}'s Hand` }}
+        {{ element.name ?? (isOwned ? 'Your Hand' : `${playerName}'s Hand`) }}
       </span>
       <span class="hand-count">({{ childCountDisplay }})</span>
     </div>
@@ -376,6 +415,27 @@ void isBoardSelected;
 
 .hand-container.is-board-selected {
   background: rgba(0, 255, 136, 0.2);
+}
+
+/* Drop target — hand zones can receive dragged elements (Go Fish target) */
+.hand-container.is-drop-target {
+  background: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15));
+  border: 2px solid rgba(0, 255, 136, 0.5);
+}
+
+.hand-container.is-drop-target:hover {
+  background: var(--bs-drop-hover-bg, rgba(0, 255, 136, 0.3));
+}
+
+/* Disabled state */
+.hand-container.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.hand-container.is-disabled:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Header */
