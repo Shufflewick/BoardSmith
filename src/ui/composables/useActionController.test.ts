@@ -1877,4 +1877,100 @@ describe('useActionController', () => {
     });
   });
 
+  describe('allCurrentChoicesAnchored', () => {
+    let anchoredActionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+
+    beforeEach(() => {
+      anchoredActionMetadata = ref({
+        ...createTestMetadata(),
+        // All choices are board-anchored (every choice has refs.length > 0)
+        allAnchored: {
+          name: 'allAnchored',
+          selections: [{
+            name: 'targets',
+            type: 'choice' as const,
+            choices: [
+              { value: 1, display: 'Target A', refs: [{ ref: { id: 10 }, role: 'target' as const }] },
+              { value: 2, display: 'Target B', refs: [{ ref: { id: 11 }, role: 'target' as const }] },
+            ],
+          }],
+        },
+        // Multi-element pick type
+        selectMultiple: {
+          name: 'selectMultiple',
+          selections: [{
+            name: 'pieces',
+            type: 'elements' as const,
+            validElements: [{ id: 1 }, { id: 2 }],
+          }],
+        },
+      });
+    });
+
+    it('returns false when currentPick is null (no action in progress — Pitfall 4 guard)', () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn,
+      });
+      // No action started → currentPick === null
+      expect(controller.currentPick.value).toBeNull();
+      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+    });
+
+    it('returns true when pick.type is element (always board-anchored)', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoFill: false,
+      });
+      await controller.start('movePiece');
+      await nextTick();
+
+      expect(controller.currentPick.value?.type).toBe('element');
+      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+    });
+
+    it('returns true when pick.type is elements (always board-anchored)', async () => {
+      const extendedAvailable = ref([...availableActions.value, 'selectMultiple']);
+      const controller = useActionController({
+        sendAction,
+        availableActions: extendedAvailable,
+        actionMetadata: anchoredActionMetadata,
+        isMyTurn,
+        autoFill: false,
+      });
+      await controller.start('selectMultiple');
+      await nextTick();
+
+      expect(controller.currentPick.value?.type).toBe('elements');
+      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+    });
+
+    it('returns false when pick.type is choice and no choice has refs', async () => {
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoFill: false, autoExecute: false,
+      });
+      // 'playCard' has choice picks with no refs
+      await controller.start('playCard');
+      await nextTick();
+
+      expect(controller.currentPick.value?.type).toBe('choice');
+      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+    });
+
+    it('returns true when pick.type is choice and every choice has refs.length > 0', async () => {
+      const extendedAvailable = ref([...availableActions.value, 'allAnchored']);
+      const controller = useActionController({
+        sendAction,
+        availableActions: extendedAvailable,
+        actionMetadata: anchoredActionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+      await controller.start('allAnchored');
+      await nextTick();
+
+      expect(controller.currentPick.value?.type).toBe('choice');
+      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+    });
+  });
+
 });

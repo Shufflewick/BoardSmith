@@ -635,6 +635,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return currentPick.value === null;
   });
 
+  /**
+   * True when every available choice for the current pick has at least one refs entry.
+   * When true, GameShell omits the ActionPanel footer entirely (D-02).
+   * MUST return false when currentPick === null (no action in progress = show panel so player
+   * can start one). This is Pitfall 4: never default to true when no action is in progress.
+   */
+  const allCurrentChoicesAnchored = computed((): boolean => {
+    const pick = currentPick.value;
+    if (!pick) return false;                                          // no action → show panel (Pitfall 4 guard)
+    if (pick.type === 'element' || pick.type === 'elements') return true;  // always anchored
+    if (pick.type !== 'choice') return false;                        // number/text → panel only
+    const choices = getCurrentChoices() as ChoiceWithRefs[];
+    return choices.length > 0 && choices.every(c => (c.refs ?? []).length > 0);
+  });
 
   /**
    * Reactive valid elements for the current pick.
@@ -1611,6 +1625,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
     pendingOnServer: readonly(pendingOnServer),
+    // True when every choice for the current pick is board-anchored → GameShell hides footer (D-02).
+    allCurrentChoicesAnchored,
 
     // Methods
     execute,

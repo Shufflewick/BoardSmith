@@ -329,6 +329,13 @@ export interface UseActionControllerReturn {
    */
   pendingOnServer: Readonly<Ref<boolean>>;
 
+  /**
+   * True when every choice for the current pick has at least one refs entry (is board-anchored).
+   * Drives GameShell footer absence (D-02). Returns false when currentPick === null so the
+   * player can always start an action (Pitfall 4 guard).
+   */
+  allCurrentChoicesAnchored: ComputedRef<boolean>;
+
   // === High-level Methods ===
   /**
    * Execute an action with all args at once.
