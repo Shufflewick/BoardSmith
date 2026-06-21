@@ -29,7 +29,9 @@
   1. In a game with face-down cards (e.g. Go Fish), intercepting another player's serialized game state reveals no face image URLs for cards that player cannot see — only the hidden count/presence indicator.
   2. The `$`-attribute whitelist in `toJSONForPlayer` is constrained to genuine abstract topology descriptors (`$type`, `$layout`, coords, `$zone` as validated enum); any test or inspection confirms no value-bearing key (e.g. `$images.face`, `$stats`, `$label`) is present on hidden/owner-only/count-only elements for unauthorized players.
   3. A unit test directly covers the filtered `$images` path on a visibility-restricted element.
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 91-01-PLAN.md — Wave 0: failing leak test proving $images.face / $image / unknown-$-key leak (SEC-01, SEC-02)
+- [ ] 91-02-PLAN.md — Wave 1: redactHiddenElementAttrs helper + three branch swaps; suite green (SEC-01, SEC-02)
 
 ---
 
