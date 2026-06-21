@@ -1,0 +1,244 @@
+<script setup lang="ts">
+/**
+ * DeckRenderer — Per-element renderer for deck elements ($type='deck').
+ *
+ * Renders a stacked visual (up to 3 offset cards) with a 20px bold name and
+ * count. Shows italic "Empty" when childCount/children length is 0.
+ * Children are rendered via ElementRenderer (never AutoElement).
+ */
+
+import { computed, inject, type Ref } from 'vue';
+import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import ElementRenderer from './ElementRenderer.vue';
+
+// ---------------------------------------------------------------------------
+// Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
+// ---------------------------------------------------------------------------
+interface GameElement {
+  id: number;
+  name?: string;
+  className: string;
+  attributes?: Record<string, unknown>;
+  children?: GameElement[];
+  childCount?: number;
+  __hidden?: boolean;
+}
+
+const props = defineProps<{
+  element: GameElement;
+  depth: number;
+}>();
+
+// ---------------------------------------------------------------------------
+// Inject context — exact keys provided by AutoRenderer.vue
+// ---------------------------------------------------------------------------
+const selectableElements = inject<Ref<Set<number>>>('selectableElements');
+const selectedElements = inject<Ref<Set<number>>>('selectedElements');
+
+// ---------------------------------------------------------------------------
+// Board interaction
+// ---------------------------------------------------------------------------
+const boardInteraction = tryUseBoardInteraction();
+
+// ---------------------------------------------------------------------------
+// Selectable / selected state
+// ---------------------------------------------------------------------------
+const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
+const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
+
+// ---------------------------------------------------------------------------
+// Board state computeds — defensive guard
+// ---------------------------------------------------------------------------
+const isBoardHighlighted = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isHighlighted({ id: props.element.id, name: props.element.name });
+});
+
+const isBoardSelected = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isSelected({ id: props.element.id, name: props.element.name });
+});
+
+const isActionSelectable = computed(() => {
+  if (!boardInteraction) return false;
+  if (isBoardSelected.value) return false;
+  return boardInteraction.isSelectableElement({ id: props.element.id, name: props.element.name });
+});
+
+// ---------------------------------------------------------------------------
+// Display values
+// ---------------------------------------------------------------------------
+const displayLabel = computed(() => props.element.name || props.element.className);
+
+const childCount = computed(() => {
+  if (props.element.childCount !== undefined) return props.element.childCount;
+  return (props.element.children ?? []).length;
+});
+
+// Stack visual: up to 3 cards from children
+const stackCards = computed(() =>
+  (props.element.children ?? []).slice(0, 3).map((card, i) => ({ card, stackIndex: i })),
+);
+
+const isEmpty = computed(() => childCount.value === 0);
+
+// ---------------------------------------------------------------------------
+// Click handler for action-selectable
+// ---------------------------------------------------------------------------
+function handleClick(event: MouseEvent) {
+  event.stopPropagation();
+  if (!boardInteraction || !isActionSelectable.value) return;
+  boardInteraction.triggerElementSelect({ id: props.element.id, name: props.element.name });
+}
+</script>
+
+<template>
+  <div
+    :class="[
+      'deck-container',
+      {
+        'is-selectable': isSelectable,
+        'is-selected': isSelected,
+        'action-selectable': isActionSelectable,
+        'is-board-highlighted': isBoardHighlighted,
+        'is-board-selected': isBoardSelected,
+      },
+    ]"
+    :data-zone="element.name"
+    :data-zone-id="element.id"
+    @click="handleClick"
+  >
+    <!-- Header: name left (20px bold), count right (13px #aaa) -->
+    <div class="deck-header">
+      <span class="deck-label">{{ displayLabel }}</span>
+      <span v-if="childCount" class="deck-count">{{ childCount }} cards</span>
+    </div>
+
+    <!-- Stack visual: up to 3 offset cards -->
+    <div v-if="!isEmpty" class="deck-stack">
+      <ElementRenderer
+        v-for="{ card, stackIndex } in stackCards"
+        :key="card.id"
+        :element="card"
+        :depth="depth + 1"
+        class="deck-card"
+        :style="{ '--stack-index': stackIndex }"
+      />
+    </div>
+
+    <!-- Empty state: italic "Empty" -->
+    <div v-else class="deck-empty">
+      <span class="empty-text">Empty</span>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* Container baseline */
+.deck-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+/* Selection states */
+.deck-container.is-selectable {
+  cursor: pointer;
+}
+
+.deck-container.is-selectable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.3);
+}
+
+.deck-container.is-selected {
+  outline: 3px solid #00d9ff;
+  outline-offset: 2px;
+}
+
+/* action-selectable: green pulse */
+.deck-container.action-selectable {
+  cursor: pointer;
+  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline-offset: 2px;
+  animation: pulse-deck 2s ease-in-out infinite;
+}
+
+.deck-container.action-selectable:hover {
+  outline-color: rgba(46, 204, 113, 1);
+  outline-width: 3px;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+}
+
+@keyframes pulse-deck {
+  0%, 100% {
+    outline-color: rgba(46, 204, 113, 0.6);
+  }
+  50% {
+    outline-color: rgba(46, 204, 113, 1);
+  }
+}
+
+/* Board interaction highlights */
+.deck-container.is-board-highlighted {
+  background: rgba(0, 217, 255, 0.2);
+}
+
+.deck-container.is-board-selected {
+  background: rgba(0, 255, 136, 0.2);
+}
+
+/* Header */
+.deck-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Name: 20px bold white */
+.deck-label {
+  font-size: 20px;
+  font-weight: bold;
+  color: #fff;
+}
+
+/* Count: 13px #aaa */
+.deck-count {
+  font-size: 13px;
+  color: #aaa;
+}
+
+/* Stack visual: 60x84px relative container for absolute-positioned cards */
+.deck-stack {
+  position: relative;
+  width: 60px;
+  height: 84px;
+  align-self: flex-start;
+}
+
+/* Each card in the stack: absolute, offset by stackIndex for depth illusion */
+.deck-card {
+  position: absolute;
+  top: calc(var(--stack-index, 0) * -2px);
+  left: calc(var(--stack-index, 0) * 1px);
+}
+
+/* Empty state */
+.deck-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+}
+
+.empty-text {
+  font-style: italic;
+  color: #666;
+}
+</style>
