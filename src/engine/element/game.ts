@@ -2305,8 +2305,13 @@ export class Game<
         // collection leak. Accept decision: keep the stable id for animation.
         return {
           className: json.className,
-          id: json.id,
-          attributes: { __hidden: true },
+          id: json.id, // intentional: stable id for FLIP (see comment above)
+          // Preserve safe layout/back attributes ($type for AutoUI dispatch,
+          // $images.back for the face-down card-back graphic) so this element
+          // can render face-down on first paint, consistent with the zone
+          // branches below. redactHiddenElementAttrs drops $image and narrows
+          // $images to { back } only, so $images.face still never leaks.
+          attributes: { __hidden: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
         };
       }
 

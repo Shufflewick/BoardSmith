@@ -561,5 +561,18 @@ describe('WR-02: standalone hidden element retains a stable id for animation', (
       (placeholder.attributes.$images as Record<string, unknown> | undefined)?.face,
       'standalone hidden element must not leak $images.face'
     ).toBeUndefined();
+
+    // WR-01 (iteration 3): the standalone placeholder must preserve safe
+    // render attributes so it can paint face-down on first render, consistent
+    // with the zone branches. $type drives AutoUI renderer dispatch and
+    // $images.back supplies the card-back graphic.
+    expect(
+      placeholder.attributes.$type,
+      'standalone hidden element must retain $type for AutoUI dispatch'
+    ).toBe('card');
+    expect(
+      (placeholder.attributes.$images as Record<string, unknown> | undefined)?.back,
+      'standalone hidden element must retain $images.back for the face-down graphic'
+    ).toBe('/cards/back.svg');
   });
 });
