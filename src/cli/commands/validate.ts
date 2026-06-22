@@ -108,6 +108,13 @@ async function validateMetadata(cwd: string): Promise<ValidationResult> {
       }
     }
 
+    // Optional "ui" field — must be "auto" or a relative path starting with "./"
+    if (config.ui !== undefined) {
+      if (config.ui !== 'auto' && !String(config.ui).startsWith('./')) {
+        issues.push('"ui" must be "auto" or a relative path (e.g. "./ui/components/GameTable.vue")');
+      }
+    }
+
     return {
       name: 'Metadata',
       passed: issues.length === 0,
