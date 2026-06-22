@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Dynamic Auto-UI
 status: executing
-stopped_at: "Phases 91-94 + inserted 94.1 complete (playability gates closed & verified passed via 94.1). Autonomous run reconciled 94 bookkeeping; starting Phase 95 Ship & Reframe."
-last_updated: "2026-06-22T00:00:00.000Z"
-last_activity: 2026-06-22
+stopped_at: "PAUSED: Phase 94 delivered refs[]/overlay/PRESENT-02 security/render/Hex-playable; Go Fish+Checkers playability gates split to inserted Phase 94.1 (interaction not converging without component test infra). main green at e46d450."
+last_updated: "2026-06-22T17:47:15.714Z"
+last_activity: 2026-06-22 -- Phase 95 execution started
 progress:
   total_phases: 7
-  completed_phases: 5
-  total_plans: 23
-  completed_plans: 23
-  percent: 71
+  completed_phases: 4
+  total_plans: 27
+  completed_plans: 22
+  percent: 57
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 95 — ship-and-reframe
+**Current focus:** Phase 95 — ship-reframe
 
 ## Current Position
 
-Phase: 95 (ship-and-reframe) — STARTING
-Plan: 0 of TBD
-Status: Phases 91-94 + 94.1 complete; reconciled 94-06 gate (superseded by 94.1). Planning Phase 95.
-Last activity: 2026-06-22
+Phase: 95 (ship-reframe) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 95
+Last activity: 2026-06-22 -- Phase 95 execution started
 
 Progress: [████████░░] 71%
 
