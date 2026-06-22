@@ -158,6 +158,21 @@ The auto-generated UI includes:
 - **ActionPanel**: Displays available actions with selection UI
 - Ships as your production UI for simple games — no custom UI required
 
+### Dev-time UI switcher
+
+Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
+renders the running game — without a split-screen and without restarting. The
+dropdown lists:
+- the game's primary UI (whatever you render in GameShell's `#game-board` slot),
+- any extra UIs you declare via GameShell's `uis` prop
+  (`:uis="[{ name: 'Compact', component: CompactBoard }]"`), and
+- the built-in **Auto UI** (offered automatically in dev).
+
+The auto-UI peek is dev-only: it is gated behind `import.meta.env.DEV`, so a
+production `boardsmith build` constant-folds it away and a custom-UI game never
+bundles the auto-UI (tree-shaking is preserved — see SHIP-02). A production build
+renders the primary slot UI.
+
 ### DebugPanel
 
 Development tool for inspecting game state, history, and debugging.
