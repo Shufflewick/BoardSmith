@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 95 — ship-reframe
+**Current focus:** Phase 96 — migration-cleanup (cross-repo)
 
 ## Current Position
 
-Phase: 95 (ship-reframe) — EXECUTING
-Plan: 4 of 4
-Status: Ready to execute
+Phase: 95 (ship-reframe) — COMPLETE & VERIFIED
+Plan: 4 of 4 complete
+Status: Phase 95 done (SHIP-01/02/03 verified; fixed a pre-existing scaffold-construction crash found by the playability gate). 2 pre-existing src/ui test failures remain on main (useActionController followUp [known baseline]; useBoardActionBridge auto-start [stale test from pre-session commit 31a07f4]) — surfaced to user. Next: Phase 96.
 Last activity: 2026-06-22
 
 Progress: [█████████░] 93%
