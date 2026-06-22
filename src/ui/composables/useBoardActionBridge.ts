@@ -203,14 +203,19 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   async function setSelectionValue(name: string, value: unknown) {
     const selection = currentPick.value;
+    // Capture choices BEFORE fill() — fill() advances the pick state so
+    // choicesForBoard.value would return the NEXT pick's choices after the await.
+    // selection.choices only holds static metadata choices (never dynamic ones),
+    // so use choicesForBoard.value to cover both static and dynamically-fetched choices.
+    const choicesSnapshot = selection?.type === 'choice' ? choicesForBoard.value.slice() : [];
     const result = await controller.fill(name, value);
     if (!result.valid) {
       console.error('Selection failed:', result.error);
       return;
     }
     // Keep the chosen board element visually selected/highlighted.
-    if (selection?.type === 'choice' && selection.choices) {
-      const choice = selection.choices.find((c: ChoiceWithRefs) => c.value === value);
+    if (selection?.type === 'choice' && choicesSnapshot.length > 0) {
+      const choice = choicesSnapshot.find((c: ChoiceWithRefs) => c.value === value);
       if (choice?.refs?.length) {
         const ref = choice.refs.find(r => r.role === 'target')?.ref ?? choice.refs[0]?.ref;
         if (ref) board.selectElement(ref);
@@ -327,7 +332,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         }
       };
       board.setDraggableSelectedElement(null);
-    } else if (selection.type === 'choice' && selection.choices) {
+    } else if (selection.type === 'choice') {
+      // Note: selection.choices carries static metadata choices only; dynamic choices
+      // (fetched via fetchPickChoices) are NOT present on selection.choices. Use
+      // choicesForBoard.value (reactive, reads snapshotVersion) for the actual choices.
       const choices = choicesForBoard.value;
       const choicesWithRefs = choices.filter((c: ChoiceWithRefs) => (c.refs ?? []).length > 0);
       if (choicesWithRefs.length > 0) {
