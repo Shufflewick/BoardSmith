@@ -672,18 +672,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * choices arrive.
    */
   const allCurrentChoicesAnchored = computed((): boolean => {
-    const pick = currentPick.value;
-    if (!pick) return false;                                          // no action → show panel (Pitfall 4 guard)
-    if (pick.type === 'element' || pick.type === 'elements') return true;  // always anchored
-    if (pick.type !== 'choice') return false;                        // number/text → panel only
-    const choices = currentChoices.value;
-    if (choices.length === 0) return false;                          // vacuous case → don't suppress
-    return choices.every(c => {
-      const refs = c.refs ?? [];
-      if (refs.length === 0) return false;
-      const clickable = refs.find(r => r.role === 'target')?.ref ?? refs[0]?.ref;
-      return clickable?.notation !== undefined;
-    });
+    // D-02: suppress footer ONLY when the board offers clickable element picks
+    // (i.e. validElements is non-empty). Choice picks keep the footer because
+    // validElements is always [] for non-element pick types — those selections
+    // surface through the ActionPanel's choice buttons, not board cells.
+    return validElements.value.length > 0;
   });
 
   /**
