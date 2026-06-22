@@ -34,8 +34,8 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 
 ### Shippable Peer & Single-UI Export (SHIP)
 - [ ] **SHIP-01**: The auto-UI is a selectable, shippable production UI (a fine choice for simple games), not merely a dev/debug panel.
-- [ ] **SHIP-02**: A production build emits a single UI — removing the scaffold's static `import { AutoUI }` lets ordinary tree-shaking drop unselected UIs (no registry/`rollupOptions.input` required for this).
-- [ ] **SHIP-03**: The scaffold generates a game that opens in its chosen UI with the custom-UI slot empty/ready — no split-screen "Custom vs Auto-Generated" comparison.
+- [x] **SHIP-02**: A production build emits a single UI — removing the scaffold's static `import { AutoUI }` lets ordinary tree-shaking drop unselected UIs (no registry/`rollupOptions.input` required for this).
+- [x] **SHIP-03**: The scaffold generates a game that opens in its chosen UI with the custom-UI slot empty/ready — no split-screen "Custom vs Auto-Generated" comparison.
 
 ### Migration & Cleanup (MIGRATE) — milestone exit criterion
 - [ ] **MIGRATE-01**: Every game in `~/BoardSmithGames/` is migrated to the new auto-UI and is *playable* (browser-verified, not just unit-test green).
@@ -80,8 +80,8 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 | PRESENT-02 | Phase 94 | Pending |
 | PRESENT-03 | Phase 94 | Complete |
 | SHIP-01 | Phase 95 | Pending |
-| SHIP-02 | Phase 95 | Pending |
-| SHIP-03 | Phase 95 | Pending |
+| SHIP-02 | Phase 95 | Complete |
+| SHIP-03 | Phase 95 | Complete |
 | MIGRATE-01 | Phase 96 | Pending |
 | MIGRATE-02 | Phase 96 | Pending |
 | MIGRATE-03 | Phase 96 | Pending |

@@ -4,13 +4,13 @@ milestone: v3.1
 milestone_name: Dynamic Auto-UI
 status: executing
 stopped_at: "PAUSED: Phase 94 delivered refs[]/overlay/PRESENT-02 security/render/Hex-playable; Go Fish+Checkers playability gates split to inserted Phase 94.1 (interaction not converging without component test infra). main green at e46d450."
-last_updated: "2026-06-22T17:47:15.714Z"
-last_activity: 2026-06-22 -- Phase 95 execution started
+last_updated: "2026-06-22T17:51:40.187Z"
+last_activity: 2026-06-22
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 27
-  completed_plans: 22
+  completed_plans: 23
   percent: 57
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 ## Current Position
 
 Phase: 95 (ship-reframe) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 95
-Last activity: 2026-06-22 -- Phase 95 execution started
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-06-22
 
-Progress: [████████░░] 71%
+Progress: [█████████░] 85%
 
 ## Milestones
 
@@ -95,7 +95,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-22T03:14:54.708Z
+Last session: 2026-06-22T17:51:40.179Z
 Stopped at: PAUSED: Phase 94 delivered refs[]/overlay/PRESENT-02 security/render/Hex-playable; Go Fish+Checkers playability gates split to inserted Phase 94.1 (interaction not converging without component test infra). main green at e46d450.
 Resume file: None
 Next action: `/gsd:plan-phase 91`

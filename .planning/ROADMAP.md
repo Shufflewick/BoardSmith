@@ -120,7 +120,7 @@
   3. A freshly scaffolded game project opens in its chosen UI immediately; there is no split-screen "Custom vs Auto-Generated" comparison panel.
   4. A developer who chooses the auto-UI as their sole production UI encounters no framework-level friction — `boardsmith dev` and `boardsmith build` just work.
 **Plans**: 4 plans
-- [ ] 95-01-PLAN.md — Single-UI scaffold (App.vue/boardsmith.json/stub) + scaffold tests + validate ui field
+- [x] 95-01-PLAN.md — Single-UI scaffold (App.vue/boardsmith.json/stub) + scaffold tests + validate ui field
 - [ ] 95-02-PLAN.md — Reframe docs + /design-game slash command away from debug/split-screen framing
 - [ ] 95-03-PLAN.md — Tree-shaking bundle proof (custom-UI build excludes AutoRenderer; auto control)
 - [ ] 95-04-PLAN.md — Browser human-verify: fresh scaffold opens single-UI and is playable
@@ -152,7 +152,7 @@
 | 93. Renderer Rebuild | 7/7 | Complete    | 2026-06-21 |
 | 94. Interaction, Presentation & Playability Gate | 5/6 | In Progress|  |
 | 94.1 Auto-UI Interaction Completion | 5/5 | Complete   | 2026-06-22 |
-| 95. Ship & Reframe | 0/? | Not started | - |
+| 95. Ship & Reframe | 1/4 | In Progress|  |
 | 96. Migration & Cleanup | 0/? | Not started | - |
 
 ---
