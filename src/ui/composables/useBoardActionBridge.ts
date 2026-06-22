@@ -176,10 +176,14 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       await executeAction(actionName, {});
       return;
     }
-    const firstSel = meta.selections[0];
-    await controller.start(actionName, options);
+    // Clear any stale board state BEFORE starting (not after). The async fetch inside
+    // controller.start() triggers snapshotVersion++ which causes watcher D to fire and
+    // populate board.validElements. If board.clear() ran AFTER the await, it would wipe
+    // the already-populated validElements and watcher D would not re-run (sources unchanged).
     board.clear();
-    board.setCurrentAction(actionName, 0, firstSel.name);
+    await controller.start(actionName, options);
+    // board.setCurrentAction and board.setValidElements are handled reactively by
+    // watchers E and D in response to controller.currentAction / snapshotVersion changes.
   }
 
   async function executeAction(actionName: string, args: Record<string, unknown>) {
