@@ -79,7 +79,7 @@ ${chalk.dim('This will start the development server and open player tabs in your
   }
 }
 
-function generateGameTs(pascal: string): string {
+export function generateGameTs(pascal: string): string {
   return `import { Game, Player, type GameOptions } from 'boardsmith';
 import { Card, Hand, Deck } from './elements.js';
 import { createGameFlow } from './flow.js';
@@ -97,6 +97,19 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
 
     // Register element classes
     this.registerElements([Card, Hand, Deck]);
+
+    // Create each player's hand. The engine pre-creates players from
+    // options.playerCount during super(), so this.players is already populated.
+    // Hands must be created here (after registerElements), not in the Player
+    // constructor — a Player is constructed before the game body runs
+    // registerElements, so creating a Hand there leaves it unregistered and
+    // unfindable by getPlayerHand().
+    for (const player of this.players) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      player.hand = hand;
+    }
 
     // Create deck
     this.deck = this.create(Deck, 'deck');
@@ -162,10 +175,8 @@ export class ${pascal}Player extends Player<${pascal}Game, ${pascal}Player> {
   constructor(seat: number, name: string, game: ${pascal}Game) {
     super(seat, name);
     this.game = game;
-    // Create player's hand
-    this.hand = game.create(Hand, \`hand-\${seat}\`);
-    this.hand.player = this;
-    this.hand.contentsVisibleToOwner();
+    // The player's hand is created by the game after registerElements
+    // (see ${pascal}Game constructor) and assigned to this.hand there.
   }
 }
 `;
