@@ -103,9 +103,9 @@
 **Goal**: All three gate games are playable start-to-finish via the auto-UI (Go Fish ask; Checkers move/capture/multi-jump/king; Hex regression), proven by Vue component/interaction tests that reproduce the browser failures — closing the Go Fish + Checkers playability gates deferred from Phase 94.
 **Requirements**: R1 (D-01 component/interaction test infra first), R2 (Go Fish ask playable), R3 (Checkers playable), R4 (INTERACT-01 multi-step completion), R5 (D-02 footer fallback)
 **Depends on:** Phase 94
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 - [x] 94.1-01-PLAN.md — Wave 1: dependency-approval checkpoint + Vue component test-infra standup (D-01) (R1)
-- [ ] 94.1-02-PLAN.md — Wave 2: Bug C reactive choice population + D-02 footer fallback (Prove Before Fix) (R4, R5)
+- [x] 94.1-02-PLAN.md — Wave 2: Bug C reactive choice population + D-02 footer fallback (Prove Before Fix) (R4, R5)
 - [ ] 94.1-03-PLAN.md — Wave 3: Checkers move/multi-jump completion (Bug A) + Hex regression guard (R3, R4)
 - [ ] 94.1-04-PLAN.md — Wave 4: Go Fish ask completion (Bug B — trace first) + PRESENT-02 no-regress (R2)
 - [ ] 94.1-05-PLAN.md — Wave 5: browser playthrough gate — Checkers, Go Fish, Hex (human-verify) (R2, R3, R4, R5)
@@ -147,7 +147,7 @@
 | 92. Piece & Grid Rendering Fixes | 3/3 | Complete    | 2026-06-21 |
 | 93. Renderer Rebuild | 7/7 | Complete    | 2026-06-21 |
 | 94. Interaction, Presentation & Playability Gate | 5/6 | In Progress|  |
-| 94.1 Auto-UI Interaction Completion | 1/5 | In Progress|  |
+| 94.1 Auto-UI Interaction Completion | 2/5 | In Progress|  |
 | 95. Ship & Reframe | 0/? | Not started | - |
 | 96. Migration & Cleanup | 0/? | Not started | - |
 
