@@ -20,6 +20,7 @@ export interface ProjectConfig {
   description: string;
   playerCount: { min: number; max: number };
   categories?: string[];
+  ui?: string;
 }
 
 /**
@@ -111,6 +112,7 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
     categories: config.categories || ['card-game'],
     thumbnail: './public/thumbnail.png',
     scoreboard: { stats: ['score'] },
+    ui: config.ui ?? 'auto',
   };
   return JSON.stringify(json, null, 2);
 }
@@ -253,17 +255,34 @@ export function generateUiIndexTs(): string {
 
 import App from './App.vue';
 export { App };
-export { default as GameTable } from './components/GameTable.vue';
 `;
 }
 
 /**
  * Generate src/ui/App.vue
+ *
+ * Branches on config.ui:
+ *   "auto" (default) → single AutoUI import
+ *   relative path    → single custom component import (no AutoUI)
  */
 export function generateAppVue(config: ProjectConfig): string {
-  return `<script setup lang="ts">
+  const ui = config.ui ?? 'auto';
+
+  const sharedStyles = `<style scoped>
+.player-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+.stat-label { color: #888; }
+.stat-value { font-weight: bold; color: #00d9ff; }
+</style>
+`;
+
+  if (ui === 'auto') {
+    return `<script setup lang="ts">
 import { GameShell, AutoUI } from 'boardsmith/ui';
-import GameTable from './components/GameTable.vue';
 </script>
 
 <template>
@@ -272,30 +291,15 @@ import GameTable from './components/GameTable.vue';
     display-name="${config.displayName}"
     :player-count="${config.playerCount.min}"
   >
-    <template #game-board="{ state, gameView, playerSeat, isMyTurn, availableActions, actionController }">
-      <div class="board-comparison">
-        <div class="board-section">
-          <h2 class="board-title">Custom UI</h2>
-          <GameTable
-            :game-view="gameView"
-            :player-seat="playerSeat"
-            :is-my-turn="isMyTurn"
-            :available-actions="availableActions"
-            :action-controller="actionController"
-          />
-        </div>
-        <div class="board-section">
-          <h2 class="board-title">Auto-Generated UI</h2>
-          <AutoUI
-            :game-view="gameView || null"
-            :player-seat="playerSeat"
-            :flow-state="state?.flowState as any"
-          />
-        </div>
-      </div>
+    <template #game-board="{ gameView, playerSeat, state }">
+      <AutoUI
+        :game-view="gameView || null"
+        :player-seat="playerSeat"
+        :flow-state="state?.flowState as any"
+      />
     </template>
 
-    <template #player-stats="{ player, gameView }">
+    <template #player-stats="{ player }">
       <div class="player-stat">
         <span class="stat-label">Score:</span>
         <span class="stat-value">{{ (player as any).score || 0 }}</span>
@@ -304,58 +308,68 @@ import GameTable from './components/GameTable.vue';
   </GameShell>
 </template>
 
-<style scoped>
-.board-comparison {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  width: 100%;
-  height: 100%;
-}
+${sharedStyles}`;
+  }
 
-.board-section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
+  // Custom UI path: derive a component name from the filename
+  const componentName = ui.split('/').pop()?.replace(/\.vue$/, '') ?? 'GameUI';
+  return `<script setup lang="ts">
+import { GameShell } from 'boardsmith/ui';
+import ${componentName} from '${ui}';
+</script>
 
-.board-title {
-  font-size: 1.2rem;
-  margin: 0 0 12px 0;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  text-align: center;
-}
+<template>
+  <GameShell
+    game-type="${config.name}"
+    display-name="${config.displayName}"
+    :player-count="${config.playerCount.min}"
+  >
+    <template #game-board="{ gameView, playerSeat, isMyTurn, availableActions, actionController }">
+      <${componentName}
+        :game-view="gameView"
+        :player-seat="playerSeat"
+        :is-my-turn="isMyTurn"
+        :available-actions="availableActions"
+        :action-controller="actionController"
+      />
+    </template>
 
-.player-stat {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  margin-top: 8px;
-}
+    <template #player-stats="{ player }">
+      <div class="player-stat">
+        <span class="stat-label">Score:</span>
+        <span class="stat-value">{{ (player as any).score || 0 }}</span>
+      </div>
+    </template>
+  </GameShell>
+</template>
 
-.stat-label {
-  color: #888;
-}
-
-.stat-value {
-  font-weight: bold;
-  color: #00d9ff;
-}
-</style>
-`;
+${sharedStyles}`;
 }
 
 /**
- * Generate src/ui/components/GameTable.vue (placeholder)
+ * Generate src/ui/components/GameTable.vue
+ *
+ * Optional custom-UI stub — start here when you want a bespoke interface.
+ * The auto-UI ships and handles everything until you're ready to fill this in.
+ * To activate: set boardsmith.json "ui" to the path of this file.
  */
 export function generateGameTableVue(): string {
   return `<script setup lang="ts">
+/**
+ * Custom UI — start here when you want to design a bespoke interface.
+ *
+ * The auto-UI (AutoUI) renders your game out of the box and can ship as-is
+ * for simple games. Fill this component in when you want full control over
+ * how the game looks, then update boardsmith.json:
+ *
+ *   "ui": "./ui/components/GameTable.vue"
+ *
+ * Pit of Success: the easy path (keeping "ui": "auto") is the right path —
+ * switch here only when you're ready to invest in a custom interface.
+ */
 import { computed } from 'vue';
 import type { UseActionControllerReturn } from 'boardsmith/ui';
 
-// Props from GameShell
 const props = defineProps<{
   gameView: any;
   playerSeat: number;
@@ -364,12 +378,6 @@ const props = defineProps<{
   actionController: UseActionControllerReturn;
 }>();
 
-// TODO: Customize this component based on your game type!
-// - For dice games: import { Die3D } from 'boardsmith/ui' and render dice
-// - For card games: render hands and card piles
-// - For board games: render a grid or board layout
-
-// Example: Check if an action is available
 const canTakeAction = computed(() => props.availableActions.length > 0);
 const firstAction = computed(() => props.availableActions[0]);
 
@@ -381,11 +389,8 @@ function handleAction() {
 </script>
 
 <template>
+  <!-- Build your custom UI here. AutoUI handles everything until you're ready. -->
   <div class="game-board">
-    <div class="placeholder-notice">
-      ⚠️ This is a placeholder UI - customize GameTable.vue for your game!
-    </div>
-
     <div class="turn-status">
       <span v-if="isMyTurn" class="turn-indicator">Your Turn</span>
       <span v-else class="waiting">Waiting for other player...</span>
@@ -408,15 +413,6 @@ function handleAction() {
   align-items: center;
   padding: 20px;
   gap: 20px;
-}
-
-.placeholder-notice {
-  background: rgba(255, 193, 7, 0.2);
-  border: 1px solid #ffc107;
-  color: #ffc107;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 0.9rem;
 }
 
 .turn-status {
