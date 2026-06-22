@@ -119,7 +119,11 @@
   2. Removing the scaffold's static `import { AutoUI }` from a production build results in the auto-UI bundle being dropped by ordinary tree-shaking (no registry or `rollupOptions.input` manipulation needed).
   3. A freshly scaffolded game project opens in its chosen UI immediately; there is no split-screen "Custom vs Auto-Generated" comparison panel.
   4. A developer who chooses the auto-UI as their sole production UI encounters no framework-level friction — `boardsmith dev` and `boardsmith build` just work.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 95-01-PLAN.md — Single-UI scaffold (App.vue/boardsmith.json/stub) + scaffold tests + validate ui field
+- [ ] 95-02-PLAN.md — Reframe docs + /design-game slash command away from debug/split-screen framing
+- [ ] 95-03-PLAN.md — Tree-shaking bundle proof (custom-UI build excludes AutoRenderer; auto control)
+- [ ] 95-04-PLAN.md — Browser human-verify: fresh scaffold opens single-UI and is playable
 **UI hint**: yes
 
 ---
