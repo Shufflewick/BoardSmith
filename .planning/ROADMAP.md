@@ -13,7 +13,7 @@
 - [x] **Phase 91: Security Leak Fix** — Filter `$images.face` and audit the `$`-whitelist in `toJSONForPlayer` so no value-bearing data reaches unauthorized players. (completed 2026-06-21)
 - [x] **Phase 92: Piece & Grid Rendering Fixes** — Pieces render with images/labels; labeled-token fallback for no-image pieces; grid boards size from declared coordinates; hardcoded 8×8 fallback removed. (completed 2026-06-21)
 - [x] **Phase 93: Renderer Rebuild** — Replace `AutoElement.vue` + `AutoGameBoard.vue` with a ranked-tester dispatcher, archetype templates (grid-board/card/tableau), closed-form grid/hex layout, and animation event wiring — reusing the interaction substrate unchanged. (completed 2026-06-21)
-- [ ] **Phase 94: Interaction, Presentation & Playability Gate** — Wire board-centric interaction (suppressible ActionPanel, multi-ref highlight, protocol extension), implement the per-UI presentation overlay, then prove Hex + Go Fish + Checkers are playable end-to-end in the browser.
+- [x] **Phase 94: Interaction, Presentation & Playability Gate** — Wire board-centric interaction (suppressible ActionPanel, multi-ref highlight, protocol extension), implement the per-UI presentation overlay, then prove Hex + Go Fish + Checkers are playable end-to-end in the browser. (completed 2026-06-22; playability gate closed via inserted Phase 94.1)
 - [ ] **Phase 95: Ship & Reframe** — Auto-UI as a shippable production peer; single-UI production export via static-import removal; scaffold reframed away from split-screen.
 - [ ] **Phase 96: Migration & Cleanup** — Migrate all 9 `~/BoardSmithGames/` games + MERC canary verification; delete old renderer + scaffold; docs updated; `npm run audit` clean.
 
@@ -93,12 +93,12 @@
 - [x] 94-03-PLAN.md — Wave 2: D-03 board-centric click/highlight affordances in 8 renderers (INTERACT-01)
 - [x] 94-04-PLAN.md — Wave 3: D-04 presentation overlay chain + __hidden security guard (PRESENT-01, PRESENT-02, PRESENT-03)
 - [x] 94-05-PLAN.md — Wave 4: game-side prep — refs migration + AutoUI-only App.vue + per-game overlays (INTERACT-01, INTERACT-03, PRESENT-01, PRESENT-03)
-- [ ] 94-06-PLAN.md — Wave 5: playability gates — Hex, Go Fish, Checkers (human-verify) (all 6 reqs)
+- [x] 94-06-PLAN.md — Wave 5: playability gates — Hex, Go Fish, Checkers (human-verify) (all 6 reqs) — SUPERSEDED by inserted Phase 94.1 (gates closed + verified passed in 94.1-VERIFICATION.md)
 **UI hint**: yes
 
 ---
 
-### Phase 94.1: Auto-UI Interaction Completion (INSERTED)
+### Phase 94.1: Auto-UI Interaction Completion (INSERTED) ✓ COMPLETE (2026-06-22)
 
 **Goal**: All three gate games are playable start-to-finish via the auto-UI (Go Fish ask; Checkers move/capture/multi-jump/king; Hex regression), proven by Vue component/interaction tests that reproduce the browser failures — closing the Go Fish + Checkers playability gates deferred from Phase 94.
 **Requirements**: R1 (D-01 component/interaction test infra first), R2 (Go Fish ask playable), R3 (Checkers playable), R4 (INTERACT-01 multi-step completion), R5 (D-02 footer fallback)
