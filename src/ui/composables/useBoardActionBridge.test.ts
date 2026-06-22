@@ -199,7 +199,7 @@ describe('useBoardActionBridge', () => {
     expect(board.isSelectableElement({ id: 21, name: 'e5', notation: 'e5' })).toBe(true);
   });
 
-  it('auto-starts the sole available action when none is in progress', () => {
+  it('auto-starts the sole available action when none is in progress', async () => {
     const board = createBoardInteraction();
     const { controller, start } = makeController({ pick: null, action: null });
 
@@ -212,6 +212,9 @@ describe('useBoardActionBridge', () => {
       availableActions: ref(['placeStone']),
     });
 
+    // Auto-start is coalesced onto a settled-state nextTick (see scheduleAutoStart),
+    // so the sole action starts on the next microtask, not synchronously at setup.
+    await nextTick();
     expect(start).toHaveBeenCalledWith('placeStone', undefined);
   });
 });

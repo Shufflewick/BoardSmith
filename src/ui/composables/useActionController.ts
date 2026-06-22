@@ -1426,11 +1426,28 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!selection?.optional) return;
 
     // When the action is server-pending (e.g. a followUp), the auto-execute watch
-    // is disabled, so skipping must actively submit the step with a null value so
-    // the server runs the action with the selection skipped (e.g. "Done taking
-    // equipment"). Otherwise just record the skip and let auto-execute submit.
+    // is disabled, so skipping must actively submit. A step-wise controller
+    // (pickStep provided) submits the skipped step with a null value so the
+    // server runs the action with the selection skipped (e.g. "Done taking
+    // equipment"). A sendAction-only controller (no pickStep — e.g. a followUp
+    // carrying pre-filled args) has no step transport, so record the skip and
+    // submit the whole action via sendAction: buildServerArgs() carries the
+    // pre-filled followUp args (collected in startFollowUp) and omits the
+    // skipped optional selection.
     if (pendingOnServer.value) {
-      void handleOnSelectFill(selection, null);
+      if (options.pickStep) {
+        void handleOnSelectFill(selection, null);
+        return;
+      }
+      currentArgs.value[selectionName] = null;
+      if (actionSnapshot.value) {
+        actionSnapshot.value.collectedPicks.set(selectionName, {
+          value: null,
+          display: '',
+          skipped: true,
+        });
+      }
+      void executeCurrentAction();
       return;
     }
 
