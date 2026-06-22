@@ -100,6 +100,14 @@ interface GameShellProps {
   suppressActionPanel?: boolean;
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
   presentation?: PresentationOverlay;
+  /**
+   * Additional named UIs selectable via the `boardsmith dev` UI dropdown, beyond
+   * the primary UI in the #game-board slot. Each renders with the same slot props.
+   * The built-in auto-UI is offered automatically in dev. A game with several
+   * board views (e.g. full board + compact) lists the extras here. Dev-only switch;
+   * a production build still renders the primary slot UI.
+   */
+  uis?: Array<{ name: string; component: unknown }>;
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -120,13 +128,37 @@ const platformMode = ref(typeof window !== 'undefined' && window.parent !== wind
 // debug panel so it appears under `boardsmith dev` but never in a deployed game.
 const isDevBuild = import.meta.env.DEV;
 
-// Dev-only auto-UI peek. `boardsmith dev` can toggle the game's chosen UI against
-// the built-in auto-UI without a permanent split-screen (the dev host posts a
-// `dev-ui-mode` message). The AutoUI import is gated behind `isDevBuild`
+// Dev-only UI switcher. `boardsmith dev` shows a dropdown of every UI this game
+// offers — the primary UI (the #game-board slot), any extra UIs from the `uis`
+// prop, and the built-in auto-UI — and renders the selected one without a
+// permanent split-screen. The AutoUI import is gated behind `isDevBuild`
 // (`import.meta.env.DEV`), so a production build statically drops this branch and
 // a custom-UI game never bundles AutoUI/AutoRenderer (SHIP-02 tree-shaking holds).
 const DevAutoUI = isDevBuild ? AutoUIDev : null;
-const devUiMode = ref<'custom' | 'auto'>('custom');
+const AUTO_UI_NAME = 'Auto UI';
+const primaryUiName = computed(() => props.displayName || 'Custom UI');
+// Ordered list of selectable UI names: primary slot UI, extra `uis`, then auto-UI (dev).
+const devUiNames = computed(() => {
+  const names = [primaryUiName.value, ...(props.uis ?? []).map(u => u.name)];
+  if (isDevBuild) names.push(AUTO_UI_NAME);
+  return names;
+});
+const selectedUiName = ref('');
+// The component to render for the current selection, or null to render the slot.
+const selectedUiComponent = computed(() => {
+  const name = selectedUiName.value;
+  if (!name || name === primaryUiName.value) return null; // render the #game-board slot
+  if (name === AUTO_UI_NAME) return isDevBuild ? DevAutoUI : null;
+  return (props.uis ?? []).find(u => u.name === name)?.component ?? null;
+});
+// Tell the dev host which UIs are available so it can populate the dropdown.
+function postDevUiList(): void {
+  if (!isDevBuild || !platformMode.value || typeof window === 'undefined') return;
+  window.parent.postMessage(
+    { source: 'shufflewick-game', type: 'dev-ui-list', uis: devUiNames.value },
+    '*'
+  );
+}
 
 // Screen state — start on 'game' in platform mode (skip lobby)
 type Screen = 'lobby' | 'waiting' | 'game';
@@ -583,10 +615,13 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       return;
     }
 
-    // Dev-only UI switcher (boardsmith dev). Ignored in production builds —
-    // DevAutoUI is null there, so the toggle has nothing to render.
-    if (data.type === 'dev-ui-mode' && isDevBuild) {
-      devUiMode.value = data.mode === 'auto' ? 'auto' : 'custom';
+    // Dev-only UI switcher (boardsmith dev). Ignored in production builds.
+    if (data.type === 'dev-ui-select' && isDevBuild) {
+      selectedUiName.value = typeof data.name === 'string' ? data.name : '';
+      return;
+    }
+    if (data.type === 'dev-ui-list-request' && isDevBuild) {
+      postDevUiList();
       return;
     }
 
@@ -615,6 +650,9 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     }
   };
   window.addEventListener('message', platformMessageHandler);
+  // Advertise the available UIs to the dev host so it can render the switcher
+  // dropdown (dev-only; no-op in production).
+  postDevUiList();
   // NOTE: auto-executing a sole endTurn (and auto-starting any single action) is
   // now owned by useBoardActionBridge, which runs unconditionally above — so it
   // works whether or not the footer ActionPanel is mounted.
@@ -1292,13 +1330,25 @@ if ((import.meta as any).hot) {
                 - actionArgs: Read-only view of current selection args (for UI display)
                 - Other props: game state for rendering
               -->
-              <!-- Dev-only: peek the built-in auto-UI in place of the game's
-                   chosen UI (toggled from the dev host). Stripped in production. -->
+              <!-- Dev-only UI switcher: render the selected non-primary UI (an
+                   extra `uis` entry or the built-in auto-UI) with the same slot
+                   props. Falls through to the #game-board slot for the primary UI
+                   and always in production (selectedUiComponent is null there). -->
               <component
-                v-if="isDevBuild && devUiMode === 'auto' && DevAutoUI"
-                :is="DevAutoUI"
+                v-if="selectedUiComponent"
+                :is="selectedUiComponent"
+                :state="state"
                 :game-view="gameView || null"
+                :players="players"
+                :my-player="myPlayer"
                 :player-seat="playerSeat"
+                :is-my-turn="isMyTurn"
+                :available-actions="availableActions"
+                :action-args="actionArgs"
+                :set-board-prompt="setBoardPrompt"
+                :can-undo="canUndo && !isViewingHistory"
+                :undo="handleUndo"
+                :action-controller="actionController"
                 :flow-state="state?.flowState"
               />
               <slot

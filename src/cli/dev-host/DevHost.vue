@@ -44,9 +44,10 @@ const seats = ref<SeatInfo[]>([]);
 const mySeat = ref<number | null>(null);
 const errorMsg = ref<string | null>(null);
 const followActive = ref(false);
-// Dev-only UI switcher: peek the built-in auto-UI against the game's chosen UI
-// (handled inside GameShell, gated to dev builds; no effect in production).
-const showAutoUi = ref(false);
+// Dev-only UI switcher: the list of UIs the game offers (sent by GameShell) and
+// the currently-selected one. Handled inside GameShell; no effect in production.
+const uiOptions = ref<string[]>([]);
+const selectedUi = ref('');
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
@@ -148,8 +149,10 @@ function postToGame(message: Record<string, unknown>): void {
 function onIframeLoad(): void {
   if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat });
   if (lastGameState) postToGame(lastGameState);
-  // Re-assert the UI mode so a (re)mounted game iframe keeps the chosen view.
-  if (showAutoUi.value) postToGame({ type: 'dev-ui-mode', mode: 'auto' });
+  // Re-request the UI list and re-assert the selection so a (re)mounted game
+  // iframe rebuilds the dropdown and keeps the chosen view.
+  postToGame({ type: 'dev-ui-list-request' });
+  if (selectedUi.value) postToGame({ type: 'dev-ui-select', name: selectedUi.value });
 }
 
 function onWindowMessage(event: MessageEvent): void {
@@ -162,6 +165,15 @@ function onWindowMessage(event: MessageEvent): void {
       op: data.op,
       payload: data.payload ?? {},
     });
+    return;
+  }
+  // The game advertises its available UIs; populate the switcher dropdown.
+  if (data.type === 'dev-ui-list' && Array.isArray(data.uis)) {
+    uiOptions.value = data.uis as string[];
+    // Keep the current selection if still offered; otherwise default to the first.
+    if (!uiOptions.value.includes(selectedUi.value)) {
+      selectedUi.value = uiOptions.value[0] ?? '';
+    }
   }
 }
 
@@ -180,9 +192,8 @@ function newGame(): void {
 function toggleFollow(): void {
   wsSend({ type: 'follow', enabled: !followActive.value });
 }
-function toggleAutoUi(): void {
-  showAutoUi.value = !showAutoUi.value;
-  postToGame({ type: 'dev-ui-mode', mode: showAutoUi.value ? 'auto' : 'custom' });
+function onUiSelect(): void {
+  postToGame({ type: 'dev-ui-select', name: selectedUi.value });
 }
 
 function seatLabel(seat: SeatInfo): string {
@@ -289,16 +300,16 @@ onUnmounted(() => {
             <span class="dev-chrome__badge">seat {{ mySeat }}</span>
           </div>
           <div class="dev-chrome__bar-actions">
-            <button
-              type="button"
-              class="btn"
-              :class="{ 'btn--on': showAutoUi }"
-              :aria-pressed="showAutoUi"
-              title="Dev only — peek the built-in auto-UI against this game's UI. Production builds ship the chosen UI only."
-              @click="toggleAutoUi"
+            <label
+              v-if="uiOptions.length > 1"
+              class="dev-chrome__ui-switch"
+              title="Dev only — switch which UI renders this game. Production builds ship the chosen UI only."
             >
-              {{ showAutoUi ? 'Showing auto-UI' : 'Show auto-UI' }}
-            </button>
+              <span class="dev-chrome__label">UI</span>
+              <select v-model="selectedUi" class="dev-chrome__select" @change="onUiSelect">
+                <option v-for="name in uiOptions" :key="name" :value="name">{{ name }}</option>
+              </select>
+            </label>
             <button
               type="button"
               class="btn"
@@ -530,6 +541,26 @@ onUnmounted(() => {
 .dev-chrome__label {
   font-size: 0.8rem;
   color: #9aa;
+}
+
+.dev-chrome__ui-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dev-chrome__select {
+  background: #1a1b33;
+  color: #e8e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.dev-chrome__select:hover {
+  border-color: rgba(0, 217, 255, 0.5);
 }
 
 .dev-chrome input {
