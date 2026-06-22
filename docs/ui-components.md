@@ -153,8 +153,8 @@ import { AutoUI } from 'boardsmith/ui';
 ```
 
 The auto-generated UI includes:
-- **AutoGameBoard**: Renders the game element tree
-- **AutoElement**: Renders individual elements based on type
+- **AutoRenderer**: Selects an archetype template by introspection and renders the game element tree via a ranked-tester renderer registry
+- **registerRenderer**: Register a higher-priority renderer for an element type to upgrade the auto-UI in place (no core edits)
 - **ActionPanel**: Displays available actions with selection UI
 - Ships as your production UI for simple games — no custom UI required
 

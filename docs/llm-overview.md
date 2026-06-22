@@ -249,7 +249,7 @@ sequence(
 
 **Helpers**: `Draggable`, `DiceRoller`, `CardFan`, `DeckPile`, `FlyingCardsOverlay`
 
-**Auto-UI**: `AutoUI`, `AutoGameBoard`, `AutoElement`, `ActionPanel`
+**Auto-UI**: `AutoUI`, `AutoRenderer`, `ActionPanel`, `registerRenderer`
 
 **Composables**:
 - `useBoardInteraction` - Board ↔ ActionPanel communication
