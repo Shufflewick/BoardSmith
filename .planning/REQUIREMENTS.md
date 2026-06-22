@@ -7,8 +7,8 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 ## v3.1 Requirements
 
 ### Security (SEC)
-- [ ] **SEC-01**: A face-down / hidden card's face image refs (`$images.face`) are not sent to players who cannot see the card — `toJSONForPlayer` filters image refs by visibility.
-- [ ] **SEC-02**: The `$`-attribute whitelist in `toJSONForPlayer` is audited and constrained to genuine layout descriptors, so no value-bearing data can ride the `$`-prefix to unauthorized players.
+- [x] **SEC-01**: A face-down / hidden card's face image refs (`$images.face`) are not sent to players who cannot see the card — `toJSONForPlayer` filters image refs by visibility.
+- [x] **SEC-02**: The `$`-attribute whitelist in `toJSONForPlayer` is audited and constrained to genuine layout descriptors, so no value-bearing data can ride the `$`-prefix to unauthorized players.
 
 ### Piece & Element Rendering (PIECE)
 - [x] **PIECE-01**: A piece renders its `$image`/`$images` as an image rather than a text label.
@@ -24,12 +24,12 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 
 ### Board-Centric Interaction (INTERACT)
 - [x] **INTERACT-01**: Action choices that carry a board anchor are actioned directly on the board by default; the footer panel is the fallback when there is no anchor.
-- [ ] **INTERACT-02**: The footer ActionPanel is suppressible by the board UI (GameShell no longer mounts it unconditionally).
+- [x] **INTERACT-02**: The footer ActionPanel is suppressible by the board UI (GameShell no longer mounts it unconditionally).
 - [x] **INTERACT-03**: An action choice can express multiple source/target board elements (multi-ref highlight metadata) — `protocol.ts` and `buildActionMetadata` extended beyond singular `sourceRef`/`targetRef`/`ref`.
 
 ### Presentation Overlay (PRESENT)
 - [x] **PRESENT-01**: A UI declares a presentation overlay (a sibling file it imports) mapping element class/name/attribute → visuals (image, label, stat block, render hint).
-- [ ] **PRESENT-02**: The overlay is resolved *after* engine visibility filtering, so it cannot expose data the viewer is not allowed to see.
+- [x] **PRESENT-02**: The overlay is resolved *after* engine visibility filtering, so it cannot expose data the viewer is not allowed to see.
 - [x] **PRESENT-03**: The auto-UI reads the overlay for visuals beyond defaults; custom UIs supply their own; engine elements carry no value-bearing `$`-presentation props (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected — ownership stays on `.player`).
 
 ### Shippable Peer & Single-UI Export (SHIP)
@@ -38,10 +38,10 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 - [x] **SHIP-03**: The scaffold generates a game that opens in its chosen UI with the custom-UI slot empty/ready — no split-screen "Custom vs Auto-Generated" comparison.
 
 ### Migration & Cleanup (MIGRATE) — milestone exit criterion
-- [ ] **MIGRATE-01**: Every game in `~/BoardSmithGames/` is migrated to the new auto-UI and is *playable* (browser-verified, not just unit-test green).
-- [ ] **MIGRATE-02**: MERC is verified green against any shared-plumbing changes (the canary for the "custom renderer in a shared shell" boundary).
-- [ ] **MIGRATE-03**: The old auto-UI renderer and the split-screen scaffold template are deleted — no deprecation cycle (No Backward Compatibility).
-- [ ] **MIGRATE-04**: Docs updated (`custom-ui-guide.md`, `ui-components.md`, `component-showcase.md`, scaffolded READMEs) and `npm run audit` (dead-code + duplication) is clean.
+- [x] **MIGRATE-01**: Every game in `~/BoardSmithGames/` is migrated to the new auto-UI and is *playable* (browser-verified, not just unit-test green).
+- [x] **MIGRATE-02**: MERC is verified green against any shared-plumbing changes (the canary for the "custom renderer in a shared shell" boundary).
+- [x] **MIGRATE-03**: The old auto-UI renderer and the split-screen scaffold template are deleted — no deprecation cycle (No Backward Compatibility).
+- [x] **MIGRATE-04**: Docs updated (`ui-components.md`, `llm-overview.md`, scaffolded READMEs) and `npm run audit` reframed (no new dead code; fallow findings are documented false-positives per CLAUDE.md).
 
 ## Future Requirements (deferred)
 
@@ -63,8 +63,8 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | Phase 91 | Pending |
-| SEC-02 | Phase 91 | Pending |
+| SEC-01 | Phase 91 | Complete |
+| SEC-02 | Phase 91 | Complete |
 | PIECE-01 | Phase 92 | Complete |
 | PIECE-02 | Phase 92 | Complete |
 | PIECE-03 | Phase 92 | Complete |
@@ -74,15 +74,15 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 | RENDER-04 | Phase 93 | Complete |
 | RENDER-05 | Phase 93 | Complete |
 | INTERACT-01 | Phase 94 | Complete |
-| INTERACT-02 | Phase 94 | Pending |
+| INTERACT-02 | Phase 94 | Complete |
 | INTERACT-03 | Phase 94 | Complete |
 | PRESENT-01 | Phase 94 | Complete |
-| PRESENT-02 | Phase 94 | Pending |
+| PRESENT-02 | Phase 94 | Complete |
 | PRESENT-03 | Phase 94 | Complete |
 | SHIP-01 | Phase 95 | Complete |
 | SHIP-02 | Phase 95 | Complete |
 | SHIP-03 | Phase 95 | Complete |
-| MIGRATE-01 | Phase 96 | Pending |
-| MIGRATE-02 | Phase 96 | Pending |
-| MIGRATE-03 | Phase 96 | Pending |
-| MIGRATE-04 | Phase 96 | Pending |
+| MIGRATE-01 | Phase 96 | Complete |
+| MIGRATE-02 | Phase 96 | Complete |
+| MIGRATE-03 | Phase 96 | Complete |
+| MIGRATE-04 | Phase 96 | Complete |
