@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide, toRef } from 'vue';
+// Dev-only auto-UI peek (see DevAutoUI below). Referenced ONLY under the
+// `isDevBuild` (`import.meta.env.DEV`) constant, so a production build constant-
+// folds the branch to `null`, leaving this import unreferenced and tree-shaken —
+// a custom-UI game ships no AutoUI/AutoRenderer (SHIP-02 holds). A static import
+// (not `import()`) is deliberate: a dynamic import would emit a code-split chunk
+// that ships even when the branch is dead.
+import AutoUIDev from './auto-ui/AutoUI.vue';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
 import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
@@ -112,6 +119,14 @@ const platformMode = ref(typeof window !== 'undefined' && window.parent !== wind
 // Dev build (Vite serves `boardsmith dev`); false in production embeds. Gates the
 // debug panel so it appears under `boardsmith dev` but never in a deployed game.
 const isDevBuild = import.meta.env.DEV;
+
+// Dev-only auto-UI peek. `boardsmith dev` can toggle the game's chosen UI against
+// the built-in auto-UI without a permanent split-screen (the dev host posts a
+// `dev-ui-mode` message). The AutoUI import is gated behind `isDevBuild`
+// (`import.meta.env.DEV`), so a production build statically drops this branch and
+// a custom-UI game never bundles AutoUI/AutoRenderer (SHIP-02 tree-shaking holds).
+const DevAutoUI = isDevBuild ? AutoUIDev : null;
+const devUiMode = ref<'custom' | 'auto'>('custom');
 
 // Screen state — start on 'game' in platform mode (skip lobby)
 type Screen = 'lobby' | 'waiting' | 'game';
@@ -565,6 +580,13 @@ if (typeof window !== 'undefined' && window.parent !== window) {
         // result, etc.). Fall back to the message itself for resilience.
         cb((data.result ?? data) as Record<string, unknown>);
       }
+      return;
+    }
+
+    // Dev-only UI switcher (boardsmith dev). Ignored in production builds —
+    // DevAutoUI is null there, so the toggle has nothing to render.
+    if (data.type === 'dev-ui-mode' && isDevBuild) {
+      devUiMode.value = data.mode === 'auto' ? 'auto' : 'custom';
       return;
     }
 
@@ -1270,7 +1292,17 @@ if ((import.meta as any).hot) {
                 - actionArgs: Read-only view of current selection args (for UI display)
                 - Other props: game state for rendering
               -->
+              <!-- Dev-only: peek the built-in auto-UI in place of the game's
+                   chosen UI (toggled from the dev host). Stripped in production. -->
+              <component
+                v-if="isDevBuild && devUiMode === 'auto' && DevAutoUI"
+                :is="DevAutoUI"
+                :game-view="gameView || null"
+                :player-seat="playerSeat"
+                :flow-state="state?.flowState"
+              />
               <slot
+                v-else
                 name="game-board"
                 :state="state"
                 :game-view="gameView"

@@ -44,6 +44,9 @@ const seats = ref<SeatInfo[]>([]);
 const mySeat = ref<number | null>(null);
 const errorMsg = ref<string | null>(null);
 const followActive = ref(false);
+// Dev-only UI switcher: peek the built-in auto-UI against the game's chosen UI
+// (handled inside GameShell, gated to dev builds; no effect in production).
+const showAutoUi = ref(false);
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
@@ -145,6 +148,8 @@ function postToGame(message: Record<string, unknown>): void {
 function onIframeLoad(): void {
   if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat });
   if (lastGameState) postToGame(lastGameState);
+  // Re-assert the UI mode so a (re)mounted game iframe keeps the chosen view.
+  if (showAutoUi.value) postToGame({ type: 'dev-ui-mode', mode: 'auto' });
 }
 
 function onWindowMessage(event: MessageEvent): void {
@@ -174,6 +179,10 @@ function newGame(): void {
 }
 function toggleFollow(): void {
   wsSend({ type: 'follow', enabled: !followActive.value });
+}
+function toggleAutoUi(): void {
+  showAutoUi.value = !showAutoUi.value;
+  postToGame({ type: 'dev-ui-mode', mode: showAutoUi.value ? 'auto' : 'custom' });
 }
 
 function seatLabel(seat: SeatInfo): string {
@@ -280,6 +289,16 @@ onUnmounted(() => {
             <span class="dev-chrome__badge">seat {{ mySeat }}</span>
           </div>
           <div class="dev-chrome__bar-actions">
+            <button
+              type="button"
+              class="btn"
+              :class="{ 'btn--on': showAutoUi }"
+              :aria-pressed="showAutoUi"
+              title="Dev only — peek the built-in auto-UI against this game's UI. Production builds ship the chosen UI only."
+              @click="toggleAutoUi"
+            >
+              {{ showAutoUi ? 'Showing auto-UI' : 'Show auto-UI' }}
+            </button>
             <button
               type="button"
               class="btn"

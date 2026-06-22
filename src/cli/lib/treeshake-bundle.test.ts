@@ -105,10 +105,34 @@ function writeFixtureFiles(dir: string, ui?: string): void {
  */
 async function buildFixtureUi(fixtureDir: string): Promise<string> {
   const outDir = join(fixtureDir, 'dist', 'ui');
+  // This build runs inside vitest, whose ambient NODE_ENV=test drives Vite's
+  // `isProduction` (and thus `import.meta.env.DEV`) regardless of the `mode`
+  // option below. Pin NODE_ENV=production for the duration of the build so it
+  // faithfully matches `boardsmith build` (dev-only branches fold away). Restore
+  // afterward so the rest of the test run is unaffected.
+  const prevNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
   await viteBuild({
     // Skip reading the fixture's vite.config.ts — its @vitejs/plugin-vue dep is
     // not installed in the fixture directory.
     configFile: false,
+    // Match real `boardsmith build`: a production build so `import.meta.env.DEV`
+    // is statically `false` and Vue compiles in production mode. Without this,
+    // dev-only branches gated on `import.meta.env.DEV` (e.g. GameShell's auto-UI
+    // peek) stay live and the dead-code import is not tree-shaken — a false
+    // positive that does not reflect what `boardsmith build` ships.
+    //
+    // `process.env.NODE_ENV` is pinned because this build runs INSIDE vitest,
+    // whose ambient `NODE_ENV=test` would otherwise leak in and force Vue's dev
+    // build (and keep the dev-only peek live). Pinning it makes the build
+    // faithfully production — matching what a real `boardsmith build` produces.
+    mode: 'production',
+    define: {
+      'import.meta.env.DEV': 'false',
+      'import.meta.env.PROD': 'true',
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    },
     root: fixtureDir,
     base: './',
     plugins: [vue()],
@@ -139,6 +163,10 @@ async function buildFixtureUi(fixtureDir: string): Promise<string> {
     logLevel: 'silent',
   });
   return outDir;
+  } finally {
+    if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNodeEnv;
+  }
 }
 
 // ---------------------------------------------------------------------------
