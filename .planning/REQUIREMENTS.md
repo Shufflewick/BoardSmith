@@ -33,7 +33,7 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 - [x] **PRESENT-03**: The auto-UI reads the overlay for visuals beyond defaults; custom UIs supply their own; engine elements carry no value-bearing `$`-presentation props (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected — ownership stays on `.player`).
 
 ### Shippable Peer & Single-UI Export (SHIP)
-- [ ] **SHIP-01**: The auto-UI is a selectable, shippable production UI (a fine choice for simple games), not merely a dev/debug panel.
+- [x] **SHIP-01**: The auto-UI is a selectable, shippable production UI (a fine choice for simple games), not merely a dev/debug panel.
 - [x] **SHIP-02**: A production build emits a single UI — removing the scaffold's static `import { AutoUI }` lets ordinary tree-shaking drop unselected UIs (no registry/`rollupOptions.input` required for this).
 - [x] **SHIP-03**: The scaffold generates a game that opens in its chosen UI with the custom-UI slot empty/ready — no split-screen "Custom vs Auto-Generated" comparison.
 
@@ -79,7 +79,7 @@ Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.p
 | PRESENT-01 | Phase 94 | Complete |
 | PRESENT-02 | Phase 94 | Pending |
 | PRESENT-03 | Phase 94 | Complete |
-| SHIP-01 | Phase 95 | Pending |
+| SHIP-01 | Phase 95 | Complete |
 | SHIP-02 | Phase 95 | Complete |
 | SHIP-03 | Phase 95 | Complete |
 | MIGRATE-01 | Phase 96 | Pending |
