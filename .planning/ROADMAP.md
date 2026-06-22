@@ -14,7 +14,7 @@
 - [x] **Phase 92: Piece & Grid Rendering Fixes** — Pieces render with images/labels; labeled-token fallback for no-image pieces; grid boards size from declared coordinates; hardcoded 8×8 fallback removed. (completed 2026-06-21)
 - [x] **Phase 93: Renderer Rebuild** — Replace `AutoElement.vue` + `AutoGameBoard.vue` with a ranked-tester dispatcher, archetype templates (grid-board/card/tableau), closed-form grid/hex layout, and animation event wiring — reusing the interaction substrate unchanged. (completed 2026-06-21)
 - [x] **Phase 94: Interaction, Presentation & Playability Gate** — Wire board-centric interaction (suppressible ActionPanel, multi-ref highlight, protocol extension), implement the per-UI presentation overlay, then prove Hex + Go Fish + Checkers are playable end-to-end in the browser. (completed 2026-06-22; playability gate closed via inserted Phase 94.1)
-- [ ] **Phase 95: Ship & Reframe** — Auto-UI as a shippable production peer; single-UI production export via static-import removal; scaffold reframed away from split-screen.
+- [x] **Phase 95: Ship & Reframe** — Auto-UI as a shippable production peer; single-UI production export via static-import removal; scaffold reframed away from split-screen. (completed 2026-06-22)
 - [ ] **Phase 96: Migration & Cleanup** — Migrate all 9 `~/BoardSmithGames/` games + MERC canary verification; delete old renderer + scaffold; docs updated; `npm run audit` clean.
 
 ---
@@ -123,7 +123,7 @@
 - [x] 95-01-PLAN.md — Single-UI scaffold (App.vue/boardsmith.json/stub) + scaffold tests + validate ui field
 - [x] 95-02-PLAN.md — Reframe docs + /design-game slash command away from debug/split-screen framing
 - [x] 95-03-PLAN.md — Tree-shaking bundle proof (custom-UI build excludes AutoRenderer; auto control)
-- [ ] 95-04-PLAN.md — Browser human-verify: fresh scaffold opens single-UI and is playable
+- [x] 95-04-PLAN.md — Browser human-verify: fresh scaffold opens single-UI and is playable
 **UI hint**: yes
 
 ---
@@ -152,7 +152,7 @@
 | 93. Renderer Rebuild | 7/7 | Complete    | 2026-06-21 |
 | 94. Interaction, Presentation & Playability Gate | 5/6 | In Progress|  |
 | 94.1 Auto-UI Interaction Completion | 5/5 | Complete   | 2026-06-22 |
-| 95. Ship & Reframe | 3/4 | In Progress|  |
+| 95. Ship & Reframe | 4/4 | Complete   | 2026-06-22 |
 | 96. Migration & Cleanup | 0/? | Not started | - |
 
 ---
