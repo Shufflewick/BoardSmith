@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Dynamic Auto-UI
 status: executing
-stopped_at: "PAUSED: Phase 94 delivered refs[]/overlay/PRESENT-02 security/render/Hex-playable; Go Fish+Checkers playability gates split to inserted Phase 94.1 (interaction not converging without component test infra). main green at e46d450."
-last_updated: "2026-06-22T18:17:31.998Z"
+stopped_at: "All v3.1 phases complete (91-96 incl. inserted 94.1). Phase 96: 8 games browser-verified single-UI + playable (3 migrated off split-screen), MERC canary 738/7 green, docs updated, audit reframed. main 927/927 green. Ready for milestone lifecycle (audit → complete → cleanup)."
+last_updated: "2026-06-22T19:00:00.000Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 7
   total_plans: 27
-  completed_plans: 25
-  percent: 57
+  completed_plans: 27
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-20)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 96 — migration-cleanup (cross-repo)
+**Current focus:** v3.1 milestone lifecycle (audit → complete → cleanup)
 
 ## Current Position
 
-Phase: 95 (ship-reframe) — COMPLETE & VERIFIED
-Plan: 4 of 4 complete
-Status: Phase 95 done (SHIP-01/02/03 verified; fixed a pre-existing scaffold-construction crash found by the playability gate). 2 pre-existing src/ui test failures remain on main (useActionController followUp [known baseline]; useBoardActionBridge auto-start [stale test from pre-session commit 31a07f4]) — surfaced to user. Next: Phase 96.
+Phase: 96 (migration-cleanup) — COMPLETE & VERIFIED — all v3.1 phases done
+Plan: n/a (verification phase — no PLAN docs)
+Status: Phases 91-96 (+94.1) complete. 8 games browser-verified single-UI + playable; MERC 738/7; main 927/927. Ready for milestone audit/complete/cleanup.
 Last activity: 2026-06-22
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Milestones
 

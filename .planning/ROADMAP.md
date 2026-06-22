@@ -15,7 +15,7 @@
 - [x] **Phase 93: Renderer Rebuild** — Replace `AutoElement.vue` + `AutoGameBoard.vue` with a ranked-tester dispatcher, archetype templates (grid-board/card/tableau), closed-form grid/hex layout, and animation event wiring — reusing the interaction substrate unchanged. (completed 2026-06-21)
 - [x] **Phase 94: Interaction, Presentation & Playability Gate** — Wire board-centric interaction (suppressible ActionPanel, multi-ref highlight, protocol extension), implement the per-UI presentation overlay, then prove Hex + Go Fish + Checkers are playable end-to-end in the browser. (completed 2026-06-22; playability gate closed via inserted Phase 94.1)
 - [x] **Phase 95: Ship & Reframe** — Auto-UI as a shippable production peer; single-UI production export via static-import removal; scaffold reframed away from split-screen. (completed 2026-06-22)
-- [ ] **Phase 96: Migration & Cleanup** — Migrate all 9 `~/BoardSmithGames/` games + MERC canary verification; delete old renderer + scaffold; docs updated; `npm run audit` clean.
+- [x] **Phase 96: Migration & Cleanup** — Migrate all `~/BoardSmithGames/` games (8) + MERC canary (738/7 green); old renderer + split-screen scaffold deleted (Ph 93/95); 3 split-screen games migrated to single-UI + all browser-verified playable; docs updated; audit reframed (no new dead code). (completed 2026-06-22)
 
 ---
 
