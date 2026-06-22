@@ -269,17 +269,60 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     }
   }
 
+  // ── Auto-start scheduling (turn-transition race fix) ─────────────────────────
+  //
+  // During a turn transition the available actions CHURN across async ticks —
+  // availableActions flickers e.g. [] → ["endTurn"] → ["move"] while isExecuting
+  // toggles (a sole no-selection action like endTurn auto-executes between, which
+  // is intended). tryAutoStartSingleAction used to be called DIRECTLY from all
+  // three watchers below, so it fired on EVERY transient tick: `move` would
+  // auto-start on a transient ["move"], then get torn down when availableActions
+  // momentarily excluded it — leaving a manual "Move" button (the bug).
+  //
+  // Fix: coalesce every auto-start request into ONE evaluation per flush, run on
+  // nextTick once the reactive state of the flush has SETTLED rather than on the
+  // transient churn. We AND the skipNoSelections flag across all callers that
+  // batched into this flush (see scheduleAutoStart) so a pure flow-transition does
+  // not auto-execute a no-selection action, while a real execution-complete still
+  // does.
+  let autoStartScheduled = false;
+  // AND-accumulator across the batched callers of the current flush. Starts true so
+  // the AND is identity until a skip=false caller participates.
+  let pendingSkipNoSelections = true;
+
+  function scheduleAutoStart(skipNoSelections: boolean): void {
+    // Logical-AND coalescing: a pure flow-transition (only the availableActions
+    // watcher, skip=true) stays skip=true and does NOT auto-execute a sole
+    // no-selection endTurn; when the isExecuting watcher (skip=false) participates —
+    // i.e. right after an execution completes — the AND yields false so a sole
+    // endTurn still auto-executes as before.
+    pendingSkipNoSelections = pendingSkipNoSelections && skipNoSelections;
+    if (autoStartScheduled) return;
+    autoStartScheduled = true;
+    void nextTick(() => {
+      autoStartScheduled = false;
+      const skip = pendingSkipNoSelections;
+      pendingSkipNoSelections = true; // reset accumulator for the next flush
+      tryAutoStartSingleAction(skip);
+    });
+  }
+
   // ── Watchers ─────────────────────────────────────────────────────────────────
 
   // Auto-start on initial render and when turn/actions change.
   watch([() => isMyTurn.value, actionsWithMetadata], () => {
-    tryAutoStartSingleAction();
+    scheduleAutoStart(false);
   }, { immediate: true });
 
   // Clear stale action state on flow transitions; retry auto-start.
   watch(() => availableActions.value, (actions, oldActions) => {
     let shouldClear = false;
-    if (currentAction.value && !actions.includes(currentAction.value)) shouldClear = true;
+    // Turn-transition race: an EMPTY availableActions is a transient
+    // "transitioning / waiting" state, NOT a signal that the current action is
+    // stale. Tearing down currentAction on a transient empty tick is exactly what
+    // killed a freshly auto-started `move`. Only clear when a NON-empty action set
+    // genuinely no longer contains the current action.
+    if (currentAction.value && actions.length > 0 && !actions.includes(currentAction.value)) shouldClear = true;
     if (oldActions && oldActions.length > 0 && actions.length > 0) {
       if (!actions.some(a => oldActions.includes(a))) shouldClear = true;
     }
@@ -292,12 +335,12 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         board.clear();
       }
     }
-    tryAutoStartSingleAction(/* skipNoSelections */ true);
+    scheduleAutoStart(/* skipNoSelections */ true);
   });
 
   // Retry auto-start when an execution completes (next action may auto-start).
   watch(isExecuting, (executing, wasExecuting) => {
-    if (wasExecuting && !executing) tryAutoStartSingleAction();
+    if (wasExecuting && !executing) scheduleAutoStart(false);
   });
 
   // Feed the board substrate's selectable elements + click callback for the

@@ -254,6 +254,123 @@ describe('Board + controller interaction integration', () => {
     expect(board.isHighlighted({ notation: 'a1' })).toBe(false);
   });
 
+  // ── Turn-transition race (Phase 94.1 auto-start churn) ──────────────────────
+
+  // Shared setup for the churn tests: a two-step `move` action plus a no-selection
+  // `endTurn` action. Mirrors the real Checkers turn where the lone playable action
+  // (`move`) should auto-start, but available actions CHURN across async ticks during
+  // a turn transition (availableActions flickers [] → ['endTurn'] → ['move']).
+  function setupChurn(initialActions: string[]) {
+    const isMyTurn = ref<boolean | undefined>(true);
+    const autoEndTurn = ref(true);
+    const availableActions = ref<string[]>(initialActions);
+    const actionMetadata = ref<Record<string, ActionMetadata>>({
+      move: checkersMoveAction,
+      endTurn: { name: 'endTurn', prompt: 'End Turn', selections: [] },
+    });
+    const sendAction = vi.fn().mockResolvedValue({ success: true });
+    const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) => {
+      if (selectionName === 'piece') return { success: true, validElements: [{ id: 42, display: 'b6' }] };
+      if (selectionName === 'destination') return { success: true, choices: simpleDestinationChoices };
+      return { success: false, error: `Unknown selection: ${selectionName}` };
+    });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoFill: false, autoExecute: false, fetchPickChoices,
+    });
+    const board = createBoardInteraction();
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions });
+    return { isMyTurn, autoEndTurn, availableActions, actionMetadata, sendAction, controller, board };
+  }
+
+  // ── Test RACE-1 ─────────────────────────────────────────────────────────────
+
+  it('RACE-1: turn-transition churn — sole move auto-starts and survives (not a manual button)', async () => {
+    // Reproduces the captured failing transition. currentAction starts null (the
+    // previous turn's action is gone); availableActions then churns through the
+    // transient ['endTurn'] before settling on the real sole action ['move'].
+    //
+    // RED before fix: `move` auto-starts on the transient ['move'] tick, then the
+    //   availableActions clear-watcher tears it down on a transient that excludes it,
+    //   leaving currentAction === null → a manual "Move" button appears.
+    // GREEN after fix: auto-start is coalesced onto the SETTLED state and a transient
+    //   empty list never tears down currentAction, so `move` survives.
+    const s = setupChurn([]);
+    await flush();
+
+    // Captured churn: [] → ['endTurn'] → ['move'] across async ticks.
+    s.availableActions.value = ['endTurn'];
+    await flush();
+    s.availableActions.value = ['move'];
+    await flush();
+    await flush(); // let everything settle
+
+    // The lone `move` action is auto-started and was NOT torn down by the churn.
+    expect(s.controller.currentAction.value).toBe('move');
+    expect(s.controller.currentPick.value?.name).toBe('piece');
+    expect(s.board.isSelectableElement({ id: 42 })).toBe(true);
+  });
+
+  // ── Test RACE-2 ─────────────────────────────────────────────────────────────
+
+  it('RACE-2: a transient empty availableActions does not tear down a started action', async () => {
+    // Part 2 of the fix in isolation. An empty availableActions means
+    // "transitioning / waiting", not "the current action is stale". Tearing
+    // currentAction down on a transient empty tick is exactly what killed a
+    // freshly auto-started `move`.
+    const s = setupChurn(['move']);
+    await flush();
+    expect(s.controller.currentAction.value).toBe('move'); // auto-started
+
+    // A transient empty tick arrives mid-turn.
+    // RED before fix: clear-watcher cancels currentAction (move not in []) → null.
+    // GREEN after fix: empty list is treated as transient, action preserved.
+    s.availableActions.value = [];
+    await flush();
+
+    expect(s.controller.currentAction.value).toBe('move');
+    expect(s.controller.currentPick.value?.name).toBe('piece');
+  });
+
+  // ── Test RACE-3 ─────────────────────────────────────────────────────────────
+
+  it('RACE-3: a sole no-selection endTurn still auto-executes (auto-advance not regressed)', async () => {
+    // Guards the intended auto-advance: when it becomes the player's turn and the
+    // only available action is a no-selection action, it must still auto-execute.
+    // Ensures the coalescing / skipNoSelections AND did not accidentally suppress
+    // no-selection auto-execute entirely.
+    const isMyTurn = ref<boolean | undefined>(false);
+    const autoEndTurn = ref(true);
+    const availableActions = ref<string[]>([]);
+    const actionMetadata = ref<Record<string, ActionMetadata>>({
+      endTurn: { name: 'endTurn', prompt: 'End Turn', selections: [] },
+    });
+    // Model the turn ending when endTurn executes, so auto-execute fires exactly
+    // once instead of re-triggering forever on a static state.
+    const sendAction = vi.fn(async (name: string) => {
+      if (name === 'endTurn') {
+        isMyTurn.value = false;
+        availableActions.value = [];
+      }
+      return { success: true };
+    });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoFill: false, autoExecute: false,
+      fetchPickChoices: vi.fn(async () => ({ success: false, error: 'n/a' })),
+    });
+    const board = createBoardInteraction();
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions });
+    await flush();
+
+    // It becomes my turn with a sole no-selection action available.
+    isMyTurn.value = true;
+    availableActions.value = ['endTurn'];
+    await flush();
+
+    expect(sendAction).toHaveBeenCalledWith('endTurn', {});
+  });
+
   // ── Test A3 ───────────────────────────────────────────────────────────────
 
   it('A3: Hex single-step placement — one board click selects+auto-executes (regression guard)', async () => {
