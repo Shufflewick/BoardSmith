@@ -226,8 +226,11 @@ const displayableArgs = computed(() => {
 const filteredChoices = computed(() => {
   if (!currentPick.value) return [];
 
-  // Get base choices from controller (handles repeating, dependsOn, filterBy)
-  let choices: ChoiceWithRefs[] = actionController.getCurrentChoices() as ChoiceWithRefs[];
+  // Get base choices from controller (handles repeating, dependsOn, filterBy).
+  // PIT OF SUCCESS: read the REACTIVE computed (currentChoices.value tracks snapshotVersion)
+  // rather than the bare getCurrentChoices() helper which does not. When async-fetched
+  // choices arrive, snapshotVersion++ marks currentChoices dirty → this computed re-runs.
+  let choices = (actionController.currentChoices.value as ChoiceWithRefs[]).slice();
 
   // ActionPanel-specific: Exclude choices that were already selected in previous choice selections
   // This handles sequential choice selections where user shouldn't pick the same thing twice
@@ -260,8 +263,10 @@ const filteredChoices = computed(() => {
 const filteredValidElements = computed(() => {
   if (!currentPick.value || (currentPick.value.type !== 'element' && currentPick.value.type !== 'elements')) return [];
 
-  // Get valid elements from controller cache
-  const validElements = actionController.getValidElements(currentPick.value);
+  // Get valid elements from controller cache.
+  // PIT OF SUCCESS: read the REACTIVE computed (validElements.value tracks snapshotVersion)
+  // rather than the non-reactive getValidElements() helper.
+  const validElements = actionController.validElements.value;
   if (validElements.length === 0) return [];
 
   // Get IDs of elements already selected in previous element/elements selections
