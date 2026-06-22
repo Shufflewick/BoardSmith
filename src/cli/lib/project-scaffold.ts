@@ -311,8 +311,12 @@ import { GameShell, AutoUI } from 'boardsmith/ui';
 ${sharedStyles}`;
   }
 
-  // Custom UI path: derive a component name from the filename
-  const componentName = ui.split('/').pop()?.replace(/\.vue$/, '') ?? 'GameUI';
+  // Custom UI path: derive a component name from the filename. Guard against an
+  // empty segment (e.g. a path ending in "/") — `??` would not catch "", which
+  // would emit an invalid `import  from '...'`. `boardsmith validate` rejects
+  // such a path up front; this is the generator-side safety net.
+  const derivedName = ui.split('/').pop()?.replace(/\.vue$/, '');
+  const componentName = derivedName && derivedName.length > 0 ? derivedName : 'GameUI';
   return `<script setup lang="ts">
 import { GameShell } from 'boardsmith/ui';
 import ${componentName} from '${ui}';

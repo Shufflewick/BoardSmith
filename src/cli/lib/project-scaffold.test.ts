@@ -49,6 +49,15 @@ describe('generateAppVue (ui: custom path)', () => {
     expect(out).not.toContain('board-section');
     expect(out).not.toContain('Auto-Generated UI');
   });
+
+  it('falls back to GameUI for a path with no filename segment (no empty import)', () => {
+    // A path ending in "/" yields an empty filename segment; the generator must
+    // not emit `import  from '...'`. (boardsmith validate rejects this up front.)
+    const out = generateAppVue({ ...config, ui: './ui/components/' });
+    expect(out).not.toMatch(/import\s+from/);
+    expect(out).not.toContain('<  ');
+    expect(out).toContain("import GameUI from './ui/components/'");
+  });
 });
 
 describe('generateBoardsmithJson', () => {

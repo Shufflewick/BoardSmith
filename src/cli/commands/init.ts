@@ -290,24 +290,27 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
 `;
 }
 
-function generateTestTs(pascal: string): string {
+export function generateTestTs(pascal: string): string {
   return `import { describe, it, expect } from 'vitest';
-import { ${pascal}Game, ${pascal}Player } from '../src/rules/game.js';
+import { ${pascal}Game } from '../src/rules/game.js';
+import { Card } from '../src/rules/elements.js';
 
+// The game builds the deck and deals opening hands in its constructor, so these
+// invariants hold immediately after construction — no setup()/start() needed.
 describe('${pascal}Game', () => {
-  it('should create a game with correct number of cards', () => {
+  it('builds a full 52-card deck', () => {
     const game = new ${pascal}Game({ playerCount: 2, seed: 'test' });
-    game.setup();
-    expect(game.deck.all().length).toBe(52);
+    // all(Card) counts cards everywhere — deck plus dealt hands.
+    expect(game.all(Card).length).toBe(52);
   });
 
-  it('should deal 5 cards to each player', () => {
+  it('deals 5 cards to each player and leaves the rest in the deck', () => {
     const game = new ${pascal}Game({ playerCount: 2, seed: 'test' });
-    game.setup();
-    game.start();
-    for (const player of game.all(${pascal}Player)) {
-      expect(player.hand.all().length).toBe(5);
+    expect(game.players.length).toBe(2);
+    for (const player of game.players) {
+      expect(player.hand.all(Card).length).toBe(5);
     }
+    expect(game.deck.all(Card).length).toBe(52 - game.players.length * 5);
   });
 });
 `;

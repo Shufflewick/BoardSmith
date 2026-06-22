@@ -108,10 +108,22 @@ async function validateMetadata(cwd: string): Promise<ValidationResult> {
       }
     }
 
-    // Optional "ui" field — must be "auto" or a relative path starting with "./"
+    // Optional "ui" field — must be "auto" or a relative path to a .vue file
+    // (e.g. "./ui/components/GameTable.vue"). The path must name a component
+    // file so the scaffold can derive a single static import; a bare directory
+    // path like "./ui/" would produce an invalid import in the generated App.vue.
     if (config.ui !== undefined) {
-      if (config.ui !== 'auto' && !String(config.ui).startsWith('./')) {
-        issues.push('"ui" must be "auto" or a relative path (e.g. "./ui/components/GameTable.vue")');
+      if (typeof config.ui !== 'string') {
+        issues.push('"ui" must be a string: "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
+      } else if (config.ui !== 'auto') {
+        const isRelativeVue =
+          config.ui.startsWith('./') &&
+          config.ui.endsWith('.vue') &&
+          // reject "./.vue" / a path with an empty filename segment
+          (config.ui.split('/').pop()?.replace(/\.vue$/, '').length ?? 0) > 0;
+        if (!isRelativeVue) {
+          issues.push('"ui" must be "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
+        }
       }
     }
 
