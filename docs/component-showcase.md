@@ -100,7 +100,7 @@ const dice = computed(() => {
 
 ## AutoUI
 
-Automatic UI generation for prototyping.
+Production-ready automatic game UI.
 
 ```vue
 <template>
@@ -113,9 +113,8 @@ Automatic UI generation for prototyping.
 ```
 
 Renders the entire game state as a tree of elements. Useful for:
-- Rapid prototyping
-- Debugging game state
-- Reference implementation
+- Shipping simple games as a complete, production-ready UI
+- Rapid prototyping and rules validation before investing in a custom UI
 
 ## Card Animations
 

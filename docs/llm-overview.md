@@ -10,7 +10,7 @@ BoardSmith is a TypeScript framework for building turn-based multiplayer board a
 - **Declarative flow system** - Define game structure with composable flow nodes
 - **Action builder API** - Fluent API for defining player actions with selections and validation
 - **Event-sourced commands** - All state mutations are tracked and replayable
-- **Automatic UI generation** - AutoUI can render any game without custom components
+- **Automatic UI generation** - AutoUI can render any game without custom components and can ship as the production UI for simple games
 - **MCTS AI** - Game-agnostic AI opponents using Monte-Carlo Tree Search
 - **Multiplayer networking** - WebSocket-based real-time game sessions
 

@@ -136,7 +136,7 @@ function onSquareClick(squareId: number) {
 
 ### AutoUI
 
-Automatic UI generation from game state. Useful for prototyping or as a reference implementation.
+Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
 
 ```vue
 <template>
@@ -156,6 +156,7 @@ The auto-generated UI includes:
 - **AutoGameBoard**: Renders the game element tree
 - **AutoElement**: Renders individual elements based on type
 - **ActionPanel**: Displays available actions with selection UI
+- Ships as your production UI for simple games — no custom UI required
 
 ### DebugPanel
 

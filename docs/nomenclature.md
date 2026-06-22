@@ -413,12 +413,12 @@ Terms for the user interface layer.
 
 ### AutoUI
 
-**Definition:** Auto-generated game interface that renders any game without custom UI code. Useful for prototyping and as a reference implementation.
+**Definition:** Auto-generated game interface that renders any game without custom UI code. A valid production choice for simple games, and a solid starting point before building a custom UI.
 
 **In Code:** `AutoUI` Vue component from `boardsmith/ui`
 **Related Terms:** GameShell, GameTable, Element
 **Usage:**
-- "Use AutoUI to test rules before building custom UI"
+- "Use AutoUI to ship simple games or build rules before investing in a custom UI"
 - "AutoUI displays the element tree automatically"
 
 ---
