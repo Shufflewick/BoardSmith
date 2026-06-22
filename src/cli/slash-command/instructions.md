@@ -397,14 +397,14 @@ Create minimal playable game matching interview requirements
 3. Generate flow.ts with turn structure
 4. Generate actions.ts with game actions
 5. Generate index.ts with game definition
-6. **Customize GameTable.vue for the game type (dice/cards/board)**
+6. **Optionally customize GameTable.vue for a bespoke UI (not required — AutoUI ships by default)**
 7. Verify compilation with tsc --noEmit
 
 ## Success
 - Game compiles
 - Can run `npx boardsmith dev`
 - Basic turn loop works
-- **Custom UI shows actual game elements (not JSON)**
+- **AutoUI renders the game (or custom UI if GameTable.vue has been filled in)**
 ```
 
 ---
@@ -695,11 +695,11 @@ export const gameDefinition = {
 };
 ```
 
-### GameTable.vue Generation (REQUIRED)
+### GameTable.vue Generation (Optional Custom UI)
 
 **READ FIRST:** `docs/custom-ui-guide.md` and `docs/ui-components.md`
 
-**You MUST customize GameTable.vue to show actual game elements.** Never leave the JSON dump placeholder. The Custom UI should visually represent the game state.
+**The scaffold opens in AutoUI and is immediately playable.** AutoUI is a valid shipping choice for simple games — no custom UI required. If you want a bespoke visual interface, fill in `GameTable.vue` and set `"ui"` in `boardsmith.json` to activate it.
 
 **Use aspect templates:** The UI component from each detected aspect (read in Step 3) provides the base code. Combine UI components from multiple aspects as needed.
 
@@ -1024,20 +1024,21 @@ Based on the **detected aspects** from Phase 2B:
 4. Leave `isFinished()` returning false (we'll add win conditions later)
 5. Leave `getWinners()` returning [] (we'll add scoring later)
 
-### Step 4: Customize GameTable.vue (REQUIRED)
+### Step 4: Custom UI (Optional On-Ramp)
 
-**DO NOT SKIP THIS STEP.** The scaffold creates a placeholder UI. You MUST replace it with a custom UI that shows actual game elements.
+**The scaffold is immediately playable via AutoUI — you can skip this step** if AutoUI is sufficient for the game. AutoUI ships as a production UI for simple games.
 
-1. Read the GameTable.vue template above that matches the game type (dice/cards/board)
-2. Replace the entire content of `src/ui/components/GameTable.vue` with the appropriate template
+**To build a custom UI:**
+
+1. Read the GameTable.vue template below that matches the game type (dice/cards/board)
+2. Replace the content of `src/ui/components/GameTable.vue` with the appropriate template
 3. Adjust the template to match your game's specific elements and actions
+4. In `boardsmith.json`, set `"ui": "./ui/components/GameTable.vue"` to activate the custom UI
 
-**Verification:** After customizing, the Custom UI panel should show:
+**Verification (only if you implemented a custom UI):** After customizing, run `boardsmith dev` and confirm the game renders your custom UI:
 - For dice games: Actual 3D dice (not JSON)
 - For card games: Visual cards in hands (not JSON)
 - For board games: A grid or board layout (not JSON)
-
-If you see JSON in the Custom UI, you have NOT completed this step.
 
 ### UI Simplicity Rules
 
