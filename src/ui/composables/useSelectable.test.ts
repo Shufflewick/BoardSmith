@@ -34,93 +34,93 @@ describe('useSelectable (element mode)', () => {
 
   it('calls triggerElementSelect once on Enter', () => {
     const bi = makeMockInteraction();
-    const { handleKeydown } = useSelectable(
+    const { onKeydown } = useSelectable(
       () => ({ id: 1 }),
       bi as BoardInteraction,
       computed(() => true),
       computed(() => false),
     );
-    handleKeydown(makeKeyEvent('Enter'));
+    onKeydown(makeKeyEvent('Enter'));
     expect(bi.triggerElementSelect).toHaveBeenCalledTimes(1);
     expect(bi.triggerElementSelect).toHaveBeenCalledWith({ id: 1 });
   });
 
   it('calls triggerElementSelect once on Space', () => {
     const bi = makeMockInteraction();
-    const { handleKeydown } = useSelectable(
+    const { onKeydown } = useSelectable(
       () => ({ id: 2 }),
       bi as BoardInteraction,
       computed(() => true),
       computed(() => false),
     );
-    handleKeydown(makeKeyEvent(' '));
+    onKeydown(makeKeyEvent(' '));
     expect(bi.triggerElementSelect).toHaveBeenCalledTimes(1);
     expect(bi.triggerElementSelect).toHaveBeenCalledWith({ id: 2 });
   });
 
   it('calls triggerElementSelect once on click', () => {
     const bi = makeMockInteraction();
-    const { handleClick } = useSelectable(
+    const { onClick } = useSelectable(
       () => ({ id: 3 }),
       bi as BoardInteraction,
       computed(() => true),
       computed(() => false),
     );
-    handleClick();
+    onClick();
     expect(bi.triggerElementSelect).toHaveBeenCalledTimes(1);
     expect(bi.triggerElementSelect).toHaveBeenCalledWith({ id: 3 });
   });
 
   it('does not call triggerElementSelect when isDisabled is true', () => {
     const bi = makeMockInteraction();
-    const { handleKeydown, handleClick } = useSelectable(
+    const { onKeydown, onClick } = useSelectable(
       () => ({ id: 4 }),
       bi as BoardInteraction,
       computed(() => true),
       computed(() => true),
     );
-    handleKeydown(makeKeyEvent('Enter'));
-    handleKeydown(makeKeyEvent(' '));
-    handleClick();
+    onKeydown(makeKeyEvent('Enter'));
+    onKeydown(makeKeyEvent(' '));
+    onClick();
     expect(bi.triggerElementSelect).not.toHaveBeenCalled();
   });
 
   it('does not call triggerElementSelect when isActionSelectable is false', () => {
     const bi = makeMockInteraction();
-    const { handleKeydown, handleClick } = useSelectable(
+    const { onKeydown, onClick } = useSelectable(
       () => ({ id: 5 }),
       bi as BoardInteraction,
       computed(() => false),
       computed(() => false),
     );
-    handleKeydown(makeKeyEvent('Enter'));
-    handleKeydown(makeKeyEvent(' '));
-    handleClick();
+    onKeydown(makeKeyEvent('Enter'));
+    onKeydown(makeKeyEvent(' '));
+    onClick();
     expect(bi.triggerElementSelect).not.toHaveBeenCalled();
   });
 
   it('does not throw and does not call select when boardInteraction is null', () => {
-    const { handleKeydown, handleClick } = useSelectable(
+    const { onKeydown, onClick } = useSelectable(
       () => ({ id: 6 }),
       null,
       computed(() => true),
       computed(() => false),
     );
-    expect(() => handleKeydown(makeKeyEvent('Enter'))).not.toThrow();
-    expect(() => handleClick()).not.toThrow();
+    expect(() => onKeydown(makeKeyEvent('Enter'))).not.toThrow();
+    expect(() => onClick()).not.toThrow();
   });
 
   it('does not call triggerElementSelect for non-activation keys (e.g. Tab)', () => {
     const bi = makeMockInteraction();
-    const { handleKeydown } = useSelectable(
+    const { onKeydown } = useSelectable(
       () => ({ id: 7 }),
       bi as BoardInteraction,
       computed(() => true),
       computed(() => false),
     );
-    handleKeydown(makeKeyEvent('Tab'));
-    handleKeydown(makeKeyEvent('a'));
-    handleKeydown(makeKeyEvent('ArrowDown'));
+    onKeydown(makeKeyEvent('Tab'));
+    onKeydown(makeKeyEvent('a'));
+    onKeydown(makeKeyEvent('ArrowDown'));
     expect(bi.triggerElementSelect).not.toHaveBeenCalled();
   });
 

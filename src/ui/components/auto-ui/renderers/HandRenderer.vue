@@ -11,6 +11,7 @@
 
 import { computed, inject, type Ref, type ComputedRef } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
@@ -235,14 +236,15 @@ const frontRowCards = computed(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Click handler for whole-hand action-selectable
+// useSelectable — whole-hand action-selectable (A11Y-01)
+// Provides click + keyboard (Enter/Space) activation for the hand container.
 // ---------------------------------------------------------------------------
-function handleClick(event: MouseEvent) {
-  event.stopPropagation();
-  if (!boardInteraction || !isActionSelectable.value) return;
-  if (isDisabled.value) return;
-  boardInteraction.triggerElementSelect(elementIdentity());
-}
+const { onClick: handleSelect, onKeydown, attrs: selectableAttrs } = useSelectable(
+  elementIdentity,
+  boardInteraction ?? null,
+  isActionSelectable,
+  isDisabled,
+);
 
 // Drop handler — hand zones are valid drop targets (Go Fish "ask" target, etc.)
 function handleDragOver(event: DragEvent) {
@@ -258,7 +260,8 @@ function handleDrop(event: DragEvent) {
   boardInteraction.triggerDrop(elementIdentity());
 }
 
-// Suppress unused warnings for injected values not used directly
+// Suppress unused warnings for injected values not used directly in script
+// (they drive CSS classes in the template)
 void isSelectable;
 void isSelected;
 void isBoardHighlighted;
@@ -267,6 +270,11 @@ void isBoardSelected;
 
 <template>
   <div
+    role="group"
+    :aria-label="`Your hand, ${childCountDisplay} cards`"
+    :tabindex="selectableAttrs.tabindex"
+    :aria-disabled="selectableAttrs['aria-disabled']"
+    :aria-selected="isSelected || undefined"
     :class="[
       'hand-container',
       {
@@ -281,7 +289,8 @@ void isBoardSelected;
     ]"
     :data-zone="element.name"
     :data-zone-id="element.id"
-    @click="handleClick"
+    @click="handleSelect"
+    @keydown="onKeydown"
     @dragover="handleDragOver"
     @drop="handleDrop"
   >
