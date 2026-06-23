@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide, toRef } from 'vue';
+import { applyTheme } from '../theme.js';
+import { consumeInitMessage } from './GameShellInit.js';
 // Dev-only auto-UI peek (see DevAutoUI below). Referenced ONLY under the
 // `isDevBuild` (`import.meta.env.DEV`) constant, so a production build constant-
 // folds the branch to `null`, leaving this import unreferenced and tree-shaken —
@@ -574,6 +576,12 @@ provide('presentation', toRef(props, 'presentation'));
 // Mount: in platform mode the host (ShufflewickPub in prod, the boardsmith dev
 // host locally) manages the session and drives everything via postMessage.
 onMounted(async () => {
+  // TOKEN-05: Install the Slate token base stylesheet once on mount. This is the
+  // single install point for the hosted chrome; it is idempotent so repeated
+  // mounts and HMR reloads are safe. A host-supplied theme override arrives later
+  // via the init postMessage and is applied by consumeInitMessage below.
+  applyTheme();
+
   if (platformMode.value) return;
 
   // A game ONLY runs through the production path: GameShell embedded in an
@@ -610,6 +618,10 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     if (data.type === 'init') {
       playerSeat.value = data.seat;
       currentScreen.value = 'game';
+      // TOKEN-05: consume any host-supplied theme override delivered at iframe init.
+      // consumeInitMessage calls applyTheme() which enforces the --bsg-* key
+      // allowlist (T-98-04) — no extra validation needed here.
+      consumeInitMessage(data, { applyTheme });
     }
 
     if (data.type === 'server_response') {
