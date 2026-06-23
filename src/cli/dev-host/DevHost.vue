@@ -297,6 +297,16 @@ function handleChromeClick(e: MouseEvent) {
   }
 }
 
+/** Resolve the display label for an option's default value. */
+function optionDefaultLabel(opt: { default?: unknown; choices?: Array<{ value: unknown; label?: string }> }): string {
+  if (opt.default === undefined || opt.default === null) return '—';
+  if (opt.choices) {
+    const match = opt.choices.find((c) => c.value === opt.default);
+    if (match) return match.label ?? String(match.value);
+  }
+  return String(opt.default);
+}
+
 /**
  * Switch to a different seat: send follow-disable if follow is active, then
  * leave the current seat and take the target. The host (multiplayer-host.ts)
@@ -308,16 +318,6 @@ function handleChromeClick(e: MouseEvent) {
  * have a specific seat they want to be in). We disable it automatically so the
  * dev is not surprised by immediate seat jumping after the switch.
  */
-/** Resolve the display label for an option's default value. */
-function optionDefaultLabel(opt: { default?: unknown; choices?: Array<{ value: unknown; label?: string }> }): string {
-  if (opt.default === undefined || opt.default === null) return '—';
-  if (opt.choices) {
-    const match = opt.choices.find((c) => c.value === opt.default);
-    if (match) return match.label ?? String(match.value);
-  }
-  return String(opt.default);
-}
-
 function switchSeat(target: number): void {
   if (target === mySeat.value) return;
   const targetInfo = seats.value.find((s) => s.seat === target);
