@@ -102,8 +102,9 @@ import { computed } from 'vue';
   padding-bottom: 10px;
   padding-left: max(12px, env(safe-area-inset-left));
   padding-right: max(12px, env(safe-area-inset-right));
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface);
+  border-bottom: 1px solid var(--bsg-line);
+  color: var(--bsg-ink);
   gap: 10px;
 }
 
@@ -117,9 +118,9 @@ import { computed } from 'vue';
 .game-header h1 {
   display: none;
   font-size: 1.3rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-family: var(--bsg-display);
+  color: var(--bsg-ink);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   margin: 0;
 }
 
@@ -132,12 +133,12 @@ import { computed } from 'vue';
 
 .game-code {
   font-size: 0.85rem;
-  color: #aaa;
+  color: var(--bsg-ink-2);
 }
 
 .game-code strong {
-  color: #00d9ff;
-  font-family: monospace;
+  color: var(--bsg-accent);
+  font-family: var(--bsg-mono);
 }
 
 .connection-badge {
@@ -147,9 +148,9 @@ import { computed } from 'vue';
   text-transform: uppercase;
 }
 
-.connection-badge.connected { background: #27ae60; }
-.connection-badge.connecting, .connection-badge.reconnecting { background: #f39c12; }
-.connection-badge.disconnected, .connection-badge.error { background: #e74c3c; }
+.connection-badge.connected { background: var(--bsg-ok); color: var(--bsg-ink); }
+.connection-badge.connecting, .connection-badge.reconnecting { background: var(--bsg-warn); color: var(--bsg-ink); }
+.connection-badge.disconnected, .connection-badge.error { background: var(--bsg-danger); color: var(--bsg-ink); }
 
 /* Zoom Control */
 .header-center {
@@ -163,7 +164,7 @@ import { computed } from 'vue';
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-field);
   padding: 4px 10px;
   border-radius: 16px;
 }
@@ -171,7 +172,7 @@ import { computed } from 'vue';
 .zoom-reset {
   background: none;
   border: none;
-  color: #00d9ff;
+  color: var(--bsg-accent);
   font-size: 0.75rem;
   font-weight: bold;
   cursor: pointer;
@@ -182,7 +183,7 @@ import { computed } from 'vue';
 }
 
 .zoom-reset:hover {
-  background: rgba(0, 217, 255, 0.2);
+  background: color-mix(in srgb, var(--bsg-accent) 20%, transparent);
 }
 
 .zoom-slider {
@@ -190,7 +191,7 @@ import { computed } from 'vue';
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bsg-line-2);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -201,7 +202,7 @@ import { computed } from 'vue';
   appearance: none;
   width: 14px;
   height: 14px;
-  background: #00d9ff;
+  background: var(--bsg-accent);
   border-radius: 50%;
   cursor: pointer;
   transition: transform 0.1s ease;
@@ -214,7 +215,7 @@ import { computed } from 'vue';
 .zoom-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  background: #00d9ff;
+  background: var(--bsg-accent);
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -225,7 +226,7 @@ import { computed } from 'vue';
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-field);
   padding: 4px 10px;
   border-radius: 16px;
   cursor: pointer;
@@ -238,7 +239,7 @@ import { computed } from 'vue';
   -webkit-appearance: none;
   width: 32px;
   height: 18px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bsg-line-2);
   border-radius: 9px;
   position: relative;
   cursor: pointer;
@@ -250,7 +251,7 @@ import { computed } from 'vue';
   position: absolute;
   width: 14px;
   height: 14px;
-  background: #fff;
+  background: var(--bsg-ink);
   border-radius: 50%;
   top: 2px;
   left: 2px;
@@ -258,7 +259,7 @@ import { computed } from 'vue';
 }
 
 .auto-end-turn-toggle input[type="checkbox"]:checked {
-  background: #00d9ff;
+  background: var(--bsg-accent);
 }
 
 .auto-end-turn-toggle input[type="checkbox"]:checked::before {
@@ -267,11 +268,11 @@ import { computed } from 'vue';
 
 .toggle-label {
   font-size: 0.75rem;
-  color: #aaa;
+  color: var(--bsg-ink-2);
 }
 
 .auto-end-turn-toggle:hover .toggle-label {
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 /* Desktop: Show header elements */
