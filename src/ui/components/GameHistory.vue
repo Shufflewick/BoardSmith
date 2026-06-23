@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 
 interface GameMessage {
   id: number;
@@ -36,13 +36,16 @@ const messagesContainer = ref<HTMLElement | null>(null);
 
 const processedMessages = ref<GameMessage[]>([]);
 let messageCounter = 0;
+// Tracks how many source messages have been processed. Never reset on clear —
+// that is the fix for the silent un-clear bug: the watcher always starts from
+// this index so pre-clear messages are never re-added when new ones arrive.
+let lastProcessedSourceIndex = 0;
 
 watch(
   () => props.messages,
   (newMessages) => {
-    const startIndex = processedMessages.value.length;
-    if (newMessages.length > startIndex) {
-      for (let i = startIndex; i < newMessages.length; i++) {
+    if (newMessages.length > lastProcessedSourceIndex) {
+      for (let i = lastProcessedSourceIndex; i < newMessages.length; i++) {
         const msg = newMessages[i];
         const text = typeof msg === 'string' ? msg : msg.text;
         const type = typeof msg === 'object' && msg.type
@@ -58,6 +61,7 @@ watch(
           });
         }
       }
+      lastProcessedSourceIndex = newMessages.length;
 
       nextTick(() => {
         if (messagesContainer.value) {
@@ -90,7 +94,9 @@ function formatTime(date: Date): string {
 
 function clearHistory() {
   processedMessages.value = [];
-  messageCounter = 0;
+  // Do NOT reset lastProcessedSourceIndex — resetting it would cause the
+  // watcher to re-add all pre-clear messages on the next state update.
+  // messageCounter stays monotonic so message IDs remain unique after clear.
 }
 
 const copyStatus = ref<'idle' | 'copied'>('idle');
@@ -123,6 +129,13 @@ async function copyHistory() {
     console.error('Failed to copy history:', err);
   }
 }
+
+// Exposed so GameShell (on behalf of DebugPanel) can drive copy/clear and
+// disable the Copy button when history is empty. The timestamped messages
+// remain owned here — only the trigger moves to DebugPanel (single source
+// of truth, DEV-06).
+const hasMessages = computed(() => processedMessages.value.length > 0);
+defineExpose({ clearHistory, copyHistory, hasMessages });
 </script>
 
 <template>
@@ -166,20 +179,6 @@ async function copyHistory() {
         <span class="header-icon">{{ isCollapsed ? '►' : '◄' }}</span>
         <span v-if="!isCollapsed" class="header-title">Game History</span>
         <span v-if="!isCollapsed" class="message-count">({{ processedMessages.length }})</span>
-      </div>
-      <div v-if="!isCollapsed" class="header-buttons">
-        <button
-          @click.stop="copyHistory"
-          class="header-btn copy-btn"
-          :class="{ copied: copyStatus === 'copied' }"
-          :disabled="processedMessages.length === 0"
-          :title="copyStatus === 'copied' ? 'Copied!' : 'Copy history to clipboard'"
-        >
-          {{ copyStatus === 'copied' ? 'Copied!' : 'Copy' }}
-        </button>
-        <button @click.stop="clearHistory" class="header-btn clear-btn" title="Clear history">
-          Clear
-        </button>
       </div>
     </div>
 
@@ -377,41 +376,6 @@ async function copyHistory() {
   font-size: 12px;
 }
 
-.header-buttons {
-  display: flex;
-  gap: 6px;
-}
-
-.header-btn {
-  padding: 3px 8px;
-  background: transparent;
-  border: 1px solid var(--bsg-line-2);
-  border-radius: 4px;
-  color: var(--bsg-ink-2);
-  font-size: 10px;
-  cursor: pointer;
-  transition: all var(--bsg-dur-fast);
-}
-
-.header-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.copy-btn:hover:not(:disabled) {
-  border-color: var(--bsg-accent);
-  color: var(--bsg-accent);
-}
-
-.copy-btn.copied {
-  border-color: var(--bsg-ok);
-  color: var(--bsg-ok);
-}
-
-.clear-btn:hover {
-  border-color: var(--bsg-danger);
-  color: var(--bsg-danger);
-}
 
 .history-content {
   flex: 1;

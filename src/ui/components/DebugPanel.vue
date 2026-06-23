@@ -235,6 +235,8 @@ const emit = defineEmits<{
   'update:expanded': [value: boolean];
   'time-travel': [state: any | null, actionIndex: number | null, diff: ElementDiff | null];
   'highlight-element': [elementId: number | null];
+  'copy-history': [];
+  'clear-history': [];
 }>();
 
 // All debug data/edits flow through the host bridge that GameShell provides in
@@ -1997,6 +1999,21 @@ const displayedState = computed(() => {
             <p class="hint">
               {{ restartConfirming ? 'Click again to confirm — auto-cancels in 5 s' : 'Start a new game (current progress will be lost)' }}
             </p>
+          </div>
+
+          <!-- Game History — copy/clear the player-visible message log.
+               Buttons emit events; GameShell drives the live GameHistory ref. -->
+          <div class="action-group">
+            <h4>Game history</h4>
+            <div class="player-buttons">
+              <button class="debug-btn small" @click="emit('copy-history')">
+                Copy
+              </button>
+              <button class="debug-btn small danger" @click="emit('clear-history')">
+                Clear
+              </button>
+            </div>
+            <p class="hint">Copy or clear the player-facing game message log</p>
           </div>
 
           <!-- Settings -->
