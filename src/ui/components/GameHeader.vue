@@ -114,7 +114,7 @@ import { computed } from 'vue';
 .game-header h1 {
   display: none;
   font-size: 1.3rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
+  background: linear-gradient(90deg, var(--bsg-accent), var(--bsg-ok));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin: 0;
@@ -129,11 +129,11 @@ import { computed } from 'vue';
 
 .game-code {
   font-size: 0.85rem;
-  color: #aaa;
+  color: var(--bsg-ink-2);
 }
 
 .game-code strong {
-  color: #00d9ff;
+  color: var(--bsg-accent);
   font-family: monospace;
 }
 
@@ -144,9 +144,9 @@ import { computed } from 'vue';
   text-transform: uppercase;
 }
 
-.connection-badge.connected { background: #27ae60; }
-.connection-badge.connecting, .connection-badge.reconnecting { background: #f39c12; }
-.connection-badge.disconnected, .connection-badge.error { background: #e74c3c; }
+.connection-badge.connected { background: var(--bsg-ok); }
+.connection-badge.connecting, .connection-badge.reconnecting { background: var(--bsg-warn); }
+.connection-badge.disconnected, .connection-badge.error { background: var(--bsg-danger); }
 
 /* Zoom Control */
 .header-center {
@@ -168,7 +168,7 @@ import { computed } from 'vue';
 .zoom-reset {
   background: none;
   border: none;
-  color: #00d9ff;
+  color: var(--bsg-accent);
   font-size: 0.75rem;
   font-weight: bold;
   cursor: pointer;
@@ -189,7 +189,6 @@ import { computed } from 'vue';
   appearance: none;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
-  outline: none;
   cursor: pointer;
 }
 
@@ -198,7 +197,7 @@ import { computed } from 'vue';
   appearance: none;
   width: 14px;
   height: 14px;
-  background: #00d9ff;
+  background: var(--bsg-accent);
   border-radius: 50%;
   cursor: pointer;
   transition: transform 0.1s ease;
@@ -211,7 +210,7 @@ import { computed } from 'vue';
 .zoom-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  background: #00d9ff;
+  background: var(--bsg-accent);
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -247,7 +246,7 @@ import { computed } from 'vue';
   position: absolute;
   width: 14px;
   height: 14px;
-  background: #fff;
+  background: var(--bsg-accent-ink);
   border-radius: 50%;
   top: 2px;
   left: 2px;
@@ -255,7 +254,7 @@ import { computed } from 'vue';
 }
 
 .auto-end-turn-toggle input[type="checkbox"]:checked {
-  background: #00d9ff;
+  background: var(--bsg-accent);
 }
 
 .auto-end-turn-toggle input[type="checkbox"]:checked::before {
@@ -264,11 +263,11 @@ import { computed } from 'vue';
 
 .toggle-label {
   font-size: 0.75rem;
-  color: #aaa;
+  color: var(--bsg-ink-2);
 }
 
 .auto-end-turn-toggle:hover .toggle-label {
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 /* Desktop: Show header elements */

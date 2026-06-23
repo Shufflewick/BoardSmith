@@ -1228,6 +1228,12 @@ if ((import.meta as any).hot) {
 
 <template>
   <div class="game-shell" :class="{ 'game-shell--platform': platformMode }">
+    <!-- Skip link: visually hidden until focused; .sr-skip in global style block -->
+    <a class="sr-skip" href="#main">Skip to game board</a>
+
+    <!-- Visually-hidden page title for AT landmarks -->
+    <h1 class="vh">BoardSmith — game board</h1>
+
     <!-- Visually-hidden live regions — always mounted, never v-if (Pitfall 2).
          Written only from watchers with immediate:false so ATs register the
          regions before any content appears. -->
@@ -1314,7 +1320,7 @@ if ((import.meta as any).hot) {
         </aside>
 
         <!-- Center: Game Board -->
-        <main class="game-shell__content">
+        <main id="main" class="game-shell__content">
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
               <!--
                 Game Board Slot Props:
@@ -1398,12 +1404,77 @@ if ((import.meta as any).hot) {
   </div>
 </template>
 
+<!-- Global (non-scoped) a11y primitives owned by GameShell — covers all
+     descendant components including those in slots and child trees. -->
+<style>
+/* ─── Visible focus ring ────────────────────────────────────────────────────
+   Replaces UA default outline with a token-colored ring that satisfies WCAG
+   2.2 Focus Appearance (3:1 minimum contrast). Non-scoped so it applies
+   everywhere — child components no longer need per-element outline rules.
+   Source: mockup boardsmith-chrome.html:59, 101-RESEARCH.md A11Y-06. */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bsg-bg), 0 0 0 4px var(--bsg-accent);
+  border-radius: var(--bsg-r-sm);
+}
+
+/* ─── Reduced-motion block ───────────────────────────────────────────────────
+   Halts all animations/transitions globally when the user has requested it.
+   Covers pulse/slide/breathe/fly animations in all renderers.
+   Source: 101-RESEARCH.md A11Y-08:515-525. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ─── Visually-hidden utility ────────────────────────────────────────────────
+   Hides content visually while keeping it in the accessibility tree.
+   MUST NOT use display:none (that removes it from the a11y tree entirely).
+   Used for live regions, skip link target h1, and other SR-only text.
+   Source: mockup boardsmith-chrome.html:60. */
+.vh {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─── Skip link ──────────────────────────────────────────────────────────────
+   Visually hidden until focused; jumps keyboard users to #main bypassing
+   repeated header chrome. Source: mockup boardsmith-chrome.html:61-64,
+   101-RESEARCH.md A11Y-10:589-594. */
+.sr-skip {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  background: var(--bsg-surface);
+  color: var(--bsg-ink);
+  border: 1px solid var(--bsg-line-2);
+  border-radius: var(--bsg-r-sm);
+  padding: 10px 14px;
+  font-weight: 700;
+  transform: translateY(-160%);
+  transition: transform .15s;
+  text-decoration: none;
+}
+
+.sr-skip:focus {
+  transform: none;
+}
+</style>
+
 <style scoped>
 .game-shell {
   min-height: 100vh;
   font-family: system-ui, -apple-system, sans-serif;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  color: #fff;
+  background: var(--bsg-bg);
+  color: var(--bsg-ink);
 }
 
 /* Platform mode: embedded in host iframe, no outer chrome */
@@ -1533,8 +1604,8 @@ if ((import.meta as any).hot) {
 /* Time travel banner */
 .time-travel-banner {
   background: rgba(245, 158, 11, 0.2);
-  border: 1px solid #f59e0b;
-  color: #f59e0b;
+  border: 1px solid var(--bsg-warn);
+  color: var(--bsg-warn);
   padding: 8px 16px;
   border-radius: 6px;
   margin-top: 8px;
@@ -1554,7 +1625,7 @@ if ((import.meta as any).hot) {
   left: 50%;
   transform: translateX(-50%);
   background: rgba(231, 76, 60, 0.9);
-  border: 1px solid #e74c3c;
+  border: 1px solid var(--bsg-danger);
   padding: 12px 24px;
   border-radius: 8px;
   z-index: 150;
@@ -1566,7 +1637,7 @@ if ((import.meta as any).hot) {
   justify-content: center;
   height: 100%;
   min-height: 300px;
-  color: #666;
+  color: var(--bsg-ink-2);
   background: rgba(255, 255, 255, 0.02);
   border-radius: 12px;
 }
