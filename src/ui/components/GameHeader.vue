@@ -148,9 +148,9 @@ import { computed } from 'vue';
   text-transform: uppercase;
 }
 
-.connection-badge.connected { background: var(--bsg-ok); color: var(--bsg-ink); }
-.connection-badge.connecting, .connection-badge.reconnecting { background: var(--bsg-warn); color: var(--bsg-ink); }
-.connection-badge.disconnected, .connection-badge.error { background: var(--bsg-danger); color: var(--bsg-ink); }
+.connection-badge.connected { background: var(--bsg-ok); color: var(--bsg-accent-ink); }
+.connection-badge.connecting, .connection-badge.reconnecting { background: var(--bsg-warn); color: var(--bsg-accent-ink); }
+.connection-badge.disconnected, .connection-badge.error { background: var(--bsg-danger); color: var(--bsg-accent-ink); }
 
 /* Zoom Control */
 .header-center {

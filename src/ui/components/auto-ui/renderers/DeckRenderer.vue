@@ -209,6 +209,14 @@ function handleClick(event: MouseEvent) {
   background: var(--bsg-selected);
 }
 
+/* Selected fill is solid accent — pin label/count ink to accent-ink so text stays legible in both themes */
+.deck-container.is-selected .deck-label,
+.deck-container.is-selected .deck-count,
+.deck-container.is-board-selected .deck-label,
+.deck-container.is-board-selected .deck-count {
+  color: var(--bsg-accent-ink);
+}
+
 /* Disabled state */
 .deck-container.is-disabled {
   opacity: 0.35;

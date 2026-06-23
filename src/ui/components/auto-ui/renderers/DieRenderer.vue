@@ -154,6 +154,11 @@ const displayLabel = computed(() => props.element.name || props.element.classNam
   box-shadow: var(--bsg-ring);
 }
 
+/* Selected fill is solid accent — pin label ink to accent-ink so the name stays legible in both themes */
+.die-container.is-board-selected .die-label {
+  color: var(--bsg-accent-ink);
+}
+
 /* Disabled state */
 .die-container.is-disabled {
   opacity: 0.35;

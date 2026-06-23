@@ -102,6 +102,9 @@ const DARK = {
   ink:       extractHex(DARK_BLOCK, '--bsg-ink'),
   accent:    extractHex(DARK_BLOCK, '--bsg-accent'),
   accentInk: extractHex(DARK_BLOCK, '--bsg-accent-ink'),
+  ok:        extractHex(DARK_BLOCK, '--bsg-ok'),
+  warn:      extractHex(DARK_BLOCK, '--bsg-warn'),
+  danger:    extractHex(DARK_BLOCK, '--bsg-danger'),
 };
 
 const LIGHT = {
@@ -110,6 +113,9 @@ const LIGHT = {
   ink:       extractHex(LIGHT_BLOCK, '--bsg-ink'),
   accent:    extractHex(LIGHT_BLOCK, '--bsg-accent'),
   accentInk: extractHex(LIGHT_BLOCK, '--bsg-accent-ink'),
+  ok:        extractHex(LIGHT_BLOCK, '--bsg-ok'),
+  warn:      extractHex(LIGHT_BLOCK, '--bsg-warn'),
+  danger:    extractHex(LIGHT_BLOCK, '--bsg-danger'),
 };
 
 // ---------------------------------------------------------------------------
@@ -164,6 +170,20 @@ describe('Both-theme WCAG contrast — key surfaces', () => {
           `${name}: --bsg-accent ${tokens.accent} vs --bsg-accent-ink ${tokens.accentInk} = ${ratio.toFixed(2)}:1 (need ≥ 3:1)`,
         ).toBeGreaterThanOrEqual(3);
       });
+
+      // Status badges/toasts paint label text over solid --bsg-ok/--bsg-warn/--bsg-danger
+      // fills. Those status colors are mid-tone in BOTH schemes, so the only ink that stays
+      // legible across themes is --bsg-accent-ink (the dark-ink-on-color pairing used by
+      // Toast and the connection badge). Guards the CR-05 invisible-badge regression.
+      for (const status of ['ok', 'warn', 'danger'] as const) {
+        it(`status fill (--bsg-${status} / --bsg-accent-ink) ≥ 3:1 contrast`, () => {
+          const ratio = contrastRatio(tokens[status], tokens.accentInk);
+          expect(
+            ratio,
+            `${name}: --bsg-${status} ${tokens[status]} vs --bsg-accent-ink ${tokens.accentInk} = ${ratio.toFixed(2)}:1 (need ≥ 3:1)`,
+          ).toBeGreaterThanOrEqual(3);
+        });
+      }
     });
   }
 
@@ -222,6 +242,38 @@ describe('Atomic-pairing source guard — key-surface components', () => {
       it('references at least one surface/bg/accent background token', () => {
         expect(content).toMatch(/var\(--bsg-(bg|surface|accent)\b/);
       });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Selected-state label legibility guard (CR-01/02/03 regression)
+//
+// These renderers paint a SOLID accent fill (background: var(--bsg-selected),
+// which resolves to var(--bsg-accent)) on the whole container under the selected
+// state, with a text label directly on top. Near-white --bsg-ink/--bsg-ink-2 on
+// solid accent is the invisible-text trap (~1-2:1 in dark mode). The label must be
+// pinned to --bsg-accent-ink under the selected state to stay legible in both themes.
+// ---------------------------------------------------------------------------
+
+describe('Selected-state label legibility — solid-accent-fill renderers', () => {
+  const SELECTED_FILL_RENDERERS = [
+    { label: 'DeckRenderer.vue', file: resolve(__dir, 'components/auto-ui/renderers/DeckRenderer.vue') },
+    { label: 'DieRenderer.vue', file: resolve(__dir, 'components/auto-ui/renderers/DieRenderer.vue') },
+    { label: 'SpaceRenderer.vue', file: resolve(__dir, 'components/auto-ui/renderers/SpaceRenderer.vue') },
+  ] as const;
+
+  for (const { label, file } of SELECTED_FILL_RENDERERS) {
+    it(`${label} pins its selected-state label ink to --bsg-accent-ink`, () => {
+      const content = readFileSync(file, 'utf-8');
+      const styleMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/);
+      const styleContent = styleMatch ? styleMatch[1] : '';
+      // A selector scoping a label/count to the selected state must set accent-ink.
+      const re = /is-(?:board-)?selected\s+\.[\w-]*(?:label|count)[\s\S]*?color:\s*var\(--bsg-accent-ink\)/;
+      expect(
+        re.test(styleContent),
+        `${label}: expected a "...is-[board-]selected .*-label { color: var(--bsg-accent-ink) }" rule so the label stays legible on the solid accent fill`,
+      ).toBe(true);
     });
   }
 });

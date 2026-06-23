@@ -220,6 +220,12 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
   transform: scale(1.02);
 }
 
+/* Selected fill is solid accent — pin label/count ink to accent-ink so text stays legible in both themes */
+.space-container.is-board-selected .space-label,
+.space-container.is-board-selected .space-count {
+  color: var(--bsg-accent-ink);
+}
+
 .space-container.is-drop-target {
   background: var(--bsg-droptarget);
   outline: 2px dotted var(--bsg-accent-2);
