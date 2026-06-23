@@ -47,9 +47,18 @@ const ActionbarHarness = defineComponent({
   setup() {
     return {};
   },
-  // RED: starts empty so tests fail — updated in GREEN phase
+  // GREEN: mirrors the exact template conditions from GameShell.vue .actionbar
   template: `
     <div class="actionbar" role="region" aria-label="Actions">
+      <template v-if="isMyTurn || awaitingCount > 0">
+        <span class="turn">
+          <span class="pr">{{ boardPrompt ?? pickPrompt }}</span>
+        </span>
+        <span class="vh" aria-live="polite">{{ boardPrompt ?? pickPrompt }}</span>
+        <template v-if="!suppressActionPanel && !allAnchored">
+          <div class="action-panel-slot">action buttons</div>
+        </template>
+      </template>
     </div>
   `,
 });

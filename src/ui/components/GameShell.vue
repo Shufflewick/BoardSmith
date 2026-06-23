@@ -214,8 +214,11 @@ const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 const showUndo = ref(true); // Show undo button when undo is available
 
-// Actionbar element ref for ResizeObserver (IA-04) — wired in Task 2
+// Actionbar element ref + ResizeObserver for dock-height reservation (IA-04).
+// The observer sets --bsg-dock-h on the root element so .boardregion can
+// reserve exactly the measured dock height instead of a hardcoded 80px.
 const actionbarRef = ref<HTMLElement | null>(null);
+let dockObserver: ResizeObserver | null = null;
 
 // Time travel state (for viewing historical game states)
 const timeTravelState = ref<any>(null);
@@ -596,6 +599,16 @@ onMounted(async () => {
   // via the init postMessage and is applied by consumeInitMessage below.
   applyTheme();
 
+  // IA-04: Measure the actionbar height and publish it as --bsg-dock-h so the
+  // .boardregion can reserve exactly the right amount of padding at the bottom.
+  // A single observer on the actionbar element fires whenever it grows/shrinks
+  // (e.g. when action buttons appear/disappear or flex-wrap adds rows).
+  dockObserver = new ResizeObserver((entries) => {
+    const h = entries[0]?.borderBoxSize?.[0]?.blockSize ?? 0;
+    document.documentElement.style.setProperty('--bsg-dock-h', `${h}px`);
+  });
+  if (actionbarRef.value) dockObserver.observe(actionbarRef.value);
+
   if (platformMode.value) return;
 
   // A game ONLY runs through the production path: GameShell embedded in an
@@ -608,6 +621,7 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
+  dockObserver?.disconnect();
   disconnectFromLobby();
   if (platformMessageHandler) {
     window.removeEventListener('message', platformMessageHandler);
@@ -1439,8 +1453,51 @@ if ((import.meta as any).hot) {
       </div>
 
       <!-- Full-width actionbar: sibling of .stage; grows vertically (IA-02, IA-03, IA-04) -->
-      <!-- Content wired in Task 2 -->
-      <div class="actionbar" ref="actionbarRef" role="region" aria-label="Actions"></div>
+      <div class="actionbar" ref="actionbarRef" role="region" aria-label="Actions">
+        <!-- Dock: only render when player is actionable (IA-04) -->
+        <template v-if="isMyTurn || awaitingPlayerNames.length">
+          <!-- Turn strip: always visible while dock is shown — survives even when
+               every current pick is board-anchored (IA-02). Never a silent board. -->
+          <span class="turn">
+            <span
+              v-if="currentPlayerColor"
+              class="turn__swatch"
+              :style="{ background: currentPlayerColor }"
+              aria-hidden="true"
+            ></span>
+            <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
+          </span>
+          <!-- VH live region mirrors the prompt for screen readers -->
+          <span class="vh" aria-live="polite">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
+
+          <!-- Action buttons: suppressed ONLY when every pick is board-anchored (IA-03).
+               The .turn strip above is NOT inside this gate so the prompt survives. -->
+          <template v-if="!props.suppressActionPanel && !actionController.allCurrentChoicesAnchored.value">
+            <slot name="action-panel">
+              <ActionPanel
+                :available-actions="isViewingHistory ? [] : availableActions"
+                :action-metadata="isViewingHistory ? {} : actionMetadata"
+                :players="players"
+                :player-seat="playerSeat"
+                :is-my-turn="isMyTurn && !isViewingHistory"
+                :can-undo="canUndo && !isViewingHistory"
+                :auto-end-turn="autoEndTurn"
+                :show-undo="showUndo"
+                :messages="gameMessages"
+                :current-player-name="currentPlayerName"
+                :current-player-color="currentPlayerColor"
+                :awaiting-players="awaitingPlayerNames"
+                @undo="handleUndo"
+              />
+            </slot>
+            <!-- Time travel banner -->
+            <div v-if="isViewingHistory" class="time-travel-banner">
+              <span class="time-travel-icon">⏰</span>
+              Viewing historical state (action {{ timeTravelActionIndex }}) - Actions disabled
+            </div>
+          </template>
+        </template>
+      </div>
 
       <!-- Debug Panel: dev only. Renders inside the dev host iframe (platform
            mode + dev build); never in a deployed/production embed. -->
