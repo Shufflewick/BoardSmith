@@ -50,7 +50,11 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   3. The chrome follows OS light/dark by default, with a complete Slate light token set in addition to the dark set (TOKEN-04).
   4. `applyTheme()` is the sole theming knob: a host-supplied token override passed at iframe init re-skins the chrome without touching component code (TOKEN-05).
   5. A stylelint `color-no-hex` rule scoped to chrome/renderer `.vue` files fails CI when a raw hex literal is introduced (TOKEN-06).
-**Plans**: TBD
+**Plans**: 4 plans (2 waves)
+  - [ ] 98-01-PLAN.md — Rewrite theme.ts as the Slate `--bsg-*` token engine (dark default + OS-following light + applyTheme sole knob + seat/interaction/motion tokens)
+  - [ ] 98-02-PLAN.md — Add `color-no-hex` stylelint guard + `lint:css` script with a documented temporary ignore list (Phase 99 empties it)
+  - [ ] 98-03-PLAN.md — Collapse the `--bs-*` namespace into `--bsg-*` across drag-drop.css + 5 renderers; HexBoardRenderer seats via `--bsg-seat-*` tokens
+  - [ ] 98-04-PLAN.md — Collapse `--bg-*/--text-*/--border-*` in ActionPanel/WaitingRoom; wire GameShell `applyTheme` base-install + init theme-override receiver
 **UI hint**: yes
 **Risk note**: This is highest-risk item #1. Flipping `theme.ts` defaults (TOKEN-02) exposes a latent collision — the renderers assume a *dark* ground while the old default was light. The token-default flip must merge **atomically with the Phase 99 renderer sweep** so `main` is never in the half-swapped state where white ink sits on a near-white page (the invisible-text trap). Treat Phases 98 + 99 as one atomic landing.
 
