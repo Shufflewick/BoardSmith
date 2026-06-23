@@ -272,6 +272,10 @@ const expandedPaths = ref<Set<string>>(new Set(['root']));
 const copyToastVisible = ref(false);
 const copyToastTimeout = ref<ReturnType<typeof setTimeout> | null>(null);
 
+// Restart confirm state (two-click guard — prevents single-click data loss)
+const restartConfirming = ref(false);
+const restartConfirmTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+
 // Action traces state
 const actionTraces = ref<ActionTrace[]>([]);
 const tracesLoading = ref(false);
@@ -483,9 +487,22 @@ function switchToPlayer(position: number) {
   emit('switch-player', position);
 }
 
-// Restart game
-async function restartGame() {
-  if (confirm('Are you sure you want to restart the game? All progress will be lost.')) {
+// Restart game — two-click confirm (no native dialog; first click arms, second fires)
+function handleRestartClick() {
+  if (!restartConfirming.value) {
+    // Arm the confirm state with a 5s auto-cancel
+    restartConfirming.value = true;
+    restartConfirmTimer.value = setTimeout(() => {
+      restartConfirming.value = false;
+      restartConfirmTimer.value = null;
+    }, 5000);
+  } else {
+    // Second click — confirmed
+    if (restartConfirmTimer.value) {
+      clearTimeout(restartConfirmTimer.value);
+      restartConfirmTimer.value = null;
+    }
+    restartConfirming.value = false;
     emit('restart-game');
   }
 }
@@ -1970,10 +1987,16 @@ const displayedState = computed(() => {
           <!-- Game Controls -->
           <div class="action-group">
             <h4>Game Controls</h4>
-            <button @click="restartGame" class="debug-btn danger">
-              Restart Game
+            <button
+              @click="handleRestartClick"
+              class="debug-btn"
+              :class="restartConfirming ? 'restart-confirming' : 'danger'"
+            >
+              {{ restartConfirming ? 'Confirm restart?' : 'Restart game' }}
             </button>
-            <p class="hint">Start a new game (current progress will be lost)</p>
+            <p class="hint">
+              {{ restartConfirming ? 'Click again to confirm — auto-cancels in 5 s' : 'Start a new game (current progress will be lost)' }}
+            </p>
           </div>
 
           <!-- Settings -->
@@ -2086,6 +2109,27 @@ const displayedState = computed(() => {
   transform: translateX(0);
 }
 
+/* Phone bottom-sheet — slides up from the bottom on narrow viewports */
+@media (max-width: 639px) {
+  .debug-drawer {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-width: 100%;
+    height: 60dvh;
+    border-radius: var(--bsg-r-sm) var(--bsg-r-sm) 0 0;
+    border-left: none;
+    border-top: 2px solid var(--bsg-accent-2);
+    transform: translateY(100%);
+  }
+
+  .debug-drawer.open {
+    transform: translateY(0);
+  }
+}
+
 .debug-header {
   display: flex;
   align-items: center;
@@ -2139,8 +2183,9 @@ const displayedState = computed(() => {
   padding: 8px 16px;
   background: var(--bsg-surface-2);
   border: none;
+  border-bottom: 2px solid transparent;
   border-radius: 6px 6px 0 0;
-  color: var(--bsg-ink-2);
+  color: var(--bsg-ink-3);
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s;
@@ -2151,15 +2196,20 @@ const displayedState = computed(() => {
   color: var(--bsg-ink);
 }
 
-.debug-tabs button.active {
-  background: color-mix(in srgb, var(--bsg-accent-2) 20%, transparent);
-  color: var(--bsg-accent-2);
+.debug-tabs button.active,
+.debug-tabs button[aria-selected="true"] {
+  background: color-mix(in srgb, var(--bsg-accent) 10%, transparent);
+  color: var(--bsg-ink);
+  border-bottom-color: var(--bsg-accent);
 }
 
 .tab-content {
   padding: 16px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* State Tab */
@@ -2212,14 +2262,15 @@ const displayedState = computed(() => {
   background: var(--bsg-surface-3);
   border-radius: 8px;
   overflow: hidden;
-  max-height: calc(100vh - 280px);
+  min-height: 0;
   overflow-y: auto;
+  flex: 1;
 }
 
 .state-display pre {
   padding: 12px;
   margin: 0;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--bsg-mono);
   font-size: 11px;
   color: var(--bsg-ok);
   overflow: auto;
@@ -2230,7 +2281,7 @@ const displayedState = computed(() => {
 /* Tree View */
 .state-tree {
   padding: 8px;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--bsg-mono);
   font-size: 11px;
 }
 
@@ -2520,6 +2571,22 @@ const displayedState = computed(() => {
   background: color-mix(in srgb, var(--bsg-danger) 20%, transparent);
 }
 
+/* Two-click restart confirming state — danger outline, no fill */
+.debug-btn.restart-confirming {
+  border-color: var(--bsg-danger);
+  color: var(--bsg-danger);
+  animation: restart-pulse 1s ease-in-out infinite alternate;
+}
+
+.debug-btn.restart-confirming:hover {
+  background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
+}
+
+@keyframes restart-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.7; }
+}
+
 /* History Tab */
 .history-tab {
   display: flex;
@@ -2664,7 +2731,7 @@ const displayedState = computed(() => {
   padding-left: 32px;
   font-size: 11px;
   color: var(--bsg-ink-2);
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--bsg-mono);
 }
 
 /* Timeline Controls */
@@ -3239,7 +3306,7 @@ const displayedState = computed(() => {
 .element-id {
   color: var(--bsg-ink-3);
   font-size: 10px;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--bsg-mono);
 }
 
 /* Custom Debug Section */
@@ -3285,7 +3352,7 @@ const displayedState = computed(() => {
 .custom-debug-value {
   margin: 0;
   padding: 8px 12px;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--bsg-mono);
   font-size: 10px;
   color: var(--bsg-ok);
   overflow: auto;
@@ -3541,7 +3608,7 @@ const displayedState = computed(() => {
 .card-id {
   color: var(--bsg-ink-3);
   font-size: 10px;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: var(--bsg-mono);
 }
 
 /* Card action buttons */
