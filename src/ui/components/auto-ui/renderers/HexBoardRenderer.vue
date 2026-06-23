@@ -253,21 +253,24 @@ const displayLabel = computed(
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow: hidden;
-  max-height: 80vh;
   position: relative;
+  min-height: 0;
+  max-width: 100%;
 }
 
 .hex-board-header {
   font-weight: bold;
   color: var(--bsg-ink);
   margin-bottom: 12px;
+  flex: none;
 }
 
-/* ── SVG ── */
+/* ── SVG: scales to container, never exceeds it in either dimension ── */
 .hex-board-svg {
   max-width: 100%;
+  max-height: 100%;
   height: auto;
+  width: auto;
 }
 
 .hex-cell-group {
