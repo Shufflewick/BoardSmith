@@ -207,10 +207,10 @@ function handleDragEnd() {
   align-items: center;
   justify-content: center;
   font-size: 0.8rem;
-  color: #fff;
+  color: var(--bsg-ink);
   font-weight: bold;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s ease;
+  box-shadow: var(--bsg-shadow-sm);
+  transition: transform var(--bsg-dur-base) var(--bsg-ease);
   cursor: default;
 }
 
@@ -220,32 +220,33 @@ function handleDragEnd() {
 }
 
 /* ── Board interaction states (CF-1: pieces get same six states as all other renderers) ── */
+/* action-selectable: dashed accent outline + selectable fill; outline never border */
 .piece.action-selectable {
   cursor: pointer;
-  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline: 2px dashed var(--bsg-accent);
   outline-offset: 2px;
-  animation: pulse-piece 2s ease-in-out infinite;
+  background: var(--bsg-selectable);
 }
 
 .piece.action-selectable:hover {
-  outline-color: rgba(46, 204, 113, 1);
-  outline-width: 3px;
+  outline-style: solid;
   transform: scale(1.1);
 }
 
-@keyframes pulse-piece {
-  0%, 100% { outline-color: rgba(46, 204, 113, 0.6); }
-  50% { outline-color: rgba(46, 204, 113, 1); }
-}
-
+/* is-board-highlighted: dashed accent + selectable fill */
 .piece.is-board-highlighted {
-  box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.8), 0 2px 8px rgba(0, 0, 0, 0.3);
-  background: rgba(0, 217, 255, 0.15);
+  outline: 2px dashed var(--bsg-accent);
+  outline-offset: 2px;
+  background: var(--bsg-selectable);
 }
 
+/* is-board-selected: solid accent ring + selected fill + accent ring shadow */
 .piece.is-board-selected {
-  box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.8), 0 2px 8px rgba(0, 0, 0, 0.3);
-  background: rgba(0, 255, 136, 0.15);
+  outline: 2px solid var(--bsg-accent);
+  outline-offset: 2px;
+  background: var(--bsg-selected);
+  box-shadow: var(--bsg-ring);
+  transform: scale(1.02);
 }
 
 .piece.is-disabled {
@@ -262,8 +263,8 @@ function handleDragEnd() {
 }
 
 .piece.is-dragging {
-  opacity: 0.5;
-  transform: scale(0.95);
+  opacity: var(--bsg-dragging-opacity);
+  transform: scale(var(--bsg-dragging-scale));
 }
 
 /* ── Image branch ── */
@@ -296,7 +297,7 @@ function handleDragEnd() {
 .piece-token-label {
   font-size: 12px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--bsg-ink);
   line-height: 1;
   text-align: center;
   pointer-events: none;
