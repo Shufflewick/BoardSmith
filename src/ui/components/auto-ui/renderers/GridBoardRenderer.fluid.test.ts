@@ -31,22 +31,32 @@ interface GameElement {
 }
 
 /**
- * Build a minimal grid element with explicit $rows/$cols so resolveGridSize
- * returns ok:true with the given dimensions.
+ * Build a minimal grid element whose resolveGridSize result will be cols×rows.
+ *
+ * resolveGridSize uses $rowCoord/$colCoord attributes on the board element, then
+ * scans children's coordinate attributes to find the max values. To get a grid of
+ * `cols` columns and `rows` rows we provide a single child cell at the corner
+ * (row: rows-1, col: cols-1) so max+1 = the desired dimensions.
  */
-function buildGridElement(cols: number, rows: number, children: GameElement[] = []): GameElement {
+function buildGridElement(cols: number, rows: number, extraChildren: GameElement[] = []): GameElement {
+  // Corner cell at (rows-1, cols-1) drives resolveGridSize to return {rows, cols}
+  const cornerCell: GameElement = {
+    id: 99,
+    className: 'Space',
+    name: 'corner',
+    attributes: { row: rows - 1, col: cols - 1 },
+    children: [],
+  };
   return {
     id: 1,
     className: 'Board',
     name: 'TestBoard',
     attributes: {
       $layout: 'grid',
-      $rows: rows,
-      $cols: cols,
       $rowCoord: 'row',
       $colCoord: 'col',
     },
-    children,
+    children: [cornerCell, ...extraChildren],
   };
 }
 

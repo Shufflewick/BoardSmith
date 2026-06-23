@@ -62,6 +62,17 @@ const gridStyle = computed(() => {
   return { 'grid-template-columns': `repeat(${gridResult.value.cols}, 1fr)` };
 });
 
+// Fluid sizing: expose --cols and --rows as CSS custom properties on the board wrapper.
+// These feed --cell: clamp(28px, min(calc(100cqw/var(--cols)), calc(100cqh/var(--rows))), 96px)
+// defined in the scoped CSS, so cells and labels self-size to the container.
+const boardSizeStyle = computed(() => {
+  if (!gridResult.value.ok) return {};
+  return {
+    '--cols': gridResult.value.cols,
+    '--rows': gridResult.value.rows,
+  };
+});
+
 // Column labels from game designer or auto-generated indices
 const columnLabels = computed(() => {
   if (!gridResult.value.ok) return [];
@@ -164,7 +175,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   <!-- Happy path: board renders when gridResult resolves successfully -->
   <div v-else class="board-container">
     <div class="board-header">{{ displayLabel }}</div>
-    <div class="board-with-labels">
+    <div class="board-with-labels" :style="boardSizeStyle">
       <!-- Column labels (from game designer or numeric indices) -->
       <div class="board-column-labels">
         <span class="board-label corner"></span>
@@ -239,6 +250,16 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   gap: 4px;
 }
 
+/* ── Fluid sizing: --cell clamp driven by --cols and --rows from the board wrapper ──
+   --cols and --rows are set as CSS custom properties via :style binding from gridResult.
+   container-type:size is on the archetype wrapper (GridBoardTemplate__board); cqw/cqh
+   resolve there. Adding container-type:inline-size here ensures --cell also resolves
+   correctly when GridBoardRenderer is used outside GridBoardTemplate.              */
+.board-with-labels {
+  container-type: inline-size;
+  --cell: clamp(28px, min(calc(100cqw / var(--cols)), calc(100cqh / var(--rows))), 96px);
+}
+
 /* ── Row/column labels ── */
 .board-column-labels {
   display: flex;
@@ -246,8 +267,8 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 }
 
 .board-label {
-  width: 50px;
-  height: 20px;
+  width: var(--cell);
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -258,7 +279,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 }
 
 .board-label.corner {
-  width: 20px;
+  width: calc(var(--cell) * 0.4);
 }
 
 .board-row-wrapper {
@@ -273,8 +294,8 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 }
 
 .board-row-labels .board-label {
-  width: 20px;
-  height: 50px;
+  width: calc(var(--cell) * 0.4);
+  height: var(--cell);
 }
 
 /* ── Grid — template-columns injected inline from resolveGridSize ── */
@@ -286,8 +307,8 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 
 /* ── Grid cell ── */
 .grid-cell {
-  width: 50px;
-  height: 50px;
+  width: var(--cell);
+  height: var(--cell);
   background: var(--bsg-cell);
   border-radius: 4px;
   display: flex;
