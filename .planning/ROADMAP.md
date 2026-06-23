@@ -150,7 +150,12 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   3. The dev seat badge is a working seat switcher, a presence strip shows who is connected / AI / away, and a tucked-away "Table setup" panel surfaces the already-injected `aiSeats`/`aiLevel`/`playerCount`/`gameOptions`/`playerOptions` (DEV-03, DEV-04).
   4. Loading/empty/error states have a clear voice — a skeleton with timeout→retry and a friendly unsupported-topology message split from dev-only guidance — and player-facing history is read-only with Copy/Clear moved into `DebugPanel` (the silent un-clear bug is gone) (DEV-05, DEV-06).
   5. The dev "New game" action (broadcasts `restart` to all seats) requires a two-click confirm with neutral styling and a broadcast toast, and the Slate material layer (low-opacity SVG noise + vignette) replaces the white dot-grid grain in dev/standalone chrome (DEV-07, DEV-08).
-**Plans**: TBD
+**Plans**: 5 plans (2 waves)
+  - [ ] 102-01-PLAN.md — [W1] DebugPanel Slate reskin + a11y: guarded Ctrl/Cmd+D shortcut, ARIA tabs, --bsg-mono, flex height, phone bottom sheet, two-click restart (DEV-01)
+  - [ ] 102-02-PLAN.md — [W1] Voiced states: AutoRenderer skeleton + timeout→retry, UnsupportedTopologyPanel player/dev split via import.meta.env.DEV (DEV-05)
+  - [ ] 102-03-PLAN.md — [W1] DevHost god-mode: localStorage pull-tab collapse (icon-only <640px), working seat switcher, presence strip, read-only Table setup panel (DEV-02/03/04)
+  - [ ] 102-04-PLAN.md — [W2] History cleanup: read-only GameHistory + un-clear fix, Copy/Clear moved to DebugPanel via GameShell (DEV-06)
+  - [ ] 102-05-PLAN.md — [W2] DevHost two-click restart confirm + broadcast toast + Slate material layer (SVG noise + vignette) (DEV-07/08)
 **UI hint**: yes
 
 ---
