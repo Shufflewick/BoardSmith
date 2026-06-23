@@ -101,7 +101,13 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   3. The action dock renders only when the player has an action, caps at `min(40vh, 320px)` with internal scroll, and reserves its measured height via `ResizeObserver` instead of a hardcoded `80px` padding (IA-04).
   4. The board fits its container with no scrollbars or manual zoom via `container-type: size` and a computed `--cell`/`--card-w` clamp (the zoom slider survives only as an accessibility magnifier), and the layout reflows across real compact/medium/wide tiers — phone fills the board with a one-line seat strip and history as an on-demand sheet, desktop sidebar collapses to a rail (IA-05, IA-06).
   5. Game Over shows a result card (winner/scores, final board behind a scrim, Rematch / New Game actions) instead of a dead-end banner (IA-07).
-**Plans**: TBD
+**Plans**: 6 plans (4 waves)
+  - [ ] 100-01-PLAN.md — [W1] Structural shell rebuild (.stage/sidebar/boardregion + full-width actionbar) + persistent prompt + conditional dock + ResizeObserver dock-height (IA-02/03/04)
+  - [ ] 100-02-PLAN.md — [W1] Fluid board sizing: Grid + Hex renderers + grid archetype container-query --cell clamp (IA-05)
+  - [ ] 100-03-PLAN.md — [W1] Fluid card sizing: Card/Hand/Deck shared --card-w clamp + DevHost 100dvh (IA-05)
+  - [ ] 100-04-PLAN.md — [W2] Platform header removal + ⋯ ControlsMenu + heartbeat corner dot + bridge preservation + showUndo deletion (IA-01)
+  - [ ] 100-05-PLAN.md — [W3] Responsive tiers (640/768/1024/1440) + sidebar rail + phone overlay/scrim + PlayersPanel token/seat-strip + history bottom sheet (IA-06)
+  - [ ] 100-06-PLAN.md — [W4] Game Over result card (validated winnerSeats, scrim over live board, Rematch/New Game) + AutoUI banner removal (IA-07)
 **UI hint**: yes
 **Risk note**: Carries highest-risk items #3 and #4. Fluid board sizing replaces fixed cells (e.g. `50px`) and can regress published game bundles — validated against MERC + real games in Phase 103. The standing-header removal + Leave/New-Game relocation changes the host↔iframe postMessage contract — test the bridge end-to-end (the host side itself stays out of scope, but the BoardSmith-emitted contract must remain host-overridable).
 
@@ -158,7 +164,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
 | 99. Theming Swap (Wave 2) | 15/15 | Complete   | 2026-06-23 |
-| 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
+| 100. IA & Responsive (Wave 3) | 0/6 | Not started | - |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |
 | 103. Cross-Repo Verification | 0/? | Not started | - |
