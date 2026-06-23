@@ -13,11 +13,11 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 
 ### Quick Wins (Wave 0 — no token dependency)
 
-- [ ] **QUICK-01**: Rejected moves and action failures surface a visible `toast.error(result.error)` instead of being swallowed to `console.error`/`alert()`
-- [ ] **QUICK-02**: Icon-only chrome controls (hamburger, ✕ close/cancel/clear) have accessible names plus `aria-expanded`/`aria-controls`, and decorative glyph spans are `aria-hidden`
-- [ ] **QUICK-03**: Dead menu items (no-op Settings/Help) and engine branding (`BS` chip, "BoardSmith Dev Mode") are removed from player-facing chrome
-- [ ] **QUICK-04**: The shell uses `100dvh` (with `100vh` fallback) so the sticky action bar never clips under mobile browser toolbars
-- [ ] **QUICK-05**: Every fixed/sticky chrome edge respects `env(safe-area-inset-*)` so controls never fall under the notch/home indicator
+- [x] **QUICK-01**: Rejected moves and action failures surface a visible `toast.error(result.error)` instead of being swallowed to `console.error`/`alert()`
+- [x] **QUICK-02**: Icon-only chrome controls (hamburger, ✕ close/cancel/clear) have accessible names plus `aria-expanded`/`aria-controls`, and decorative glyph spans are `aria-hidden`
+- [x] **QUICK-03**: Dead menu items (no-op Settings/Help) and engine branding (`BS` chip, "BoardSmith Dev Mode") are removed from player-facing chrome
+- [x] **QUICK-04**: The shell uses `100dvh` (with `100vh` fallback) so the sticky action bar never clips under mobile browser toolbars
+- [x] **QUICK-05**: Every fixed/sticky chrome edge respects `env(safe-area-inset-*)` so controls never fall under the notch/home indicator
 
 ### Token Foundation (Wave 1 — the keystone)
 
@@ -112,11 +112,11 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| QUICK-01 | 97 (Wave 0 — Quick Wins) | Pending |
-| QUICK-02 | 97 (Wave 0 — Quick Wins) | Pending |
-| QUICK-03 | 97 (Wave 0 — Quick Wins) | Pending |
-| QUICK-04 | 97 (Wave 0 — Quick Wins) | Pending |
-| QUICK-05 | 97 (Wave 0 — Quick Wins) | Pending |
+| QUICK-01 | 97 (Wave 0 — Quick Wins) | Complete |
+| QUICK-02 | 97 (Wave 0 — Quick Wins) | Complete |
+| QUICK-03 | 97 (Wave 0 — Quick Wins) | Complete |
+| QUICK-04 | 97 (Wave 0 — Quick Wins) | Complete |
+| QUICK-05 | 97 (Wave 0 — Quick Wins) | Complete |
 | TOKEN-01 | 98 (Wave 1 — Token Foundation) | Pending |
 | TOKEN-02 | 98 (Wave 1 — Token Foundation) | Pending |
 | TOKEN-03 | 98 (Wave 1 — Token Foundation) | Pending |

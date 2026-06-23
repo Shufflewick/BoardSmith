@@ -13,7 +13,7 @@
 
 The seven phases map 1:1 to the spec's six waves plus a final cross-repo verification gate.
 
-- [ ] **Phase 97: Quick Wins (Wave 0)** — Independent accessibility/mobile/branding fixes that need no token system; ships first to bank credibility and de-risk later waves.
+- [x] **Phase 97: Quick Wins (Wave 0)** — Independent accessibility/mobile/branding fixes that need no token system; ships first to bank credibility and de-risk later waves. (completed 2026-06-23)
 - [ ] **Phase 98: Token Foundation (Wave 1)** — The keystone: collapse three namespaces into one `--bsg-*` contract emitted by `theme.ts` with full Slate defaults + a `color-no-hex` lint guard. Blocks Waves 2/3/5.
 - [ ] **Phase 99: Theming Swap (Wave 2)** — Spend the tokens: sweep 8 renderers + chrome + DevHost from neon literals to `var(--bsg-*)`, teal primary button, `outline` selection, solid type, tokenized card back, calm active-player cue.
 - [ ] **Phase 100: IA & Responsive (Wave 3)** — Board is the hero: kill the standing header, persistent turn ribbon + always-on prompt, conditional action dock, fluid container-query board sizing, real breakpoints, Game Over result card.
@@ -35,7 +35,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   3. The player-facing chrome shows no dead Settings/Help menu items and no engine branding (`BS` chip, "BoardSmith Dev Mode") (QUICK-03).
   4. On a mobile viewport the sticky action bar stays fully visible (shell uses `100dvh` with a `100vh` fallback) and no fixed/sticky chrome edge falls under the notch/home indicator (`env(safe-area-inset-*)` respected) (QUICK-04, QUICK-05).
 **Plans**: 1 plan
-  - [ ] 97-01-PLAN.md — All five quick wins (toast error feedback, accessible names, dead-weight removal, 100dvh, safe-area insets) + component tests
+  - [x] 97-01-PLAN.md — All five quick wins (toast error feedback, accessible names, dead-weight removal, 100dvh, safe-area insets) + component tests
 **UI hint**: yes
 
 ---
@@ -136,7 +136,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 97. Quick Wins (Wave 0) | 0/1 | Not started | - |
+| 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
 | 98. Token Foundation (Wave 1) | 0/? | Not started | - |
 | 99. Theming Swap (Wave 2) | 0/? | Not started | - |
 | 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
