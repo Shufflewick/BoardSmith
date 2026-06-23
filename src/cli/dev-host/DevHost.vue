@@ -12,6 +12,8 @@
  */
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import type { DevHostConfig } from './config-types.js';
+import Toast from '../../ui/components/Toast.vue';
+import { useToast } from '../../ui/composables/useToast.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -66,6 +68,37 @@ const selectedUi = ref('');
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
+
+// ── Destructive restart confirm (DEV-07) ──────────────────────────────────────
+const toast = useToast();
+/** True while the "Confirm restart?" prompt is showing (first click armed it). */
+const restartConfirming = ref(false);
+let restartConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+/** Set to true by newGame() before sending restart; cleared when game_state arrives. */
+const pendingRestart = ref(false);
+
+/**
+ * Two-click guard for the destructive "New game" action (CLAUDE.md:
+ * always_confirm_destructive). First click arms a 5-second confirm window;
+ * second click within the window executes the restart. The window auto-cancels
+ * after 5 s so an accidental first click does no harm.
+ */
+function handleNewGameClick(): void {
+  if (!restartConfirming.value) {
+    restartConfirming.value = true;
+    restartConfirmTimer = setTimeout(() => {
+      restartConfirming.value = false;
+      restartConfirmTimer = null;
+    }, 5000);
+  } else {
+    if (restartConfirmTimer !== null) {
+      clearTimeout(restartConfirmTimer);
+      restartConfirmTimer = null;
+    }
+    restartConfirming.value = false;
+    newGame();
+  }
+}
 
 /** Seats this client may take: open, or held by an away (disconnected) player. */
 function canTake(seat: SeatInfo): boolean {
@@ -139,6 +172,10 @@ function onHostMessage(msg: Record<string, unknown>): void {
         winners: msg.winners,
       };
       postToGame(lastGameState);
+      if (pendingRestart.value) {
+        pendingRestart.value = false;
+        toast.info('Game restarted');
+      }
       break;
     case 'server_response':
       postToGame({ type: 'server_response', requestId: msg.requestId, result: msg.result });
@@ -213,6 +250,7 @@ function leaveSeat(): void {
   mySeat.value = null;
 }
 function newGame(): void {
+  pendingRestart.value = true;
   wsSend({ type: 'restart' });
 }
 function toggleFollow(): void {
@@ -294,12 +332,16 @@ onUnmounted(() => {
   window.removeEventListener('message', onWindowMessage);
   closedByUs = true;
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  if (restartConfirmTimer !== null) clearTimeout(restartConfirmTimer);
   ws?.close();
 });
 </script>
 
 <template>
   <div class="dev-host">
+    <!-- Toast notifications (Teleports to body; must live here since DevHost is the outer page) -->
+    <Toast />
+
     <!-- Connecting -->
     <div v-if="!connected" class="dev-host__center">
       <p>Connecting to the dev host…</p>
@@ -472,9 +514,14 @@ onUnmounted(() => {
                   <span class="dev-chrome__btn-icon" aria-hidden="true">{{ followActive ? '◉' : '○' }}</span>
                   <span class="dev-chrome__btn-label">{{ followActive ? 'Following active seat' : 'Follow active seat' }}</span>
                 </button>
-                <button type="button" class="btn btn--start" @click="newGame">
+                <button
+                  type="button"
+                  class="btn btn--start"
+                  :class="{ 'btn--confirming': restartConfirming }"
+                  @click="handleNewGameClick"
+                >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">↺</span>
-                  <span class="dev-chrome__btn-label">New game</span>
+                  <span class="dev-chrome__btn-label">{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</span>
                 </button>
                 <button
                   type="button"
@@ -499,7 +546,12 @@ onUnmounted(() => {
               >
                 {{ followActive ? 'Following active seat' : 'Follow active seat' }}
               </button>
-              <button type="button" class="btn btn--start" @click="newGame">New game</button>
+              <button
+                type="button"
+                class="btn btn--start"
+                :class="{ 'btn--confirming': restartConfirming }"
+                @click="handleNewGameClick"
+              >{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</button>
               <button
                 type="button"
                 class="btn"
@@ -725,6 +777,16 @@ onUnmounted(() => {
 .btn--start:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Confirm state: subtle danger tint — no accent CTA fill (CLAUDE.md: always_confirm_destructive) */
+.btn--start.btn--confirming {
+  border-color: color-mix(in srgb, var(--bsg-danger) 60%, transparent);
+  color: var(--bsg-danger);
+}
+
+.btn--start.btn--confirming:hover {
+  background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
 }
 
 .btn--on {
