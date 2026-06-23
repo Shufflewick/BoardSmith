@@ -190,7 +190,8 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   top: 0;
   left: 0;
   width: 280px;
-  height: 100vh;
+  height: 100vh; /* fallback: browsers without dvh support */
+  height: 100dvh;
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
   z-index: 300;
   display: flex;

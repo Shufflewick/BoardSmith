@@ -1445,7 +1445,8 @@ if ((import.meta as any).hot) {
 
 <style scoped>
 .game-shell {
-  min-height: 100vh;
+  min-height: 100vh; /* fallback: browsers without dvh support */
+  min-height: 100dvh;
   font-family: system-ui, -apple-system, sans-serif;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   color: #fff;
@@ -1454,7 +1455,8 @@ if ((import.meta as any).hot) {
 /* Platform mode: embedded in host iframe, no outer chrome */
 .game-shell--platform {
   min-height: 100%;
-  height: 100vh;
+  height: 100vh; /* fallback: browsers without dvh support */
+  height: 100dvh;
 }
 
 .game-shell--platform .game-shell__game {
@@ -1486,7 +1488,8 @@ if ((import.meta as any).hot) {
 .game-shell__game {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100vh; /* fallback: browsers without dvh support */
+  min-height: 100dvh;
 }
 
 /* Main Content Area - Mobile First */
@@ -1564,14 +1567,19 @@ if ((import.meta as any).hot) {
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 12px 15px;
+  padding-top: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-left: max(15px, env(safe-area-inset-left));
+  padding-right: max(15px, env(safe-area-inset-right));
   z-index: 100;
 }
 
 /* Desktop: Wider padding for action bar */
 @media (min-width: 768px) {
   .game-shell__action-bar {
-    padding: 16px 20px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
   }
 }
 

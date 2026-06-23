@@ -98,7 +98,10 @@ import { computed } from 'vue';
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-bottom: 10px;
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
   background: rgba(0, 0, 0, 0.3);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   gap: 10px;
@@ -274,7 +277,10 @@ import { computed } from 'vue';
 /* Desktop: Show header elements */
 @media (min-width: 768px) {
   .game-header {
-    padding: 12px 20px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: 12px;
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
   }
 
   .header-left {
