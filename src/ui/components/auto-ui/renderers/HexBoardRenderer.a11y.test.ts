@@ -81,6 +81,26 @@ function mountHex(element: GameElement, interaction = createBoardInteraction()) 
 // Tests
 // ---------------------------------------------------------------------------
 describe('HexBoardRenderer a11y — role=gridcell + roving tabindex (partial — SVG focus in Safari/VoiceOver requires manual verification, research Open Q3)', () => {
+  it('SVG root has role="grid" (required ancestor for role="gridcell", WR-02)', () => {
+    const { wrapper } = mountHex(buildHexElement(3));
+    const svg = wrapper.find('svg');
+    expect(svg.attributes('role')).toBe('grid');
+  });
+
+  it('SVG root has aria-colcount matching the column count', () => {
+    // 3 cells in a single horizontal row → q=0,1,2 → hexCols = 3
+    const { wrapper } = mountHex(buildHexElement(3));
+    const svg = wrapper.find('svg');
+    expect(svg.attributes('aria-colcount')).toBe('3');
+  });
+
+  it('SVG root has aria-rowcount', () => {
+    // Single-row board → all cells have r=0 → hexRows = 1
+    const { wrapper } = mountHex(buildHexElement(3));
+    const svg = wrapper.find('svg');
+    expect(svg.attributes('aria-rowcount')).toBe('1');
+  });
+
   it('each <g> hex cell has role="gridcell"', () => {
     const { wrapper } = mountHex(buildHexElement(3));
     const cells = wrapper.findAll('[role="gridcell"]');

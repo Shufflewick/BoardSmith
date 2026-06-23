@@ -10,7 +10,7 @@
  *
  * A11Y-01: uses useSelectableGrid() for roving-tabindex keyboard navigation.
  * Each hex <g> cell gets role="gridcell" + tabindex + aria-label.
- * The SVG root gets role="group" + aria-label + @keydown.
+ * The SVG root gets role="grid" + aria-label + aria-rowcount/colcount + @keydown.
  *
  * MANUAL VERIFICATION REQUIRED (research Open Q3):
  * tabindex="0" on SVG <g> is spec-valid in modern browsers but Safari/VoiceOver
@@ -219,7 +219,8 @@ const displayLabel = computed(
 // If manual VoiceOver/Safari testing fails, escalate to overlay <button> approach.
 const hexCells = computed(() => props.element.children ?? []);
 
-// Compute grid width as the q-coordinate range + 1 for roving-tabindex row math.
+// Compute grid width as the q-coordinate range + 1 for roving-tabindex row math
+// and for aria-colcount on the role="grid" SVG root (WR-02).
 const hexCols = computed(() => {
   const cells = hexCells.value;
   if (!cells.length) return 1;
@@ -231,6 +232,20 @@ const hexCols = computed(() => {
     minQ = Math.min(minQ, q);
   }
   return maxQ - minQ + 1;
+});
+
+// Compute grid height as the r-coordinate range + 1 for aria-rowcount (WR-02).
+const hexRows = computed(() => {
+  const cells = hexCells.value;
+  if (!cells.length) return 1;
+  let maxR = -Infinity;
+  let minR = Infinity;
+  for (const cell of cells) {
+    const r = (cell.attributes?.[rCoordName.value] as number) ?? 0;
+    maxR = Math.max(maxR, r);
+    minR = Math.min(minR, r);
+  }
+  return maxR - minR + 1;
 });
 
 const { currentIdx, focusCell, handleGridKeydown: _composableKeydown } = useSelectableGrid(
@@ -295,7 +310,8 @@ function hexCellAriaLabel(cell: GameElement): string {
   <div class="hex-board-container">
     <div class="hex-board-header">{{ displayLabel }}</div>
     <!--
-      SVG root: role="group" (hex is not a strict rectangular grid) + aria-label
+      SVG root: role="grid" (required ancestor for role="gridcell" cells, WR-02)
+      + aria-rowcount/aria-colcount from the hex coordinate ranges
       + @keydown for roving-tabindex keyboard navigation (A11Y-01).
 
       MANUAL VERIFICATION REQUIRED (research Open Q3):
@@ -310,8 +326,10 @@ function hexCellAriaLabel(cell: GameElement): string {
       :width="svgBounds.width"
       :height="svgBounds.height"
       preserveAspectRatio="xMidYMid meet"
-      role="group"
+      role="grid"
       :aria-label="displayLabel"
+      :aria-rowcount="hexRows"
+      :aria-colcount="hexCols"
       @keydown="handleSvgKeydown"
     >
       <!--
