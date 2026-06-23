@@ -235,4 +235,32 @@ describe('DevHost — seat switcher', () => {
     const leaveCall = calls.find((c) => c.type === 'leave');
     expect(leaveCall).toBeUndefined(); // no leave if already in that seat
   });
+
+  it('does not re-collapse chrome when switching seats after first auto-collapse (CR-02)', async () => {
+    // No stored preference → will auto-collapse on first seat taken
+    const wrapper = await mountDevHost();
+    await activateSeat(wrapper, 1);
+
+    // Chrome should have auto-collapsed
+    const bar = wrapper.find('.dev-chrome__bar');
+    expect(bar.isVisible()).toBe(false);
+
+    // User manually re-opens the chrome
+    await wrapper.find('.dev-chrome__pull-tab').trigger('click');
+    await wrapper.vm.$nextTick();
+    expect(bar.isVisible()).toBe(true);
+
+    // Switch seat: switchSeat calls leaveSeat() (sets mySeat → null)
+    // then takeSeat(2) (sends 'join'). Then the server responds with 'joined'.
+    const ws = mockWsInstance!;
+    await (wrapper.vm as unknown as { switchSeat(n: number): void }).switchSeat(2);
+    await wrapper.vm.$nextTick();
+
+    // Simulate server responding with 'joined' — triggers null → 2 transition
+    ws.simulateMessage({ type: 'joined', seat: 2 });
+    await wrapper.vm.$nextTick();
+
+    // Chrome must NOT re-collapse — the auto-collapse fires once per session
+    expect(bar.isVisible()).toBe(true);
+  });
 });

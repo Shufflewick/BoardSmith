@@ -317,6 +317,10 @@ function switchSeat(target: number): void {
 // saved preference. A stored 'false' or 'true' always overrides the default.
 watch(mySeat, (newSeat, oldSeat) => {
   if (newSeat !== null && oldSeat === null && seatedWithoutStoredPreference) {
+    // Clear the flag FIRST so subsequent seat switches (null → newSeat from
+    // switchSeat) do not re-collapse the chrome. The auto-collapse is a
+    // first-seat-only courtesy, not a per-switch policy.
+    seatedWithoutStoredPreference = false;
     chromeOpen.value = false;
     // Do NOT persist here — the first-seat collapse is the default, not a
     // user choice. If they open it and close it that becomes their preference.
