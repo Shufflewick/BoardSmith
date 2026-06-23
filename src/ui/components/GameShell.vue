@@ -230,8 +230,11 @@ const autoEndTurn = ref(true); // Auto-end turn after making a move
 // narrows to compact, but never forces expansion when viewport widens (user preference).
 const sidebarRail = ref<boolean>(false);
 let compactQuery: MediaQueryList | null = null;
-function initCompactRail(mql: MediaQueryList | MediaQueryListEvent) {
-  if (mql.matches) sidebarRail.value = true;
+// On phones the sidebar no longer collapses to a slim rail — it stacks full-width
+// above the board (the full players list), driven purely by the @media block below.
+// So the compact matchMedia listener is a no-op kept only for symmetry/teardown.
+function initCompactRail(_mql: MediaQueryList | MediaQueryListEvent) {
+  /* intentionally empty — see the (max-width: 639px) block in <style> */
 }
 
 // Connection health (IA-01): driven by postMessage heartbeat in platform mode.
@@ -2106,18 +2109,27 @@ if ((import.meta as any).hot) {
    When expanded the sidebar overlays the board area only (never the actionbar),
    absolutely positioned inside .stage. Scrim becomes visible and interactive. */
 @media (max-width: 639px) {
-  .sidebar:not(.rail) {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 50;
-    width: min(86vw, var(--bsg-side));
-    box-shadow: var(--bsg-shadow);
+  /* Phones: stack the sidebar (full players list) ABOVE the board as a full-width
+     band, instead of a slim side rail with side-by-side tokens. The board fills the
+     remaining height below. (Product decision: players stack vertically on mobile.) */
+  .stage {
+    flex-direction: column;
   }
-  .scrim.active {
-    opacity: 1;
-    pointer-events: auto;
+  .sidebar,
+  .sidebar.rail {
+    position: static;
+    width: 100%;
+    flex: none;
+    max-height: 42dvh;
+    overflow-y: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--bsg-line);
+    box-shadow: none;
+  }
+  /* No rail/overlay affordances on phones — the panel is always shown stacked. */
+  .side-edge,
+  .scrim {
+    display: none;
   }
 }
 
