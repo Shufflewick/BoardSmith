@@ -276,7 +276,9 @@ const copyToastTimeout = ref<ReturnType<typeof setTimeout> | null>(null);
 
 // Restart confirm state (two-click guard — prevents single-click data loss)
 const restartConfirming = ref(false);
-const restartConfirmTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+// Plain let — no reactive consumers read the timer ID; a ref would track
+// reads/writes unnecessarily (matches DevHost.vue's pattern for the same).
+let restartConfirmTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Action traces state
 const actionTraces = ref<ActionTrace[]>([]);
@@ -381,6 +383,12 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
+  // Clear the restart-confirm timer if the component unmounts while the 5-second
+  // window is open (e.g. page transition), so the callback never writes to dead refs.
+  if (restartConfirmTimer !== null) {
+    clearTimeout(restartConfirmTimer);
+    restartConfirmTimer = null;
+  }
 });
 
 // Format state for display
@@ -494,15 +502,15 @@ function handleRestartClick() {
   if (!restartConfirming.value) {
     // Arm the confirm state with a 5s auto-cancel
     restartConfirming.value = true;
-    restartConfirmTimer.value = setTimeout(() => {
+    restartConfirmTimer = setTimeout(() => {
       restartConfirming.value = false;
-      restartConfirmTimer.value = null;
+      restartConfirmTimer = null;
     }, 5000);
   } else {
     // Second click — confirmed
-    if (restartConfirmTimer.value) {
-      clearTimeout(restartConfirmTimer.value);
-      restartConfirmTimer.value = null;
+    if (restartConfirmTimer) {
+      clearTimeout(restartConfirmTimer);
+      restartConfirmTimer = null;
     }
     restartConfirming.value = false;
     emit('restart-game');
