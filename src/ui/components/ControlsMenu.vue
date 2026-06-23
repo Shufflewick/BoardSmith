@@ -9,10 +9,10 @@
  * GameShell.handleMenuItemClick can also post the bridge message to the host — do not
  * strand these controls or call leaveGame directly here (that is GameShell's job).
  *
- * Focus-trap/aria keyboard navigation is deferred to Phase 101.
  * Phase 102 adds the Appearance and Debug panel items.
  */
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 const props = defineProps<{
   /** Current auto-end-turn state */
@@ -32,19 +32,25 @@ const emit = defineEmits<{
 
 const isOpen = ref(false);
 const menuRoot = ref<HTMLElement | null>(null);
+const menuRef = ref<HTMLElement | null>(null);
+
+const { open: openTrap, close: closeTrap, handleKeydown: trapKeydown } = useFocusTrap(menuRef, {
+  escapeToClose: true,
+  onClose: close,
+});
 
 function toggle() {
-  isOpen.value = !isOpen.value;
+  if (isOpen.value) {
+    close();
+  } else {
+    isOpen.value = true;
+    nextTick(() => openTrap());
+  }
 }
 
 function close() {
+  closeTrap();
   isOpen.value = false;
-}
-
-function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && isOpen.value) {
-    close();
-  }
 }
 
 function handleOutsideClick(event: MouseEvent) {
@@ -55,12 +61,10 @@ function handleOutsideClick(event: MouseEvent) {
 }
 
 onMounted(() => {
-  document.addEventListener('keydown', handleKeydown);
   document.addEventListener('mousedown', handleOutsideClick);
 });
 
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown);
   document.removeEventListener('mousedown', handleOutsideClick);
 });
 
@@ -102,7 +106,7 @@ function handleLeave() {
       </svg>
     </button>
 
-    <div v-if="isOpen" role="menu" aria-label="Game controls" class="menu">
+    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" @keydown="trapKeydown">
       <div class="grouplabel">Play</div>
 
       <!-- Auto end turn -->
@@ -191,6 +195,8 @@ function handleLeave() {
 .menubtn {
   height: 38px;
   width: 38px;
+  min-height: 44px;
+  min-width: 44px;
   display: grid;
   place-items: center;
   border-radius: var(--bsg-r-sm);
