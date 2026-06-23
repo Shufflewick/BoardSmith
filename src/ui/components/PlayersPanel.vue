@@ -63,15 +63,16 @@ defineSlots<{
 }
 
 .player-card {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface);
+  color: var(--bsg-ink);
   padding: 12px;
   border-radius: 8px;
   transition: all 0.2s;
 }
 
 .player-card.current {
-  background: rgba(0, 217, 255, 0.15);
-  border: 1px solid rgba(0, 217, 255, 0.3);
+  background: color-mix(in srgb, var(--bsg-accent) 12%, var(--bsg-surface));
+  border: 1px solid var(--bsg-accent);
 }
 
 .player-name-row {
@@ -89,11 +90,11 @@ defineSlots<{
   height: 14px;
   border-radius: 3px;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--bsg-line-2);
 }
 
 .you-badge {
-  color: #00d9ff;
+  color: var(--bsg-accent);
   font-size: 0.8rem;
   margin-left: 8px;
 }
@@ -102,19 +103,20 @@ defineSlots<{
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  animation: pulse-glow 1.5s ease-in-out infinite;
+  background: var(--bsg-accent);
+  border: 2px solid color-mix(in srgb, var(--bsg-accent) 40%, transparent);
+  animation: breathe 2s ease-in-out infinite;
   flex-shrink: 0;
 }
 
-@keyframes pulse-glow {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 8px rgba(0, 217, 255, 0.6);
-  }
-  50% {
-    transform: scale(1.15);
-    box-shadow: 0 0 16px rgba(0, 255, 136, 0.8);
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-indicator-dot {
+    animation: none;
   }
 }
 </style>
