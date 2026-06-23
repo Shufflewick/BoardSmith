@@ -102,7 +102,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   4. The board fits its container with no scrollbars or manual zoom via `container-type: size` and a computed `--cell`/`--card-w` clamp (the zoom slider survives only as an accessibility magnifier), and the layout reflows across real compact/medium/wide tiers — phone fills the board with a one-line seat strip and history as an on-demand sheet, desktop sidebar collapses to a rail (IA-05, IA-06).
   5. Game Over shows a result card (winner/scores, final board behind a scrim, Rematch / New Game actions) instead of a dead-end banner (IA-07).
 **Plans**: 6 plans (4 waves)
-  - [ ] 100-01-PLAN.md — [W1] Structural shell rebuild (.stage/sidebar/boardregion + full-width actionbar) + persistent prompt + conditional dock + ResizeObserver dock-height (IA-02/03/04)
+  - [x] 100-01-PLAN.md — [W1] Structural shell rebuild (.stage/sidebar/boardregion + full-width actionbar) + persistent prompt + conditional dock + ResizeObserver dock-height (IA-02/03/04)
   - [ ] 100-02-PLAN.md — [W1] Fluid board sizing: Grid + Hex renderers + grid archetype container-query --cell clamp (IA-05)
   - [ ] 100-03-PLAN.md — [W1] Fluid card sizing: Card/Hand/Deck shared --card-w clamp + DevHost 100dvh (IA-05)
   - [ ] 100-04-PLAN.md — [W2] Platform header removal + ⋯ ControlsMenu + heartbeat corner dot + bridge preservation + showUndo deletion (IA-01)
@@ -164,7 +164,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
 | 99. Theming Swap (Wave 2) | 15/15 | Complete   | 2026-06-23 |
-| 100. IA & Responsive (Wave 3) | 0/6 | Not started | - |
+| 100. IA & Responsive (Wave 3) | 1/6 | In Progress|  |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |
 | 103. Cross-Repo Verification | 0/? | Not started | - |
