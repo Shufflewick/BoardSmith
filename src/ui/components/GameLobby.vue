@@ -170,10 +170,7 @@ function handleResume(gameId: string) {
 
 .game-lobby h1 {
   font-size: 2.5rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--bsg-accent);
   margin-bottom: 30px;
 }
 
@@ -189,7 +186,7 @@ function handleResume(gameId: string) {
 }
 
 .action-box {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface-2);
   padding: 25px;
   border-radius: 12px;
   text-align: center;
@@ -197,11 +194,11 @@ function handleResume(gameId: string) {
 
 .action-box h3 {
   margin-bottom: 16px;
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 .action-box p {
-  color: #aaa;
+  color: var(--bsg-ink-2);
   margin-bottom: 16px;
   font-size: 0.9rem;
 }
@@ -210,25 +207,25 @@ function handleResume(gameId: string) {
   width: 100%;
   padding: 12px;
   margin-bottom: 15px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid var(--bsg-line-2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: var(--bsg-field);
+  color: var(--bsg-ink);
   font-size: 1rem;
   font-family: monospace;
 }
 
 .game-code-input:focus {
   outline: none;
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .game-code-input::placeholder {
-  color: #666;
+  color: var(--bsg-ink-3);
 }
 
 .divider {
-  color: #666;
+  color: var(--bsg-ink-3);
   font-size: 0.9rem;
 }
 
@@ -244,40 +241,40 @@ function handleResume(gameId: string) {
 }
 
 .btn.primary {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   font-weight: bold;
 }
 
 .btn.primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.4);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .btn.secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: var(--bsg-field);
+  color: var(--bsg-ink);
+  border: 2px solid var(--bsg-line-2);
 }
 
 .btn.secondary:hover {
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .btn.resume {
-  background: rgba(0, 217, 255, 0.15);
-  color: #00d9ff;
-  border: 2px solid rgba(0, 217, 255, 0.3);
+  background: var(--bsg-selectable);
+  color: var(--bsg-accent);
+  border: 2px solid var(--bsg-line);
   font-family: monospace;
 }
 
 .btn.resume:hover {
-  background: rgba(0, 217, 255, 0.25);
-  border-color: #00d9ff;
+  background: color-mix(in srgb, var(--bsg-accent) 22%, transparent);
+  border-color: var(--bsg-accent);
 }
 
 .resume-box {
-  border: 2px solid rgba(0, 217, 255, 0.3);
+  border: 2px solid var(--bsg-line);
 }
 
 .saved-games-list {
