@@ -108,7 +108,9 @@ const viewBox = computed(
 function getPieceColor(piece: GameElement, _pieceIndex: number): string {
   const player = piece.attributes?.player as { seat?: number; color?: string } | undefined;
   if (player?.color) return player.color;
-  if (player?.seat !== undefined) return `var(--bsg-seat-${(player.seat % 6) + 1})`;
+  // Seats are 1-indexed (src/session/types.ts). Subtract 1 before modulo so
+  // seat 1 → token 1, seat 6 → token 6 (without the -1 you get a cyclic shift).
+  if (player?.seat !== undefined) return `var(--bsg-seat-${((player.seat - 1) % 6) + 1})`;
   return 'var(--bsg-ink-3)';
 }
 
