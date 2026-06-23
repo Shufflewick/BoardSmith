@@ -261,8 +261,10 @@ function handleDragEnd() {
   transform: scale(1.02);
 }
 
+/* Disabled state — hatch pattern (A11Y-09: non-color cue, not opacity alone) */
 .piece.is-disabled {
-  opacity: 0.35;
+  background-image: repeating-linear-gradient(45deg, var(--bsg-cell), var(--bsg-cell) 5px, transparent 5px, transparent 10px);
+  opacity: 0.6;
   cursor: not-allowed;
 }
 

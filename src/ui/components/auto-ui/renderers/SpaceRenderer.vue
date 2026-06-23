@@ -253,8 +253,10 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
   background: var(--bsg-droptarget-hover);
 }
 
+/* Disabled state — hatch pattern (A11Y-09: non-color cue, not opacity alone) */
 .space-container.is-disabled {
-  opacity: 0.35;
+  background-image: repeating-linear-gradient(45deg, var(--bsg-cell), var(--bsg-cell) 5px, transparent 5px, transparent 10px);
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
