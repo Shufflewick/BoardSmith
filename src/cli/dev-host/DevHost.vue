@@ -12,6 +12,8 @@
  */
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import type { DevHostConfig } from './config-types.js';
+import Toast from '../../ui/components/Toast.vue';
+import { useToast } from '../../ui/composables/useToast.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -66,6 +68,37 @@ const selectedUi = ref('');
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
+
+// ── Destructive restart confirm (DEV-07) ──────────────────────────────────────
+const toast = useToast();
+/** True while the "Confirm restart?" prompt is showing (first click armed it). */
+const restartConfirming = ref(false);
+let restartConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+/** Set to true by newGame() before sending restart; cleared when game_state arrives. */
+const pendingRestart = ref(false);
+
+/**
+ * Two-click guard for the destructive "New game" action (CLAUDE.md:
+ * always_confirm_destructive). First click arms a 5-second confirm window;
+ * second click within the window executes the restart. The window auto-cancels
+ * after 5 s so an accidental first click does no harm.
+ */
+function handleNewGameClick(): void {
+  if (!restartConfirming.value) {
+    restartConfirming.value = true;
+    restartConfirmTimer = setTimeout(() => {
+      restartConfirming.value = false;
+      restartConfirmTimer = null;
+    }, 5000);
+  } else {
+    if (restartConfirmTimer !== null) {
+      clearTimeout(restartConfirmTimer);
+      restartConfirmTimer = null;
+    }
+    restartConfirming.value = false;
+    newGame();
+  }
+}
 
 /** Seats this client may take: open, or held by an away (disconnected) player. */
 function canTake(seat: SeatInfo): boolean {
@@ -139,6 +172,10 @@ function onHostMessage(msg: Record<string, unknown>): void {
         winners: msg.winners,
       };
       postToGame(lastGameState);
+      if (pendingRestart.value) {
+        pendingRestart.value = false;
+        toast.info('Game restarted');
+      }
       break;
     case 'server_response':
       postToGame({ type: 'server_response', requestId: msg.requestId, result: msg.result });
@@ -213,6 +250,7 @@ function leaveSeat(): void {
   mySeat.value = null;
 }
 function newGame(): void {
+  pendingRestart.value = true;
   wsSend({ type: 'restart' });
 }
 function toggleFollow(): void {
@@ -294,12 +332,22 @@ onUnmounted(() => {
   window.removeEventListener('message', onWindowMessage);
   closedByUs = true;
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  if (restartConfirmTimer !== null) clearTimeout(restartConfirmTimer);
   ws?.close();
 });
 </script>
 
 <template>
   <div class="dev-host">
+    <!-- Toast notifications (Teleports to body; must live here since DevHost is the outer page) -->
+    <Toast />
+
+    <!-- Decorative Slate material layers: fixed, pointer-events:none, behind all content -->
+    <!-- DEV-08: low-opacity SVG fractalNoise grain replaces bare flat background -->
+    <div class="dev-grain" aria-hidden="true"></div>
+    <!-- DEV-08: radial vignette darkens edges so the board iframe remains the hero -->
+    <div class="dev-vignette" aria-hidden="true"></div>
+
     <!-- Connecting -->
     <div v-if="!connected" class="dev-host__center">
       <p>Connecting to the dev host…</p>
@@ -472,9 +520,14 @@ onUnmounted(() => {
                   <span class="dev-chrome__btn-icon" aria-hidden="true">{{ followActive ? '◉' : '○' }}</span>
                   <span class="dev-chrome__btn-label">{{ followActive ? 'Following active seat' : 'Follow active seat' }}</span>
                 </button>
-                <button type="button" class="btn btn--start" @click="newGame">
+                <button
+                  type="button"
+                  class="btn btn--start"
+                  :class="{ 'btn--confirming': restartConfirming }"
+                  @click="handleNewGameClick"
+                >
                   <span class="dev-chrome__btn-icon" aria-hidden="true">↺</span>
-                  <span class="dev-chrome__btn-label">New game</span>
+                  <span class="dev-chrome__btn-label">{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</span>
                 </button>
                 <button
                   type="button"
@@ -499,7 +552,12 @@ onUnmounted(() => {
               >
                 {{ followActive ? 'Following active seat' : 'Follow active seat' }}
               </button>
-              <button type="button" class="btn btn--start" @click="newGame">New game</button>
+              <button
+                type="button"
+                class="btn btn--start"
+                :class="{ 'btn--confirming': restartConfirming }"
+                @click="handleNewGameClick"
+              >{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</button>
               <button
                 type="button"
                 class="btn"
@@ -579,12 +637,54 @@ onUnmounted(() => {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
+/* ── Slate material layer (DEV-08) ── */
+/*
+ * Both layers are position:fixed so they cover the viewport regardless of
+ * content height and do NOT scroll with page content. pointer-events:none
+ * ensures they never intercept clicks. z-index 0/1 keeps them behind the
+ * flex children (which get z-index:2 via position:relative on their wrappers).
+ *
+ * No background-attachment:fixed (causes compositing jank on mobile).
+ * No rgba/hex literals — color-mix with --bsg-bg for theme-awareness.
+ */
+
+/* Low-opacity SVG fractalNoise grain — neutral/graphite, not warm-tinted */
+.dev-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.07;
+  /* URL-encoded SVG feTurbulence fractalNoise (# → %23, < → %3C, > → %3E) */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+}
+
+/* Radial vignette: transparent center → token-mixed edge (no raw hex) */
+.dev-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: radial-gradient(
+    ellipse at center,
+    transparent 35%,
+    color-mix(in srgb, var(--bsg-bg) 70%, transparent) 100%
+  );
+}
+
+/* ── Content stacking above decorative layers ── */
+/* All direct-content wrappers get position:relative + z-index:2 to sit above
+   the fixed grain/vignette layers (z-index 0 and 1). */
 .dev-host__center {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  position: relative;
+  z-index: 2;
 }
 
 /* ── Lobby ── */
@@ -727,6 +827,16 @@ onUnmounted(() => {
   cursor: default;
 }
 
+/* Confirm state: subtle danger tint — no accent CTA fill (CLAUDE.md: always_confirm_destructive) */
+.btn--start.btn--confirming {
+  border-color: color-mix(in srgb, var(--bsg-danger) 60%, transparent);
+  color: var(--bsg-danger);
+}
+
+.btn--start.btn--confirming:hover {
+  background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
+}
+
 .btn--on {
   border-color: var(--bsg-accent);
   background: color-mix(in srgb, var(--bsg-accent) 15%, transparent);
@@ -747,6 +857,8 @@ onUnmounted(() => {
   flex-direction: column;
   background: var(--bsg-surface);
   border-bottom: 1px solid var(--bsg-line);
+  position: relative;
+  z-index: 2;
 }
 
 /* ── Pull-tab (always visible, toggles the chrome bar) ── */
@@ -894,6 +1006,8 @@ onUnmounted(() => {
 .dev-host__stage {
   flex: 1 1 auto;
   min-height: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .dev-host__frame {
