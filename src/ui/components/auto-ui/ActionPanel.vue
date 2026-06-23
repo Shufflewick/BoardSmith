@@ -14,6 +14,7 @@
  * action controller is provided via inject('actionController').
  */
 import { ref, computed, watch, inject } from 'vue';
+import { useToast } from '../../composables/useToast';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import type {
@@ -34,6 +35,7 @@ if (!_actionController) {
   throw new Error('ActionPanel requires actionController to be provided via inject. Use inside GameShell.');
 }
 const actionController = _actionController;
+const toast = useToast();
 
 // Re-export types
 export type { ChoiceWithRefs, ValidElement, ElementRef };
@@ -673,6 +675,7 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
   const result = await actionController.fill(name, value);
   if (!result.valid) {
     console.error('Selection failed:', result.error);
+    toast.error(result.error || 'Selection failed.');
     return;
   }
 
@@ -728,9 +731,11 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
     const result = await actionController.execute(actionName, filteredArgs);
     if (!result.success && result.error) {
       console.error('Action failed:', result.error);
+      toast.error(result.error);
     }
   } catch (err) {
     console.error('Execute action error:', err);
+    toast.error(err instanceof Error ? err.message : 'Failed to execute action.');
   } finally {
     boardInteraction?.clear();
     emit('cancelSelection');

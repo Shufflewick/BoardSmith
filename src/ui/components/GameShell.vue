@@ -479,7 +479,10 @@ function setBoardPrompt(prompt: string | null): void {
 async function handleUndo(): Promise<void> {
   if (platformMode.value) {
     const result = await platformRequest('undo', { player: playerSeat.value });
-    if (!result.success) console.error('Undo failed:', result.error);
+    if (!result.success) {
+      console.error('Undo failed:', result.error);
+      toast.error(result.error || 'Undo failed.');
+    }
     // State update arrives via the game_state broadcast.
     return;
   }
@@ -493,10 +496,12 @@ async function handleUndo(): Promise<void> {
     const result = await response.json();
     if (!result.success) {
       console.error('Undo failed:', result.error);
+      toast.error(result.error || 'Undo failed.');
     }
     // State update will come via WebSocket
   } catch (error) {
     console.error('Undo error:', error);
+    toast.error(error instanceof Error ? error.message : 'Undo failed.');
   }
 }
 
@@ -752,7 +757,7 @@ async function createGame(config?: LobbyConfig) {
     }
   } catch (err) {
     console.error('Failed to create game:', err);
-    alert('Failed to create game');
+    toast.error(err instanceof Error ? err.message : 'Failed to create game.');
   }
 }
 
@@ -823,7 +828,7 @@ function disconnectFromLobby() {
 
 async function joinGame() {
   if (!joinGameId.value.trim()) {
-    alert('Please enter a game code');
+    toast.error('Please enter a game code.');
     return;
   }
 
@@ -905,7 +910,7 @@ async function joinGame() {
     }
   } catch (err) {
     console.error('Failed to join game:', err);
-    alert('Failed to join game. Check the game code.');
+    toast.error(err instanceof Error ? err.message : 'Failed to join game. Check the game code.');
   }
 }
 
@@ -936,11 +941,11 @@ async function handleJoinLobby(name: string) {
         updateUrl(createdGameId.value, result.seat);
       }
     } else {
-      alert(result.error || 'Failed to join lobby');
+      toast.error(result.error || 'Failed to join lobby.');
     }
   } catch (err) {
     console.error('Failed to join lobby:', err);
-    alert('Failed to join lobby');
+    toast.error(err instanceof Error ? err.message : 'Failed to join lobby.');
   }
 }
 
@@ -982,6 +987,7 @@ async function handleSetReady(ready: boolean) {
       }
     } else {
       console.error('Failed to set ready:', result.error);
+      toast.error(result.error || 'Failed to mark as ready.');
     }
   } catch (err) {
     console.error('Failed to set ready:', err);
@@ -1174,6 +1180,7 @@ async function handleRestartGame() {
     // so the state will update automatically
   } catch (err) {
     console.error('Failed to restart game:', err);
+    toast.error(err instanceof Error ? err.message : 'Failed to restart game.');
     error.value = err instanceof Error ? err : new Error('Failed to restart game');
   }
 }
