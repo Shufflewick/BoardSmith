@@ -1219,7 +1219,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  background: var(--bg-color, #1a1a2e);
+  background: var(--bsg-bg);
   padding: 8px;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);

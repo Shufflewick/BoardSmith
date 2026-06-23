@@ -1515,25 +1515,25 @@ function clearBoardSelection() {
   justify-content: center;
   gap: 1rem;
   padding: 1rem;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--bsg-surface-2);
   border-radius: 0.5rem;
 }
 
 .pending-text {
-  color: var(--text-secondary, #666);
+  color: var(--bsg-ink-2);
   font-style: italic;
 }
 
 .skip-btn {
   padding: 0.25rem 0.75rem;
-  border: 1px solid var(--border-color, #ccc);
+  border: 1px solid var(--bsg-line);
   border-radius: 0.25rem;
-  background: var(--bg-primary, #fff);
+  background: var(--bsg-surface);
   cursor: pointer;
   font-size: 0.875rem;
 }
 
 .skip-btn:hover {
-  background: var(--bg-hover, #eee);
+  background: var(--bsg-surface-3);
 }
 </style>
