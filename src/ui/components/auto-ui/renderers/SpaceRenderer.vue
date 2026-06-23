@@ -13,6 +13,7 @@
 
 import { computed } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 
 // ---------------------------------------------------------------------------
@@ -86,13 +87,24 @@ function handleDrop(event: DragEvent) {
   boardInteraction.triggerDrop(elementIdentity());
 }
 
-// Click handler — dispatch board action when space is selectable
-function handleClick(event: MouseEvent) {
-  event.stopPropagation();
-  if (!boardInteraction || !isActionSelectable.value) return;
-  if (isDisabled.value) return;
-  boardInteraction.triggerElementSelect(elementIdentity());
-}
+// useSelectable — keyboard + click wiring (A11Y-01)
+const { onClick, onKeydown, attrs: selectableAttrs } = useSelectable(
+  elementIdentity,
+  boardInteraction ?? null,
+  isActionSelectable,
+  isDisabled,
+);
+
+// ARIA label: space name + occupant count + state
+const ariaLabel = computed(() => {
+  const name = props.element.name ?? 'space';
+  const count = childCountDisplay.value;
+  if (isDisabled.value) return `${name}, unavailable`;
+  if (isDropTarget.value) return `${name}, drop target`;
+  if (isBoardSelected.value) return `${name}, selected`;
+  if (isActionSelectable.value) return count > 0 ? `${name}, ${count} items, selectable` : `${name}, selectable`;
+  return count > 0 ? `${name}, ${count} items` : name;
+});
 
 // Layout CSS vars derived from element attributes
 const layoutStyles = computed(() => {
@@ -149,6 +161,10 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 
 <template>
   <div
+    v-bind="selectableAttrs"
+    :aria-label="ariaLabel"
+    :aria-selected="isBoardSelected || undefined"
+    :aria-disabled="isDisabled || undefined"
     class="space-container"
     :class="{
       'action-selectable': isActionSelectable,
@@ -159,7 +175,8 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
     }"
     :style="layoutStyles"
     :data-element-id="element.id"
-    @click="handleClick"
+    @click="onClick"
+    @keydown="onKeydown"
     @dragover="handleDragOver"
     @drop="handleDrop"
   >
