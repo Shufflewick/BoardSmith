@@ -51,7 +51,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   4. `applyTheme()` is the sole theming knob: a host-supplied token override passed at iframe init re-skins the chrome without touching component code (TOKEN-05).
   5. A stylelint `color-no-hex` rule scoped to chrome/renderer `.vue` files fails CI when a raw hex literal is introduced (TOKEN-06).
 **Plans**: 4 plans (2 waves)
-  - [ ] 98-01-PLAN.md — Rewrite theme.ts as the Slate `--bsg-*` token engine (dark default + OS-following light + applyTheme sole knob + seat/interaction/motion tokens)
+  - [x] 98-01-PLAN.md — Rewrite theme.ts as the Slate `--bsg-*` token engine (dark default + OS-following light + applyTheme sole knob + seat/interaction/motion tokens)
   - [ ] 98-02-PLAN.md — Add `color-no-hex` stylelint guard + `lint:css` script with a documented temporary ignore list (Phase 99 empties it)
   - [ ] 98-03-PLAN.md — Collapse the `--bs-*` namespace into `--bsg-*` across drag-drop.css + 5 renderers; HexBoardRenderer seats via `--bsg-seat-*` tokens
   - [ ] 98-04-PLAN.md — Collapse `--bg-*/--text-*/--border-*` in ActionPanel/WaitingRoom; wire GameShell `applyTheme` base-install + init theme-override receiver
@@ -141,7 +141,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
-| 98. Token Foundation (Wave 1) | 0/? | Not started | - |
+| 98. Token Foundation (Wave 1) | 1/4 | In Progress|  |
 | 99. Theming Swap (Wave 2) | 0/? | Not started | - |
 | 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |
