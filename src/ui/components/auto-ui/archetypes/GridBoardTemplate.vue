@@ -115,19 +115,25 @@ const chromeElements = computed(() =>
   padding: 8px;
 }
 
-/* Board slot: DOMINANT area — the focal grid/hex board */
+/* Board slot: DOMINANT area — the focal grid/hex board.
+   container-type:size establishes a container-query context so the renderer's
+   cqw/cqh units resolve against this element's size even outside GameShell's
+   boardregion (Assumption A3 robustness). min-height:0 ensures a definite block
+   size so cqh resolves correctly (Pitfall 1). */
 .grid-board-template__board {
   grid-area: board;
+  min-height: 0;
+  container-type: size;
   overflow: auto;
   display: flex;
   align-items: stretch;
   justify-content: center;
 }
 
-/* Hand strip: docked at bottom — max 30vh, scrollable horizontally */
+/* Hand strip: docked at bottom — fluid clamp replaces fixed 30vh viewport unit */
 .grid-board-template__hand {
   grid-area: hand;
-  max-height: 30vh;
+  max-height: clamp(96px, 22vh, 180px);
   overflow-x: auto;
   display: flex;
   gap: 8px;
