@@ -170,9 +170,12 @@ function onWindowMessage(event: MessageEvent): void {
   // The game advertises its available UIs; populate the switcher dropdown.
   if (data.type === 'dev-ui-list' && Array.isArray(data.uis)) {
     uiOptions.value = data.uis as string[];
-    // Keep the current selection if still offered; otherwise default to the first.
+    // Keep the current selection if still offered; otherwise default to the first
+    // and tell the game, so the host dropdown and GameShell's internal selection
+    // can't silently diverge (host shows A while the game still renders B).
     if (!uiOptions.value.includes(selectedUi.value)) {
       selectedUi.value = uiOptions.value[0] ?? '';
+      postToGame({ type: 'dev-ui-select', name: selectedUi.value });
     }
   }
 }
