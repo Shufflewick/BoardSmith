@@ -71,7 +71,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   4. Both card renderers consume one shared `--bsg-card-back` class (no corporate-blue gradient), and the active-player cue is a calm accent dot with an opacity-only breathe and a token border (no scaling neon halo / `pulse-glow`) (THEME-05, THEME-06).
   5. Panels and zone surfaces use `var(--bsg-surface)` + `var(--bsg-line)`/`--bsg-line-2` hairlines (no translucent-black glass / white hairlines), backdrops go transparent in platform mode so the host shows through, and `DevHost` is recolored from indigo/neon literals to Slate tokens (THEME-07, THEME-08).
 **Plans**: 15 plans (4 waves)
-  - [ ] 99-01-PLAN.md — [W1] Add the two new tokens (`--bsg-card-back`, `--bsg-display`) to theme.ts + test-lock them
+  - [x] 99-01-PLAN.md — [W1] Add the two new tokens (`--bsg-card-back`, `--bsg-display`) to theme.ts + test-lock them
   - [ ] 99-02-PLAN.md — [W2] Sweep CardRenderer + HandRenderer (shared card back, glow→neutral, HandRenderer border→outline fix)
   - [ ] 99-03-PLAN.md — [W2] Sweep DeckRenderer + DieRenderer + PieceRenderer (interaction tokens, no glow)
   - [ ] 99-04-PLAN.md — [W2] Sweep GridBoard + HexBoard (hex `<g>`) + Space renderers; confirm ElementRenderer clean
@@ -157,7 +157,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 |-------|----------------|--------|-----------|
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
-| 99. Theming Swap (Wave 2) | 0/15 | Planned | - |
+| 99. Theming Swap (Wave 2) | 1/15 | In Progress|  |
 | 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |

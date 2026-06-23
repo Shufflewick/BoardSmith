@@ -33,8 +33,8 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 - [ ] **THEME-01**: All 8 renderers + hex `<g>` express interaction state via `var(--bsg-selectable|selected|droptarget)` — no `#00d9ff`/`#00ff88`/`rgba(46,204,113…)` literals and no colored glow box-shadows remain
 - [ ] **THEME-02**: Selection highlight uses `outline` (never `border`) across every renderer, so highlighting never reflows layout
 - [ ] **THEME-03**: The primary action button is the Slate teal plate (token fill, dark-ink label, neutral elevation, no glow)
-- [ ] **THEME-04**: Titles render as solid type in the display font with a faint shadow — the gradient clip-text blocks are deleted
-- [ ] **THEME-05**: The default card back is one shared tokenized `--bsg-card-back` class consumed by both card renderers (no corporate-blue gradient)
+- [x] **THEME-04**: Titles render as solid type in the display font with a faint shadow — the gradient clip-text blocks are deleted
+- [x] **THEME-05**: The default card back is one shared tokenized `--bsg-card-back` class consumed by both card renderers (no corporate-blue gradient)
 - [ ] **THEME-06**: The active-player cue is calm — accent dot with an opacity-only breathe and a token border, replacing the scaling neon halo/`pulse-glow`
 - [ ] **THEME-07**: Panels and zone surfaces use `var(--bsg-surface)` + `var(--bsg-edge)` hairlines, replacing translucent-black glass and white hairlines; backdrops go transparent in platform mode so the host shows through
 - [ ] **THEME-08**: `DevHost` is recolored to Slate — the indigo/neon literals are replaced with tokens
@@ -126,8 +126,8 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | THEME-01 | 99 (Wave 2 — Theming Swap) | Pending |
 | THEME-02 | 99 (Wave 2 — Theming Swap) | Pending |
 | THEME-03 | 99 (Wave 2 — Theming Swap) | Pending |
-| THEME-04 | 99 (Wave 2 — Theming Swap) | Pending |
-| THEME-05 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-04 | 99 (Wave 2 — Theming Swap) | Complete |
+| THEME-05 | 99 (Wave 2 — Theming Swap) | Complete |
 | THEME-06 | 99 (Wave 2 — Theming Swap) | Pending |
 | THEME-07 | 99 (Wave 2 — Theming Swap) | Pending |
 | THEME-08 | 99 (Wave 2 — Theming Swap) | Pending |
