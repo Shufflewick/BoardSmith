@@ -53,7 +53,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 **Plans**: 4 plans (2 waves)
   - [x] 98-01-PLAN.md — Rewrite theme.ts as the Slate `--bsg-*` token engine (dark default + OS-following light + applyTheme sole knob + seat/interaction/motion tokens)
   - [x] 98-02-PLAN.md — Add `color-no-hex` stylelint guard + `lint:css` script with a documented temporary ignore list (Phase 99 empties it)
-  - [ ] 98-03-PLAN.md — Collapse the `--bs-*` namespace into `--bsg-*` across drag-drop.css + 5 renderers; HexBoardRenderer seats via `--bsg-seat-*` tokens
+  - [x] 98-03-PLAN.md — Collapse the `--bs-*` namespace into `--bsg-*` across drag-drop.css + 5 renderers; HexBoardRenderer seats via `--bsg-seat-*` tokens
   - [ ] 98-04-PLAN.md — Collapse `--bg-*/--text-*/--border-*` in ActionPanel/WaitingRoom; wire GameShell `applyTheme` base-install + init theme-override receiver
 **UI hint**: yes
 **Risk note**: This is highest-risk item #1. Flipping `theme.ts` defaults (TOKEN-02) exposes a latent collision — the renderers assume a *dark* ground while the old default was light. The token-default flip must merge **atomically with the Phase 99 renderer sweep** so `main` is never in the half-swapped state where white ink sits on a near-white page (the invisible-text trap). Treat Phases 98 + 99 as one atomic landing.
@@ -141,7 +141,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
-| 98. Token Foundation (Wave 1) | 2/4 | In Progress|  |
+| 98. Token Foundation (Wave 1) | 3/4 | In Progress|  |
 | 99. Theming Swap (Wave 2) | 0/? | Not started | - |
 | 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |

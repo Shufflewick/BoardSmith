@@ -21,7 +21,7 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 
 ### Token Foundation (Wave 1 — the keystone)
 
-- [ ] **TOKEN-01**: All chrome and renderer color, spacing, type, radius, shadow, and motion values resolve from a single `--bsg-*` namespace — the `--bs-*` and `--bg-*`/`--text-*`/`--border-*` namespaces are collapsed into it
+- [x] **TOKEN-01**: All chrome and renderer color, spacing, type, radius, shadow, and motion values resolve from a single `--bsg-*` namespace — the `--bs-*` and `--bg-*`/`--text-*`/`--border-*` namespaces are collapsed into it
 - [x] **TOKEN-02**: `theme.ts` default tokens are the Slate palette (graphite `--bsg-bg`, layered surfaces, ink ramp, single teal accent + accent-2, muted seat palette, interaction tokens) — the dead light-blue defaults are deleted
 - [x] **TOKEN-03**: `theme.ts` emits spacing (4px scale), type (Hanken Grotesk + JetBrains Mono + size scale), radius, shadow, and seat tokens — it is no longer color-only
 - [x] **TOKEN-04**: The chrome follows OS light/dark by default, with a complete Slate light token set in addition to dark
@@ -117,7 +117,7 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | QUICK-03 | 97 (Wave 0 — Quick Wins) | Complete |
 | QUICK-04 | 97 (Wave 0 — Quick Wins) | Complete |
 | QUICK-05 | 97 (Wave 0 — Quick Wins) | Complete |
-| TOKEN-01 | 98 (Wave 1 — Token Foundation) | Pending |
+| TOKEN-01 | 98 (Wave 1 — Token Foundation) | Complete |
 | TOKEN-02 | 98 (Wave 1 — Token Foundation) | Complete |
 | TOKEN-03 | 98 (Wave 1 — Token Foundation) | Complete |
 | TOKEN-04 | 98 (Wave 1 — Token Foundation) | Complete |
