@@ -8,22 +8,11 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.0 UI Redesign (Slate)
+## Previous: v4.0 Shipped
 
-**Goal:** Rebuild the BoardSmith user interface from the adversarial UI/UX audit — replace the hardcoded neon-noir chrome with a single load-bearing token system in the neutral **"Slate"** design language (graphite palette, single teal accent, Hanken Grotesk + JetBrains Mono, OS light/dark), get the chrome out of the game's way so the board is the hero, and close the critical accessibility gaps — without breaking a single existing game.
+UI Redesign (Slate) — rebuilt the entire BoardSmith UI on a single load-bearing `--bsg-*` token system in the neutral "Slate" design language (graphite palette, single teal accent, Hanken Grotesk + JetBrains Mono, OS light/dark), got the chrome out of the board's way, and closed the critical accessibility gaps — without breaking a single game.
 
-**Design source of truth:** `planning/boardsmith-ui-redesign-spec.md` (structural/behavioral audit + 6-wave roadmap) and the canonical mockup `planning/mockups/boardsmith-chrome.html` (the chosen "Slate" direction). The spec body is written in "warm tavern" terms; the **go-forward override (chosen 2026-06-22)** keeps every structural/behavioral value but swaps the warm color values for the **neutral Slate** ones — the game chrome must stay generic and game-agnostic; tavern theming belongs to the ShufflewickPub host (out of scope this milestone), applied via the token override.
-
-**Target features (6 waves, in-repo surfaces only):**
-- **Wave 0 — Quick wins:** in-repo accessible-name/`aria` fixes, `100vh`→`100dvh`, safe-area insets, replace `alert()`/`console.error` swallows with visible `toast.error`, delete dead menu items + engine branding.
-- **Wave 1 — Token foundation:** collapse three namespaces (`--bsg-*`/`--bs-*`/`--bg-*`) into one `--bsg-*` contract emitted by `theme.ts`; repoint dead light-blue defaults to the Slate palette (color + spacing + type + shadow + seat + interaction tokens); make `applyTheme()` the sole knob (host-overridable); add a stylelint `color-no-hex` guard.
-- **Wave 2 — Theming swap:** spend the tokens — sweep 8 renderers + chrome + DevHost from neon literals to `var(--bsg-*)`; brass→teal primary button; `outline`-not-`border` selection; solid (no clip-text) type; tokenized card back; calm active-player cue.
-- **Wave 3 — IA & responsive:** kill the standing header in platform mode; persistent turn ribbon + always-on prompt; action bar only when actionable (capped + scroll); fluid container-query board sizing (retire the zoom-slider fit strategy); real compact/medium/wide breakpoints; collapsible sidebar→rail; Game Over result card.
-- **Wave 4 — Accessibility (WCAG 2.2 AA):** keyboard-operable board via a shared `useSelectable()` composable (roving-tabindex grid) — fixes the two **critical** blockers; live regions + SR narration; semantic names/state; non-color state cues; global `:focus-visible`; dialog semantics + focus trap; `prefers-reduced-motion`; contrast + ≥44px target sweep.
-- **Wave 5 — Material polish & dev/debug parity:** reskin `DebugPanel` in Slate; dev chrome collapse-to-tab + seat switcher + presence strip + "Table setup" panel; loading/empty/error voice; read-only player history; destructive-action confirm.
-- **Cross-repo verification:** every game in `~/BoardSmithGames/` (hex, checkers, cribbage, go-fish, polyhedral-potions, floss-bitties, demo-action-panel, demo-animation, demo-complex-ui) **and** MERC (`~/Dropbox/MERC/BoardSmith/MERC`, vendored BoardSmith) must still build, pass tests, and play in the browser after the redesign.
-
-**Key context:** Scope is **this repo only** — the BoardSmith game-shell chrome + 8 board renderers + `theme.ts` + dev-server chrome (DevHost/DebugPanel). The ShufflewickPub host skin (separate repo: lobby, `GameFrame.vue`, `[sessionId].vue`, PrimeVue preset, connection banner) is **out of scope**, but the BoardSmith-side token/`applyTheme`/postMessage-consumption infrastructure must remain host-overridable so the host can apply its own theme later. Highest-risk items per the spec: (1) `theme.ts` default flip must merge atomically with the renderer sweep (invisible-text trap); (2) the keyboard/semantics composable is architectural across all 8 renderers; (3) fluid board sizing can regress published game bundles — validate against MERC + real games; (4) standing-header removal changes the host↔iframe postMessage contract. No backward compatibility — clean break.
+**v4.0 Delivered:** Phases 97-103 (six waves + a cross-repo verification gate) — one `--bsg-*` token contract in `theme.ts` with `applyTheme()` as the sole host-overridable knob + `color-no-hex` lint; full neon→Slate sweep of 8 renderers + chrome + DevHost (teal button, outline selection, tokenized card back); board-as-hero IA (no platform header, turn status + always-on prompt, conditional dock, fluid container-query sizing, Game Over card); WCAG 2.2 AA (shared `useSelectable()` keyboard board across all 8 renderers, live regions, focus-trap dialogs, non-color cues, contrast/target sweep); dev/debug parity (Slate DebugPanel, collapse-to-tab, seat switcher, Table-setup, two-click New-Game confirm, material layer). Verified: BoardSmith 1245/1245 tests, lint:css clean, all 8 games + MERC (738) green, browser-verified across hex/cards/grid renderers. The ShufflewickPub host skin (HOST-01..04) is deferred; the token/`applyTheme` infra is host-overridable and ready.
 
 ## Previous: v3.1 Shipped
 
@@ -225,15 +214,18 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ Example games migrated (demo-animation, cribbage) — v3.0
 - ✓ Documentation updated (ui-components.md, nomenclature.md, migration-guide.md) — v3.0
 
+- ✓ Single `--bsg-*` Slate token contract + `applyTheme()` knob + `color-no-hex` lint — v4.0
+- ✓ Neon→Slate visual sweep of 8 renderers + chrome + DevHost (teal button, outline selection, tokenized card back) — v4.0
+- ✓ Board-as-hero IA + responsive (no platform header, turn status + always-on prompt, conditional dock, fluid container-query sizing, Game Over card) — v4.0
+- ✓ WCAG 2.2 AA — shared `useSelectable()` keyboard board, live regions, focus-trap dialogs, non-color cues, contrast/target sweep — v4.0
+- ✓ Dev/debug parity — Slate DebugPanel, collapse-to-tab, seat switcher, Table-setup, two-click New-Game confirm, material layer — v4.0
+- ✓ Cross-repo verified — all 8 games + MERC build/test/play on the new Slate chrome — v4.0
+
 ### Active
 
-v4.0 UI Redesign (Slate) requirements (see `.planning/REQUIREMENTS.md`):
-- Single `--bsg-*` token contract in `theme.ts` with Slate defaults; `applyTheme()` as the sole host-overridable knob; stylelint `color-no-hex` guard
-- Visual theming swap — 8 renderers + chrome + DevHost from neon literals to tokens; teal primary button; `outline` selection; solid type; tokenized card back
-- IA & responsive — no standing header in platform mode, persistent turn ribbon + prompt, conditional action bar, fluid container-query board sizing, real breakpoints, Game Over result card
-- Accessibility (WCAG 2.2 AA) — keyboard-operable board composable, live regions, semantic names/state, non-color cues, focus-visible, dialog semantics, reduced-motion, contrast/target sweep
-- Dev/debug parity — Slate DebugPanel, dev chrome collapse + seat switcher + Table-setup panel, voiced states, read-only history, destructive-action confirm
-- Cross-repo verification — all `~/BoardSmithGames/` games + MERC still build, test, and play
+Planning next milestone. Carried forward (deferred from v4.0):
+- ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
+- v4.0 polish todos (non-blocking): dev-standalone shell height gap; pre-existing dev-host AI-turn issue; orphaned tokens / lint scope / focus-ring naming / platform-mode connection-announce seam. See `.planning/todos/pending/`.
 
 ### Out of Scope
 
@@ -360,4 +352,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-22 — started v4.0 UI Redesign (Slate) milestone*
+*Last updated: 2026-06-23 — shipped v4.0 UI Redesign (Slate) milestone*

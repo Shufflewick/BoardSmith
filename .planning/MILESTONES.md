@@ -1,5 +1,27 @@
 # Project Milestones: BoardSmith
 
+## v4.0 UI Redesign (Slate) (Shipped: 2026-06-23)
+
+**Delivered:** Rebuilt the entire BoardSmith UI on a single load-bearing `--bsg-*` token system in the neutral "Slate" design language (graphite palette, single teal accent, Hanken Grotesk + JetBrains Mono, OS light/dark), got the chrome out of the board's way, and closed the critical accessibility gaps — without breaking a single game.
+
+**Phases completed:** 7 phases (97-103), 42 plans
+
+**Key accomplishments:**
+
+- **Single token contract (Wave 1/98):** collapsed three color namespaces (`--bs-*`/`--bg-*`/`--bsg-*`) into one `--bsg-*` system emitted by `theme.ts` with full Slate defaults, OS light/dark, `applyTheme()` as the sole host-overridable knob, and a `color-no-hex` stylelint guard.
+- **Neon → Slate sweep (Wave 2/99):** swept all 8 renderers + chrome + DevHost from neon literals to tokens — teal primary button, `outline`-not-`border` selection, solid display type, shared tokenized card back, calm active-player cue — verified by both-theme contrast assertions (caught 5 invisible-text cases).
+- **Board is the hero (Wave 3/100):** no standing header in platform mode, turn status + always-on prompt, action dock only when actionable, fluid container-query board sizing (retired the zoom-as-fit crutch), real responsive tiers, ControlsMenu, and a Game Over result card.
+- **WCAG 2.2 AA (Wave 4/101):** closed the two Critical findings — a shared `useSelectable()` keyboard composable across all 8 renderers (drag preserved as enhancement) and board-anchored action-panel parity — plus live regions, dialog focus-traps, non-color cues, focus-visible, reduced-motion, and a contrast/target sweep.
+- **Dev/debug parity (Wave 5/102):** Slate DebugPanel with ARIA tabs, dev chrome collapse-to-tab, working seat switcher + presence strip + Table-setup panel, voiced states, read-only history, two-click New-Game confirm, and a neutral material layer.
+- **Cross-repo verified (103):** all 8 `~/BoardSmithGames/` games + MERC (the canary, 738 tests) build and pass; browser-verified the Slate chrome across hex / cards / grid renderers + a custom UI with zero console errors. BoardSmith: 1245/1245 tests, lint:css clean.
+
+**Stats:** 196 files changed, +31,251 / -1,933 lines · 7 phases, 42 plans · ~9 hours (2026-06-22 23:14 → 2026-06-23 08:03).
+
+**Known deferred items at close:** 3 follow-up todos (dev-standalone shell height gap; pre-existing dev-host AI-turn issue — not a v4.0 regression; Slate token/a11y polish incl. the platform-mode connection-announce seam) + Phase 101 manual AT spot-checks (covered by the Phase 103 browser pass). See `.planning/todos/pending/` and `milestones/v4.0-MILESTONE-AUDIT.md`.
+
+**Out of scope (deferred to a future host milestone):** the ShufflewickPub host skin (lobby, GameFrame, PrimeVue preset, connection banner) — HOST-01..04. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
+
+
 ## v3.0 Animation Timeline (Shipped: 2026-02-08)
 
 **Delivered:** Replaced v2.9 theatre view and mutation capture with a client-side animation timeline -- animation events are a pure data channel, playback is 100% client-owned, and the server never waits on animation state.
