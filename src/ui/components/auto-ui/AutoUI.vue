@@ -12,6 +12,7 @@
  * />
  */
 import AutoGameBoard from './AutoGameBoard.vue';
+import BoardLegend from './BoardLegend.vue';
 import type { GameElement } from './index';
 
 interface FlowState {
@@ -44,12 +45,16 @@ defineProps<{
       :game-view="gameView"
       :player-seat="playerSeat"
     />
+
+    <!-- Interaction state legend (A11Y-05) — absolute bottom-left per mockup -->
+    <BoardLegend />
   </div>
 </template>
 
 <style scoped>
 .auto-ui {
   height: 100%;
+  position: relative;
 }
 
 .game-complete {
@@ -61,7 +66,7 @@ defineProps<{
 
 .game-complete h2 {
   font-size: 2rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
+  background: linear-gradient(90deg, var(--bsg-accent-2), var(--bsg-accent));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
