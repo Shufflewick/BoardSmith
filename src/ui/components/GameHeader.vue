@@ -4,6 +4,7 @@
  *
  * Contains the hamburger menu, game title, zoom control, game code, and connection status.
  */
+import { computed } from 'vue';
 import HamburgerMenu from './HamburgerMenu.vue';
 
 const props = defineProps<{
@@ -35,8 +36,6 @@ function resetZoom() {
 }
 
 const zoomPercent = computed(() => Math.round((props.zoom ?? 1.0) * 100));
-
-import { computed } from 'vue';
 </script>
 
 <template>
