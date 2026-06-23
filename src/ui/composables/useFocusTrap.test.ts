@@ -213,4 +213,58 @@ describe('useFocusTrap', () => {
     close();
     expect(sibling.hasAttribute('inert')).toBe(false);
   });
+
+  it('open() applies inert to body-level siblings even when dialog is deeply nested (CR-01)', () => {
+    // Simulate real DOM: body > hostRoot > wrapper > dialog
+    // (mirrors HamburgerMenu: body > .game-shell > .hamburger-menu > .menu-drawer)
+    const bodySibling = document.createElement('div');
+    bodySibling.id = 'body-sibling';
+    document.body.appendChild(bodySibling);
+
+    const hostRoot = document.createElement('div');
+    hostRoot.id = 'host-root';
+    document.body.appendChild(hostRoot);
+
+    const wrapper = document.createElement('div');
+    hostRoot.appendChild(wrapper);
+
+    const dialog = document.createElement('div');
+    dialog.innerHTML = '<button id="b-nested">OK</button>';
+    wrapper.appendChild(dialog);
+
+    const dialogRef = ref(dialog);
+    const { open } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+
+    open();
+
+    // bodySibling is a sibling of hostRoot at body level — must be inerted
+    expect(bodySibling.hasAttribute('inert')).toBe(true);
+    // hostRoot itself must NOT be inerted (it contains the dialog)
+    expect(hostRoot.hasAttribute('inert')).toBe(false);
+    // The immediate wrapper around the dialog must NOT be inerted
+    expect(wrapper.hasAttribute('inert')).toBe(false);
+    // The dialog itself must NOT be inerted
+    expect(dialog.hasAttribute('inert')).toBe(false);
+  });
+
+  it('close() removes inert even after dialogRef is cleared (CR-02 guard)', () => {
+    // Simulate onBeforeUnmount / onUnmounted scenario: ref may be null at cleanup
+    const sibling = document.createElement('div');
+    sibling.id = 'sibling-guard';
+    document.body.appendChild(sibling);
+
+    const dialog = appendDialog('<button id="b1">OK</button>');
+    const dialogRef = ref<HTMLElement | null>(dialog);
+    const { open, close } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+
+    open();
+    expect(sibling.hasAttribute('inert')).toBe(true);
+
+    // Simulate Vue clearing the template ref before cleanup runs
+    dialogRef.value = null;
+
+    close();
+    // Cleanup must use _inertRoot (not dialogRef) so inert is removed even with null ref
+    expect(sibling.hasAttribute('inert')).toBe(false);
+  });
 });

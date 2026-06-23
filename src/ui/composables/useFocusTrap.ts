@@ -60,6 +60,10 @@ export function useFocusTrap(
 ) {
   const escapeToClose = options?.escapeToClose ?? true;
   let previouslyFocused: HTMLElement | null = null;
+  // Saved reference to the body-level host node whose siblings receive inert.
+  // Using a plain variable (not dialogRef) means cleanup works even after the
+  // Vue template ref is cleared at unmount (CR-02 guard).
+  let _inertRoot: HTMLElement | null = null;
 
   // --------------------------------------------------------------------------
   // open() — save context, apply inert, focus first element
@@ -120,27 +124,43 @@ export function useFocusTrap(
   }
 
   // --------------------------------------------------------------------------
-  // Inert helpers — apply/remove on all siblings of the dialog within its parent
+  // Inert helpers — apply/remove at body-child scope (CR-01)
+  //
+  // Walk up from the dialog to the direct child of <body> (the "scoping root"),
+  // then apply `inert` to all of its siblings. This ensures Tab cannot escape
+  // to any other top-level DOM subtree regardless of how deeply the dialog is
+  // nested inside its parent components.
   // --------------------------------------------------------------------------
 
+  function getScopingRoot(): HTMLElement | null {
+    let node: HTMLElement | null = dialogRef.value;
+    while (node && node.parentElement && node.parentElement !== document.body) {
+      node = node.parentElement;
+    }
+    return node;
+  }
+
   function applySiblingInert() {
-    const parent = dialogRef.value?.parentElement;
-    if (!parent) return;
+    const target = getScopingRoot();
+    const parent = target?.parentElement;
+    if (!target || !parent) return;
     for (const child of Array.from(parent.children)) {
-      if (child !== dialogRef.value) {
+      if (child !== target) {
         (child as HTMLElement).setAttribute('inert', '');
       }
     }
+    _inertRoot = target;
   }
 
   function removeSiblingInert() {
-    const parent = dialogRef.value?.parentElement;
+    const parent = _inertRoot?.parentElement;
     if (!parent) return;
     for (const child of Array.from(parent.children)) {
-      if (child !== dialogRef.value) {
+      if (child !== _inertRoot) {
         (child as HTMLElement).removeAttribute('inert');
       }
     }
+    _inertRoot = null;
   }
 
   return { open, close, handleKeydown };
