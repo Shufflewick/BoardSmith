@@ -99,51 +99,51 @@ function handleClick(event: MouseEvent) {
   border-radius: 8px;
 }
 
-/* Primary variant - cyan/green gradient */
+/* Primary variant - Slate teal */
 .btn--primary {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
 }
 
 .btn--primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.4);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 /* Secondary variant - subtle outline */
 .btn--secondary {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: var(--bsg-field);
+  border: 1px solid var(--bsg-line-2);
+  color: var(--bsg-ink);
 }
 
 .btn--secondary:hover:not(:disabled) {
-  border-color: #00d9ff;
-  background: rgba(0, 217, 255, 0.2);
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
 }
 
-/* Danger variant - amber/orange for destructive actions */
+/* Danger variant - destructive actions */
 .btn--danger {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border: 1px solid #b45309;
-  color: #1a1a2e;
+  background: var(--bsg-danger);
+  border: 1px solid color-mix(in srgb, var(--bsg-danger) 60%, black);
+  color: var(--bsg-bg);
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+  background: color-mix(in srgb, var(--bsg-danger) 85%, black);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 /* Ghost variant - transparent with hover */
 .btn--ghost {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--bsg-ink-3);
   padding: 4px 8px;
 }
 
 .btn--ghost:hover:not(:disabled) {
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 /* Icon variant - compact icon buttons */
@@ -151,15 +151,15 @@ function handleClick(event: MouseEvent) {
   width: 32px;
   height: 32px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #888;
+  background: var(--bsg-field);
+  border: 1px solid var(--bsg-line);
+  color: var(--bsg-ink-3);
 }
 
 .btn--icon:hover:not(:disabled) {
-  background: rgba(0, 217, 255, 0.2);
-  border-color: rgba(0, 217, 255, 0.3);
-  color: #00d9ff;
+  background: var(--bsg-selectable);
+  border-color: color-mix(in srgb, var(--bsg-accent) 30%, transparent);
+  color: var(--bsg-accent-2);
 }
 
 .btn--icon.btn--small {
