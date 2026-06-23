@@ -1482,16 +1482,17 @@ if ((import.meta as any).hot) {
 .game-shell {
   min-height: 100vh; /* fallback: browsers without dvh support */
   min-height: 100dvh;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  color: #fff;
+  font-family: var(--bsg-font);
+  background: var(--bsg-bg);
+  color: var(--bsg-ink);
 }
 
-/* Platform mode: embedded in host iframe, no outer chrome */
+/* Platform mode: embedded in host iframe, transparent backdrop so host shows through */
 .game-shell--platform {
   min-height: 100%;
   height: 100vh; /* fallback: browsers without dvh support */
   height: 100dvh;
+  background: transparent;
 }
 
 .game-shell--platform .game-shell__game {
@@ -1562,8 +1563,8 @@ if ((import.meta as any).hot) {
 /* Sidebar - Mobile (below content) */
 .game-shell__sidebar {
   width: 100%;
-  background: rgba(0, 0, 0, 0.3);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface);
+  border-top: 1px solid var(--bsg-line);
   padding: 15px;
   overflow-y: auto;
   order: 2; /* Sidebar below content on mobile */
@@ -1587,7 +1588,7 @@ if ((import.meta as any).hot) {
     min-width: 280px;
     max-height: none;
     border-top: none;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid var(--bsg-line);
     padding: 20px;
     order: 1; /* Sidebar on left on desktop */
   }
@@ -1599,9 +1600,9 @@ if ((import.meta as any).hot) {
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--bsg-surface);
   backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--bsg-line);
   padding-top: 12px;
   padding-bottom: max(12px, env(safe-area-inset-bottom));
   padding-left: max(15px, env(safe-area-inset-left));
@@ -1621,9 +1622,9 @@ if ((import.meta as any).hot) {
 
 /* Time travel banner */
 .time-travel-banner {
-  background: rgba(245, 158, 11, 0.2);
-  border: 1px solid #f59e0b;
-  color: #f59e0b;
+  background: color-mix(in srgb, var(--bsg-warn) 20%, transparent);
+  border: 1px solid var(--bsg-warn);
+  color: var(--bsg-warn);
   padding: 8px 16px;
   border-radius: 6px;
   margin-top: 8px;
@@ -1642,8 +1643,9 @@ if ((import.meta as any).hot) {
   bottom: 100px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(231, 76, 60, 0.9);
-  border: 1px solid #e74c3c;
+  background: color-mix(in srgb, var(--bsg-danger) 90%, transparent);
+  border: 1px solid var(--bsg-danger);
+  color: var(--bsg-ink);
   padding: 12px 24px;
   border-radius: 8px;
   z-index: 150;
@@ -1655,8 +1657,8 @@ if ((import.meta as any).hot) {
   justify-content: center;
   height: 100%;
   min-height: 300px;
-  color: #666;
-  background: rgba(255, 255, 255, 0.02);
+  color: var(--bsg-ink-2);
+  background: var(--bsg-field);
   border-radius: 12px;
 }
 
@@ -1665,11 +1667,16 @@ if ((import.meta as any).hot) {
   width: 100% !important;
   min-width: unset !important;
   border-right: none !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--bsg-line);
   height: auto !important;
   max-height: 300px;
   margin-top: 20px;
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* Platform mode: drawer backdrop transparent so host shows through */
+.game-shell--platform :deep(.menu-drawer) {
+  background: transparent;
 }
 </style>
