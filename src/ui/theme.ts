@@ -110,6 +110,7 @@ const STATIC_TOKENS = `
 
   /* Fonts — family tokens only; @font-face loading is the host's responsibility */
   --bsg-font: 'Hanken Grotesk', system-ui, sans-serif;
+  --bsg-display: 'Hanken Grotesk', system-ui, sans-serif;
   --bsg-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Layout */
@@ -151,6 +152,9 @@ const STATIC_TOKENS = `
   --bsg-droptarget-hover-shadow: 0 0 0 2px color-mix(in srgb, var(--bsg-accent) 30%, transparent);
   --bsg-droptarget-hover-scale: 1.02;
   --bsg-drag-transition: all var(--bsg-dur-base) var(--bsg-ease);
+
+  /* Card back — composite surface token; consumers apply border separately */
+  --bsg-card-back: linear-gradient(180deg, var(--bsg-surface-2), var(--bsg-bg-2));
 
   /* Seat colors — emitted from SEAT_PALETTE (single source of truth) */
 ${seatTokens}`.trimStart();
