@@ -19,7 +19,7 @@
 // MUST be imported before any component that uses resolveRenderer().
 import './builtin-renderers.js';
 
-import { computed, provide, ref } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import type { PresentationOverlay } from './presentation.js';
 import { useFlyingElements } from '../../composables/useFlyingElements.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
@@ -134,6 +134,58 @@ const topLevelChildren = computed(() => {
 const archetype = computed(() => selectArchetype(topLevelChildren.value));
 
 // ---------------------------------------------------------------------------
+// Loading skeleton state — shown while gameView is null
+// ---------------------------------------------------------------------------
+const LOAD_TIMEOUT_MS = 8000;
+const loadTimedOut = ref(false);
+let loadTimer: ReturnType<typeof setTimeout> | null = null;
+
+const emit = defineEmits<{
+  retry: [];
+}>();
+
+function armLoadTimer() {
+  if (loadTimer !== null) clearTimeout(loadTimer);
+  loadTimer = setTimeout(() => {
+    loadTimedOut.value = true;
+  }, LOAD_TIMEOUT_MS);
+}
+
+function handleRetry() {
+  loadTimedOut.value = false;
+  armLoadTimer();
+  emit('retry');
+}
+
+onMounted(() => {
+  if (!props.gameView) armLoadTimer();
+});
+
+onUnmounted(() => {
+  if (loadTimer !== null) {
+    clearTimeout(loadTimer);
+    loadTimer = null;
+  }
+});
+
+watch(
+  () => props.gameView,
+  (newView) => {
+    if (newView) {
+      // Game state arrived — cancel the timer
+      if (loadTimer !== null) {
+        clearTimeout(loadTimer);
+        loadTimer = null;
+      }
+      loadTimedOut.value = false;
+    } else {
+      // Back to null (reconnect scenario) — re-arm
+      armLoadTimer();
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Flying elements — for FlyingCardsOverlay; fly API passed to animation wiring
 // ---------------------------------------------------------------------------
 const { flyingElements, fly } = useFlyingElements();
@@ -150,9 +202,19 @@ useAutoRendererAnimations(animationEvents, { fly });
   <div class="auto-renderer">
     <FlyingCardsOverlay :flying-cards="flyingElements" />
 
-    <!-- CF-3: null gameView empty/loading state — never renders a blank tableau -->
+    <!-- CF-3: null gameView loading state — animated skeleton + timeout retry -->
     <div v-if="!gameView" class="auto-renderer-empty">
-      <p class="auto-renderer-empty-text">Waiting for game state&hellip;</p>
+      <div class="auto-renderer-skeleton" aria-busy="true" aria-label="Loading game…">
+        <span class="sr-only">Loading game…</span>
+        <div class="skeleton-bar skeleton-bar--wide" aria-hidden="true"></div>
+        <div class="skeleton-bar skeleton-bar--medium" aria-hidden="true"></div>
+        <div class="skeleton-bar skeleton-bar--narrow" aria-hidden="true"></div>
+        <div class="skeleton-bar skeleton-bar--wide" aria-hidden="true"></div>
+      </div>
+      <div v-if="loadTimedOut" class="auto-renderer-retry">
+        <p class="auto-renderer-retry__message">Still waiting for the game host&hellip;</p>
+        <button class="auto-renderer-retry__btn" type="button" @click="handleRetry">Retry</button>
+      </div>
     </div>
 
     <GridBoardTemplate
@@ -181,17 +243,88 @@ useAutoRendererAnimations(animationEvents, { fly });
   overflow: hidden;
 }
 
-/* CF-3: null gameView empty/loading state */
+/* CF-3: null gameView loading state — skeleton + retry */
 .auto-renderer-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 24px;
   height: 100%;
+  padding: 32px;
 }
 
-.auto-renderer-empty-text {
+/* Skeleton container */
+.auto-renderer-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Placeholder bars */
+.skeleton-bar {
+  height: 16px;
+  border-radius: var(--bsg-r-sm);
+  background: var(--bsg-field);
+  animation: skeleton-pulse var(--bsg-dur-base, 1s) ease-in-out infinite;
+}
+
+.skeleton-bar--wide  { width: 100%; }
+.skeleton-bar--medium { width: 72%; }
+.skeleton-bar--narrow { width: 48%; }
+
+@keyframes skeleton-pulse {
+  0%,
+  100% { opacity: 1; }
+  50%  { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
+}
+
+/* Screen-reader only helper (no raw hex — uses inherit) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Retry affordance */
+.auto-renderer-retry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.auto-renderer-retry__message {
   color: var(--bsg-ink-3);
   font-size: 14px;
-  font-weight: 400;
+  margin: 0;
+}
+
+.auto-renderer-retry__btn {
+  padding: 8px 20px;
+  border-radius: var(--bsg-r-sm);
+  border: 1px solid var(--bsg-line);
+  background: var(--bsg-surface);
+  color: var(--bsg-ink);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.auto-renderer-retry__btn:hover {
+  background: var(--bsg-field);
 }
 </style>
