@@ -10,11 +10,26 @@
  * just bridges the WS transport to the iframe's postMessage protocol — so dev is
  * inherently multiplayer (open another browser / another computer to join).
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import type { DevHostConfig } from './config-types.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
+
+// ── Dev chrome collapse (localStorage-persisted pull-tab) ────────────────────
+const CHROME_KEY = 'boardsmith:dev-chrome-open';
+/**
+ * Tracks whether the in-game chrome bar is expanded. Starts true (expanded),
+ * then auto-collapses to false when the dev first takes a seat — unless they
+ * have a stored preference (the stored value always wins).
+ */
+const chromeOpen = ref(true);
+let seatedWithoutStoredPreference = false;
+
+function toggleChrome(): void {
+  chromeOpen.value = !chromeOpen.value;
+  localStorage.setItem(CHROME_KEY, String(chromeOpen.value));
+}
 
 // ── Persistent client identity (so a reload reclaims the same seat) ──────────
 const CLIENT_KEY = 'boardsmith:dev-client-id';
@@ -208,11 +223,69 @@ function onUiSelect(): void {
 }
 
 function seatLabel(seat: SeatInfo): string {
-  if (!seat.clientId) return 'Open';
+  if (!seat.clientId) return `Seat ${seat.seat}`;
   return seat.name + (seat.connected ? '' : ' (away)');
 }
 
+// ── Seat switcher ─────────────────────────────────────────────────────────────
+const seatSwitcherOpen = ref(false);
+
+// ── Table setup panel (read-only config display — DEV-04) ─────────────────────
+const tableSetupOpen = ref(false);
+
+/**
+ * Switch to a different seat: send follow-disable if follow is active, then
+ * leave the current seat and take the target. The host (multiplayer-host.ts)
+ * is authoritative — it will reject taking a seat held by a connected client,
+ * so canTake() here is a courtesy guard only.
+ *
+ * Follow auto-disable on manual switch: if the dev is following the active
+ * seat and manually picks a new seat, following no longer makes sense (they
+ * have a specific seat they want to be in). We disable it automatically so the
+ * dev is not surprised by immediate seat jumping after the switch.
+ */
+/** Resolve the display label for an option's default value. */
+function optionDefaultLabel(opt: { default?: unknown; choices?: Array<{ value: unknown; label?: string }> }): string {
+  if (opt.default === undefined || opt.default === null) return '—';
+  if (opt.choices) {
+    const match = opt.choices.find((c) => c.value === opt.default);
+    if (match) return match.label ?? String(match.value);
+  }
+  return String(opt.default);
+}
+
+function switchSeat(target: number): void {
+  if (target === mySeat.value) return;
+  const targetInfo = seats.value.find((s) => s.seat === target);
+  if (targetInfo && !canTake(targetInfo)) return;
+
+  // Auto-disable follow when manually switching seats
+  if (followActive.value) {
+    wsSend({ type: 'follow', enabled: false });
+  }
+
+  leaveSeat();
+  takeSeat(target);
+}
+
+// Collapse chrome when the dev first takes a seat, unless they have an explicit
+// saved preference. A stored 'false' or 'true' always overrides the default.
+watch(mySeat, (newSeat, oldSeat) => {
+  if (newSeat !== null && oldSeat === null && seatedWithoutStoredPreference) {
+    chromeOpen.value = false;
+    // Do NOT persist here — the first-seat collapse is the default, not a
+    // user choice. If they open it and close it that becomes their preference.
+  }
+});
+
 onMounted(() => {
+  const stored = localStorage.getItem(CHROME_KEY);
+  if (stored !== null) {
+    chromeOpen.value = stored !== 'false';
+  } else {
+    // No stored preference — will auto-collapse on first seat taken.
+    seatedWithoutStoredPreference = true;
+  }
   window.addEventListener('message', onWindowMessage);
   connect();
 });
@@ -307,34 +380,178 @@ onUnmounted(() => {
     <!-- In game -->
     <template v-else>
       <header class="dev-chrome">
-        <div class="dev-chrome__bar">
+        <!-- Pull-tab: always visible; clicking toggles the chrome bar open/closed -->
+        <button
+          type="button"
+          class="dev-chrome__pull-tab"
+          :aria-expanded="chromeOpen"
+          aria-label="Toggle dev chrome"
+          @click="toggleChrome"
+        >
+          <span class="dev-chrome__pull-tab-icon" aria-hidden="true">{{ chromeOpen ? '▲' : '▼' }}</span>
+          <span class="dev-chrome__pull-tab-label">Dev</span>
+        </button>
+
+        <!-- Bar — hidden when collapsed -->
+        <div v-show="chromeOpen" class="dev-chrome__bar">
           <div class="dev-chrome__toggle">
-            <strong>{{ cfg.displayName }}</strong>
-            <span class="dev-chrome__badge">seat {{ mySeat }}</span>
+            <!-- Seat switcher: click to open a menu listing all seats -->
+            <div class="dev-chrome__seat-switcher">
+              <button
+                type="button"
+                class="dev-chrome__badge dev-chrome__badge--btn"
+                aria-haspopup="true"
+                :aria-expanded="seatSwitcherOpen"
+                @click="seatSwitcherOpen = !seatSwitcherOpen"
+              >
+                Seat {{ mySeat }} ▾
+              </button>
+              <div v-if="seatSwitcherOpen" class="seat-switcher-menu">
+                <button
+                  v-for="seat in seats"
+                  :key="seat.seat"
+                  type="button"
+                  class="seat-switcher-menu__item"
+                  :class="{
+                    'seat-switcher-menu__item--current': seat.seat === mySeat,
+                    'seat-switcher-menu__item--disabled': !canTake(seat) && seat.seat !== mySeat,
+                  }"
+                  :disabled="!canTake(seat) && seat.seat !== mySeat"
+                  @click="seatSwitcherOpen = false; switchSeat(seat.seat)"
+                >
+                  <span class="seat-switcher-menu__dot"
+                    :class="seat.connected ? 'is-online' : 'is-offline'"
+                  ></span>
+                  {{ seat.name || `Seat ${seat.seat}` }}
+                  <span v-if="cfg.aiSeats.includes(seat.seat)" class="seat-switcher-menu__ai">AI</span>
+                  <span v-if="seat.seat === mySeat" class="seat-switcher-menu__current-label"> (you)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Presence strip: one pill per seat -->
+          <div class="presence-strip">
+            <div
+              v-for="seat in seats"
+              :key="seat.seat"
+              class="presence-strip__seat"
+              :class="{ 'presence-strip__seat--mine': seat.seat === mySeat }"
+            >
+              <span
+                class="presence-strip__dot"
+                :class="seat.connected ? 'is-online' : 'is-offline'"
+              ></span>
+              <span class="presence-strip__name">{{ seat.name || `Seat ${seat.seat}` }}</span>
+              <span v-if="cfg.aiSeats.includes(seat.seat)" class="presence-strip__ai">AI</span>
+            </div>
           </div>
           <div class="dev-chrome__bar-actions">
+            <!-- Primary controls (always visible in bar) -->
             <label
               v-if="uiOptions.length > 1"
               class="dev-chrome__ui-switch"
               title="Dev only — switch which UI renders this game. Production builds ship the chosen UI only."
             >
-              <span class="dev-chrome__label">UI</span>
+              <span class="dev-chrome__label dev-chrome__label--icon-only" aria-hidden="true">UI</span>
               <select v-model="selectedUi" class="dev-chrome__select" @change="onUiSelect">
                 <option v-for="name in uiOptions" :key="name" :value="name">{{ name }}</option>
               </select>
             </label>
-            <button
-              type="button"
-              class="btn"
-              :class="{ 'btn--on': followActive }"
-              :aria-pressed="followActive"
-              @click="toggleFollow"
-            >
-              {{ followActive ? 'Following active seat' : 'Follow active seat' }}
-            </button>
-            <button type="button" class="btn btn--start" @click="newGame">New game</button>
+            <!-- Secondary controls — always visible on wide screens; overflow to … on narrow -->
+            <details class="dev-chrome__overflow">
+              <summary class="dev-chrome__overflow-trigger btn" aria-label="More dev controls">…</summary>
+              <div class="dev-chrome__overflow-menu">
+                <button
+                  type="button"
+                  class="btn"
+                  :class="{ 'btn--on': followActive }"
+                  :aria-pressed="followActive"
+                  @click="toggleFollow"
+                >
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">{{ followActive ? '◉' : '○' }}</span>
+                  <span class="dev-chrome__btn-label">{{ followActive ? 'Following active seat' : 'Follow active seat' }}</span>
+                </button>
+                <button type="button" class="btn btn--start" @click="newGame">
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">↺</span>
+                  <span class="dev-chrome__btn-label">New game</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn"
+                  :class="{ 'btn--on': tableSetupOpen }"
+                  :aria-expanded="tableSetupOpen"
+                  @click="tableSetupOpen = !tableSetupOpen"
+                >
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">⚙</span>
+                  <span class="dev-chrome__btn-label">Table setup</span>
+                </button>
+              </div>
+            </details>
+            <!-- Wide-screen inline controls (hidden at narrow via CSS) -->
+            <div class="dev-chrome__bar-wide">
+              <button
+                type="button"
+                class="btn"
+                :class="{ 'btn--on': followActive }"
+                :aria-pressed="followActive"
+                @click="toggleFollow"
+              >
+                {{ followActive ? 'Following active seat' : 'Follow active seat' }}
+              </button>
+              <button type="button" class="btn btn--start" @click="newGame">New game</button>
+              <button
+                type="button"
+                class="btn"
+                :class="{ 'btn--on': tableSetupOpen }"
+                :aria-expanded="tableSetupOpen"
+                @click="tableSetupOpen = !tableSetupOpen"
+              >
+                Table setup
+              </button>
+            </div>
           </div>
         </div>
+        <!-- Table setup panel — read-only summary of injected config (DEV-04) -->
+        <div v-if="tableSetupOpen" class="table-setup">
+          <dl class="table-setup__dl">
+            <div class="table-setup__row">
+              <dt>Players</dt>
+              <dd>{{ cfg.playerCount }}</dd>
+            </div>
+            <div class="table-setup__row">
+              <dt>AI seats</dt>
+              <dd>{{ cfg.aiSeats.length ? cfg.aiSeats.join(', ') : 'none' }}</dd>
+            </div>
+            <div class="table-setup__row">
+              <dt>AI level</dt>
+              <dd>{{ cfg.aiLevel || '—' }}</dd>
+            </div>
+            <template v-if="cfg.gameOptions.length">
+              <div class="table-setup__group-header">Game options</div>
+              <div
+                v-for="opt in cfg.gameOptions"
+                :key="opt.id"
+                class="table-setup__row"
+              >
+                <dt>{{ opt.label || opt.id }}</dt>
+                <dd>{{ optionDefaultLabel(opt) }}</dd>
+              </div>
+            </template>
+            <template v-if="cfg.playerOptions.length">
+              <div class="table-setup__group-header">Player options</div>
+              <div
+                v-for="opt in cfg.playerOptions"
+                :key="opt.id"
+                class="table-setup__row"
+              >
+                <dt>{{ opt.label || opt.id }}</dt>
+                <dd>{{ optionDefaultLabel(opt) }}</dd>
+              </div>
+            </template>
+          </dl>
+        </div>
+
         <div v-if="errorMsg" class="dev-chrome__error">{{ errorMsg }}</div>
       </header>
 
@@ -516,15 +733,83 @@ onUnmounted(() => {
   color: var(--bsg-accent-2);
 }
 
+/* ── Focus ring (outer page — does not inherit GameShell's non-scoped rule) ── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bsg-bg), 0 0 0 4px var(--bsg-accent);
+  border-radius: var(--bsg-r-sm, 4px);
+}
+
 /* ── In-game chrome ── */
 .dev-chrome {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 16px;
   background: var(--bsg-surface);
   border-bottom: 1px solid var(--bsg-line);
+}
+
+/* ── Pull-tab (always visible, toggles the chrome bar) ── */
+.dev-chrome__pull-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--bsg-line);
+  color: var(--bsg-ink-3);
+  cursor: pointer;
+  font-size: 0.8rem;
+  width: 100%;
+  text-align: left;
+}
+
+.dev-chrome__pull-tab:hover {
+  color: var(--bsg-ink);
+  background: color-mix(in srgb, var(--bsg-accent) 8%, transparent);
+}
+
+.dev-chrome__pull-tab-icon {
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+/* ── Overflow menu (… button + dropdown for secondary controls) ── */
+.dev-chrome__overflow {
+  position: relative;
+  display: none; /* hidden on wide screens — wide controls used instead */
+}
+
+.dev-chrome__overflow-trigger {
+  list-style: none;
+  cursor: pointer;
+}
+
+.dev-chrome__overflow-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.dev-chrome__overflow-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+  min-width: 200px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--bsg-bg) 60%, transparent);
+}
+
+.dev-chrome__bar-wide {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .dev-chrome__bar {
@@ -533,6 +818,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  padding: 10px 16px;
 }
 
 .dev-chrome__toggle {
@@ -615,5 +901,230 @@ onUnmounted(() => {
   height: 100%;
   border: 0;
   display: block;
+}
+
+/* ── Seat switcher ── */
+.dev-chrome__seat-switcher {
+  position: relative;
+}
+
+.dev-chrome__badge--btn {
+  background: color-mix(in srgb, var(--bsg-accent) 15%, transparent);
+  color: var(--bsg-accent-2);
+  border: 1px solid color-mix(in srgb, var(--bsg-accent) 30%, transparent);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.dev-chrome__badge--btn:hover {
+  background: color-mix(in srgb, var(--bsg-accent) 25%, transparent);
+}
+
+.seat-switcher-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 20;
+  min-width: 160px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--bsg-bg) 50%, transparent);
+}
+
+.seat-switcher-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--bsg-ink);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+  width: 100%;
+}
+
+.seat-switcher-menu__item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bsg-accent) 10%, transparent);
+}
+
+.seat-switcher-menu__item--current {
+  color: var(--bsg-accent-2);
+}
+
+.seat-switcher-menu__item--disabled,
+.seat-switcher-menu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.seat-switcher-menu__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.seat-switcher-menu__dot.is-online {
+  background: var(--bsg-ok);
+}
+
+.seat-switcher-menu__dot.is-offline {
+  background: var(--bsg-away);
+}
+
+.seat-switcher-menu__ai {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bsg-ink-3);
+  background: var(--bsg-field);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.seat-switcher-menu__current-label {
+  color: var(--bsg-ink-3);
+  font-size: 0.8em;
+}
+
+/* ── Presence strip ── */
+.presence-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.presence-strip__seat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bsg-field);
+  border: 1px solid var(--bsg-line-2);
+  font-size: 0.75rem;
+  color: var(--bsg-ink-2);
+}
+
+.presence-strip__seat--mine {
+  border-color: var(--bsg-accent);
+  background: color-mix(in srgb, var(--bsg-accent) 10%, var(--bsg-field));
+}
+
+.presence-strip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.presence-strip__dot.is-online {
+  background: var(--bsg-ok);
+}
+
+.presence-strip__dot.is-offline {
+  background: var(--bsg-away);
+}
+
+.presence-strip__name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presence-strip__ai {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bsg-ink-3);
+}
+
+/* ── Table setup panel (read-only) ── */
+.table-setup {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--bsg-line);
+  background: var(--bsg-surface);
+}
+
+.table-setup__dl {
+  display: grid;
+  grid-template-columns: auto;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.table-setup__group-header {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bsg-ink-3);
+  padding: 8px 0 4px;
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--bsg-line-2);
+  margin-top: 6px;
+}
+
+.table-setup__group-header:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+.table-setup__row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+
+.table-setup__row dt {
+  font-size: 0.8rem;
+  color: var(--bsg-ink-3);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.table-setup__row dd {
+  font-size: 0.85rem;
+  color: var(--bsg-ink);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Phone layout: icon-only controls, … overflow for secondary ── */
+@media (max-width: 639px) {
+  .dev-chrome__bar-wide {
+    display: none; /* hide inline secondary controls */
+  }
+
+  .dev-chrome__overflow {
+    display: block; /* show the … overflow button instead */
+  }
+
+  .dev-chrome__btn-label {
+    /* kept visible inside the dropdown even on mobile */
+  }
+
+  .dev-chrome__label--icon-only {
+    /* "UI" label stays visible — it's already short */
+  }
+
+  .dev-chrome__bar-actions {
+    gap: 8px;
+  }
 }
 </style>
