@@ -182,8 +182,8 @@ async function copyHistory() {
 .game-history {
   display: flex;
   flex-direction: column;
-  background: rgba(0, 0, 0, 0.4);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface);
+  border-right: 1px solid var(--bsg-line);
   height: 100%;
   transition: width 0.2s ease;
   width: 280px;
@@ -200,8 +200,8 @@ async function copyHistory() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  background: rgba(0, 217, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface-2);
+  border-bottom: 1px solid var(--bsg-line);
 }
 
 .header-left {
@@ -217,18 +217,18 @@ async function copyHistory() {
 }
 
 .header-icon {
-  color: #00d9ff;
+  color: var(--bsg-accent);
   font-size: 10px;
 }
 
 .header-title {
   font-weight: 600;
   font-size: 13px;
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 .message-count {
-  color: #666;
+  color: var(--bsg-ink-3);
   font-size: 12px;
 }
 
@@ -240,9 +240,9 @@ async function copyHistory() {
 .header-btn {
   padding: 3px 8px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--bsg-line-2);
   border-radius: 4px;
-  color: #888;
+  color: var(--bsg-ink-2);
   font-size: 10px;
   cursor: pointer;
   transition: all 0.2s;
@@ -254,18 +254,18 @@ async function copyHistory() {
 }
 
 .copy-btn:hover:not(:disabled) {
-  border-color: #00d9ff;
-  color: #00d9ff;
+  border-color: var(--bsg-accent);
+  color: var(--bsg-accent);
 }
 
 .copy-btn.copied {
-  border-color: #2ecc71;
-  color: #2ecc71;
+  border-color: var(--bsg-ok);
+  color: var(--bsg-ok);
 }
 
 .clear-btn:hover {
-  border-color: #e74c3c;
-  color: #e74c3c;
+  border-color: var(--bsg-danger);
+  color: var(--bsg-danger);
 }
 
 .history-content {
@@ -284,37 +284,37 @@ async function copyHistory() {
 .message {
   padding: 8px 10px;
   margin-bottom: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bsg-field);
   border-radius: 6px;
-  border-left: 3px solid #00d9ff;
+  border-left: 3px solid var(--bsg-accent);
   font-size: 12px;
 }
 
 .message.system {
-  border-left-color: #f39c12;
+  border-left-color: var(--bsg-warn);
 }
 
 .message.error {
-  border-left-color: #e74c3c;
-  background: rgba(231, 76, 60, 0.1);
+  border-left-color: var(--bsg-danger);
+  background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
 }
 
 .timestamp {
   display: block;
-  color: #666;
+  color: var(--bsg-ink-3);
   font-size: 10px;
   font-family: monospace;
   margin-bottom: 4px;
 }
 
 .text {
-  color: #ccc;
+  color: var(--bsg-ink-2);
   line-height: 1.4;
 }
 
 .no-messages {
   text-align: center;
-  color: #666;
+  color: var(--bsg-ink-3);
   font-style: italic;
   padding: 30px 10px;
 }
@@ -332,14 +332,14 @@ async function copyHistory() {
 .vertical-text {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  color: #666;
+  color: var(--bsg-ink-3);
   font-size: 11px;
   letter-spacing: 1px;
 }
 
 .badge {
-  background: rgba(0, 217, 255, 0.2);
-  color: #00d9ff;
+  background: color-mix(in srgb, var(--bsg-accent) 20%, transparent);
+  color: var(--bsg-accent);
   font-size: 10px;
   padding: 4px 6px;
   border-radius: 10px;
@@ -353,15 +353,15 @@ async function copyHistory() {
 }
 
 .messages-container::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bsg-bg);
 }
 
 .messages-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bsg-line-2);
   border-radius: 3px;
 }
 
 .messages-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--bsg-line-2);
 }
 </style>
