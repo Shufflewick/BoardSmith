@@ -182,7 +182,6 @@ import { computed } from 'vue';
   appearance: none;
   background: var(--bsg-line-2);
   border-radius: 2px;
-  outline: none;
   cursor: pointer;
 }
 

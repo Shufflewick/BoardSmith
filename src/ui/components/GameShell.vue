@@ -10,6 +10,12 @@ import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 // that ships even when the branch is dead.
 import AutoUIDev from './auto-ui/AutoUI.vue';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
+import {
+  announceTurnChange,
+  announceConnectionChange,
+  announceGameOver,
+  announceOpponentTurn,
+} from '../composables/liveRegionAnnouncer.js';
 import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
@@ -271,6 +277,17 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGam
   gameId,
   { playerSeat }
 );
+
+// Screen-reader live-region message refs.
+// Written only from watchers with immediate:false — never at mount (Pitfall 2).
+const politeMessage = ref('');
+const assertiveMessage = ref('');
+
+// Emit an announce postMessage alongside each live-region write so a future
+// host page can relay the announcement to its own AT-accessible DOM node.
+function emitAnnounce(level: 'polite' | 'assertive', text: string): void {
+  window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
+}
 
 // Animation events - wire createAnimationEvents to server state
 const animationEvents = createAnimationEvents({
@@ -1332,6 +1349,52 @@ function handleMenuItemClick(id: string) {
   }
 }
 
+// ── Live-region watchers (immediate: false — never write to regions at mount) ─
+
+watch(isMyTurn, (newVal) => {
+  const text = announceTurnChange(newVal);
+  if (text) {
+    politeMessage.value = text;
+    emitAnnounce('polite', text);
+  }
+}, { immediate: false });
+
+watch(connectionStatus, (newVal, oldVal) => {
+  const text = announceConnectionChange(newVal, oldVal ?? '');
+  if (text) {
+    politeMessage.value = text;
+    emitAnnounce('polite', text);
+  }
+}, { immediate: false });
+
+watch(
+  () => (state.value?.flowState as any)?.complete,
+  (newComplete, oldComplete) => {
+    if (newComplete && !oldComplete) {
+      const flowState = state.value?.flowState as any;
+      const winnerSeats: number[] = flowState?.winners ?? [];
+      const winnerNames = winnerSeats.map((seat) => {
+        const p = players.value.find((pl) => pl.seat === seat);
+        return (p as any)?.name || `Player ${seat}`;
+      });
+      const text = announceGameOver(winnerNames);
+      assertiveMessage.value = text;
+      emitAnnounce('assertive', text);
+    }
+  },
+  { immediate: false },
+);
+
+watch(awaitingPlayerNames, (newVal) => {
+  if (newVal.length > 0 && !isMyTurn.value) {
+    const text = announceOpponentTurn(newVal.map((p: any) => p.name));
+    if (text) {
+      politeMessage.value = text;
+      emitAnnounce('polite', text);
+    }
+  }
+}, { immediate: false });
+
 // Expose to parent/slots
 defineExpose({
   state,
@@ -1374,6 +1437,18 @@ if ((import.meta as any).hot) {
 
 <template>
   <div class="game-shell" :class="{ 'game-shell--platform': platformMode }">
+    <!-- Skip link: visually hidden until focused; .sr-skip in global style block -->
+    <a class="sr-skip" href="#main">Skip to game board</a>
+
+    <!-- Visually-hidden page title for AT landmarks -->
+    <h1 class="vh">BoardSmith — game board</h1>
+
+    <!-- Visually-hidden live regions — always mounted, never v-if (Pitfall 2).
+         Written only from watchers with immediate:false so ATs register the
+         regions before any content appears. -->
+    <p class="vh" role="status" aria-live="polite">{{ politeMessage }}</p>
+    <p class="vh" role="alert" aria-live="assertive">{{ assertiveMessage }}</p>
+
     <!-- LOBBY SCREEN -->
     <GameLobby
       v-if="currentScreen === 'lobby'"
@@ -1647,6 +1722,71 @@ if ((import.meta as any).hot) {
     <Toast />
   </div>
 </template>
+
+<!-- Global (non-scoped) a11y primitives owned by GameShell — covers all
+     descendant components including those in slots and child trees. -->
+<style>
+/* ─── Visible focus ring ────────────────────────────────────────────────────
+   Replaces UA default outline with a token-colored ring that satisfies WCAG
+   2.2 Focus Appearance (3:1 minimum contrast). Non-scoped so it applies
+   everywhere — child components no longer need per-element outline rules.
+   Source: mockup boardsmith-chrome.html:59, 101-RESEARCH.md A11Y-06. */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bsg-bg), 0 0 0 4px var(--bsg-accent);
+  border-radius: var(--bsg-r-sm);
+}
+
+/* ─── Reduced-motion block ───────────────────────────────────────────────────
+   Halts all animations/transitions globally when the user has requested it.
+   Covers pulse/slide/breathe/fly animations in all renderers.
+   Source: 101-RESEARCH.md A11Y-08:515-525. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ─── Visually-hidden utility ────────────────────────────────────────────────
+   Hides content visually while keeping it in the accessibility tree.
+   MUST NOT use display:none (that removes it from the a11y tree entirely).
+   Used for live regions, skip link target h1, and other SR-only text.
+   Source: mockup boardsmith-chrome.html:60. */
+.vh {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ─── Skip link ──────────────────────────────────────────────────────────────
+   Visually hidden until focused; jumps keyboard users to #main bypassing
+   repeated header chrome. Source: mockup boardsmith-chrome.html:61-64,
+   101-RESEARCH.md A11Y-10:589-594. */
+.sr-skip {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  background: var(--bsg-surface);
+  color: var(--bsg-ink);
+  border: 1px solid var(--bsg-line-2);
+  border-radius: var(--bsg-r-sm);
+  padding: 10px 14px;
+  font-weight: 700;
+  transform: translateY(-160%);
+  transition: transform .15s;
+  text-decoration: none;
+}
+
+.sr-skip:focus {
+  transform: none;
+}
+</style>
 
 <style scoped>
 .game-shell {

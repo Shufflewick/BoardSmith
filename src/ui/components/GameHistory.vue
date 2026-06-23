@@ -185,7 +185,8 @@ async function copyHistory() {
 
     <!-- Content (when not collapsed) -->
     <div v-if="!isCollapsed" class="history-content">
-      <div ref="messagesContainer" class="messages-container">
+      <!-- Messages: role=log so screen readers announce new entries as they arrive -->
+      <div ref="messagesContainer" class="messages-container" role="log" aria-live="polite" aria-relevant="additions">
         <div
           v-for="msg in processedMessages"
           :key="msg.id"
