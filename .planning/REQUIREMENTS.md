@@ -41,7 +41,7 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 
 ### Information Architecture & Responsive (Wave 3 — board is the hero)
 
-- [ ] **IA-01**: In platform mode no standing BoardSmith header renders; connection status collapses to a corner dot driven by a real heartbeat
+- [x] **IA-01**: In platform mode no standing BoardSmith header renders; connection status collapses to a corner dot driven by a real heartbeat
 - [x] **IA-02**: A persistent turn ribbon always shows whose turn it is and the active prompt (`boardPrompt ?? currentPick.prompt`) at every breakpoint
 - [x] **IA-03**: When all picks are board-anchored, the prompt stays visible and only the action buttons are suppressed — the player is never left with a silent board
 - [x] **IA-04**: The action dock renders only when the player has an action; it caps at `min(40vh, 320px)` with internal scroll and reserves its measured height via `ResizeObserver` (no hardcoded `80px` padding)
@@ -131,7 +131,7 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | THEME-06 | 99 (Wave 2 — Theming Swap) | Complete |
 | THEME-07 | 99 (Wave 2 — Theming Swap) | Complete |
 | THEME-08 | 99 (Wave 2 — Theming Swap) | Complete |
-| IA-01 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-01 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-02 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-03 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-04 | 100 (Wave 3 — IA & Responsive) | Complete |
