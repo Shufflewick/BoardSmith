@@ -20,7 +20,7 @@ describe('HamburgerMenu accessibility (QUICK-02)', () => {
     });
 
     const btn = wrapper.find('.hamburger-btn');
-    expect(btn.attributes('aria-label')).toBeTruthy();
+    expect(btn.attributes('aria-label')).toBe('Open menu');
     expect(btn.attributes('aria-expanded')).toBe('false');
     expect(btn.attributes('aria-controls')).toBe('hamburger-menu-drawer');
   });
@@ -34,6 +34,17 @@ describe('HamburgerMenu accessibility (QUICK-02)', () => {
     await btn.trigger('click');
 
     expect(btn.attributes('aria-expanded')).toBe('true');
+  });
+
+  it('hamburger button aria-label changes to "Close menu" when open', async () => {
+    const wrapper = mount(HamburgerMenu, {
+      props: { gameTitle: 'Test Game' },
+    });
+
+    const btn = wrapper.find('.hamburger-btn');
+    expect(btn.attributes('aria-label')).toBe('Open menu');
+    await btn.trigger('click');
+    expect(btn.attributes('aria-label')).toBe('Close menu');
   });
 
   it('drawer gets id matching aria-controls when open', async () => {

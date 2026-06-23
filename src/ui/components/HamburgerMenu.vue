@@ -67,7 +67,7 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
       class="hamburger-btn"
       @click="toggleMenu"
       :class="{ open: isOpen }"
-      aria-label="Open menu"
+      :aria-label="isOpen ? 'Close menu' : 'Open menu'"
       :aria-expanded="isOpen"
       aria-controls="hamburger-menu-drawer"
     >
