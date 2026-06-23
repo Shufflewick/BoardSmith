@@ -40,7 +40,6 @@ module.exports = {
     'src/ui/components/GameHeader.vue',
     'src/ui/components/GameHistory.vue',
     'src/ui/components/GameLobby.vue',
-    'src/ui/components/HamburgerMenu.vue',
     'src/ui/components/PlayersPanel.vue',
     'src/ui/components/Toast.vue',
 
