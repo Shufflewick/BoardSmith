@@ -820,7 +820,7 @@ function clearBoardSelection() {
             <button
               class="clear-selection-btn"
               @click="clearSelection(key as string)"
-              :aria-label="`Clear ${key}`"
+              :aria-label="`Clear ${(key as string).replace(/([A-Z])/g, ' $1').trim().toLowerCase()}`"
             >
               <span aria-hidden="true">✕</span>
             </button>
