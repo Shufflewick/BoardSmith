@@ -26,7 +26,7 @@ import type {
   ElementRef,
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
-import { filterAnchoredChoices } from './action-panel-helpers.js';
+import { splitAnchoredChoices } from './action-panel-helpers.js';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
@@ -221,10 +221,13 @@ const displayableArgs = computed(() => {
   return result;
 });
 
-// Filter choices based on filterBy, dependsOn, and previous selections
+// Split choices into primary (unanchored) and anchored (notation-anchored) sets.
 // Delegates to controller for base choices, then applies ActionPanel-specific filtering
-const filteredChoices = computed(() => {
-  if (!currentPick.value) return [];
+// and D-03 partitioning (splitAnchoredChoices). Primary choices render as normal
+// choice buttons; anchored choices render as a secondary focusable button list so
+// keyboard/SR users always have an operable control even when all picks are board-anchored.
+const _splitChoices = computed<{ primary: ChoiceWithRefs[]; anchored: ChoiceWithRefs[] }>(() => {
+  if (!currentPick.value) return { primary: [], anchored: [] };
 
   // Get base choices from controller (handles repeating, dependsOn, filterBy).
   // PIT OF SUCCESS: read the REACTIVE computed (currentChoices.value tracks snapshotVersion)
@@ -250,12 +253,17 @@ const filteredChoices = computed(() => {
     }
   }
 
-  // D-03: Anchored choices are actioned on the board — exclude them from the panel.
-  // filterAnchoredChoices applies only for 'choice' picks; element picks are unaffected.
-  choices = filterAnchoredChoices(choices, currentPick.value?.type);
-
-  return choices;
+  // D-03: Partition choices — notation-anchored choices go to the secondary list,
+  // never dropped. splitAnchoredChoices applies only for 'choice' picks.
+  return splitAnchoredChoices(choices, currentPick.value?.type);
 });
+
+// Primary (unanchored) choices: rendered as the main choice buttons in the panel.
+const filteredChoices = computed(() => _splitChoices.value.primary);
+
+// Notation-anchored choices: rendered as a secondary focusable list of buttons
+// whose activation calls triggerElementSelect — parity with clicking the board element.
+const anchoredChoices = computed(() => _splitChoices.value.anchored);
 
 // Filtered valid elements - excludes elements already selected in previous selections
 // This handles the case where an action has multiple element selections and the filter
@@ -1073,6 +1081,30 @@ function clearBoardSelection() {
             <DoneButton @click="submitTextInput" />
           </div>
         </div>
+
+        <!-- A11Y-02: Secondary list for notation-anchored choices.
+             When all (or some) choices are anchored to board positions, keyboard and
+             screen-reader users need an operable control in the panel. These buttons
+             call triggerElementSelect on the choice's notation — identical selection
+             path as clicking the board element. -->
+        <div v-if="anchoredChoices.length" class="anchored-choices">
+          <p class="anchored-choices-label">Select on board or choose here:</p>
+          <ul role="list" class="anchored-choices-list">
+            <li v-for="choice in anchoredChoices" :key="String(choice.value)">
+              <button
+                class="choice-btn anchored-choice-btn"
+                :disabled="!!choice.disabled"
+                :title="choice.disabled || undefined"
+                :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
+                @click="boardInteraction?.triggerElementSelect({ notation: choice.refs?.find(r => r.ref.notation !== undefined)?.ref.notation })"
+                @mouseenter="handleChoiceHover(choice)"
+                @mouseleave="handleChoiceLeave"
+              >
+                {{ choice.display }}
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
@@ -1332,6 +1364,41 @@ function clearBoardSelection() {
 
 .filtered-choice-btn:hover {
   border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
+}
+
+/* A11Y-02: Secondary list for notation-anchored choices */
+.anchored-choices {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.anchored-choices-label {
+  color: var(--bsg-ink-3);
+  font-size: 0.8rem;
+  margin: 0 0 6px;
+  text-align: center;
+}
+
+.anchored-choices-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.anchored-choices-list li {
+  display: contents;
+}
+
+.anchored-choice-btn {
+  border-color: var(--bsg-accent);
+}
+
+.anchored-choice-btn:hover:not(:disabled) {
   background: var(--bsg-selectable);
 }
 

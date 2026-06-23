@@ -1,22 +1,22 @@
 // @vitest-environment jsdom
 /**
- * Tests for ActionPanel helpers and D-03 anchored-choice filtering.
+ * Tests for ActionPanel helpers and D-03 anchored-choice splitting.
  *
- * The D-03 filter (filterAnchoredChoices) is extracted as a pure function so it
+ * The D-03 splitter (splitAnchoredChoices) is extracted as a pure function so it
  * can be tested without mounting the component. This is the "pit of success" design:
  * pure functions are trivially testable.
  *
  * Coverage:
- * - Mixed-anchor choice pick (notation refs): notation choices excluded, others kept
- * - Id-only ref choices: KEPT in panel (id refs are highlighting hints, not click targets)
- * - All-unanchored choice pick: all choices kept (panel-only mode)
- * - All notation-anchored: returns empty (board handles all selections; defensive)
- * - Non-choice pick type: filter does not apply (element/number/text picks pass through)
+ * - Mixed-anchor choice pick (notation refs): notation choices → anchored, others → primary
+ * - Id-only ref choices: KEPT in primary (id refs are highlighting hints, not click targets)
+ * - All-unanchored choice pick: all choices in primary, anchored empty
+ * - All notation-anchored: primary empty, all in anchored (never dropped)
+ * - Non-choice pick type: splitter does not apply (all → primary)
  *
- * D-03 anchor semantics (plan 04 clarification):
- *   NOTATION refs (e.g., { notation: 'a5' }) → anchored → filtered from panel
- *     → board grid makes the cell clickable; user clicks board to choose.
- *   Id-only refs (e.g., { id: 10 }) → NOT anchored → KEPT in panel
+ * D-03 anchor semantics:
+ *   NOTATION refs (e.g., { notation: 'a5' }) → anchored → secondary panel list
+ *     → board grid makes the cell clickable; panel list provides parity for keyboard/SR.
+ *   Id-only refs (e.g., { id: 10 }) → NOT anchored → KEPT in primary
  *     → board HIGHLIGHTS the element but it is not a click selection surface;
  *       panel buttons are the selection surface (Go Fish rank pick).
  */
@@ -25,7 +25,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
-import { filterAnchoredChoices } from './action-panel-helpers.js';
+import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
 
 // ---------------------------------------------------------------------------
@@ -72,124 +72,128 @@ const notationRef2: ChoiceWithRefs = {
 };
 
 // ---------------------------------------------------------------------------
-// filterAnchoredChoices (D-03)
+// splitAnchoredChoices (D-03)
 // ---------------------------------------------------------------------------
 
-describe('filterAnchoredChoices (D-03)', () => {
+describe('splitAnchoredChoices (D-03)', () => {
   describe('choice pick with mixed notation anchors', () => {
-    it('filters notation-ref choices and keeps unanchored ones', () => {
+    it('puts notation-ref choices in anchored and unanchored ones in primary', () => {
       const choices = [unanchored1, notationRef1, unanchored2, notationRef2];
-      const result = filterAnchoredChoices(choices, 'choice');
-      expect(result).toHaveLength(2);
-      expect(result).toContain(unanchored1);
-      expect(result).toContain(unanchored2);
-      expect(result).not.toContain(notationRef1);
-      expect(result).not.toContain(notationRef2);
+      const result = splitAnchoredChoices(choices, 'choice');
+      expect(result.primary).toHaveLength(2);
+      expect(result.primary).toContain(unanchored1);
+      expect(result.primary).toContain(unanchored2);
+      expect(result.anchored).toHaveLength(2);
+      expect(result.anchored).toContain(notationRef1);
+      expect(result.anchored).toContain(notationRef2);
     });
   });
 
   describe('id-only ref choices (Go Fish rank / highlight-only)', () => {
-    it('keeps id-only ref choices in the panel (not board-anchored)', () => {
+    it('keeps id-only ref choices in primary (not board-anchored)', () => {
       // Go Fish rank choices have id-only refs linking to card elements for visual
       // highlighting. The board cannot "click" these selections (grid matches by notation,
       // not by id). The panel buttons are the selection surface for these choices.
       const choices = [idOnlyRef1, idOnlyRef2];
-      const result = filterAnchoredChoices(choices, 'choice');
-      expect(result).toHaveLength(2);
-      expect(result).toContain(idOnlyRef1);
-      expect(result).toContain(idOnlyRef2);
+      const result = splitAnchoredChoices(choices, 'choice');
+      expect(result.primary).toHaveLength(2);
+      expect(result.primary).toContain(idOnlyRef1);
+      expect(result.primary).toContain(idOnlyRef2);
+      expect(result.anchored).toHaveLength(0);
     });
 
-    it('keeps id-only ref choices even when mixed with unanchored choices', () => {
+    it('keeps id-only ref choices in primary even when mixed with unanchored choices', () => {
       const choices = [unanchored1, idOnlyRef1, unanchored2, idOnlyRef2];
-      const result = filterAnchoredChoices(choices, 'choice');
-      // No notation refs → hasAnyAnchored = false → all returned unchanged
-      expect(result).toHaveLength(4);
-      expect(result).toContain(unanchored1);
-      expect(result).toContain(idOnlyRef1);
-      expect(result).toContain(unanchored2);
-      expect(result).toContain(idOnlyRef2);
+      const result = splitAnchoredChoices(choices, 'choice');
+      // No notation refs → all go to primary
+      expect(result.primary).toHaveLength(4);
+      expect(result.anchored).toHaveLength(0);
     });
   });
 
   describe('choice pick with no anchored choices (panel-only mode)', () => {
-    it('keeps all choices when none are notation-anchored', () => {
+    it('keeps all choices in primary when none are notation-anchored', () => {
       const choices = [unanchored1, unanchored2];
-      const result = filterAnchoredChoices(choices, 'choice');
-      expect(result).toHaveLength(2);
-      expect(result).toContain(unanchored1);
-      expect(result).toContain(unanchored2);
+      const result = splitAnchoredChoices(choices, 'choice');
+      expect(result.primary).toHaveLength(2);
+      expect(result.anchored).toHaveLength(0);
     });
   });
 
   describe('choice pick where all choices are notation-anchored', () => {
-    it('returns empty array (defensive — board handles all; D-02 footer v-if keeps panel absent)', () => {
+    it('puts all choices in anchored — never dropped (secondary panel list provides parity)', () => {
       const choices = [notationRef1, notationRef2];
-      const result = filterAnchoredChoices(choices, 'choice');
-      expect(result).toHaveLength(0);
+      const result = splitAnchoredChoices(choices, 'choice');
+      expect(result.primary).toHaveLength(0);
+      expect(result.anchored).toHaveLength(2);
+      expect(result.anchored).toContain(notationRef1);
+      expect(result.anchored).toContain(notationRef2);
     });
   });
 
   describe('non-choice pick types', () => {
-    it('does not filter for element picks (element picks are always board-anchored)', () => {
-      // element picks never contain ChoiceWithRefs, but the filter must be a no-op regardless
+    it('does not split for element picks (all go to primary)', () => {
       const choices = [notationRef1, notationRef2];
-      const result = filterAnchoredChoices(choices, 'element');
-      expect(result).toEqual(choices);
+      const result = splitAnchoredChoices(choices, 'element');
+      expect(result.primary).toEqual(choices);
+      expect(result.anchored).toHaveLength(0);
     });
 
-    it('does not filter for elements picks', () => {
+    it('does not split for elements picks', () => {
       const choices = [notationRef1, unanchored1];
-      const result = filterAnchoredChoices(choices, 'elements');
-      expect(result).toEqual(choices);
+      const result = splitAnchoredChoices(choices, 'elements');
+      expect(result.primary).toEqual(choices);
+      expect(result.anchored).toHaveLength(0);
     });
 
-    it('does not filter for number picks', () => {
+    it('does not split for number picks', () => {
       const choices = [notationRef1];
-      const result = filterAnchoredChoices(choices, 'number');
-      expect(result).toEqual(choices);
+      const result = splitAnchoredChoices(choices, 'number');
+      expect(result.primary).toEqual(choices);
+      expect(result.anchored).toHaveLength(0);
     });
 
-    it('does not filter for text picks', () => {
+    it('does not split for text picks', () => {
       const choices = [notationRef1];
-      const result = filterAnchoredChoices(choices, 'text');
-      expect(result).toEqual(choices);
+      const result = splitAnchoredChoices(choices, 'text');
+      expect(result.primary).toEqual(choices);
+      expect(result.anchored).toHaveLength(0);
     });
 
-    it('does not filter for undefined pick type', () => {
+    it('does not split for undefined pick type', () => {
       const choices = [notationRef1, unanchored1];
-      const result = filterAnchoredChoices(choices, undefined);
-      expect(result).toEqual(choices);
+      const result = splitAnchoredChoices(choices, undefined);
+      expect(result.primary).toEqual(choices);
+      expect(result.anchored).toHaveLength(0);
     });
   });
 
   describe('refs edge cases', () => {
-    it('treats a choice with an empty refs array as unanchored', () => {
+    it('treats a choice with an empty refs array as primary (unanchored)', () => {
       const emptyRefs: ChoiceWithRefs = { value: 'x', display: 'X', refs: [] };
       const choices = [emptyRefs, notationRef1];
-      const result = filterAnchoredChoices(choices, 'choice');
-      // notationRef1 is filtered; emptyRefs stays
-      expect(result).toHaveLength(1);
-      expect(result).toContain(emptyRefs);
+      const result = splitAnchoredChoices(choices, 'choice');
+      expect(result.primary).toHaveLength(1);
+      expect(result.primary).toContain(emptyRefs);
+      expect(result.anchored).toHaveLength(1);
+      expect(result.anchored).toContain(notationRef1);
     });
 
-    it('treats a choice with no refs property as unanchored', () => {
+    it('treats a choice with no refs property as primary (unanchored)', () => {
       const noRefs: ChoiceWithRefs = { value: 'y', display: 'Y' };
       const choices = [noRefs, notationRef1];
-      const result = filterAnchoredChoices(choices, 'choice');
-      expect(result).toHaveLength(1);
-      expect(result).toContain(noRefs);
+      const result = splitAnchoredChoices(choices, 'choice');
+      expect(result.primary).toHaveLength(1);
+      expect(result.primary).toContain(noRefs);
+      expect(result.anchored).toHaveLength(1);
     });
 
-    it('id-only ref is not treated as anchored (stays with unanchored choices)', () => {
-      // A mixed set where one choice has an id-only ref and another has no refs.
-      // No notation refs present → hasAnyAnchored = false → all returned unchanged.
+    it('id-only ref is not treated as anchored (goes to primary)', () => {
       const emptyRefs: ChoiceWithRefs = { value: 'x', display: 'X', refs: [] };
       const choices = [emptyRefs, idOnlyRef1];
-      const result = filterAnchoredChoices(choices, 'choice');
-      expect(result).toHaveLength(2);
-      expect(result).toContain(emptyRefs);
-      expect(result).toContain(idOnlyRef1);
+      const result = splitAnchoredChoices(choices, 'choice');
+      expect(result.primary).toHaveLength(2);
+      expect(result.anchored).toHaveLength(0);
     });
   });
 });
