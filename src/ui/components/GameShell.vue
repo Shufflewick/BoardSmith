@@ -1433,6 +1433,7 @@ if ((import.meta as any).hot) {
               :current-player-seat="state?.state.currentPlayer"
               :color-selection-enabled="colorSelectionEnabled"
               :awaiting-player-seats="awaitingPlayerSeats"
+              :seat-strip="sidebarRail"
             >
               <template #player-stats="{ player }">
                 <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>
