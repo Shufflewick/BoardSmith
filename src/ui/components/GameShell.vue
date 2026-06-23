@@ -19,6 +19,7 @@ function hmrLog(...args: unknown[]) {
   if (DEBUG_HMR) console.log('[HMR-DEBUG]', ...args);
 }
 import ActionPanel from './auto-ui/ActionPanel.vue';
+import ControlsMenu from './ControlsMenu.vue';
 import DebugPanel from './DebugPanel.vue';
 import GameHeader from './GameHeader.vue';
 import GameHistory from './GameHistory.vue';
@@ -1341,11 +1342,12 @@ if ((import.meta as any).hot) {
 
     <!-- GAME SCREEN -->
     <div v-if="currentScreen === 'game'" class="game-shell__game">
-      <!-- Top Header Bar — gating by !platformMode is plan 100-04 -->
+      <!-- Top Header Bar — dev/standalone only; absent in platform mode (IA-01) -->
       <GameHeader
+        v-if="!platformMode"
         :game-title="displayName || gameType"
         :game-id="gameId"
-        :connection-status="platformMode ? 'connected' : connectionStatus"
+        :connection-status="connectionStatus"
         v-model:zoom="zoomLevel"
         v-model:auto-end-turn="autoEndTurn"
         v-model:show-undo="showUndo"
@@ -1356,17 +1358,19 @@ if ((import.meta as any).hot) {
       <div class="stage">
         <!-- Sidebar: always-visible player status + history; collapses to rail -->
         <aside class="sidebar" aria-label="Players and log">
-          <!-- side-head: Shufflewick host button + ⋯ controls menu — wiring deferred to plan 100-04 -->
+          <!-- side-head: Shufflewick host button + ⋯ controls menu (IA-01) -->
           <div class="side-head">
             <button class="sw-btn" aria-label="Shufflewick — host menu and leave game" type="button">
               <span class="sw-btn__mark" aria-hidden="true"></span>
               <span class="sw-btn__wordmark">Shufflewick</span>
             </button>
-            <button class="menubtn" aria-label="Game controls" type="button">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
-                <circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>
-              </svg>
-            </button>
+            <ControlsMenu
+              v-model:auto-end-turn="autoEndTurn"
+              v-model:zoom="zoomLevel"
+              :can-undo="canUndo && !isViewingHistory"
+              @undo="handleUndo"
+              @menu-item-click="handleMenuItemClick"
+            />
           </div>
 
           <div class="side-scroll">
@@ -1637,24 +1641,6 @@ if ((import.meta as any).hot) {
   text-overflow: ellipsis;
   min-width: 0;
   font-size: 14px;
-}
-
-.menubtn {
-  height: 38px;
-  width: 38px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: var(--bsg-r-sm);
-  background: transparent;
-  border: 1px solid var(--bsg-line);
-  color: var(--bsg-ink-2);
-  cursor: pointer;
-  margin-left: auto;
-}
-.menubtn:hover {
-  color: var(--bsg-ink);
-  border-color: var(--bsg-line-2);
 }
 
 /* Side scroll: players panel + game history (scrollable) */
