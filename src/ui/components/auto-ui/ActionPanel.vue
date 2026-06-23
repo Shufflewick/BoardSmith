@@ -729,9 +729,9 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   try {
     // Delegate to controller for execution
     const result = await actionController.execute(actionName, filteredArgs);
-    if (!result.success && result.error) {
+    if (!result.success) {
       console.error('Action failed:', result.error);
-      toast.error(result.error);
+      toast.error(result.error || 'Action failed.');
     }
   } catch (err) {
     console.error('Execute action error:', err);
