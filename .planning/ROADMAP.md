@@ -125,14 +125,14 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   5. The hamburger drawer and the Game Over overlay are `role="dialog" aria-modal` with focus move/trap, Escape-to-close, and focus restore; `prefers-reduced-motion: reduce` disables every pulse/slide/toast; muted text routes through `--bsg-ink-muted` to meet AA contrast and every interactive chrome element meets a ≥44px target floor; toasts are `role="status"`/assertive with a real `<button aria-label="Dismiss">` and an auto-timeout (A11Y-07, A11Y-08, A11Y-09, A11Y-10).
 **Plans**: 11 plans
   - [x] 101-01-PLAN.md — Foundations: useSelectable + useFocusTrap composables (+ tests) and the --bsg-warn contrast fix (Wave 1)
-  - [ ] 101-02-PLAN.md — Migrate CardRenderer/PieceRenderer/DeckRenderer to useSelectable + ARIA (Wave 2)
-  - [ ] 101-03-PLAN.md — Migrate HandRenderer/SpaceRenderer/DieRenderer to useSelectable + ARIA (Wave 2)
-  - [ ] 101-04-PLAN.md — Migrate GridBoardRenderer + HexBoardRenderer to useSelectableGrid roving tabindex (Wave 2)
-  - [ ] 101-05-PLAN.md — Shell-global a11y: live regions, focus ring, reduced-motion, skip link/h1, footer parity, accessible Toast (Wave 2)
-  - [ ] 101-06-PLAN.md — Action-panel keyboard parity: splitAnchoredChoices + secondary focusable list (Wave 2)
-  - [ ] 101-07-PLAN.md — BoardLegend + shape-based seat identity + aria-current + reduced-motion border (Wave 2)
-  - [ ] 101-08-PLAN.md — Dialog semantics + focus trap for HamburgerMenu/ControlsMenu/GameOverCard (Wave 2)
-  - [ ] 101-09-PLAN.md — Dev-chrome a11y floor: names/focus/target-size for DebugPanel + DevHost (Wave 2)
+  - [x] 101-02-PLAN.md — Migrate CardRenderer/PieceRenderer/DeckRenderer to useSelectable + ARIA (Wave 2)
+  - [x] 101-03-PLAN.md — Migrate HandRenderer/SpaceRenderer/DieRenderer to useSelectable + ARIA (Wave 2)
+  - [x] 101-04-PLAN.md — Migrate GridBoardRenderer + HexBoardRenderer to useSelectableGrid roving tabindex (Wave 2)
+  - [x] 101-05-PLAN.md — Shell-global a11y: live regions, focus ring, reduced-motion, skip link/h1, footer parity, accessible Toast (Wave 2)
+  - [x] 101-06-PLAN.md — Action-panel keyboard parity: splitAnchoredChoices + secondary focusable list (Wave 2)
+  - [x] 101-07-PLAN.md — BoardLegend + shape-based seat identity + aria-current + reduced-motion border (Wave 2)
+  - [x] 101-08-PLAN.md — Dialog semantics + focus trap for HamburgerMenu/ControlsMenu/GameOverCard (Wave 2)
+  - [x] 101-09-PLAN.md — Dev-chrome a11y floor: names/focus/target-size for DebugPanel + DevHost (Wave 2)
   - [ ] 101-10-PLAN.md — Renderer disabled-hatch + reduced-motion pulse guards across 8 renderers (Wave 3)
   - [ ] 101-11-PLAN.md — Divergence grep-guard + drag-still-works regression test (Wave 3)
 **UI hint**: yes
@@ -176,7 +176,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
 | 99. Theming Swap (Wave 2) | 15/15 | Complete   | 2026-06-23 |
 | 100. IA & Responsive (Wave 3) | 6/6 | Complete   | 2026-06-23 |
-| 101. Accessibility — WCAG 2.2 AA (Wave 4) | 1/11 | In Progress|  |
+| 101. Accessibility — WCAG 2.2 AA (Wave 4) | 9/11 | In Progress|  |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |
 | 103. Cross-Repo Verification | 0/? | Not started | - |
 
