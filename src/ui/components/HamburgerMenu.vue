@@ -54,10 +54,6 @@ function handleItemClick(item: MenuItem) {
 // Default menu items if none provided
 const defaultItems: MenuItem[] = [
   { id: 'new-game', label: 'New Game', icon: '+' },
-  { id: 'divider-1', label: '', divider: true },
-  { id: 'settings', label: 'Settings', icon: 'cog' },
-  { id: 'help', label: 'Help', icon: '?' },
-  { id: 'divider-2', label: '', divider: true },
   { id: 'leave', label: 'Leave Game', icon: 'X' },
 ];
 
@@ -88,7 +84,6 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
       <div v-if="isOpen" id="hamburger-menu-drawer" class="menu-drawer">
         <div class="drawer-header">
           <div class="logo">
-            <span class="logo-icon">BS</span>
             <span class="logo-text">{{ gameTitle }}</span>
           </div>
           <button class="close-btn" @click="closeMenu" aria-label="Close menu">
@@ -133,9 +128,6 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
           </template>
         </nav>
 
-        <div class="drawer-footer">
-          <span class="version">BoardSmith Dev Mode</span>
-        </div>
       </div>
     </Transition>
   </div>
@@ -218,19 +210,6 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.logo-icon {
-  width: 36px;
-  height: 36px;
-  background: linear-gradient(135deg, #00d9ff, #00ff88);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 12px;
-  color: #1a1a2e;
 }
 
 .logo-text {
@@ -350,17 +329,6 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   height: 1px;
   background: rgba(255, 255, 255, 0.1);
   margin: 10px 24px;
-}
-
-/* Footer */
-.drawer-footer {
-  padding: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.version {
-  color: #666;
-  font-size: 11px;
 }
 
 /* Slide transition */
