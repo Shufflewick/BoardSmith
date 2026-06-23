@@ -8,21 +8,28 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v3.1 Dynamic Auto-UI
+## Current Milestone: v4.0 UI Redesign (Slate)
 
-**Goal:** Replace the current Auto UI — which can show what components exist but can't actually play a game — with a dynamically-generated UI good enough to *play* a basic game before any custom UI is written, so designers focus on rules in the early days.
+**Goal:** Rebuild the BoardSmith user interface from the adversarial UI/UX audit — replace the hardcoded neon-noir chrome with a single load-bearing token system in the neutral **"Slate"** design language (graphite palette, single teal accent, Hanken Grotesk + JetBrains Mono, OS light/dark), get the chrome out of the game's way so the board is the hero, and close the critical accessibility gaps — without breaking a single existing game.
 
-**Target features:**
-- Replace the auto-UI renderer (`AutoElement.vue` + `AutoGameBoard.vue`) — keep the interaction substrate (`useActionController`, `useBoardInteraction`, drag orchestration, FLIP), with the specific plumbing edits a good board UI requires.
-- Hierarchy-bearing archetype templates (grid-board / card / tableau) selected by introspection, with closed-form grid/hex layout — **not** a general percentage-relative solver (deferred until a game needs it).
-- Pieces render with images/labels (re-targeted from cards, which are already `$images`-driven); fix the 8×8 grid fallback.
-- Board-centric interaction: board-anchored actions by default, suppressible footer ActionPanel, multi-ref highlight metadata, new renderer consumes `useAnimationEvents`.
-- Per-UI presentation overlay in the `ui` layer (sibling file per UI), resolved *after* visibility filtering — **no** value-bearing `$`-annotations on engine elements.
-- Auto-UI as a selectable, shippable peer + single-UI production export (remove the scaffold's static `AutoUI` import so tree-shaking drops it); reframe the scaffold away from split-screen. (Defer the N-UI registry + live dev switcher.)
-- Fix the `$images.face` information leak (face-down card face URLs ship to all players via the `$`-whitelist in `toJSONForPlayer`).
-- Migrate all games to the new auto-UI and delete the old paths — nothing left half-broken (No Backward Compatibility).
+**Design source of truth:** `planning/boardsmith-ui-redesign-spec.md` (structural/behavioral audit + 6-wave roadmap) and the canonical mockup `planning/mockups/boardsmith-chrome.html` (the chosen "Slate" direction). The spec body is written in "warm tavern" terms; the **go-forward override (chosen 2026-06-22)** keeps every structural/behavioral value but swaps the warm color values for the **neutral Slate** ones — the game chrome must stay generic and game-agnostic; tavern theming belongs to the ShufflewickPub host (out of scope this milestone), applied via the token override.
 
-**Key context:** Locked design decisions (2026-06-20) — (1) templates now, general solver later; (2) presentation lives in a per-UI overlay in the `ui` layer, not on engine `$`-props. Full research and red-team verdict: `docs/auto-ui-redesign-research.md` (§0 is authoritative). Games are cross-repo (`~/BoardSmithGames/`, MERC at `~/Dropbox/MERC/BoardSmith/MERC`); migration follows the prior cross-repo re-vendor pattern, with MERC as the canary for any shared-plumbing change.
+**Target features (6 waves, in-repo surfaces only):**
+- **Wave 0 — Quick wins:** in-repo accessible-name/`aria` fixes, `100vh`→`100dvh`, safe-area insets, replace `alert()`/`console.error` swallows with visible `toast.error`, delete dead menu items + engine branding.
+- **Wave 1 — Token foundation:** collapse three namespaces (`--bsg-*`/`--bs-*`/`--bg-*`) into one `--bsg-*` contract emitted by `theme.ts`; repoint dead light-blue defaults to the Slate palette (color + spacing + type + shadow + seat + interaction tokens); make `applyTheme()` the sole knob (host-overridable); add a stylelint `color-no-hex` guard.
+- **Wave 2 — Theming swap:** spend the tokens — sweep 8 renderers + chrome + DevHost from neon literals to `var(--bsg-*)`; brass→teal primary button; `outline`-not-`border` selection; solid (no clip-text) type; tokenized card back; calm active-player cue.
+- **Wave 3 — IA & responsive:** kill the standing header in platform mode; persistent turn ribbon + always-on prompt; action bar only when actionable (capped + scroll); fluid container-query board sizing (retire the zoom-slider fit strategy); real compact/medium/wide breakpoints; collapsible sidebar→rail; Game Over result card.
+- **Wave 4 — Accessibility (WCAG 2.2 AA):** keyboard-operable board via a shared `useSelectable()` composable (roving-tabindex grid) — fixes the two **critical** blockers; live regions + SR narration; semantic names/state; non-color state cues; global `:focus-visible`; dialog semantics + focus trap; `prefers-reduced-motion`; contrast + ≥44px target sweep.
+- **Wave 5 — Material polish & dev/debug parity:** reskin `DebugPanel` in Slate; dev chrome collapse-to-tab + seat switcher + presence strip + "Table setup" panel; loading/empty/error voice; read-only player history; destructive-action confirm.
+- **Cross-repo verification:** every game in `~/BoardSmithGames/` (hex, checkers, cribbage, go-fish, polyhedral-potions, floss-bitties, demo-action-panel, demo-animation, demo-complex-ui) **and** MERC (`~/Dropbox/MERC/BoardSmith/MERC`, vendored BoardSmith) must still build, pass tests, and play in the browser after the redesign.
+
+**Key context:** Scope is **this repo only** — the BoardSmith game-shell chrome + 8 board renderers + `theme.ts` + dev-server chrome (DevHost/DebugPanel). The ShufflewickPub host skin (separate repo: lobby, `GameFrame.vue`, `[sessionId].vue`, PrimeVue preset, connection banner) is **out of scope**, but the BoardSmith-side token/`applyTheme`/postMessage-consumption infrastructure must remain host-overridable so the host can apply its own theme later. Highest-risk items per the spec: (1) `theme.ts` default flip must merge atomically with the renderer sweep (invisible-text trap); (2) the keyboard/semantics composable is architectural across all 8 renderers; (3) fluid board sizing can regress published game bundles — validate against MERC + real games; (4) standing-header removal changes the host↔iframe postMessage contract. No backward compatibility — clean break.
+
+## Previous: v3.1 Shipped
+
+Dynamic Auto-UI — replaced the demo-only Auto UI with a dynamically-generated, actually-playable UI built on archetype templates (grid-board / card / tableau) selected by introspection, with closed-form grid/hex layout, piece image/label rendering, board-centric interaction, a per-UI presentation overlay in the `ui` layer, auto-UI as a shippable peer + single-UI export, the `$images.face` leak fix, and migration of all games off the old paths.
+
+**v3.1 Delivered:** Phases 91-96 (+ inserted 94.1) — 8 games browser-verified single-UI + playable, MERC canary green, plus the re-open fixes (engine `chooseFrom` object-subset resolution, dev UI-switcher state sync, dev host stale-page cross-wiring).
 
 ## Previous: v3.0 Shipped
 
@@ -220,14 +227,13 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-v3.1 Dynamic Auto-UI requirements (see `.planning/REQUIREMENTS.md`):
-- Renderer rebuild (archetype templates + ranked dispatch + closed-form layout)
-- Piece image/label rendering + grid-fallback fix
-- Board-centric interaction (suppressible panel, multi-ref highlight, animation events)
-- Per-UI presentation overlay in the `ui` layer
-- Auto-UI as shippable peer + single-UI export + scaffold reframe
-- `$images.face` leak fix
-- Cross-repo migration of all games + old-path deletion
+v4.0 UI Redesign (Slate) requirements (see `.planning/REQUIREMENTS.md`):
+- Single `--bsg-*` token contract in `theme.ts` with Slate defaults; `applyTheme()` as the sole host-overridable knob; stylelint `color-no-hex` guard
+- Visual theming swap — 8 renderers + chrome + DevHost from neon literals to tokens; teal primary button; `outline` selection; solid type; tokenized card back
+- IA & responsive — no standing header in platform mode, persistent turn ribbon + prompt, conditional action bar, fluid container-query board sizing, real breakpoints, Game Over result card
+- Accessibility (WCAG 2.2 AA) — keyboard-operable board composable, live regions, semantic names/state, non-color cues, focus-visible, dialog semantics, reduced-motion, contrast/target sweep
+- Dev/debug parity — Slate DebugPanel, dev chrome collapse + seat switcher + Table-setup panel, voiced states, read-only history, destructive-action confirm
+- Cross-repo verification — all `~/BoardSmithGames/` games + MERC still build, test, and play
 
 ### Out of Scope
 
@@ -301,6 +307,13 @@ v3.1 Dynamic Auto-UI requirements (see `.planning/REQUIREMENTS.md`):
 | AnimateCommand not invertible (like MESSAGE) | MCTS uses full state restore fallback — animation commands don't need undo | ✓ Good |
 | Buffer cleared at performAction() boundaries | Not at flow execute blocks — prevents premature clearing during multi-step flows | ✓ Good |
 | skipAll() aborts in-flight handlers via AbortSignal | Cooperative cancellation — handlers check signal, no forced teardown | ✓ Good |
+| Neutral "Slate" palette for game chrome, not warm "tavern" | Game chrome must be generic/game-agnostic; reads as professional, not themed. Tavern theming belongs to the ShufflewickPub host, applied via the token override | v4.0 |
+| Single `--bsg-*` token namespace emitted by `theme.ts` | Three namespaces (`--bsg-*`/`--bs-*`/`--bg-*`) + dead light-blue defaults = pit of failure; one contract + `color-no-hex` lint makes the wrong path fail CI | v4.0 |
+| `applyTheme()` is the sole theming knob, host-overridable | Host can override the palette once at iframe init via postMessage; chrome stays generic | v4.0 |
+| Token default flip merges atomically with the renderer sweep | Renderers assume a dark ground; a half-swapped `main` would put white ink on a near-white page (invisible-text trap) | v4.0 |
+| Board keyboard/semantics live in one shared `useSelectable()` composable | Architectural across all 8 renderers — centralize so divergence is impossible; drag becomes progressive enhancement | v4.0 |
+| Fluid container-query sizing replaces the zoom-slider fit strategy | Zoom-as-fit is a pit of failure (blurs text, shifts hit targets); board fits by construction, zoom demoted to an a11y magnifier | v4.0 |
+| ShufflewickPub host skin out of scope for v4.0 | Separate repo; BoardSmith-side token/`applyTheme` infra stays host-overridable so host work can land later | v4.0 |
 
 ## Context
 
@@ -347,4 +360,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-20 — started v3.1 Dynamic Auto-UI milestone*
+*Last updated: 2026-06-22 — started v4.0 UI Redesign (Slate) milestone*

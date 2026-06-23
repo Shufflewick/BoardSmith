@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.1
-milestone_name: Dynamic Auto-UI
-status: executing
-stopped_at: "All v3.1 phases complete (91-96 incl. inserted 94.1). Phase 96: 8 games browser-verified single-UI + playable (3 migrated off split-screen), MERC canary 738/7 green, docs updated, audit reframed. main 927/927 green. Ready for milestone lifecycle (audit → complete → cleanup)."
-last_updated: "2026-06-22T19:00:00.000Z"
-last_activity: 2026-06-22
+milestone: v4.0
+milestone_name: UI Redesign (Slate)
+status: planning
+last_updated: "2026-06-23T04:01:24.674Z"
+last_activity: 2026-06-23
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 27
-  completed_plans: 27
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-20)
 
 ## Current Position
 
-Phase: 96 (migration-cleanup) — COMPLETE & VERIFIED — all v3.1 phases done
-Plan: n/a (verification phase — no PLAN docs)
-Status: Phases 91-96 (+94.1) complete. 8 games browser-verified single-UI + playable; MERC 738/7; main 927/927. Ready for milestone audit/complete/cleanup.
-Last activity: 2026-06-22
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-23 — Milestone v4.0 started
 
 ## Milestones
 
