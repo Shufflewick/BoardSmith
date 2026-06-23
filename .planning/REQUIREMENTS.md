@@ -58,7 +58,7 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 - [ ] **A11Y-05**: Every interaction state is paired with a non-color cue (shape/icon/border-style + label) and is colorblind-safe, with a legend
 - [ ] **A11Y-06**: A visible `:focus-visible` ring is present on every interactive element; the two `outline:none` declarations are removed
 - [x] **A11Y-07**: The hamburger drawer and the Game Over overlay are `role="dialog" aria-modal` with focus move/trap, Escape-to-close, and focus restore on close
-- [ ] **A11Y-08**: Every pulse/slide/toast animation is wrapped so `prefers-reduced-motion: reduce` disables it (the infinite turn-dot pulse becomes a static high-contrast border)
+- [x] **A11Y-08**: Every pulse/slide/toast animation is wrapped so `prefers-reduced-motion: reduce` disables it (the infinite turn-dot pulse becomes a static high-contrast border)
 - [x] **A11Y-09**: Muted text routes through `--bsg-ink-muted` to meet AA contrast, and every interactive chrome element meets a ≥44px target floor
 - [ ] **A11Y-10**: Toasts are `role="status"`/assertive with a real `<button aria-label="Dismiss">` and an auto-timeout
 
@@ -145,7 +145,7 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | A11Y-05 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-06 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-07 | 101 (Wave 4 — Accessibility) | Complete |
-| A11Y-08 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-08 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-09 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-10 | 101 (Wave 4 — Accessibility) | Pending |
 | DEV-01 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
