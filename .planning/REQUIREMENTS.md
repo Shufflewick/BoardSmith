@@ -64,14 +64,14 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 
 ### Dev & Debug Parity + Material Polish (Wave 5)
 
-- [ ] **DEV-01**: `DebugPanel` is reskinned in Slate; its toggle is a real `<button aria-expanded>`, the bare `D` shortcut is gated behind a modifier + contenteditable guard, and it uses the ARIA tabs pattern
-- [ ] **DEV-02**: The dev-server chrome collapses to a slim pull-tab (default-collapsed once seated, persisted in localStorage), with icon-only controls + a `…` overflow below 640px
-- [ ] **DEV-03**: The dev seat badge becomes a working seat switcher, and a presence strip shows who is connected / AI / away
-- [ ] **DEV-04**: A tucked-away "Table setup" panel surfaces the already-injected `aiSeats`/`aiLevel`/`playerCount`/`gameOptions`/`playerOptions`
-- [ ] **DEV-05**: Loading/empty/error states have a clear voice — a skeleton with timeout→retry, and a friendly unsupported-topology message split from dev-only guidance
-- [ ] **DEV-06**: Player-facing history is read-only; Copy/Clear move into `DebugPanel` (the silent un-clear bug is gone)
-- [ ] **DEV-07**: The dev "New game" action (broadcasts `restart` to all seats) requires a two-click confirm with neutral styling and a broadcast toast
-- [ ] **DEV-08**: The Slate material layer (low-opacity SVG noise + vignette) replaces the white dot-grid grain in dev/standalone chrome
+- [x] **DEV-01**: `DebugPanel` is reskinned in Slate; its toggle is a real `<button aria-expanded>`, the bare `D` shortcut is gated behind a modifier + contenteditable guard, and it uses the ARIA tabs pattern
+- [x] **DEV-02**: The dev-server chrome collapses to a slim pull-tab (default-collapsed once seated, persisted in localStorage), with icon-only controls + a `…` overflow below 640px
+- [x] **DEV-03**: The dev seat badge becomes a working seat switcher, and a presence strip shows who is connected / AI / away
+- [x] **DEV-04**: A tucked-away "Table setup" panel surfaces the already-injected `aiSeats`/`aiLevel`/`playerCount`/`gameOptions`/`playerOptions`
+- [x] **DEV-05**: Loading/empty/error states have a clear voice — a skeleton with timeout→retry, and a friendly unsupported-topology message split from dev-only guidance
+- [x] **DEV-06**: Player-facing history is read-only; Copy/Clear move into `DebugPanel` (the silent un-clear bug is gone)
+- [x] **DEV-07**: The dev "New game" action (broadcasts `restart` to all seats) requires a two-click confirm with neutral styling and a broadcast toast
+- [x] **DEV-08**: The Slate material layer (low-opacity SVG noise + vignette) replaces the white dot-grid grain in dev/standalone chrome
 
 ### Cross-Repo Verification
 
@@ -148,14 +148,14 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | A11Y-08 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-09 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-10 | 101 (Wave 4 — Accessibility) | Pending |
-| DEV-01 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
-| DEV-02 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
-| DEV-03 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
-| DEV-04 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
-| DEV-05 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
-| DEV-06 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
-| DEV-07 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
-| DEV-08 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-01 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
+| DEV-02 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
+| DEV-03 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
+| DEV-04 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
+| DEV-05 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
+| DEV-06 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
+| DEV-07 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
+| DEV-08 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
 | VERIFY-01 | 103 (Cross-Repo Verification) | Pending |
 | VERIFY-02 | 103 (Cross-Repo Verification) | Pending |
 | VERIFY-03 | 103 (Cross-Repo Verification) | Pending |
