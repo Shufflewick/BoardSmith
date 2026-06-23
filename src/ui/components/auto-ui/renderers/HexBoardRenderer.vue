@@ -104,21 +104,12 @@ const viewBox = computed(
     `${svgBounds.value.minX} ${svgBounds.value.minY} ${svgBounds.value.width} ${svgBounds.value.height}`
 );
 
-// ── Player color cycle (from UI-SPEC §HexBoardRenderer) ──────────────────────
-const PLAYER_COLOR_CYCLE = [
-  '#e74c3c',
-  '#3498db',
-  '#2ecc71',
-  '#f39c12',
-  '#9b59b6',
-  '#1abc9c',
-];
-
-function getPieceColor(piece: GameElement, pieceIndex: number): string {
+// ── Piece color — seat token source (from --bsg-seat-1..6 in theme.ts) ────────
+function getPieceColor(piece: GameElement, _pieceIndex: number): string {
   const player = piece.attributes?.player as { seat?: number; color?: string } | undefined;
   if (player?.color) return player.color;
-  if (player?.seat !== undefined) return PLAYER_COLOR_CYCLE[player.seat % PLAYER_COLOR_CYCLE.length] ?? '#888';
-  return PLAYER_COLOR_CYCLE[pieceIndex % PLAYER_COLOR_CYCLE.length] ?? '#888';
+  if (player?.seat !== undefined) return `var(--bsg-seat-${(player.seat % 6) + 1})`;
+  return 'var(--bsg-ink-3)';
 }
 
 // Effective hex piece circle radius: 35% of hexSize (from UI-SPEC)
