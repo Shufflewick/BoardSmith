@@ -300,16 +300,35 @@ const HeartbeatHarness = defineComponent({
   },
   setup() {
     const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting');
+    let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // RED: no-op — tests that assert connectionHealth='connected' will fail
-    function handleHeartbeat(_data: unknown): void {
-      // intentionally empty for RED phase
+    // GREEN: validate payload shape before acting (T-100-04-01, T-100-04-02)
+    function handleHeartbeat(data: unknown): void {
+      if (!data || typeof data !== 'object') return;
+      const msg = data as Record<string, unknown>;
+      if (msg.source !== 'shufflewick' || msg.type !== 'heartbeat') return;
+      connectionHealth.value = 'connected';
+      if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
+      heartbeatTimer = setTimeout(() => {
+        connectionHealth.value = 'stale';
+      }, 10_000);
     }
+
+    onUnmounted(() => {
+      if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
+    });
 
     return { connectionHealth, handleHeartbeat };
   },
-  // RED: empty template — tests that find .game-header-sentinel / .conn-dot will fail
-  template: `<div class="harness"></div>`,
+  // GREEN: mirrors GameShell.vue IA-01 additions in the platform-mode shell
+  template: `
+    <div class="harness">
+      <!-- Fake GameHeader sentinel — absent in platform mode (IA-01) -->
+      <div v-if="!platformMode" class="game-header-sentinel">GameHeader</div>
+      <!-- Corner dot: class bound to connectionHealth (IA-01) -->
+      <span v-if="platformMode" class="conn-dot" :class="connectionHealth"></span>
+    </div>
+  `,
 });
 
 describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {

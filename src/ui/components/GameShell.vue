@@ -215,6 +215,13 @@ const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 const showUndo = ref(true); // Show undo button when undo is available
 
+// Connection health (IA-01): driven by postMessage heartbeat in platform mode.
+// Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a
+// staleness timer (~10s). Replaces the hardcoded 'connected' string that was
+// passed to the GameHeader badge.
+const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting');
+let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+
 // Actionbar element ref + ResizeObserver for dock-height reservation (IA-04).
 // The observer sets --bsg-dock-h on the root element so .boardregion can
 // reserve exactly the measured dock height instead of a hardcoded 80px.
@@ -623,6 +630,7 @@ onMounted(async () => {
 // Cleanup on unmount
 onUnmounted(() => {
   dockObserver?.disconnect();
+  if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
   disconnectFromLobby();
   if (platformMessageHandler) {
     window.removeEventListener('message', platformMessageHandler);
@@ -707,6 +715,25 @@ if (typeof window !== 'undefined' && window.parent !== window) {
         playerSeat: playerSeat.value,
         isSpectator: false,
       } as any;
+    }
+
+    // Heartbeat: host pings periodically to prove the connection is live (IA-01).
+    // Shape-validated before acting (T-100-04-01, T-100-04-02): origin is already
+    // guarded by isOriginAllowed above; we additionally confirm source + type so
+    // unrelated window messages cannot spoof the health state.
+    if (data.type === 'heartbeat') {
+      if (
+        typeof data === 'object' &&
+        data !== null &&
+        data.source === 'shufflewick' &&
+        data.type === 'heartbeat'
+      ) {
+        connectionHealth.value = 'connected';
+        if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
+        heartbeatTimer = setTimeout(() => {
+          connectionHealth.value = 'stale';
+        }, 10_000);
+      }
     }
   };
   window.addEventListener('message', platformMessageHandler);
@@ -1404,6 +1431,14 @@ if ((import.meta as any).hot) {
 
         <!-- Board region: hero; ~zero chrome padding; container-query-sized -->
         <main class="boardregion" id="main" role="main">
+          <!-- Connection health dot: platform mode only. Driven by postMessage heartbeat
+               (IA-01). Dev/standalone uses the GameHeader connection badge instead. -->
+          <span
+            v-if="platformMode"
+            class="conn-dot"
+            :class="connectionHealth"
+            aria-hidden="true"
+          ></span>
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
             <!--
               Game Board Slot Props:
@@ -1650,6 +1685,23 @@ if ((import.meta as any).hot) {
   overflow: auto;
   padding: var(--bsg-s3);
 }
+
+/* Connection health dot: absolute corner of boardregion; platform mode only (IA-01).
+   Class bound to connectionHealth ref: connected / stale / connecting. */
+.conn-dot {
+  position: absolute;
+  top: var(--bsg-s2);
+  right: var(--bsg-s2);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bsg-away);
+  z-index: 5;
+  pointer-events: none;
+}
+.conn-dot.connected { background: var(--bsg-ok); }
+.conn-dot.stale     { background: var(--bsg-warn); }
+.conn-dot.connecting { background: var(--bsg-away); }
 
 /* Board region: hero; container-query-sized; ~zero chrome padding (IA-05) */
 .boardregion {
