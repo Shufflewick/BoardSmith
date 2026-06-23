@@ -1113,21 +1113,23 @@ function clearBoardSelection() {
   gap: 10px;
 }
 
+/* Primary action button — Slate teal plate */
 .action-btn {
   padding: 10px 20px;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   border: none;
   border-radius: 8px;
   font-size: 0.95rem;
   font-weight: bold;
   cursor: pointer;
+  box-shadow: var(--bsg-shadow-sm);
   transition: all 0.2s;
 }
 
 .action-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: var(--bsg-shadow);
 }
 
 .action-btn:disabled {
@@ -1135,15 +1137,17 @@ function clearBoardSelection() {
   cursor: not-allowed;
 }
 
-/* Undo button - amber/orange color */
+/* Undo button - secondary/neutral style */
 .undo-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border-color: #b45309;
+  background: var(--bsg-surface-2);
+  border: 1px solid var(--bsg-line-2);
+  color: var(--bsg-ink);
+  box-shadow: none;
 }
 
 .undo-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+  background: var(--bsg-surface-3);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 /* Action configuration - horizontal flow layout */
@@ -1171,7 +1175,7 @@ function clearBoardSelection() {
 .cancel-btn {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--bsg-ink-3);
   font-size: 1rem;
   cursor: pointer;
   padding: 2px 6px;
@@ -1179,7 +1183,7 @@ function clearBoardSelection() {
 }
 
 .cancel-btn:hover {
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 .selected-values {
@@ -1190,7 +1194,7 @@ function clearBoardSelection() {
 }
 
 .selected-value {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface-2);
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 0.85rem;
@@ -1203,27 +1207,27 @@ function clearBoardSelection() {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: rgba(0, 217, 255, 0.1);
+  background: var(--bsg-selectable);
   border-radius: 6px;
-  border: 1px solid rgba(0, 217, 255, 0.3);
+  border: 1px solid var(--bsg-line-2);
 }
 
 .accumulated-label {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--bsg-ink-2);
   margin-right: 4px;
 }
 
 .accumulated-chip {
-  background: rgba(0, 217, 255, 0.2);
+  background: var(--bsg-selectable);
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 0.85rem;
-  color: #00d9ff;
+  color: var(--bsg-accent);
 }
 
 .loading-indicator {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--bsg-ink-3);
   animation: pulse 1s infinite;
 }
 
@@ -1233,26 +1237,26 @@ function clearBoardSelection() {
 }
 
 .value-display {
-  color: #00d9ff;
+  color: var(--bsg-accent);
 }
 
 .selected-value.from-board {
-  background: rgba(0, 255, 136, 0.15);
-  border: 1px solid rgba(0, 255, 136, 0.3);
+  background: var(--bsg-selectable);
+  border: 1px solid var(--bsg-line-2);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .selected-value.from-board .value-display {
-  color: #00ff88;
+  color: var(--bsg-accent);
   font-weight: bold;
 }
 
 .clear-selection-btn {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--bsg-ink-3);
   font-size: 0.85rem;
   cursor: pointer;
   padding: 0 4px;
@@ -1260,7 +1264,7 @@ function clearBoardSelection() {
 }
 
 .clear-selection-btn:hover {
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 /* Selection input - flows inline */
@@ -1274,7 +1278,7 @@ function clearBoardSelection() {
 
 .selection-prompt {
   font-size: 0.9rem;
-  color: #aaa;
+  color: var(--bsg-ink-2);
   white-space: nowrap;
 }
 
@@ -1287,10 +1291,10 @@ function clearBoardSelection() {
 
 .choice-btn {
   padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--bsg-surface-2);
+  border: 1px solid var(--bsg-line);
   border-radius: 6px;
-  color: #fff;
+  color: var(--bsg-ink);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -1300,13 +1304,13 @@ function clearBoardSelection() {
   opacity: 0.45;
   cursor: not-allowed;
   filter: grayscale(0.5);
-  border-color: rgba(128, 128, 128, 0.3);
-  color: rgba(255, 255, 255, 0.5);
+  border-color: var(--bsg-line);
+  color: var(--bsg-ink-3);
 }
 
 .choice-btn:hover:not(:disabled) {
-  border-color: #00d9ff;
-  background: rgba(0, 217, 255, 0.2);
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
 }
 
 /* Element selection buttons */
@@ -1314,22 +1318,9 @@ function clearBoardSelection() {
   font-weight: bold;
 }
 
-/* Skip button for optional selections */
-.skip-btn {
-  background: rgba(128, 128, 128, 0.2);
-  border-color: rgba(128, 128, 128, 0.4);
-  color: #999;
-}
-
-.skip-btn:hover {
-  background: rgba(128, 128, 128, 0.3);
-  border-color: rgba(128, 128, 128, 0.6);
-  color: #ccc;
-}
-
 /* Optional label */
 .optional-label {
-  color: #888;
+  color: var(--bsg-ink-3);
   font-style: italic;
   font-size: 0.85em;
   margin-left: 6px;
@@ -1337,40 +1328,40 @@ function clearBoardSelection() {
 
 /* Filtered choice buttons */
 .filtered-choice-btn {
-  background: rgba(0, 255, 136, 0.1);
-  border-color: rgba(0, 255, 136, 0.3);
+  background: var(--bsg-surface-2);
+  border-color: var(--bsg-line-2);
 }
 
 .filtered-choice-btn:hover {
-  border-color: #00ff88;
-  background: rgba(0, 255, 136, 0.25);
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
 }
 
 .no-choices {
-  color: #888;
+  color: var(--bsg-ink-2);
   font-style: italic;
   font-size: 0.85rem;
 }
 
 .element-instruction {
   padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-field);
   border-radius: 6px;
   text-align: center;
 }
 
 .instruction-text {
-  color: #00d9ff;
+  color: var(--bsg-ink-2);
   font-size: 0.9rem;
 }
 
 .number-input input,
 .text-input input {
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--bsg-field);
+  border: 1px solid var(--bsg-line);
   border-radius: 6px;
-  color: #fff;
+  color: var(--bsg-ink);
   font-size: 0.9rem;
   width: 120px;
 }
@@ -1378,11 +1369,11 @@ function clearBoardSelection() {
 .number-input input:focus,
 .text-input input:focus {
   outline: none;
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .input-hint {
-  color: #888;
+  color: var(--bsg-ink-2);
   font-size: 0.8rem;
   margin-bottom: 6px;
 }
@@ -1395,10 +1386,10 @@ function clearBoardSelection() {
 
 .waiting-message {
   padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface-2);
   border-radius: 8px;
   text-align: center;
-  color: #888;
+  color: var(--bsg-ink-2);
   font-size: 0.9rem;
 }
 
@@ -1413,7 +1404,7 @@ function clearBoardSelection() {
 
 /* Multi-select styles */
 .multi-select-count {
-  color: #00d9ff;
+  color: var(--bsg-accent);
   font-weight: bold;
   margin-left: 8px;
 }
@@ -1430,10 +1421,10 @@ function clearBoardSelection() {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--bsg-surface-2);
+  border: 1px solid var(--bsg-line);
   border-radius: 6px;
-  color: #fff;
+  color: var(--bsg-ink);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -1443,18 +1434,18 @@ function clearBoardSelection() {
   opacity: 0.45;
   cursor: not-allowed;
   filter: grayscale(0.5);
-  border-color: rgba(128, 128, 128, 0.3);
-  color: rgba(255, 255, 255, 0.5);
+  border-color: var(--bsg-line);
+  color: var(--bsg-ink-3);
 }
 
 .multi-select-choice:hover:not(:has(input:disabled)) {
-  border-color: #00d9ff;
-  background: rgba(0, 217, 255, 0.2);
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
 }
 
 .multi-select-choice.selected {
-  border-color: #00ff88;
-  background: rgba(0, 255, 136, 0.2);
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
 }
 
 .multi-select-choice input[type="checkbox"] {
@@ -1462,7 +1453,7 @@ function clearBoardSelection() {
   -webkit-appearance: none;
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  border: 2px solid var(--bsg-line-2);
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
@@ -1471,8 +1462,8 @@ function clearBoardSelection() {
 }
 
 .multi-select-choice input[type="checkbox"]:checked {
-  border-color: #00ff88;
-  background: #00ff88;
+  border-color: var(--bsg-accent);
+  background: var(--bsg-accent);
 }
 
 .multi-select-choice input[type="checkbox"]:checked::after {
@@ -1481,7 +1472,7 @@ function clearBoardSelection() {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: #1a1a2e;
+  color: var(--bsg-accent-ink);
   font-size: 12px;
   font-weight: bold;
 }
@@ -1497,15 +1488,10 @@ function clearBoardSelection() {
 
 /* Choice loading styles */
 .loading-choices {
-  color: #00d9ff;
+  color: var(--bsg-ink-2);
   font-style: italic;
   font-size: 0.9rem;
   animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
 }
 
 /* Animation pending state */
