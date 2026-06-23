@@ -223,8 +223,36 @@ function onUiSelect(): void {
 }
 
 function seatLabel(seat: SeatInfo): string {
-  if (!seat.clientId) return 'Open';
+  if (!seat.clientId) return `Seat ${seat.seat}`;
   return seat.name + (seat.connected ? '' : ' (away)');
+}
+
+// ── Seat switcher ─────────────────────────────────────────────────────────────
+const seatSwitcherOpen = ref(false);
+
+/**
+ * Switch to a different seat: send follow-disable if follow is active, then
+ * leave the current seat and take the target. The host (multiplayer-host.ts)
+ * is authoritative — it will reject taking a seat held by a connected client,
+ * so canTake() here is a courtesy guard only.
+ *
+ * Follow auto-disable on manual switch: if the dev is following the active
+ * seat and manually picks a new seat, following no longer makes sense (they
+ * have a specific seat they want to be in). We disable it automatically so the
+ * dev is not surprised by immediate seat jumping after the switch.
+ */
+function switchSeat(target: number): void {
+  if (target === mySeat.value) return;
+  const targetInfo = seats.value.find((s) => s.seat === target);
+  if (targetInfo && !canTake(targetInfo)) return;
+
+  // Auto-disable follow when manually switching seats
+  if (followActive.value) {
+    wsSend({ type: 'follow', enabled: false });
+  }
+
+  leaveSeat();
+  takeSeat(target);
 }
 
 // Collapse chrome when the dev first takes a seat, unless they have an explicit
@@ -354,8 +382,56 @@ onUnmounted(() => {
         <!-- Bar — hidden when collapsed -->
         <div v-show="chromeOpen" class="dev-chrome__bar">
           <div class="dev-chrome__toggle">
-            <!-- Seat badge: static for Task 1; replaced with switcher in Task 2 -->
-            <span class="dev-chrome__badge">seat {{ mySeat }}</span>
+            <!-- Seat switcher: click to open a menu listing all seats -->
+            <div class="dev-chrome__seat-switcher">
+              <button
+                type="button"
+                class="dev-chrome__badge dev-chrome__badge--btn"
+                aria-haspopup="true"
+                :aria-expanded="seatSwitcherOpen"
+                @click="seatSwitcherOpen = !seatSwitcherOpen"
+              >
+                Seat {{ mySeat }} ▾
+              </button>
+              <div v-if="seatSwitcherOpen" class="seat-switcher-menu">
+                <button
+                  v-for="seat in seats"
+                  :key="seat.seat"
+                  type="button"
+                  class="seat-switcher-menu__item"
+                  :class="{
+                    'seat-switcher-menu__item--current': seat.seat === mySeat,
+                    'seat-switcher-menu__item--disabled': !canTake(seat) && seat.seat !== mySeat,
+                  }"
+                  :disabled="!canTake(seat) && seat.seat !== mySeat"
+                  @click="seatSwitcherOpen = false; switchSeat(seat.seat)"
+                >
+                  <span class="seat-switcher-menu__dot"
+                    :class="seat.connected ? 'is-online' : 'is-offline'"
+                  ></span>
+                  {{ seat.name || `Seat ${seat.seat}` }}
+                  <span v-if="cfg.aiSeats.includes(seat.seat)" class="seat-switcher-menu__ai">AI</span>
+                  <span v-if="seat.seat === mySeat" class="seat-switcher-menu__current-label"> (you)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Presence strip: one pill per seat -->
+          <div class="presence-strip">
+            <div
+              v-for="seat in seats"
+              :key="seat.seat"
+              class="presence-strip__seat"
+              :class="{ 'presence-strip__seat--mine': seat.seat === mySeat }"
+            >
+              <span
+                class="presence-strip__dot"
+                :class="seat.connected ? 'is-online' : 'is-offline'"
+              ></span>
+              <span class="presence-strip__name">{{ seat.name || `Seat ${seat.seat}` }}</span>
+              <span v-if="cfg.aiSeats.includes(seat.seat)" class="presence-strip__ai">AI</span>
+            </div>
           </div>
           <div class="dev-chrome__bar-actions">
             <!-- Primary controls (always visible in bar) -->
@@ -753,6 +829,156 @@ onUnmounted(() => {
   height: 100%;
   border: 0;
   display: block;
+}
+
+/* ── Seat switcher ── */
+.dev-chrome__seat-switcher {
+  position: relative;
+}
+
+.dev-chrome__badge--btn {
+  background: color-mix(in srgb, var(--bsg-accent) 15%, transparent);
+  color: var(--bsg-accent-2);
+  border: 1px solid color-mix(in srgb, var(--bsg-accent) 30%, transparent);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.dev-chrome__badge--btn:hover {
+  background: color-mix(in srgb, var(--bsg-accent) 25%, transparent);
+}
+
+.seat-switcher-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 20;
+  min-width: 160px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--bsg-bg) 50%, transparent);
+}
+
+.seat-switcher-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--bsg-ink);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+  width: 100%;
+}
+
+.seat-switcher-menu__item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bsg-accent) 10%, transparent);
+}
+
+.seat-switcher-menu__item--current {
+  color: var(--bsg-accent-2);
+}
+
+.seat-switcher-menu__item--disabled,
+.seat-switcher-menu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.seat-switcher-menu__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.seat-switcher-menu__dot.is-online {
+  background: var(--bsg-ok);
+}
+
+.seat-switcher-menu__dot.is-offline {
+  background: var(--bsg-away);
+}
+
+.seat-switcher-menu__ai {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bsg-ink-3);
+  background: var(--bsg-field);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.seat-switcher-menu__current-label {
+  color: var(--bsg-ink-3);
+  font-size: 0.8em;
+}
+
+/* ── Presence strip ── */
+.presence-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.presence-strip__seat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bsg-field);
+  border: 1px solid var(--bsg-line-2);
+  font-size: 0.75rem;
+  color: var(--bsg-ink-2);
+}
+
+.presence-strip__seat--mine {
+  border-color: var(--bsg-accent);
+  background: color-mix(in srgb, var(--bsg-accent) 10%, var(--bsg-field));
+}
+
+.presence-strip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.presence-strip__dot.is-online {
+  background: var(--bsg-ok);
+}
+
+.presence-strip__dot.is-offline {
+  background: var(--bsg-away);
+}
+
+.presence-strip__name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presence-strip__ai {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bsg-ink-3);
 }
 
 /* ── Phone layout: icon-only controls, … overflow for secondary ── */

@@ -24,7 +24,7 @@ interface MockWS {
 let mockWsInstance: MockWS | null = null;
 
 class FakeWebSocket {
-  readyState = WebSocket.CONNECTING;
+  readyState: number = WebSocket.CONNECTING;
   send = vi.fn();
   close = vi.fn();
   private listeners: Record<string, Array<(ev: unknown) => void>> = {};
