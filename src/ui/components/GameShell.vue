@@ -1577,6 +1577,7 @@ if ((import.meta as any).hot) {
 /* Desktop: Wider padding for action bar */
 @media (min-width: 768px) {
   .game-shell__action-bar {
+    padding-top: 16px;
     padding-bottom: max(16px, env(safe-area-inset-bottom));
     padding-left: max(20px, env(safe-area-inset-left));
     padding-right: max(20px, env(safe-area-inset-right));
