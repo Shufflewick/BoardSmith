@@ -1210,6 +1210,7 @@ function clearBoardSelection() {
   cursor: pointer;
   padding: 2px 6px;
   line-height: 1;
+  min-height: 44px;
 }
 
 .cancel-btn:hover {
@@ -1291,6 +1292,8 @@ function clearBoardSelection() {
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .clear-selection-btn:hover {
@@ -1433,7 +1436,6 @@ function clearBoardSelection() {
 
 .number-input input:focus,
 .text-input input:focus {
-  outline: none;
   border-color: var(--bsg-accent);
 }
 
