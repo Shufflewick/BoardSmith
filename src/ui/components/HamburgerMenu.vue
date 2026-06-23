@@ -156,7 +156,7 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   display: block;
   width: 100%;
   height: 3px;
-  background: #fff;
+  background: var(--bsg-ink);
   border-radius: 2px;
   transition: all 0.3s ease;
 }
@@ -184,7 +184,8 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   z-index: 200;
 }
 
-/* Drawer */
+/* Drawer — background: transparent is injected by .game-shell--platform :deep(.menu-drawer)
+   when embedded so the host backdrop shows through; var(--bsg-bg) is the standalone fallback. */
 .menu-drawer {
   position: fixed;
   top: 0;
@@ -192,11 +193,11 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   width: 280px;
   height: 100vh; /* fallback: browsers without dvh support */
   height: 100dvh;
-  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+  background: var(--bsg-bg);
   z-index: 300;
   display: flex;
   flex-direction: column;
-  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--bsg-shadow);
 }
 
 .drawer-header {
@@ -204,7 +205,7 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--bsg-line);
 }
 
 .logo {
@@ -213,36 +214,37 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   gap: 12px;
 }
 
+/* Solid display title — clip-text removed (THEME-04) */
 .logo-text {
+  font-family: var(--bsg-display);
   font-size: 18px;
   font-weight: 600;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--bsg-ink);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .close-btn {
   width: 32px;
   height: 32px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-field);
   border: none;
   border-radius: 8px;
-  color: #888;
+  color: var(--bsg-ink-2);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .close-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  background: var(--bsg-line-2);
+  color: var(--bsg-ink);
 }
 
 /* Game Info Section */
 .drawer-game-info {
   padding: 12px 20px;
-  background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface-2);
+  border-bottom: 1px solid var(--bsg-line);
 }
 
 .game-info-row {
@@ -258,26 +260,26 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
 }
 
 .info-label {
-  color: #888;
+  color: var(--bsg-ink-2);
 }
 
 .info-value {
-  color: #fff;
-  font-family: monospace;
+  color: var(--bsg-ink);
+  font-family: var(--bsg-mono);
 }
 
 .connection-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #888;
+  background: var(--bsg-away);
 }
 
-.connection-dot.connected { background: #27ae60; }
+.connection-dot.connected { background: var(--bsg-ok); }
 .connection-dot.connecting,
-.connection-dot.reconnecting { background: #f39c12; }
+.connection-dot.reconnecting { background: var(--bsg-warn); }
 .connection-dot.disconnected,
-.connection-dot.error { background: #e74c3c; }
+.connection-dot.error { background: var(--bsg-danger); }
 
 /* Navigation */
 .drawer-nav {
@@ -294,7 +296,7 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   padding: 14px 24px;
   background: transparent;
   border: none;
-  color: #ccc;
+  color: var(--bsg-ink-2);
   font-size: 14px;
   text-decoration: none;
   cursor: pointer;
@@ -303,16 +305,16 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
 }
 
 .menu-item:hover {
-  background: rgba(0, 217, 255, 0.1);
-  color: #00d9ff;
+  background: var(--bsg-selectable);
+  color: var(--bsg-accent);
 }
 
 .menu-item.danger {
-  color: #e74c3c;
+  color: var(--bsg-danger);
 }
 
 .menu-item.danger:hover {
-  background: rgba(231, 76, 60, 0.1);
+  background: color-mix(in srgb, var(--bsg-danger) 12%, transparent);
 }
 
 .item-icon {
@@ -321,14 +323,14 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-field);
   border-radius: 6px;
   font-size: 12px;
 }
 
 .menu-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-line);
   margin: 10px 24px;
 }
 

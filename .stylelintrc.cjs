@@ -35,13 +35,11 @@ module.exports = {
     'src/ui/components/auto-ui/archetypes/UnsupportedTopologyPanel.vue',
 
     // Chrome shell components — swept in Phase 99
-    'src/ui/components/GameShell.vue',
     'src/ui/components/WaitingRoom.vue',
     'src/ui/components/DebugPanel.vue',
     'src/ui/components/GameHeader.vue',
     'src/ui/components/GameHistory.vue',
     'src/ui/components/GameLobby.vue',
-    'src/ui/components/HamburgerMenu.vue',
     'src/ui/components/PlayersPanel.vue',
     'src/ui/components/Toast.vue',
 
