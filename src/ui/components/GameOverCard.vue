@@ -12,7 +12,7 @@
  * Focus is trapped inside the card on mount (A11Y-07). Escape does NOT close:
  * the game is over and there is no dismiss — the user must click Rematch or New Game.
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 
 export interface Player {
@@ -40,7 +40,7 @@ const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef
 });
 
 onMounted(() => openTrap());
-onUnmounted(() => closeTrap());
+onBeforeUnmount(() => closeTrap());
 
 // ---------------------------------------------------------------------------
 // Shape set (mirrors PlayersPanel.vue, IA-06): seat index → shape class.
