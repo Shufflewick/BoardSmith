@@ -218,6 +218,10 @@ watch(lobbyInfo, (lobby) => {
 // UI state
 const historyCollapsed = ref(false);
 const debugExpanded = ref(false);
+// Single ref for whichever GameHistory instance is currently mounted
+// (sidebar and sheet are mutually exclusive by breakpoint). GameShell
+// mediates Copy/Clear from DebugPanel without duplicating message state.
+const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 
@@ -1559,6 +1563,7 @@ if ((import.meta as any).hot) {
             <!-- Game History (sidebar mode: medium/wide only; replaced by sheet on compact) -->
             <GameHistory
               v-if="showHistory && !sidebarRail"
+              ref="historyPanel"
               :messages="gameMessages"
               v-model:collapsed="historyCollapsed"
               class="sidebar-history"
@@ -1641,6 +1646,7 @@ if ((import.meta as any).hot) {
              Positioned absolute within .stage — never covers the .actionbar sibling below. -->
         <GameHistory
           v-if="showHistory && sidebarRail"
+          ref="historyPanel"
           :messages="gameMessages"
           :sheet="true"
           v-model:collapsed="historyCollapsed"
@@ -1712,6 +1718,8 @@ if ((import.meta as any).hot) {
         @restart-game="handleRestartGame"
         @time-travel="handleTimeTravel"
         @highlight-element="handleHighlightElement"
+        @copy-history="() => historyPanel?.copyHistory()"
+        @clear-history="() => historyPanel?.clearHistory()"
       />
 
       <!-- Error display -->
