@@ -322,7 +322,7 @@ const displayLabel = computed(
 }
 
 .hex-polygon.is-drop-target {
-  fill: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15));
+  fill: var(--bsg-droptarget);
   stroke: rgba(0, 255, 136, 0.6);
   stroke-width: 2;
 }

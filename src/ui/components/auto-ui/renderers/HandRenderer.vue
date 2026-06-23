@@ -428,12 +428,12 @@ void isBoardSelected;
 
 /* Drop target — hand zones can receive dragged elements (Go Fish target) */
 .hand-container.is-drop-target {
-  background: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15));
+  background: var(--bsg-droptarget);
   border: 2px solid rgba(0, 255, 136, 0.5);
 }
 
 .hand-container.is-drop-target:hover {
-  background: var(--bs-drop-hover-bg, rgba(0, 255, 136, 0.3));
+  background: var(--bsg-droptarget-hover);
 }
 
 /* Disabled state */

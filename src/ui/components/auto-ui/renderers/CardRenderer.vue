@@ -485,16 +485,16 @@ function handleClick(event: MouseEvent) {
 
 /* Dragging state — consume CSS vars from drag-drop.css, never redefine */
 .card-container.is-dragging {
-  opacity: var(--bs-dragging-opacity, 0.5);
-  transform: scale(var(--bs-dragging-scale, 0.95));
+  opacity: var(--bsg-dragging-opacity);
+  transform: scale(var(--bsg-dragging-scale));
 }
 
 .card-container.is-drop-target {
-  background: var(--bs-drop-target-bg);
+  background: var(--bsg-droptarget);
 }
 
 .card-container.is-drop-target:hover {
-  background: var(--bs-drop-hover-bg);
+  background: var(--bsg-droptarget-hover);
 }
 
 /* Baseline 3: no-image visible card — white face with name label */

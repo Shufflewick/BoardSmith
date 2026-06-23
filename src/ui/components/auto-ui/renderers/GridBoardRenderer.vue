@@ -321,12 +321,12 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 }
 
 .grid-cell.is-drop-target {
-  background: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15));
+  background: var(--bsg-droptarget);
   animation: pulse-drop-target 1s ease-in-out infinite;
 }
 
 .grid-cell.is-drop-target:hover {
-  background: var(--bs-drop-hover-bg, rgba(0, 255, 136, 0.3));
+  background: var(--bsg-droptarget-hover);
 }
 
 @keyframes pulse-cell {
@@ -335,8 +335,8 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 }
 
 @keyframes pulse-drop-target {
-  0%, 100% { background: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15)); }
-  50% { background: var(--bs-drop-hover-bg, rgba(0, 255, 136, 0.3)); }
+  0%, 100% { background: var(--bsg-droptarget); }
+  50% { background: var(--bsg-droptarget-hover); }
 }
 
 /* ── Coordinate notation corner label ── */

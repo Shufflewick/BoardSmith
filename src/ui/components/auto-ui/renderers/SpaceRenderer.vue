@@ -218,12 +218,12 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 }
 
 .space-container.is-drop-target {
-  background: var(--bs-drop-target-bg, rgba(0, 255, 136, 0.15));
+  background: var(--bsg-droptarget);
   border-color: rgba(0, 255, 136, 0.5);
 }
 
 .space-container.is-drop-target:hover {
-  background: var(--bs-drop-hover-bg, rgba(0, 255, 136, 0.3));
+  background: var(--bsg-droptarget-hover);
 }
 
 .space-container.is-disabled {
