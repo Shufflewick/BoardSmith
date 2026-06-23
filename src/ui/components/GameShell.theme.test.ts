@@ -11,8 +11,8 @@
  *      and does not throw.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { consumeInitMessage } from './GameShellInit.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import { applyTheme } from '../../ui/theme.js';
 
 function cleanup(): void {
@@ -46,5 +46,56 @@ describe('GameShell init theme receiver (consumeInitMessage)', () => {
   it('honors data.scheme when present in the init message', () => {
     consumeInitMessage({ type: 'init', seat: 0, scheme: 'light' }, { applyTheme });
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+});
+
+describe('isOriginAllowed — postMessage origin guard (CR-01)', () => {
+  it('allows all origins when trustedOrigins is undefined (permissive default)', () => {
+    expect(isOriginAllowed('https://evil.example.com', undefined)).toBe(true);
+  });
+
+  it('allows all origins when trustedOrigins is an empty array (no filtering)', () => {
+    // An empty array means "not configured" — no filtering, same as undefined.
+    // The host locks this down by supplying a non-empty trustedOrigins prop.
+    expect(isOriginAllowed('https://any.example.com', [])).toBe(true);
+  });
+
+  it('rejects a non-listed origin when trustedOrigins is set', () => {
+    const trusted = ['https://shufflewick.pub', 'http://localhost:5173'];
+    expect(isOriginAllowed('https://attacker.example.com', trusted)).toBe(false);
+  });
+
+  it('allows a listed origin when trustedOrigins is set', () => {
+    const trusted = ['https://shufflewick.pub', 'http://localhost:5173'];
+    expect(isOriginAllowed('https://shufflewick.pub', trusted)).toBe(true);
+  });
+
+  it('rejects a theme injection from an untrusted origin — applyTheme is NOT called', () => {
+    // Simulate what the GameShell postMessage handler does: check origin, then
+    // conditionally call consumeInitMessage. A rejected origin must not reach applyTheme.
+    const mockApplyTheme = vi.fn();
+    const trustedOrigins = ['https://shufflewick.pub'];
+    const untrustedOrigin = 'https://attacker.example.com';
+    const data = { type: 'init' as const, seat: 1, theme: { '--bsg-danger': 'lime' } };
+
+    if (isOriginAllowed(untrustedOrigin, trustedOrigins)) {
+      consumeInitMessage(data, { applyTheme: mockApplyTheme });
+    }
+
+    expect(mockApplyTheme).not.toHaveBeenCalled();
+  });
+
+  it('passes a theme injection from a trusted origin — applyTheme IS called', () => {
+    // Same simulation: a trusted origin must reach consumeInitMessage/applyTheme.
+    const mockApplyTheme = vi.fn();
+    const trustedOrigins = ['https://shufflewick.pub'];
+    const trustedOrigin = 'https://shufflewick.pub';
+    const data = { type: 'init' as const, seat: 1, theme: { '--bsg-accent': '#abc' } };
+
+    if (isOriginAllowed(trustedOrigin, trustedOrigins)) {
+      consumeInitMessage(data, { applyTheme: mockApplyTheme });
+    }
+
+    expect(mockApplyTheme).toHaveBeenCalledOnce();
   });
 });

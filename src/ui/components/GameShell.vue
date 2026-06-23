@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide, toRef } from 'vue';
 import { applyTheme } from '../theme.js';
-import { consumeInitMessage } from './GameShellInit.js';
+import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 // Dev-only auto-UI peek (see DevAutoUI below). Referenced ONLY under the
 // `isDevBuild` (`import.meta.env.DEV`) constant, so a production build constant-
 // folds the branch to `null`, leaving this import unreferenced and tree-shaken —
@@ -110,6 +110,17 @@ interface GameShellProps {
    * a production build still renders the primary slot UI.
    */
   uis?: Array<{ name: string; component: unknown }>;
+  /**
+   * Origins allowed to send postMessages to this GameShell iframe.
+   * When non-empty, any message whose event.origin is NOT in this list is
+   * silently dropped before the payload is inspected. When empty or unset,
+   * the current behavior is retained (no origin filtering) so the existing
+   * embed flow is unbroken — the host (HOST-02) supplies this list to lock
+   * down the production embed.
+   *
+   * Example: ['https://shufflewick.pub', 'http://localhost:5173']
+   */
+  trustedOrigins?: string[];
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -612,7 +623,16 @@ let platformMessageHandler: ((event: MessageEvent) => void) | null = null;
 
 if (typeof window !== 'undefined' && window.parent !== window) {
   platformMessageHandler = (event: MessageEvent) => {
+    // Origin check: event.origin is browser-enforced and cannot be spoofed by
+    // the sender, unlike fields inside event.data. isOriginAllowed passes all
+    // origins when trustedOrigins is unset (preserving existing behavior); the
+    // host locks this down via the trustedOrigins prop (HOST-02).
+    if (!isOriginAllowed(event.origin, props.trustedOrigins)) return;
+
     const data = event.data;
+    // Lightweight message-shape filter: data.source is a sender-controlled field,
+    // not a security control (use trustedOrigins for that). It filters out
+    // unrelated window messages that happen to arrive while the iframe is open.
     if (!data || data.source !== 'shufflewick') return;
 
     if (data.type === 'init') {
@@ -620,7 +640,9 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       currentScreen.value = 'game';
       // TOKEN-05: consume any host-supplied theme override delivered at iframe init.
       // consumeInitMessage calls applyTheme() which enforces the --bsg-* key
-      // allowlist (T-98-04) — no extra validation needed here.
+      // allowlist — this prevents unknown CSS property names but does NOT prevent
+      // an attacker from overriding legitimate tokens. Origin validation (above)
+      // is the primary security control for the theme-injection path.
       consumeInitMessage(data, { applyTheme });
     }
 

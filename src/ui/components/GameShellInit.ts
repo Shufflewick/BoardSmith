@@ -25,13 +25,34 @@ export interface InitDeps {
 }
 
 /**
+ * Returns true if `origin` is allowed to send postMessages to this iframe.
+ *
+ * When `trustedOrigins` is a non-empty array only listed origins pass — this
+ * is the primary security control for the theme-injection path (T-98-04).
+ * When `trustedOrigins` is undefined or empty, all origins pass so the
+ * existing embed flow is unbroken; the host locks this down via HOST-02.
+ *
+ * Use event.origin (browser-enforced) not data.source (sender-controlled).
+ */
+export function isOriginAllowed(origin: string, trustedOrigins: string[] | undefined): boolean {
+  if (!trustedOrigins || trustedOrigins.length === 0) return true;
+  return trustedOrigins.includes(origin);
+}
+
+/**
  * Consume an `init` postMessage from the host page.
  *
  * Called on every `init` event. Always calls `applyTheme()` at minimum so
  * the Slate base token <style> is idempotently present. If `data.theme` is a
  * non-null object, passes it as an override; if `data.scheme` is present,
- * forwards it as the scheme option. applyTheme enforces the --bsg-* key
- * allowlist, so no extra validation is needed here (T-98-04).
+ * forwards it as the scheme option.
+ *
+ * applyTheme enforces the --bsg-* key allowlist (prevents unknown CSS
+ * property names) but does NOT prevent an attacker from overriding legitimate
+ * tokens with attacker-chosen values. Origin validation in the GameShell
+ * postMessage handler (trustedOrigins prop) is the primary security control
+ * for this path. This function trusts that the caller has already verified
+ * the message origin.
  */
 export function consumeInitMessage(data: InitMessageData, deps: InitDeps): void {
   const { applyTheme } = deps;
