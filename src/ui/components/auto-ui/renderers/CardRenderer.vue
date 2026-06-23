@@ -413,8 +413,10 @@ function handleClick(event: MouseEvent) {
 </template>
 
 <style scoped>
-/* Card container */
+/* Card container — fluid card token (IA-05) */
 .card-container {
+  --card-w: clamp(44px, 14cqw, 84px);
+  --card-h: calc(var(--card-w) * 1.4);
   display: inline-block;
   transition: transform var(--bsg-dur-base) var(--bsg-ease);
 }
@@ -503,9 +505,8 @@ function handleClick(event: MouseEvent) {
 
 /* Baseline 3: no-image visible card — surface face with name label */
 .card-face {
-  width: 60px;
-  min-width: 45px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   background: var(--bsg-surface);
   border-radius: var(--bsg-r-sm);
   display: flex;
@@ -523,9 +524,8 @@ function handleClick(event: MouseEvent) {
 
 /* Baseline 1: URL image */
 .card-image {
-  width: 60px;
-  min-width: 45px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   border-radius: var(--bsg-r-sm);
   box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
@@ -534,9 +534,8 @@ function handleClick(event: MouseEvent) {
 
 /* Baseline 2: sprite sheet */
 .card-sprite {
-  width: 60px;
-  min-width: 45px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   border-radius: var(--bsg-r-sm);
   box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
@@ -545,9 +544,8 @@ function handleClick(event: MouseEvent) {
 
 /* Baseline 4: default card back — shared token surface (THEME-05) */
 .card-back {
-  width: 60px;
-  min-width: 45px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   background: var(--bsg-card-back);
   border-radius: var(--bsg-r-sm);
   border: 1px solid var(--bsg-line-2);

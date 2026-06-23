@@ -368,8 +368,10 @@ void isBoardSelected;
 </template>
 
 <style scoped>
-/* Container baseline */
+/* Container baseline — fluid card token (IA-05) */
 .hand-container {
+  --card-w: clamp(44px, 14cqw, 84px);
+  --card-h: calc(var(--card-w) * 1.4);
   background: var(--bsg-surface);
   border-radius: var(--bsg-r-md);
   padding: var(--bsg-s4);
@@ -551,9 +553,8 @@ void isBoardSelected;
 
 /* Hidden card placeholder — shared card-back token (THEME-05) */
 .card-back-small {
-  width: 60px;
-  min-width: 45px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   background: var(--bsg-card-back);
   border-radius: var(--bsg-r-sm);
   border: 1px solid var(--bsg-line-2);
@@ -567,9 +568,8 @@ void isBoardSelected;
 }
 
 .card-image {
-  width: 60px;
-  min-width: 45px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   border-radius: var(--bsg-r-sm);
   box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
@@ -577,9 +577,8 @@ void isBoardSelected;
 }
 
 .card-sprite {
-  width: 60px;
-  min-width: 45px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   border-radius: var(--bsg-r-sm);
   box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;

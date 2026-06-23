@@ -150,8 +150,10 @@ function handleClick(event: MouseEvent) {
 </template>
 
 <style scoped>
-/* Container baseline */
+/* Container baseline — fluid card token (IA-05) */
 .deck-container {
+  --card-w: clamp(44px, 14cqw, 84px);
+  --card-h: calc(var(--card-w) * 1.4);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -250,11 +252,11 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-ink-2);
 }
 
-/* Stack visual: 60x84px relative container for absolute-positioned cards */
+/* Stack visual: fluid card-w relative container for absolute-positioned cards (IA-05) */
 .deck-stack {
   position: relative;
-  width: 60px;
-  height: 84px;
+  width: var(--card-w);
+  height: var(--card-h);
   align-self: flex-start;
 }
 
