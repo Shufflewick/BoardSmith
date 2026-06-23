@@ -7,11 +7,23 @@
  *   getHexPolygonPoints — generates SVG polygon points string
  *
  * No hand-rolled trig: never re-implement the closed-form functions here.
+ *
+ * A11Y-01: uses useSelectableGrid() for roving-tabindex keyboard navigation.
+ * Each hex <g> cell gets role="gridcell" + tabindex + aria-label.
+ * The SVG root gets role="group" + aria-label + @keydown.
+ *
+ * MANUAL VERIFICATION REQUIRED (research Open Q3):
+ * tabindex="0" on SVG <g> is spec-valid in modern browsers but Safari/VoiceOver
+ * SVG focus has historically been unreliable. Run a manual VoiceOver/Safari pass
+ * before marking A11Y-01 complete for HexBoardRenderer. If VO cannot land focus
+ * on hex cells, escalate to transparent overlay <button> elements positioned over
+ * each hex cell using position:absolute within a position:relative container.
  */
 
-import { computed, inject, type ComputedRef } from 'vue';
+import { computed, inject, nextTick, type ComputedRef } from 'vue';
 import { hexToPixel, getHexPolygonPoints } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
@@ -114,6 +126,17 @@ function getPieceColor(piece: GameElement, _pieceIndex: number): string {
   return 'var(--bsg-ink-3)';
 }
 
+/**
+ * Non-color owner glyph for accessibility (A11Y WCAG 1.4.1 Use of Color).
+ * Renders the seat number inside the piece token so seat identity is conveyed
+ * without relying on color alone.
+ */
+function getPieceGlyph(piece: GameElement): string {
+  const player = piece.attributes?.player as { seat?: number } | undefined;
+  if (player?.seat !== undefined) return String(player.seat);
+  return '';
+}
+
 // Effective hex piece circle radius: 35% of hexSize (from UI-SPEC)
 const pieceRadius = computed(() => hexSize.value * 0.35);
 
@@ -156,16 +179,6 @@ function isCellDisabled(cell: GameElement): boolean {
   return boardInteraction.isDisabledElement(cellIdentity(cell)) !== false;
 }
 
-function handleHexClick(cell: GameElement) {
-  if (!boardInteraction) return;
-  if (isCellDisabled(cell)) return;
-  if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
-    boardInteraction.triggerElementSelect(cellIdentity(cell));
-  } else if (cell.name) {
-    boardInteraction.selectElement(cellIdentity(cell));
-  }
-}
-
 // A `drop` only fires on an element whose `dragover` called preventDefault().
 // Without this handler the browser silently rejects every drop on a hex cell —
 // mirrors GridBoardRenderer.handleDragOver for Custom-UI/Action-Panel parity.
@@ -194,11 +207,102 @@ const presentationEntry = computed(() =>
 const displayLabel = computed(
   () => presentationEntry.value?.label ?? props.element.name ?? props.element.className
 );
+
+// ── A11Y-01: useSelectableGrid — roving tabindex for hex grid navigation ────
+//
+// hexCells: flat array of all hex cells (children of the board element)
+// hexCols: width of the hex grid in cells (q-range + 1) for ArrowUp/Down row math
+// The SVG root receives @keydown; each <g> receives :tabindex from currentIdx.
+//
+// NOTE (research Open Q3): tabindex on SVG <g> is spec-valid but Safari/VoiceOver
+// may not reliably focus <g> elements. Ships with tabindex-on-g first.
+// If manual VoiceOver/Safari testing fails, escalate to overlay <button> approach.
+const hexCells = computed(() => props.element.children ?? []);
+
+// Compute grid width as the q-coordinate range + 1 for roving-tabindex row math.
+const hexCols = computed(() => {
+  const cells = hexCells.value;
+  if (!cells.length) return 1;
+  let maxQ = -Infinity;
+  let minQ = Infinity;
+  for (const cell of cells) {
+    const q = (cell.attributes?.[qCoordName.value] as number) ?? 0;
+    maxQ = Math.max(maxQ, q);
+    minQ = Math.min(minQ, q);
+  }
+  return maxQ - minQ + 1;
+});
+
+const { currentIdx, focusCell, handleGridKeydown: _composableKeydown } = useSelectableGrid(
+  hexCells,
+  hexCols,
+  cellIdentity,
+  boardInteraction,
+);
+
+// DOM refs for each hex <g> cell — needed to call .focus() after arrow navigation
+const hexCellRefs: (SVGGElement | null)[] = [];
+function setHexCellRef(el: Element | null, idx: number) {
+  hexCellRefs[idx] = el instanceof SVGGElement ? el : null;
+}
+
+// Hex cell activation: selectable AND passive selectElement branches.
+// Called from both click and keyboard (Enter/Space) for consistent behavior.
+function handleHexActivate(cell: GameElement) {
+  if (!boardInteraction) return;
+  if (isCellDisabled(cell)) return;
+  if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
+    boardInteraction.triggerElementSelect(cellIdentity(cell));
+  } else if (cell.name) {
+    boardInteraction.selectElement(cellIdentity(cell));
+  }
+}
+
+// SVG keydown handler: intercepts Enter/Space for activation,
+// delegates Arrow/Home/End navigation to the composable.
+function handleSvgKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    const cell = hexCells.value[currentIdx.value];
+    if (cell) handleHexActivate(cell);
+    e.preventDefault();
+    return;
+  }
+  _composableKeydown(e);
+  void nextTick(() => {
+    hexCellRefs[currentIdx.value]?.focus();
+  });
+}
+
+// Per-cell aria-label: coord + occupant names + state
+function hexCellAriaLabel(cell: GameElement): string {
+  const coord = cell.name
+    ?? `(${cell.attributes?.[qCoordName.value] ?? '?'},${cell.attributes?.[rCoordName.value] ?? '?'})`;
+  let state: string;
+  if (isCellDisabled(cell)) state = 'unavailable';
+  else if (isCellBoardSelected(cell)) state = 'selected';
+  else if (isCellDropTarget(cell)) state = 'drop target';
+  else if (isCellActionSelectable(cell)) state = 'selectable';
+  else state = 'empty';
+  const pieces = cell.children ?? [];
+  const occupant = pieces.length > 0
+    ? `, ${pieces.map(p => p.name ?? 'piece').join(', ')}`
+    : '';
+  return `${coord}${occupant}, ${state}`;
+}
 </script>
 
 <template>
   <div class="hex-board-container">
     <div class="hex-board-header">{{ displayLabel }}</div>
+    <!--
+      SVG root: role="group" (hex is not a strict rectangular grid) + aria-label
+      + @keydown for roving-tabindex keyboard navigation (A11Y-01).
+
+      MANUAL VERIFICATION REQUIRED (research Open Q3):
+      tabindex="0" on SVG <g> is spec-valid; ships here first. Run a manual
+      VoiceOver/Safari pass. If VO cannot land focus on hex <g> cells, escalate
+      to transparent overlay <button> elements (position:absolute) over each hex.
+    -->
     <svg
       class="hex-board-svg"
       :key="`hex-svg-${element.id}`"
@@ -206,14 +310,28 @@ const displayLabel = computed(
       :width="svgBounds.width"
       :height="svgBounds.height"
       preserveAspectRatio="xMidYMid meet"
+      role="group"
+      :aria-label="displayLabel"
+      @keydown="handleSvgKeydown"
     >
-      <!-- One group per hex cell: polygon + piece circles + coordinate label -->
+      <!--
+        One group per hex cell: polygon + piece tokens + coordinate label.
+        role="gridcell" + roving tabindex (A11Y-01).
+        MANUAL VERIFICATION: tabindex on SVG <g> — test with VoiceOver/Safari (Open Q3).
+      -->
       <g
-        v-for="cell in (element.children ?? [])"
+        v-for="(cell, idx) in hexCells"
         :key="cell.id"
+        :ref="(el) => setHexCellRef(el as Element | null, idx)"
         class="hex-cell-group"
+        role="gridcell"
+        :tabindex="idx === currentIdx ? '0' : '-1'"
+        :aria-label="hexCellAriaLabel(cell)"
+        :aria-selected="isCellBoardSelected(cell) || undefined"
+        :aria-disabled="isCellDisabled(cell) || undefined"
         :transform="`translate(${getCellPosition(cell).x}, ${getCellPosition(cell).y})`"
-        @click="handleHexClick(cell)"
+        @focus="focusCell(idx)"
+        @click="handleHexActivate(cell)"
         @dragover="handleHexDragOver($event, cell)"
         @drop="handleHexDrop($event, cell)"
       >
@@ -231,16 +349,31 @@ const displayLabel = computed(
           }"
         />
 
-        <!-- Piece circles (SVG, no foreignObject) — player color cycle per UI-SPEC -->
-        <circle
+        <!--
+          Piece tokens: color circle + non-color seat glyph (text) + title.
+          The glyph conveys seat ownership without relying on color alone
+          (WCAG 1.4.1 Use of Color). aria-hidden on the group because the
+          cell's own aria-label includes occupant names.
+        -->
+        <g
           v-for="(piece, pieceIndex) in (cell.children ?? [])"
           :key="piece.id"
-          :r="pieceRadius"
-          class="hex-piece-circle"
-          :style="{ fill: getPieceColor(piece, pieceIndex) }"
+          class="hex-piece-group"
+          aria-hidden="true"
         >
+          <circle
+            :r="pieceRadius"
+            class="hex-piece-circle"
+            :style="{ fill: getPieceColor(piece, pieceIndex) }"
+          />
+          <!-- Non-color seat glyph: seat number rendered inside the token -->
+          <text
+            class="hex-piece-glyph"
+            text-anchor="middle"
+            dominant-baseline="middle"
+          >{{ getPieceGlyph(piece) }}</text>
           <title>{{ piece.name }}</title>
-        </circle>
+        </g>
 
         <!-- Coordinate label: cell.name as SVG text, pointer-events none -->
         <text
@@ -347,6 +480,11 @@ const displayLabel = computed(
   stroke: var(--bsg-cell-line);
 }
 
+/* ── Hex piece groups ── */
+.hex-piece-group {
+  pointer-events: none;
+}
+
 /* ── Hex piece circles ── */
 .hex-piece-circle {
   fill: var(--bsg-ink-3);
@@ -356,8 +494,16 @@ const displayLabel = computed(
   transition: transform 0.15s ease;
 }
 
-.hex-piece-circle:hover {
+.hex-piece-group:hover .hex-piece-circle {
   transform: scale(1.05);
+}
+
+/* ── Non-color seat glyph (A11Y WCAG 1.4.1 Use of Color) ── */
+.hex-piece-glyph {
+  font-size: 11px;
+  fill: var(--bsg-surface);
+  pointer-events: none;
+  font-weight: bold;
 }
 
 /* ── Hex coordinate labels ── */
