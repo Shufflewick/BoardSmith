@@ -222,7 +222,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 <style scoped>
 /* ── Board container ── */
 .board-container {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface);
   border-radius: 12px;
   padding: 16px;
 }
@@ -230,7 +230,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 .board-header {
   font-weight: bold;
   margin-bottom: 12px;
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 .board-with-labels {
@@ -252,7 +252,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #888;
+  color: var(--bsg-ink-3);
   font-weight: bold;
   text-transform: uppercase;
 }
@@ -288,7 +288,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 .grid-cell {
   width: 50px;
   height: 50px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-cell);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -302,36 +302,37 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 }
 
 .grid-cell.is-clickable:hover {
-  background: rgba(0, 217, 255, 0.2);
+  background: var(--bsg-selectable);
 }
 
 /* Cell states */
 .grid-cell.action-selectable {
-  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline: 2px dashed var(--bsg-accent);
   outline-offset: -2px;
-  animation: pulse-cell 2s ease-in-out infinite;
+  background: var(--bsg-selectable);
 }
 
 .grid-cell.is-board-highlighted {
-  background: rgba(0, 217, 255, 0.3);
+  background: var(--bsg-selectable);
 }
 
 .grid-cell.is-board-selected {
-  background: rgba(0, 255, 136, 0.3);
+  outline: 2px solid var(--bsg-accent);
+  outline-offset: -2px;
+  background: var(--bsg-selected);
+  box-shadow: var(--bsg-ring);
+  transform: scale(1.04);
 }
 
 .grid-cell.is-drop-target {
   background: var(--bsg-droptarget);
+  outline: 2px dotted var(--bsg-accent-2);
+  outline-offset: -2px;
   animation: pulse-drop-target 1s ease-in-out infinite;
 }
 
 .grid-cell.is-drop-target:hover {
   background: var(--bsg-droptarget-hover);
-}
-
-@keyframes pulse-cell {
-  0%, 100% { outline-color: rgba(46, 204, 113, 0.6); }
-  50% { outline-color: rgba(46, 204, 113, 1); }
 }
 
 @keyframes pulse-drop-target {
@@ -345,7 +346,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   bottom: 2px;
   right: 2px;
   font-size: 10px;
-  color: #666;
+  color: var(--bsg-ink-3);
   opacity: 0;
   transition: opacity 0.15s ease;
   pointer-events: none;
@@ -362,19 +363,19 @@ function handleDrop(event: DragEvent, cell: GameElement) {
 }
 
 .grid-cell.is-disabled:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-cell);
 }
 
 /* ── Error panel ── */
 .grid-error-panel {
-  background: rgba(231, 76, 60, 0.1);
-  border: 1px solid rgba(231, 76, 60, 0.4);
+  background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bsg-danger) 40%, transparent);
   border-radius: 8px;
   padding: 16px;
 }
 
 .grid-error-panel__text {
-  color: #e74c3c;
+  color: var(--bsg-danger);
   font-size: 14px;
   font-weight: 700;
 }

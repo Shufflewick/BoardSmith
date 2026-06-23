@@ -247,7 +247,7 @@ const displayLabel = computed(
 <style scoped>
 /* ── Container ── */
 .hex-board-container {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface);
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -260,7 +260,7 @@ const displayLabel = computed(
 
 .hex-board-header {
   font-weight: bold;
-  color: #fff;
+  color: var(--bsg-ink);
   margin-bottom: 12px;
 }
 
@@ -276,48 +276,51 @@ const displayLabel = computed(
 
 /* ── Hex polygon states (UI-SPEC §HexBoardRenderer) ── */
 .hex-polygon {
-  fill: rgba(255, 255, 255, 0.1);
-  stroke: rgba(255, 255, 255, 0.3);
+  fill: var(--bsg-cell);
+  stroke: var(--bsg-cell-line);
   stroke-width: 1.5;
   transition: all 0.15s ease;
 }
 
 .hex-polygon:hover {
-  fill: rgba(0, 217, 255, 0.2);
-  stroke: rgba(0, 217, 255, 0.6);
+  fill: var(--bsg-selectable);
+  stroke: var(--bsg-accent);
 }
 
 .hex-polygon.has-children {
-  fill: rgba(255, 255, 255, 0.15);
+  fill: var(--bsg-surface-2);
 }
 
+/* Dashed stroke signals selectable — SVG stroke is the outline equivalent for polygons */
 .hex-polygon.action-selectable {
-  fill: rgba(46, 204, 113, 0.2);
-  stroke: rgba(46, 204, 113, 0.8);
+  fill: var(--bsg-selectable);
+  stroke: var(--bsg-accent);
   stroke-width: 2;
-  animation: pulse-hex 2s ease-in-out infinite;
+  stroke-dasharray: 4 2;
 }
 
 .hex-polygon.action-selectable:hover {
-  fill: rgba(46, 204, 113, 0.4);
+  fill: var(--bsg-droptarget-hover);
 }
 
 .hex-polygon.is-board-highlighted {
-  fill: rgba(0, 217, 255, 0.3);
-  stroke: rgba(0, 217, 255, 0.8);
+  fill: var(--bsg-selectable);
+  stroke: var(--bsg-accent);
   stroke-width: 2;
 }
 
 .hex-polygon.is-board-selected {
-  fill: rgba(0, 255, 136, 0.3);
-  stroke: rgba(0, 255, 136, 0.8);
+  fill: var(--bsg-selected);
+  stroke: var(--bsg-accent);
   stroke-width: 2.5;
 }
 
+/* Dotted stroke signals drop target — matches accent-2 per Slate pattern */
 .hex-polygon.is-drop-target {
   fill: var(--bsg-droptarget);
-  stroke: rgba(0, 255, 136, 0.6);
+  stroke: var(--bsg-accent-2);
   stroke-width: 2;
+  stroke-dasharray: 3 2;
 }
 
 .hex-polygon.is-disabled {
@@ -326,18 +329,13 @@ const displayLabel = computed(
 }
 
 .hex-polygon.is-disabled:hover {
-  fill: rgba(255, 255, 255, 0.1);
-  stroke: rgba(255, 255, 255, 0.3);
-}
-
-@keyframes pulse-hex {
-  0%, 100% { stroke: rgba(46, 204, 113, 0.6); }
-  50% { stroke: rgba(46, 204, 113, 1); }
+  fill: var(--bsg-cell);
+  stroke: var(--bsg-cell-line);
 }
 
 /* ── Hex piece circles ── */
 .hex-piece-circle {
-  fill: #888;
+  fill: var(--bsg-ink-3);
   stroke: rgba(0, 0, 0, 0.3);
   stroke-width: 2;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
@@ -351,7 +349,7 @@ const displayLabel = computed(
 /* ── Hex coordinate labels ── */
 .hex-label {
   font-size: 12px;
-  fill: #888;
+  fill: var(--bsg-ink-3);
   pointer-events: none;
 }
 </style>
