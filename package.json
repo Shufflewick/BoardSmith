@@ -64,6 +64,7 @@
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "lint": "eslint src/",
+    "lint:css": "stylelint 'src/ui/**/*.vue'",
     "audit:duplication": "npx jscpd src/ --min-lines 10 --min-tokens 100",
     "audit:dead-code": "npx fallow",
     "audit": "npm run audit:dead-code && npm run audit:duplication"
@@ -93,7 +94,9 @@
     "@vue/test-utils": "^2.4.11",
     "jsdom": "^29.1.1",
     "playwright": "^1.57.0",
+    "postcss-html": "^1.8.1",
     "puppeteer": "^24.32.1",
+    "stylelint": "^17.13.0",
     "three": "^0.182.0",
     "tsx": "^4.21.0",
     "typescript": "^5.7.0",
