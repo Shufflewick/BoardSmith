@@ -10,11 +10,26 @@
  * just bridges the WS transport to the iframe's postMessage protocol — so dev is
  * inherently multiplayer (open another browser / another computer to join).
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import type { DevHostConfig } from './config-types.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
+
+// ── Dev chrome collapse (localStorage-persisted pull-tab) ────────────────────
+const CHROME_KEY = 'boardsmith:dev-chrome-open';
+/**
+ * Tracks whether the in-game chrome bar is expanded. Starts true (expanded),
+ * then auto-collapses to false when the dev first takes a seat — unless they
+ * have a stored preference (the stored value always wins).
+ */
+const chromeOpen = ref(true);
+let seatedWithoutStoredPreference = false;
+
+function toggleChrome(): void {
+  chromeOpen.value = !chromeOpen.value;
+  localStorage.setItem(CHROME_KEY, String(chromeOpen.value));
+}
 
 // ── Persistent client identity (so a reload reclaims the same seat) ──────────
 const CLIENT_KEY = 'boardsmith:dev-client-id';
@@ -212,7 +227,24 @@ function seatLabel(seat: SeatInfo): string {
   return seat.name + (seat.connected ? '' : ' (away)');
 }
 
+// Collapse chrome when the dev first takes a seat, unless they have an explicit
+// saved preference. A stored 'false' or 'true' always overrides the default.
+watch(mySeat, (newSeat, oldSeat) => {
+  if (newSeat !== null && oldSeat === null && seatedWithoutStoredPreference) {
+    chromeOpen.value = false;
+    // Do NOT persist here — the first-seat collapse is the default, not a
+    // user choice. If they open it and close it that becomes their preference.
+  }
+});
+
 onMounted(() => {
+  const stored = localStorage.getItem(CHROME_KEY);
+  if (stored !== null) {
+    chromeOpen.value = stored !== 'false';
+  } else {
+    // No stored preference — will auto-collapse on first seat taken.
+    seatedWithoutStoredPreference = true;
+  }
   window.addEventListener('message', onWindowMessage);
   connect();
 });
@@ -307,32 +339,69 @@ onUnmounted(() => {
     <!-- In game -->
     <template v-else>
       <header class="dev-chrome">
-        <div class="dev-chrome__bar">
+        <!-- Pull-tab: always visible; clicking toggles the chrome bar open/closed -->
+        <button
+          type="button"
+          class="dev-chrome__pull-tab"
+          :aria-expanded="chromeOpen"
+          aria-label="Toggle dev chrome"
+          @click="toggleChrome"
+        >
+          <span class="dev-chrome__pull-tab-icon" aria-hidden="true">{{ chromeOpen ? '▲' : '▼' }}</span>
+          <span class="dev-chrome__pull-tab-label">Dev</span>
+        </button>
+
+        <!-- Bar — hidden when collapsed -->
+        <div v-show="chromeOpen" class="dev-chrome__bar">
           <div class="dev-chrome__toggle">
-            <strong>{{ cfg.displayName }}</strong>
+            <!-- Seat badge: static for Task 1; replaced with switcher in Task 2 -->
             <span class="dev-chrome__badge">seat {{ mySeat }}</span>
           </div>
           <div class="dev-chrome__bar-actions">
+            <!-- Primary controls (always visible in bar) -->
             <label
               v-if="uiOptions.length > 1"
               class="dev-chrome__ui-switch"
               title="Dev only — switch which UI renders this game. Production builds ship the chosen UI only."
             >
-              <span class="dev-chrome__label">UI</span>
+              <span class="dev-chrome__label dev-chrome__label--icon-only" aria-hidden="true">UI</span>
               <select v-model="selectedUi" class="dev-chrome__select" @change="onUiSelect">
                 <option v-for="name in uiOptions" :key="name" :value="name">{{ name }}</option>
               </select>
             </label>
-            <button
-              type="button"
-              class="btn"
-              :class="{ 'btn--on': followActive }"
-              :aria-pressed="followActive"
-              @click="toggleFollow"
-            >
-              {{ followActive ? 'Following active seat' : 'Follow active seat' }}
-            </button>
-            <button type="button" class="btn btn--start" @click="newGame">New game</button>
+            <!-- Secondary controls — always visible on wide screens; overflow to … on narrow -->
+            <details class="dev-chrome__overflow">
+              <summary class="dev-chrome__overflow-trigger btn" aria-label="More dev controls">…</summary>
+              <div class="dev-chrome__overflow-menu">
+                <button
+                  type="button"
+                  class="btn"
+                  :class="{ 'btn--on': followActive }"
+                  :aria-pressed="followActive"
+                  @click="toggleFollow"
+                >
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">{{ followActive ? '◉' : '○' }}</span>
+                  <span class="dev-chrome__btn-label">{{ followActive ? 'Following active seat' : 'Follow active seat' }}</span>
+                </button>
+                <button type="button" class="btn btn--start" @click="newGame">
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">↺</span>
+                  <span class="dev-chrome__btn-label">New game</span>
+                </button>
+              </div>
+            </details>
+            <!-- Wide-screen inline controls (hidden at narrow via CSS) -->
+            <div class="dev-chrome__bar-wide">
+              <button
+                type="button"
+                class="btn"
+                :class="{ 'btn--on': followActive }"
+                :aria-pressed="followActive"
+                @click="toggleFollow"
+              >
+                {{ followActive ? 'Following active seat' : 'Follow active seat' }}
+              </button>
+              <button type="button" class="btn btn--start" @click="newGame">New game</button>
+            </div>
           </div>
         </div>
         <div v-if="errorMsg" class="dev-chrome__error">{{ errorMsg }}</div>
@@ -516,15 +585,83 @@ onUnmounted(() => {
   color: var(--bsg-accent-2);
 }
 
+/* ── Focus ring (outer page — does not inherit GameShell's non-scoped rule) ── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bsg-bg), 0 0 0 4px var(--bsg-accent);
+  border-radius: var(--bsg-r-sm, 4px);
+}
+
 /* ── In-game chrome ── */
 .dev-chrome {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 16px;
   background: var(--bsg-surface);
   border-bottom: 1px solid var(--bsg-line);
+}
+
+/* ── Pull-tab (always visible, toggles the chrome bar) ── */
+.dev-chrome__pull-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--bsg-line);
+  color: var(--bsg-ink-3);
+  cursor: pointer;
+  font-size: 0.8rem;
+  width: 100%;
+  text-align: left;
+}
+
+.dev-chrome__pull-tab:hover {
+  color: var(--bsg-ink);
+  background: color-mix(in srgb, var(--bsg-accent) 8%, transparent);
+}
+
+.dev-chrome__pull-tab-icon {
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+/* ── Overflow menu (… button + dropdown for secondary controls) ── */
+.dev-chrome__overflow {
+  position: relative;
+  display: none; /* hidden on wide screens — wide controls used instead */
+}
+
+.dev-chrome__overflow-trigger {
+  list-style: none;
+  cursor: pointer;
+}
+
+.dev-chrome__overflow-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.dev-chrome__overflow-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+  min-width: 200px;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--bsg-bg) 60%, transparent);
+}
+
+.dev-chrome__bar-wide {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .dev-chrome__bar {
@@ -533,6 +670,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  padding: 10px 16px;
 }
 
 .dev-chrome__toggle {
@@ -615,5 +753,28 @@ onUnmounted(() => {
   height: 100%;
   border: 0;
   display: block;
+}
+
+/* ── Phone layout: icon-only controls, … overflow for secondary ── */
+@media (max-width: 639px) {
+  .dev-chrome__bar-wide {
+    display: none; /* hide inline secondary controls */
+  }
+
+  .dev-chrome__overflow {
+    display: block; /* show the … overflow button instead */
+  }
+
+  .dev-chrome__btn-label {
+    /* kept visible inside the dropdown even on mobile */
+  }
+
+  .dev-chrome__label--icon-only {
+    /* "UI" label stays visible — it's already short */
+  }
+
+  .dev-chrome__bar-actions {
+    gap: 8px;
+  }
 }
 </style>
