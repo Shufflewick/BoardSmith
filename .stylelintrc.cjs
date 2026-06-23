@@ -26,7 +26,6 @@ module.exports = {
     'src/ui/components/auto-ui/renderers/*.vue',
 
     // Auto-UI top-level components — swept in Phase 99
-    'src/ui/components/auto-ui/ActionPanel.vue',
     'src/ui/components/auto-ui/AutoRenderer.vue',
     'src/ui/components/auto-ui/AutoUI.vue',
     'src/ui/components/auto-ui/DoneButton.vue',
