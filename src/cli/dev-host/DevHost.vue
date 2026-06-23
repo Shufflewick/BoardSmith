@@ -354,8 +354,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #0f1020;
-  color: #e8e8f0;
+  background: var(--bsg-bg);
+  color: var(--bsg-ink);
   font-family: system-ui, -apple-system, sans-serif;
 }
 
@@ -375,8 +375,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 16px;
   padding: 24px;
-  background: #1a1b33;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
   border-radius: 12px;
 }
 
@@ -389,7 +389,7 @@ onUnmounted(() => {
 
 .lobby__hint {
   font-size: 0.85rem;
-  color: #9aa;
+  color: var(--bsg-ink-3);
   line-height: 1.4;
 }
 
@@ -405,17 +405,17 @@ onUnmounted(() => {
   gap: 10px;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #0f1020;
+  border: 1px solid var(--bsg-line-2);
+  background: var(--bsg-bg);
 }
 
 .seat-card--mine {
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent-2);
 }
 
 .seat-card__num {
   font-size: 0.8rem;
-  color: #9aa;
+  color: var(--bsg-ink-3);
   min-width: 54px;
 }
 
@@ -423,7 +423,7 @@ onUnmounted(() => {
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--bsg-line-2);
 }
 
 .seat-card__name {
@@ -432,7 +432,7 @@ onUnmounted(() => {
 }
 
 .seat-card--open .seat-card__name {
-  color: #778;
+  color: var(--bsg-ink-3);
   font-style: italic;
 }
 
@@ -443,11 +443,11 @@ onUnmounted(() => {
 }
 
 .seat-card__dot.is-online {
-  background: #2ecc71;
+  background: var(--bsg-ok);
 }
 
 .seat-card__dot.is-offline {
-  background: #888;
+  background: var(--bsg-away);
 }
 
 .lobby__claim {
@@ -472,7 +472,7 @@ onUnmounted(() => {
 }
 
 .color-swatch--on {
-  border-color: #fff;
+  border-color: var(--bsg-ink);
 }
 
 .color-swatch--taken {
@@ -483,17 +483,21 @@ onUnmounted(() => {
 .btn {
   padding: 6px 14px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: #0f1020;
-  color: #e8e8f0;
+  border: 1px solid var(--bsg-line-2);
+  background: var(--bsg-bg);
+  color: var(--bsg-ink);
   cursor: pointer;
 }
 
 .btn--start {
-  border: none;
-  background: #2ecc71;
-  color: #021;
-  font-weight: 600;
+  border: 1px solid var(--bsg-line-2);
+  background: transparent;
+  color: var(--bsg-ink-2);
+}
+
+.btn--start:hover {
+  background: var(--bsg-field);
+  border-color: var(--bsg-line-2);
 }
 
 .btn--start:disabled {
@@ -502,9 +506,9 @@ onUnmounted(() => {
 }
 
 .btn--on {
-  border-color: #00d9ff;
-  background: rgba(0, 217, 255, 0.15);
-  color: #00d9ff;
+  border-color: var(--bsg-accent);
+  background: color-mix(in srgb, var(--bsg-accent) 15%, transparent);
+  color: var(--bsg-accent-2);
 }
 
 /* ── In-game chrome ── */
@@ -514,8 +518,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 10px 16px;
-  background: #1a1b33;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bsg-surface);
+  border-bottom: 1px solid var(--bsg-line);
 }
 
 .dev-chrome__bar {
@@ -545,13 +549,13 @@ onUnmounted(() => {
   letter-spacing: 0.05em;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(0, 217, 255, 0.15);
-  color: #00d9ff;
+  background: color-mix(in srgb, var(--bsg-accent) 15%, transparent);
+  color: var(--bsg-accent-2);
 }
 
 .dev-chrome__label {
   font-size: 0.8rem;
-  color: #9aa;
+  color: var(--bsg-ink-3);
 }
 
 .dev-chrome__ui-switch {
@@ -561,9 +565,9 @@ onUnmounted(() => {
 }
 
 .dev-chrome__select {
-  background: #1a1b33;
-  color: #e8e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bsg-surface);
+  color: var(--bsg-ink);
+  border: 1px solid var(--bsg-line-2);
   border-radius: 6px;
   padding: 5px 8px;
   font-size: 0.85rem;
@@ -571,28 +575,28 @@ onUnmounted(() => {
 }
 
 .dev-chrome__select:hover {
-  border-color: rgba(0, 217, 255, 0.5);
+  border-color: var(--bsg-accent);
 }
 
 .dev-chrome input {
-  background: #0f1020;
-  color: #e8e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bsg-field);
+  color: var(--bsg-ink);
+  border: 1px solid var(--bsg-line-2);
   border-radius: 4px;
   padding: 4px 8px;
 }
 
 .lobby__claim input {
-  background: #0f1020;
-  color: #e8e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bsg-field);
+  color: var(--bsg-ink);
+  border: 1px solid var(--bsg-line-2);
   border-radius: 4px;
   padding: 4px 8px;
   margin-left: 6px;
 }
 
 .dev-chrome__error {
-  color: #ff6b6b;
+  color: var(--bsg-danger);
   font-size: 0.85rem;
 }
 
