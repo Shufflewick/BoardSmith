@@ -1,88 +1,130 @@
-# Requirements — v3.1 Dynamic Auto-UI
+# Requirements: BoardSmith — v4.0 UI Redesign (Slate)
 
-**Goal:** Replace the current Auto UI with a dynamically-generated UI good enough to *play* a basic game (Hex, Go Fish, Checkers) before any custom UI is written, plus fix an information leak surfaced during research. Reuse the interaction substrate; replace the renderer; ship via templates (not a general solver); keep presentation out of the engine; migrate every game and delete the old paths.
+**Defined:** 2026-06-22
+**Core Value:** Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-Source research: `docs/auto-ui-redesign-research.md` (§0 authoritative) and `.planning/research/SUMMARY.md`.
+**Design source of truth:** `planning/boardsmith-ui-redesign-spec.md` (6-wave audit roadmap) + canonical mockup `planning/mockups/boardsmith-chrome.html` (the chosen neutral **"Slate"** direction). The spec body is written in "warm tavern" terms; the go-forward override (2026-06-22) keeps every structural/behavioral value but uses the **neutral Slate** color values. The game chrome stays generic/game-agnostic; tavern theming belongs to the ShufflewickPub host (out of scope), applied via the token override.
 
-## v3.1 Requirements
+**Scope:** this repo only — game-shell chrome + 8 board renderers + `theme.ts` + dev-server chrome (DevHost/DebugPanel). The ShufflewickPub host skin (separate repo) is out of scope, but the BoardSmith-side token/`applyTheme`/postMessage infrastructure must stay host-overridable.
 
-### Security (SEC)
-- [x] **SEC-01**: A face-down / hidden card's face image refs (`$images.face`) are not sent to players who cannot see the card — `toJSONForPlayer` filters image refs by visibility.
-- [x] **SEC-02**: The `$`-attribute whitelist in `toJSONForPlayer` is audited and constrained to genuine layout descriptors, so no value-bearing data can ride the `$`-prefix to unauthorized players.
+## v1 Requirements
 
-### Piece & Element Rendering (PIECE)
-- [x] **PIECE-01**: A piece renders its `$image`/`$images` as an image rather than a text label.
-- [x] **PIECE-02**: A piece with no image renders as a labeled token with owner color/shape — not a bare text box.
-- [x] **PIECE-03**: Grid boards size from declared coordinates (`$rowCoord`/`$colCoord`); the hardcoded 8×8 fallback is removed and missing coordinates fail loudly with an actionable message.
+Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see Traceability).
 
-### Renderer Rebuild (RENDER)
-- [x] **RENDER-01**: A new renderer replaces `AutoElement.vue` + `AutoGameBoard.vue` while reusing the interaction substrate (`useActionController`, `useBoardInteraction`, drag orchestration, FLIP/flying primitives) unchanged except where INTERACT requires.
-- [x] **RENDER-02**: Element renderers are dispatched via a ranked-tester registry (replacing the brittle `elementType` if/else cascade); a higher-priority renderer can be registered to upgrade the auto-UI in place.
-- [x] **RENDER-03**: The board is laid out by an introspection-selected archetype template (grid-board / card / tableau) that encodes visual hierarchy (focal board, docked hand, peripheral chrome) — not equal-space subdivision.
-- [x] **RENDER-04**: Grid and hex layouts use closed-form math (`useGameGrid`/`useHexGrid`); the auto-UI's scope is bounded to coordinate-addressable topologies (grid/hex/stack/hand) and fails honestly outside it.
-- [x] **RENDER-05**: The new renderer consumes `useAnimationEvents` so deal/flip/reveal choreography plays (the old auto path never did).
+### Quick Wins (Wave 0 — no token dependency)
 
-### Board-Centric Interaction (INTERACT)
-- [x] **INTERACT-01**: Action choices that carry a board anchor are actioned directly on the board by default; the footer panel is the fallback when there is no anchor.
-- [x] **INTERACT-02**: The footer ActionPanel is suppressible by the board UI (GameShell no longer mounts it unconditionally).
-- [x] **INTERACT-03**: An action choice can express multiple source/target board elements (multi-ref highlight metadata) — `protocol.ts` and `buildActionMetadata` extended beyond singular `sourceRef`/`targetRef`/`ref`.
+- [ ] **QUICK-01**: Rejected moves and action failures surface a visible `toast.error(result.error)` instead of being swallowed to `console.error`/`alert()`
+- [ ] **QUICK-02**: Icon-only chrome controls (hamburger, ✕ close/cancel/clear) have accessible names plus `aria-expanded`/`aria-controls`, and decorative glyph spans are `aria-hidden`
+- [ ] **QUICK-03**: Dead menu items (no-op Settings/Help) and engine branding (`BS` chip, "BoardSmith Dev Mode") are removed from player-facing chrome
+- [ ] **QUICK-04**: The shell uses `100dvh` (with `100vh` fallback) so the sticky action bar never clips under mobile browser toolbars
+- [ ] **QUICK-05**: Every fixed/sticky chrome edge respects `env(safe-area-inset-*)` so controls never fall under the notch/home indicator
 
-### Presentation Overlay (PRESENT)
-- [x] **PRESENT-01**: A UI declares a presentation overlay (a sibling file it imports) mapping element class/name/attribute → visuals (image, label, stat block, render hint).
-- [x] **PRESENT-02**: The overlay is resolved *after* engine visibility filtering, so it cannot expose data the viewer is not allowed to see.
-- [x] **PRESENT-03**: The auto-UI reads the overlay for visuals beyond defaults; custom UIs supply their own; engine elements carry no value-bearing `$`-presentation props (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected — ownership stays on `.player`).
+### Token Foundation (Wave 1 — the keystone)
 
-### Shippable Peer & Single-UI Export (SHIP)
-- [x] **SHIP-01**: The auto-UI is a selectable, shippable production UI (a fine choice for simple games), not merely a dev/debug panel.
-- [x] **SHIP-02**: A production build emits a single UI — removing the scaffold's static `import { AutoUI }` lets ordinary tree-shaking drop unselected UIs (no registry/`rollupOptions.input` required for this).
-- [x] **SHIP-03**: The scaffold generates a game that opens in its chosen UI with the custom-UI slot empty/ready — no split-screen "Custom vs Auto-Generated" comparison.
+- [ ] **TOKEN-01**: All chrome and renderer color, spacing, type, radius, shadow, and motion values resolve from a single `--bsg-*` namespace — the `--bs-*` and `--bg-*`/`--text-*`/`--border-*` namespaces are collapsed into it
+- [ ] **TOKEN-02**: `theme.ts` default tokens are the Slate palette (graphite `--bsg-bg`, layered surfaces, ink ramp, single teal accent + accent-2, muted seat palette, interaction tokens) — the dead light-blue defaults are deleted
+- [ ] **TOKEN-03**: `theme.ts` emits spacing (4px scale), type (Hanken Grotesk + JetBrains Mono + size scale), radius, shadow, and seat tokens — it is no longer color-only
+- [ ] **TOKEN-04**: The chrome follows OS light/dark by default, with a complete Slate light token set in addition to dark
+- [ ] **TOKEN-05**: `applyTheme()` is the sole theming knob and accepts a host-supplied token override at iframe init (the host can re-skin the chrome without touching component code)
+- [ ] **TOKEN-06**: A stylelint `color-no-hex` rule scoped to chrome/renderer `.vue` files fails CI when a raw hex literal is introduced
 
-### Migration & Cleanup (MIGRATE) — milestone exit criterion
-- [x] **MIGRATE-01**: Every game in `~/BoardSmithGames/` is migrated to the new auto-UI and is *playable* (browser-verified, not just unit-test green).
-- [x] **MIGRATE-02**: MERC is verified green against any shared-plumbing changes (the canary for the "custom renderer in a shared shell" boundary).
-- [x] **MIGRATE-03**: The old auto-UI renderer and the split-screen scaffold template are deleted — no deprecation cycle (No Backward Compatibility).
-- [x] **MIGRATE-04**: Docs updated (`ui-components.md`, `llm-overview.md`, scaffolded READMEs) and `npm run audit` reframed (no new dead code; fallow findings are documented false-positives per CLAUDE.md).
+### Visual Theming Swap (Wave 2 — make it Slate)
 
-## Future Requirements (deferred)
+- [ ] **THEME-01**: All 8 renderers + hex `<g>` express interaction state via `var(--bsg-selectable|selected|droptarget)` — no `#00d9ff`/`#00ff88`/`rgba(46,204,113…)` literals and no colored glow box-shadows remain
+- [ ] **THEME-02**: Selection highlight uses `outline` (never `border`) across every renderer, so highlighting never reflows layout
+- [ ] **THEME-03**: The primary action button is the Slate teal plate (token fill, dark-ink label, neutral elevation, no glow)
+- [ ] **THEME-04**: Titles render as solid type in the display font with a faint shadow — the gradient clip-text blocks are deleted
+- [ ] **THEME-05**: The default card back is one shared tokenized `--bsg-card-back` class consumed by both card renderers (no corporate-blue gradient)
+- [ ] **THEME-06**: The active-player cue is calm — accent dot with an opacity-only breathe and a token border, replacing the scaling neon halo/`pulse-glow`
+- [ ] **THEME-07**: Panels and zone surfaces use `var(--bsg-surface)` + `var(--bsg-edge)` hairlines, replacing translucent-black glass and white hairlines; backdrops go transparent in platform mode so the host shows through
+- [ ] **THEME-08**: `DevHost` is recolored to Slate — the indigo/neon literals are replaced with tokens
 
-- General percentage-relative layout solver — only when a real game's topology can't be templated.
-- Responsive container-query / breakpoint layout primitives (viewport-measured reflow beyond what templates give).
-- Phase-surface and structured scoring-summary renderers (Cribbage/MERC-class complexity).
-- N-UI registry + live dev-time UI switcher (multiple UIs per game, switch against one session).
-- Auto-generate-then-eject (dump the generated UI as editable components).
-- Engine model additions: spatial adjacency/connection graph, free-form positioning, z-order.
+### Information Architecture & Responsive (Wave 3 — board is the hero)
+
+- [ ] **IA-01**: In platform mode no standing BoardSmith header renders; connection status collapses to a corner dot driven by a real heartbeat
+- [ ] **IA-02**: A persistent turn ribbon always shows whose turn it is and the active prompt (`boardPrompt ?? currentPick.prompt`) at every breakpoint
+- [ ] **IA-03**: When all picks are board-anchored, the prompt stays visible and only the action buttons are suppressed — the player is never left with a silent board
+- [ ] **IA-04**: The action dock renders only when the player has an action; it caps at `min(40vh, 320px)` with internal scroll and reserves its measured height via `ResizeObserver` (no hardcoded `80px` padding)
+- [ ] **IA-05**: The board fits its container with no scrollbars or manual zoom via `container-type: size` and a computed `--cell`/`--card-w` clamp; the zoom slider survives only as an accessibility magnifier
+- [ ] **IA-06**: Layout reflows across real compact/medium/wide tiers — phone fills the board and collapses players to a one-line seat strip with history as an on-demand sheet; desktop sidebar collapses to a rail
+- [ ] **IA-07**: Game Over shows a result card (winner/scores, final board behind a scrim, Rematch / New Game actions) instead of a dead-end banner
+
+### Accessibility — WCAG 2.2 AA (Wave 4)
+
+- [ ] **A11Y-01**: The board is fully keyboard-operable — a shared `useSelectable()` composable binds `@click` + `@keydown.enter/space` to the same selection with a roving-tabindex grid (arrow/Home/End nav) across all 8 renderers (Critical)
+- [ ] **A11Y-02**: When picks are board-anchored, the action panel still exposes those choices in a focusable secondary list and never fully suppresses while picks are pending (Critical)
+- [ ] **A11Y-03**: Turn changes, errors, disconnects, and game-over are announced via a polite live region (assertive for errors); `GameHistory` becomes `role="log" aria-live="polite"`
+- [ ] **A11Y-04**: Every board element exposes a semantic `aria-label` and `aria-selected`/`-disabled`/`-current` derived from the same booleans driving CSS; grids/hands/hex carry appropriate roles
+- [ ] **A11Y-05**: Every interaction state is paired with a non-color cue (shape/icon/border-style + label) and is colorblind-safe, with a legend
+- [ ] **A11Y-06**: A visible `:focus-visible` ring is present on every interactive element; the two `outline:none` declarations are removed
+- [ ] **A11Y-07**: The hamburger drawer and the Game Over overlay are `role="dialog" aria-modal` with focus move/trap, Escape-to-close, and focus restore on close
+- [ ] **A11Y-08**: Every pulse/slide/toast animation is wrapped so `prefers-reduced-motion: reduce` disables it (the infinite turn-dot pulse becomes a static high-contrast border)
+- [ ] **A11Y-09**: Muted text routes through `--bsg-ink-muted` to meet AA contrast, and every interactive chrome element meets a ≥44px target floor
+- [ ] **A11Y-10**: Toasts are `role="status"`/assertive with a real `<button aria-label="Dismiss">` and an auto-timeout
+
+### Dev & Debug Parity + Material Polish (Wave 5)
+
+- [ ] **DEV-01**: `DebugPanel` is reskinned in Slate; its toggle is a real `<button aria-expanded>`, the bare `D` shortcut is gated behind a modifier + contenteditable guard, and it uses the ARIA tabs pattern
+- [ ] **DEV-02**: The dev-server chrome collapses to a slim pull-tab (default-collapsed once seated, persisted in localStorage), with icon-only controls + a `…` overflow below 640px
+- [ ] **DEV-03**: The dev seat badge becomes a working seat switcher, and a presence strip shows who is connected / AI / away
+- [ ] **DEV-04**: A tucked-away "Table setup" panel surfaces the already-injected `aiSeats`/`aiLevel`/`playerCount`/`gameOptions`/`playerOptions`
+- [ ] **DEV-05**: Loading/empty/error states have a clear voice — a skeleton with timeout→retry, and a friendly unsupported-topology message split from dev-only guidance
+- [ ] **DEV-06**: Player-facing history is read-only; Copy/Clear move into `DebugPanel` (the silent un-clear bug is gone)
+- [ ] **DEV-07**: The dev "New game" action (broadcasts `restart` to all seats) requires a two-click confirm with neutral styling and a broadcast toast
+- [ ] **DEV-08**: The Slate material layer (low-opacity SVG noise + vignette) replaces the white dot-grid grain in dev/standalone chrome
+
+### Cross-Repo Verification
+
+- [ ] **VERIFY-01**: All 9 games in `~/BoardSmithGames/` (hex, checkers, cribbage, go-fish, polyhedral-potions, floss-bitties, demo-action-panel, demo-animation, demo-complex-ui) build and pass their test suites after the redesign
+- [ ] **VERIFY-02**: All 9 games render and are playable in the browser with the new Slate chrome — board fits, two-step + drag interaction works, no console errors
+- [ ] **VERIFY-03**: MERC (`~/Dropbox/MERC/BoardSmith/MERC`, vendored BoardSmith) re-vendors the new BoardSmith, builds, passes its test suite, and plays in the browser (the cross-repo canary)
+- [ ] **VERIFY-04**: BoardSmith's own unit/integration suite stays green, with at least one new integration test per cross-layer boundary the redesign touches (token→render, keyboard→select, postMessage theme handshake)
+
+## Future Requirements
+
+Deferred to a future milestone. Tracked but not in this roadmap.
+
+### ShufflewickPub Host Skin (separate repo)
+
+- **HOST-01**: PrimeVue `definePreset(Lara, …)` tavern preset so lobby `surface-*`/`bg-primary` utilities inherit the host palette
+- **HOST-02**: Host-side theme handshake — forward `theme` + token map into the iframe init postMessage; tavern lobby + overlays
+- **HOST-03**: Host connection health — `connectionState` + non-blocking "Reconnecting…" banner with backoff, iframe kept mounted
+- **HOST-04**: Host Game Over exit / "Back to Shufflewick" + host pull-tab affordance (chevron, peek bounce, off dead-center)
+
+### Engine / Layout
+
+- **LAYOUT-01**: General percentage-relative layout solver — still deferred until a real game's topology can't be templated (v3.1 decision stands)
 
 ## Out of Scope
 
-- General layout solver upfront — see decision; templates first.
-- Value-bearing `$`-annotations on engine elements — security leak + not per-UI.
-- Touch/mobile polish, accessibility (screen-reader/keyboard/colorblind-safe identity), i18n of author strings — named gaps for a future milestone.
-- Backward compatibility / deprecation cycles — clean break per project rule.
+| Feature | Reason |
+|---------|--------|
+| Warm "tavern" color values for the game chrome | Overridden to neutral Slate (2026-06-22); the chrome must be generic/game-agnostic. Tavern theming is the host's job, applied via the token override |
+| ShufflewickPub host skin code (lobby, `GameFrame.vue`, `[sessionId].vue`, Lara preset, connection banner) | Separate repo; out of scope this milestone. BoardSmith-side token/`applyTheme`/postMessage infra stays host-overridable so host work can land later |
+| Backward compatibility / fallbacks for old token namespaces or neon literals | Clean break — No Backward Compatibility hard rule |
+| Engine model additions (spatial adjacency graph, free-form positioning, z-order) | Rules-layer decision, not needed for the redesign |
+| i18n of author-facing strings | Named gap for a future milestone |
+| New live N-UI dev-switcher features | Shipped in v3.1; further work deferred |
 
 ## Traceability
 
+Which phases cover which requirements. Populated during roadmap creation (phase numbering continues from v3.1's last phase 96).
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | Phase 91 | Complete |
-| SEC-02 | Phase 91 | Complete |
-| PIECE-01 | Phase 92 | Complete |
-| PIECE-02 | Phase 92 | Complete |
-| PIECE-03 | Phase 92 | Complete |
-| RENDER-01 | Phase 93 | Complete |
-| RENDER-02 | Phase 93 | Complete |
-| RENDER-03 | Phase 93 | Complete |
-| RENDER-04 | Phase 93 | Complete |
-| RENDER-05 | Phase 93 | Complete |
-| INTERACT-01 | Phase 94 | Complete |
-| INTERACT-02 | Phase 94 | Complete |
-| INTERACT-03 | Phase 94 | Complete |
-| PRESENT-01 | Phase 94 | Complete |
-| PRESENT-02 | Phase 94 | Complete |
-| PRESENT-03 | Phase 94 | Complete |
-| SHIP-01 | Phase 95 | Complete |
-| SHIP-02 | Phase 95 | Complete |
-| SHIP-03 | Phase 95 | Complete |
-| MIGRATE-01 | Phase 96 | Complete |
-| MIGRATE-02 | Phase 96 | Complete |
-| MIGRATE-03 | Phase 96 | Complete |
-| MIGRATE-04 | Phase 96 | Complete |
+| QUICK-01..05 | TBD | Pending |
+| TOKEN-01..06 | TBD | Pending |
+| THEME-01..08 | TBD | Pending |
+| IA-01..07 | TBD | Pending |
+| A11Y-01..10 | TBD | Pending |
+| DEV-01..08 | TBD | Pending |
+| VERIFY-01..04 | TBD | Pending |
+
+**Coverage:**
+- v1 requirements: 48 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 48 ⚠️
+
+---
+*Requirements defined: 2026-06-22*
+*Last updated: 2026-06-22 after initial definition*
