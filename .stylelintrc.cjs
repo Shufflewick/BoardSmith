@@ -46,7 +46,6 @@ module.exports = {
     'src/ui/components/Toast.vue',
 
     // Helper/overlay components — swept in Phase 99
-    'src/ui/components/helpers/Button.vue',
     'src/ui/components/helpers/FlyingCardsOverlay.vue',
     'src/ui/components/helpers/ZoomPreviewOverlay.vue',
   ],
