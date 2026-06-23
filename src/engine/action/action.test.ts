@@ -2227,3 +2227,77 @@ describe('Element selection API (F23/F28)', () => {
     expect(result.errors.join(' ')).toContain('at least 1 element, got 0');
   });
 });
+
+// A custom UI often hand-builds a chooseFrom choice object from local state and
+// submits it via actionController.execute(). The server bakes presentation-only
+// metadata into the choice value (e.g. checkers' `capturedNotations`, used only for
+// board-highlight refs). The UI shouldn't have to mirror that metadata: the engine
+// resolves a submitted object to the unique choice it's a subset of, so the move is
+// identified by its logical fields alone. A non-unique or unknown object still fails
+// validation loudly rather than resolving to the wrong choice.
+describe('Object-subset choice resolution (custom-UI partial choice objects)', () => {
+  let game: TestGame;
+  let executor: ActionExecutor;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 2 });
+    executor = new ActionExecutor(game);
+  });
+
+  // Mirrors checkers' move action: destination choices carry a presentation-only
+  // `capturedNotations` field the UI omits.
+  const moveAction = () =>
+    Action.create('move')
+      .chooseFrom('destination', {
+        choices: [
+          { pieceId: 77, fromNotation: 'b6', toNotation: 'a5', isCapture: false, capturedNotations: [] },
+          { pieceId: 77, fromNotation: 'b6', toNotation: 'c5', isCapture: false, capturedNotations: [] },
+          { pieceId: 42, fromNotation: 'd4', toNotation: 'f2', isCapture: true, capturedNotations: ['e3'] },
+        ],
+      })
+      .execute(() => {});
+
+  it('resolves a partial object (missing presentation field) to the unique full choice', () => {
+    const action = moveAction();
+    const player = game.getPlayer(1)!;
+    const submitted = { pieceId: 77, fromNotation: 'b6', toNotation: 'c5', isCapture: false };
+
+    const resolved = executor.resolveArgs(action, { destination: submitted }, player);
+    expect(resolved.destination).toEqual({
+      pieceId: 77, fromNotation: 'b6', toNotation: 'c5', isCapture: false, capturedNotations: [],
+    });
+
+    // The canonicalized value now passes exact-match validation.
+    expect(executor.validateAction(action, player, resolved).valid).toBe(true);
+  });
+
+  it('resolves a capture choice whose extra field is a non-empty array', () => {
+    const action = moveAction();
+    const player = game.getPlayer(1)!;
+    const submitted = { pieceId: 42, fromNotation: 'd4', toNotation: 'f2', isCapture: true };
+
+    const resolved = executor.resolveArgs(action, { destination: submitted }, player);
+    expect((resolved.destination as { capturedNotations: string[] }).capturedNotations).toEqual(['e3']);
+    expect(executor.validateAction(action, player, resolved).valid).toBe(true);
+  });
+
+  it('does NOT resolve an ambiguous subset that matches more than one choice', () => {
+    const action = moveAction();
+    const player = game.getPlayer(1)!;
+    // Matches both b6 destinations — the engine must not guess.
+    const ambiguous = { pieceId: 77, fromNotation: 'b6', isCapture: false };
+
+    const resolved = executor.resolveArgs(action, { destination: ambiguous }, player);
+    expect(resolved.destination).toEqual(ambiguous); // unchanged → falls through
+    expect(executor.validateAction(action, player, resolved).valid).toBe(false);
+  });
+
+  it('rejects an object that is not a subset of any choice', () => {
+    const action = moveAction();
+    const player = game.getPlayer(1)!;
+    const bogus = { pieceId: 77, fromNotation: 'b6', toNotation: 'h1', isCapture: false };
+
+    const resolved = executor.resolveArgs(action, { destination: bogus }, player);
+    expect(executor.validateAction(action, player, resolved).valid).toBe(false);
+  });
+});

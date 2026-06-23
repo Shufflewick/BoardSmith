@@ -568,7 +568,47 @@ export class ActionExecutor {
       }
     }
 
+    // Try object-subset match: a custom UI may submit a choice object carrying only
+    // the identifying fields, omitting presentation-only metadata the server bakes
+    // into the choice value (e.g. `capturedNotations`/`refs` used purely for board
+    // highlights). Resolve to the canonical choice when the submitted object is a
+    // subset of exactly one choice — every submitted key deep-equals that choice's
+    // corresponding field. This mirrors the id/display resolution above: the UI sends
+    // an identity, the engine canonicalizes it. A non-unique or zero match falls
+    // through to `return value`, so validation still rejects ambiguous/unknown input
+    // with a clear error rather than silently picking the wrong choice.
+    if (this.isPlainObject(value)) {
+      const matches = choices.filter(c => this.isObjectSubset(value, c.value));
+      if (matches.length === 1) {
+        return matches[0].value;
+      }
+    }
+
     return value;
+  }
+
+  /** True for a plain data object (not null, not array, not a serialized element). */
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value) &&
+      !this.isSerializedElement(value)
+    );
+  }
+
+  /**
+   * True when every own key of `subset` exists on `full` and deep-equals it.
+   * `full` may carry extra keys (the presentation-only metadata). Both must be
+   * plain objects for a subset relationship to be meaningful.
+   */
+  private isObjectSubset(subset: unknown, full: unknown): boolean {
+    if (!this.isPlainObject(subset) || !this.isPlainObject(full)) return false;
+    for (const key of Object.keys(subset)) {
+      if (!(key in full)) return false;
+      if (!this.valuesEqual(subset[key], full[key])) return false;
+    }
+    return true;
   }
 
   /**
