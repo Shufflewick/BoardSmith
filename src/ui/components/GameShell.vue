@@ -1448,6 +1448,11 @@ if ((import.meta as any).hot) {
          regions before any content appears. -->
     <p class="vh" role="status" aria-live="polite">{{ politeMessage }}</p>
     <p class="vh" role="alert" aria-live="assertive">{{ assertiveMessage }}</p>
+    <!-- Always-mounted prompt region: value is empty when not the player's turn.
+         Replaces the conditionally-mounted duplicate that was inside the actionbar
+         v-if block (WR-04). Mounting the region before writing content is required
+         for ATs to register it (Pitfall 2). -->
+    <span class="vh" aria-live="polite">{{ (isMyTurn || awaitingPlayerNames.length) ? (boardPrompt ?? actionController.currentPick.value?.prompt) : '' }}</span>
 
     <!-- LOBBY SCREEN -->
     <GameLobby
@@ -1663,9 +1668,6 @@ if ((import.meta as any).hot) {
             ></span>
             <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
           </span>
-          <!-- VH live region mirrors the prompt for screen readers -->
-          <span class="vh" aria-live="polite">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
-
           <!-- Action buttons: suppressed ONLY when every pick is board-anchored (IA-03).
                The .turn strip above is NOT inside this gate so the prompt survives. -->
           <template v-if="!props.suppressActionPanel && !actionController.allCurrentChoicesAnchored.value">
