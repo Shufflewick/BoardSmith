@@ -15,7 +15,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 
 - [x] **Phase 97: Quick Wins (Wave 0)** — Independent accessibility/mobile/branding fixes that need no token system; ships first to bank credibility and de-risk later waves. (completed 2026-06-23)
 - [x] **Phase 98: Token Foundation (Wave 1)** — The keystone: collapse three namespaces into one `--bsg-*` contract emitted by `theme.ts` with full Slate defaults + a `color-no-hex` lint guard. Blocks Waves 2/3/5. (completed 2026-06-23)
-- [ ] **Phase 99: Theming Swap (Wave 2)** — Spend the tokens: sweep 8 renderers + chrome + DevHost from neon literals to `var(--bsg-*)`, teal primary button, `outline` selection, solid type, tokenized card back, calm active-player cue.
+- [x] **Phase 99: Theming Swap (Wave 2)** — Spend the tokens: sweep 8 renderers + chrome + DevHost from neon literals to `var(--bsg-*)`, teal primary button, `outline` selection, solid type, tokenized card back, calm active-player cue. (completed 2026-06-23)
 - [ ] **Phase 100: IA & Responsive (Wave 3)** — Board is the hero: kill the standing header, persistent turn ribbon + always-on prompt, conditional action dock, fluid container-query board sizing, real breakpoints, Game Over result card.
 - [ ] **Phase 101: Accessibility — WCAG 2.2 AA (Wave 4)** — The two CRITICAL findings: keyboard-operable board via shared `useSelectable()`, live regions, semantic names/state, non-color cues, focus-visible, dialog semantics, reduced-motion, contrast + target sweep.
 - [ ] **Phase 102: Material Polish & Dev/Debug Parity (Wave 5)** — Slate DebugPanel, dev chrome collapse + seat switcher + presence strip + "Table setup" panel, voiced states, read-only history, destructive-action confirm, Slate material layer.
@@ -85,7 +85,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   - [x] 99-12-PLAN.md — [W2] DebugPanel color-only tokenization (155 hex; no reskin — Phase 102)
   - [x] 99-13-PLAN.md — [W2] DevHost Slate recolor + demote emerald "New game" to quiet outline
   - [x] 99-14-PLAN.md — [W3] Both-theme WCAG contrast test + atomic-pairing source guard (correctness rule #2)
-  - [ ] 99-15-PLAN.md — [W4] Completion gate: empty `ignoreFiles`, `lint:css` green, residual-neon grep, suite green (rule #3)
+  - [x] 99-15-PLAN.md — [W4] Completion gate: empty `ignoreFiles`, `lint:css` green, residual-neon grep, suite green (rule #3)
 **UI hint**: yes
 **Risk note**: Highest-risk item #1 (atomic token flip) is shared with Phase 98 — the `theme.ts` default flip (TOKEN-02) and this renderer sweep (THEME-01/07) must land in the **same merge** to avoid the invisible-text trap. Three baked-in correctness rules: (1) every per-component sweep tokenizes background AND ink in the same edit; (2) a dedicated both-theme contrast test (99-14); (3) the phase is done only when `ignoreFiles` is empty + `lint:css` green + residual-neon grep clean (99-15).
 
@@ -157,7 +157,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 |-------|----------------|--------|-----------|
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
-| 99. Theming Swap (Wave 2) | 14/15 | In Progress|  |
+| 99. Theming Swap (Wave 2) | 15/15 | Complete   | 2026-06-23 |
 | 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |

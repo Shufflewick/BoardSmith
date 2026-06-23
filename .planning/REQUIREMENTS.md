@@ -31,13 +31,13 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 ### Visual Theming Swap (Wave 2 — make it Slate)
 
 - [x] **THEME-01**: All 8 renderers + hex `<g>` express interaction state via `var(--bsg-selectable|selected|droptarget)` — no `#00d9ff`/`#00ff88`/`rgba(46,204,113…)` literals and no colored glow box-shadows remain
-- [ ] **THEME-02**: Selection highlight uses `outline` (never `border`) across every renderer, so highlighting never reflows layout
+- [x] **THEME-02**: Selection highlight uses `outline` (never `border`) across every renderer, so highlighting never reflows layout
 - [x] **THEME-03**: The primary action button is the Slate teal plate (token fill, dark-ink label, neutral elevation, no glow)
 - [x] **THEME-04**: Titles render as solid type in the display font with a faint shadow — the gradient clip-text blocks are deleted
 - [x] **THEME-05**: The default card back is one shared tokenized `--bsg-card-back` class consumed by both card renderers (no corporate-blue gradient)
-- [ ] **THEME-06**: The active-player cue is calm — accent dot with an opacity-only breathe and a token border, replacing the scaling neon halo/`pulse-glow`
+- [x] **THEME-06**: The active-player cue is calm — accent dot with an opacity-only breathe and a token border, replacing the scaling neon halo/`pulse-glow`
 - [x] **THEME-07**: Panels and zone surfaces use `var(--bsg-surface)` + `var(--bsg-edge)` hairlines, replacing translucent-black glass and white hairlines; backdrops go transparent in platform mode so the host shows through
-- [ ] **THEME-08**: `DevHost` is recolored to Slate — the indigo/neon literals are replaced with tokens
+- [x] **THEME-08**: `DevHost` is recolored to Slate — the indigo/neon literals are replaced with tokens
 
 ### Information Architecture & Responsive (Wave 3 — board is the hero)
 
@@ -124,13 +124,13 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | TOKEN-05 | 98 (Wave 1 — Token Foundation) | Complete |
 | TOKEN-06 | 98 (Wave 1 — Token Foundation) | Complete |
 | THEME-01 | 99 (Wave 2 — Theming Swap) | Complete |
-| THEME-02 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-02 | 99 (Wave 2 — Theming Swap) | Complete |
 | THEME-03 | 99 (Wave 2 — Theming Swap) | Complete |
 | THEME-04 | 99 (Wave 2 — Theming Swap) | Complete |
 | THEME-05 | 99 (Wave 2 — Theming Swap) | Complete |
-| THEME-06 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-06 | 99 (Wave 2 — Theming Swap) | Complete |
 | THEME-07 | 99 (Wave 2 — Theming Swap) | Complete |
-| THEME-08 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-08 | 99 (Wave 2 — Theming Swap) | Complete |
 | IA-01 | 100 (Wave 3 — IA & Responsive) | Pending |
 | IA-02 | 100 (Wave 3 — IA & Responsive) | Pending |
 | IA-03 | 100 (Wave 3 — IA & Responsive) | Pending |
