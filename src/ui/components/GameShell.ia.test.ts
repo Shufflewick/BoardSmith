@@ -331,6 +331,93 @@ const HeartbeatHarness = defineComponent({
   `,
 });
 
+// ---------------------------------------------------------------------------
+// Suite 4: IA-06 — sidebar rail state + scrim behavior
+//
+// Behaviors under test:
+//   A. .sidebar gains class "rail" when sidebarRail=true, loses it when false.
+//   B. .scrim gains class "active" when sidebarRail=false (sidebar expanded).
+//   C. Clicking .side-edge toggles sidebarRail.
+//   D. Clicking .scrim.active collapses (sidebarRail → true).
+// ---------------------------------------------------------------------------
+
+const SidebarHarness = defineComponent({
+  name: 'SidebarHarness',
+  props: {
+    sidebarRail: { type: Boolean, default: false },
+  },
+  emits: ['toggle', 'collapse'],
+  template: `
+    <div class="stage">
+      <aside class="sidebar" :class="{ rail: sidebarRail }">
+        <button class="side-edge" @click="$emit('toggle')">
+          <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+      </aside>
+      <main class="boardregion"></main>
+      <div
+        class="scrim"
+        :class="{ active: !sidebarRail }"
+        aria-hidden="true"
+        @click="$emit('collapse')"
+      ></div>
+    </div>
+  `,
+});
+
+describe('GameShell IA-06 — sidebar rail state + phone scrim', () => {
+  // --- A. Rail class binding ---
+  it('sidebar has class "rail" when sidebarRail=true', () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: true } });
+    expect(wrapper.find('.sidebar').classes()).toContain('rail');
+  });
+
+  it('sidebar does not have class "rail" when sidebarRail=false', () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: false } });
+    expect(wrapper.find('.sidebar').classes()).not.toContain('rail');
+  });
+
+  // --- B. Scrim class binding ---
+  it('scrim has class "active" when sidebarRail=false (expanded)', () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: false } });
+    expect(wrapper.find('.scrim').classes()).toContain('active');
+  });
+
+  it('scrim does not have class "active" when sidebarRail=true (collapsed)', () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: true } });
+    expect(wrapper.find('.scrim').classes()).not.toContain('active');
+  });
+
+  // --- C. side-edge button emits toggle ---
+  it('clicking .side-edge emits toggle', async () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: false } });
+    await wrapper.find('.side-edge').trigger('click');
+    expect(wrapper.emitted('toggle')).toHaveLength(1);
+  });
+
+  // --- D. scrim click emits collapse ---
+  it('clicking .scrim emits collapse (to collapse expanded sidebar)', async () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: false } });
+    await wrapper.find('.scrim').trigger('click');
+    expect(wrapper.emitted('collapse')).toHaveLength(1);
+  });
+
+  // --- Rail toggle reactivity ---
+  it('sidebar gains .rail class when sidebarRail changes to true', async () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: false } });
+    expect(wrapper.find('.sidebar').classes()).not.toContain('rail');
+    await wrapper.setProps({ sidebarRail: true });
+    expect(wrapper.find('.sidebar').classes()).toContain('rail');
+  });
+
+  it('scrim loses .active class when sidebarRail changes to true (collapse)', async () => {
+    const wrapper = mount(SidebarHarness, { props: { sidebarRail: false } });
+    expect(wrapper.find('.scrim').classes()).toContain('active');
+    await wrapper.setProps({ sidebarRail: true });
+    expect(wrapper.find('.scrim').classes()).not.toContain('active');
+  });
+});
+
 describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
   // --- A. GameHeader absent in platform mode --------------------------------
   it('GameHeader sentinel is present when platformMode=false', () => {

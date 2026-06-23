@@ -214,6 +214,15 @@ const debugExpanded = ref(false);
 const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 
+// IA-06: Sidebar rail state. Default expanded; collapses to --bsg-rail on compact phones.
+// The matchMedia listener ensures the rail collapses automatically when the viewport
+// narrows to compact, but never forces expansion when viewport widens (user preference).
+const sidebarRail = ref<boolean>(false);
+let compactQuery: MediaQueryList | null = null;
+function initCompactRail(mql: MediaQueryList | MediaQueryListEvent) {
+  if (mql.matches) sidebarRail.value = true;
+}
+
 // Connection health (IA-01): driven by postMessage heartbeat in platform mode.
 // Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a
 // staleness timer (~10s). Replaces the hardcoded 'connected' string that was
@@ -616,6 +625,12 @@ onMounted(async () => {
   });
   if (actionbarRef.value) dockObserver.observe(actionbarRef.value);
 
+  // IA-06: Collapse sidebar to rail by default on compact phones (≤639px).
+  // This runs after paint so the initial state is correct before first render.
+  compactQuery = window.matchMedia('(max-width: 639px)');
+  initCompactRail(compactQuery);
+  compactQuery.addEventListener('change', initCompactRail);
+
   if (platformMode.value) return;
 
   // A game ONLY runs through the production path: GameShell embedded in an
@@ -629,6 +644,7 @@ onMounted(async () => {
 // Cleanup on unmount
 onUnmounted(() => {
   dockObserver?.disconnect();
+  compactQuery?.removeEventListener('change', initCompactRail);
   if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
   disconnectFromLobby();
   if (platformMessageHandler) {
@@ -1381,8 +1397,20 @@ if ((import.meta as any).hot) {
 
       <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a sibling, below) -->
       <div class="stage">
-        <!-- Sidebar: always-visible player status + history; collapses to rail -->
-        <aside class="sidebar" aria-label="Players and log">
+        <!-- Sidebar: always-visible player status + history; collapses to rail (IA-06) -->
+        <aside class="sidebar" :class="{ rail: sidebarRail }" aria-label="Players and log">
+          <!-- Rail toggle button: absolutely positioned on the right edge of the sidebar (IA-06) -->
+          <button
+            class="side-edge"
+            type="button"
+            :aria-label="sidebarRail ? 'Expand panel' : 'Collapse panel'"
+            :aria-expanded="!sidebarRail"
+            @click="sidebarRail = !sidebarRail"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
           <!-- side-head: Shufflewick host button + ⋯ controls menu (IA-01) -->
           <div class="side-head">
             <button class="sw-btn" aria-label="Shufflewick — host menu and leave game" type="button">
@@ -1487,6 +1515,15 @@ if ((import.meta as any).hot) {
             </slot>
           </div>
         </main>
+        <!-- Scrim: only active on compact phones when sidebar is expanded over the board (IA-06).
+             Click collapses the sidebar back to the rail. Sibling of .stage children so it
+             sits inside .stage and can never cover the .actionbar below. -->
+        <div
+          class="scrim"
+          :class="{ active: !sidebarRail }"
+          aria-hidden="true"
+          @click="sidebarRail = true"
+        ></div>
       </div>
 
       <!-- Full-width actionbar: sibling of .stage; grows vertically (IA-02, IA-03, IA-04) -->
@@ -1618,16 +1655,87 @@ if ((import.meta as any).hot) {
   position: relative;
 }
 
-/* Sidebar: always-visible player status + history; collapses to rail (plan 100-05) */
+/* Sidebar: always-visible player status + history; collapses to rail (IA-06) */
 .sidebar {
   flex: none;
-  width: var(--bsg-side);
+  width: clamp(220px, 22vw, 320px);
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--bsg-surface);
   border-right: 1px solid var(--bsg-line);
   position: relative;
+  transition: width var(--bsg-dur-base) cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Rail mode: slim sidebar showing only icon tokens (IA-06) */
+.sidebar.rail {
+  width: var(--bsg-rail);
+}
+.sidebar.rail .side-head {
+  flex-direction: column;
+  gap: var(--bsg-s2);
+  padding: 9px 0;
+}
+.sidebar.rail .sw-btn__wordmark {
+  display: none;
+}
+.sidebar.rail .sw-btn {
+  padding: 6px;
+}
+.sidebar.rail .side-scroll {
+  padding: var(--bsg-s2) 0;
+}
+/* In rail, hide sidebar text labels; keep only the player tokens visible */
+.sidebar.rail :deep(.player-name-row),
+.sidebar.rail :deep(.you-badge),
+.sidebar.rail :deep(.player-color) {
+  display: none;
+}
+/* History hidden in rail mode */
+.sidebar.rail .sidebar-history {
+  display: none;
+}
+
+/* Rail toggle button: floats on the right edge of the sidebar */
+.side-edge {
+  position: absolute;
+  top: 14px;
+  right: -13px;
+  z-index: 6;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
+  box-shadow: var(--bsg-shadow-sm);
+  color: var(--bsg-ink-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.side-edge svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  transition: transform var(--bsg-dur-fast);
+}
+.sidebar.rail .side-edge svg {
+  transform: rotate(180deg);
+}
+
+/* Scrim: transparent cover over board area; visible only on compact when sidebar expanded (IA-06).
+   Positioned inside .stage so it never covers the .actionbar sibling below. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: rgba(0, 0, 0, .5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--bsg-dur-base);
 }
 
 /* Side head: Shufflewick host button + ⋯ controls menu trigger */
@@ -1754,14 +1862,61 @@ if ((import.meta as any).hot) {
   font-weight: 600;
 }
 
-/* Desktop: retarget the 768px breakpoint to the new class names.
-   Plan 100-05 replaces this with full compact/medium/wide tiers. */
-@media (min-width: 768px) {
-  .sidebar {
-    width: var(--bsg-side);
+/* ─── Responsive Tiers (IA-06) ──────────────────────────────────────────────
+   Shared breakpoint scale: 640 / 768 / 1024 / 1440.
+   @media queries drive shell chrome; @container for renderer reflow (plan 100-02).
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Compact (phones ≤639px): board fills the viewport; sidebar defaults to rail.
+   When expanded the sidebar overlays the board area only (never the actionbar),
+   absolutely positioned inside .stage. Scrim becomes visible and interactive. */
+@media (max-width: 639px) {
+  .sidebar:not(.rail) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: min(86vw, var(--bsg-side));
+    box-shadow: var(--bsg-shadow);
   }
+  .scrim.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Medium (768px–1023px): standard sidebar + board. */
+@media (min-width: 768px) and (max-width: 1023px) {
   .boardregion {
-    min-height: 400px;
+    min-height: 380px;
+  }
+}
+
+/* Large (≥1024px): wider board min-height. */
+@media (min-width: 1024px) {
+  .boardregion {
+    min-height: 480px;
+  }
+}
+
+/* Wide (≥1440px): center the game shell at a max-width so the board stays
+   the hero on ultra-wide displays. Auto margins center it horizontally. */
+@media (min-width: 1440px) {
+  .game-shell__game {
+    max-width: 1600px;
+    margin-inline: auto;
+  }
+}
+
+/* Landscape phone (short screen): prevent the actionbar from crushing the board.
+   The stage already uses the row layout (sidebar | board); this branch only
+   reduces the actionbar height cap so the board retains adequate vertical space. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .actionbar {
+    max-height: min(22dvh, 120px);
+    padding-top: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
 }
 
