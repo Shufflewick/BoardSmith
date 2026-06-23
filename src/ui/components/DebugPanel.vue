@@ -128,7 +128,8 @@ export const TreeNode = defineComponent({
           style: styles.copyBtn,
           onClick: handleCopy,
           title: 'Copy JSON',
-        }, '⎘'),
+          'aria-label': 'Copy JSON to clipboard',
+        }, h('span', { 'aria-hidden': 'true' }, '⎘')),
       ];
 
       children.push(
@@ -1179,17 +1180,25 @@ const displayedState = computed(() => {
 <template>
   <div class="debug-panel" :class="{ expanded: panelExpanded }">
     <!-- Toggle tab (always visible on right edge) -->
-    <div class="debug-toggle" @click="togglePanel">
-      <span class="toggle-icon">{{ panelExpanded ? '›' : '‹' }}</span>
-      <span class="toggle-label">Debug</span>
-    </div>
+    <button
+      type="button"
+      class="debug-toggle"
+      @click="togglePanel"
+      :aria-expanded="panelExpanded"
+      aria-label="Toggle debug panel"
+    >
+      <span aria-hidden="true" class="toggle-icon">{{ panelExpanded ? '›' : '‹' }}</span>
+      <span aria-hidden="true" class="toggle-label">Debug</span>
+    </button>
 
     <!-- Drawer content -->
     <div class="debug-drawer" :class="{ open: panelExpanded }">
       <div class="debug-header">
         <span class="debug-title">Debug Panel</span>
         <span class="debug-hint">(Press D to toggle)</span>
-        <button class="close-btn" @click="togglePanel">✕</button>
+        <button class="close-btn" @click="togglePanel" aria-label="Close debug panel">
+          <span aria-hidden="true">✕</span>
+        </button>
       </div>
 
       <!-- Expanded content -->
@@ -1471,15 +1480,17 @@ const displayedState = computed(() => {
                       @click="shuffleDeck(deck.id)"
                       :disabled="deckManipulationLoading"
                       title="Shuffle deck"
+                      aria-label="Shuffle deck"
                     >
-                      🔀
+                      <span aria-hidden="true">🔀</span>
                     </button>
                     <button
                       class="debug-btn small deck-action-btn"
                       @click="copyDeckToClipboard(deck)"
                       title="Copy deck JSON"
+                      aria-label="Copy deck JSON"
                     >
-                      📋
+                      <span aria-hidden="true">📋</span>
                     </button>
                   </div>
                 </div>
@@ -1509,32 +1520,36 @@ const displayedState = computed(() => {
                         @click="moveCardToTop(card.id)"
                         :disabled="index === 0 || deckManipulationLoading"
                         title="Move to top"
+                        aria-label="Move to top"
                       >
-                        ⬆️
+                        <span aria-hidden="true">⬆️</span>
                       </button>
                       <button
                         class="card-action-btn"
                         @click="moveCardUp(deck, card.id)"
                         :disabled="index === 0 || deckManipulationLoading"
                         title="Move up"
+                        aria-label="Move up"
                       >
-                        ↑
+                        <span aria-hidden="true">↑</span>
                       </button>
                       <button
                         class="card-action-btn"
                         @click="moveCardDown(deck, card.id)"
                         :disabled="index === deck.cards.length - 1 || deckManipulationLoading"
                         title="Move down"
+                        aria-label="Move down"
                       >
-                        ↓
+                        <span aria-hidden="true">↓</span>
                       </button>
                       <button
                         class="card-action-btn"
                         @click="openTransferDialog(card.id, deck.id)"
                         :disabled="discoveredCardContainers.length < 2 || deckManipulationLoading"
                         title="Transfer to another container"
+                        aria-label="Transfer to another container"
                       >
-                        ➡️
+                        <span aria-hidden="true">➡️</span>
                       </button>
                     </div>
                   </div>
@@ -1576,7 +1591,9 @@ const displayedState = computed(() => {
             <div class="transfer-dialog">
               <div class="transfer-dialog-header">
                 <span>Transfer Card</span>
-                <button class="close-btn" @click="closeTransferDialog">×</button>
+                <button class="close-btn" @click="closeTransferDialog" aria-label="Close transfer dialog">
+                  <span aria-hidden="true">×</span>
+                </button>
               </div>
               <div class="transfer-dialog-body">
                 <div class="form-group">
@@ -1962,11 +1979,13 @@ const displayedState = computed(() => {
   padding: 10px 6px;
   cursor: pointer;
   background: rgba(0, 217, 255, 0.9);
+  border: none;
   border-radius: 8px 0 0 8px;
   transition: all 0.2s;
   pointer-events: auto;
   writing-mode: vertical-rl;
   text-orientation: mixed;
+  min-height: 44px;
 }
 
 .debug-toggle:hover {
@@ -3481,8 +3500,10 @@ const displayedState = computed(() => {
 }
 
 .card-action-btn {
-  width: 22px;
-  height: 22px;
+  min-width: 24px;
+  min-height: 24px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
