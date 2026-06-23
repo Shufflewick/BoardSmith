@@ -5,11 +5,18 @@
  * Delegates all grid sizing to resolveGridSize(). Never falls back to 8×8.
  * When coordinates are missing/undeclared, renders the locked error panel.
  * Provides gridCoords to child cells so they can position via grid-row/grid-column.
+ *
+ * A11Y-01: uses useSelectableGrid() for roving-tabindex grid navigation.
+ * The board-grid container is role="grid"; each cell is role="gridcell".
+ * Arrow/Home/End move focus; Enter/Space activates the focused cell.
+ * Passive selectElement branch preserved: non-selectable named cells call
+ * boardInteraction.selectElement() on activation (same as click).
  */
 
-import { computed, provide, watchEffect, ref, inject, type ComputedRef } from 'vue';
+import { computed, provide, watchEffect, ref, inject, nextTick, type ComputedRef } from 'vue';
 import { resolveGridSize } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
@@ -142,7 +149,32 @@ function isCellDisabled(cell: GameElement): boolean {
   return boardInteraction.isDisabledElement(cellIdentity(cell)) !== false;
 }
 
-function handleCellClick(cell: GameElement) {
+// ── A11Y-01: useSelectableGrid — roving tabindex for 2D grid navigation ────
+//
+// colsRef drives Arrow Up/Down row-skipping math in the composable.
+// Mirrors planning/mockups/boardsmith-chrome.html:569-618 exactly.
+const colsRef = computed(() => (gridResult.value.ok ? gridResult.value.cols : 0));
+const rowsRef = computed(() => (gridResult.value.ok ? gridResult.value.rows : 0));
+
+const { currentIdx, focusCell, handleGridKeydown: _composableKeydown } = useSelectableGrid(
+  children,
+  colsRef,
+  cellIdentity,
+  boardInteraction,
+);
+
+// DOM refs for each cell — needed to call .focus() after arrow-key navigation
+// (composable tracks authoritative index; DOM wiring belongs here per useSelectable.ts)
+const cellRefs: (HTMLElement | null)[] = [];
+function setCellRef(el: Element | null, idx: number) {
+  cellRefs[idx] = el instanceof HTMLElement ? el : null;
+}
+
+// Cell activation: handles selectable AND passive selectElement branches.
+// Called from both click and keyboard (Enter/Space) for consistent behavior.
+// Passive branch: non-selectable named cells call selectElement() so the board
+// can track which cell is focused for highlighting/annotation purposes.
+function handleCellActivate(cell: GameElement) {
   if (!boardInteraction) return;
   if (isCellDisabled(cell)) return;
   if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
@@ -150,6 +182,42 @@ function handleCellClick(cell: GameElement) {
   } else if (cell.name) {
     boardInteraction.selectElement(cellIdentity(cell));
   }
+}
+
+// Grid keydown handler: intercepts Enter/Space to apply the passive branch,
+// delegates all navigation keys (Arrow/Home/End) to the composable.
+// After navigation, moves DOM focus to the new current cell so keyboard
+// users see a visible focus ring without a second Tab press.
+function handleGridKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    const cell = children.value[currentIdx.value];
+    if (cell) handleCellActivate(cell);
+    e.preventDefault();
+    return;
+  }
+  _composableKeydown(e);
+  // Move DOM focus to match the new currentIdx (composable updates state synchronously;
+  // DOM attribute update is deferred to the next microtask via nextTick)
+  void nextTick(() => {
+    cellRefs[currentIdx.value]?.focus();
+  });
+}
+
+// Per-cell aria-label: coordinate notation + state, mirroring mockup:574-581
+function cellAriaLabel(cell: GameElement, idx: number): string {
+  const cols = colsRef.value;
+  const rows = rowsRef.value;
+  const c = idx % cols;
+  const r = Math.floor(idx / cols);
+  // Use the cell's own name (notation) if available; fall back to computed coord
+  const coord = cell.name ?? (String.fromCharCode(97 + c) + (rows - r));
+  let state: string;
+  if (isCellDisabled(cell)) state = 'unavailable';
+  else if (isCellSelected(cell)) state = 'selected';
+  else if (isCellDropTarget(cell)) state = 'drop target';
+  else if (isCellActionSelectable(cell)) state = 'selectable';
+  else state = 'empty';
+  return `${coord}, ${state}`;
 }
 
 function handleDragOver(event: DragEvent, cell: GameElement) {
@@ -194,12 +262,28 @@ function handleDrop(event: DragEvent, cell: GameElement) {
             class="board-label"
           >{{ label }}</span>
         </div>
-        <!-- CSS grid — template-columns set dynamically from resolveGridSize result -->
-        <div class="board-grid" :style="gridStyle">
+        <!--
+          CSS grid — template-columns set dynamically from resolveGridSize result.
+          A11Y-01: role="grid" + aria-label + @keydown wires the roving-tabindex
+          composable. The grid is a single tab stop; Arrow/Home/End move between cells.
+        -->
+        <div
+          class="board-grid"
+          :style="gridStyle"
+          role="grid"
+          :aria-label="`Game board, ${colsRef} by ${rowsRef}`"
+          @keydown="handleGridKeydown"
+        >
           <div
-            v-for="cell in children"
+            v-for="(cell, idx) in children"
             :key="cell.id"
+            :ref="(el) => setCellRef(el as Element | null, idx)"
             class="grid-cell"
+            role="gridcell"
+            :tabindex="idx === currentIdx ? '0' : '-1'"
+            :aria-label="cellAriaLabel(cell, idx)"
+            :aria-selected="isCellSelected(cell) || undefined"
+            :aria-disabled="isCellDisabled(cell) || undefined"
             :class="{
               'has-children': (cell.children?.length ?? 0) > 0,
               'is-clickable': (cell.children?.length ?? 0) > 0,
@@ -210,7 +294,8 @@ function handleDrop(event: DragEvent, cell: GameElement) {
               'is-disabled': isCellDisabled(cell),
             }"
             :title="cell.name ?? undefined"
-            @click.stop="handleCellClick(cell)"
+            @focus="focusCell(idx)"
+            @click.stop="handleCellActivate(cell)"
             @dragover="handleDragOver($event, cell)"
             @drop="handleDrop($event, cell)"
           >
