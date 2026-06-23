@@ -166,6 +166,16 @@ function handleHexClick(cell: GameElement) {
   }
 }
 
+// A `drop` only fires on an element whose `dragover` called preventDefault().
+// Without this handler the browser silently rejects every drop on a hex cell —
+// mirrors GridBoardRenderer.handleDragOver for Custom-UI/Action-Panel parity.
+function handleHexDragOver(event: DragEvent, cell: GameElement) {
+  if (!boardInteraction?.isDragging) return;
+  if (!isCellDropTarget(cell)) return;
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = 'move';
+}
+
 function handleHexDrop(event: DragEvent, cell: GameElement) {
   if (!boardInteraction?.isDragging) return;
   event.preventDefault();
@@ -204,6 +214,7 @@ const displayLabel = computed(
         class="hex-cell-group"
         :transform="`translate(${getCellPosition(cell).x}, ${getCellPosition(cell).y})`"
         @click="handleHexClick(cell)"
+        @dragover="handleHexDragOver($event, cell)"
         @drop="handleHexDrop($event, cell)"
       >
         <!-- Hex polygon with board-interaction state classes (all six required states) -->

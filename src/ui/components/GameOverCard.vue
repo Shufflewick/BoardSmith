@@ -82,7 +82,7 @@ const titleText = computed(() => {
       <!-- Winner tokens: only when winners are known (not in dev-WS degrade) -->
       <div v-if="winners.length > 0" class="winners" aria-label="Winners">
         <div
-          v-for="(player, idx) in winners"
+          v-for="player in winners"
           :key="player.seat"
           class="winner-row"
         >

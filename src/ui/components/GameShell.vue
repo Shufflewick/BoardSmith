@@ -628,7 +628,20 @@ onMounted(async () => {
     const h = entries[0]?.borderBoxSize?.[0]?.blockSize ?? 0;
     document.documentElement.style.setProperty('--bsg-dock-h', `${h}px`);
   });
-  if (actionbarRef.value) dockObserver.observe(actionbarRef.value);
+  // The actionbar only exists while currentScreen === 'game'. In dev/standalone
+  // mode the screen starts at 'lobby', so the element is absent at mount and
+  // appears later on the lobby→game transition. Track the ref so the observer
+  // (re)attaches whenever the actionbar mounts and detaches when it unmounts —
+  // observing on mount alone would silently never fire in the lobby-first flow.
+  watch(
+    actionbarRef,
+    (el, prev) => {
+      if (prev) dockObserver?.unobserve(prev);
+      if (el) dockObserver?.observe(el);
+      else document.documentElement.style.setProperty('--bsg-dock-h', '0px');
+    },
+    { immediate: true },
+  );
 
   // IA-06: Collapse sidebar to rail by default on compact phones (≤639px).
   // This runs after paint so the initial state is correct before first render.
