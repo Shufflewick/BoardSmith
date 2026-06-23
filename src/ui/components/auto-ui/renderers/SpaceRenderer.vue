@@ -187,8 +187,8 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 
 <style scoped>
 .space-container {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
   border-radius: 8px;
   padding: 12px;
   min-height: 60px;
@@ -197,29 +197,33 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 
 .space-container.action-selectable {
   cursor: pointer;
-  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline: 2px dashed var(--bsg-accent);
   outline-offset: 2px;
-  animation: pulse-space 2s ease-in-out infinite;
+  background: var(--bsg-selectable);
 }
 
 .space-container.action-selectable:hover {
-  outline-color: rgba(46, 204, 113, 1);
-  background: rgba(46, 204, 113, 0.05);
+  background: var(--bsg-selectable);
 }
 
 .space-container.is-board-highlighted {
-  background: rgba(0, 217, 255, 0.08);
-  border-color: rgba(0, 217, 255, 0.4);
+  background: var(--bsg-selectable);
+  outline: 1px solid var(--bsg-accent);
+  outline-offset: 2px;
 }
 
 .space-container.is-board-selected {
-  background: rgba(0, 255, 136, 0.08);
-  border-color: rgba(0, 255, 136, 0.4);
+  background: var(--bsg-selected);
+  outline: 2px solid var(--bsg-accent);
+  outline-offset: 2px;
+  box-shadow: var(--bsg-ring);
+  transform: scale(1.02);
 }
 
 .space-container.is-drop-target {
   background: var(--bsg-droptarget);
-  border-color: rgba(0, 255, 136, 0.5);
+  outline: 2px dotted var(--bsg-accent-2);
+  outline-offset: 2px;
 }
 
 .space-container.is-drop-target:hover {
@@ -232,16 +236,7 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 }
 
 .space-container.is-disabled:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-@keyframes pulse-space {
-  0%, 100% {
-    outline-color: rgba(46, 204, 113, 0.6);
-  }
-  50% {
-    outline-color: rgba(46, 204, 113, 1);
-  }
+  background: var(--bsg-surface);
 }
 
 .space-header {
@@ -253,12 +248,12 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 
 .space-label {
   font-weight: bold;
-  color: #aaa;
+  color: var(--bsg-ink-2);
   font-size: 16px;
 }
 
 .space-count {
-  color: #666;
+  color: var(--bsg-ink-3);
   font-size: 13px;
 }
 
