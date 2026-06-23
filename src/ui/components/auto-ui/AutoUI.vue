@@ -12,6 +12,7 @@
  * />
  */
 import AutoRenderer from './AutoRenderer.vue';
+import BoardLegend from './BoardLegend.vue';
 import type { GameElement } from './index';
 import type { PresentationOverlay } from './presentation.js';
 
@@ -40,11 +41,15 @@ defineProps<{
       :player-seat="playerSeat"
       :presentation="presentation"
     />
+
+    <!-- Interaction state legend (A11Y-05) — absolute bottom-left per mockup -->
+    <BoardLegend />
   </div>
 </template>
 
 <style scoped>
 .auto-ui {
   height: 100%;
+  position: relative;
 }
 </style>

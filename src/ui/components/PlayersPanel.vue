@@ -6,6 +6,10 @@
  * The active player shows a natural turn-status sentence (IA-02 reconciliation).
  * In seat-strip mode a compact one-line variant carries the turn status for
  * phones (IA-06 compact tier).
+ *
+ * A11Y-04: active player's listitem carries aria-current="true".
+ * A11Y-08: under prefers-reduced-motion the breathe becomes a static
+ *   high-contrast border instead of disappearing.
  */
 import { computed } from 'vue';
 
@@ -125,6 +129,7 @@ defineSlots<{
       class="player-card"
       :class="{ current: isPlayerActive(player.seat) }"
       role="listitem"
+      :aria-current="isPlayerActive(player.seat) ? 'true' : undefined"
     >
       <!-- Player identity token: color + shape + letter (IA-06) -->
       <div class="player-token-wrap">
@@ -279,9 +284,15 @@ defineSlots<{
   50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsg-accent) 22%, transparent); }
 }
 
+/* A11Y-08: reduced-motion — stop breathe animation AND provide a static
+   high-contrast border so the active-player turn cue remains visible
+   (does not simply vanish under reduced-motion preference). */
 @media (prefers-reduced-motion: reduce) {
   .turn-indicator-dot {
     animation: none;
+  }
+  .player-card.current {
+    border: 2px solid var(--bsg-accent);
   }
 }
 
