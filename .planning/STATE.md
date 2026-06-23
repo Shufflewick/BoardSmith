@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: UI Redesign (Slate)
 status: Awaiting next milestone
-stopped_at: ROADMAP.md written (Phases 97–103, 48/48 requirements mapped); REQUIREMENTS.md traceability filled; STATE.md updated.
+stopped_at: "v4.0 UI Redesign (Slate) shipped — 7 phases, 48/48 requirements, BoardSmith 1245 tests + 8 games + MERC green, browser-verified, tagged v4.0."
 last_updated: "2026-06-23T13:04:08.825Z"
 last_activity: 2026-06-23 — Milestone v4.0 completed and archived
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 42
-  completed_plans: 43
-  percent: 86
+  completed_plans: 42
+  percent: 100
 ---
 
 # Project State
