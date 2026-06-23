@@ -47,7 +47,7 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 - [x] **IA-04**: The action dock renders only when the player has an action; it caps at `min(40vh, 320px)` with internal scroll and reserves its measured height via `ResizeObserver` (no hardcoded `80px` padding)
 - [x] **IA-05**: The board fits its container with no scrollbars or manual zoom via `container-type: size` and a computed `--cell`/`--card-w` clamp; the zoom slider survives only as an accessibility magnifier
 - [x] **IA-06**: Layout reflows across real compact/medium/wide tiers — phone fills the board and collapses players to a one-line seat strip with history as an on-demand sheet; desktop sidebar collapses to a rail
-- [ ] **IA-07**: Game Over shows a result card (winner/scores, final board behind a scrim, Rematch / New Game actions) instead of a dead-end banner
+- [x] **IA-07**: Game Over shows a result card (winner/scores, final board behind a scrim, Rematch / New Game actions) instead of a dead-end banner
 
 ### Accessibility — WCAG 2.2 AA (Wave 4)
 
@@ -137,7 +137,7 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | IA-04 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-05 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-06 | 100 (Wave 3 — IA & Responsive) | Complete |
-| IA-07 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-07 | 100 (Wave 3 — IA & Responsive) | Complete |
 | A11Y-01 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-02 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-03 | 101 (Wave 4 — Accessibility) | Pending |

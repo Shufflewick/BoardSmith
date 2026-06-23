@@ -16,7 +16,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 - [x] **Phase 97: Quick Wins (Wave 0)** — Independent accessibility/mobile/branding fixes that need no token system; ships first to bank credibility and de-risk later waves. (completed 2026-06-23)
 - [x] **Phase 98: Token Foundation (Wave 1)** — The keystone: collapse three namespaces into one `--bsg-*` contract emitted by `theme.ts` with full Slate defaults + a `color-no-hex` lint guard. Blocks Waves 2/3/5. (completed 2026-06-23)
 - [x] **Phase 99: Theming Swap (Wave 2)** — Spend the tokens: sweep 8 renderers + chrome + DevHost from neon literals to `var(--bsg-*)`, teal primary button, `outline` selection, solid type, tokenized card back, calm active-player cue. (completed 2026-06-23)
-- [ ] **Phase 100: IA & Responsive (Wave 3)** — Board is the hero: kill the standing header, persistent turn ribbon + always-on prompt, conditional action dock, fluid container-query board sizing, real breakpoints, Game Over result card.
+- [x] **Phase 100: IA & Responsive (Wave 3)** — Board is the hero: kill the standing header, persistent turn ribbon + always-on prompt, conditional action dock, fluid container-query board sizing, real breakpoints, Game Over result card. (completed 2026-06-23)
 - [ ] **Phase 101: Accessibility — WCAG 2.2 AA (Wave 4)** — The two CRITICAL findings: keyboard-operable board via shared `useSelectable()`, live regions, semantic names/state, non-color cues, focus-visible, dialog semantics, reduced-motion, contrast + target sweep.
 - [ ] **Phase 102: Material Polish & Dev/Debug Parity (Wave 5)** — Slate DebugPanel, dev chrome collapse + seat switcher + presence strip + "Table setup" panel, voiced states, read-only history, destructive-action confirm, Slate material layer.
 - [ ] **Phase 103: Cross-Repo Verification** — Gate: all 9 `~/BoardSmithGames/` games + MERC (the canary) build, pass tests, and play in the browser with the new Slate chrome; BoardSmith's own suite stays green with new cross-boundary integration tests.
@@ -107,7 +107,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   - [x] 100-03-PLAN.md — [W1] Fluid card sizing: Card/Hand/Deck shared --card-w clamp + DevHost 100dvh (IA-05)
   - [x] 100-04-PLAN.md — [W2] Platform header removal + ⋯ ControlsMenu + heartbeat corner dot + bridge preservation + showUndo deletion (IA-01)
   - [x] 100-05-PLAN.md — [W3] Responsive tiers (640/768/1024/1440) + sidebar rail + phone overlay/scrim + PlayersPanel token/seat-strip + history bottom sheet (IA-06)
-  - [ ] 100-06-PLAN.md — [W4] Game Over result card (validated winnerSeats, scrim over live board, Rematch/New Game) + AutoUI banner removal (IA-07)
+  - [x] 100-06-PLAN.md — [W4] Game Over result card (validated winnerSeats, scrim over live board, Rematch/New Game) + AutoUI banner removal (IA-07)
 **UI hint**: yes
 **Risk note**: Carries highest-risk items #3 and #4. Fluid board sizing replaces fixed cells (e.g. `50px`) and can regress published game bundles — validated against MERC + real games in Phase 103. The standing-header removal + Leave/New-Game relocation changes the host↔iframe postMessage contract — test the bridge end-to-end (the host side itself stays out of scope, but the BoardSmith-emitted contract must remain host-overridable).
 
@@ -164,7 +164,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
 | 99. Theming Swap (Wave 2) | 15/15 | Complete   | 2026-06-23 |
-| 100. IA & Responsive (Wave 3) | 5/6 | In Progress|  |
+| 100. IA & Responsive (Wave 3) | 6/6 | Complete   | 2026-06-23 |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |
 | 103. Cross-Repo Verification | 0/? | Not started | - |
