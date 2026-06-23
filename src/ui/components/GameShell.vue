@@ -1550,10 +1550,6 @@ if ((import.meta as any).hot) {
   height: 100%;
 }
 
-.game-shell--platform .game-shell__content {
-  padding-bottom: 60px;
-}
-
 /* Platform mode: the host renders a pull-down logo tab at the top-center.
    Keep the header's centered controls (zoom / Auto / Undo) out of the middle
    by packing them to the left and pushing the connection badge to the right,
@@ -1570,30 +1566,168 @@ if ((import.meta as any).hot) {
   margin-left: auto;
 }
 
-/* Game Screen */
+/* Game Screen: flex column, full viewport height */
 .game-shell__game {
   display: flex;
   flex-direction: column;
-  min-height: 100vh; /* fallback: browsers without dvh support */
-  min-height: 100dvh;
+  height: 100vh; /* fallback: browsers without dvh support */
+  height: 100dvh;
 }
 
-/* Main Content Area - Mobile First */
-.game-shell__main {
+/* Stage: sidebar + boardregion side by side; fills remaining height */
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+/* Sidebar: always-visible player status + history; collapses to rail (plan 100-05) */
+.sidebar {
+  flex: none;
+  width: var(--bsg-side);
   display: flex;
   flex-direction: column;
-  flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  background: var(--bsg-surface);
+  border-right: 1px solid var(--bsg-line);
+  position: relative;
 }
 
-.game-shell__content {
+/* Side head: Shufflewick host button + ⋯ controls menu trigger */
+.side-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 9px 9px 11px;
+  border-bottom: 1px solid var(--bsg-line);
+}
+
+.sw-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+  padding: 7px 10px;
+  border-radius: var(--bsg-r-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--bsg-ink);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+.sw-btn:hover {
+  background: var(--bsg-field);
+  border-color: var(--bsg-line);
+}
+.sw-btn__mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--bsg-accent);
+  opacity: 0.7;
+}
+.sw-btn__wordmark {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.menubtn {
+  height: 38px;
+  width: 38px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--bsg-r-sm);
+  background: transparent;
+  border: 1px solid var(--bsg-line);
+  color: var(--bsg-ink-2);
+  cursor: pointer;
+  margin-left: auto;
+}
+.menubtn:hover {
+  color: var(--bsg-ink);
+  border-color: var(--bsg-line-2);
+}
+
+/* Side scroll: players panel + game history (scrollable) */
+.side-scroll {
   flex: 1;
-  padding: 0;
-  padding-bottom: 80px; /* Space for sticky action bar */
+  min-height: 0;
   overflow: auto;
-  min-height: 300px;
-  order: 1; /* Content first on mobile */
-  position: relative; /* Positioning context for GameOverlay */
+  padding: var(--bsg-s3);
+}
+
+/* Board region: hero; container-query-sized; ~zero chrome padding (IA-05) */
+.boardregion {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: var(--bsg-s1);
+  container-type: size;
+  /* Reserve space for the actionbar measured via ResizeObserver (IA-04).
+     Falls back to s3 or safe-area inset if --bsg-dock-h is not yet set. */
+  padding-bottom: max(var(--bsg-s3), var(--bsg-dock-h, 0px), env(safe-area-inset-bottom));
+}
+
+/* Full-width actionbar: sibling of .stage, spans both sidebar + boardregion.
+   Grows vertically (flex-wrap), caps at ~5 rows, then scrolls — never horizontal. */
+.actionbar {
+  flex: none;
+  background: var(--bsg-surface);
+  border-top: 1px solid var(--bsg-line);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px var(--bsg-s4);
+  padding-bottom: calc(9px + env(safe-area-inset-bottom));
+  max-height: min(40dvh, 320px);
+  overflow-y: auto;
+}
+
+/* Turn strip: active player color swatch + prompt sentence */
+.turn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px 0 10px;
+  min-height: 46px;
+  border-right: 1px solid var(--bsg-line);
+  margin-right: 4px;
+}
+.turn__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex: none;
+}
+.turn .pr {
+  font-size: 13.5px;
+  color: var(--bsg-ink);
+  font-weight: 600;
+}
+
+/* Desktop: retarget the 768px breakpoint to the new class names.
+   Plan 100-05 replaces this with full compact/medium/wide tiers. */
+@media (min-width: 768px) {
+  .sidebar {
+    width: var(--bsg-side);
+  }
+  .boardregion {
+    min-height: 400px;
+  }
 }
 
 .game-shell__zoom-container {
@@ -1608,66 +1742,6 @@ if ((import.meta as any).hot) {
      Any fixed-position elements inside will behave like absolute positioning
      relative to this container - they cannot cover the navbar or ActionPanel. */
   contain: layout;
-}
-
-/* Sidebar - Mobile (below content) */
-.game-shell__sidebar {
-  width: 100%;
-  background: var(--bsg-surface);
-  border-top: 1px solid var(--bsg-line);
-  padding: 15px;
-  overflow-y: auto;
-  order: 2; /* Sidebar below content on mobile */
-  max-height: 40vh;
-}
-
-/* Desktop: Sidebar on Left */
-@media (min-width: 768px) {
-  .game-shell__main {
-    flex-direction: row;
-  }
-
-  .game-shell__content {
-    padding: 0;
-    min-height: 400px;
-    order: 2; /* Content on right on desktop */
-  }
-
-  .game-shell__sidebar {
-    width: 280px;
-    min-width: 280px;
-    max-height: none;
-    border-top: none;
-    border-right: 1px solid var(--bsg-line);
-    padding: 20px;
-    order: 1; /* Sidebar on left on desktop */
-  }
-}
-
-/* Bottom Action Bar - Fixed at bottom */
-.game-shell__action-bar {
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--bsg-surface);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid var(--bsg-line);
-  padding-top: 12px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
-  padding-left: max(15px, env(safe-area-inset-left));
-  padding-right: max(15px, env(safe-area-inset-right));
-  z-index: 100;
-}
-
-/* Desktop: Wider padding for action bar */
-@media (min-width: 768px) {
-  .game-shell__action-bar {
-    padding-top: 16px;
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
-    padding-left: max(20px, env(safe-area-inset-left));
-    padding-right: max(20px, env(safe-area-inset-right));
-  }
 }
 
 /* Time travel banner */
