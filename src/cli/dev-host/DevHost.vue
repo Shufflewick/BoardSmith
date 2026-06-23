@@ -274,9 +274,28 @@ function seatLabel(seat: SeatInfo): string {
 
 // ── Seat switcher ─────────────────────────────────────────────────────────────
 const seatSwitcherOpen = ref(false);
+const seatSwitcherRef = ref<HTMLElement | null>(null);
 
 // ── Table setup panel (read-only config display — DEV-04) ─────────────────────
 const tableSetupOpen = ref(false);
+
+// ── Dismissal: Escape key closes both disclosure widgets; document click
+// closes the seat switcher when clicking outside its container (WR-02).
+function handleChromeKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  seatSwitcherOpen.value = false;
+  tableSetupOpen.value = false;
+}
+
+function handleChromeClick(e: MouseEvent) {
+  if (
+    seatSwitcherOpen.value &&
+    seatSwitcherRef.value &&
+    !seatSwitcherRef.value.contains(e.target as Node)
+  ) {
+    seatSwitcherOpen.value = false;
+  }
+}
 
 /**
  * Switch to a different seat: send follow-disable if follow is active, then
@@ -336,11 +355,15 @@ onMounted(() => {
     seatedWithoutStoredPreference = true;
   }
   window.addEventListener('message', onWindowMessage);
+  document.addEventListener('keydown', handleChromeKeydown);
+  document.addEventListener('click', handleChromeClick);
   connect();
 });
 
 onUnmounted(() => {
   window.removeEventListener('message', onWindowMessage);
+  document.removeEventListener('keydown', handleChromeKeydown);
+  document.removeEventListener('click', handleChromeClick);
   closedByUs = true;
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (restartConfirmTimer !== null) clearTimeout(restartConfirmTimer);
@@ -455,7 +478,7 @@ onUnmounted(() => {
         <div v-show="chromeOpen" class="dev-chrome__bar">
           <div class="dev-chrome__toggle">
             <!-- Seat switcher: click to open a menu listing all seats -->
-            <div class="dev-chrome__seat-switcher">
+            <div class="dev-chrome__seat-switcher" ref="seatSwitcherRef">
               <button
                 type="button"
                 class="dev-chrome__badge dev-chrome__badge--btn"
