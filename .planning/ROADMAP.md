@@ -34,7 +34,8 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   2. An accessibility inspector announces the hamburger and every ✕ close/cancel/clear control by name, with `aria-expanded`/`aria-controls` on the hamburger, and decorative glyph spans are `aria-hidden` (QUICK-02).
   3. The player-facing chrome shows no dead Settings/Help menu items and no engine branding (`BS` chip, "BoardSmith Dev Mode") (QUICK-03).
   4. On a mobile viewport the sticky action bar stays fully visible (shell uses `100dvh` with a `100vh` fallback) and no fixed/sticky chrome edge falls under the notch/home indicator (`env(safe-area-inset-*)` respected) (QUICK-04, QUICK-05).
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 97-01-PLAN.md — All five quick wins (toast error feedback, accessible names, dead-weight removal, 100dvh, safe-area insets) + component tests
 **UI hint**: yes
 
 ---
@@ -135,7 +136,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 97. Quick Wins (Wave 0) | 0/? | Not started | - |
+| 97. Quick Wins (Wave 0) | 0/1 | Not started | - |
 | 98. Token Foundation (Wave 1) | 0/? | Not started | - |
 | 99. Theming Swap (Wave 2) | 0/? | Not started | - |
 | 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
