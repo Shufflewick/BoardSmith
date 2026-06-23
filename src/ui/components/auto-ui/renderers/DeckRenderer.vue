@@ -124,7 +124,7 @@ function handleClick(event: MouseEvent) {
     :data-zone-id="element.id"
     @click="handleClick"
   >
-    <!-- Header: name left (20px bold), count right (13px #aaa) -->
+    <!-- Header: name left (display font, 20px bold), count right (secondary ink) -->
     <div class="deck-header">
       <span class="deck-label">{{ displayLabel }}</span>
       <span v-if="childCount" class="deck-count">{{ childCount }} cards</span>

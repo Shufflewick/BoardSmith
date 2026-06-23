@@ -178,7 +178,7 @@ function handleDragEnd() {
       }"
     />
 
-    <!-- Branch 3: labeled token (player color or neutral #888) -->
+    <!-- Branch 3: labeled token (player color or neutral ink) -->
     <!-- Token: no shadow — shadow lives on .piece only (carry-forward #2) -->
     <div
       v-else
