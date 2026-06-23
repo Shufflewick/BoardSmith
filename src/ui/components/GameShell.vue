@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
+import {
+  announceTurnChange,
+  announceConnectionChange,
+  announceGameOver,
+  announceOpponentTurn,
+} from '../composables/liveRegionAnnouncer.js';
 import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
@@ -174,6 +180,17 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGam
   gameId,
   { playerSeat }
 );
+
+// Screen-reader live-region message refs.
+// Written only from watchers with immediate:false — never at mount (Pitfall 2).
+const politeMessage = ref('');
+const assertiveMessage = ref('');
+
+// Emit an announce postMessage alongside each live-region write so a future
+// host page can relay the announcement to its own AT-accessible DOM node.
+function emitAnnounce(level: 'polite' | 'assertive', text: string): void {
+  window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
+}
 
 // Animation events - wire createAnimationEvents to server state
 const animationEvents = createAnimationEvents({
@@ -1123,6 +1140,52 @@ function handleMenuItemClick(id: string) {
   }
 }
 
+// ── Live-region watchers (immediate: false — never write to regions at mount) ─
+
+watch(isMyTurn, (newVal) => {
+  const text = announceTurnChange(newVal);
+  if (text) {
+    politeMessage.value = text;
+    emitAnnounce('polite', text);
+  }
+}, { immediate: false });
+
+watch(connectionStatus, (newVal, oldVal) => {
+  const text = announceConnectionChange(newVal, oldVal ?? '');
+  if (text) {
+    politeMessage.value = text;
+    emitAnnounce('polite', text);
+  }
+}, { immediate: false });
+
+watch(
+  () => (state.value?.flowState as any)?.complete,
+  (newComplete, oldComplete) => {
+    if (newComplete && !oldComplete) {
+      const flowState = state.value?.flowState as any;
+      const winnerSeats: number[] = flowState?.winners ?? [];
+      const winnerNames = winnerSeats.map((seat) => {
+        const p = players.value.find((pl) => pl.seat === seat);
+        return (p as any)?.name || `Player ${seat}`;
+      });
+      const text = announceGameOver(winnerNames);
+      assertiveMessage.value = text;
+      emitAnnounce('assertive', text);
+    }
+  },
+  { immediate: false },
+);
+
+watch(awaitingPlayerNames, (newVal) => {
+  if (newVal.length > 0 && !isMyTurn.value) {
+    const text = announceOpponentTurn(newVal.map((p: any) => p.name));
+    if (text) {
+      politeMessage.value = text;
+      emitAnnounce('polite', text);
+    }
+  }
+}, { immediate: false });
+
 // Expose to parent/slots
 defineExpose({
   state,
@@ -1165,6 +1228,12 @@ if ((import.meta as any).hot) {
 
 <template>
   <div class="game-shell" :class="{ 'game-shell--platform': platformMode }">
+    <!-- Visually-hidden live regions — always mounted, never v-if (Pitfall 2).
+         Written only from watchers with immediate:false so ATs register the
+         regions before any content appears. -->
+    <p class="vh" role="status" aria-live="polite">{{ politeMessage }}</p>
+    <p class="vh" role="alert" aria-live="assertive">{{ assertiveMessage }}</p>
+
     <!-- LOBBY SCREEN -->
     <GameLobby
       v-if="currentScreen === 'lobby'"
