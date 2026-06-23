@@ -169,6 +169,14 @@ function onWindowMessage(event: MessageEvent): void {
   }
   // The game advertises its available UIs; populate the switcher dropdown.
   if (data.type === 'dev-ui-list' && Array.isArray(data.uis)) {
+    // If the iframe is running a different game than this outer page was built
+    // for, the page is stale (dev server restarted with another game on the same
+    // port). The chrome would show the old game's identity wrapping the new game.
+    // Force a full reload so the whole page reflects the running game.
+    if (data.gameType && cfg.gameType && data.gameType !== cfg.gameType) {
+      window.location.reload();
+      return;
+    }
     uiOptions.value = data.uis as string[];
     // Keep the current selection if still offered; otherwise default to the first
     // and tell the game, so the host dropdown and GameShell's internal selection

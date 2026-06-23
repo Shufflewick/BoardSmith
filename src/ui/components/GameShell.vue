@@ -155,7 +155,10 @@ const selectedUiComponent = computed(() => {
 function postDevUiList(): void {
   if (!isDevBuild || !platformMode.value || typeof window === 'undefined') return;
   window.parent.postMessage(
-    { source: 'shufflewick-game', type: 'dev-ui-list', uis: devUiNames.value },
+    // gameType lets the dev host detect when its outer page is stale relative to
+    // the game now running in the iframe (e.g. the dev server was restarted with a
+    // different game on the same port) and force a full reload.
+    { source: 'shufflewick-game', type: 'dev-ui-list', uis: devUiNames.value, gameType: props.gameType },
     '*'
   );
 }
