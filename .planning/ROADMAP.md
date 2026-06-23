@@ -19,7 +19,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 - [x] **Phase 100: IA & Responsive (Wave 3)** — Board is the hero: kill the standing header, persistent turn ribbon + always-on prompt, conditional action dock, fluid container-query board sizing, real breakpoints, Game Over result card. (completed 2026-06-23)
 - [x] **Phase 101: Accessibility — WCAG 2.2 AA (Wave 4)** — The two CRITICAL findings: keyboard-operable board via shared `useSelectable()`, live regions, semantic names/state, non-color cues, focus-visible, dialog semantics, reduced-motion, contrast + target sweep. (completed 2026-06-23)
 - [x] **Phase 102: Material Polish & Dev/Debug Parity (Wave 5)** — Slate DebugPanel, dev chrome collapse + seat switcher + presence strip + "Table setup" panel, voiced states, read-only history, destructive-action confirm, Slate material layer. (completed 2026-06-23)
-- [ ] **Phase 103: Cross-Repo Verification** — Gate: all 9 `~/BoardSmithGames/` games + MERC (the canary) build, pass tests, and play in the browser with the new Slate chrome; BoardSmith's own suite stays green with new cross-boundary integration tests.
+- [x] **Phase 103: Cross-Repo Verification** — Gate: all `~/BoardSmithGames/` games (8 present) + MERC (the canary) build, pass tests, and render/play in the browser with the new Slate chrome; BoardSmith's own suite stays green with the three cross-boundary integration tests. (completed 2026-06-23)
 
 ---
 

@@ -140,14 +140,14 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | IA-07 | 100 (Wave 3 — IA & Responsive) | Complete |
 | A11Y-01 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-02 | 101 (Wave 4 — Accessibility) | Complete |
-| A11Y-03 | 101 (Wave 4 — Accessibility) | Pending |
-| A11Y-04 | 101 (Wave 4 — Accessibility) | Pending |
-| A11Y-05 | 101 (Wave 4 — Accessibility) | Pending |
-| A11Y-06 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-03 | 101 (Wave 4 — Accessibility) | Complete |
+| A11Y-04 | 101 (Wave 4 — Accessibility) | Complete |
+| A11Y-05 | 101 (Wave 4 — Accessibility) | Complete |
+| A11Y-06 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-07 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-08 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-09 | 101 (Wave 4 — Accessibility) | Complete |
-| A11Y-10 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-10 | 101 (Wave 4 — Accessibility) | Complete |
 | DEV-01 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
 | DEV-02 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
 | DEV-03 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
@@ -156,10 +156,10 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | DEV-06 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
 | DEV-07 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
 | DEV-08 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Complete |
-| VERIFY-01 | 103 (Cross-Repo Verification) | Pending |
-| VERIFY-02 | 103 (Cross-Repo Verification) | Pending |
-| VERIFY-03 | 103 (Cross-Repo Verification) | Pending |
-| VERIFY-04 | 103 (Cross-Repo Verification) | Pending |
+| VERIFY-01 | 103 (Cross-Repo Verification) | Complete |
+| VERIFY-02 | 103 (Cross-Repo Verification) | Complete |
+| VERIFY-03 | 103 (Cross-Repo Verification) | Complete |
+| VERIFY-04 | 103 (Cross-Repo Verification) | Complete |
 
 **Coverage:**
 - v1 requirements: 48 total
