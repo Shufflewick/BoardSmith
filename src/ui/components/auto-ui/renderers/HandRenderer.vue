@@ -370,10 +370,10 @@ void isBoardSelected;
 <style scoped>
 /* Container baseline */
 .hand-container {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 16px;
-  transition: all 0.2s ease;
+  background: var(--bsg-surface);
+  border-radius: var(--bsg-r-md);
+  padding: var(--bsg-s4);
+  transition: all var(--bsg-dur-base) var(--bsg-ease);
   overflow: visible;
   position: relative;
 }
@@ -385,51 +385,54 @@ void isBoardSelected;
 
 .hand-container.is-selectable:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.3);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .hand-container.is-selected {
-  outline: 3px solid #00d9ff;
+  outline: 3px solid var(--bsg-accent);
   outline-offset: 2px;
+  box-shadow: var(--bsg-ring);
 }
 
-/* Whole-hand action-selectable — green border + bg */
+/* Whole-hand action-selectable — Slate dashed outline (THEME-02: outline not border) */
 .hand-container.action-selectable {
   cursor: pointer;
-  border: 2px solid rgba(0, 255, 136, 0.6);
-  background: rgba(0, 255, 136, 0.1);
+  outline: 2px dashed var(--bsg-accent);
+  outline-offset: 4px;
+  background: var(--bsg-selectable);
   animation: pulse-hand 2s ease-in-out infinite;
 }
 
 .hand-container.action-selectable:hover {
-  border-color: rgba(0, 255, 136, 1);
-  background: rgba(0, 255, 136, 0.2);
+  outline-color: var(--bsg-accent-2);
+  background: color-mix(in srgb, var(--bsg-accent) 22%, transparent);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 @keyframes pulse-hand {
   0%, 100% {
-    border-color: rgba(0, 255, 136, 0.6);
+    outline-color: var(--bsg-accent);
   }
   50% {
-    border-color: rgba(0, 255, 136, 1);
+    outline-color: var(--bsg-accent-2);
   }
 }
 
 /* Board interaction highlights */
 .hand-container.is-board-highlighted {
-  background: rgba(0, 217, 255, 0.2);
+  background: var(--bsg-selectable);
 }
 
 .hand-container.is-board-selected {
-  background: rgba(0, 255, 136, 0.2);
+  background: color-mix(in srgb, var(--bsg-selected) 20%, transparent);
 }
 
 /* Drop target — hand zones can receive dragged elements (Go Fish target) */
 .hand-container.is-drop-target {
   background: var(--bsg-droptarget);
-  border: 2px solid rgba(0, 255, 136, 0.5);
+  outline: 1px dotted var(--bsg-accent-2);
+  outline-offset: 2px;
 }
 
 .hand-container.is-drop-target:hover {
@@ -452,17 +455,17 @@ void isBoardSelected;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: var(--bsg-s3);
 }
 
 .hand-label {
   font-weight: bold;
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 .hand-count {
-  color: #888;
-  font-size: 13px;
+  color: var(--bsg-ink-3);
+  font-size: var(--bsg-text-sm);
 }
 
 /* Cards wrapper */
@@ -490,7 +493,7 @@ void isBoardSelected;
   flex-direction: var(--layout-direction, row);
   align-items: flex-end;
   justify-content: center;
-  gap: 8px;
+  gap: var(--bsg-s2);
   flex-wrap: wrap;
 }
 
@@ -509,7 +512,7 @@ void isBoardSelected;
 /* Individual card slot */
 .hand-card {
   flex-shrink: 0;
-  transition: transform 0.2s ease, z-index 0s;
+  transition: transform var(--bsg-dur-base) var(--bsg-ease), z-index 0s;
 }
 
 .hand-card:hover {
@@ -546,15 +549,15 @@ void isBoardSelected;
   z-index: 100 !important;
 }
 
-/* Hidden card placeholder (childCount-only display) */
+/* Hidden card placeholder — shared card-back token (THEME-05) */
 .card-back-small {
   width: 60px;
   min-width: 45px;
   height: 84px;
-  background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
-  border-radius: 8px;
-  border: 2px solid #4a6fa5;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: var(--bsg-card-back);
+  border-radius: var(--bsg-r-sm);
+  border: 1px solid var(--bsg-line-2);
+  box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
 }
 
@@ -567,8 +570,8 @@ void isBoardSelected;
   width: 60px;
   min-width: 45px;
   height: 84px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: var(--bsg-r-sm);
+  box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
   object-fit: contain;
 }
@@ -577,14 +580,14 @@ void isBoardSelected;
   width: 60px;
   min-width: 45px;
   height: 84px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: var(--bsg-r-sm);
+  box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
   background-repeat: no-repeat;
 }
 
 .empty-hand {
-  color: #666;
+  color: var(--bsg-ink-3);
   font-style: italic;
   display: flex;
   align-items: center;
