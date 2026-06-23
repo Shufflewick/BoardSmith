@@ -342,6 +342,12 @@ onUnmounted(() => {
     <!-- Toast notifications (Teleports to body; must live here since DevHost is the outer page) -->
     <Toast />
 
+    <!-- Decorative Slate material layers: fixed, pointer-events:none, behind all content -->
+    <!-- DEV-08: low-opacity SVG fractalNoise grain replaces bare flat background -->
+    <div class="dev-grain" aria-hidden="true"></div>
+    <!-- DEV-08: radial vignette darkens edges so the board iframe remains the hero -->
+    <div class="dev-vignette" aria-hidden="true"></div>
+
     <!-- Connecting -->
     <div v-if="!connected" class="dev-host__center">
       <p>Connecting to the dev host…</p>
@@ -631,12 +637,54 @@ onUnmounted(() => {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
+/* ── Slate material layer (DEV-08) ── */
+/*
+ * Both layers are position:fixed so they cover the viewport regardless of
+ * content height and do NOT scroll with page content. pointer-events:none
+ * ensures they never intercept clicks. z-index 0/1 keeps them behind the
+ * flex children (which get z-index:2 via position:relative on their wrappers).
+ *
+ * No background-attachment:fixed (causes compositing jank on mobile).
+ * No rgba/hex literals — color-mix with --bsg-bg for theme-awareness.
+ */
+
+/* Low-opacity SVG fractalNoise grain — neutral/graphite, not warm-tinted */
+.dev-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.07;
+  /* URL-encoded SVG feTurbulence fractalNoise (# → %23, < → %3C, > → %3E) */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+}
+
+/* Radial vignette: transparent center → token-mixed edge (no raw hex) */
+.dev-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: radial-gradient(
+    ellipse at center,
+    transparent 35%,
+    color-mix(in srgb, var(--bsg-bg) 70%, transparent) 100%
+  );
+}
+
+/* ── Content stacking above decorative layers ── */
+/* All direct-content wrappers get position:relative + z-index:2 to sit above
+   the fixed grain/vignette layers (z-index 0 and 1). */
 .dev-host__center {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  position: relative;
+  z-index: 2;
 }
 
 /* ── Lobby ── */
@@ -809,6 +857,8 @@ onUnmounted(() => {
   flex-direction: column;
   background: var(--bsg-surface);
   border-bottom: 1px solid var(--bsg-line);
+  position: relative;
+  z-index: 2;
 }
 
 /* ── Pull-tab (always visible, toggles the chrome bar) ── */
@@ -956,6 +1006,8 @@ onUnmounted(() => {
 .dev-host__stage {
   flex: 1 1 auto;
   min-height: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .dev-host__frame {
