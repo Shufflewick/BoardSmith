@@ -51,15 +51,15 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 
 ### Accessibility — WCAG 2.2 AA (Wave 4)
 
-- [ ] **A11Y-01**: The board is fully keyboard-operable — a shared `useSelectable()` composable binds `@click` + `@keydown.enter/space` to the same selection with a roving-tabindex grid (arrow/Home/End nav) across all 8 renderers (Critical)
+- [x] **A11Y-01**: The board is fully keyboard-operable — a shared `useSelectable()` composable binds `@click` + `@keydown.enter/space` to the same selection with a roving-tabindex grid (arrow/Home/End nav) across all 8 renderers (Critical)
 - [ ] **A11Y-02**: When picks are board-anchored, the action panel still exposes those choices in a focusable secondary list and never fully suppresses while picks are pending (Critical)
 - [ ] **A11Y-03**: Turn changes, errors, disconnects, and game-over are announced via a polite live region (assertive for errors); `GameHistory` becomes `role="log" aria-live="polite"`
 - [ ] **A11Y-04**: Every board element exposes a semantic `aria-label` and `aria-selected`/`-disabled`/`-current` derived from the same booleans driving CSS; grids/hands/hex carry appropriate roles
 - [ ] **A11Y-05**: Every interaction state is paired with a non-color cue (shape/icon/border-style + label) and is colorblind-safe, with a legend
 - [ ] **A11Y-06**: A visible `:focus-visible` ring is present on every interactive element; the two `outline:none` declarations are removed
-- [ ] **A11Y-07**: The hamburger drawer and the Game Over overlay are `role="dialog" aria-modal` with focus move/trap, Escape-to-close, and focus restore on close
+- [x] **A11Y-07**: The hamburger drawer and the Game Over overlay are `role="dialog" aria-modal` with focus move/trap, Escape-to-close, and focus restore on close
 - [ ] **A11Y-08**: Every pulse/slide/toast animation is wrapped so `prefers-reduced-motion: reduce` disables it (the infinite turn-dot pulse becomes a static high-contrast border)
-- [ ] **A11Y-09**: Muted text routes through `--bsg-ink-muted` to meet AA contrast, and every interactive chrome element meets a ≥44px target floor
+- [x] **A11Y-09**: Muted text routes through `--bsg-ink-muted` to meet AA contrast, and every interactive chrome element meets a ≥44px target floor
 - [ ] **A11Y-10**: Toasts are `role="status"`/assertive with a real `<button aria-label="Dismiss">` and an auto-timeout
 
 ### Dev & Debug Parity + Material Polish (Wave 5)
@@ -138,15 +138,15 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | IA-05 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-06 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-07 | 100 (Wave 3 — IA & Responsive) | Complete |
-| A11Y-01 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-01 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-02 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-03 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-04 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-05 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-06 | 101 (Wave 4 — Accessibility) | Pending |
-| A11Y-07 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-07 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-08 | 101 (Wave 4 — Accessibility) | Pending |
-| A11Y-09 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-09 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-10 | 101 (Wave 4 — Accessibility) | Pending |
 | DEV-01 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
 | DEV-02 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
