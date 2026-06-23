@@ -262,6 +262,8 @@ onUnmounted(() => {
               }"
               :style="{ background: c.value }"
               :title="c.label"
+              :aria-label="c.label"
+              :aria-pressed="colorInput === c.value"
               @click="colorInput = c.value"
             ></button>
           </div>
@@ -423,8 +425,10 @@ onUnmounted(() => {
 }
 
 .color-swatch {
-  width: 22px;
-  height: 22px;
+  min-width: 24px;
+  min-height: 24px;
+  width: 24px;
+  height: 24px;
   border-radius: 4px;
   border: 2px solid transparent;
   cursor: pointer;
