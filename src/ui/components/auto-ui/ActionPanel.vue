@@ -56,8 +56,6 @@ const props = defineProps<{
    * - Auto-executes actions with no selections when they're the only option
    */
   autoEndTurn?: boolean;
-  /** Show undo button when undo is available (default: true) */
-  showUndo?: boolean;
   /** Game messages to display while waiting */
   messages?: Array<{ text: string }>;
   /** Name of the player whose turn it is */
@@ -791,9 +789,9 @@ function clearBoardSelection() {
       >
         {{ action.prompt || formatActionName(action.name) }}
       </button>
-      <!-- Undo button - shows when player has made actions this turn and showUndo is enabled -->
+      <!-- Undo button - shows when player has made actions this turn -->
       <button
-        v-if="canUndo && showUndo !== false"
+        v-if="canUndo"
         class="action-btn undo-btn"
         @click="emit('undo')"
         :disabled="isExecuting"

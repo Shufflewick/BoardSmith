@@ -213,7 +213,6 @@ const historyCollapsed = ref(false);
 const debugExpanded = ref(false);
 const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
-const showUndo = ref(true); // Show undo button when undo is available
 
 // Connection health (IA-01): driven by postMessage heartbeat in platform mode.
 // Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a
@@ -1377,7 +1376,6 @@ if ((import.meta as any).hot) {
         :connection-status="connectionStatus"
         v-model:zoom="zoomLevel"
         v-model:auto-end-turn="autoEndTurn"
-        v-model:show-undo="showUndo"
         @menu-item-click="handleMenuItemClick"
       />
 
@@ -1521,7 +1519,6 @@ if ((import.meta as any).hot) {
                 :is-my-turn="isMyTurn && !isViewingHistory"
                 :can-undo="canUndo && !isViewingHistory"
                 :auto-end-turn="autoEndTurn"
-                :show-undo="showUndo"
                 :messages="gameMessages"
                 :current-player-name="currentPlayerName"
                 :current-player-color="currentPlayerColor"
