@@ -147,7 +147,7 @@ function handleDragEnd() {
     :draggable="isActionSelectable"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-selected="isBoardSelected || undefined"
+    :aria-pressed="isBoardSelected || undefined"
     @click="onActivate"
     @keydown="onKeydown"
     @dragstart="handleDragStart"

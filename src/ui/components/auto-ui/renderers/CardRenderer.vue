@@ -353,7 +353,7 @@ function handleDrop(event: DragEvent) {
     :draggable="isActionSelectable"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-selected="isSelected || undefined"
+    :aria-pressed="isSelected || undefined"
     @click="onActivate"
     @keydown="onSelectKey"
     @dragstart="handleDragStart"

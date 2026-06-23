@@ -132,7 +132,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
     :data-zone-id="element.id"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-selected="(isSelected || isBoardSelected) || undefined"
+    :aria-pressed="(isSelected || isBoardSelected) || undefined"
     @click="onActivate"
     @keydown="onKeydown"
   >

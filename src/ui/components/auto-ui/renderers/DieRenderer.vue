@@ -105,7 +105,7 @@ const ariaLabel = computed(() => {
   <div
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-selected="isBoardSelected || undefined"
+    :aria-pressed="isBoardSelected || undefined"
     :aria-disabled="isDisabled || undefined"
     class="die-container"
     :class="{
