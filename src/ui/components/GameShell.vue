@@ -214,6 +214,9 @@ const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 const showUndo = ref(true); // Show undo button when undo is available
 
+// Actionbar element ref for ResizeObserver (IA-04) — wired in Task 2
+const actionbarRef = ref<HTMLElement | null>(null);
+
 // Time travel state (for viewing historical game states)
 const timeTravelState = ref<any>(null);
 const timeTravelActionIndex = ref<number | null>(null);
@@ -1324,7 +1327,7 @@ if ((import.meta as any).hot) {
 
     <!-- GAME SCREEN -->
     <div v-if="currentScreen === 'game'" class="game-shell__game">
-      <!-- Top Header Bar -->
+      <!-- Top Header Bar — gating by !platformMode is plan 100-04 -->
       <GameHeader
         :game-title="displayName || gameType"
         :game-id="gameId"
@@ -1335,119 +1338,109 @@ if ((import.meta as any).hot) {
         @menu-item-click="handleMenuItemClick"
       />
 
-      <!-- Main Content Area -->
-      <div class="game-shell__main">
-        <!-- Left Sidebar: Players, Stats & History -->
-        <aside class="game-shell__sidebar">
-          <PlayersPanel
-            :players="players"
-            :player-seat="playerSeat"
-            :current-player-seat="state?.state.currentPlayer"
-            :color-selection-enabled="colorSelectionEnabled"
-            :awaiting-player-seats="awaitingPlayerSeats"
-          >
-            <template #player-stats="{ player }">
-              <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>
-            </template>
-          </PlayersPanel>
+      <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a sibling, below) -->
+      <div class="stage">
+        <!-- Sidebar: always-visible player status + history; collapses to rail -->
+        <aside class="sidebar" aria-label="Players and log">
+          <!-- side-head: Shufflewick host button + ⋯ controls menu — wiring deferred to plan 100-04 -->
+          <div class="side-head">
+            <button class="sw-btn" aria-label="Shufflewick — host menu and leave game" type="button">
+              <span class="sw-btn__mark" aria-hidden="true"></span>
+              <span class="sw-btn__wordmark">Shufflewick</span>
+            </button>
+            <button class="menubtn" aria-label="Game controls" type="button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                <circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/>
+              </svg>
+            </button>
+          </div>
 
-          <slot name="sidebar-extra"
-            :state="state"
-            :game-view="gameView"
-            :players="players"
-          ></slot>
+          <div class="side-scroll">
+            <PlayersPanel
+              :players="players"
+              :player-seat="playerSeat"
+              :current-player-seat="state?.state.currentPlayer"
+              :color-selection-enabled="colorSelectionEnabled"
+              :awaiting-player-seats="awaitingPlayerSeats"
+            >
+              <template #player-stats="{ player }">
+                <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>
+              </template>
+            </PlayersPanel>
 
-          <!-- Game History (below scoreboard) -->
-          <GameHistory
-            v-if="showHistory"
-            :messages="gameMessages"
-            v-model:collapsed="historyCollapsed"
-            class="sidebar-history"
-          />
+            <slot name="sidebar-extra"
+              :state="state"
+              :game-view="gameView"
+              :players="players"
+            ></slot>
+
+            <!-- Game History (below scoreboard) -->
+            <GameHistory
+              v-if="showHistory"
+              :messages="gameMessages"
+              v-model:collapsed="historyCollapsed"
+              class="sidebar-history"
+            />
+          </div>
         </aside>
 
-        <!-- Center: Game Board -->
-        <main class="game-shell__content">
+        <!-- Board region: hero; ~zero chrome padding; container-query-sized -->
+        <main class="boardregion" id="main" role="main">
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
-              <!--
-                Game Board Slot Props:
-                - actionController: USE THIS for all action handling (start, fill, execute, cancel)
-                - actionArgs: Read-only view of current selection args (for UI display)
-                - Other props: game state for rendering
-              -->
-              <!-- Dev-only UI switcher: render the selected non-primary UI (an
-                   extra `uis` entry or the built-in auto-UI) with the same slot
-                   props. Falls through to the #game-board slot for the primary UI
-                   and always in production (selectedUiComponent is null there). -->
-              <component
-                v-if="selectedUiComponent"
-                :is="selectedUiComponent"
-                :state="state"
-                :game-view="gameView || null"
-                :players="players"
-                :my-player="myPlayer"
-                :player-seat="playerSeat"
-                :is-my-turn="isMyTurn"
-                :available-actions="availableActions"
-                :action-args="actionArgs"
-                :set-board-prompt="setBoardPrompt"
-                :can-undo="canUndo && !isViewingHistory"
-                :undo="handleUndo"
-                :action-controller="actionController"
-                :flow-state="state?.flowState"
-              />
-              <slot
-                v-else
-                name="game-board"
-                :state="state"
-                :game-view="gameView"
-                :players="players"
-                :my-player="myPlayer"
-                :player-seat="playerSeat"
-                :is-my-turn="isMyTurn"
-                :available-actions="availableActions"
-                :action-args="actionArgs"
-                :set-board-prompt="setBoardPrompt"
-                :can-undo="canUndo && !isViewingHistory"
-                :undo="handleUndo"
-                :action-controller="actionController"
-              >
-                <div class="empty-game-area">
-                  <p>Add your game board in the #game-board slot</p>
-                </div>
-              </slot>
+            <!--
+              Game Board Slot Props:
+              - actionController: USE THIS for all action handling (start, fill, execute, cancel)
+              - actionArgs: Read-only view of current selection args (for UI display)
+              - Other props: game state for rendering
+            -->
+            <!-- Dev-only UI switcher: render the selected non-primary UI (an
+                 extra `uis` entry or the built-in auto-UI) with the same slot
+                 props. Falls through to the #game-board slot for the primary UI
+                 and always in production (selectedUiComponent is null there). -->
+            <component
+              v-if="selectedUiComponent"
+              :is="selectedUiComponent"
+              :state="state"
+              :game-view="gameView || null"
+              :players="players"
+              :my-player="myPlayer"
+              :player-seat="playerSeat"
+              :is-my-turn="isMyTurn"
+              :available-actions="availableActions"
+              :action-args="actionArgs"
+              :set-board-prompt="setBoardPrompt"
+              :can-undo="canUndo && !isViewingHistory"
+              :undo="handleUndo"
+              :action-controller="actionController"
+              :flow-state="state?.flowState"
+            />
+            <slot
+              v-else
+              name="game-board"
+              :state="state"
+              :game-view="gameView"
+              :players="players"
+              :my-player="myPlayer"
+              :player-seat="playerSeat"
+              :is-my-turn="isMyTurn"
+              :available-actions="availableActions"
+              :action-args="actionArgs"
+              :set-board-prompt="setBoardPrompt"
+              :can-undo="canUndo && !isViewingHistory"
+              :undo="handleUndo"
+              :action-controller="actionController"
+            >
+              <div class="empty-game-area">
+                <p>Add your game board in the #game-board slot</p>
+              </div>
+            </slot>
           </div>
         </main>
       </div>
 
-      <!-- Bottom Action Bar — absent when all choices are board-anchored (D-02) -->
-      <footer
-        v-if="!props.suppressActionPanel && !actionController.allCurrentChoicesAnchored.value"
-        class="game-shell__action-bar"
-      >
-        <slot name="action-panel">
-          <ActionPanel
-            :available-actions="isViewingHistory ? [] : availableActions"
-            :action-metadata="isViewingHistory ? {} : actionMetadata"
-            :players="players"
-            :player-seat="playerSeat"
-            :is-my-turn="isMyTurn && !isViewingHistory"
-            :can-undo="canUndo && !isViewingHistory"
-            :auto-end-turn="autoEndTurn"
-            :show-undo="showUndo"
-            :messages="gameMessages"
-            :current-player-name="currentPlayerName"
-            :current-player-color="currentPlayerColor"
-            :awaiting-players="awaitingPlayerNames"
-            @undo="handleUndo"
-          />
-        </slot>
-        <!-- Time travel banner -->
-        <div v-if="isViewingHistory" class="time-travel-banner">
-          <span class="time-travel-icon">⏰</span>
-          Viewing historical state (action {{ timeTravelActionIndex }}) - Actions disabled
-        </div>
-      </footer>
+      <!-- Full-width actionbar: sibling of .stage; grows vertically (IA-02, IA-03, IA-04) -->
+      <!-- Content wired in Task 2 -->
+      <div class="actionbar" ref="actionbarRef" role="region" aria-label="Actions"></div>
 
       <!-- Debug Panel: dev only. Renders inside the dev host iframe (platform
            mode + dev build); never in a deployed/production embed. -->
