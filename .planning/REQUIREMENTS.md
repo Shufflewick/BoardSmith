@@ -108,23 +108,64 @@ Deferred to a future milestone. Tracked but not in this roadmap.
 
 ## Traceability
 
-Which phases cover which requirements. Populated during roadmap creation (phase numbering continues from v3.1's last phase 96).
+Which phases cover which requirements. Phase numbering continues from v3.1's last phase 96; this milestone is Phases 97–103 (six waves + a cross-repo verification gate).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| QUICK-01..05 | TBD | Pending |
-| TOKEN-01..06 | TBD | Pending |
-| THEME-01..08 | TBD | Pending |
-| IA-01..07 | TBD | Pending |
-| A11Y-01..10 | TBD | Pending |
-| DEV-01..08 | TBD | Pending |
-| VERIFY-01..04 | TBD | Pending |
+| QUICK-01 | 97 (Wave 0 — Quick Wins) | Pending |
+| QUICK-02 | 97 (Wave 0 — Quick Wins) | Pending |
+| QUICK-03 | 97 (Wave 0 — Quick Wins) | Pending |
+| QUICK-04 | 97 (Wave 0 — Quick Wins) | Pending |
+| QUICK-05 | 97 (Wave 0 — Quick Wins) | Pending |
+| TOKEN-01 | 98 (Wave 1 — Token Foundation) | Pending |
+| TOKEN-02 | 98 (Wave 1 — Token Foundation) | Pending |
+| TOKEN-03 | 98 (Wave 1 — Token Foundation) | Pending |
+| TOKEN-04 | 98 (Wave 1 — Token Foundation) | Pending |
+| TOKEN-05 | 98 (Wave 1 — Token Foundation) | Pending |
+| TOKEN-06 | 98 (Wave 1 — Token Foundation) | Pending |
+| THEME-01 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-02 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-03 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-04 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-05 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-06 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-07 | 99 (Wave 2 — Theming Swap) | Pending |
+| THEME-08 | 99 (Wave 2 — Theming Swap) | Pending |
+| IA-01 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-02 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-03 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-04 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-05 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-06 | 100 (Wave 3 — IA & Responsive) | Pending |
+| IA-07 | 100 (Wave 3 — IA & Responsive) | Pending |
+| A11Y-01 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-02 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-03 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-04 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-05 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-06 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-07 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-08 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-09 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-10 | 101 (Wave 4 — Accessibility) | Pending |
+| DEV-01 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-02 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-03 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-04 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-05 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-06 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-07 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| DEV-08 | 102 (Wave 5 — Material Polish & Dev/Debug Parity) | Pending |
+| VERIFY-01 | 103 (Cross-Repo Verification) | Pending |
+| VERIFY-02 | 103 (Cross-Repo Verification) | Pending |
+| VERIFY-03 | 103 (Cross-Repo Verification) | Pending |
+| VERIFY-04 | 103 (Cross-Repo Verification) | Pending |
 
 **Coverage:**
 - v1 requirements: 48 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 48 ⚠️
+- Mapped to phases: 48 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-22*
-*Last updated: 2026-06-22 after initial definition*
+*Last updated: 2026-06-23 — traceability filled during v4.0 roadmap creation (Phases 97–103, 48/48 mapped)*

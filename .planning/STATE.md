@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: UI Redesign (Slate)
-status: planning
+status: roadmap_created
 last_updated: "2026-06-23T04:01:24.674Z"
 last_activity: 2026-06-23
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-20)
+See: .planning/PROJECT.md (updated 2026-06-22)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v3.1 milestone lifecycle (audit → complete → cleanup)
+**Current focus:** v4.0 UI Redesign (Slate) -- rebuild the game chrome on a single `--bsg-*` token system, get out of the board's way, close the critical a11y gaps, break no game.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 97 — Quick Wins (Wave 0) — Not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-23 — Milestone v4.0 started
+Status: Roadmap created
+Last activity: 2026-06-23 — v4.0 roadmap created (Phases 97–103, 48/48 requirements mapped)
 
 ## Milestones
 
@@ -56,31 +56,39 @@ Last activity: 2026-06-23 — Milestone v4.0 started
 - v2.8 Disabled Selections (Phases 75-79) -- shipped 2026-02-06
 - v2.9 Theatre View (Phases 80-84) -- shipped 2026-02-07
 - v3.0 Animation Timeline (Phases 85-90) -- shipped 2026-02-08
+- v3.1 Dynamic Auto-UI (Phases 91-96) -- shipped 2026-06-22
 
 **In Progress:**
 
-- v3.1 Dynamic Auto-UI (Phases 91-96) -- started 2026-06-20
+- v4.0 UI Redesign (Slate) (Phases 97-103) -- started 2026-06-22; roadmap created 2026-06-23
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
-- Phase 94.1 inserted after Phase 94: Auto-UI Interaction Completion — split out of Phase 94 (Go Fish/Checkers playability gates deferred; test infra first) (URGENT)
+- v4.0 roadmap maps the spec's six waves 1:1 to Phases 97–102, plus a final cross-repo verification gate (Phase 103).
+- Phases 98 + 99 must land **atomically** (token-default flip + renderer sweep) to avoid the invisible-text trap.
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-**v3.1 locked decisions (2026-06-20):**
+**v4.0 locked decisions (2026-06-22):**
 
-- Layout = archetype templates now, general solver deferred (must be earned by a concrete game no template covers)
-- Presentation metadata = per-UI overlay in the `ui` layer (sibling file), resolved after visibility filtering
-- No value-bearing `$`-props on engine elements (`$image`/`$stats`/`$label`/`$render`/`$owner` rejected)
-- `$images.face` leak filed as a security bug (SEC-01); independent of redesign, lands in Phase 91
-- "Custom renderer in a shared mandatory shell" is the honest framing (GameShell is a mandatory host)
-- Plumbing edits are real work: ActionPanel must be suppressible (INTERACT-02), `protocol.ts` needs multi-ref (INTERACT-03), animation events must be explicitly wired (RENDER-05)
-- [Phase ?]: pieceVisual and gridResult computeds guard on elementType so other element types never invoke the helpers
-- [Phase ?]: console.error fires from watchEffect with _lastGridError dedup ref — never from inside computed getter
+- Neutral "Slate" palette for game chrome, not warm "tavern" — chrome stays generic/game-agnostic; tavern theming is the host's job via the token override.
+- Single `--bsg-*` token namespace emitted by `theme.ts`; `color-no-hex` lint makes the wrong path fail CI.
+- `applyTheme()` is the sole, host-overridable theming knob.
+- Token default flip merges atomically with the renderer sweep (Phases 98+99).
+- Board keyboard/semantics live in one shared `useSelectable()` composable; drag becomes progressive enhancement.
+- Fluid container-query sizing replaces the zoom-slider fit strategy; zoom demoted to an a11y magnifier.
+- ShufflewickPub host skin out of scope for v4.0 (HOST-01..04 deferred); BoardSmith-side infra stays host-overridable.
+
+### Highest-Risk Items
+
+1. `theme.ts` default flip — atomic with renderer sweep (Phases 98+99).
+2. Board keyboard/semantics composable — architectural across all 8 renderers (Phase 101).
+3. Fluid board sizing — can regress published bundles; validate vs MERC + real games (Phase 103).
+4. Standing-header removal — changes the host↔iframe postMessage contract (Phase 100).
 
 ### Pending Todos
 
@@ -92,7 +100,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-22T18:17:31.991Z
-Stopped at: PAUSED: Phase 94 delivered refs[]/overlay/PRESENT-02 security/render/Hex-playable; Go Fish+Checkers playability gates split to inserted Phase 94.1 (interaction not converging without component test infra). main green at e46d450.
+Last session: 2026-06-23 — v4.0 roadmap created.
+Stopped at: ROADMAP.md written (Phases 97–103, 48/48 requirements mapped); REQUIREMENTS.md traceability filled; STATE.md updated.
 Resume file: None
-Next action: `/gsd:plan-phase 91`
+Next action: `/gsd:plan-phase 97`
