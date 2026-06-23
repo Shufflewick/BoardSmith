@@ -22,7 +22,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, ref, onMounted, onUnmounted } from 'vue';
+import { defineComponent, ref, onMounted, onUnmounted, nextTick } from 'vue';
 import type { PropType } from 'vue';
 
 // ---------------------------------------------------------------------------
@@ -265,5 +265,126 @@ describe('GameShell actionbar — IA-04 ResizeObserver dock-height', () => {
     wrapper.vm.disconnectObserver();
 
     expect(observerCallback).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 3: IA-01 — header gate in platform mode + heartbeat corner dot
+//
+// Behaviors under test:
+//   A. GameHeader is absent when platformMode=true.
+//   B. A corner .conn-dot element renders in platform mode.
+//   C. A valid heartbeat postMessage (source:shufflewick, type:heartbeat)
+//      sets connectionHealth='connected' and the dot gains the class.
+//   D. A malformed heartbeat payload does NOT change connectionHealth.
+//
+// Implementation approach: isolate the heartbeat handler logic and the header
+// gate into a HeartbeatHarness that mirrors GameShell.vue's exact conditions,
+// so tests do not need to mount the full GameShell (which requires client setup).
+// ---------------------------------------------------------------------------
+
+/**
+ * HeartbeatHarness — mirrors the IA-01 GameShell.vue additions:
+ *   - platformMode prop gates rendering of a fake "GameHeader" sentinel
+ *   - connectionHealth ref starts 'connecting'
+ *   - a handleHeartbeat() method validates + applies the heartbeat
+ *   - a .conn-dot renders in platform mode bound to connectionHealth class
+ *
+ * RED: harness starts empty — template renders nothing, handleHeartbeat is a no-op.
+ * GREEN (next commit): fill in template logic and heartbeat validation.
+ */
+const HeartbeatHarness = defineComponent({
+  name: 'HeartbeatHarness',
+  props: {
+    platformMode: { type: Boolean, default: false },
+  },
+  setup() {
+    const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting');
+
+    // RED: no-op — tests that assert connectionHealth='connected' will fail
+    function handleHeartbeat(_data: unknown): void {
+      // intentionally empty for RED phase
+    }
+
+    return { connectionHealth, handleHeartbeat };
+  },
+  // RED: empty template — tests that find .game-header-sentinel / .conn-dot will fail
+  template: `<div class="harness"></div>`,
+});
+
+describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
+  // --- A. GameHeader absent in platform mode --------------------------------
+  it('GameHeader sentinel is present when platformMode=false', () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: false } });
+    expect(wrapper.find('.game-header-sentinel').exists()).toBe(true);
+  });
+
+  it('GameHeader sentinel is absent when platformMode=true', () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    expect(wrapper.find('.game-header-sentinel').exists()).toBe(false);
+  });
+
+  // --- B. Corner dot renders in platform mode --------------------------------
+  it('conn-dot renders when platformMode=true', () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    expect(wrapper.find('.conn-dot').exists()).toBe(true);
+  });
+
+  it('conn-dot is absent when platformMode=false', () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: false } });
+    expect(wrapper.find('.conn-dot').exists()).toBe(false);
+  });
+
+  // --- C. Valid heartbeat → connectionHealth='connected' --------------------
+  it('conn-dot starts with class connecting', () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+    expect(wrapper.find('.conn-dot').classes()).toContain('connecting');
+  });
+
+  it('valid heartbeat sets connectionHealth to connected', async () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+
+    wrapper.vm.handleHeartbeat({ source: 'shufflewick', type: 'heartbeat' });
+    await nextTick();
+
+    expect(wrapper.vm.connectionHealth).toBe('connected');
+    expect(wrapper.find('.conn-dot').classes()).toContain('connected');
+  });
+
+  // --- D. Malformed heartbeat → ignored ------------------------------------
+  it('null payload does not change connectionHealth', async () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+
+    wrapper.vm.handleHeartbeat(null);
+    await nextTick();
+
+    expect(wrapper.vm.connectionHealth).toBe('connecting');
+  });
+
+  it('wrong source does not change connectionHealth', async () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+
+    wrapper.vm.handleHeartbeat({ source: 'evil-host', type: 'heartbeat' });
+    await nextTick();
+
+    expect(wrapper.vm.connectionHealth).toBe('connecting');
+  });
+
+  it('wrong type does not change connectionHealth', async () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+
+    wrapper.vm.handleHeartbeat({ source: 'shufflewick', type: 'game_state' });
+    await nextTick();
+
+    expect(wrapper.vm.connectionHealth).toBe('connecting');
+  });
+
+  it('non-object payload does not change connectionHealth', async () => {
+    const wrapper = mount(HeartbeatHarness, { props: { platformMode: true } });
+
+    wrapper.vm.handleHeartbeat('heartbeat');
+    await nextTick();
+
+    expect(wrapper.vm.connectionHealth).toBe('connecting');
   });
 });
