@@ -122,41 +122,36 @@ const displayLabel = computed(() => props.element.name || props.element.classNam
   align-items: center;
   gap: 8px;
   padding: 8px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: var(--bsg-r-sm);
+  transition: all var(--bsg-dur-base) var(--bsg-ease);
 }
 
+/* action-selectable: dashed accent outline + selectable fill */
 .die-container.action-selectable {
   cursor: pointer;
-  background: rgba(46, 204, 113, 0.1);
-  outline: 2px solid rgba(46, 204, 113, 0.6);
-  animation: pulse-die 2s ease-in-out infinite;
+  background: var(--bsg-selectable);
+  outline: 2px dashed var(--bsg-accent);
+  outline-offset: 2px;
 }
 
 .die-container.action-selectable:hover {
-  background: rgba(46, 204, 113, 0.2);
-  outline-color: rgba(46, 204, 113, 1);
+  background: var(--bsg-selectable);
+  outline-style: solid;
   transform: scale(1.05);
 }
 
-@keyframes pulse-die {
-  0%, 100% {
-    outline-color: rgba(46, 204, 113, 0.6);
-  }
-  50% {
-    outline-color: rgba(46, 204, 113, 1);
-  }
-}
-
-/* Board interaction highlights */
+/* Board interaction highlights — dashed = highlighted, solid = selected */
 .die-container.is-board-highlighted {
-  background: rgba(0, 217, 255, 0.15);
-  outline: 2px solid rgba(0, 217, 255, 0.6);
+  background: var(--bsg-selectable);
+  outline: 2px dashed var(--bsg-accent);
+  outline-offset: 2px;
 }
 
 .die-container.is-board-selected {
-  background: rgba(0, 255, 136, 0.15);
-  outline: 2px solid rgba(0, 255, 136, 0.6);
+  background: var(--bsg-selected);
+  outline: 2px solid var(--bsg-accent);
+  outline-offset: 2px;
+  box-shadow: var(--bsg-ring);
 }
 
 /* Disabled state */
@@ -171,7 +166,7 @@ const displayLabel = computed(() => props.element.name || props.element.classNam
 
 .die-label {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--bsg-ink-2);
   text-transform: uppercase;
 }
 </style>
