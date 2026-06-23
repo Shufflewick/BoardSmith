@@ -190,7 +190,7 @@ useAutoRendererAnimations(animationEvents, { fly });
 }
 
 .auto-renderer-empty-text {
-  color: #888888;
+  color: var(--bsg-ink-3);
   font-size: 14px;
   font-weight: 400;
 }

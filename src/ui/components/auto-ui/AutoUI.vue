@@ -59,16 +59,13 @@ defineProps<{
 .game-complete {
   text-align: center;
   padding: 40px;
-  background: rgba(0, 255, 136, 0.1);
+  background: color-mix(in srgb, var(--bsg-accent) 10%, transparent);
   border-radius: 16px;
 }
 
 .game-complete h2 {
   font-size: 2rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--bsg-accent);
   margin-bottom: 16px;
 }
 </style>
