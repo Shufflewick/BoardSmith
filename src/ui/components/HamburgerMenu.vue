@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 interface MenuItem {
   id: string;
@@ -34,13 +35,26 @@ const emit = defineEmits<{
 }>();
 
 const isOpen = ref(false);
+const drawerRef = ref<HTMLElement | null>(null);
 
-function toggleMenu() {
-  isOpen.value = !isOpen.value;
+const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(drawerRef, {
+  escapeToClose: true,
+  onClose: closeMenu,
+});
+
+function openMenu() {
+  isOpen.value = true;
+  nextTick(() => openTrap());
 }
 
 function closeMenu() {
+  closeTrap();
   isOpen.value = false;
+}
+
+function toggleMenu() {
+  if (isOpen.value) closeMenu();
+  else openMenu();
 }
 
 function handleItemClick(item: MenuItem) {
@@ -81,7 +95,16 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
 
     <!-- Menu Drawer -->
     <Transition name="slide">
-      <div v-if="isOpen" id="hamburger-menu-drawer" class="menu-drawer">
+      <div
+        v-if="isOpen"
+        id="hamburger-menu-drawer"
+        ref="drawerRef"
+        class="menu-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Game menu"
+        @keydown="handleKeydown"
+      >
         <div class="drawer-header">
           <div class="logo">
             <span class="logo-text">{{ gameTitle }}</span>
@@ -144,8 +167,11 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  align-items: center;
   width: 28px;
   height: 20px;
+  min-width: 44px;
+  min-height: 44px;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -154,7 +180,7 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
 
 .bar {
   display: block;
-  width: 100%;
+  width: 28px;
   height: 3px;
   background: var(--bsg-ink);
   border-radius: 2px;

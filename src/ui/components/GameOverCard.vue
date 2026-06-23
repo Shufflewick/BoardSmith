@@ -9,9 +9,11 @@
  * Scrim is positioned absolute inside .boardregion — it cannot cover browser
  * chrome or the .actionbar (which is a sibling of .stage, not a child).
  *
- * Phase 101 adds focus-trap + aria-modal. This phase: visual + actions only.
+ * Focus is trapped inside the card on mount (A11Y-07). Escape does NOT close:
+ * the game is over and there is no dismiss — the user must click Rematch or New Game.
  */
-import { computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 export interface Player {
   seat: number;
@@ -30,6 +32,15 @@ const emit = defineEmits<{
   rematch: [];
   'new-game': [];
 }>();
+
+const cardRef = ref<HTMLElement | null>(null);
+
+const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef, {
+  escapeToClose: false,
+});
+
+onMounted(() => openTrap());
+onUnmounted(() => closeTrap());
 
 // ---------------------------------------------------------------------------
 // Shape set (mirrors PlayersPanel.vue, IA-06): seat index → shape class.
@@ -71,11 +82,13 @@ const titleText = computed(() => {
 </script>
 
 <template>
-  <div class="game-over-scrim" aria-modal="false">
+  <div class="game-over-scrim" aria-modal="true">
     <div
+      ref="cardRef"
       class="game-over-card"
       role="dialog"
       aria-labelledby="game-over-title"
+      @keydown="handleKeydown"
     >
       <h2 id="game-over-title" class="game-over-title">{{ titleText }}</h2>
 
