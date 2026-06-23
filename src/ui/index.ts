@@ -275,9 +275,8 @@ export {
 // Theming
 export {
   applyTheme,
-  getTheme,
   themeCSS,
-  type ThemeConfig,
+  SEAT_PALETTE,
 } from './theme.js';
 
 // Shared types
