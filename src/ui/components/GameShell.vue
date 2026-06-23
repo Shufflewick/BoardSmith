@@ -991,6 +991,7 @@ async function handleSetReady(ready: boolean) {
     }
   } catch (err) {
     console.error('Failed to set ready:', err);
+    toast.error(err instanceof Error ? err.message : 'Failed to mark as ready.');
   }
 }
 
