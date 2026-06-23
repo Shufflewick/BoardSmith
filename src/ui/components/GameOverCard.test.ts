@@ -129,3 +129,21 @@ describe('GameOverCard — structure', () => {
     expect(card.attributes('aria-labelledby')).toBe('game-over-title');
   });
 });
+
+describe('GameOverCard — A11Y-07 modal semantics', () => {
+  it('has aria-modal="true" on the scrim', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS },
+    });
+
+    expect(wrapper.find('.game-over-scrim').attributes('aria-modal')).toBe('true');
+  });
+
+  it('scrim does not have aria-modal="false"', () => {
+    const wrapper = mount(GameOverCard, {
+      props: { winnerSeats: [], players: PLAYERS },
+    });
+
+    expect(wrapper.find('.game-over-scrim').attributes('aria-modal')).not.toBe('false');
+  });
+});
