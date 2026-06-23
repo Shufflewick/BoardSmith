@@ -9,6 +9,7 @@
 
 import { computed, inject, type Ref } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 
 // ---------------------------------------------------------------------------
@@ -96,15 +97,22 @@ const stackCards = computed(() =>
 
 const isEmpty = computed(() => childCount.value === 0);
 
+// aria-label: deck name + card count + current interaction state
+const ariaLabel = computed(() => {
+  const name = props.element.name || props.element.className;
+  const countPart = childCount.value > 0 ? `, ${childCount.value} cards` : '';
+  const label = `${name}${countPart}`;
+  if (isDisabled.value) return `${label}, unavailable`;
+  if (isSelected.value || isBoardSelected.value) return `${label}, selected`;
+  if (isActionSelectable.value) return `${label}, selectable`;
+  return label;
+});
+
 // ---------------------------------------------------------------------------
-// Click handler for action-selectable
+// Keyboard + click wiring — single composable is the ONLY activation point
 // ---------------------------------------------------------------------------
-function handleClick(event: MouseEvent) {
-  event.stopPropagation();
-  if (!boardInteraction || !isActionSelectable.value) return;
-  if (isDisabled.value) return;
-  boardInteraction.triggerElementSelect(elementIdentity());
-}
+const { attrs: selectableAttrs, onActivate, onKeydown } =
+  useSelectable(elementIdentity, boardInteraction, isActionSelectable, isDisabled);
 </script>
 
 <template>
@@ -122,7 +130,11 @@ function handleClick(event: MouseEvent) {
     ]"
     :data-zone="element.name"
     :data-zone-id="element.id"
-    @click="handleClick"
+    v-bind="selectableAttrs"
+    :aria-label="ariaLabel"
+    :aria-selected="(isSelected || isBoardSelected) || undefined"
+    @click="onActivate"
+    @keydown="onKeydown"
   >
     <!-- Header: name left (display font, 20px bold), count right (secondary ink) -->
     <div class="deck-header">

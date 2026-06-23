@@ -19,6 +19,7 @@
 
 import { computed, inject, ref, type Ref, type ComputedRef } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
@@ -85,6 +86,15 @@ const elementNotation = computed(
   () => (props.element.attributes?.notation as string | undefined) ?? props.element.name ?? null,
 );
 
+// Element identity function — passed to the keyboard/click composable
+function elementIdentity() {
+  return {
+    id: props.element.id,
+    name: props.element.name,
+    notation: elementNotation.value || undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Board state computeds — all with defensive !boardInteraction guard
 // ---------------------------------------------------------------------------
@@ -148,6 +158,28 @@ const isDisabled = computed(() => {
     notation: elementNotation.value || undefined,
   }) !== false;
 });
+
+// Keyboard/ARIA: tabindex 0 for both action-selectable and drop-target cards
+// so keyboard users can reach cards that are valid drag targets too.
+const isInteractiveForTabindex = computed(
+  () => isActionSelectable.value || isDropTarget.value,
+);
+
+// aria-label: name + current interaction state (spec: "<name>, <state>")
+const ariaLabel = computed(() => {
+  const name = elementNotation.value || props.element.name || props.element.className;
+  if (isDisabled.value) return `${name}, unavailable`;
+  if (isDropTarget.value) return `${name}, drop target`;
+  if (isSelected.value) return `${name}, selected`;
+  if (isActionSelectable.value) return `${name}, selectable`;
+  return name;
+});
+
+// ---------------------------------------------------------------------------
+// Keyboard + click wiring — single composable is the ONLY activation point
+// ---------------------------------------------------------------------------
+const { attrs: selectableAttrs, onActivate, onKeydown: onSelectKey } =
+  useSelectable(elementIdentity, boardInteraction, isInteractiveForTabindex, isDisabled);
 
 // ---------------------------------------------------------------------------
 // Sprite-sheet scaling constants (standard card face dimensions)
@@ -295,34 +327,7 @@ function handleDrop(event: DragEvent) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Click handler
-// ---------------------------------------------------------------------------
-function handleClick(event: MouseEvent) {
-  event.stopPropagation();
 
-  if (!boardInteraction) return;
-  if (isDisabled.value) return;
-
-  const elementRef = {
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  };
-
-  if (boardInteraction.isSelectableElement(elementRef)) {
-    boardInteraction.triggerElementSelect(elementRef);
-    return;
-  }
-
-  if (elementNotation.value) {
-    boardInteraction.selectElement({
-      id: props.element.id,
-      name: props.element.name,
-      notation: elementNotation.value,
-    });
-  }
-}
 </script>
 
 <template>
@@ -346,7 +351,11 @@ function handleClick(event: MouseEvent) {
     :data-element-id="element.id"
     :data-animatable="true"
     :draggable="isActionSelectable"
-    @click="handleClick"
+    v-bind="selectableAttrs"
+    :aria-label="ariaLabel"
+    :aria-selected="isSelected || undefined"
+    @click="onActivate"
+    @keydown="onSelectKey"
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
     @dragover="handleDragOver"

@@ -13,6 +13,7 @@
 import { computed, inject, type ComputedRef } from 'vue';
 import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
@@ -88,12 +89,19 @@ const isDragged = computed(() => {
   return boardInteraction.isDraggedElement(elementIdentity());
 });
 
-// ── Click handler — dispatch board action on selectable pieces (CF-1) ─────────
-function handleClick() {
-  if (!boardInteraction || !isActionSelectable.value) return;
-  if (isDisabled.value) return;
-  boardInteraction.triggerElementSelect(elementIdentity());
-}
+// aria-label: piece name/notation + current interaction state
+const ariaLabel = computed(() => {
+  const notation = props.element.attributes?.notation as string | undefined;
+  const name = notation || props.element.name || props.element.className;
+  if (isDisabled.value) return `${name}, unavailable`;
+  if (isBoardSelected.value) return `${name}, selected`;
+  if (isActionSelectable.value) return `${name}, selectable`;
+  return name;
+});
+
+// ── Keyboard + click wiring — single composable is the ONLY activation point ──
+const { attrs: selectableAttrs, onActivate, onKeydown } =
+  useSelectable(elementIdentity, boardInteraction, isActionSelectable, isDisabled);
 
 // ── Drag-and-drop handlers ────────────────────────────────────────────────────
 function handleDragStart(event: DragEvent) {
@@ -137,7 +145,11 @@ function handleDragEnd() {
     :data-element-id="element.id"
     :data-animatable="true"
     :draggable="isActionSelectable"
-    @click="handleClick"
+    v-bind="selectableAttrs"
+    :aria-label="ariaLabel"
+    :aria-selected="isBoardSelected || undefined"
+    @click="onActivate"
+    @keydown="onKeydown"
     @dragstart="handleDragStart"
     @dragend="handleDragEnd"
   >
