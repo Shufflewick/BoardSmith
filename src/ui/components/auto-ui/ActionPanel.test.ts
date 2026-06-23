@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * Tests for ActionPanel helpers and D-03 anchored-choice filtering.
  *
@@ -20,9 +21,20 @@
  *       panel buttons are the selection surface (Go Fish rank pick).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ref } from 'vue';
+import { mount } from '@vue/test-utils';
+import ActionPanel from './ActionPanel.vue';
 import { filterAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
+
+// ---------------------------------------------------------------------------
+// useToast mock — hoisted so the factory runs before module imports
+// ---------------------------------------------------------------------------
+const mockToast = vi.hoisted(() => ({ error: vi.fn() }));
+vi.mock('../../composables/useToast', () => ({
+  useToast: () => mockToast,
+}));
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -179,5 +191,112 @@ describe('filterAnchoredChoices (D-03)', () => {
       expect(result).toContain(emptyRefs);
       expect(result).toContain(idOnlyRef1);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ActionPanel QUICK-01 + QUICK-02 component tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal controller shape for component tests.
+ * Only includes the properties ActionPanel accesses during the tested paths.
+ */
+function makeTestController(overrides: Record<string, unknown> = {}) {
+  const noop = () => undefined;
+  return {
+    currentAction: ref<string | null>(null),
+    isExecuting: ref(false),
+    isLoadingChoices: ref(false),
+    actionSnapshot: ref(null),
+    animationsPending: ref(false),
+    showActionPanel: ref(true),
+    repeatingState: ref(null),
+    multiSelectDraft: ref(null),
+    currentArgs: ref<Record<string, unknown>>({}),
+    currentPick: ref(null),
+    currentChoices: ref([]),
+    getCurrentChoices: () => [] as unknown[],
+    getValidElements: () => [] as unknown[],
+    getCollectedPick: () => null,
+    isMultiSelectSelected: () => false,
+    start: async () => {},
+    fill: async () => ({ valid: true }),
+    skip: noop,
+    cancel: noop,
+    clear: noop,
+    execute: async () => ({ success: true }),
+    toggleMultiSelect: async () => {},
+    confirmMultiSelect: async () => {},
+    ...overrides,
+  };
+}
+
+describe('ActionPanel QUICK-01 — toast.error on rejected actions', () => {
+  beforeEach(() => {
+    mockToast.error.mockReset();
+  });
+
+  it('toast.error is called with fill() rejection error string', async () => {
+    const controller = makeTestController({
+      currentAction: ref('testAction'),
+      currentPick: ref({ name: 'color', type: 'choice', prompt: 'Pick a color' }),
+      currentChoices: ref([{ value: 'red', display: 'Red' }]),
+      fill: vi.fn().mockResolvedValue({ valid: false, error: 'Selection is invalid.' }),
+    });
+
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller } },
+      props: { availableActions: [], playerSeat: 1, isMyTurn: true },
+    });
+
+    // Click the choice button to trigger setSelectionValue → fill()
+    const choiceBtn = wrapper.find('.choice-btn');
+    expect(choiceBtn.exists()).toBe(true);
+    await choiceBtn.trigger('click');
+    await Promise.resolve(); // flush async fill()
+
+    expect(mockToast.error).toHaveBeenCalledWith('Selection is invalid.');
+  });
+
+  it('toast.error is called with execute() rejection error string', async () => {
+    const controller = makeTestController({
+      execute: vi.fn().mockResolvedValue({ success: false, error: 'Not your turn.' }),
+    });
+
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller } },
+      props: {
+        availableActions: ['testAction'],
+        playerSeat: 1,
+        isMyTurn: true,
+      },
+    });
+
+    // Click an action button (no selections → goes directly to executeAction)
+    const actionBtn = wrapper.find('.action-btn');
+    expect(actionBtn.exists()).toBe(true);
+    await actionBtn.trigger('click');
+    await Promise.resolve(); // flush async execute()
+
+    expect(mockToast.error).toHaveBeenCalledWith('Not your turn.');
+  });
+});
+
+describe('ActionPanel QUICK-02 — accessible names on icon-only controls', () => {
+  it('cancel button has aria-label="Cancel action"', () => {
+    // currentAction must be non-null for the action-config view (and cancel button) to render
+    const controller = makeTestController({
+      currentAction: ref('testAction'),
+    });
+
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller } },
+      props: { availableActions: [], playerSeat: 1, isMyTurn: true },
+    });
+
+    const cancelBtn = wrapper.find('.cancel-btn');
+    expect(cancelBtn.exists()).toBe(true);
+    expect(cancelBtn.attributes('aria-label')).toBe('Cancel action');
   });
 });
