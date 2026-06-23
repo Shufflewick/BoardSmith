@@ -100,6 +100,8 @@ const DARK = {
   bg:        extractHex(DARK_BLOCK, '--bsg-bg'),
   surface:   extractHex(DARK_BLOCK, '--bsg-surface'),
   ink:       extractHex(DARK_BLOCK, '--bsg-ink'),
+  ink2:      extractHex(DARK_BLOCK, '--bsg-ink-2'),
+  ink3:      extractHex(DARK_BLOCK, '--bsg-ink-3'),
   accent:    extractHex(DARK_BLOCK, '--bsg-accent'),
   accentInk: extractHex(DARK_BLOCK, '--bsg-accent-ink'),
   ok:        extractHex(DARK_BLOCK, '--bsg-ok'),
@@ -111,6 +113,8 @@ const LIGHT = {
   bg:        extractHex(LIGHT_BLOCK, '--bsg-bg'),
   surface:   extractHex(LIGHT_BLOCK, '--bsg-surface'),
   ink:       extractHex(LIGHT_BLOCK, '--bsg-ink'),
+  ink2:      extractHex(LIGHT_BLOCK, '--bsg-ink-2'),
+  ink3:      extractHex(LIGHT_BLOCK, '--bsg-ink-3'),
   accent:    extractHex(LIGHT_BLOCK, '--bsg-accent'),
   accentInk: extractHex(LIGHT_BLOCK, '--bsg-accent-ink'),
   ok:        extractHex(LIGHT_BLOCK, '--bsg-ok'),
@@ -184,6 +188,38 @@ describe('Both-theme WCAG contrast — key surfaces', () => {
           ).toBeGreaterThanOrEqual(3);
         });
       }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // A11Y-09 regressions: Toast warning + muted text
+  // These assertions were added in Phase 101 plan 01 after the light-mode
+  // --bsg-warn token was fixed from 3.37:1 (#b5832a) to ≥ 4.5:1 (#8c6318).
+  // -------------------------------------------------------------------------
+
+  for (const { name, tokens } of SCHEMES) {
+    it(`Toast warning bg (--bsg-warn / --bsg-accent-ink) ≥ 4.5:1 — ${name}`, () => {
+      const ratio = contrastRatio(tokens.warn, tokens.accentInk);
+      expect(
+        ratio,
+        `${name}: --bsg-warn ${tokens.warn} vs --bsg-accent-ink ${tokens.accentInk} = ${ratio.toFixed(2)}:1 (need ≥ 4.5:1 for small text)`,
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`Muted text (--bsg-ink-2 / --bsg-surface) ≥ 4.5:1 — ${name}`, () => {
+      const ratio = contrastRatio(tokens.ink2, tokens.surface);
+      expect(
+        ratio,
+        `${name}: --bsg-ink-2 ${tokens.ink2} vs --bsg-surface ${tokens.surface} = ${ratio.toFixed(2)}:1 (need ≥ 4.5:1)`,
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`Muted text (--bsg-ink-3 / --bsg-surface) ≥ 3:1 — ${name}`, () => {
+      const ratio = contrastRatio(tokens.ink3, tokens.surface);
+      expect(
+        ratio,
+        `${name}: --bsg-ink-3 ${tokens.ink3} vs --bsg-surface ${tokens.surface} = ${ratio.toFixed(2)}:1 (need ≥ 3:1 non-text floor)`,
+      ).toBeGreaterThanOrEqual(3);
     });
   }
 

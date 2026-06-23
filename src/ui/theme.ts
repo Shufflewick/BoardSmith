@@ -83,7 +83,7 @@ const LIGHT_COLOR_TOKENS = `
   --bsg-accent-ink: #ffffff;
   --bsg-danger: #c2492f;
   --bsg-ok: #1c8a5a;
-  --bsg-warn: #b5832a;
+  --bsg-warn: #8c6318;
   --bsg-away: #9aa1a8;
   --bsg-cell: rgba(22,27,32,.025);
   --bsg-cell-line: rgba(22,27,32,.10);
