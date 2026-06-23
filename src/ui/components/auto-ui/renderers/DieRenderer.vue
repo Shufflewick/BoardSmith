@@ -10,6 +10,7 @@
 import { computed } from 'vue';
 import { Die3D } from '../../dice/index.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useSelectable } from '../../../composables/useSelectable.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -63,12 +64,13 @@ const isDisabled = computed(() => {
   return boardInteraction.isDisabledElement(elementIdentity()) !== false;
 });
 
-// Click handler — dispatch board action when die is selectable
-function handleClick() {
-  if (!boardInteraction || !isActionSelectable.value) return;
-  if (isDisabled.value) return;
-  boardInteraction.triggerElementSelect(elementIdentity());
-}
+// useSelectable — keyboard + click wiring (A11Y-01)
+const { onClick, onKeydown, attrs: selectableAttrs } = useSelectable(
+  elementIdentity,
+  boardInteraction ?? null,
+  isActionSelectable,
+  isDisabled,
+);
 
 // Map element attributes to Die3D props
 const dieProps = computed(() => {
@@ -85,10 +87,26 @@ const dieProps = computed(() => {
 });
 
 const displayLabel = computed(() => props.element.name || props.element.className);
+
+// ARIA label: die name + current face value + state
+const ariaLabel = computed(() => {
+  const name = displayLabel.value;
+  const value = (props.element.attributes?.value as number | undefined) ?? 1;
+  const sides = (props.element.attributes?.sides as number | undefined) ?? 6;
+  const base = `${name}, showing ${value} on a d${sides}`;
+  if (isDisabled.value) return `${base}, unavailable`;
+  if (isBoardSelected.value) return `${base}, selected`;
+  if (isActionSelectable.value) return `${base}, selectable`;
+  return base;
+});
 </script>
 
 <template>
   <div
+    v-bind="selectableAttrs"
+    :aria-label="ariaLabel"
+    :aria-selected="isBoardSelected || undefined"
+    :aria-disabled="isDisabled || undefined"
     class="die-container"
     :class="{
       'action-selectable': isActionSelectable,
@@ -99,7 +117,8 @@ const displayLabel = computed(() => props.element.name || props.element.classNam
     :data-element-id="element.id"
     :data-animatable="true"
     :data-die-preview="JSON.stringify(dieProps)"
-    @click="handleClick"
+    @click="onClick"
+    @keydown="onKeydown"
   >
     <Die3D
       :sides="dieProps.sides"
