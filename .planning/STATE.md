@@ -4,7 +4,7 @@ milestone: v4.0
 milestone_name: UI Redesign (Slate)
 status: executing
 stopped_at: ROADMAP.md written (Phases 97–103, 48/48 requirements mapped); REQUIREMENTS.md traceability filled; STATE.md updated.
-last_updated: "2026-06-23T10:41:07.063Z"
+last_updated: "2026-06-23T10:41:18.339Z"
 last_activity: 2026-06-23
 progress:
   total_phases: 7
@@ -83,6 +83,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Board keyboard/semantics live in one shared `useSelectable()` composable; drag becomes progressive enhancement.
 - Fluid container-query sizing replaces the zoom-slider fit strategy; zoom demoted to an a11y magnifier.
 - ShufflewickPub host skin out of scope for v4.0 (HOST-01..04 deferred); BoardSmith-side infra stays host-overridable.
+- [Phase ?]: Divergence test uses source-grep over AST — sufficient for detecting hand-rolled handler names, less fragile than Vue SFC parsing
 
 ### Highest-Risk Items
 
