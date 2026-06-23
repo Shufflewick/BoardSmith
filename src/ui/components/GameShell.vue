@@ -1595,12 +1595,15 @@ if ((import.meta as any).hot) {
 
         <!-- Board region: hero; ~zero chrome padding; container-query-sized -->
         <main class="boardregion" id="main" role="main">
-          <!-- Connection health dot: platform mode only. Driven by postMessage heartbeat
-               (IA-01). Dev/standalone uses the GameHeader connection badge instead. -->
+          <!-- Connection health dot: platform mode only, and only surfaced when there's
+               something to say (stale/connecting). A healthy connection shows nothing —
+               a persistent green dot over the board just reads as a mystery speck (IA-01).
+               Dev/standalone uses the GameHeader connection badge instead. -->
           <span
-            v-if="platformMode"
+            v-if="platformMode && connectionHealth !== 'connected'"
             class="conn-dot"
             :class="connectionHealth"
+            :title="connectionHealth === 'stale' ? 'Connection lost — reconnecting…' : 'Connecting…'"
             aria-hidden="true"
           ></span>
           <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07).
@@ -1689,9 +1692,14 @@ if ((import.meta as any).hot) {
       <div class="actionbar" ref="actionbarRef" role="region" aria-label="Actions">
         <!-- Dock: only render when player is actionable (IA-04) -->
         <template v-if="isMyTurn || awaitingPlayerNames.length">
-          <!-- Turn strip: always visible while dock is shown — survives even when
-               every current pick is board-anchored (IA-02). Never a silent board. -->
-          <span class="turn">
+          <!-- Turn strip: the fallback prompt surface. Shown ONLY when the ActionPanel
+               is NOT rendering (every pick board-anchored, or panel suppressed) — that
+               way the prompt survives a board-only turn (IA-03, never a silent board)
+               without duplicating the prompt the ActionPanel already shows (IA-02). -->
+          <span
+            v-if="props.suppressActionPanel || actionController.allCurrentChoicesAnchored.value"
+            class="turn"
+          >
             <span
               v-if="currentPlayerColor"
               class="turn__swatch"
@@ -1834,12 +1842,15 @@ if ((import.meta as any).hot) {
   color: var(--bsg-ink);
 }
 
-/* Platform mode: embedded in host iframe, transparent backdrop so host shows through */
+/* Platform mode: embedded in host iframe. Paint the Slate ground (var(--bsg-bg))
+   rather than `transparent` — an iframe's own document defaults to opaque white, so a
+   transparent shell reveals white, not the host. The host re-themes by overriding
+   --bsg-bg via applyTheme, so this stays host-controllable. */
 .game-shell--platform {
   min-height: 100%;
   height: 100vh; /* fallback: browsers without dvh support */
   height: 100dvh;
-  background: transparent;
+  background: var(--bsg-bg);
 }
 
 .game-shell--platform .game-shell__game {

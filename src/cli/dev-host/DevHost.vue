@@ -14,6 +14,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
+import { applyTheme } from '../../ui/theme.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -198,7 +199,17 @@ function postToGame(message: Record<string, unknown>): void {
   win.postMessage(payload, '*');
 }
 
+// Dev heartbeat: production hosts send a periodic {source,type:'heartbeat'} so the
+// game's connection-health dot reads 'connected' (and hides). The dev host must do
+// the same, otherwise the dot is stuck on 'connecting' forever and reads as a mystery
+// speck over the board. Interval (3s) stays well under the game's 10s stale timeout.
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
 function onIframeLoad(): void {
+  postToGame({ type: 'heartbeat' });
+  if (heartbeatTimer === null) {
+    heartbeatTimer = setInterval(() => postToGame({ type: 'heartbeat' }), 3000);
+  }
   if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat });
   if (lastGameState) postToGame(lastGameState);
   // Re-request the UI list and re-assert the selection so a (re)mounted game
@@ -347,6 +358,11 @@ watch(mySeat, (newSeat, oldSeat) => {
 });
 
 onMounted(() => {
+  // Install the Slate --bsg-* token stylesheet on THIS (dev-host) document.
+  // The game runs in a platform-mode iframe that calls applyTheme itself, but the
+  // outer dev page needs the tokens too — otherwise every var(--bsg-*) resolves to
+  // nothing and the dev chrome falls back to an unstyled white page.
+  applyTheme();
   const stored = localStorage.getItem(CHROME_KEY);
   if (stored !== null) {
     chromeOpen.value = stored !== 'false';
@@ -365,6 +381,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleChromeKeydown);
   document.removeEventListener('click', handleChromeClick);
   closedByUs = true;
+  if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (restartConfirmTimer !== null) clearTimeout(restartConfirmTimer);
   ws?.close();

@@ -55,7 +55,13 @@ function playerShape(index: number): string {
 }
 
 function playerInitial(name: string): string {
-  return (name.trim()[0] ?? '?').toUpperCase();
+  const trimmed = name.trim();
+  // Default seat names ("Player 1", "Player 2") all start with "P" — useless as an
+  // identity glyph. Use the trailing number so the tokens read 1 / 2 / 3 and stay
+  // distinguishable. Real names ("Alice") fall through to their first letter.
+  const generic = trimmed.match(/^player\s*(\d+)$/i);
+  if (generic) return generic[1];
+  return (trimmed[0] ?? '?').toUpperCase();
 }
 
 function isPlayerActive(seat: number): boolean {
