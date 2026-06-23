@@ -1529,6 +1529,7 @@ function clearBoardSelection() {
   border: 1px solid var(--bsg-line);
   border-radius: 0.25rem;
   background: var(--bsg-surface);
+  color: var(--bsg-ink-2); /* explicit — do not rely on Rule A cascade */
   cursor: pointer;
   font-size: 0.875rem;
 }
