@@ -69,10 +69,25 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   2. Selection highlight uses `outline` (never `border`) in every renderer, so highlighting never reflows layout (THEME-02).
   3. The primary action button is the Slate teal plate (token fill, dark-ink label, neutral elevation, no glow), and titles render as solid display-font type with a faint shadow — the gradient clip-text blocks are deleted (THEME-03, THEME-04).
   4. Both card renderers consume one shared `--bsg-card-back` class (no corporate-blue gradient), and the active-player cue is a calm accent dot with an opacity-only breathe and a token border (no scaling neon halo / `pulse-glow`) (THEME-05, THEME-06).
-  5. Panels and zone surfaces use `var(--bsg-surface)` + `var(--bsg-edge)` hairlines (no translucent-black glass / white hairlines), backdrops go transparent in platform mode so the host shows through, and `DevHost` is recolored from indigo/neon literals to Slate tokens (THEME-07, THEME-08).
-**Plans**: TBD
+  5. Panels and zone surfaces use `var(--bsg-surface)` + `var(--bsg-line)`/`--bsg-line-2` hairlines (no translucent-black glass / white hairlines), backdrops go transparent in platform mode so the host shows through, and `DevHost` is recolored from indigo/neon literals to Slate tokens (THEME-07, THEME-08).
+**Plans**: 15 plans (4 waves)
+  - [ ] 99-01-PLAN.md — [W1] Add the two new tokens (`--bsg-card-back`, `--bsg-display`) to theme.ts + test-lock them
+  - [ ] 99-02-PLAN.md — [W2] Sweep CardRenderer + HandRenderer (shared card back, glow→neutral, HandRenderer border→outline fix)
+  - [ ] 99-03-PLAN.md — [W2] Sweep DeckRenderer + DieRenderer + PieceRenderer (interaction tokens, no glow)
+  - [ ] 99-04-PLAN.md — [W2] Sweep GridBoard + HexBoard (hex `<g>`) + Space renderers; confirm ElementRenderer clean
+  - [ ] 99-05-PLAN.md — [W2] GameShell + HamburgerMenu (platform-transparent backdrops, surfaces, Hamburger clip-text delete)
+  - [ ] 99-06-PLAN.md — [W2] GameHeader clip-text delete + solid title; PlayersPanel calm active-player cue (no pulse-glow)
+  - [ ] 99-07-PLAN.md — [W2] ActionPanel: Slate teal primary button + tokenize the action dock
+  - [ ] 99-08-PLAN.md — [W2] GameHistory + GameLobby surface sweep
+  - [ ] 99-09-PLAN.md — [W2] helpers/Button + FlyingCardsOverlay + ZoomPreviewOverlay
+  - [ ] 99-10-PLAN.md — [W2] Toast + DoneButton + AutoRenderer + AutoUI + UnsupportedTopologyPanel (small literals)
+  - [ ] 99-11-PLAN.md — [W2] WaitingRoom full color sweep (75 hex)
+  - [ ] 99-12-PLAN.md — [W2] DebugPanel color-only tokenization (155 hex; no reskin — Phase 102)
+  - [ ] 99-13-PLAN.md — [W2] DevHost Slate recolor + demote emerald "New game" to quiet outline
+  - [ ] 99-14-PLAN.md — [W3] Both-theme WCAG contrast test + atomic-pairing source guard (correctness rule #2)
+  - [ ] 99-15-PLAN.md — [W4] Completion gate: empty `ignoreFiles`, `lint:css` green, residual-neon grep, suite green (rule #3)
 **UI hint**: yes
-**Risk note**: Highest-risk item #1 (atomic token flip) is shared with Phase 98 — the `theme.ts` default flip (TOKEN-02) and this renderer sweep (THEME-01/07) must land in the **same merge** to avoid the invisible-text trap.
+**Risk note**: Highest-risk item #1 (atomic token flip) is shared with Phase 98 — the `theme.ts` default flip (TOKEN-02) and this renderer sweep (THEME-01/07) must land in the **same merge** to avoid the invisible-text trap. Three baked-in correctness rules: (1) every per-component sweep tokenizes background AND ink in the same edit; (2) a dedicated both-theme contrast test (99-14); (3) the phase is done only when `ignoreFiles` is empty + `lint:css` green + residual-neon grep clean (99-15).
 
 ---
 
@@ -142,7 +157,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 |-------|----------------|--------|-----------|
 | 97. Quick Wins (Wave 0) | 1/1 | Complete   | 2026-06-23 |
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
-| 99. Theming Swap (Wave 2) | 0/? | Not started | - |
+| 99. Theming Swap (Wave 2) | 0/15 | Planned | - |
 | 100. IA & Responsive (Wave 3) | 0/? | Not started | - |
 | 101. Accessibility — WCAG 2.2 AA (Wave 4) | 0/? | Not started | - |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |
