@@ -156,58 +156,57 @@ function handleClick(event: MouseEvent) {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
   border-radius: 12px;
-  transition: all 0.2s ease;
+  transition: all var(--bsg-dur-base) var(--bsg-ease);
 }
 
-/* Selection states */
+/* Selection states — outline never border; dashed = selectable, solid = selected */
 .deck-container.is-selectable {
   cursor: pointer;
+  outline: 2px dashed var(--bsg-accent);
+  outline-offset: 2px;
+  background: var(--bsg-selectable);
 }
 
 .deck-container.is-selectable:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.3);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .deck-container.is-selected {
-  outline: 3px solid #00d9ff;
+  outline: 2px solid var(--bsg-accent);
   outline-offset: 2px;
+  background: var(--bsg-selected);
+  transform: scale(1.02);
 }
 
-/* action-selectable: green pulse */
+/* action-selectable: dashed accent outline + selectable fill */
 .deck-container.action-selectable {
   cursor: pointer;
-  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline: 2px dashed var(--bsg-accent);
   outline-offset: 2px;
-  animation: pulse-deck 2s ease-in-out infinite;
+  background: var(--bsg-selectable);
 }
 
 .deck-container.action-selectable:hover {
-  outline-color: rgba(46, 204, 113, 1);
-  outline-width: 3px;
+  outline-style: solid;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
-}
-
-@keyframes pulse-deck {
-  0%, 100% {
-    outline-color: rgba(46, 204, 113, 0.6);
-  }
-  50% {
-    outline-color: rgba(46, 204, 113, 1);
-  }
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 /* Board interaction highlights */
 .deck-container.is-board-highlighted {
-  background: rgba(0, 217, 255, 0.2);
+  outline: 2px dashed var(--bsg-accent);
+  outline-offset: 2px;
+  background: var(--bsg-selectable);
 }
 
 .deck-container.is-board-selected {
-  background: rgba(0, 255, 136, 0.2);
+  outline: 2px solid var(--bsg-accent);
+  outline-offset: 2px;
+  background: var(--bsg-selected);
 }
 
 /* Disabled state */
@@ -228,17 +227,19 @@ function handleClick(event: MouseEvent) {
   align-items: center;
 }
 
-/* Name: 20px bold white */
+/* Name: 20px bold display type */
 .deck-label {
   font-size: 20px;
   font-weight: bold;
-  color: #fff;
+  color: var(--bsg-ink);
+  font-family: var(--bsg-display);
+  text-shadow: 0 1px 2px rgba(0,0,0,.25);
 }
 
-/* Count: 13px #aaa */
+/* Count: secondary ink */
 .deck-count {
   font-size: 13px;
-  color: #aaa;
+  color: var(--bsg-ink-2);
 }
 
 /* Stack visual: 60x84px relative container for absolute-positioned cards */
@@ -266,6 +267,6 @@ function handleClick(event: MouseEvent) {
 
 .empty-text {
   font-style: italic;
-  color: #666;
+  color: var(--bsg-ink-3);
 }
 </style>
