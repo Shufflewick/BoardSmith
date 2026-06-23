@@ -41,28 +41,28 @@ const { toasts, remove } = useToast();
   font-size: 0.9rem;
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--bsg-shadow-sm);
   white-space: nowrap;
 }
 
 .toast.success {
-  background: rgba(46, 204, 113, 0.95);
-  color: #fff;
+  background: var(--bsg-ok);
+  color: var(--bsg-accent-ink);
 }
 
 .toast.error {
-  background: rgba(231, 76, 60, 0.95);
-  color: #fff;
+  background: var(--bsg-danger);
+  color: var(--bsg-accent-ink);
 }
 
 .toast.info {
-  background: rgba(0, 217, 255, 0.95);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
 }
 
 .toast.warning {
-  background: rgba(243, 156, 18, 0.95);
-  color: #1a1a2e;
+  background: var(--bsg-warn);
+  color: var(--bsg-accent-ink);
 }
 
 /* Transition animations */

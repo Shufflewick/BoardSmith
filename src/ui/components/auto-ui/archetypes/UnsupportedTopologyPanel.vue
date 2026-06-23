@@ -33,12 +33,12 @@
 .unsupported-topology-panel {
   border-radius: 8px;
   padding: 24px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid color-mix(in srgb, var(--bsg-warn) 40%, transparent);
+  background: color-mix(in srgb, var(--bsg-warn) 10%, transparent);
 }
 
 .unsupported-topology-panel__heading {
-  color: #f59e0b;
+  color: var(--bsg-warn);
   font-size: 20px;
   font-weight: 700;
   margin: 0 0 12px 0;
@@ -46,7 +46,7 @@
 }
 
 .unsupported-topology-panel__body {
-  color: #fff;
+  color: var(--bsg-ink);
   font-size: 16px;
   line-height: 1.5;
   margin: 0;
