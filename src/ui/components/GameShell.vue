@@ -1736,6 +1736,7 @@ if ((import.meta as any).hot) {
         :player-seat="playerSeat"
         :player-count="playerCount"
         :game-id="gameId"
+        :history-has-messages="historyPanel?.hasMessages.value ?? false"
         v-model:expanded="debugExpanded"
         @switch-player="handleSwitchPlayer"
         @restart-game="handleRestartGame"

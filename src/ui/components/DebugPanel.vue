@@ -190,6 +190,12 @@ export interface DebugPanelProps {
   gameId: string | null;
   /** Whether panel is expanded */
   expanded?: boolean;
+  /**
+   * Whether the game history log has any messages. Drives the :disabled state
+   * of the Copy button in the Controls tab — sourced from GameHistory.hasMessages
+   * via GameShell (IN-03, DEV-06 single source of truth).
+   */
+  historyHasMessages?: boolean;
 }
 </script>
 
@@ -227,6 +233,7 @@ interface ActionTrace {
 
 const props = withDefaults(defineProps<DebugPanelProps>(), {
   expanded: false,
+  historyHasMessages: false,
 });
 
 const emit = defineEmits<{
@@ -2014,7 +2021,7 @@ const displayedState = computed(() => {
           <div class="action-group">
             <h4>Game history</h4>
             <div class="player-buttons">
-              <button class="debug-btn small" @click="emit('copy-history')">
+              <button class="debug-btn small" :disabled="!props.historyHasMessages" @click="emit('copy-history')">
                 Copy
               </button>
               <button class="debug-btn small danger" @click="emit('clear-history')">
