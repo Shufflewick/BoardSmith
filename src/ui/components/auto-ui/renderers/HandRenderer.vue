@@ -274,7 +274,6 @@ void isBoardSelected;
     :aria-label="`Your hand, ${childCountDisplay} cards`"
     :tabindex="selectableAttrs.tabindex"
     :aria-disabled="selectableAttrs['aria-disabled']"
-    :aria-selected="isSelected || undefined"
     :class="[
       'hand-container',
       {
