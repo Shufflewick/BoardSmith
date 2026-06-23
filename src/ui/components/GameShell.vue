@@ -1518,12 +1518,15 @@ if ((import.meta as any).hot) {
               <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-          <!-- side-head: Shufflewick host button + ⋯ controls menu (IA-01) -->
+          <!-- side-head: Shufflewick branding + ⋯ controls menu (IA-01) -->
           <div class="side-head">
-            <button class="sw-btn" aria-label="Shufflewick — host menu and leave game" type="button">
-              <span class="sw-btn__mark" aria-hidden="true"></span>
+            <!-- sw-btn is purely decorative branding — no interactive affordance is available
+                 in platform mode (GameHeader/HamburgerMenu is hidden). aria-hidden prevents
+                 AT users from encountering a non-functional interactive element (IN-02). -->
+            <div class="sw-btn" aria-hidden="true">
+              <span class="sw-btn__mark"></span>
               <span class="sw-btn__wordmark">Shufflewick</span>
-            </button>
+            </div>
             <ControlsMenu
               v-model:auto-end-turn="autoEndTurn"
               v-model:zoom="zoomLevel"
