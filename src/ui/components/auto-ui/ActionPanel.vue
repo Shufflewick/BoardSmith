@@ -806,7 +806,9 @@ function clearBoardSelection() {
     <div v-else class="action-config">
       <div class="config-header">
         <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(currentAction) }}</span>
-        <button class="cancel-btn" @click="cancelAction">✕</button>
+        <button class="cancel-btn" @click="cancelAction" aria-label="Cancel action">
+          <span aria-hidden="true">✕</span>
+        </button>
       </div>
 
       <!-- Selected values (show previous selections as chips) -->
@@ -815,7 +817,13 @@ function clearBoardSelection() {
         <template v-for="(value, key) in displayableArgs" :key="key">
           <div class="selected-value from-board">
             <span class="value-display">{{ getSelectionDisplay(key as string, value) }}</span>
-            <button class="clear-selection-btn" @click="clearSelection(key as string)">✕</button>
+            <button
+              class="clear-selection-btn"
+              @click="clearSelection(key as string)"
+              :aria-label="`Clear ${key}`"
+            >
+              <span aria-hidden="true">✕</span>
+            </button>
           </div>
         </template>
       </div>

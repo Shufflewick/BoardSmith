@@ -67,7 +67,14 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
 <template>
   <div class="hamburger-menu">
     <!-- Hamburger Button -->
-    <button class="hamburger-btn" @click="toggleMenu" :class="{ open: isOpen }">
+    <button
+      class="hamburger-btn"
+      @click="toggleMenu"
+      :class="{ open: isOpen }"
+      aria-label="Open menu"
+      :aria-expanded="isOpen"
+      aria-controls="hamburger-menu-drawer"
+    >
       <span class="bar"></span>
       <span class="bar"></span>
       <span class="bar"></span>
@@ -78,13 +85,15 @@ const menuItems = props.items.length > 0 ? props.items : defaultItems;
 
     <!-- Menu Drawer -->
     <Transition name="slide">
-      <div v-if="isOpen" class="menu-drawer">
+      <div v-if="isOpen" id="hamburger-menu-drawer" class="menu-drawer">
         <div class="drawer-header">
           <div class="logo">
             <span class="logo-icon">BS</span>
             <span class="logo-text">{{ gameTitle }}</span>
           </div>
-          <button class="close-btn" @click="closeMenu">X</button>
+          <button class="close-btn" @click="closeMenu" aria-label="Close menu">
+            <span aria-hidden="true">X</span>
+          </button>
         </div>
 
         <!-- Game Info (visible in menu for mobile) -->
