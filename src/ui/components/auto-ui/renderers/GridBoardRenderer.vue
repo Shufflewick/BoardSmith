@@ -446,6 +446,13 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   50% { background: var(--bsg-droptarget-hover); }
 }
 
+/* A11Y-08: silence pulse under reduced-motion (belt-and-suspenders for the global block) */
+@media (prefers-reduced-motion: reduce) {
+  .grid-cell.is-drop-target {
+    animation: none;
+  }
+}
+
 /* ── Coordinate notation corner label ── */
 .cell-notation {
   position: absolute;
@@ -462,9 +469,10 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   opacity: 1;
 }
 
-/* ── Disabled state (UI-SPEC: opacity 0.35, cursor not-allowed, no hover effect) ── */
+/* ── Disabled state — hatch pattern (A11Y-09: non-color cue, not opacity alone) ── */
 .grid-cell.is-disabled {
-  opacity: 0.35;
+  background-image: repeating-linear-gradient(45deg, var(--bsg-cell), var(--bsg-cell) 5px, transparent 5px, transparent 10px);
+  opacity: 0.6;
   cursor: not-allowed;
 }
 

@@ -471,6 +471,13 @@ function handleDrop(event: DragEvent) {
   }
 }
 
+/* A11Y-08: silence pulse under reduced-motion (belt-and-suspenders for the global block) */
+@media (prefers-reduced-motion: reduce) {
+  .card-container.action-selectable {
+    animation: none;
+  }
+}
+
 /* Board interaction highlights */
 .card-container.is-board-highlighted {
   background: var(--bsg-selectable);

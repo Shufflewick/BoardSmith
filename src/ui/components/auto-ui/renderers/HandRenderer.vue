@@ -430,6 +430,13 @@ void isBoardSelected;
   }
 }
 
+/* A11Y-08: silence pulse under reduced-motion (belt-and-suspenders for the global block) */
+@media (prefers-reduced-motion: reduce) {
+  .hand-container.action-selectable {
+    animation: none;
+  }
+}
+
 /* Board interaction highlights */
 .hand-container.is-board-highlighted {
   background: var(--bsg-selectable);

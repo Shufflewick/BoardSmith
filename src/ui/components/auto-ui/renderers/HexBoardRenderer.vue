@@ -470,14 +470,20 @@ function hexCellAriaLabel(cell: GameElement): string {
   stroke-dasharray: 3 2;
 }
 
+/* Disabled state — stroke-dasharray pattern for SVG (A11Y-09: non-color cue).
+   SVG polygons cannot use CSS background-image; use a dashed stroke to signal disabled
+   without relying on opacity alone. aria-disabled is already set on the parent <g>. */
 .hex-polygon.is-disabled {
-  opacity: 0.35;
+  opacity: 0.4;
+  stroke: var(--bsg-ink-3);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
   cursor: not-allowed;
 }
 
 .hex-polygon.is-disabled:hover {
   fill: var(--bsg-cell);
-  stroke: var(--bsg-cell-line);
+  stroke: var(--bsg-ink-3);
 }
 
 /* ── Hex piece groups ── */
