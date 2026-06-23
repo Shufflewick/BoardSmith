@@ -784,24 +784,24 @@ Step 2.6: This phase is code/markup changes only. No external CLI tools, databas
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **GameOverCard Escape behavior**
+1. **GameOverCard Escape behavior** — **RESOLVED:** GameOverCard calls `useFocusTrap()` with `escapeToClose: false`; Tab stays trapped, Escape does nothing, user dismisses via Rematch/New Game. Implemented in Plan 101-08 Task 3.
    - What we know: `useFocusTrap()` binds Escape to close by default
    - What's unclear: Should Escape close the game-over screen? There is no "cancel" — game is over. Closing it would hide the winner display with no way to reopen.
    - Recommendation: For GameOverCard, `useFocusTrap()` should be called with `escapeToClose: false`. Focus trap still applies (Tab stays inside dialog); Escape does nothing. The user must click Rematch/New Game to dismiss.
 
-2. **`useSelectable()` API surface — two modes vs one**
+2. **`useSelectable()` API surface — two modes vs one** — **RESOLVED:** Single `useSelectable.ts` file exports both `useSelectable` (element mode) and `useSelectableGrid` (grid mode), sharing the `triggerElementSelect` wrapping. Implemented in Plan 101-01 Task 1.
    - What we know: Element renderers need single-element keyboard activation; grid renderers need 2D roving tabindex
    - What's unclear: Should this be one composable with a `mode` parameter, or two (`useSelectable` + `useSelectableGrid`)?
    - Recommendation: Single `useSelectable.ts` file that exports both `useSelectable` (element mode) and `useSelectableGrid` (grid mode). They share core `triggerElementSelect` wrapping logic.
 
-3. **HexBoardRenderer `<g>` focus in Safari**
+3. **HexBoardRenderer `<g>` focus in Safari** — **RESOLVED:** Ship `tabindex="0"` on `<g role="gridcell">` first; a jsdom test asserts roving-tabindex advances on ArrowRight (partial — Safari/VoiceOver SVG focus needs manual verification). Escalate to overlay buttons only if manual VO fails. Implemented in Plan 101-04 Task 2 (+ HexBoardRenderer.a11y.test.ts).
    - What we know: `tabindex` on SVG `<g>` is spec-valid; support has improved
    - What's unclear: Whether Safari 17+ handles this reliably enough for AA compliance
    - Recommendation: Implement with `tabindex="0"` on `<g>` first; flag for manual VoiceOver/Safari test during verification. If it fails, escalate to a transparent HTML overlay button approach.
 
-4. **`action-panel-helpers.test.ts` existence**
+4. **`action-panel-helpers.test.ts` existence** — **RESOLVED:** Plan 101-06 Task 1 creates/extends `action-panel-helpers.test.ts` for the new `splitAnchoredChoices` return shape.
    - What we know: The file is not in the test file listing found above
    - What's unclear: Whether it exists (the test file scan may have been incomplete)
    - Recommendation: The planner should include a task to check for `action-panel-helpers.test.ts` and create it in Wave 0 if absent.
