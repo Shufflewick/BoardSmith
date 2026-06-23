@@ -32,10 +32,10 @@ import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
  * @param isActionSelectable  Computed: true when this element is a valid pick target
  * @param isDisabled          Computed: true when this element is disabled for selection
  *
- * @returns { handleClick, handleKeydown, attrs }
- *   - handleClick    — bind to @click on the element root
- *   - handleKeydown  — bind to @keydown on the element root (handles Enter / Space only)
- *   - attrs          — computed object; spread onto the element root with v-bind
+ * @returns { onActivate, onKeydown, attrs }
+ *   - onActivate  — bind to @click on the element root (handles mouse activation)
+ *   - onKeydown   — bind to @keydown on the element root (handles Enter / Space only)
+ *   - attrs       — computed object; spread onto the element root with v-bind
  */
 export function useSelectable(
   identity: () => ElementRef,
@@ -56,8 +56,8 @@ export function useSelectable(
   }));
 
   return {
-    handleClick: (_e?: MouseEvent) => handleActivate(),
-    handleKeydown: (e: KeyboardEvent) => {
+    onActivate: (_e?: MouseEvent) => handleActivate(),
+    onKeydown: (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         handleActivate();
