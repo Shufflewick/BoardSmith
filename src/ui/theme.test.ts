@@ -124,6 +124,24 @@ describe('applyTheme — override knob', () => {
   });
 });
 
+describe('themeCSS — new tokens (Phase 99 Plan 01)', () => {
+  it('contains --bsg-card-back declaration', () => {
+    expect(themeCSS).toContain('--bsg-card-back:');
+  });
+
+  it('contains --bsg-display declaration', () => {
+    expect(themeCSS).toContain('--bsg-display:');
+  });
+
+  it('--bsg-card-back value uses var(--bsg-*) chains, no hex literal', () => {
+    const match = themeCSS.match(/--bsg-card-back:\s*([^;]+);/);
+    expect(match).not.toBeNull();
+    const value = match![1];
+    expect(value).toContain('var(--bsg-');
+    expect(value).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+  });
+});
+
 describe('applyTheme — base injection idempotence', () => {
   beforeEach(cleanup);
 
