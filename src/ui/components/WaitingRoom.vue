@@ -828,13 +828,14 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .waiting-room h2 {
   margin-bottom: 20px;
-  color: #00d9ff;
+  font-family: var(--bsg-display);
+  color: var(--bsg-ink);
   font-size: 1.8rem;
 }
 
 .waiting-room h3 {
   margin: 0;
-  color: #aaa;
+  color: var(--bsg-ink-2);
   font-size: 0.9rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -842,7 +843,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 /* Share Code */
 .share-code {
-  background: rgba(0, 217, 255, 0.1);
+  background: var(--bsg-selectable);
   padding: 16px 20px;
   border-radius: 12px;
   margin-bottom: 16px;
@@ -856,14 +857,14 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .code-label {
-  color: #888;
+  color: var(--bsg-ink-2);
   font-size: 0.9rem;
 }
 
 .code {
   font-family: monospace;
   font-size: 1.5rem;
-  color: #00d9ff;
+  color: var(--bsg-accent);
   letter-spacing: 2px;
 }
 
@@ -878,7 +879,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 /* Game Settings (editable for host) */
 .game-settings {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface-2);
   padding: 20px;
   border-radius: 12px;
   margin-bottom: 20px;
@@ -904,35 +905,35 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .game-option-label {
   font-size: 0.9rem;
-  color: #ccc;
+  color: var(--bsg-ink-2);
   font-weight: 500;
 }
 
 .game-option-description {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--bsg-ink-3);
   margin: 0 0 4px 0;
 }
 
 .game-option-input,
 .game-option-select {
   padding: 10px 14px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid var(--bsg-line-2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: var(--bsg-field);
+  color: var(--bsg-ink);
   font-size: 1rem;
 }
 
 .game-option-input:focus,
 .game-option-select:focus {
   outline: none;
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .game-option-select option {
-  background: #1a1a2e;
-  color: #fff;
+  background: var(--bsg-surface-2);
+  color: var(--bsg-ink);
 }
 
 /* Boolean toggle switch */
@@ -954,7 +955,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 .toggle-switch {
   width: 48px;
   height: 26px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bsg-line-2);
   border-radius: 13px;
   position: relative;
   transition: background 0.2s;
@@ -965,7 +966,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   position: absolute;
   width: 20px;
   height: 20px;
-  background: #fff;
+  background: var(--bsg-ink);
   border-radius: 50%;
   top: 3px;
   left: 3px;
@@ -973,7 +974,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .boolean-toggle input:checked + .toggle-switch {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
+  background: var(--bsg-accent);
 }
 
 .boolean-toggle input:checked + .toggle-switch::after {
@@ -982,11 +983,11 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .toggle-label {
   font-size: 0.9rem;
-  color: #888;
+  color: var(--bsg-ink-2);
 }
 
 .boolean-toggle input:checked ~ .toggle-label {
-  color: #2ecc71;
+  color: var(--bsg-ok);
 }
 
 /* Main content - side by side on larger screens */
@@ -1015,11 +1016,11 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .option-badge {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bsg-surface-2);
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 0.85rem;
-  color: #888;
+  color: var(--bsg-ink-2);
 }
 
 /* Slots */
@@ -1035,13 +1036,13 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .add-player-btn {
-  background: rgba(0, 217, 255, 0.2);
-  color: #00d9ff;
-  border: 1px solid #00d9ff;
+  background: var(--bsg-selectable);
+  color: var(--bsg-accent);
+  border: 1px solid var(--bsg-accent);
 }
 
 .add-player-btn:hover {
-  background: rgba(0, 217, 255, 0.3);
+  background: color-mix(in srgb, var(--bsg-accent) 26%, transparent);
 }
 
 .slots-list {
@@ -1054,7 +1055,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface-2);
   border-radius: 8px;
   border: 2px solid transparent;
   transition: all 0.2s;
@@ -1062,14 +1063,14 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .slot.is-me {
-  border-color: #00d9ff;
-  background: rgba(0, 217, 255, 0.1);
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
 }
 
 .slot-position {
   font-size: 0.85rem;
   font-weight: bold;
-  color: #666;
+  color: var(--bsg-ink-3);
   width: 30px;
   flex-shrink: 0;
 }
@@ -1083,11 +1084,11 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .slot-name {
   font-weight: 500;
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 .slot-name.disconnected {
-  color: #888;
+  color: var(--bsg-ink-2);
   opacity: 0.7;
 }
 
@@ -1100,21 +1101,21 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .connection-dot.online {
-  background: #2ecc71;
-  box-shadow: 0 0 6px rgba(46, 204, 113, 0.6);
+  background: var(--bsg-ok);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .connection-dot.offline {
-  background: #888;
+  background: var(--bsg-away);
 }
 
 .slot-name.open-label {
-  color: #666;
+  color: var(--bsg-ink-3);
   font-style: italic;
 }
 
 .slot-name.ai-name {
-  color: #9b59b6;
+  color: var(--bsg-seat-5);
 }
 
 .slot-badge {
@@ -1125,18 +1126,18 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .host-badge {
-  background: rgba(255, 215, 0, 0.2);
-  color: #ffd700;
+  background: color-mix(in srgb, var(--bsg-warn) 20%, transparent);
+  color: var(--bsg-warn);
 }
 
 .you-badge {
-  background: rgba(0, 217, 255, 0.2);
-  color: #00d9ff;
+  background: var(--bsg-selectable);
+  color: var(--bsg-accent);
 }
 
 .ai-badge {
-  background: rgba(155, 89, 182, 0.2);
-  color: #9b59b6;
+  background: color-mix(in srgb, var(--bsg-seat-5) 20%, transparent);
+  color: var(--bsg-seat-5);
 }
 
 .ai-badge.clickable {
@@ -1146,8 +1147,8 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .ai-badge.clickable:hover {
-  background: rgba(155, 89, 182, 0.35);
-  border-color: #9b59b6;
+  background: color-mix(in srgb, var(--bsg-seat-5) 35%, transparent);
+  border-color: var(--bsg-seat-5);
   transform: scale(1.05);
 }
 
@@ -1159,13 +1160,13 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .ready-indicator.ready {
-  background: rgba(46, 204, 113, 0.2);
-  color: #2ecc71;
+  background: color-mix(in srgb, var(--bsg-ok) 20%, transparent);
+  color: var(--bsg-ok);
 }
 
 .ready-indicator.not-ready {
-  background: rgba(243, 156, 18, 0.2);
-  color: #f39c12;
+  background: color-mix(in srgb, var(--bsg-warn) 20%, transparent);
+  color: var(--bsg-warn);
 }
 
 .slot-controls {
@@ -1193,7 +1194,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--bsg-line-2);
   flex-shrink: 0;
 }
 
@@ -1204,11 +1205,11 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .slot-color-swatch.clickable:hover {
   transform: scale(1.1);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .slot-color-swatch.expanded {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+  box-shadow: var(--bsg-ring);
 }
 
 .slot-color-picker {
@@ -1222,7 +1223,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   background: var(--bsg-bg);
   padding: 8px;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--bsg-shadow);
   z-index: 100;
   min-width: 140px;
   max-width: 200px;
@@ -1240,19 +1241,19 @@ function handleUpdateGameOption(key: string, value: unknown) {
   cursor: pointer;
   padding: 4px 10px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bsg-field);
   border: 2px solid transparent;
   transition: all 0.2s;
 }
 
 .slot-exclusive-radio:hover:not(.disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--bsg-surface-2);
+  border-color: var(--bsg-line);
 }
 
 .slot-exclusive-radio.selected {
-  background: rgba(0, 217, 255, 0.1);
-  border-color: #00d9ff;
+  background: var(--bsg-selectable);
+  border-color: var(--bsg-accent);
 }
 
 .slot-exclusive-radio.disabled {
@@ -1270,7 +1271,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  border: 2px solid var(--bsg-line-2);
   background: transparent;
   position: relative;
   transition: all 0.2s;
@@ -1278,7 +1279,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .slot-exclusive-radio.selected .radio-indicator {
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .slot-exclusive-radio.selected .radio-indicator::after {
@@ -1290,46 +1291,46 @@ function handleUpdateGameOption(key: string, value: unknown) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #00d9ff, #00ff88);
+  background: var(--bsg-accent);
 }
 
 .radio-label {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--bsg-ink-2);
   transition: color 0.2s;
 }
 
 .slot-exclusive-radio.selected .radio-label {
-  color: #00d9ff;
+  color: var(--bsg-accent);
   font-weight: 500;
 }
 
 .control-btn {
   padding: 4px 10px;
   font-size: 0.75rem;
-  background: rgba(255, 255, 255, 0.1);
-  color: #888;
+  background: var(--bsg-surface-2);
+  color: var(--bsg-ink-2);
 }
 
 .control-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: var(--bsg-surface-3);
+  color: var(--bsg-ink);
 }
 
 .control-btn.danger {
-  color: #e74c3c;
+  color: var(--bsg-danger);
 }
 
 .control-btn.danger:hover {
-  background: rgba(231, 76, 60, 0.2);
+  background: color-mix(in srgb, var(--bsg-danger) 20%, transparent);
 }
 
 /* Kick button */
 .kick-btn {
   padding: 4px 8px;
   font-size: 0.9rem;
-  background: rgba(231, 76, 60, 0.2);
-  color: #e74c3c;
+  background: color-mix(in srgb, var(--bsg-danger) 20%, transparent);
+  color: var(--bsg-danger);
   border: 1px solid transparent;
   border-radius: 4px;
   margin-left: 8px;
@@ -1337,8 +1338,8 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .kick-btn:hover {
-  background: rgba(231, 76, 60, 0.4);
-  border-color: #e74c3c;
+  background: color-mix(in srgb, var(--bsg-danger) 40%, transparent);
+  border-color: var(--bsg-danger);
 }
 
 /* Inline Ready button (in slot row) */
@@ -1351,29 +1352,29 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .inline-ready-btn.not-ready {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   border: none;
 }
 
 .inline-ready-btn.not-ready:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 10px rgba(0, 217, 255, 0.4);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .inline-ready-btn.ready {
-  background: rgba(46, 204, 113, 0.2);
-  color: #2ecc71;
-  border: 2px solid #2ecc71;
+  background: color-mix(in srgb, var(--bsg-ok) 20%, transparent);
+  color: var(--bsg-ok);
+  border: 2px solid var(--bsg-ok);
 }
 
 /* Join section */
 .join-section {
-  background: rgba(0, 217, 255, 0.05);
+  background: var(--bsg-surface-2);
   padding: 20px;
   border-radius: 12px;
   margin-bottom: 20px;
-  border: 2px solid rgba(0, 217, 255, 0.2);
+  border: 1px solid var(--bsg-line);
 }
 
 /* Join button on slots */
@@ -1387,10 +1388,10 @@ function handleUpdateGameOption(key: string, value: unknown) {
 .join-name-input {
   flex: 1;
   padding: 8px 12px;
-  border: 2px solid #00d9ff;
+  border: 2px solid var(--bsg-accent);
   border-radius: 6px;
-  background: rgba(0, 217, 255, 0.1);
-  color: #fff;
+  background: var(--bsg-selectable);
+  color: var(--bsg-ink);
   font-size: 0.9rem;
 }
 
@@ -1399,12 +1400,12 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .join-name-input::placeholder {
-  color: #666;
+  color: var(--bsg-ink-3);
 }
 
 .join-btn {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   font-weight: bold;
   padding: 6px 16px;
   font-size: 0.85rem;
@@ -1412,7 +1413,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .join-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 2px 10px rgba(0, 217, 255, 0.4);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .join-btn:disabled {
@@ -1422,7 +1423,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 /* My Settings */
 .my-settings {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bsg-surface-2);
   padding: 24px;
   border-radius: 12px;
   margin-bottom: 20px;
@@ -1441,7 +1442,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .name-edit-row label {
-  color: #888;
+  color: var(--bsg-ink-2);
   font-size: 0.9rem;
   flex-shrink: 0;
 }
@@ -1449,16 +1450,16 @@ function handleUpdateGameOption(key: string, value: unknown) {
 .name-edit-row input {
   flex: 1;
   padding: 10px 14px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid var(--bsg-line-2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: var(--bsg-field);
+  color: var(--bsg-ink);
   font-size: 1rem;
 }
 
 .name-edit-row input:focus {
   outline: none;
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 /* Status Message */
@@ -1469,19 +1470,19 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .status-message .starting {
-  color: #2ecc71;
-  background: rgba(46, 204, 113, 0.1);
+  color: var(--bsg-ok);
+  background: color-mix(in srgb, var(--bsg-ok) 10%, transparent);
   padding: 12px;
   border-radius: 8px;
   font-weight: 500;
 }
 
 .status-message .waiting {
-  color: #f39c12;
+  color: var(--bsg-warn);
 }
 
 .status-message .instruction {
-  color: #888;
+  color: var(--bsg-ink-2);
 }
 
 /* Buttons */
@@ -1496,11 +1497,11 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .btn.text {
   background: transparent;
-  color: #888;
+  color: var(--bsg-ink-2);
 }
 
 .btn.text:hover {
-  color: #fff;
+  color: var(--bsg-ink);
 }
 
 .btn.small {
@@ -1515,7 +1516,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   gap: 12px;
   margin-top: 4px;
   padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--bsg-line);
 }
 
 .player-option {
@@ -1526,28 +1527,28 @@ function handleUpdateGameOption(key: string, value: unknown) {
 
 .player-option-label {
   font-size: 0.85rem;
-  color: #888;
+  color: var(--bsg-ink-2);
 }
 
 .player-option-select,
 .player-option-input {
   padding: 10px 14px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid var(--bsg-line-2);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  background: var(--bsg-field);
+  color: var(--bsg-ink);
   font-size: 1rem;
 }
 
 .player-option-select:focus,
 .player-option-input:focus {
   outline: none;
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .player-option-select option {
-  background: #1a1a2e;
-  color: #fff;
+  background: var(--bsg-surface-2);
+  color: var(--bsg-ink);
 }
 
 .color-picker {
@@ -1571,8 +1572,8 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .color-swatch.selected {
-  border-color: #fff;
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+  border-color: var(--bsg-ink);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .color-swatch.taken,
@@ -1590,7 +1591,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   left: 50%;
   width: 80%;
   height: 3px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--bsg-ink);
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
   border-radius: 1px;
 }
@@ -1609,21 +1610,21 @@ function handleUpdateGameOption(key: string, value: unknown) {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: var(--bsg-field);
+  border: 2px solid var(--bsg-line);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .exclusive-option:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: var(--bsg-surface-2);
+  border-color: var(--bsg-line-2);
 }
 
 .exclusive-option.selected {
-  background: rgba(0, 217, 255, 0.1);
-  border-color: #00d9ff;
+  background: var(--bsg-selectable);
+  border-color: var(--bsg-accent);
 }
 
 .exclusive-option input[type="checkbox"] {
@@ -1637,7 +1638,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  border: 2px solid var(--bsg-line-2);
   background: transparent;
   position: relative;
   transition: all 0.2s;
@@ -1645,7 +1646,7 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .exclusive-option.selected .exclusive-indicator {
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .exclusive-option.selected .exclusive-indicator::after {
@@ -1657,17 +1658,17 @@ function handleUpdateGameOption(key: string, value: unknown) {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #00d9ff, #00ff88);
+  background: var(--bsg-accent);
 }
 
 .exclusive-label {
   font-size: 0.95rem;
-  color: #ccc;
+  color: var(--bsg-ink-2);
   transition: color 0.2s;
 }
 
 .exclusive-option.selected .exclusive-label {
-  color: #fff;
+  color: var(--bsg-ink);
   font-weight: 500;
 }
 </style>

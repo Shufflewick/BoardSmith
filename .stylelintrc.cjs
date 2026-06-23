@@ -36,7 +36,6 @@ module.exports = {
 
     // Chrome shell components — swept in Phase 99
     'src/ui/components/GameShell.vue',
-    'src/ui/components/WaitingRoom.vue',
     'src/ui/components/DebugPanel.vue',
     'src/ui/components/GameHeader.vue',
     'src/ui/components/GameHistory.vue',
