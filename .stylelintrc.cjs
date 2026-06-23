@@ -45,8 +45,6 @@ module.exports = {
     'src/ui/components/PlayersPanel.vue',
     'src/ui/components/Toast.vue',
 
-    // Helper/overlay components — swept in Phase 99
-    'src/ui/components/helpers/FlyingCardsOverlay.vue',
-    'src/ui/components/helpers/ZoomPreviewOverlay.vue',
+    // Helper/overlay components — all swept in Phase 99
   ],
 };

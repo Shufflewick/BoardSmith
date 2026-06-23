@@ -324,7 +324,7 @@ function getDefaultSuitColor(suit: string): string {
 }
 
 .card-front {
-  background: #fff;
+  background: var(--bsg-surface);
 }
 
 .card-front .rank {
@@ -336,7 +336,7 @@ function getDefaultSuitColor(suit: string): string {
 }
 
 .card-back {
-  background: linear-gradient(135deg, #8b5a2b, #6b4423);
+  background: var(--bsg-card-back);
   transform: rotateY(180deg);
 }
 
@@ -352,8 +352,8 @@ function getDefaultSuitColor(suit: string): string {
   height: 70%;
   background: repeating-linear-gradient(
     45deg,
-    rgba(212, 165, 116, 0.3),
-    rgba(212, 165, 116, 0.3) 2px,
+    var(--bsg-line),
+    var(--bsg-line) 2px,
     transparent 2px,
     transparent 8px
   );

@@ -290,7 +290,7 @@ const previewCardStyle = computed(() => ({
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.2);
   overflow: hidden;
-  background: #fff;
+  background: var(--bsg-surface);
 }
 
 .preview-image {
@@ -313,19 +313,19 @@ const previewCardStyle = computed(() => ({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: var(--bsg-surface);
   border-radius: 12px;
 }
 
 .preview-card-back {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+  background: var(--bsg-card-back);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 3px solid #4a6fa5;
+  border: 3px solid var(--bsg-line-2);
 }
 
 .card-back-pattern {
