@@ -30,8 +30,8 @@ const emit = defineEmits<{
 <style scoped>
 .done-button {
   padding: 8px 20px;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   border: none;
   border-radius: 6px;
   font-size: 0.9rem;
@@ -42,12 +42,12 @@ const emit = defineEmits<{
 
 .done-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 3px 12px rgba(0, 217, 255, 0.4);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .done-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background: rgba(128, 128, 128, 0.3);
+  background: var(--bsg-surface-3);
 }
 </style>
