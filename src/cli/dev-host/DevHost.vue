@@ -230,6 +230,9 @@ function seatLabel(seat: SeatInfo): string {
 // ── Seat switcher ─────────────────────────────────────────────────────────────
 const seatSwitcherOpen = ref(false);
 
+// ── Table setup panel (read-only config display — DEV-04) ─────────────────────
+const tableSetupOpen = ref(false);
+
 /**
  * Switch to a different seat: send follow-disable if follow is active, then
  * leave the current seat and take the target. The host (multiplayer-host.ts)
@@ -241,6 +244,16 @@ const seatSwitcherOpen = ref(false);
  * have a specific seat they want to be in). We disable it automatically so the
  * dev is not surprised by immediate seat jumping after the switch.
  */
+/** Resolve the display label for an option's default value. */
+function optionDefaultLabel(opt: { default?: unknown; choices?: Array<{ value: unknown; label?: string }> }): string {
+  if (opt.default === undefined || opt.default === null) return '—';
+  if (opt.choices) {
+    const match = opt.choices.find((c) => c.value === opt.default);
+    if (match) return match.label ?? String(match.value);
+  }
+  return String(opt.default);
+}
+
 function switchSeat(target: number): void {
   if (target === mySeat.value) return;
   const targetInfo = seats.value.find((s) => s.seat === target);
@@ -463,6 +476,16 @@ onUnmounted(() => {
                   <span class="dev-chrome__btn-icon" aria-hidden="true">↺</span>
                   <span class="dev-chrome__btn-label">New game</span>
                 </button>
+                <button
+                  type="button"
+                  class="btn"
+                  :class="{ 'btn--on': tableSetupOpen }"
+                  :aria-expanded="tableSetupOpen"
+                  @click="tableSetupOpen = !tableSetupOpen"
+                >
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">⚙</span>
+                  <span class="dev-chrome__btn-label">Table setup</span>
+                </button>
               </div>
             </details>
             <!-- Wide-screen inline controls (hidden at narrow via CSS) -->
@@ -477,9 +500,58 @@ onUnmounted(() => {
                 {{ followActive ? 'Following active seat' : 'Follow active seat' }}
               </button>
               <button type="button" class="btn btn--start" @click="newGame">New game</button>
+              <button
+                type="button"
+                class="btn"
+                :class="{ 'btn--on': tableSetupOpen }"
+                :aria-expanded="tableSetupOpen"
+                @click="tableSetupOpen = !tableSetupOpen"
+              >
+                Table setup
+              </button>
             </div>
           </div>
         </div>
+        <!-- Table setup panel — read-only summary of injected config (DEV-04) -->
+        <div v-if="tableSetupOpen" class="table-setup">
+          <dl class="table-setup__dl">
+            <div class="table-setup__row">
+              <dt>Players</dt>
+              <dd>{{ cfg.playerCount }}</dd>
+            </div>
+            <div class="table-setup__row">
+              <dt>AI seats</dt>
+              <dd>{{ cfg.aiSeats.length ? cfg.aiSeats.join(', ') : 'none' }}</dd>
+            </div>
+            <div class="table-setup__row">
+              <dt>AI level</dt>
+              <dd>{{ cfg.aiLevel || '—' }}</dd>
+            </div>
+            <template v-if="cfg.gameOptions.length">
+              <div class="table-setup__group-header">Game options</div>
+              <div
+                v-for="opt in cfg.gameOptions"
+                :key="opt.id"
+                class="table-setup__row"
+              >
+                <dt>{{ opt.label || opt.id }}</dt>
+                <dd>{{ optionDefaultLabel(opt) }}</dd>
+              </div>
+            </template>
+            <template v-if="cfg.playerOptions.length">
+              <div class="table-setup__group-header">Player options</div>
+              <div
+                v-for="opt in cfg.playerOptions"
+                :key="opt.id"
+                class="table-setup__row"
+              >
+                <dt>{{ opt.label || opt.id }}</dt>
+                <dd>{{ optionDefaultLabel(opt) }}</dd>
+              </div>
+            </template>
+          </dl>
+        </div>
+
         <div v-if="errorMsg" class="dev-chrome__error">{{ errorMsg }}</div>
       </header>
 
@@ -979,6 +1051,58 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--bsg-ink-3);
+}
+
+/* ── Table setup panel (read-only) ── */
+.table-setup {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--bsg-line);
+  background: var(--bsg-surface);
+}
+
+.table-setup__dl {
+  display: grid;
+  grid-template-columns: auto;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.table-setup__group-header {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bsg-ink-3);
+  padding: 8px 0 4px;
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--bsg-line-2);
+  margin-top: 6px;
+}
+
+.table-setup__group-header:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+.table-setup__row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+
+.table-setup__row dt {
+  font-size: 0.8rem;
+  color: var(--bsg-ink-3);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.table-setup__row dd {
+  font-size: 0.85rem;
+  color: var(--bsg-ink);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Phone layout: icon-only controls, … overflow for secondary ── */
