@@ -28,6 +28,7 @@ import PlayersPanel from './PlayersPanel.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
+import GameOverCard from './GameOverCard.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge';
@@ -229,6 +230,10 @@ function initCompactRail(mql: MediaQueryList | MediaQueryListEvent) {
 // passed to the GameHeader badge.
 const connectionHealth = ref<'connecting' | 'connected' | 'stale'>('connecting');
 let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Winner seats captured from the game_state postMessage (IA-07).
+// Validated as number[] on receipt; stays [] in dev-WS mode (graceful degrade).
+const winnerSeats = ref<number[]>([]);
 
 // Actionbar element ref + ResizeObserver for dock-height reservation (IA-04).
 // The observer sets --bsg-dock-h on the root element so .boardregion can
@@ -730,6 +735,15 @@ if (typeof window !== 'undefined' && window.parent !== window) {
         playerSeat: playerSeat.value,
         isSpectator: false,
       } as any;
+
+      // Capture winners from the game_state message (IA-07, T-100-06-01).
+      // Validated as number[] before assigning — protects against tampered payloads.
+      // In dev-WS mode the message does not include winners, so winnerSeats stays [].
+      winnerSeats.value =
+        Array.isArray(data.winners) &&
+        (data.winners as unknown[]).every((n: unknown) => typeof n === 'number')
+          ? (data.winners as number[])
+          : [];
     }
 
     // Heartbeat: host pings periodically to prove the connection is live (IA-01).
@@ -1466,6 +1480,17 @@ if ((import.meta as any).hot) {
             :class="connectionHealth"
             aria-hidden="true"
           ></span>
+          <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07).
+               Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
+               or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode.
+               @new-game → handleMenuItemClick goes back to lobby; @rematch → restarts same game. -->
+          <GameOverCard
+            v-if="state?.flowState?.complete"
+            :winner-seats="winnerSeats"
+            :players="players"
+            @new-game="handleMenuItemClick('new-game')"
+            @rematch="handleRestartGame"
+          />
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
             <!--
               Game Board Slot Props:

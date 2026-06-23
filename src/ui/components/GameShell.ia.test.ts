@@ -494,3 +494,100 @@ describe('GameShell IA-01 — header gate + heartbeat corner dot', () => {
     expect(wrapper.vm.connectionHealth).toBe('connecting');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Suite 5: IA-07 — winnerSeats capture from game_state postMessage (T-100-06-01)
+//
+// Behaviors under test:
+//   A. Valid game_state message with winners=[1,2] sets winnerSeats to [1,2].
+//   B. game_state with no winners field leaves winnerSeats as [].
+//   C. game_state with winners as string array is rejected → winnerSeats stays [].
+//   D. game_state with a non-array winners field is rejected → winnerSeats stays [].
+// ---------------------------------------------------------------------------
+
+/**
+ * WinnerCaptureHarness — mirrors the GameShell.vue game_state winner-capture logic.
+ *
+ * Isolates the winnerSeats validation branch so tests do not need to mount the
+ * full GameShell (which requires client setup).
+ */
+const WinnerCaptureHarness = defineComponent({
+  name: 'WinnerCaptureHarness',
+  setup() {
+    const winnerSeats = ref<number[]>([]);
+
+    // Mirrors the game_state handler winner-capture in GameShell.vue (T-100-06-01).
+    function captureWinners(data: unknown): void {
+      const msg = data as Record<string, unknown> | null | undefined;
+      if (!msg) return;
+      winnerSeats.value =
+        Array.isArray(msg.winners) &&
+        (msg.winners as unknown[]).every((n: unknown) => typeof n === 'number')
+          ? (msg.winners as number[])
+          : [];
+    }
+
+    return { winnerSeats, captureWinners };
+  },
+  template: `<div class="winner-capture-harness"></div>`,
+});
+
+describe('GameShell IA-07 — winnerSeats capture from game_state postMessage', () => {
+  // --- A. Valid winners array captured ------------------------------------------
+  it('captures valid winners array from game_state message', async () => {
+    const wrapper = mount(WinnerCaptureHarness);
+
+    wrapper.vm.captureWinners({ type: 'game_state', winners: [1, 2] });
+    await nextTick();
+
+    expect(wrapper.vm.winnerSeats).toEqual([1, 2]);
+  });
+
+  it('captures single winner seat', async () => {
+    const wrapper = mount(WinnerCaptureHarness);
+
+    wrapper.vm.captureWinners({ type: 'game_state', winners: [0] });
+    await nextTick();
+
+    expect(wrapper.vm.winnerSeats).toEqual([0]);
+  });
+
+  // --- B. No winners field → stays [] (dev-WS degrade) -------------------------
+  it('leaves winnerSeats as [] when winners field is absent', async () => {
+    const wrapper = mount(WinnerCaptureHarness);
+
+    wrapper.vm.captureWinners({ type: 'game_state' });
+    await nextTick();
+
+    expect(wrapper.vm.winnerSeats).toEqual([]);
+  });
+
+  // --- C. Non-number winners rejected → stays [] (T-100-06-01) -----------------
+  it('rejects a string array winners field and keeps winnerSeats as []', async () => {
+    const wrapper = mount(WinnerCaptureHarness);
+
+    wrapper.vm.captureWinners({ type: 'game_state', winners: ['1', '2'] });
+    await nextTick();
+
+    expect(wrapper.vm.winnerSeats).toEqual([]);
+  });
+
+  // --- D. Non-array winners rejected → stays [] (T-100-06-01) ------------------
+  it('rejects a non-array winners field and keeps winnerSeats as []', async () => {
+    const wrapper = mount(WinnerCaptureHarness);
+
+    wrapper.vm.captureWinners({ type: 'game_state', winners: 1 });
+    await nextTick();
+
+    expect(wrapper.vm.winnerSeats).toEqual([]);
+  });
+
+  it('rejects winners: null and keeps winnerSeats as []', async () => {
+    const wrapper = mount(WinnerCaptureHarness);
+
+    wrapper.vm.captureWinners({ type: 'game_state', winners: null });
+    await nextTick();
+
+    expect(wrapper.vm.winnerSeats).toEqual([]);
+  });
+});

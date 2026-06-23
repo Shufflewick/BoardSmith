@@ -33,17 +33,9 @@ defineProps<{
 
 <template>
   <div class="auto-ui">
-    <!-- Game complete banner -->
-    <div v-if="flowState?.complete" class="game-complete">
-      <h2>Game Over!</h2>
-      <slot name="game-over">
-        <p>The game has ended.</p>
-      </slot>
-    </div>
-
-    <!-- Game board -->
+    <!-- Game board: always rendered — the result card (GameOverCard.vue) is
+         GameShell's responsibility and overlays inside .boardregion above this. -->
     <AutoRenderer
-      v-else
       :game-view="gameView"
       :player-seat="playerSeat"
       :presentation="presentation"
@@ -54,18 +46,5 @@ defineProps<{
 <style scoped>
 .auto-ui {
   height: 100%;
-}
-
-.game-complete {
-  text-align: center;
-  padding: 40px;
-  background: color-mix(in srgb, var(--bsg-accent) 10%, transparent);
-  border-radius: 16px;
-}
-
-.game-complete h2 {
-  font-size: 2rem;
-  color: var(--bsg-accent);
-  margin-bottom: 16px;
 }
 </style>
