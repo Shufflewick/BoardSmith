@@ -52,7 +52,7 @@ Requirements for the v4.0 milestone. Each maps to exactly one roadmap phase (see
 ### Accessibility — WCAG 2.2 AA (Wave 4)
 
 - [x] **A11Y-01**: The board is fully keyboard-operable — a shared `useSelectable()` composable binds `@click` + `@keydown.enter/space` to the same selection with a roving-tabindex grid (arrow/Home/End nav) across all 8 renderers (Critical)
-- [ ] **A11Y-02**: When picks are board-anchored, the action panel still exposes those choices in a focusable secondary list and never fully suppresses while picks are pending (Critical)
+- [x] **A11Y-02**: When picks are board-anchored, the action panel still exposes those choices in a focusable secondary list and never fully suppresses while picks are pending (Critical)
 - [ ] **A11Y-03**: Turn changes, errors, disconnects, and game-over are announced via a polite live region (assertive for errors); `GameHistory` becomes `role="log" aria-live="polite"`
 - [ ] **A11Y-04**: Every board element exposes a semantic `aria-label` and `aria-selected`/`-disabled`/`-current` derived from the same booleans driving CSS; grids/hands/hex carry appropriate roles
 - [ ] **A11Y-05**: Every interaction state is paired with a non-color cue (shape/icon/border-style + label) and is colorblind-safe, with a legend
@@ -139,7 +139,7 @@ Which phases cover which requirements. Phase numbering continues from v3.1's las
 | IA-06 | 100 (Wave 3 — IA & Responsive) | Complete |
 | IA-07 | 100 (Wave 3 — IA & Responsive) | Complete |
 | A11Y-01 | 101 (Wave 4 — Accessibility) | Complete |
-| A11Y-02 | 101 (Wave 4 — Accessibility) | Pending |
+| A11Y-02 | 101 (Wave 4 — Accessibility) | Complete |
 | A11Y-03 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-04 | 101 (Wave 4 — Accessibility) | Pending |
 | A11Y-05 | 101 (Wave 4 — Accessibility) | Pending |

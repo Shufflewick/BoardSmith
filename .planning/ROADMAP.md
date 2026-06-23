@@ -17,7 +17,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 - [x] **Phase 98: Token Foundation (Wave 1)** — The keystone: collapse three namespaces into one `--bsg-*` contract emitted by `theme.ts` with full Slate defaults + a `color-no-hex` lint guard. Blocks Waves 2/3/5. (completed 2026-06-23)
 - [x] **Phase 99: Theming Swap (Wave 2)** — Spend the tokens: sweep 8 renderers + chrome + DevHost from neon literals to `var(--bsg-*)`, teal primary button, `outline` selection, solid type, tokenized card back, calm active-player cue. (completed 2026-06-23)
 - [x] **Phase 100: IA & Responsive (Wave 3)** — Board is the hero: kill the standing header, persistent turn ribbon + always-on prompt, conditional action dock, fluid container-query board sizing, real breakpoints, Game Over result card. (completed 2026-06-23)
-- [ ] **Phase 101: Accessibility — WCAG 2.2 AA (Wave 4)** — The two CRITICAL findings: keyboard-operable board via shared `useSelectable()`, live regions, semantic names/state, non-color cues, focus-visible, dialog semantics, reduced-motion, contrast + target sweep.
+- [x] **Phase 101: Accessibility — WCAG 2.2 AA (Wave 4)** — The two CRITICAL findings: keyboard-operable board via shared `useSelectable()`, live regions, semantic names/state, non-color cues, focus-visible, dialog semantics, reduced-motion, contrast + target sweep. (completed 2026-06-23)
 - [ ] **Phase 102: Material Polish & Dev/Debug Parity (Wave 5)** — Slate DebugPanel, dev chrome collapse + seat switcher + presence strip + "Table setup" panel, voiced states, read-only history, destructive-action confirm, Slate material layer.
 - [ ] **Phase 103: Cross-Repo Verification** — Gate: all 9 `~/BoardSmithGames/` games + MERC (the canary) build, pass tests, and play in the browser with the new Slate chrome; BoardSmith's own suite stays green with new cross-boundary integration tests.
 
@@ -134,7 +134,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
   - [x] 101-08-PLAN.md — Dialog semantics + focus trap for HamburgerMenu/ControlsMenu/GameOverCard (Wave 2)
   - [x] 101-09-PLAN.md — Dev-chrome a11y floor: names/focus/target-size for DebugPanel + DevHost (Wave 2)
   - [x] 101-10-PLAN.md — Renderer disabled-hatch + reduced-motion pulse guards across 8 renderers (Wave 3)
-  - [ ] 101-11-PLAN.md — Divergence grep-guard + drag-still-works regression test (Wave 3)
+  - [x] 101-11-PLAN.md — Divergence grep-guard + drag-still-works regression test (Wave 3)
 **UI hint**: yes
 **Risk note**: Highest-risk item #2 — the board keyboard/semantics rework is architectural across all 8 renderers. Centralize it in the one shared `useSelectable()` composable so divergence is impossible, and regression-test that drag still works as progressive enhancement.
 
@@ -176,7 +176,7 @@ The seven phases map 1:1 to the spec's six waves plus a final cross-repo verific
 | 98. Token Foundation (Wave 1) | 4/4 | Complete   | 2026-06-23 |
 | 99. Theming Swap (Wave 2) | 15/15 | Complete   | 2026-06-23 |
 | 100. IA & Responsive (Wave 3) | 6/6 | Complete   | 2026-06-23 |
-| 101. Accessibility — WCAG 2.2 AA (Wave 4) | 10/11 | In Progress|  |
+| 101. Accessibility — WCAG 2.2 AA (Wave 4) | 11/11 | Complete   | 2026-06-23 |
 | 102. Material Polish & Dev/Debug Parity (Wave 5) | 0/? | Not started | - |
 | 103. Cross-Repo Verification | 0/? | Not started | - |
 
