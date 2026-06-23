@@ -8,14 +8,24 @@ const { toasts, remove } = useToast();
   <Teleport to="body">
     <div class="toast-container">
       <TransitionGroup name="toast">
+        <!-- role=alert for errors (assertive); role=status for all other types (polite).
+             Body-click dismissal is intentionally removed — only the dismiss button
+             should dismiss, giving keyboard and AT users a predictable interaction. -->
         <div
           v-for="toast in toasts"
           :key="toast.id"
           class="toast"
           :class="toast.type"
-          @click="remove(toast.id)"
+          :role="toast.type === 'error' ? 'alert' : 'status'"
         >
           {{ toast.message }}
+          <button
+            class="toast-dismiss"
+            aria-label="Dismiss"
+            @click.stop="remove(toast.id)"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
         </div>
       </TransitionGroup>
     </div>
@@ -36,13 +46,39 @@ const { toasts, remove } = useToast();
 }
 
 .toast {
-  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
   border-radius: 8px;
   font-size: 0.9rem;
-  cursor: pointer;
   pointer-events: auto;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   white-space: nowrap;
+}
+
+.toast-dismiss {
+  /* Keyboard-accessible dismiss target — minimum 44px touch/click surface */
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.8;
+  margin-left: auto;
+  border-radius: 4px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.toast-dismiss:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .toast.success {
