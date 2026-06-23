@@ -8,65 +8,43 @@
  * - .bs-drop-hover: A dragged element is hovering over this drop target
  *
  * Customization:
- * Override CSS variables in your game's stylesheet:
+ * Override CSS variables via applyTheme() — token defaults are registered in theme.ts:
  *
- * :root {
- *   --bs-draggable-cursor: grab;
- *   --bs-dragging-opacity: 0.5;
- *   --bs-drop-target-bg: rgba(0, 255, 136, 0.15);
- *   --bs-drop-hover-bg: rgba(0, 255, 136, 0.3);
- *   --bs-drop-hover-scale: 1.02;
- * }
+ *   applyTheme({
+ *     '--bsg-draggable-cursor': 'grab',
+ *     '--bsg-dragging-opacity': '0.5',
+ *     '--bsg-droptarget': 'color-mix(in srgb, var(--bsg-accent) 12%, transparent)',
+ *     '--bsg-droptarget-hover': 'color-mix(in srgb, var(--bsg-accent) 24%, transparent)',
+ *     '--bsg-droptarget-hover-scale': '1.02',
+ *   });
  */
-
-:root {
-  /* Draggable element styling */
-  --bs-draggable-cursor: grab;
-  --bs-dragging-cursor: grabbing;
-  --bs-dragging-opacity: 0.5;
-  --bs-dragging-scale: 0.95;
-
-  /* Drop target styling */
-  --bs-drop-target-bg: rgba(0, 255, 136, 0.15);
-  --bs-drop-target-border-color: rgba(0, 255, 136, 0.6);
-  --bs-drop-target-shadow: 0 0 12px rgba(0, 255, 136, 0.4);
-
-  /* Drop hover styling (when dragged element is over this target) */
-  --bs-drop-hover-bg: rgba(0, 255, 136, 0.3);
-  --bs-drop-hover-border-color: rgba(0, 255, 136, 0.9);
-  --bs-drop-hover-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
-  --bs-drop-hover-scale: 1.02;
-
-  /* Transition timing */
-  --bs-drag-transition: all 0.2s ease;
-}
 
 /* Draggable element - ready to be dragged */
 .bs-draggable {
-  cursor: var(--bs-draggable-cursor);
-  transition: var(--bs-drag-transition);
+  cursor: var(--bsg-draggable-cursor);
+  transition: var(--bsg-drag-transition);
 }
 
 /* Element currently being dragged */
 .bs-dragging {
-  opacity: var(--bs-dragging-opacity);
-  transform: scale(var(--bs-dragging-scale));
-  cursor: var(--bs-dragging-cursor);
+  opacity: var(--bsg-dragging-opacity);
+  transform: scale(var(--bsg-dragging-scale));
+  cursor: var(--bsg-dragging-cursor);
 }
 
 /* Valid drop target for current drag operation */
 .bs-drop-target {
-  background-color: var(--bs-drop-target-bg);
-  border-color: var(--bs-drop-target-border-color);
-  box-shadow: var(--bs-drop-target-shadow);
+  background-color: var(--bsg-droptarget);
+  border-color: var(--bsg-droptarget-border);
+  box-shadow: var(--bsg-droptarget-shadow);
 }
 
 /* Drop target being hovered by a dragged element */
 .bs-drop-hover {
-  background-color: var(--bs-drop-hover-bg);
-  border-color: var(--bs-drop-hover-border-color);
-  box-shadow: var(--bs-drop-hover-shadow);
-  transform: scale(var(--bs-drop-hover-scale));
+  background-color: var(--bsg-droptarget-hover);
+  border-color: var(--bsg-droptarget-hover-border);
+  box-shadow: var(--bsg-droptarget-hover-shadow);
+  transform: scale(var(--bsg-droptarget-hover-scale));
 }
 
 /* Accessibility: Reduce motion for users who prefer it */
