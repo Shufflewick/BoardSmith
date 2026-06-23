@@ -416,7 +416,7 @@ function handleClick(event: MouseEvent) {
 /* Card container */
 .card-container {
   display: inline-block;
-  transition: transform 0.2s ease;
+  transition: transform var(--bsg-dur-base) var(--bsg-ease);
 }
 
 /* Selection states */
@@ -426,45 +426,47 @@ function handleClick(event: MouseEvent) {
 
 .card-container.is-selectable:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.3);
+  box-shadow: var(--bsg-shadow-sm);
 }
 
 .card-container.is-selected {
-  outline: 3px solid #00d9ff;
+  outline: 3px solid var(--bsg-accent);
   outline-offset: 2px;
+  box-shadow: var(--bsg-ring);
 }
 
-/* action-selectable: green pulse (T-93-03 XSS guard) */
+/* action-selectable: Slate dashed accent outline + translucent fill (T-93-03 XSS guard) */
 .card-container.action-selectable {
   cursor: pointer;
-  outline: 2px solid rgba(46, 204, 113, 0.6);
+  outline: 2px dashed var(--bsg-accent);
   outline-offset: 2px;
-  border-radius: 8px;
+  border-radius: var(--bsg-r-sm);
+  background: var(--bsg-selectable);
   animation: pulse-card 2s ease-in-out infinite;
 }
 
 .card-container.action-selectable:hover {
-  outline-color: rgba(46, 204, 113, 1);
+  outline-color: var(--bsg-accent-2);
   outline-width: 3px;
   transform: translateY(-8px);
 }
 
 @keyframes pulse-card {
   0%, 100% {
-    outline-color: rgba(46, 204, 113, 0.6);
+    outline-color: var(--bsg-accent);
   }
   50% {
-    outline-color: rgba(46, 204, 113, 1);
+    outline-color: var(--bsg-accent-2);
   }
 }
 
 /* Board interaction highlights */
 .card-container.is-board-highlighted {
-  background: rgba(0, 217, 255, 0.2);
+  background: var(--bsg-selectable);
 }
 
 .card-container.is-board-selected {
-  background: rgba(0, 255, 136, 0.2);
+  background: color-mix(in srgb, var(--bsg-selected) 20%, transparent);
 }
 
 /* Hidden cards */
@@ -491,29 +493,31 @@ function handleClick(event: MouseEvent) {
 
 .card-container.is-drop-target {
   background: var(--bsg-droptarget);
+  outline: 1px dotted var(--bsg-accent-2);
+  outline-offset: 2px;
 }
 
 .card-container.is-drop-target:hover {
   background: var(--bsg-droptarget-hover);
 }
 
-/* Baseline 3: no-image visible card — white face with name label */
+/* Baseline 3: no-image visible card — surface face with name label */
 .card-face {
   width: 60px;
   min-width: 45px;
   height: 84px;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--bsg-surface);
+  border-radius: var(--bsg-r-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 14px;
-  color: #000;
+  font-size: var(--bsg-text-sm);
+  color: var(--bsg-ink);
   text-align: center;
-  padding: 4px;
-  border: 2px solid #333;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: var(--bsg-s1);
+  border: 1px solid var(--bsg-line);
+  box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
 }
 
@@ -522,8 +526,8 @@ function handleClick(event: MouseEvent) {
   width: 60px;
   min-width: 45px;
   height: 84px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: var(--bsg-r-sm);
+  box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
   object-fit: contain;
 }
@@ -533,21 +537,21 @@ function handleClick(event: MouseEvent) {
   width: 60px;
   min-width: 45px;
   height: 84px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: var(--bsg-r-sm);
+  box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
   background-repeat: no-repeat;
 }
 
-/* Baseline 4: default back gradient (no back image provided) */
+/* Baseline 4: default card back — shared token surface (THEME-05) */
 .card-back {
   width: 60px;
   min-width: 45px;
   height: 84px;
-  background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
-  border-radius: 8px;
-  border: 2px solid #4a6fa5;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: var(--bsg-card-back);
+  border-radius: var(--bsg-r-sm);
+  border: 1px solid var(--bsg-line-2);
+  box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
 }
 
@@ -559,15 +563,15 @@ function handleClick(event: MouseEvent) {
 .card-back .card-image {
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  border-radius: var(--bsg-r-sm);
   object-fit: contain;
 }
 
 /* Overlay stats block (D-04) */
 .card-stats {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: #ccc;
+  margin: var(--bsg-s1) 0 0;
+  font-size: var(--bsg-text-xs);
+  color: var(--bsg-ink-2);
   display: grid;
   grid-template-columns: auto auto;
   gap: 2px 8px;
@@ -575,11 +579,11 @@ function handleClick(event: MouseEvent) {
 
 .card-stats dt {
   font-weight: 700;
-  color: #888;
+  color: var(--bsg-ink-3);
 }
 
 .card-stats dd {
   margin: 0;
-  color: #fff;
+  color: var(--bsg-ink);
 }
 </style>
