@@ -276,7 +276,7 @@ audioService.init({
 });
 
 // Use game composable
-const { state, connectionStatus, isConnected, isMyTurn, error, action } = useGame(
+const { state, connectionStatus, isConnected, isMyTurn, error, action, refreshState, reconnect } = useGame(
   client,
   gameId,
   { playerSeat }
@@ -1353,6 +1353,28 @@ function handleMenuItemClick(id: string) {
   }
 }
 
+// Retry handler — wired from AutoUI → GameShell when the user clicks Retry
+// after the 8-second loading timeout (DEV-05).
+// In platform mode (iframe inside dev host or prod host): post a request-state
+// message to the parent so it re-sends the last game_state. This covers the
+// case where the iframe mounted before the host sent its first game_state.
+// In standalone/WebSocket mode: call refreshState() which sends a state request
+// on the existing GameConnection, and reconnect() to re-open the socket if it
+// dropped.
+function handleRetry(): void {
+  if (platformMode.value) {
+    window.parent.postMessage(
+      { source: 'shufflewick-game', type: 'request-state' },
+      '*'
+    );
+    return;
+  }
+  // Non-platform: refresh state via WebSocket (requestState) and ensure the
+  // connection is live (reconnect is a no-op if already connected).
+  refreshState();
+  reconnect();
+}
+
 // ── Live-region watchers (immediate: false — never write to regions at mount) ─
 
 watch(isMyTurn, (newVal) => {
@@ -1619,6 +1641,7 @@ if ((import.meta as any).hot) {
               :undo="handleUndo"
               :action-controller="actionController"
               :flow-state="state?.flowState"
+              @retry="handleRetry"
             />
             <slot
               v-else

@@ -219,6 +219,13 @@ function onWindowMessage(event: MessageEvent): void {
     });
     return;
   }
+  // Retry: GameShell's AutoUI retry button asks the host to re-send the
+  // last cached state so the iframe can recover without a full reload.
+  if (data.type === 'request-state') {
+    if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat });
+    if (lastGameState) postToGame(lastGameState);
+    return;
+  }
   // The game advertises its available UIs; populate the switcher dropdown.
   if (data.type === 'dev-ui-list' && Array.isArray(data.uis)) {
     // If the iframe is running a different game than this outer page was built
