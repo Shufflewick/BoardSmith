@@ -101,6 +101,11 @@ export interface OpResult {
   playerViews: unknown[];
   isComplete: boolean;
   winners: number[];
+  // Public observer (spectator) view — position 0, no hidden info, no action
+  // metadata. Mirrors a per-player view's `{ flowState, state }` shape so a host
+  // can read `spectatorView.state` exactly like `playerViews[i].state`. Present
+  // on every state-mutating op (start + ops that spread stateEnvelope).
+  spectatorView?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,10 +143,24 @@ function buildViews(runner: GameRunner, playerCount: number): unknown[] {
   }));
 }
 
+// Public observer view. Position 0 is the spectator sentinel (see utils.ts:418):
+// no player has seat 0, so only mode:'all' elements are visible — mode:'owner'/
+// 'hidden' element contents are omitted. includeActionMetadata:false ensures
+// spectators receive no action prompts. MUST be built from the LIVE runner (its
+// zone visibility is set in the game constructor and is NOT serialized, so a
+// fromSnapshot reconstruction would lose it and over-reveal).
+function buildSpectatorView(runner: GameRunner): unknown {
+  return {
+    flowState: runner.getFlowState(),
+    state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
+  };
+}
+
 function stateEnvelope(runner: GameRunner, playerCount: number): {
   snapshot: unknown;
   flowState: unknown;
   playerViews: unknown[];
+  spectatorView: unknown;
   isComplete: boolean;
   winners: number[];
   pendingState: null;
@@ -150,6 +169,7 @@ function stateEnvelope(runner: GameRunner, playerCount: number): {
     snapshot: runner.getSnapshot(),
     flowState: runner.getFlowState(),
     playerViews: buildViews(runner, playerCount),
+    spectatorView: buildSpectatorView(runner),
     isComplete: runner.isComplete(),
     winners: runner.getWinners().map((p) => p.seat),
     pendingState: null,
@@ -199,6 +219,7 @@ function handleStart(
     snapshot: runner.getSnapshot(),
     flowState,
     playerViews: buildViews(runner, gameOptions.playerCount),
+    spectatorView: buildSpectatorView(runner),
     isComplete: runner.isComplete(),
     winners: runner.getWinners().map((p) => p.seat),
     pendingState: null,
@@ -241,6 +262,7 @@ function handleAction(
     snapshot: runner.getSnapshot(),
     flowState: actionResult.flowState,
     playerViews: buildViews(runner, gameOptions.playerCount),
+    spectatorView: buildSpectatorView(runner),
     isComplete: runner.isComplete(),
     winners: runner.getWinners().map((p) => p.seat),
     pendingState: null,
@@ -442,6 +464,7 @@ async function handleAITurn(
     snapshot: runner.getSnapshot(),
     flowState: actionResult.flowState,
     playerViews: buildViews(runner, gameOptions.playerCount),
+    spectatorView: buildSpectatorView(runner),
     isComplete: runner.isComplete(),
     winners: runner.getWinners().map((p) => p.seat),
     pendingState: null,
