@@ -296,52 +296,10 @@ describe('useSelectableGrid (grid mode)', () => {
     expect(currentIdx.value).toBe(2);
   });
 
-  it('Enter activates current cell via triggerElementSelect', () => {
-    const bi = makeMockInteraction();
-    const cells = [{ id: 42 }, { id: 43 }, { id: 44 }];
-    const cellsRef = computed(() => cells);
-    const colsRef = computed(() => 3);
-    const { handleGridKeydown } = useSelectableGrid(
-      cellsRef,
-      colsRef,
-      (c) => ({ id: c.id }),
-      bi as BoardInteraction,
-    );
-    handleGridKeydown(makeKeyEvent('Enter'));
-    expect(bi.triggerElementSelect).toHaveBeenCalledTimes(1);
-    expect(bi.triggerElementSelect).toHaveBeenCalledWith({ id: 42 });
-  });
-
-  it('Space activates current cell via triggerElementSelect', () => {
-    const bi = makeMockInteraction();
-    const cells = [{ id: 50 }, { id: 51 }];
-    const cellsRef = computed(() => cells);
-    const colsRef = computed(() => 2);
-    const { handleGridKeydown } = useSelectableGrid(
-      cellsRef,
-      colsRef,
-      (c) => ({ id: c.id }),
-      bi as BoardInteraction,
-    );
-    handleGridKeydown(makeKeyEvent(' '));
-    expect(bi.triggerElementSelect).toHaveBeenCalledTimes(1);
-    expect(bi.triggerElementSelect).toHaveBeenCalledWith({ id: 50 });
-  });
-
-  it('Enter does not throw when boardInteraction is null', () => {
-    const cells = [{ id: 0 }];
-    const cellsRef = computed(() => cells);
-    const colsRef = computed(() => 1);
-    const { handleGridKeydown } = useSelectableGrid(
-      cellsRef,
-      colsRef,
-      (c) => ({ id: c.id }),
-      null,
-    );
-    expect(() => handleGridKeydown(makeKeyEvent('Enter'))).not.toThrow();
-  });
-
-  it('unhandled keys do not move currentIdx', () => {
+  it('unhandled keys (including Enter/Space) do not move currentIdx and do not activate (IN-01)', () => {
+    // Enter/Space activation is handled by the renderer, not this composable.
+    // GridBoardRenderer and HexBoardRenderer both intercept Enter/Space before
+    // delegating to _composableKeydown, so this branch is intentionally absent.
     const bi = makeMockInteraction();
     const { cellsRef, colsRef } = makeGrid3x3();
     const { currentIdx, handleGridKeydown } = useSelectableGrid(
@@ -352,6 +310,8 @@ describe('useSelectableGrid (grid mode)', () => {
     );
     handleGridKeydown(makeKeyEvent('Tab'));
     handleGridKeydown(makeKeyEvent('Escape'));
+    handleGridKeydown(makeKeyEvent('Enter'));
+    handleGridKeydown(makeKeyEvent(' '));
     expect(currentIdx.value).toBe(0);
     expect(bi.triggerElementSelect).not.toHaveBeenCalled();
   });

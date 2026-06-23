@@ -113,8 +113,14 @@ export function useSelectableGrid<T>(
   }
 
   /**
-   * Handle arrow-key + Home/End navigation and Enter/Space activation.
+   * Handle arrow-key navigation (Arrow/Home/End) for the grid's roving tabindex.
    * Bind to @keydown on the `role="grid"` container element.
+   *
+   * NOTE: Enter/Space activation is intentionally NOT handled here. Both grid
+   * renderer consumers (GridBoardRenderer, HexBoardRenderer) intercept Enter/Space
+   * before delegating to this function, applying their own passive-select and
+   * triggerElementSelect logic. Adding an Enter/Space branch here would be dead
+   * code that could interfere with future renderer-specific activation paths.
    */
   function handleGridKeydown(e: KeyboardEvent) {
     const k = e.key;
@@ -128,13 +134,7 @@ export function useSelectableGrid<T>(
     else if (k === 'ArrowUp') focusCell(currentIdx.value - COLS);
     else if (k === 'Home') focusCell(currentIdx.value - (currentIdx.value % COLS));
     else if (k === 'End') focusCell(currentIdx.value - (currentIdx.value % COLS) + COLS - 1);
-    // Activation — follows mockup lines 607-615
-    else if (k === 'Enter' || k === ' ') {
-      const cell = cells.value[currentIdx.value];
-      if (cell !== undefined) {
-        boardInteraction?.triggerElementSelect(getIdentity(cell));
-      }
-    } else {
+    else {
       handled = false;
     }
 
