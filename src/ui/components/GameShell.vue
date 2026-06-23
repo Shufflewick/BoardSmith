@@ -1446,9 +1446,9 @@ if ((import.meta as any).hot) {
               :players="players"
             ></slot>
 
-            <!-- Game History (below scoreboard) -->
+            <!-- Game History (sidebar mode: medium/wide only; replaced by sheet on compact) -->
             <GameHistory
-              v-if="showHistory"
+              v-if="showHistory && !sidebarRail"
               :messages="gameMessages"
               v-model:collapsed="historyCollapsed"
               class="sidebar-history"
@@ -1516,6 +1516,14 @@ if ((import.meta as any).hot) {
             </slot>
           </div>
         </main>
+        <!-- Game History bottom sheet: compact/phone mode (IA-06).
+             Positioned absolute within .stage — never covers the .actionbar sibling below. -->
+        <GameHistory
+          v-if="showHistory && sidebarRail"
+          :messages="gameMessages"
+          :sheet="true"
+          v-model:collapsed="historyCollapsed"
+        />
         <!-- Scrim: only active on compact phones when sidebar is expanded over the board (IA-06).
              Click collapses the sidebar back to the rail. Sibling of .stage children so it
              sits inside .stage and can never cover the .actionbar below. -->
