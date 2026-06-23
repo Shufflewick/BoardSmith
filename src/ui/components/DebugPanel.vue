@@ -194,7 +194,7 @@ export interface DebugPanelProps {
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, inject, nextTick } from 'vue';
 
 interface SerializedAction {
   name: string;
@@ -252,7 +252,18 @@ async function debugRequest(op: string, payload: Record<string, unknown> = {}): 
 
 // Local state
 const panelExpanded = ref(props.expanded);
-const activeTab = ref<'state' | 'history' | 'elements' | 'decks' | 'actions' | 'controls'>('state');
+const activeTab = ref<'state' | 'elements' | 'decks' | 'actions' | 'history' | 'controls'>('state');
+
+// Tab descriptor for ARIA pattern — order matters for arrow-key navigation
+const DEBUG_TABS = [
+  { id: 'state' as const, label: 'State' },
+  { id: 'elements' as const, label: 'Elements' },
+  { id: 'decks' as const, label: 'Decks' },
+  { id: 'actions' as const, label: 'Actions' },
+  { id: 'history' as const, label: 'History' },
+  { id: 'controls' as const, label: 'Controls' },
+] as const;
+type TabId = typeof DEBUG_TABS[number]['id'];
 const showRawState = ref(false);
 const stateSearchQuery = ref('');
 const expandedPaths = ref<Set<string>>(new Set(['root']));
@@ -313,16 +324,49 @@ function togglePanel() {
   emit('update:expanded', panelExpanded.value);
 }
 
-// Keyboard shortcut handler
+// Keyboard shortcut handler — requires Ctrl/Cmd modifier; skips form fields
 function handleKeyDown(e: KeyboardEvent) {
-  // Don't trigger if typing in an input
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+  // Don't trigger when typing inside form controls or contenteditable elements
+  if (
+    e.target instanceof HTMLInputElement ||
+    e.target instanceof HTMLTextAreaElement ||
+    e.target instanceof HTMLSelectElement ||
+    (e.target instanceof HTMLElement && e.target.isContentEditable)
+  ) {
     return;
   }
-  // 'D' key toggles debug panel
-  if (e.key === 'd' || e.key === 'D') {
+  // Ctrl+D or Cmd+D toggles the debug panel; suppress the browser bookmark dialog
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+    e.preventDefault();
     togglePanel();
   }
+}
+
+// Arrow-key / Home / End navigation within the tablist
+function handleTabKeydown(e: KeyboardEvent) {
+  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End'];
+  if (!keys.includes(e.key)) return;
+  e.preventDefault();
+
+  const ids = DEBUG_TABS.map(t => t.id);
+  const currentIndex = ids.indexOf(activeTab.value as TabId);
+
+  let nextIndex: number;
+  if (e.key === 'ArrowRight') {
+    nextIndex = (currentIndex + 1) % ids.length;
+  } else if (e.key === 'ArrowLeft') {
+    nextIndex = (currentIndex - 1 + ids.length) % ids.length;
+  } else if (e.key === 'Home') {
+    nextIndex = 0;
+  } else {
+    nextIndex = ids.length - 1;
+  }
+
+  activeTab.value = ids[nextIndex] as TabId;
+  nextTick(() => {
+    const el = document.getElementById(`debug-tab-${activeTab.value}`);
+    el?.focus();
+  });
 }
 
 onMounted(() => {
@@ -1195,7 +1239,7 @@ const displayedState = computed(() => {
     <div class="debug-drawer" :class="{ open: panelExpanded }">
       <div class="debug-header">
         <span class="debug-title">Debug Panel</span>
-        <span class="debug-hint">(Press D to toggle)</span>
+        <span class="debug-hint">(Ctrl/Cmd+D to toggle)</span>
         <button class="close-btn" @click="togglePanel" aria-label="Close debug panel">
           <span aria-hidden="true">✕</span>
         </button>
@@ -1203,49 +1247,33 @@ const displayedState = computed(() => {
 
       <!-- Expanded content -->
       <div class="debug-content">
-        <!-- Tabs -->
-        <div class="debug-tabs">
+        <!-- Tabs — ARIA tablist pattern -->
+        <div class="debug-tabs" role="tablist" aria-label="Debug sections">
           <button
-            :class="{ active: activeTab === 'state' }"
-            @click="activeTab = 'state'"
+            v-for="tab in DEBUG_TABS"
+            :key="tab.id"
+            role="tab"
+            :id="`debug-tab-${tab.id}`"
+            :aria-selected="activeTab === tab.id"
+            :aria-controls="`debug-panel-${tab.id}`"
+            :tabindex="activeTab === tab.id ? 0 : -1"
+            :class="{ active: activeTab === tab.id }"
+            @click="activeTab = tab.id"
+            @keydown="handleTabKeydown"
           >
-            State
-          </button>
-          <button
-            :class="{ active: activeTab === 'elements' }"
-            @click="activeTab = 'elements'"
-          >
-            Elements
-          </button>
-          <button
-            :class="{ active: activeTab === 'decks' }"
-            @click="activeTab = 'decks'"
-          >
-            Decks
-            <span v-if="discoveredDecks.length > 0" class="tab-badge">{{ discoveredDecks.length }}</span>
-          </button>
-          <button
-            :class="{ active: activeTab === 'actions' }"
-            @click="activeTab = 'actions'"
-          >
-            Actions
-          </button>
-          <button
-            :class="{ active: activeTab === 'history' }"
-            @click="activeTab = 'history'"
-          >
-            History
-          </button>
-          <button
-            :class="{ active: activeTab === 'controls' }"
-            @click="activeTab = 'controls'"
-          >
-            Controls
+            {{ tab.label }}
+            <span v-if="tab.id === 'decks' && discoveredDecks.length > 0" class="tab-badge">{{ discoveredDecks.length }}</span>
           </button>
         </div>
 
         <!-- State Tab -->
-        <div v-if="activeTab === 'state'" class="tab-content state-tab">
+        <div
+          v-show="activeTab === 'state'"
+          id="debug-panel-state"
+          role="tabpanel"
+          aria-labelledby="debug-tab-state"
+          class="tab-content state-tab"
+        >
           <!-- Historical state banner -->
           <div v-if="isViewingHistory" class="historical-banner">
             <span class="historical-icon">&#9200;</span>
@@ -1319,7 +1347,13 @@ const displayedState = computed(() => {
         </div>
 
         <!-- Elements Tab -->
-        <div v-if="activeTab === 'elements'" class="tab-content elements-tab">
+        <div
+          v-show="activeTab === 'elements'"
+          id="debug-panel-elements"
+          role="tabpanel"
+          aria-labelledby="debug-tab-elements"
+          class="tab-content elements-tab"
+        >
           <!-- Search -->
           <div class="element-search">
             <input
@@ -1426,7 +1460,13 @@ const displayedState = computed(() => {
         </div>
 
         <!-- Decks Tab -->
-        <div v-if="activeTab === 'decks'" class="tab-content decks-tab">
+        <div
+          v-show="activeTab === 'decks'"
+          id="debug-panel-decks"
+          role="tabpanel"
+          aria-labelledby="debug-tab-decks"
+          class="tab-content decks-tab"
+        >
           <!-- Search -->
           <div class="deck-search">
             <input
@@ -1639,7 +1679,13 @@ const displayedState = computed(() => {
         </div>
 
         <!-- Actions Tab -->
-        <div v-if="activeTab === 'actions'" class="tab-content actions-tab">
+        <div
+          v-show="activeTab === 'actions'"
+          id="debug-panel-actions"
+          role="tabpanel"
+          aria-labelledby="debug-tab-actions"
+          class="tab-content actions-tab"
+        >
           <div class="actions-header">
             <span class="actions-count">{{ actionTraces.length }} actions</span>
             <button @click="fetchActionTraces" class="debug-btn small" :disabled="tracesLoading">
@@ -1793,7 +1839,13 @@ const displayedState = computed(() => {
         </div>
 
         <!-- History Tab -->
-        <div v-if="activeTab === 'history'" class="tab-content history-tab">
+        <div
+          v-show="activeTab === 'history'"
+          id="debug-panel-history"
+          role="tabpanel"
+          aria-labelledby="debug-tab-history"
+          class="tab-content history-tab"
+        >
           <div class="history-header">
             <span class="history-count">{{ actionHistory.length }} actions</span>
             <button @click="fetchHistory" class="debug-btn small" :disabled="historyLoading">
@@ -1891,7 +1943,13 @@ const displayedState = computed(() => {
         </div>
 
         <!-- Controls Tab -->
-        <div v-if="activeTab === 'controls'" class="tab-content controls-tab">
+        <div
+          v-show="activeTab === 'controls'"
+          id="debug-panel-controls"
+          role="tabpanel"
+          aria-labelledby="debug-tab-controls"
+          class="tab-content controls-tab"
+        >
           <!-- Player Perspective -->
           <div class="action-group">
             <h4>Player Perspective</h4>
@@ -1939,7 +1997,7 @@ const displayedState = computed(() => {
               <span class="value monospace">{{ playerSeat }} / {{ playerCount }}</span>
             </div>
             <div class="shortcut-hint">
-              <kbd>D</kbd> Toggle debug panel
+              <kbd>Ctrl/Cmd+D</kbd> Toggle debug panel
             </div>
           </div>
         </div>
