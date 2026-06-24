@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide, toRef } from 'vue';
-import { applyTheme } from '../theme.js';
+import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 // Dev-only auto-UI peek (see DevAutoUI below). Referenced ONLY under the
 // `isDevBuild` (`import.meta.env.DEV`) constant, so a production build constant-
@@ -31,6 +31,7 @@ import GameHeader from './GameHeader.vue';
 import GameHistory from './GameHistory.vue';
 import GameLobby from './GameLobby.vue';
 import PlayersPanel from './PlayersPanel.vue';
+import PlayerToken from './PlayerToken.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
@@ -216,11 +217,9 @@ watch(lobbyInfo, (lobby) => {
 }, { immediate: true });
 
 // UI state
-const historyCollapsed = ref(false);
 const debugExpanded = ref(false);
-// Single ref for whichever GameHistory instance is currently mounted
-// (sidebar and sheet are mutually exclusive by breakpoint). GameShell
-// mediates Copy/Clear from DebugPanel without duplicating message state.
+// Ref to the mounted GameHistory (lives in the players panel). GameShell mediates
+// Copy/Clear from DebugPanel without duplicating message state.
 const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
@@ -229,13 +228,27 @@ const autoEndTurn = ref(true); // Auto-end turn after making a move
 // The matchMedia listener ensures the rail collapses automatically when the viewport
 // narrows to compact, but never forces expansion when viewport widens (user preference).
 const sidebarRail = ref<boolean>(false);
+// Mobile only: the sidebar defaults to a compact one-line player strip; this opens
+// the full players + log as an overlay over the board (board stays the hero).
+const mobileExpanded = ref<boolean>(false);
+// True on phones (≤639px). Mobile uses its own compact-strip + overlay layout and
+// must NOT inherit the desktop rail state — otherwise a rail collapsed on desktop
+// would make the mobile overlay show icons (and hide the log) instead of the full panel.
+const isCompact = ref<boolean>(false);
 let compactQuery: MediaQueryList | null = null;
-// On phones the sidebar no longer collapses to a slim rail — it stacks full-width
-// above the board (the full players list), driven purely by the @media block below.
-// So the compact matchMedia listener is a no-op kept only for symmetry/teardown.
-function initCompactRail(_mql: MediaQueryList | MediaQueryListEvent) {
-  /* intentionally empty — see the (max-width: 639px) block in <style> */
+// Track the compact (phone) breakpoint so the mobile layout can ignore the desktop
+// rail state. Collapsing the mobile overlay when leaving compact avoids a stuck
+// overlay if the viewport widens while expanded.
+function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
+  isCompact.value = mql.matches;
+  if (!mql.matches) mobileExpanded.value = false;
 }
+
+// Floating action dock height, measured so the board reserves matching scroll room
+// at the bottom — anything the dock floats over can then be scrolled into view.
+const dockHeight = ref<number>(68);
+let dockResizeObserver: ResizeObserver | null = null;
+const actionbarEl = ref<HTMLElement | null>(null);
 
 // Connection health (IA-01): driven by postMessage heartbeat in platform mode.
 // Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a
@@ -247,12 +260,6 @@ let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 // Winner seats captured from the game_state postMessage (IA-07).
 // Validated as number[] on receipt; stays [] in dev-WS mode (graceful degrade).
 const winnerSeats = ref<number[]>([]);
-
-// Actionbar element ref + ResizeObserver for dock-height reservation (IA-04).
-// The observer sets --bsg-dock-h on the root element so .boardregion can
-// reserve exactly the measured dock height instead of a hardcoded 80px.
-const actionbarRef = ref<HTMLElement | null>(null);
-let dockObserver: ResizeObserver | null = null;
 
 // Time travel state (for viewing historical game states)
 const timeTravelState = ref<any>(null);
@@ -492,6 +499,21 @@ const gameMessages = computed(() => {
 const players = computed(() => state.value?.state.players || []);
 const myPlayer = computed(() => players.value.find(p => p.seat === playerSeat.value));
 const opponentPlayers = computed(() => players.value.filter(p => p.seat !== playerSeat.value));
+
+// Per-seat live connection status for the players panel. The lobby slots are the
+// only source of truth for human presence (lobby-manager.setPlayerConnected), kept
+// reactive in `lobbyInfo` for the life of the session. AI slots and modes with no
+// lobby (e.g. --ai) leave `connected` undefined so PlayersPanel renders no indicator
+// rather than fabricating presence we don't actually know.
+const playersWithConnection = computed(() => {
+  const slots = lobbyInfo.value?.slots;
+  if (!slots) return players.value;
+  return players.value.map((p) => {
+    const slot = slots.find((s) => s.seat === p.seat);
+    const connected = slot && slot.aiLevel == null ? slot.connected : undefined;
+    return connected === undefined ? p : { ...p, connected };
+  });
+});
 const currentPlayerName = computed(() => {
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return '';
@@ -517,6 +539,17 @@ const awaitingPlayerNames = computed(() => {
       const player = players.value.find(pl => pl.seat === p.playerIndex);
       return { seat: p.playerIndex, name: player?.name || `Player ${p.playerIndex}`, color: typeof (player as any)?.color === 'string' ? (player as any).color : undefined };
     });
+});
+
+// Active player (whose turn it is, or first awaiting) for the action-bar turn
+// token. index → token shape; matches the PlayersPanel ordering.
+const activePlayer = computed(() => {
+  const seat = state.value?.state?.currentPlayer ?? awaitingPlayerSeats.value[0];
+  if (seat === undefined) return null;
+  const index = players.value.findIndex(p => p.seat === seat);
+  if (index < 0) return null;
+  const p = players.value[index] as { name?: string; color?: string };
+  return { name: p.name ?? `Player ${seat + 1}`, index, color: p.color };
 });
 
 const currentPlayerColor = computed((): string | undefined => {
@@ -644,34 +677,25 @@ onMounted(async () => {
   // via the init postMessage and is applied by consumeInitMessage below.
   applyTheme();
 
-  // IA-04: Measure the actionbar height and publish it as --bsg-dock-h so the
-  // .boardregion can reserve exactly the right amount of padding at the bottom.
-  // A single observer on the actionbar element fires whenever it grows/shrinks
-  // (e.g. when action buttons appear/disappear or flex-wrap adds rows).
-  dockObserver = new ResizeObserver((entries) => {
-    const h = entries[0]?.borderBoxSize?.[0]?.blockSize ?? 0;
-    document.documentElement.style.setProperty('--bsg-dock-h', `${h}px`);
-  });
-  // The actionbar only exists while currentScreen === 'game'. In dev/standalone
-  // mode the screen starts at 'lobby', so the element is absent at mount and
-  // appears later on the lobby→game transition. Track the ref so the observer
-  // (re)attaches whenever the actionbar mounts and detaches when it unmounts —
-  // observing on mount alone would silently never fire in the lobby-first flow.
-  watch(
-    actionbarRef,
-    (el, prev) => {
-      if (prev) dockObserver?.unobserve(prev);
-      if (el) dockObserver?.observe(el);
-      else document.documentElement.style.setProperty('--bsg-dock-h', '0px');
-    },
-    { immediate: true },
-  );
-
   // IA-06: Collapse sidebar to rail by default on compact phones (≤639px).
   // This runs after paint so the initial state is correct before first render.
-  compactQuery = window.matchMedia('(max-width: 639px)');
-  initCompactRail(compactQuery);
-  compactQuery.addEventListener('change', initCompactRail);
+  compactQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.compact - 1}px)`);
+  updateCompact(compactQuery);
+  compactQuery.addEventListener('change', updateCompact);
+
+  // Track the floating dock's height so the board reserves matching scroll room at
+  // the bottom — covered board content can then always be scrolled into view.
+  if (actionbarEl.value && typeof ResizeObserver !== 'undefined') {
+    dockResizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      // Use the BORDER-box height (the dock's full on-screen footprint incl. padding),
+      // plus a small buffer so revealed content clears the dock edge. contentRect
+      // excludes padding and would leave the board's bottom slightly under the dock.
+      const h = entry?.borderBoxSize?.[0]?.blockSize ?? entry?.target.getBoundingClientRect().height;
+      if (h != null) dockHeight.value = Math.round(h) + 8;
+    });
+    dockResizeObserver.observe(actionbarEl.value);
+  }
 
   if (platformMode.value) return;
 
@@ -685,8 +709,8 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
-  dockObserver?.disconnect();
-  compactQuery?.removeEventListener('change', initCompactRail);
+  compactQuery?.removeEventListener('change', updateCompact);
+  dockResizeObserver?.disconnect();
   if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
   disconnectFromLobby();
   if (platformMessageHandler) {
@@ -750,6 +774,14 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       return;
     }
 
+    // Dev-only: the Dev header (DevHost chrome) owns the Debug toggle now. It
+    // posts this to open/close the in-iframe DebugPanel. GameShell echoes the
+    // resulting state back via the debugExpanded watcher so the header stays synced.
+    if (data.type === 'dev-debug-toggle' && isDevBuild) {
+      debugExpanded.value = !debugExpanded.value;
+      return;
+    }
+
     if (data.type === 'game_state' && platformMode.value) {
       const view = data.view as { flowState?: unknown; state?: Record<string, unknown> } | undefined;
       if (!view?.state) return;
@@ -806,6 +838,16 @@ if (typeof window !== 'undefined' && window.parent !== window) {
   // Advertise the available UIs to the dev host so it can render the switcher
   // dropdown (dev-only; no-op in production).
   postDevUiList();
+  // Keep the Dev header's Debug toggle in sync with the panel's actual open state
+  // (it can also be toggled via the in-panel ✕ or Ctrl/Cmd+D). Dev-only.
+  if (isDevBuild) {
+    watch(debugExpanded, (open) => {
+      window.parent.postMessage(
+        { source: 'shufflewick-game', type: 'dev-debug-state', open },
+        '*'
+      );
+    });
+  }
   // NOTE: auto-executing a sole endTurn (and auto-starting any single action) is
   // now owned by useBoardActionBridge, which runs unconditionally above — so it
   // works whether or not the footer ActionPanel is mounted.
@@ -1534,7 +1576,7 @@ if ((import.meta as any).hot) {
       <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a sibling, below) -->
       <div class="stage">
         <!-- Sidebar: always-visible player status + history; collapses to rail (IA-06) -->
-        <aside class="sidebar" :class="{ rail: sidebarRail }" aria-label="Players and log">
+        <aside class="sidebar" :class="{ rail: sidebarRail, 'mobile-expanded': mobileExpanded }" aria-label="Players and log">
           <!-- Rail toggle button: absolutely positioned on the right edge of the sidebar (IA-06) -->
           <button
             class="side-edge"
@@ -1547,35 +1589,56 @@ if ((import.meta as any).hot) {
               <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-          <!-- side-head: Shufflewick branding + ⋯ controls menu (IA-01) -->
-          <div class="side-head">
-            <!-- sw-btn is purely decorative branding — no interactive affordance is available
-                 in platform mode (GameHeader/HamburgerMenu is hidden). aria-hidden prevents
-                 AT users from encountering a non-functional interactive element (IN-02). -->
-            <div class="sw-btn" aria-hidden="true">
-              <span class="sw-btn__mark"></span>
-              <span class="sw-btn__wordmark">Shufflewick</span>
-            </div>
-            <ControlsMenu
-              v-model:auto-end-turn="autoEndTurn"
-              v-model:zoom="zoomLevel"
-              :can-undo="canUndo && !isViewingHistory"
-              @undo="handleUndo"
-              @menu-item-click="handleMenuItemClick"
-            />
-          </div>
 
-          <div class="side-scroll">
+          <!-- Mobile only (CSS-gated): a one-line player-icon strip with an expand
+               toggle. Keeps the board the hero; the full panel + log open as an
+               overlay below (see .mobile-expanded). -->
+          <div class="mobile-strip">
             <PlayersPanel
+              class="mobile-strip__players"
               :players="players"
               :player-seat="playerSeat"
               :current-player-seat="state?.state.currentPlayer"
-              :color-selection-enabled="colorSelectionEnabled"
               :awaiting-player-seats="awaitingPlayerSeats"
-              :seat-strip="sidebarRail"
+              seat-strip
+            />
+            <button
+              class="mobile-strip__toggle"
+              type="button"
+              :aria-expanded="mobileExpanded"
+              :aria-label="mobileExpanded ? 'Hide players and log' : 'Show players and log'"
+              @click="mobileExpanded = !mobileExpanded"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- No header band: host branding (ShufflewickPub pull-down tab) overlays
+               the top in production, and the ⋯ controls now live in the action bar. -->
+          <div class="side-scroll">
+            <PlayersPanel
+              :players="playersWithConnection"
+              :player-seat="playerSeat"
+              :current-player-seat="state?.state.currentPlayer"
+              :awaiting-player-seats="awaitingPlayerSeats"
+              :seat-strip="!isCompact && sidebarRail"
             >
               <template #player-stats="{ player }">
-                <slot name="player-stats" :player="player" :game-view="gameView" :players="players"></slot>
+                <!-- Expose interaction state so a game's player-stats can be actionable
+                     (e.g. tap your own special ability to use it), not just informational.
+                     player is the panel's player; playerSeat is the local seat. -->
+                <slot
+                  name="player-stats"
+                  :player="player"
+                  :game-view="gameView"
+                  :players="players"
+                  :player-seat="playerSeat"
+                  :is-my-turn="isMyTurn"
+                  :available-actions="availableActions"
+                  :action-controller="actionController"
+                ></slot>
               </template>
             </PlayersPanel>
 
@@ -1585,19 +1648,21 @@ if ((import.meta as any).hot) {
               :players="players"
             ></slot>
 
-            <!-- Game History (sidebar mode: medium/wide only; replaced by sheet on compact) -->
+            <!-- Game History in the side-scroll: shown when expanded on desktop, and
+                 always on mobile (inside the overlay). The desktop rail uses the sheet. -->
             <GameHistory
-              v-if="showHistory && !sidebarRail"
+              v-if="showHistory && (isCompact || !sidebarRail)"
               ref="historyPanel"
               :messages="gameMessages"
-              v-model:collapsed="historyCollapsed"
               class="sidebar-history"
             />
           </div>
         </aside>
 
-        <!-- Board region: hero; ~zero chrome padding; container-query-sized -->
-        <main class="boardregion" id="main" role="main">
+        <!-- Board region: hero; ~zero chrome padding; container-query-sized.
+             --dock-h carries the floating dock's measured height so the board has
+             matching scroll room at the bottom (covered content stays reachable). -->
+        <main class="boardregion" id="main" role="main" :style="{ '--dock-h': dockHeight + 'px' }">
           <!-- Connection health dot: platform mode only, and only surfaced when there's
                something to say (stale/connecting). A healthy connection shows nothing —
                a persistent green dot over the board just reads as a mystery speck (IA-01).
@@ -1671,49 +1736,66 @@ if ((import.meta as any).hot) {
             </slot>
           </div>
         </main>
-        <!-- Game History bottom sheet: compact/phone mode (IA-06).
-             Positioned absolute within .stage — never covers the .actionbar sibling below. -->
-        <GameHistory
-          v-if="showHistory && sidebarRail"
-          ref="historyPanel"
-          :messages="gameMessages"
-          :sheet="true"
-          v-model:collapsed="historyCollapsed"
-        />
-        <!-- Scrim: only active on compact phones when sidebar is expanded over the board (IA-06).
-             Click collapses the sidebar back to the rail. Sibling of .stage children so it
-             sits inside .stage and can never cover the .actionbar below. -->
+        <!-- No floating log button: the log lives in the players panel. Collapse the
+             sidebar rail / mobile strip to hide it; expand to read it. -->
+        <!-- Scrim: active only on mobile when the player strip is expanded into the
+             full overlay. Tapping it collapses back to the strip. Sibling of .stage
+             children so it sits inside .stage and never covers the .actionbar below. -->
         <div
           class="scrim"
-          :class="{ active: !sidebarRail }"
+          :class="{ active: mobileExpanded }"
           aria-hidden="true"
-          @click="sidebarRail = true"
+          @click="mobileExpanded = false"
         ></div>
       </div>
 
-      <!-- Full-width actionbar: sibling of .stage; grows vertically (IA-02, IA-03, IA-04) -->
-      <div class="actionbar" ref="actionbarRef" role="region" aria-label="Actions">
+      <!-- Floating action dock: absolutely positioned over the BOTTOM of the game
+           area (full width) so showing/growing it NEVER reflows or moves the board.
+           Its options list caps at 5 rows and scrolls; the board reserves the dock's
+           measured height as scroll room so anything it floats over stays reachable. -->
+      <div class="actionbar" role="region" aria-label="Actions" ref="actionbarEl">
+        <!-- ⋯ controls menu: always available at the far-left of the bar (the sole
+             control surface in platform mode, where GameHeader is hidden). Opens
+             upward since the bar is bottom-anchored. -->
+        <ControlsMenu
+          class="actionbar-controls"
+          open-up
+          align="left"
+          v-model:auto-end-turn="autoEndTurn"
+          v-model:zoom="zoomLevel"
+          :can-undo="canUndo && !isViewingHistory"
+          @undo="handleUndo"
+          @menu-item-click="handleMenuItemClick"
+        />
         <!-- Dock: only render when player is actionable (IA-04) -->
         <template v-if="isMyTurn || awaitingPlayerNames.length">
+          <!-- Active-player identity token: always shown at the head of the dock so
+               the action bar carries WHO is acting (IA-02), regardless of whether the
+               ActionPanel or the fallback prompt strip renders the WHAT. -->
+          <PlayerToken
+            v-if="activePlayer"
+            class="turn-token"
+            :name="activePlayer.name"
+            :index="activePlayer.index"
+            :color="activePlayer.color"
+            :size="30"
+          />
           <!-- Turn strip: the fallback prompt surface. Shown ONLY when the ActionPanel
-               is NOT rendering (every pick board-anchored, or panel suppressed) — that
-               way the prompt survives a board-only turn (IA-03, never a silent board)
-               without duplicating the prompt the ActionPanel already shows (IA-02). -->
+               is explicitly suppressed (the D-02 escape hatch) — that way the prompt
+               survives even when no panel renders (IA-03, never a silent board). -->
           <span
-            v-if="props.suppressActionPanel || actionController.allCurrentChoicesAnchored.value"
+            v-if="props.suppressActionPanel"
             class="turn"
           >
-            <span
-              v-if="currentPlayerColor"
-              class="turn__swatch"
-              :style="{ background: currentPlayerColor }"
-              aria-hidden="true"
-            ></span>
             <span class="pr">{{ boardPrompt ?? actionController.currentPick.value?.prompt }}</span>
           </span>
-          <!-- Action buttons: suppressed ONLY when every pick is board-anchored (IA-03).
-               The .turn strip above is NOT inside this gate so the prompt survives. -->
-          <template v-if="!props.suppressActionPanel && !actionController.allCurrentChoicesAnchored.value">
+          <!-- Action panel: mounted whenever not explicitly suppressed — INCLUDING the
+               all-board-anchored case, where ActionPanel renders its anchored-choices
+               operable button list ("Select on board or choose here"). That focusable
+               list is the keyboard/SR safety net (A11Y C-2): the panel is never fully
+               removed while a pick has choices, so custom UIs whose board isn't
+               keyboard-operable still expose an operable control. -->
+          <template v-if="!props.suppressActionPanel">
             <slot name="action-panel">
               <ActionPanel
                 :available-actions="isViewingHistory ? [] : availableActions"
@@ -1877,12 +1959,14 @@ if ((import.meta as any).hot) {
   margin-left: auto;
 }
 
-/* Game Screen: flex column, full viewport height */
+/* Game Screen: flex column, full viewport height. Positioning context for the
+   floating action dock (.actionbar), which is absolutely positioned within it. */
 .game-shell__game {
   display: flex;
   flex-direction: column;
   height: 100vh; /* fallback: browsers without dvh support */
   height: 100dvh;
+  position: relative;
 }
 
 /* Stage: sidebar + boardregion side by side; fills remaining height */
@@ -1910,24 +1994,12 @@ if ((import.meta as any).hot) {
 .sidebar.rail {
   width: var(--bsg-rail);
 }
-.sidebar.rail .side-head {
-  flex-direction: column;
-  gap: var(--bsg-s2);
-  padding: 9px 0;
-}
-.sidebar.rail .sw-btn__wordmark {
-  display: none;
-}
-.sidebar.rail .sw-btn {
-  padding: 6px;
-}
 .sidebar.rail .side-scroll {
   padding: var(--bsg-s2) 0;
 }
 /* In rail, hide sidebar text labels; keep only the player tokens visible */
 .sidebar.rail :deep(.player-name-row),
-.sidebar.rail :deep(.you-badge),
-.sidebar.rail :deep(.player-color) {
+.sidebar.rail :deep(.you-badge) {
   display: none;
 }
 /* History hidden in rail mode */
@@ -1964,8 +2036,9 @@ if ((import.meta as any).hot) {
   transform: rotate(180deg);
 }
 
-/* Scrim: transparent cover over board area; visible only on compact when sidebar expanded (IA-06).
-   Positioned inside .stage so it never covers the .actionbar sibling below. */
+/* Scrim: transparent cover over board area; visible only on mobile when the player
+   strip is expanded into the overlay (IA-06). Inside .stage so it never covers the
+   .actionbar sibling below. */
 .scrim {
   position: absolute;
   inset: 0;
@@ -1975,50 +2048,15 @@ if ((import.meta as any).hot) {
   pointer-events: none;
   transition: opacity var(--bsg-dur-base);
 }
-
-/* Side head: Shufflewick host button + ⋯ controls menu trigger */
-.side-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 9px 9px 11px;
-  border-bottom: 1px solid var(--bsg-line);
+.scrim.active {
+  opacity: 1;
+  pointer-events: auto;
 }
 
-.sw-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  cursor: pointer;
-  padding: 7px 10px;
-  border-radius: var(--bsg-r-sm);
-  border: 1px solid transparent;
-  background: none;
-  color: var(--bsg-ink);
-  font-weight: 800;
-  font-size: 14px;
-  letter-spacing: 0.01em;
-}
-.sw-btn:hover {
-  background: var(--bsg-field);
-  border-color: var(--bsg-line);
-}
-.sw-btn__mark {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--bsg-accent);
-  opacity: 0.7;
-}
-.sw-btn__wordmark {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  font-size: 14px;
+/* Mobile player strip (one-line icons + expand toggle). Hidden on desktop;
+   shown only inside the mobile @media block below. */
+.mobile-strip {
+  display: none;
 }
 
 /* Side scroll: players panel + game history (scrollable) */
@@ -2046,53 +2084,76 @@ if ((import.meta as any).hot) {
 .conn-dot.stale     { background: var(--bsg-warn); }
 .conn-dot.connecting { background: var(--bsg-away); }
 
-/* Board region: hero; container-query-sized; ~zero chrome padding (IA-05) */
+/* Board region: hero; container-query-sized; ~zero chrome padding (IA-05).
+   The board is NOT force-fit or centered: it renders at its NATURAL size, pinned
+   top-left, and this region scrolls (both axes) whenever the board — at its natural
+   size or zoomed — is larger than the viewport. Many games have more content than
+   ever fits a viewport, so scroll is the contract, not shrink-to-fit. */
 .boardregion {
   flex: 1;
   min-width: 0;
   min-height: 0;
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: auto;
   padding: var(--bsg-s1);
-  container-type: size;
-  /* Reserve space for the actionbar measured via ResizeObserver (IA-04).
-     Falls back to s3 or safe-area inset if --bsg-dock-h is not yet set. */
-  padding-bottom: max(var(--bsg-s3), var(--bsg-dock-h, 0px), env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Full-width actionbar: sibling of .stage, spans both sidebar + boardregion.
-   Grows vertically (flex-wrap), caps at ~5 rows, then scrolls — never horizontal. */
+/* Floating action dock: absolutely anchored to the bottom, FULL WIDTH (spans under
+   the sidebar too). Out of flow, so it never reflows/moves the board — it floats over
+   the board's bottom; the board reserves the dock's measured height (--dock-h) as
+   scroll room so covered content stays reachable. Everything inside wraps naturally
+   (flex-wrap) — no reserved columns; the options list caps at 5 rows and scrolls. */
 .actionbar {
-  flex: none;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
   background: var(--bsg-surface);
   border-top: 1px solid var(--bsg-line);
+  box-shadow: var(--bsg-shadow);
+  /* One inline-wrapping flow: the ⋯ menu, player token, prompt text, cancel, and
+     every option button are flattened into THIS flex container (ActionPanel wrappers
+     use display:contents) so they wrap together like words in a sentence — no header
+     row / carriage return before the buttons. */
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
   gap: 8px;
   padding: 9px var(--bsg-s4);
   padding-bottom: calc(9px + env(safe-area-inset-bottom));
-  max-height: min(40dvh, 320px);
+  /* Cap at ~5 button-rows (44px buttons + 8px row gaps + vertical padding), then the
+     whole flow scrolls. The ⋯ menu popover teleports to <body>, so overflow is safe. */
+  max-height: calc(5 * 44px + 4 * 8px + 18px + env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 
-/* Turn strip: active player color swatch + prompt sentence */
+/* ⋯ controls menu — first item in the inline dock flow. */
+.actionbar-controls {
+  margin-right: 4px;
+}
+
+/* Active-player identity token — flows inline right after the ⋯ menu. */
+.turn-token {
+  margin-right: 4px;
+}
+
+/* Turn strip: prompt sentence (fallback when ActionPanel is not rendering) */
 .turn {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 0 14px 0 10px;
+  padding: 0 14px 0 4px;
   min-height: 46px;
   border-right: 1px solid var(--bsg-line);
   margin-right: 4px;
-}
-.turn__swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  flex: none;
 }
 .turn .pr {
   font-size: 13.5px;
@@ -2105,54 +2166,126 @@ if ((import.meta as any).hot) {
    @media queries drive shell chrome; @container for renderer reflow (plan 100-02).
    ──────────────────────────────────────────────────────────────────────────── */
 
-/* Compact (phones ≤639px): board fills the viewport; sidebar defaults to rail.
-   When expanded the sidebar overlays the board area only (never the actionbar),
-   absolutely positioned inside .stage. Scrim becomes visible and interactive. */
+/* Compact (phones ≤639px): the board is the hero. The sidebar collapses to a single
+   one-line player-icon strip across the top; tapping its chevron opens the full
+   players + log as an overlay over the board (never the action bar), with a scrim. */
 @media (max-width: 639px) {
-  /* Phones: stack the sidebar (full players list) ABOVE the board as a full-width
-     band, instead of a slim side rail with side-by-side tokens. The board fills the
-     remaining height below. (Product decision: players stack vertically on mobile.) */
   .stage {
     flex-direction: column;
   }
+  /* Sidebar = just the strip height by default; positioned so the expanded overlay
+     (top:100%) anchors right below the strip. */
   .sidebar,
   .sidebar.rail {
-    position: static;
+    position: relative;
     width: 100%;
     flex: none;
-    max-height: 42dvh;
-    overflow-y: auto;
+    max-height: none;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--bsg-line);
     box-shadow: none;
   }
-  /* No rail/overlay affordances on phones — the panel is always shown stacked. */
-  .side-edge,
-  .scrim {
+  /* The desktop rail toggle has no role on phones. */
+  .side-edge {
     display: none;
   }
+  /* Compact strip: player icons on the left, expand chevron on the right. */
+  .mobile-strip {
+    display: flex;
+    align-items: center;
+    gap: var(--bsg-s2);
+    padding: 6px var(--bsg-s3);
+  }
+  .mobile-strip__players {
+    flex: 1;
+    min-width: 0;
+  }
+  /* Strip icons hug the left and never wrap to a second row. */
+  .mobile-strip :deep(.seat-strip) {
+    justify-content: flex-start;
+  }
+  .mobile-strip :deep(.strip-tokens) {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+  }
+  /* Un-hide the turn-status sentence in the phone strip so off-turn players can
+     READ whose turn it is (the desktop rail keeps it icon-only — see PlayersPanel).
+     Scoped to .mobile-strip so only the wide phone bar gets the text. */
+  .mobile-strip :deep(.strip-status) {
+    display: inline-block;
+    margin-left: var(--bsg-s2);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--bsg-accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .mobile-strip__toggle {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--bsg-r-sm);
+    background: transparent;
+    border: 1px solid var(--bsg-line);
+    color: var(--bsg-ink-2);
+    cursor: pointer;
+  }
+  .mobile-strip__toggle svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    transition: transform var(--bsg-dur-fast);
+  }
+  .sidebar.mobile-expanded .mobile-strip__toggle svg {
+    transform: rotate(180deg);
+  }
+  /* Full panel + log: hidden by default; shown as an overlay below the strip when
+     expanded (board stays the hero underneath, dimmed by the scrim). */
+  .side-scroll {
+    display: none;
+  }
+  /* Lift the whole sidebar (strip + overlay) above the scrim so the toggle stays tappable. */
+  .sidebar.mobile-expanded {
+    z-index: 50;
+    background: var(--bsg-surface);
+  }
+  .sidebar.mobile-expanded .side-scroll {
+    display: block;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 60dvh;
+    overflow-y: auto;
+    background: var(--bsg-surface);
+    border-bottom: 1px solid var(--bsg-line);
+    box-shadow: var(--bsg-shadow);
+  }
+  /* Phones use the SAME 5-row dock cap as desktop (no override) — the base
+     .actionbar max-height applies. */
 }
 
-/* Medium (768px–1023px): standard sidebar + board. */
-@media (min-width: 768px) and (max-width: 1023px) {
+/* Medium (640px–1023px): standard sidebar + board. Lower bound aligns with the
+   compact ceiling (639px) so 640–767px is a real tier, not an untiered gap. */
+@media (min-width: 640px) and (max-width: 1023px) {
   .boardregion {
     min-height: 380px;
   }
 }
 
-/* Large (≥1024px): wider board min-height. */
+/* Large (≥1024px): wider board min-height. The board is NOT centered or width-capped
+   — many games have more content than fits the viewport, so the board sits top-left
+   and the region scrolls (both axes) when the board is larger than the viewport. */
 @media (min-width: 1024px) {
   .boardregion {
     min-height: 480px;
-  }
-}
-
-/* Wide (≥1440px): center the game shell at a max-width so the board stays
-   the hero on ultra-wide displays. Auto margins center it horizontally. */
-@media (min-width: 1440px) {
-  .game-shell__game {
-    max-width: 1600px;
-    margin-inline: auto;
   }
 }
 
@@ -2169,11 +2302,21 @@ if ((import.meta as any).hot) {
 
 .game-shell__zoom-container {
   --zoom-level: 1;
-  transform: scale(var(--zoom-level));
-  transform-origin: top left;
-  /* Width/height at 100% divided by zoom to reserve correct space */
-  width: calc(100% / var(--zoom-level));
-  min-height: calc(100% / var(--zoom-level));
+  /* Size to the board's NATURAL content (not stretched to the region), so the board
+     keeps its intrinsic size top-left and the region scrolls when it's bigger. */
+  flex: none;
+  width: max-content;
+  max-width: none;
+  /* Use the `zoom` property (not transform): it scales the LAYOUT box, so a
+     zoomed-up board genuinely overflows .boardregion and becomes scrollable in both
+     axes (the board has an intrinsic size to multiply) — unlike transform:scale,
+     which only shifts the paint and left the board un-scrollable / drifting sideways. */
+  zoom: var(--zoom-level);
+
+  /* Scroll room equal to the floating dock's height, so the board's bottom — which
+     the dock floats over — can always be scrolled up into view. Measured live by a
+     ResizeObserver (--dock-h) so it tracks the dock as it grows/shrinks. */
+  margin-bottom: var(--dock-h, 0px);
 
   /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
      Any fixed-position elements inside will behave like absolute positioning

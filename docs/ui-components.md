@@ -37,12 +37,22 @@ The main wrapper component that provides the complete game UI structure: header,
       />
     </template>
 
-    <!-- Custom player stats display -->
-    <template #player-stats="{ player, gameView }">
+    <!-- Custom player stats display. The slot also receives interaction state so a
+         player's panel can be actionable (e.g. tap your own ability to use it), not
+         just informational: playerSeat (the local seat), isMyTurn, availableActions,
+         and actionController. `player` is the panel's player — gate actions on
+         `player.seat === playerSeat`. -->
+    <template #player-stats="{ player, players, playerSeat, isMyTurn, availableActions, actionController }">
       <div class="player-stat">
         <span class="label">Score:</span>
         <span class="value">{{ player.score }}</span>
       </div>
+      <button
+        v-if="player.seat === playerSeat && isMyTurn && availableActions.includes('useAbility')"
+        @click="actionController.start('useAbility')"
+      >
+        Use ability
+      </button>
     </template>
   </GameShell>
 </template>
@@ -401,6 +411,45 @@ const showModal = ref(false);
 - Must be rendered inside a component within GameShell's game-board slot
 - Use `@click.stop` on your modal content to prevent backdrop clicks from closing
 - Use `position: sticky` on content for tall game boards
+
+### BoardMessage
+
+Transient/ephemeral message anchored to the game board. **This is the standard
+primitive for short-lived board indicators** (e.g. "Select a target cell",
+"Captures are mandatory").
+
+> **Standard:** Transient board messages MUST use `<BoardMessage>` (or otherwise
+> be absolutely positioned within a `position: relative` board container) so they
+> **never reflow the board**. An in-flow status element shifts the board up/down
+> each time it appears/disappears — this is not allowed.
+
+**How it works:** BoardMessage is absolutely positioned inside the nearest
+`position: relative` ancestor (your board wrapper), so showing/hiding it never
+changes layout. It is themed entirely with `--bsg-*` tokens, exposes a
+`role="status"` `aria-live="polite"` region for screen readers, and disables its
+fade transition under `prefers-reduced-motion`. (Distinct from `Toast`, which is
+for global, viewport-edge notifications.)
+
+```vue
+<script setup>
+import { BoardMessage } from 'boardsmith/ui';
+</script>
+
+<template>
+  <div class="board-wrapper"> <!-- position: relative -->
+    <svg class="board">...</svg>
+    <BoardMessage :visible="isMyTurn">Select a target cell</BoardMessage>
+  </div>
+</template>
+
+<style scoped>
+.board-wrapper { position: relative; }
+</style>
+```
+
+**Props:**
+- `visible` (boolean, default: true) - Whether the message is shown (toggling fades it without reflow)
+- `position` (`'bottom' | 'top' | 'center'`, default: `'bottom'`) - Anchor within the board container
 
 ## Composables
 
