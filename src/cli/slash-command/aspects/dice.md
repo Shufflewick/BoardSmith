@@ -168,10 +168,7 @@ function handleRoll() {
 
 .game-over-title {
   font-size: 2.5rem;
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--bsg-accent);
 }
 
 .dice-area {
@@ -182,8 +179,8 @@ function handleRoll() {
 }
 
 .roll-button {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   border: none;
   padding: 12px 32px;
   border-radius: 8px;

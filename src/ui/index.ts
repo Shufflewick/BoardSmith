@@ -13,6 +13,7 @@ export { default as Toast } from './components/Toast.vue';
 
 // Helper components
 export {
+  BoardMessage,
   FlyingCardsOverlay,
   GameOverlay,
   ZoomPreviewOverlay,

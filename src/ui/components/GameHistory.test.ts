@@ -57,14 +57,19 @@ describe('GameHistory', () => {
 
   // -------------------------------------------------------------------------
 
-  describe('read-only sidebar (DEV-06)', () => {
-    it('renders no Copy button and no Clear button in sidebar mode', () => {
+  describe('log header', () => {
+    it('has a copy-log button but no clear button (clear lives in DebugPanel)', () => {
       const wrapper = mount(GameHistory, {
-        props: { messages: [], sheet: false, collapsed: false },
+        props: { messages: [] },
       });
 
-      expect(wrapper.find('.copy-btn').exists()).toBe(false);
+      expect(wrapper.find('.history-copy').exists()).toBe(true);
       expect(wrapper.find('.clear-btn').exists()).toBe(false);
+    });
+
+    it('the copy button is disabled when the log is empty', () => {
+      const wrapper = mount(GameHistory, { props: { messages: [] } });
+      expect(wrapper.find('.history-copy').attributes('disabled')).toBeDefined();
     });
   });
 

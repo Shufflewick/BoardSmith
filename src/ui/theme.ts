@@ -10,6 +10,23 @@
  */
 
 // ---------------------------------------------------------------------------
+// Responsive breakpoints — single source of truth (px).
+//
+// CSS @media / @container conditions cannot read CSS custom properties, so these
+// live as a TS constant for JS-side consumers (matchMedia, ResizeObserver math).
+// Keep the .vue @media literals aligned to these tiers:
+//   compact ≤639px · medium 640–1023px · wide ≥1024px (board centers at wide).
+// ---------------------------------------------------------------------------
+export const BREAKPOINTS = {
+  /** Phone ceiling — below this is the compact tier. */
+  compact: 640,
+  /** Tablet ceiling — at/above this is the wide/desktop tier. */
+  medium: 1024,
+  /** Wide threshold — board gains a centered max-width cap from here up. */
+  wide: 1440,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Seat palette — single source of truth for seat color values
 // Muted (~30% desaturated), colorblind-aware, harmonious on the graphite ground
 // ---------------------------------------------------------------------------
@@ -116,6 +133,12 @@ const STATIC_TOKENS = `
   /* Layout */
   --bsg-rail: 64px;
   --bsg-side: 286px;
+
+  /* Board element natural sizes. Boards render at these intrinsic sizes (NOT fit to
+     the viewport); the board area scrolls when larger, and zoom multiplies them.
+     Games/themes can override per board. */
+  --bsg-cell: 64px;     /* grid/space cell edge */
+  --bsg-card-w: 72px;   /* hand/deck card width (height via aspect-ratio) */
 
   /* Type scale (1.25 ratio, 16px body) */
   --bsg-text-xs: .75rem;

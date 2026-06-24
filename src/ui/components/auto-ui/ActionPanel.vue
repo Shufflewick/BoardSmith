@@ -1129,22 +1129,24 @@ function clearBoardSelection() {
 
 <style scoped>
 .action-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  /* Flattened into the dock's flex flow: ActionPanel's own box disappears so its
+     children (action title, cancel, prompt, option buttons) flow INLINE alongside the
+     ⋯ menu + token, wrapping like one sentence (no header row before the buttons).
+     The wrapper chain below is also display:contents to reach the leaf items. */
+  display: contents;
 }
 
 .action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
+  /* Flattened into the dock flow so available-action buttons wrap inline with the
+     ⋯ menu + token (see .action-panel). */
+  display: contents;
 }
 
 /* Primary action button — Slate teal plate */
 .action-btn {
+  /* min-height floor meets the WCAG 2.2 AA 44px touch-target target (SC 2.5.8);
+     these are the primary in-game interactions and were previously ~38px. */
+  min-height: 44px;
   padding: 10px 20px;
   background: var(--bsg-accent);
   color: var(--bsg-accent-ink);
@@ -1181,19 +1183,13 @@ function clearBoardSelection() {
 }
 
 /* Action configuration - horizontal flow layout */
+/* Flattened into the dock flow (see .action-panel) so the action title, cancel,
+   prompt, and option buttons all wrap inline together. */
 .action-config {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  width: 100%;
+  display: contents;
 }
-
 .config-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: contents;
 }
 
 .config-title {
@@ -1210,7 +1206,8 @@ function clearBoardSelection() {
   cursor: pointer;
   padding: 2px 6px;
   line-height: 1;
-  min-height: 44px;
+  min-height: 24px;
+  min-width: 24px;
 }
 
 .cancel-btn:hover {
@@ -1292,8 +1289,8 @@ function clearBoardSelection() {
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
-  min-height: 44px;
-  min-width: 44px;
+  min-height: 24px;
+  min-width: 24px;
 }
 
 .clear-selection-btn:hover {
@@ -1302,11 +1299,9 @@ function clearBoardSelection() {
 
 /* Selection input - flows inline */
 .selection-input {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  /* Flattened into the dock flow so the prompt + option buttons wrap inline with the
+     ⋯ menu / token / title (see .action-panel). */
+  display: contents;
 }
 
 .selection-prompt {
@@ -1316,13 +1311,19 @@ function clearBoardSelection() {
 }
 
 .choice-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
+  /* Flattened into the dock flow so every option button is a direct sibling of the
+     ⋯ menu / token / prompt and they all wrap inline together. The 5-row cap + scroll
+     now lives on the dock itself (GameShell .actionbar). */
+  display: contents;
 }
 
 .choice-btn {
+  /* 44px touch-target floor (WCAG 2.2 AA SC 2.5.8); inline-flex centers the label
+     within the taller box. Covers element-/filtered-/anchored-/skip-choice variants. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px 14px;
   background: var(--bsg-surface-2);
   border: 1px solid var(--bsg-line);
@@ -1452,10 +1453,12 @@ function clearBoardSelection() {
 }
 
 .waiting-message {
+  flex: 1 1 0;
+  min-width: 0;
   padding: 10px 20px;
   background: var(--bsg-surface-2);
   border-radius: 8px;
-  text-align: center;
+  text-align: left;
   color: var(--bsg-ink-2);
   font-size: 0.9rem;
 }

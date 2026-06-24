@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * DevHost.vue — seat switcher + presence strip tests (DEV-03)
+ * DevHost.vue — seat switcher tests (DEV-03)
  *
- * Tests the presence strip rendering and the seat-switcher message order.
+ * Tests the seat-switcher menu (presence + Follow) and the switch message order.
  * We mock the global WebSocket so wsSend() frames are observable without
  * a real socket connection.
  */
@@ -127,48 +127,45 @@ afterEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('DevHost — presence strip', () => {
-  it('renders one pill per seat in the presence strip', async () => {
+describe('DevHost — seat switcher menu (presence + follow)', () => {
+  // The standalone presence strip was removed; per-seat presence (name, AI, online
+  // status) and the Follow-active-seat toggle now live inside the seat-switcher menu.
+  async function openMenu(wrapper: Awaited<ReturnType<typeof mountDevHost>>) {
+    await wrapper.find('.dev-chrome__badge--btn').trigger('click');
+    await wrapper.vm.$nextTick();
+  }
+
+  it('lists "Follow active seat" as the first menu option', async () => {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper);
+    await openMenu(wrapper);
 
-    const pills = wrapper.findAll('.presence-strip__seat');
-    expect(pills).toHaveLength(3);
+    const items = wrapper.findAll('.seat-switcher-menu__item');
+    expect(items.length).toBeGreaterThanOrEqual(4); // follow + 3 seats
+    expect(items[0].text()).toContain('Follow active seat');
   });
 
-  it('shows the seat name (or "Seat N" for open seats)', async () => {
+  it('shows a connection dot and name per seat', async () => {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper);
+    await openMenu(wrapper);
 
-    const pills = wrapper.findAll('.presence-strip__seat');
-    // Seat 1 is Alice (connected human)
-    expect(pills[0].text()).toContain('Alice');
-    // Seats 2 and 3 are open/AI → should show "Seat 2", "Seat 3"
-    expect(pills[1].text()).toContain('Seat 2');
-    expect(pills[2].text()).toContain('Seat 3');
+    const dots = wrapper.findAll('.seat-switcher-menu__dot');
+    expect(dots).toHaveLength(3);
+    // Seat 1 (Alice) is a connected human
+    expect(dots[0].classes()).toContain('is-online');
+
+    const items = wrapper.findAll('.seat-switcher-menu__item');
+    expect(items.some((i) => i.text().includes('Alice'))).toBe(true);
   });
 
   it('shows AI badge for seats listed in cfg.aiSeats', async () => {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper);
+    await openMenu(wrapper);
 
-    const pills = wrapper.findAll('.presence-strip__seat');
-    // Seat 1 is human — no AI badge
-    expect(pills[0].find('.presence-strip__ai').exists()).toBe(false);
-    // Seats 2 and 3 are in cfg.aiSeats → AI badge present
-    expect(pills[1].find('.presence-strip__ai').exists()).toBe(true);
-    expect(pills[2].find('.presence-strip__ai').exists()).toBe(true);
-  });
-
-  it('shows connected/away dot per seat', async () => {
-    const wrapper = await mountDevHost();
-    await activateSeat(wrapper);
-
-    const pills = wrapper.findAll('.presence-strip__seat');
-    // Seat 1 Alice is connected
-    expect(pills[0].find('.presence-strip__dot.is-online').exists()).toBe(true);
-    // Seat 2 is disconnected (no clientId)
-    expect(pills[1].find('.presence-strip__dot.is-offline, .presence-strip__dot:not(.is-online)').exists()).toBe(true);
+    // Seats 2 and 3 are AI → two AI badges in the menu
+    expect(wrapper.findAll('.seat-switcher-menu__ai')).toHaveLength(2);
   });
 });
 
@@ -234,33 +231,5 @@ describe('DevHost — seat switcher', () => {
     const calls = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
     const leaveCall = calls.find((c) => c.type === 'leave');
     expect(leaveCall).toBeUndefined(); // no leave if already in that seat
-  });
-
-  it('does not re-collapse chrome when switching seats after first auto-collapse (CR-02)', async () => {
-    // No stored preference → will auto-collapse on first seat taken
-    const wrapper = await mountDevHost();
-    await activateSeat(wrapper, 1);
-
-    // Chrome should have auto-collapsed
-    const bar = wrapper.find('.dev-chrome__bar');
-    expect(bar.isVisible()).toBe(false);
-
-    // User manually re-opens the chrome
-    await wrapper.find('.dev-chrome__pull-tab').trigger('click');
-    await wrapper.vm.$nextTick();
-    expect(bar.isVisible()).toBe(true);
-
-    // Switch seat: switchSeat calls leaveSeat() (sets mySeat → null)
-    // then takeSeat(2) (sends 'join'). Then the server responds with 'joined'.
-    const ws = mockWsInstance!;
-    await (wrapper.vm as unknown as { switchSeat(n: number): void }).switchSeat(2);
-    await wrapper.vm.$nextTick();
-
-    // Simulate server responding with 'joined' — triggers null → 2 transition
-    ws.simulateMessage({ type: 'joined', seat: 2 });
-    await wrapper.vm.$nextTick();
-
-    // Chrome must NOT re-collapse — the auto-collapse fires once per session
-    expect(bar.isVisible()).toBe(true);
   });
 });

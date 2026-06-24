@@ -44,12 +44,10 @@ describe('DebugPanel shortcut guard', () => {
     wrapper.unmount();
   });
 
-  function toggleButton(): Element {
-    return wrapper.element.querySelector('[aria-label="Toggle debug panel"]')!;
-  }
-
   function isExpanded(): boolean {
-    return toggleButton().getAttribute('aria-expanded') === 'true';
+    // The floating toggle tab was removed (the panel is now opened from the Dev
+    // header / Ctrl+D); read the open state from the root panel's `expanded` class.
+    return (wrapper.element as HTMLElement).classList.contains('expanded');
   }
 
   it('bare "d" keydown does NOT toggle the panel', async () => {

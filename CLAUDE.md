@@ -51,9 +51,16 @@ Every design decision should guide developers and users toward correct behavior 
 - **eslint-plugin** - ESLint rules enforcing game design constraints (no-network, no-timers, no-nondeterministic, etc).
 - **cli** - Command-line interface for dev server, game creation, testing, and local server setup.
 
-# Example Games
+# Related Repositories
 
-Example games are located in `~/BoardSmithGames/`. Reference games include Hex (simplest), Go Fish (cards), Checkers (grid + multi-step), and Cribbage (complex multi-phase).
+This library is developed alongside two sibling repos. When a BoardSmith change affects games, verify against them.
+
+- **`~/BoardSmithGames/`** — example games. Reference games: Hex (simplest), Go Fish (cards), Checkers (grid + multi-step), Cribbage (complex multi-phase); plus Polyhedral Potions and demo-* apps. Each game depends on BoardSmith via `"boardsmith": "file:../../BoardSmith"`, and `node_modules/boardsmith` is a **symlink to this repo** — so `npx boardsmith dev` in a game picks up local BoardSmith source changes live (Vite HMR). Quickest way to browser-test a UI change: `cd ~/BoardSmithGames/go-fish && npx boardsmith dev` (serves on :5173). Kill the server when done.
+- **`~/Dropbox/MERC/BoardSmith/MERC`** — our most complex game. It does NOT symlink; it uses a **vendored copy** of BoardSmith that must be re-vendored to pick up library changes (see its commit history for the re-vendor pattern).
+
+# `boardsmith dev` host (CLI)
+
+`npx boardsmith dev` serves a multiplayer dev host (`src/cli/dev-host/DevHost.vue`): each browser is a real player connecting over WS, rendering its seat via a GameShell **iframe in platform mode** (the exact code production runs). The outer page is the "Dev" chrome (seat selector w/ Follow-active-seat, UI switcher, New game, Table setup, Debug). The Debug panel lives inside the iframe but is toggled from the Dev header via postMessage. To repro GameShell's mobile breakpoint without shrinking the whole window, shrink the iframe element width via JS in the page context.
 
 # Hard Rules
 - **Pit of Success**: The right path is always the easy path, the wrong path is always hard. Design APIs and code so correct usage is obvious and incorrect usage is difficult.

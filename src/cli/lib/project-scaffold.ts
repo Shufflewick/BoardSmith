@@ -276,7 +276,7 @@ export function generateAppVue(config: ProjectConfig): string {
   margin-top: 8px;
 }
 .stat-label { color: #888; }
-.stat-value { font-weight: bold; color: #00d9ff; }
+.stat-value { font-weight: bold; color: var(--bsg-accent); }
 </style>
 `;
 
@@ -424,8 +424,8 @@ function handleAction() {
 }
 
 .turn-indicator {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   padding: 8px 24px;
   border-radius: 20px;
   font-weight: bold;
@@ -436,8 +436,8 @@ function handleAction() {
 }
 
 .action-button {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   border: none;
   padding: 12px 32px;
   border-radius: 8px;

@@ -119,7 +119,7 @@ export interface FlyingCardData {
   suit?: string;
   /** Whether the element starts face up */
   faceUp?: boolean;
-  /** Custom back color/gradient (e.g., '#1a1a2e' or 'linear-gradient(...)') */
+  /** Custom back color/gradient (e.g., 'var(--bsg-surface-2)' or 'linear-gradient(...)') */
   backColor?: string;
   /** Face image - URL string or sprite object */
   faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };

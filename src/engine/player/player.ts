@@ -119,6 +119,21 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
   color?: string;
 
   /**
+   * Human-readable name for {@link color} (e.g. "Red", "Blue").
+   *
+   * Auto-assigned from the game's labeled color palette (or the default palette
+   * names) when players are created. Use this in player-facing text — logs,
+   * narration — so messages read "Player 1 plays Red" instead of a raw hex.
+   * Falls back to `undefined` only when the assigned hex has no known name.
+   *
+   * @example
+   * ```typescript
+   * this.message(`${player.name} plays ${player.colorLabel ?? player.color}`);
+   * ```
+   */
+  colorLabel?: string;
+
+  /**
    * Whether this player is currently taking their turn.
    * @internal Use {@link isCurrent} and {@link setCurrent} instead.
    */

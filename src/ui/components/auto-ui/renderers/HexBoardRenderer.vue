@@ -52,6 +52,11 @@ const boardInteraction = tryUseBoardInteraction();
 
 // ── Hex grid configuration from element attributes ──────────────────────────
 const hexSize = computed(() => (props.element.attributes?.$hexSize as number) ?? 50);
+// $hexSize is an abstract viewBox unit (games pick anything, e.g. 50 or 150). Render
+// each hex at a consistent NATURAL pixel size regardless, so the board isn't fit to
+// the viewport — it renders at its natural size and the board area scrolls if bigger.
+const NATURAL_HEX_PX = 52;
+const renderScale = computed(() => NATURAL_HEX_PX / hexSize.value);
 const orientation = computed(
   () => (props.element.attributes?.$hexOrientation as 'flat' | 'pointy') ?? 'pointy'
 );
@@ -323,8 +328,8 @@ function hexCellAriaLabel(cell: GameElement): string {
       class="hex-board-svg"
       :key="`hex-svg-${element.id}`"
       :viewBox="viewBox"
-      :width="svgBounds.width"
-      :height="svgBounds.height"
+      :width="svgBounds.width * renderScale"
+      :height="svgBounds.height * renderScale"
       preserveAspectRatio="xMidYMid meet"
       role="grid"
       :aria-label="displayLabel"
@@ -414,10 +419,10 @@ function hexCellAriaLabel(cell: GameElement): string {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
+  width: fit-content;
   position: relative;
   min-height: 0;
-  max-width: 100%;
 }
 
 .hex-board-header {
@@ -427,12 +432,10 @@ function hexCellAriaLabel(cell: GameElement): string {
   flex: none;
 }
 
-/* ── SVG: scales to container, never exceeds it in either dimension ── */
+/* ── SVG: renders at its natural size (width/height attrs); the board area scrolls
+   when it's larger than the viewport (and zoom multiplies it). ── */
 .hex-board-svg {
-  max-width: 100%;
-  max-height: 100%;
-  height: auto;
-  width: auto;
+  display: block;
 }
 
 .hex-cell-group {

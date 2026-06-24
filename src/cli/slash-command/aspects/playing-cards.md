@@ -287,12 +287,12 @@ function handlePlayCard(cardId: number) {
 
 .card.playable {
   cursor: pointer;
-  border-color: #00d9ff;
+  border-color: var(--bsg-accent);
 }
 
 .card.playable:hover {
   transform: translateY(-12px);
-  box-shadow: 0 8px 16px rgba(0, 217, 255, 0.3);
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--bsg-accent) 30%, transparent);
 }
 
 .rank {
@@ -304,8 +304,8 @@ function handlePlayCard(cardId: number) {
 }
 
 .action-button {
-  background: linear-gradient(90deg, #00d9ff, #00ff88);
-  color: #1a1a2e;
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
   border: none;
   padding: 10px 20px;
   border-radius: 8px;

@@ -48,10 +48,11 @@ defineProps<{
 .tableau-template {
   display: flex;
   flex-wrap: wrap;
-  gap: 32px;
+  /* Fixed spacing — no container-query context now that elements size naturally. */
+  gap: var(--bsg-s4);
   height: 100%;
   overflow: auto;
-  padding: 16px;
+  padding: var(--bsg-s4);
   align-content: flex-start;
 }
 </style>

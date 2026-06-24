@@ -162,9 +162,9 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
 </template>
 
 <style scoped>
-/* Container baseline — fluid card token (IA-05) */
+/* Container baseline — natural card token (IA-05) */
 .deck-container {
-  --card-w: clamp(44px, 14cqw, 84px);
+  --card-w: var(--bsg-card-w);
   --card-h: calc(var(--card-w) * 1.4);
   display: flex;
   flex-direction: column;

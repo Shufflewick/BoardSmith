@@ -69,9 +69,9 @@ const gridStyle = computed(() => {
   return { 'grid-template-columns': `repeat(${gridResult.value.cols}, 1fr)` };
 });
 
-// Fluid sizing: expose --cols and --rows as CSS custom properties on the board wrapper.
-// These feed --cell: clamp(28px, min(calc(100cqw/var(--cols)), calc(100cqh/var(--rows))), 96px)
-// defined in the scoped CSS, so cells and labels self-size to the container.
+// Natural sizing: expose --cols and --rows as CSS custom properties on the board wrapper.
+// The grid renders at its natural size (--cell: var(--bsg-cell)); the board area scrolls
+// when larger than the viewport rather than shrinking cells to fit.
 const boardSizeStyle = computed(() => {
   if (!gridResult.value.ok) return {};
   return {
@@ -335,14 +335,12 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   gap: 4px;
 }
 
-/* ── Fluid sizing: --cell clamp driven by --cols and --rows from the board wrapper ──
-   --cols and --rows are set as CSS custom properties via :style binding from gridResult.
-   container-type:size is on the archetype wrapper (GridBoardTemplate__board); cqw/cqh
-   resolve there. Adding container-type:inline-size here ensures --cell also resolves
-   correctly when GridBoardRenderer is used outside GridBoardTemplate.              */
+/* ── Natural sizing: --cell driven by the --bsg-cell token ──
+   --cols and --rows are set as CSS custom properties via :style binding from gridResult
+   (used for grid-template-columns). The board renders at its natural cell size; the
+   board area scrolls when larger than the viewport rather than fitting to the container. */
 .board-with-labels {
-  container-type: inline-size;
-  --cell: clamp(28px, min(calc(100cqw / var(--cols)), calc(100cqh / var(--rows))), 96px);
+  --cell: var(--bsg-cell);
 }
 
 /* ── Row/column labels ── */
@@ -430,27 +428,16 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   transform: scale(1.04);
 }
 
+/* CALM, NOT A DISCO — static glow ring for drop target; no infinite attract pulse */
 .grid-cell.is-drop-target {
   background: var(--bsg-droptarget);
   outline: 2px dotted var(--bsg-accent-2);
   outline-offset: -2px;
-  animation: pulse-drop-target 1s ease-in-out infinite;
+  box-shadow: var(--bsg-ring);
 }
 
 .grid-cell.is-drop-target:hover {
   background: var(--bsg-droptarget-hover);
-}
-
-@keyframes pulse-drop-target {
-  0%, 100% { background: var(--bsg-droptarget); }
-  50% { background: var(--bsg-droptarget-hover); }
-}
-
-/* A11Y-08: silence pulse under reduced-motion (belt-and-suspenders for the global block) */
-@media (prefers-reduced-motion: reduce) {
-  .grid-cell.is-drop-target {
-    animation: none;
-  }
 }
 
 /* ── Coordinate notation corner label ── */

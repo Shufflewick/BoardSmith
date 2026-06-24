@@ -1,9 +1,11 @@
 <script setup lang="ts">
 /**
- * ControlsMenu — ⋯ controls popover mounted in the sidebar .side-head (IA-01).
+ * ControlsMenu — ⋯ controls popover anchored at the far-left of the action bar.
  *
  * Provides a single trigger button (aria-haspopup="menu") plus a role="menu" popover
  * containing game-control items: Auto end turn, Undo, zoom magnifier, New game, Leave.
+ * The popover is teleported to <body> with fixed positioning (openUp/align props) so
+ * the action bar's overflow:auto can't clip it.
  *
  * Bridge contract: New game and Leave game emit 'menu-item-click' with the item id so
  * GameShell.handleMenuItemClick can also post the bridge message to the host — do not
@@ -14,14 +16,21 @@
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** Current auto-end-turn state */
   autoEndTurn: boolean;
   /** Current zoom level (0.5–2.0) */
   zoom: number;
   /** Whether the undo action is currently available */
   canUndo: boolean;
-}>();
+  /** Open the popover upward (for a bottom-anchored trigger, e.g. the action bar). */
+  openUp?: boolean;
+  /** Horizontal edge the popover aligns to. */
+  align?: 'left' | 'right';
+}>(), {
+  openUp: false,
+  align: 'right',
+});
 
 const emit = defineEmits<{
   'update:autoEndTurn': [value: boolean];
@@ -33,16 +42,34 @@ const emit = defineEmits<{
 const isOpen = ref(false);
 const menuRoot = ref<HTMLElement | null>(null);
 const menuRef = ref<HTMLElement | null>(null);
+const triggerRef = ref<HTMLElement | null>(null);
+// The popover is teleported to <body> with fixed positioning so it can never be
+// clipped by an ancestor's overflow (e.g. the action bar's overflow-y:auto).
+// Coordinates are computed from the trigger's rect each time it opens.
+const menuStyle = ref<Record<string, string>>({});
 
 const { open: openTrap, close: closeTrap, handleKeydown: trapKeydown } = useFocusTrap(menuRef, {
   escapeToClose: true,
   onClose: close,
 });
 
+function computePosition() {
+  const el = triggerRef.value;
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const style: Record<string, string> = { position: 'fixed', zIndex: '70' };
+  if (props.openUp) style.bottom = `${Math.round(window.innerHeight - r.top + 6)}px`;
+  else style.top = `${Math.round(r.bottom + 6)}px`;
+  if (props.align === 'left') style.left = `${Math.round(r.left)}px`;
+  else style.right = `${Math.round(window.innerWidth - r.right)}px`;
+  menuStyle.value = style;
+}
+
 function toggle() {
   if (isOpen.value) {
     close();
   } else {
+    computePosition();
     isOpen.value = true;
     nextTick(() => openTrap());
   }
@@ -54,8 +81,11 @@ function close() {
 }
 
 function handleOutsideClick(event: MouseEvent) {
+  const target = event.target as Node;
   const root = menuRoot.value;
-  if (root && !root.contains(event.target as Node)) {
+  const menu = menuRef.value;
+  // The popover is teleported to body, so check it separately from the trigger root.
+  if (root && !root.contains(target) && (!menu || !menu.contains(target))) {
     close();
   }
 }
@@ -92,6 +122,7 @@ function handleLeave() {
 <template>
   <div ref="menuRoot" class="controls-menu">
     <button
+      ref="triggerRef"
       class="menubtn"
       type="button"
       aria-label="Game controls"
@@ -106,7 +137,8 @@ function handleLeave() {
       </svg>
     </button>
 
-    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" @keydown="trapKeydown">
+    <Teleport to="body">
+    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" :style="menuStyle" @keydown="trapKeydown">
       <div class="grouplabel">Play</div>
 
       <!-- Auto end turn -->
@@ -150,6 +182,7 @@ function handleLeave() {
             step="0.1"
             :value="zoom"
             aria-label="Zoom"
+            :aria-valuetext="Math.round(zoom * 100) + '%'"
             @input="handleZoomInput"
           />
         </span>
@@ -180,14 +213,13 @@ function handleLeave() {
         Leave game
       </button>
     </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-/* Wrapper: pushes itself to the right end of .side-head via margin-left:auto */
 .controls-menu {
   position: relative;
-  margin-left: auto;
   flex: none;
 }
 
@@ -195,8 +227,6 @@ function handleLeave() {
 .menubtn {
   height: 38px;
   width: 38px;
-  min-height: 44px;
-  min-width: 44px;
   display: grid;
   place-items: center;
   border-radius: var(--bsg-r-sm);
@@ -210,12 +240,9 @@ function handleLeave() {
   border-color: var(--bsg-line-2);
 }
 
-/* Popover — drops downward from the trigger */
+/* Popover — teleported to <body>; position is set inline (fixed) from the
+   trigger's rect so no ancestor overflow can clip it. */
 .menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 70;
   width: 300px;
   background: var(--bsg-surface);
   border: 1px solid var(--bsg-line);
@@ -226,7 +253,7 @@ function handleLeave() {
 }
 
 @keyframes pop {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
 

@@ -71,8 +71,8 @@ describe('CardRenderer.vue — fluid card-w token (IA-05)', () => {
     expect(style).not.toMatch(/height\s*:\s*84px/);
   });
 
-  it('uses the clamp floor of 44px (tap zone)', () => {
-    expect(style).toContain('clamp(44px');
+  it('sizes --card-w from the natural --bsg-card-w token', () => {
+    expect(style).toContain('--card-w: var(--bsg-card-w)');
   });
 });
 

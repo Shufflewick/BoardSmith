@@ -369,16 +369,15 @@ void isBoardSelected;
             ></div>
           </div>
         </template>
-        <div v-if="!visibleChildren.length && !element.childCount" class="empty-hand">No cards</div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Container baseline — fluid card token (IA-05) */
+/* Container baseline — natural card token (IA-05) */
 .hand-container {
-  --card-w: clamp(44px, 14cqw, 84px);
+  --card-w: var(--bsg-card-w);
   --card-h: calc(var(--card-w) * 1.4);
   background: var(--bsg-surface);
   border-radius: var(--bsg-r-md);
@@ -405,12 +404,13 @@ void isBoardSelected;
 }
 
 /* Whole-hand action-selectable — Slate dashed outline (THEME-02: outline not border) */
+/* CALM, NOT A DISCO — static glow ring for selectable; no infinite attract pulse */
 .hand-container.action-selectable {
   cursor: pointer;
   outline: 2px dashed var(--bsg-accent);
   outline-offset: 4px;
   background: var(--bsg-selectable);
-  animation: pulse-hand 2s ease-in-out infinite;
+  box-shadow: var(--bsg-ring);
 }
 
 .hand-container.action-selectable:hover {
@@ -418,22 +418,6 @@ void isBoardSelected;
   background: color-mix(in srgb, var(--bsg-accent) 22%, transparent);
   transform: translateY(-2px);
   box-shadow: var(--bsg-shadow-sm);
-}
-
-@keyframes pulse-hand {
-  0%, 100% {
-    outline-color: var(--bsg-accent);
-  }
-  50% {
-    outline-color: var(--bsg-accent-2);
-  }
-}
-
-/* A11Y-08: silence pulse under reduced-motion (belt-and-suspenders for the global block) */
-@media (prefers-reduced-motion: reduce) {
-  .hand-container.action-selectable {
-    animation: none;
-  }
 }
 
 /* Board interaction highlights */
@@ -504,10 +488,10 @@ void isBoardSelected;
   z-index: 2;
 }
 
-/* Base hand-cards row */
+/* Base hand-cards row — no reserved min-height; an empty hand collapses to 0
+   (cards define their own height via --card-h) */
 .hand-cards {
   display: flex;
-  min-height: 90px;
   flex-direction: var(--layout-direction, row);
   align-items: flex-end;
   justify-content: center;
@@ -515,11 +499,20 @@ void isBoardSelected;
   flex-wrap: wrap;
 }
 
-/* Fan mode: add padding to contain rotated cards */
+/* Fan mode: add padding to contain rotated cards.
+   Narrow widths: scroll horizontally with snap so cards never clip off-screen. */
 .hand-cards-wrapper.has-fan .hand-cards {
   padding: 20px 30px 10px 30px;
   gap: 0;
   flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hand-cards-wrapper.has-fan .hand-card {
+  scroll-snap-align: center;
 }
 
 /* Overlap mode */
@@ -542,9 +535,12 @@ void isBoardSelected;
   transform: translateY(-8px);
 }
 
-/* Overlap layout */
+/* Overlap layout — overlap grows with card count, but the negative margin is
+   capped so every card always exposes a >=44px tap strip (var(--card-w) - 44px). */
 .hand-cards-wrapper.has-overlap .hand-card {
-  margin-right: -10px;
+  margin-right: calc(
+    -1 * min((var(--card-count, 1) - 1) * 4px, max(var(--card-w) - 44px, 0px))
+  );
 }
 
 .hand-cards-wrapper.has-overlap .hand-card:last-child {
@@ -599,13 +595,5 @@ void isBoardSelected;
   box-shadow: var(--bsg-shadow-sm);
   flex-shrink: 0;
   background-repeat: no-repeat;
-}
-
-.empty-hand {
-  color: var(--bsg-ink-3);
-  font-style: italic;
-  display: flex;
-  align-items: center;
-  min-height: 90px;
 }
 </style>

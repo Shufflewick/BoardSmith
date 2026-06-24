@@ -145,6 +145,26 @@ export type { UndoResult, ElementDiff } from './state-history.js';
  * const result = await session.performAction('move', 0, { from: 'a3', to: 'b4' });
  * ```
  */
+/**
+ * Build a hex→label map from a game's `color` player-option choices so the engine
+ * can set `player.colorLabel` (e.g. "Red") for player-facing text. Returns
+ * undefined when the game defines no labeled color choices — the engine then
+ * falls back to the default palette names.
+ */
+function buildColorLabelMap(
+  defs?: Record<string, PlayerOptionDefinition>,
+): Record<string, string> | undefined {
+  const colorDef = defs?.color;
+  if (!colorDef || !('choices' in colorDef) || !colorDef.choices?.length) return undefined;
+  const map: Record<string, string> = {};
+  for (const choice of colorDef.choices) {
+    if (typeof choice === 'object' && choice.value != null && choice.label) {
+      map[String(choice.value)] = choice.label;
+    }
+  }
+  return Object.keys(map).length > 0 ? map : undefined;
+}
+
 export class GameSession<G extends Game = Game, TSession extends SessionInfo = SessionInfo> {
   #runner: GameRunner<G>;
   readonly #storedState: StoredGameState;
@@ -268,6 +288,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         // Check if player count changed in lobby (host added/removed players)
         const currentSlotCount = storedState.lobbySlots?.length ?? 0;
 
+        // Color name map (hex → "Red"), derived from the persisted player-option
+        // definitions so the recreated runner sets player.colorLabel for the log.
+        const colorLabels = buildColorLabelMap(storedState.playerOptionsDefinitions);
+
         // Always recreate the game to pass playerConfigs from lobby
         // The game needs access to playerConfigs for per-player options like isDictator
         if (storedState.lobbySlots) {
@@ -278,6 +302,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             seed: storedState.seed,
             ...storedState.gameOptions,
             ...(storedState.colors ? { colors: storedState.colors } : {}),
+            ...(colorLabels ? { colorLabels } : {}),
             playerConfigs,
           };
 
@@ -308,10 +333,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               if (slot.name && player.name !== slot.name) {
                 player.name = slot.name;
               }
-              // Sync player color from lobby slot
+              // Sync player color from lobby slot (and keep colorLabel in lockstep
+              // so the name matches the player's chosen color, not the auto-assigned one).
               const selectedColor = slot.playerOptions?.color as string | undefined;
               if (selectedColor) {
                 player.color = selectedColor;
+                if (colorLabels?.[selectedColor]) player.colorLabel = colorLabels[selectedColor];
               }
             }
           }
@@ -394,12 +421,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         );
       }
     }
+    // Color name map (hex → "Red") so players' colorLabel is set for player-facing
+    // text. Derived from the game's labeled palette; undefined falls back to the
+    // engine's default palette names.
+    const colorLabels = buildColorLabelMap(playerOptionsDefinitions);
     const effectiveGameOptions = {
       playerCount,
       playerNames,
       seed: gameSeed,
       ...customGameOptions,
       ...(extractedColors ? { colors: extractedColors } : {}),
+      ...(colorLabels ? { colorLabels } : {}),
     };
 
     const runner = new GameRunner<G>({
@@ -496,7 +528,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       for (let i = 0; i < playerCount; i++) {
         const player = runner.game.getPlayer(i + 1);
         if (player && !player.color) {
-          player.color = colors[i % colors.length];
+          const hex = colors[i % colors.length];
+          player.color = hex;
+          // Keep the label in lockstep with the color (createPlayers already did
+          // this for the common path; this only fires when color was unset).
+          if (colorLabels?.[hex]) player.colorLabel = colorLabels[hex];
         }
       }
     }
@@ -1173,11 +1209,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * to ensure the constructor receives the same options as the original game.
    */
   #buildGameOptions(): GameOptions & Record<string, unknown> {
+    const colorLabels = buildColorLabelMap(this.#storedState.playerOptionsDefinitions);
     const options: GameOptions & Record<string, unknown> = {
       playerCount: this.#storedState.playerCount,
       playerNames: this.#storedState.playerNames,
       seed: this.#storedState.seed,
       ...this.#storedState.gameOptions,
+      ...(colorLabels ? { colorLabels } : {}),
     };
 
     // Reconstruct playerConfigs from lobbySlots so constructor-time logic

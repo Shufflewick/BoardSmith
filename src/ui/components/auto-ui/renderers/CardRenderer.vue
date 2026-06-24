@@ -422,9 +422,9 @@ function handleDrop(event: DragEvent) {
 </template>
 
 <style scoped>
-/* Card container — fluid card token (IA-05) */
+/* Card container — natural card token (IA-05) */
 .card-container {
-  --card-w: clamp(44px, 14cqw, 84px);
+  --card-w: var(--bsg-card-w);
   --card-h: calc(var(--card-w) * 1.4);
   display: inline-block;
   transition: transform var(--bsg-dur-base) var(--bsg-ease);
@@ -447,35 +447,20 @@ function handleDrop(event: DragEvent) {
 }
 
 /* action-selectable: Slate dashed accent outline + translucent fill (T-93-03 XSS guard) */
+/* CALM, NOT A DISCO — static glow ring for selectable; no infinite attract pulse */
 .card-container.action-selectable {
   cursor: pointer;
   outline: 2px dashed var(--bsg-accent);
   outline-offset: 2px;
   border-radius: var(--bsg-r-sm);
   background: var(--bsg-selectable);
-  animation: pulse-card 2s ease-in-out infinite;
+  box-shadow: var(--bsg-ring);
 }
 
 .card-container.action-selectable:hover {
   outline-color: var(--bsg-accent-2);
   outline-width: 3px;
   transform: translateY(-8px);
-}
-
-@keyframes pulse-card {
-  0%, 100% {
-    outline-color: var(--bsg-accent);
-  }
-  50% {
-    outline-color: var(--bsg-accent-2);
-  }
-}
-
-/* A11Y-08: silence pulse under reduced-motion (belt-and-suspenders for the global block) */
-@media (prefers-reduced-motion: reduce) {
-  .card-container.action-selectable {
-    animation: none;
-  }
 }
 
 /* Board interaction highlights */

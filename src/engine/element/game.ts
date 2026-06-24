@@ -123,6 +123,23 @@ export const DEFAULT_COLOR_PALETTE: readonly string[] = [
 ] as const;
 
 /**
+ * Human-readable names for the default palette hexes.
+ * Lets `player.colorLabel` resolve to a word (e.g. "Red") for player-facing
+ * text — logs, narration — even when a game doesn't define a labeled palette.
+ * Games with a custom labeled palette pass their own map via `GameOptions.colorLabels`.
+ */
+export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
+  '#e74c3c': 'Red',
+  '#3498db': 'Blue',
+  '#27ae60': 'Green',
+  '#f39c12': 'Yellow',
+  '#9b59b6': 'Purple',
+  '#1abc9c': 'Teal',
+  '#e67e22': 'Orange',
+  '#2c3e50': 'Black',
+};
+
+/**
  * Options for creating a new game
  */
 export type GameOptions = {
@@ -134,6 +151,12 @@ export type GameOptions = {
   seed?: string;
   /** Available color palette for players (hex strings) */
   colors?: string[];
+  /**
+   * Human-readable name per hex (e.g. `{ '#e74c3c': 'Red' }`), used to set
+   * `player.colorLabel` so player-facing text can say "Red" instead of a hex.
+   * Defaults to {@link DEFAULT_COLOR_LABELS} for any hex not covered here.
+   */
+  colorLabels?: Record<string, string>;
   /** Whether players can change colors in lobby (default: true) */
   colorSelectionEnabled?: boolean;
 };
@@ -515,12 +538,19 @@ export class Game<
       );
     }
 
+    // Resolve color labels: game-supplied map wins, falling back to the default
+    // palette names so a hex always has a chance of a human-readable name.
+    const colorLabels = options.colorLabels;
+
     // Create players (1-indexed: Player 1 has seat 1)
     for (let i = 0; i < options.playerCount; i++) {
       const playerName = options.playerNames?.[i] ?? `Player ${i + 1}`;
       const player = this.create(PlayerClassToUse as unknown as ElementClass<P>, playerName, { seat: i + 1 } as any);
       // Auto-assign color from palette (seat 1 = index 0, seat 2 = index 1, etc.)
-      player.color = colorPalette[i];
+      const hex = colorPalette[i];
+      player.color = hex;
+      // Human-readable name for the assigned color (e.g. "Red") for player-facing text.
+      player.colorLabel = colorLabels?.[hex] ?? DEFAULT_COLOR_LABELS[hex];
       if (i === 0) player.setCurrent(true);
     }
 

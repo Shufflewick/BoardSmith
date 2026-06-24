@@ -1257,17 +1257,8 @@ const displayedState = computed(() => {
 
 <template>
   <div class="debug-panel" :class="{ expanded: panelExpanded }">
-    <!-- Toggle tab (always visible on right edge) -->
-    <button
-      type="button"
-      class="debug-toggle"
-      @click="togglePanel"
-      :aria-expanded="panelExpanded"
-      aria-label="Toggle debug panel"
-    >
-      <span aria-hidden="true" class="toggle-icon">{{ panelExpanded ? '›' : '‹' }}</span>
-      <span aria-hidden="true" class="toggle-label">Debug</span>
-    </button>
+    <!-- Opened from the Dev header (DevHost chrome) or Ctrl/Cmd+D; closed via the
+         header toggle, the in-panel ✕, or Ctrl/Cmd+D. No floating edge tab. -->
 
     <!-- Drawer content -->
     <div class="debug-drawer" :class="{ open: panelExpanded }">
@@ -1354,10 +1345,7 @@ const displayedState = computed(() => {
                       <span class="summary-label">Phase:</span>
                       <span class="summary-value">{{ displayedState?.state?.phase || 'N/A' }}</span>
                     </span>
-                    <span class="summary-item">
-                      <span class="summary-label">Turn:</span>
-                      <span class="summary-value">P{{ (displayedState?.state?.currentPlayer ?? 0) + 1 }}</span>
-                    </span>
+                    <!-- Whose turn it is is already shown in the players panel; no need to repeat it here. -->
                   </div>
 
                   <!-- State tree (recursive component) -->
@@ -2081,45 +2069,6 @@ const displayedState = computed(() => {
 }
 
 /* Toggle tab on right edge */
-.debug-toggle {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 6px;
-  cursor: pointer;
-  background: var(--bsg-accent-2);
-  border: none;
-  border-radius: 8px 0 0 8px;
-  transition: all 0.2s;
-  pointer-events: auto;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  min-height: 44px;
-}
-
-.debug-toggle:hover {
-  background: var(--bsg-accent-2);
-  padding-right: 10px;
-}
-
-.toggle-icon {
-  font-size: 12px;
-  color: var(--bsg-accent-ink);
-  font-weight: bold;
-}
-
-.toggle-label {
-  font-weight: 600;
-  color: var(--bsg-accent-ink);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
 /* Drawer panel */
 .debug-drawer {
   position: absolute;
@@ -2129,7 +2078,7 @@ const displayedState = computed(() => {
   width: 420px;
   max-width: 90vw;
   background: var(--bsg-surface);
-  border-left: 2px solid var(--bsg-accent-2);
+  border-left: 1px solid var(--bsg-line);
   transform: translateX(100%);
   transition: transform 0.3s ease-in-out;
   pointer-events: auto;
@@ -2153,7 +2102,7 @@ const displayedState = computed(() => {
     height: 60dvh;
     border-radius: var(--bsg-r-sm) var(--bsg-r-sm) 0 0;
     border-left: none;
-    border-top: 2px solid var(--bsg-accent-2);
+    border-top: 1px solid var(--bsg-line);
     transform: translateY(100%);
   }
 

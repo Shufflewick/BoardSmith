@@ -12,7 +12,6 @@
  * />
  */
 import AutoRenderer from './AutoRenderer.vue';
-import BoardLegend from './BoardLegend.vue';
 import type { GameElement } from './index';
 import type { PresentationOverlay } from './presentation.js';
 
@@ -48,9 +47,6 @@ const emit = defineEmits<{
       :presentation="presentation"
       @retry="emit('retry')"
     />
-
-    <!-- Interaction state legend (A11Y-05) — absolute bottom-left per mockup -->
-    <BoardLegend />
   </div>
 </template>
 

@@ -116,14 +116,12 @@ const chromeElements = computed(() =>
 }
 
 /* Board slot: DOMINANT area — the focal grid/hex board.
-   container-type:size establishes a container-query context so the renderer's
-   cqw/cqh units resolve against this element's size even outside GameShell's
-   boardregion (Assumption A3 robustness). min-height:0 ensures a definite block
-   size so cqh resolves correctly (Pitfall 1). */
+   The board renders at its natural size; this slot scrolls (overflow:auto) when the
+   board is larger than the available space rather than fitting it to the container.
+   min-height:0 lets the slot shrink within the grid track. */
 .grid-board-template__board {
   grid-area: board;
   min-height: 0;
-  container-type: size;
   overflow: auto;
   display: flex;
   align-items: stretch;

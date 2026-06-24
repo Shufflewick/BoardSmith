@@ -40,7 +40,6 @@ import AutoUI from './AutoUI.vue';
 // Stub child components
 // ---------------------------------------------------------------------------
 const stubs = {
-  BoardLegend: true,
   // Stub AutoRenderer as a simple component that can emit 'retry' on demand.
   AutoRenderer: defineComponent({
     name: 'AutoRendererStub',
