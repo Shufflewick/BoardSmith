@@ -119,6 +119,34 @@ describe('TutorialOverlay', () => {
       expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(true);
     });
 
+    it('calls getBoundingClientRect on the resolved d4 anchor element', async () => {
+      // Proves the overlay positioned against the exact stub element, not a
+      // different one — the honest deterministic proxy for jsdom rect measurement.
+      const gameState = makeGameState([
+        { text: 'Move here', target: { kind: 'element', ref: { notation: 'd4' } } },
+      ]);
+
+      const fixture = document.createElement('div');
+      fixture.className = 'boardregion';
+      fixture.style.position = 'relative';
+      fixture.innerHTML = '<div data-bs-el-notation="d4"></div>';
+      document.body.appendChild(fixture);
+
+      const stubEl = fixture.querySelector('[data-bs-el-notation="d4"]') as Element;
+      const rectSpy = vi.spyOn(stubEl, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(10, 20, 40, 40),
+      );
+
+      const wrapper = mount(TutorialOverlay, {
+        global: { provide: { gameState } },
+        attachTo: fixture,
+      });
+      await nextTick();
+
+      expect(rectSpy).toHaveBeenCalled();
+      expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(true);
+    });
+
     it('resolves by id taking precedence over notation', async () => {
       const { wrapper } = mountOverlay(
         [
