@@ -25,7 +25,7 @@
 ### 🚧 v4.1 Tutorial Primitives (Checkers) — Phases 104–110
 
 - [x] **Phase 104: Tutorial Lifecycle & Action Gating** — Engine/session run a gated, resumable tutorial; steps restrict the legal action set and progress is checkpoint/replay safe. (completed 2026-06-25)
-- [ ] **Phase 105: Annotation Overlay (UI Parity)** — Text-bubble + targeted highlight on any cell/piece/panel/control, rendered identically in custom UI and AutoUI via `useBoardInteraction`.
+- [x] **Phase 105: Annotation Overlay (UI Parity)** — Text-bubble + targeted highlight on any cell/piece/panel/control, rendered identically in custom UI and AutoUI via `useBoardInteraction`. (completed 2026-06-25)
 - [ ] **Phase 106: Predicate Triggers & CI-Verifiable Authoring** — Fire content on game-state predicate/event, and author the tutorial as a test that fails when the rules drift.
 - [ ] **Phase 107: AI-Assisted Teaching** — MCTS-powered move hint, narrated AI-vs-AI demo, and evaluation heatmap, surfaced from checkers' existing bot.
 - [ ] **Phase 108: Lightweight Action Help** — Per-action help text revealed on hover/tap, with a global toggle.
@@ -62,7 +62,7 @@
 - [x] 105-02-PLAN.md — Shared anchor substrate: `anchorAttrs` single source → `data-bs-el-*`/`data-bs-action`/`data-bs-panel` via useSelectable/useSelectableGrid (Wave 1)
 - [x] 105-03-PLAN.md — TutorialOverlay + BoardMessage annotation variant: ring + bubble resolved by anchor only (Wave 2)
 - [x] 105-04-PLAN.md — GameShell wiring: mount overlay in `.boardregion` + close MR-01 (thread tutorialStep into useActionController) (Wave 3)
-- [ ] 105-05-PLAN.md — Dual-path parity test: same annotation renders in AutoUI + custom-UI fixtures (criterion #3) (Wave 3)
+- [x] 105-05-PLAN.md — Dual-path parity test: same annotation renders in AutoUI + custom-UI fixtures (criterion #3) (Wave 3)
 **UI hint**: yes
 
 ### Phase 106: Predicate Triggers & CI-Verifiable Authoring
@@ -128,7 +128,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
-| 105. Annotation Overlay (UI Parity) | 4/5 | In Progress|  |
+| 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 0/? | Not started | - |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
 | 108. Lightweight Action Help | 0/? | Not started | - |
