@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-06-25T18:43:22.142Z"
 last_activity: 2026-06-25
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-22)
+See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 102 — material-dev-debug-wave-5
+**Current focus:** v4.1 roadmap created (Phases 104–110); ready to plan Phase 104.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap created, 7 phases mapped)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-25 — Milestone v4.1 started
+Status: Roadmap complete, awaiting phase planning
+Last activity: 2026-06-25 — ROADMAP.md created for v4.1, all 15 v1 requirements mapped
 
 ## Milestones
 
@@ -57,43 +57,47 @@ Last activity: 2026-06-25 — Milestone v4.1 started
 - v2.9 Theatre View (Phases 80-84) -- shipped 2026-02-07
 - v3.0 Animation Timeline (Phases 85-90) -- shipped 2026-02-08
 - v3.1 Dynamic Auto-UI (Phases 91-96) -- shipped 2026-06-22
+- v4.0 UI Redesign (Slate) (Phases 97-103) -- shipped 2026-06-23
 
 **In Progress:**
 
-- v4.0 UI Redesign (Slate) (Phases 97-103) -- started 2026-06-22; roadmap created 2026-06-23
+- v4.1 Tutorial Primitives (Checkers) (Phases 104-110) -- started 2026-06-25; roadmap created 2026-06-25
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
-- v4.0 roadmap maps the spec's six waves 1:1 to Phases 97–102, plus a final cross-repo verification gate (Phase 103).
-- Phases 98 + 99 must land **atomically** (token-default flip + renderer sweep) to avoid the invisible-text trap.
+- v4.1 roadmap derives 7 substrate-first phases (104–110) from 15 v1 requirements. The TUT substrate (104–106) is foundational and must land before the checkers showcase (CHK, Phase 109) and the AI hint (AI-01, Phase 107).
+- Phase 104 (lifecycle + action gating) is the engine/session base; Phase 105 (annotation overlay) is the UI base; Phase 106 (predicate triggers + CI-verifiable authoring) completes authoring.
+- The annotation overlay (TUT-01, Phase 105) has a HARD parity constraint — it MUST route through `useBoardInteraction` so it works identically in custom UI and AutoUI (project hard-rule).
+- CI-verifiable authoring via the `testing` DSL (TUT-04, Phase 106) lands before/alongside CHK so the checkers tutorial is authored as a verifiable artifact, not retrofitted.
+- AI-01/02/03 (Phase 107) reuse checkers' EXISTING MCTS bot (`~/BoardSmithGames/checkers/src/rules/ai.ts`) — no new training; the work is surfacing existing evaluations to the UI.
+- CHK-* (Phase 109) authored cross-repo in `~/BoardSmithGames/checkers` (symlinked to this repo's node_modules) while the substrate lands in this repo's `src/`.
+- DEMO-01 (Phase 110) is the FINAL phase — the user's explicit "demonstrate to me so we can refine" gate, browser-verified end-to-end, before the future cribbage (CRIB) milestone.
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
-**v4.0 locked decisions (2026-06-22):**
+**v4.1 roadmap decisions (2026-06-25):**
 
-- Neutral "Slate" palette for game chrome, not warm "tavern" — chrome stays generic/game-agnostic; tavern theming is the host's job via the token override.
-- Single `--bsg-*` token namespace emitted by `theme.ts`; `color-no-hex` lint makes the wrong path fail CI.
-- `applyTheme()` is the sole, host-overridable theming knob.
-- Token default flip merges atomically with the renderer sweep (Phases 98+99).
-- Board keyboard/semantics live in one shared `useSelectable()` composable; drag becomes progressive enhancement.
-- Fluid container-query sizing replaces the zoom-slider fit strategy; zoom demoted to an a11y magnifier.
-- ShufflewickPub host skin out of scope for v4.0 (HOST-01..04 deferred); BoardSmith-side infra stays host-overridable.
-- [Phase ?]: Divergence test uses source-grep over AST — sufficient for detecting hand-rolled handler names, less fragile than Vue SFC parsing
+- Substrate-first sequencing: engine/session lifecycle+gating (104) → UI overlay (105) → triggers + CI-authoring (106) → teaching layers (107 AI, 108 HELP) → checkers showcase (109) → demo gate (110).
+- TUT-01 annotation overlay must route through `useBoardInteraction` for custom-UI/AutoUI parity (hard-rule), verified in both UI paths.
+- Action gating (TUT-02) reuses the engine's existing action validation and the v2.8 disabled-reason surface — no parallel validation path.
+- AI teaching features reuse checkers' existing MCTS; no new training/weights.
+- Checkers tutorial content (CHK-*) lands cross-repo in `~/BoardSmithGames/checkers`; substrate stays in this repo's `src/`.
+- DEMO-01 framed as a refinement checkpoint, not a sign-off — captured friction feeds the substrate before cribbage (v2 CRIB).
 
 ### Highest-Risk Items
 
-1. `theme.ts` default flip — atomic with renderer sweep (Phases 98+99).
-2. Board keyboard/semantics composable — architectural across all 8 renderers (Phase 101).
-3. Fluid board sizing — can regress published bundles; validate vs MERC + real games (Phase 103).
-4. Standing-header removal — changes the host↔iframe postMessage contract (Phase 100).
+1. `useBoardInteraction` parity for the annotation overlay (Phase 105) — a primitive that works in only one UI path violates the hard-rule; verify both paths.
+2. Tutorial progress serialization round-trip (Phase 104) — must be checkpoint/replay safe like prior engine state.
+3. CI-verifiable authoring (Phase 106) — the test must actually fail on a broken rule, not pass vacuously; prove with a deliberately broken rule.
+4. Cross-repo authoring (Phase 109) — substrate in `src/` vs content in `~/BoardSmithGames/checkers`; keep the symlinked dev loop green.
 
 ### Pending Todos
 
-None.
+Carried from v4.0 (non-blocking): dev-standalone shell height gap; pre-existing dev-host AI-turn issue; orphaned tokens / lint scope / focus-ring naming / platform-mode connection-announce seam. See `.planning/todos/pending/`.
 
 ### Blockers/Concerns
 
@@ -101,11 +105,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-23T19:45:34.685Z
-Stopped at: context exhaustion at 75% (2026-06-23)
+Last session: 2026-06-25 — v4.1 roadmap created
+Stopped at: roadmap complete, 15/15 requirements mapped
 Resume file: None
-Next action: `/gsd:plan-phase 97`
+Next action: `/gsd:plan-phase 104`
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first phase with `/gsd:plan-phase 104`

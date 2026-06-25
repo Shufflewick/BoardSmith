@@ -74,27 +74,27 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TUT-01 | TBD | Pending |
-| TUT-02 | TBD | Pending |
-| TUT-03 | TBD | Pending |
-| TUT-04 | TBD | Pending |
-| TUT-05 | TBD | Pending |
-| AI-01 | TBD | Pending |
-| AI-02 | TBD | Pending |
-| AI-03 | TBD | Pending |
-| HELP-01 | TBD | Pending |
-| HELP-02 | TBD | Pending |
-| CHK-01 | TBD | Pending |
-| CHK-02 | TBD | Pending |
-| CHK-03 | TBD | Pending |
-| CHK-04 | TBD | Pending |
-| DEMO-01 | TBD | Pending |
+| TUT-01 | Phase 105 | Pending |
+| TUT-02 | Phase 104 | Pending |
+| TUT-03 | Phase 106 | Pending |
+| TUT-04 | Phase 106 | Pending |
+| TUT-05 | Phase 104 | Pending |
+| AI-01 | Phase 107 | Pending |
+| AI-02 | Phase 107 | Pending |
+| AI-03 | Phase 107 | Pending |
+| HELP-01 | Phase 108 | Pending |
+| HELP-02 | Phase 108 | Pending |
+| CHK-01 | Phase 109 | Pending |
+| CHK-02 | Phase 109 | Pending |
+| CHK-03 | Phase 109 | Pending |
+| CHK-04 | Phase 109 | Pending |
+| DEMO-01 | Phase 110 | Pending |
 
 **Coverage:**
 - v1 requirements: 15 total
-- Mapped to phases: 0 (roadmapper will map)
-- Unmapped: 15 ⚠️ (resolved at roadmap creation)
+- Mapped to phases: 15 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-06-25*
-*Last updated: 2026-06-25 after initial definition*
+*Last updated: 2026-06-25 — roadmap created, all 15 v1 requirements mapped to Phases 104–110*
