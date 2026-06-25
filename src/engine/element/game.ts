@@ -962,6 +962,20 @@ export class Game<
       return { success: false, error: `Unknown action: ${actionName}` };
     }
 
+    // Enforce tutorial action-level gating at execution, not just in the projection
+    // layer. This is the server-side enforcement required by HR-01: a bare
+    // { action: 'move' } gate must prevent execution of 'pass'/'endTurn', not just
+    // annotate them as disabled for the UI. Reuses the same getActionLevelDisabledReasons
+    // logic already consulted by getTutorialDisabledActions / buildPlayerState so
+    // there is no parallel validator.
+    const gatedReasons = getActionLevelDisabledReasons(this, player.seat, [actionName]);
+    if (gatedReasons[actionName]) {
+      return {
+        success: false,
+        error: `Action '${actionName}' is disabled: ${gatedReasons[actionName]}`,
+      };
+    }
+
     return this._actionExecutor.executeAction(action, player, args);
   }
 
