@@ -57,7 +57,12 @@
   1. An author can attach a text-bubble annotation plus a targeted highlight to a tutorial step, and both render in the browser.
   2. The highlight can target any of: a board cell, a piece, a panel, or an action control.
   3. The same annotation renders identically in a custom UI and in AutoUI because it routes through `useBoardInteraction` — verified in BOTH UI paths (parity is a project hard-rule; no primitive may work in only one UI path).
-**Plans**: TBD
+**Plans**: 5 plans (Waves 1–3)
+- [ ] 105-01-PLAN.md — Annotation content model: narrow TutorialStep/TutorialStepView `content` to `Annotation[]` + AnnotationTarget union (Wave 1)
+- [ ] 105-02-PLAN.md — Shared anchor substrate: `anchorAttrs` single source → `data-bs-el-*`/`data-bs-action`/`data-bs-panel` via useSelectable/useSelectableGrid (Wave 1)
+- [ ] 105-03-PLAN.md — TutorialOverlay + BoardMessage annotation variant: ring + bubble resolved by anchor only (Wave 2)
+- [ ] 105-04-PLAN.md — GameShell wiring: mount overlay in `.boardregion` + close MR-01 (thread tutorialStep into useActionController) (Wave 3)
+- [ ] 105-05-PLAN.md — Dual-path parity test: same annotation renders in AutoUI + custom-UI fixtures (criterion #3) (Wave 3)
 **UI hint**: yes
 
 ### Phase 106: Predicate Triggers & CI-Verifiable Authoring
@@ -123,7 +128,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
-| 105. Annotation Overlay (UI Parity) | 0/? | Not started | - |
+| 105. Annotation Overlay (UI Parity) | 0/5 | Planned | - |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 0/? | Not started | - |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
 | 108. Lightweight Action Help | 0/? | Not started | - |
