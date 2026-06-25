@@ -15,7 +15,7 @@ The reusable engine/session/UI primitives. Design constraint: parity across cust
 - [ ] **TUT-02**: A game author can gate a tutorial step to a restricted set of legal actions, reusing the engine's existing action validation; out-of-step actions are blocked and surface a reason (building on the v2.8 disabled-reason mechanism).
 - [ ] **TUT-03**: A game author can define triggers that fire tutorial content when a game-state predicate or engine event matches (e.g. before the player's first turn, after N turns, the first time a capture becomes forced).
 - [ ] **TUT-04**: A game author can author a tutorial as a CI-verifiable artifact using the `testing` DSL, so a game-rule change that breaks the tutorial fails a test rather than rotting silently.
-- [ ] **TUT-05**: A player can start, advance, skip a step, and exit a tutorial; tutorial progress serializes with the game state so it is checkpoint/replay safe.
+- [x] **TUT-05**: A player can start, advance, skip a step, and exit a tutorial; tutorial progress serializes with the game state so it is checkpoint/replay safe.
 
 ### AI-Assisted Teaching (AI)
 
@@ -78,7 +78,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | TUT-02 | Phase 104 | Pending |
 | TUT-03 | Phase 106 | Pending |
 | TUT-04 | Phase 106 | Pending |
-| TUT-05 | Phase 104 | Pending |
+| TUT-05 | Phase 104 | Complete |
 | AI-01 | Phase 107 | Pending |
 | AI-02 | Phase 107 | Pending |
 | AI-03 | Phase 107 | Pending |

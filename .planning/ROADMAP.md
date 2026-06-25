@@ -44,7 +44,7 @@
   3. A game author can gate a step to a restricted subset of legal actions; out-of-step actions are blocked and surface a reason (reusing the v2.8 disabled-reason mechanism), not silently ignored.
   4. Action gating reuses the engine's existing action validation — no parallel or duplicate validation path is introduced.
 **Plans**: 4 plans
-- [ ] 104-01-PLAN.md — Tutorial substrate: contracts, serialized progress field, definition threading, serialization round-trip guard (Wave 1)
+- [x] 104-01-PLAN.md — Tutorial substrate: contracts, serialized progress field, definition threading, serialization round-trip guard (Wave 1)
 - [ ] 104-02-PLAN.md — Action & target gating via the v2.8 disabled path + action-level reason (Wave 2)
 - [ ] 104-03-PLAN.md — Auto-fill suppressibility for taught selections (Wave 2)
 - [ ] 104-04-PLAN.md — Lifecycle controller (start/advance/skip/exit) + dual-projection parity (Wave 3)
@@ -122,7 +122,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 104. Tutorial Lifecycle & Action Gating | 0/? | Not started | - |
+| 104. Tutorial Lifecycle & Action Gating | 1/4 | In Progress|  |
 | 105. Annotation Overlay (UI Parity) | 0/? | Not started | - |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 0/? | Not started | - |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
