@@ -40,3 +40,6 @@ Vector Cards (Version 3.2)
 
 # Fallow tool binary caches
 .fallow/*.bin
+
+# Agent scratch (never commit)
+/scratchpad/

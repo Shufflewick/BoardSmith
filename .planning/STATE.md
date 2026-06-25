@@ -2,13 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives (Checkers)
-status: planning
-last_updated: "2026-06-25T18:43:22.142Z"
-last_activity: 2026-06-25
+status: executing
+stopped_at: roadmap complete, 15/15 requirements mapped
+last_updated: "2026-06-25T19:35:52.898Z"
+last_activity: 2026-06-25 -- Phase 104 execution started
 progress:
   total_phases: 7
   completed_phases: 0
-  total_plans: 0
+  total_plans: 4
   completed_plans: 0
   percent: 0
 ---
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.1 roadmap created (Phases 104–110); ready to plan Phase 104.
+**Current focus:** Phase 104 — Tutorial Lifecycle & Action Gating
 
 ## Current Position
 
-Phase: Not started (roadmap created, 7 phases mapped)
-Plan: —
-Status: Roadmap complete, awaiting phase planning
-Last activity: 2026-06-25 — ROADMAP.md created for v4.1, all 15 v1 requirements mapped
+Phase: 104 (Tutorial Lifecycle & Action Gating) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 104
+Last activity: 2026-06-25 -- Phase 104 execution started
 
 ## Milestones
 
