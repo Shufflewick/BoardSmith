@@ -61,6 +61,9 @@ function makeGameState(content?: Annotation[]) {
  * Mount TutorialOverlay inside a fixture div that acts as .boardregion.
  * Extra DOM stubs are passed as innerHTML fragments so the overlay's
  * querySelector can find anchors.
+ *
+ * Teleport is stubbed so content renders inline (inside the wrapper element)
+ * making wrapper.find() assertions work in jsdom without teleported DOM access.
  */
 function mountOverlay(
   content: Annotation[] | undefined,
@@ -78,6 +81,9 @@ function mountOverlay(
   const wrapper = mount(TutorialOverlay, {
     global: {
       provide: { gameState },
+      // Stub Teleport so overlay content renders inline (not teleported to body).
+      // This keeps wrapper.find() assertions working in jsdom.
+      stubs: { Teleport: true },
     },
     attachTo: fixture,
   });
@@ -254,6 +260,118 @@ describe('TutorialOverlay', () => {
 
       expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(false);
       expect(wrapper.text()).toContain('Look here');
+    });
+  });
+
+  // ── BL-01 guard: action target OUTSIDE .boardregion (production topology) ────
+  //
+  // Production: ActionPanel renders data-bs-action in .actionbar, which is a
+  // SIBLING of .boardregion. This test mirrors that topology so the test is a
+  // real guard for BL-01 (overlay must query document, not just .boardregion).
+
+  describe('action target outside .boardregion (BL-01 guard — production topology)', () => {
+    let shell: HTMLDivElement;
+    let boardRegion: HTMLDivElement;
+
+    beforeEach(() => {
+      shell = document.createElement('div');
+      boardRegion = document.createElement('div');
+      boardRegion.className = 'boardregion';
+      boardRegion.style.position = 'relative';
+      // Action button is a SIBLING of boardregion (mirrors .actionbar position in GameShell)
+      const actionButton = document.createElement('button');
+      actionButton.setAttribute('data-bs-action', 'move');
+      actionButton.textContent = 'Move';
+      shell.appendChild(boardRegion);
+      shell.appendChild(actionButton);  // outside boardregion
+      document.body.appendChild(shell);
+    });
+
+    afterEach(() => {
+      shell.parentNode?.removeChild(shell);
+    });
+
+    it('resolves data-bs-action anchor outside boardregion → ring rendered', async () => {
+      const gameState = makeGameState([
+        { text: 'Click Move', target: { kind: 'action', actionName: 'move' } },
+      ]);
+      const wrapper = mount(TutorialOverlay, {
+        global: {
+          provide: { gameState },
+          stubs: { Teleport: true },
+        },
+        attachTo: boardRegion,
+      });
+      await nextTick();
+
+      expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Click Move');
+
+      wrapper.unmount();
+    });
+  });
+
+  // ── CR-01 guard: bubble (role=status) must NOT be inside an aria-hidden subtree
+
+  describe('CR-01: annotation bubble accessibility', () => {
+    it('role=status bubble has no aria-hidden="true" ancestor', async () => {
+      const { wrapper } = mountOverlay(
+        [{ text: 'Learn this move', target: { kind: 'element', ref: { notation: 'd4' } } }],
+        '<div data-bs-el-notation="d4"></div>',
+      );
+      await nextTick();
+
+      const bubble = wrapper.find('[role="status"]');
+      expect(bubble.exists()).toBe(true);
+
+      // Walk the DOM tree upward — no ancestor may be aria-hidden="true"
+      let el: Element | null = bubble.element;
+      while (el && el !== document.body) {
+        expect(el.getAttribute('aria-hidden')).not.toBe('true');
+        el = el.parentElement;
+      }
+    });
+  });
+
+  // ── WR-01 guard: untargeted / explicit-placement bubbles must not render at 0,0
+
+  describe('WR-01: untargeted and explicit-placement bubble positions', () => {
+    it('untargeted bubble (no target field) has an explicit position style (not empty anchorStyle)', async () => {
+      const { wrapper } = mountOverlay([{ text: 'Floating tip, no target' }]);
+      await nextTick();
+
+      // The bubble should render
+      const bubble = wrapper.find('.bsg-board-message--annotation');
+      expect(bubble.exists()).toBe(true);
+
+      // anchorStyle must be non-empty: at minimum top should be set
+      // (when anchorStyle={} the element has no inline style attribute at all)
+      const style = (bubble.element as HTMLElement).style;
+      expect(style.top).not.toBe('');
+    });
+
+    it('explicit placement="top" bubble has top position set', async () => {
+      const { wrapper } = mountOverlay([
+        { text: 'Top bubble', placement: 'top' },
+      ]);
+      await nextTick();
+
+      const bubble = wrapper.find('.bsg-board-message--annotation');
+      expect(bubble.exists()).toBe(true);
+      const style = (bubble.element as HTMLElement).style;
+      expect(style.top).not.toBe('');
+    });
+
+    it('explicit placement="bottom" bubble has top position set', async () => {
+      const { wrapper } = mountOverlay([
+        { text: 'Bottom bubble', placement: 'bottom' },
+      ]);
+      await nextTick();
+
+      const bubble = wrapper.find('.bsg-board-message--annotation');
+      expect(bubble.exists()).toBe(true);
+      const style = (bubble.element as HTMLElement).style;
+      expect(style.top).not.toBe('');
     });
   });
 

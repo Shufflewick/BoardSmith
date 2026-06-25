@@ -118,11 +118,18 @@ const MinimalCustomUIRenderer = defineComponent({
 // ── Fixture builders ──────────────────────────────────────────────────────────
 
 /**
- * Mount the AutoUI fixture:
- *   [boardregion]
- *     MinimalAutoUIRenderer (useSelectable → shared anchor)
- *     <button data-bs-action="move">      (action-layer anchor, same in both paths)
- *     TutorialOverlay                     (reads gameState.tutorial.content)
+ * Mount the AutoUI fixture — production-realistic topology (WR-02 fix):
+ *
+ *   [shell wrapper]
+ *     [boardregion]                        ← .stage > .boardregion in GameShell
+ *       MinimalAutoUIRenderer (useSelectable → shared anchor)
+ *       TutorialOverlay
+ *     <button data-bs-action="move">       ← .actionbar sibling OUTSIDE boardregion
+ *
+ * The action button is a SIBLING of .boardregion, mirroring the real ActionPanel
+ * in .actionbar. This makes the "action target resolves" assertion a genuine
+ * guard for BL-01: it fails when TutorialOverlay queries only inside .boardregion
+ * and passes when it queries the whole document.
  */
 function buildAutoUIWrapper(content: Annotation[]) {
   const gameState = makeGameState(content);
@@ -137,19 +144,28 @@ function buildAutoUIWrapper(content: Annotation[]) {
       // inside the fixture) can inject it via tryUseBoardInteraction.
       const boardInteraction = createBoardInteraction();
       provideBoardInteraction(boardInteraction);
+      // Shell wrapper mirrors GameShell structure: boardregion + actionbar sibling.
+      // Action anchor sits OUTSIDE boardregion (same topology as production).
       return () =>
-        h('div', { class: 'boardregion', style: 'position:relative' }, [
-          h(MinimalAutoUIRenderer),
-          // Action anchor: data-bs-action is set by the action layer (HandRenderer /
-          // ActionPanel), not by the element renderer — same in both UI paths.
+        h('div', { class: 'shell-wrapper' }, [
+          h('div', { class: 'boardregion', style: 'position:relative' }, [
+            h(MinimalAutoUIRenderer),
+            h(TutorialOverlay),
+          ]),
+          // Action anchor: outside boardregion — mirrors ActionPanel in .actionbar.
+          // TutorialOverlay must query the whole document to resolve this.
           h('button', { 'data-bs-action': 'move' }, 'Move'),
-          h(TutorialOverlay),
         ]);
     },
   });
 
   const wrapper = mount(WrapperComponent, {
-    global: { provide: { gameState } },
+    global: {
+      provide: { gameState },
+      // Stub Teleport so overlay renders inline — keeps wrapper.find() assertions
+      // working in jsdom without teleported-DOM access.
+      stubs: { Teleport: true },
+    },
     attachTo: fixture,
   });
 
@@ -157,14 +173,17 @@ function buildAutoUIWrapper(content: Annotation[]) {
 }
 
 /**
- * Mount the Custom-UI fixture:
- *   [boardregion]
- *     MinimalCustomUIRenderer (anchorAttrs directly → shared anchor)
- *     <button data-bs-action="move">
- *     TutorialOverlay
+ * Mount the Custom-UI fixture — production-realistic topology (WR-02 fix):
  *
- * No boardInteraction provided — the custom UI does not need it for annotation
- * routing. anchorAttrs emits the anchor; TutorialOverlay resolves it.
+ *   [shell wrapper]
+ *     [boardregion]                        ← .stage > .boardregion in GameShell
+ *       MinimalCustomUIRenderer (anchorAttrs directly → shared anchor)
+ *       TutorialOverlay
+ *     <button data-bs-action="move">       ← .actionbar sibling OUTSIDE boardregion
+ *
+ * No boardInteraction provided — custom UIs that use anchorAttrs directly do not
+ * need boardInteraction to receive tutorial annotations ("for free" guarantee).
+ * The action button is a sibling of .boardregion, mirroring production.
  */
 function buildCustomUIWrapper(content: Annotation[]) {
   const gameState = makeGameState(content);
@@ -178,17 +197,26 @@ function buildCustomUIWrapper(content: Annotation[]) {
       // No provideBoardInteraction — custom UIs that use anchorAttrs directly
       // do not need boardInteraction to receive tutorial annotations. This is the
       // "for free" guarantee: use the shared anchor layer, get annotations automatically.
+      // Shell wrapper mirrors GameShell structure: boardregion + actionbar sibling.
       return () =>
-        h('div', { class: 'boardregion', style: 'position:relative' }, [
-          h(MinimalCustomUIRenderer),
+        h('div', { class: 'shell-wrapper' }, [
+          h('div', { class: 'boardregion', style: 'position:relative' }, [
+            h(MinimalCustomUIRenderer),
+            h(TutorialOverlay),
+          ]),
+          // Action anchor: outside boardregion — mirrors ActionPanel in .actionbar.
           h('button', { 'data-bs-action': 'move' }, 'Move'),
-          h(TutorialOverlay),
         ]);
     },
   });
 
   const wrapper = mount(WrapperComponent, {
-    global: { provide: { gameState } },
+    global: {
+      provide: { gameState },
+      // Stub Teleport so overlay renders inline — keeps wrapper.find() assertions
+      // working in jsdom without teleported-DOM access.
+      stubs: { Teleport: true },
+    },
     attachTo: fixture,
   });
 
