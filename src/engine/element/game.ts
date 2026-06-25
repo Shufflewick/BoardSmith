@@ -9,6 +9,7 @@ import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, Act
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
+import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -896,6 +897,29 @@ export class Game<
   }
 
   /**
+   * Get tutorial-disabled action reasons for a player seat.
+   *
+   * Returns a `Record<actionName, reason>` for each currently-available action
+   * that the active tutorial step excludes for the given seat. Returns `{}`
+   * when no tutorial is running for the seat (zero overhead in normal play).
+   *
+   * Unlike `getAvailableActions` (which remains binary), gated actions are NOT
+   * removed from availability — they stay visible so the UI can surface the
+   * reason (RESEARCH Pitfall 3 / success criterion #3).
+   *
+   * @param seat - The player seat number (1-indexed).
+   */
+  getTutorialDisabledActions(seat: number): Record<string, string> {
+    const player = this.getPlayer(seat);
+    if (!player) return {};
+
+    const availableActions = this.getAvailableActions(player);
+    const availableActionNames = availableActions.map(a => a.name);
+
+    return getActionLevelDisabledReasons(this, seat, availableActionNames);
+  }
+
+  /**
    * Get the action executor (for advanced usage like building action metadata)
    */
   getActionExecutor(): ActionExecutor {
@@ -905,6 +929,7 @@ export class Game<
   /**
    * Get the choices for a selection (for UI).
    * Returns AnnotatedChoice[] with each item annotated with disabled status.
+   * Tutorial gate disabled reasons are included so the UI can surface them.
    */
   getSelectionChoices(
     actionName: string,
@@ -918,7 +943,7 @@ export class Game<
     const selection = action.selections.find(s => s.name === selectionName);
     if (!selection) return [];
 
-    return this._actionExecutor.getChoices(selection, player, args);
+    return this._actionExecutor.getChoices(selection, player, args, actionName);
   }
 
   /**

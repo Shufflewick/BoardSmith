@@ -23,6 +23,7 @@ import type {
 } from './types.js';
 import { isDevMode, devWarn, wrapFilterWithHelpfulErrors } from './helpers.js';
 import { Action } from './action-builder.js';
+import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 
 // Re-export Action class from action-builder
 export { Action };
@@ -316,17 +317,30 @@ export class ActionExecutor {
   /**
    * Get available choices for a selection given current args.
    * Returns AnnotatedChoice[] with each item annotated with disabled status.
+   *
+   * @param actionName - When provided, tutorial gate evaluation is applied:
+   *   choices not permitted by the active tutorial step for the player's seat
+   *   are annotated with a gate reason. Pass `undefined` for internal calls
+   *   that should not trigger tutorial gating (e.g. resolveArgs, debug traces).
    */
   getChoices(
     selection: Selection,
     player: Player,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    actionName?: string,
   ): AnnotatedChoice<unknown>[] {
     const context: ActionContext = {
       game: this.game,
       player,
       args,
     };
+
+    // Resolve the active tutorial step once per getChoices call (O(1) map lookup).
+    // Only done when actionName is provided so internal / non-gated callers
+    // (resolveArgs, traceActionAvailability) pay zero cost.
+    const tutorialStep = actionName !== undefined
+      ? getActiveStep(this.game, player.seat)
+      : null;
 
     switch (selection.type) {
       case 'choice': {
@@ -362,10 +376,15 @@ export class ActionExecutor {
           }
         }
 
-        return choices.map(choice => ({
-          value: choice,
-          disabled: choiceSel.disabled ? choiceSel.disabled(choice, context) : false,
-        }));
+        return choices.map(choice => {
+          const gameDisabled = choiceSel.disabled ? choiceSel.disabled(choice, context) : false;
+          // OR-in gate reason: only when no game-defined reason already applies.
+          if (tutorialStep && gameDisabled === false) {
+            const gateReason = getGateReasonForValue(tutorialStep, actionName!, choice);
+            if (gateReason) return { value: choice, disabled: gateReason };
+          }
+          return { value: choice, disabled: gameDisabled };
+        });
       }
 
       case 'element': {
@@ -407,12 +426,17 @@ export class ActionExecutor {
           }
         }
 
-        return elements.map(el => ({
-          value: el,
-          disabled: elementSel.disabled
+        return elements.map(el => {
+          const gameDisabled = elementSel.disabled
             ? elementSel.disabled(el as any, context)
-            : false,
-        }));
+            : false;
+          // OR-in gate reason: only when no game-defined reason already applies.
+          if (tutorialStep && gameDisabled === false) {
+            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el);
+            if (gateReason) return { value: el, disabled: gateReason };
+          }
+          return { value: el, disabled: gameDisabled };
+        });
       }
 
       case 'elements': {
@@ -422,12 +446,17 @@ export class ActionExecutor {
           ? elementsSel.elements(context)
           : [...elementsSel.elements];
 
-        return elements.map(el => ({
-          value: el,
-          disabled: elementsSel.disabled
+        return elements.map(el => {
+          const gameDisabled = elementsSel.disabled
             ? elementsSel.disabled(el as any, context)
-            : false,
-        }));
+            : false;
+          // OR-in gate reason: only when no game-defined reason already applies.
+          if (tutorialStep && gameDisabled === false) {
+            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el);
+            if (gateReason) return { value: el, disabled: gateReason };
+          }
+          return { value: el, disabled: gameDisabled };
+        });
       }
 
       case 'text':
@@ -637,13 +666,19 @@ export class ActionExecutor {
   }
 
   /**
-   * Validate a single selection value
+   * Validate a single selection value.
+   *
+   * @param actionName - When provided, tutorial gate disabled reasons are
+   *   included in the choices evaluated here, so a learner submitting a
+   *   non-allowed target receives the gate reason via the existing
+   *   "Selection disabled: <reason>" path.
    */
   validateSelection(
     selection: Selection,
     value: unknown,
     player: Player,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    actionName?: string,
   ): ValidationResult {
     const errors: string[] = [];
     const context: ActionContext = {
@@ -654,7 +689,7 @@ export class ActionExecutor {
 
     // Check if value is in valid choices (for choice/element)
     if (selection.type === 'choice' || selection.type === 'element') {
-      const choices = this.getChoices(selection, player, args);
+      const choices = this.getChoices(selection, player, args, actionName);
 
       // Handle multiSelect arrays - validate each value in the array
       if (Array.isArray(value)) {
@@ -693,7 +728,7 @@ export class ActionExecutor {
     // Validate elements selection (new "pit of success" type)
     // After resolveArgs, values are GameElement objects (not raw IDs)
     if (selection.type === 'elements') {
-      const annotatedElements = this.getChoices(selection, player, args);
+      const annotatedElements = this.getChoices(selection, player, args, actionName);
       const validElements = annotatedElements.map(c => c.value) as GameElement[];
       const validIds = validElements.map(e => e.id);
 
@@ -860,7 +895,7 @@ export class ActionExecutor {
         continue;
       }
 
-      const result = this.validateSelection(selection, value, player, args);
+      const result = this.validateSelection(selection, value, player, args, action.name);
       allErrors.push(...result.errors);
     }
 
@@ -955,8 +990,10 @@ export class ActionExecutor {
       return false;
     }
 
-    // Check if there's at least one valid path through all selections
-    return this.hasValidSelectionPath(action.selections, player, {}, 0);
+    // Check if there's at least one valid path through all selections.
+    // Pass action.name so tutorial gate disabled reasons are included when
+    // filtering enabled choices — hasValidSelectionPath checks disabled===false.
+    return this.hasValidSelectionPath(action.selections, player, {}, 0, action.name);
   }
 
   /**
@@ -1117,12 +1154,16 @@ export class ActionExecutor {
    * with static choices and filterBy. For element/player selections,
    * or choice selections with dynamic choices functions, the cost of
    * repeatedly computing choices is too high.
+   *
+   * @param actionName - Propagated from `isActionAvailable` so tutorial gate
+   *   disabled reasons are included when filtering enabled choices.
    */
   private hasValidSelectionPath(
     selections: Selection[],
     player: Player,
     args: Record<string, unknown>,
-    index: number
+    index: number,
+    actionName?: string,
   ): boolean {
     // Base case: all selections processed
     if (index >= selections.length) {
@@ -1133,18 +1174,18 @@ export class ActionExecutor {
 
     // Skip optional selections - they don't block availability
     if (selection.optional) {
-      return this.hasValidSelectionPath(selections, player, args, index + 1);
+      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
     }
 
     // Text/number inputs are always available
     if (selection.type === 'text' || selection.type === 'number') {
-      return this.hasValidSelectionPath(selections, player, args, index + 1);
+      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
     }
 
     // For element selections, check if they have enabled choices
     // If a later selection depends on this one, do full path validation
     if (selection.type === 'element') {
-      const annotatedChoices = this.getChoices(selection, player, args);
+      const annotatedChoices = this.getChoices(selection, player, args, actionName);
       const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
       if (enabledChoices.length === 0) {
         return false;
@@ -1155,19 +1196,19 @@ export class ActionExecutor {
         // Need to verify at least one enabled choice leads to a valid path
         for (const choice of enabledChoices) {
           const newArgs = { ...args, [selection.name]: choice.value };
-          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
             return true;
           }
         }
         return false;
       }
-      return this.hasValidSelectionPath(selections, player, args, index + 1);
+      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
     }
 
     // For elements selections (chooseElements), check if they have enabled elements
     // If a later selection depends on this one, do full path validation
     if (selection.type === 'elements') {
-      const annotatedElements = this.getChoices(selection, player, args);
+      const annotatedElements = this.getChoices(selection, player, args, actionName);
       const enabledElements = annotatedElements.filter(c => c.disabled === false);
       if (enabledElements.length === 0) {
         return false;
@@ -1178,13 +1219,13 @@ export class ActionExecutor {
         // Need to verify at least one enabled element leads to a valid path
         for (const element of enabledElements) {
           const newArgs = { ...args, [selection.name]: element.value };
-          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
             return true;
           }
         }
         return false;
       }
-      return this.hasValidSelectionPath(selections, player, args, index + 1);
+      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
     }
 
     // For choice selections with dynamic choices functions
@@ -1192,7 +1233,7 @@ export class ActionExecutor {
     if (selection.type === 'choice') {
       const choiceSel = selection as ChoiceSelection;
       if (typeof choiceSel.choices === 'function') {
-        const annotatedChoices = this.getChoices(selection, player, args);
+        const annotatedChoices = this.getChoices(selection, player, args, actionName);
         const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
         if (enabledChoices.length === 0) {
           return false;
@@ -1203,18 +1244,18 @@ export class ActionExecutor {
           // Need to verify at least one enabled choice leads to a valid path
           for (const choice of enabledChoices) {
             const newArgs = { ...args, [selection.name]: choice.value };
-            if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+            if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
               return true;
             }
           }
           return false;
         }
-        return this.hasValidSelectionPath(selections, player, args, index + 1);
+        return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
       }
     }
 
     // Get choices for this selection (static choices only at this point)
-    const annotatedChoices = this.getChoices(selection, player, args);
+    const annotatedChoices = this.getChoices(selection, player, args, actionName);
     const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
     if (enabledChoices.length === 0) {
       return false;
@@ -1225,7 +1266,7 @@ export class ActionExecutor {
 
     if (!hasDependent) {
       // No dependent selections, just check if subsequent selections are valid
-      return this.hasValidSelectionPath(selections, player, args, index + 1);
+      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
     }
 
     // Has dependent selections - need to check if at least one enabled choice
@@ -1235,7 +1276,7 @@ export class ActionExecutor {
       const newArgs = { ...args, [selection.name]: choice.value };
 
       // Check if this choice leads to a valid path
-      if (this.hasValidSelectionPath(selections, player, newArgs, index + 1)) {
+      if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
         return true; // Found at least one valid path
       }
     }
@@ -1592,8 +1633,8 @@ export class ActionExecutor {
     // Clients send element IDs over the wire; validation compares against GameElement objects.
     const resolvedValue = this.resolveSelectionValue(selection, value, player);
 
-    // Validate the selection
-    const validationResult = this.validateSelection(selection, resolvedValue, player, pendingState.collectedArgs);
+    // Validate the selection (pass action.name so tutorial gate disabled reasons apply)
+    const validationResult = this.validateSelection(selection, resolvedValue, player, pendingState.collectedArgs, action.name);
     if (!validationResult.valid) {
       return { success: false, error: validationResult.errors.join('; ') };
     }
