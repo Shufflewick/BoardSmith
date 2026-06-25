@@ -535,14 +535,22 @@ export class Game<
     this.game = this as unknown as G;
     this._ctx.game = this;
 
-    // Store all constructor options for snapshot restoration
-    // This enables MCTS clones and other restores to receive full options
-    this._constructorOptions = { ...options, seed };
+    // Store all constructor options for snapshot restoration, EXCLUDING tutorial.
+    // This enables MCTS clones and other restores to receive full options.
+    //
+    // `tutorial` is intentionally excluded: it is static config (like _actions /
+    // flow definitions) that must be re-supplied on restore from the session layer
+    // (`GameSession.restore` → `GameRunnerOptions.gameOptions.tutorial`), NOT
+    // serialized into the snapshot. Storing it here would silently embed it in
+    // `snapshot.gameOptions` via `getConstructorOptions()` → `createSnapshot()`.
+    // Functions in predicate-style gates would also fail JSON.stringify.
+    const { tutorial: _tutorialOption, ...restOptions } = options;
+    this._constructorOptions = { ...restOptions, seed };
 
     // Wire tutorial definition (un-serialized static config, see tutorialDefinition JSDoc).
     // Listed in unserializableAttributes so toJSON/loadSerializedState skip it.
-    if (options.tutorial) {
-      this.tutorialDefinition = options.tutorial;
+    if (_tutorialOption) {
+      this.tutorialDefinition = _tutorialOption;
     }
 
     // Register base classes

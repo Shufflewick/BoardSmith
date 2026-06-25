@@ -36,6 +36,11 @@ const SAFE_PROPERTIES: ReadonlySet<string> = new Set([
   'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
   '_flowEngine', '_debugRegistry', '_persistentMaps',
   '_animationEvents', '_animationEventSeq', '_constructorOptions',
+  // Tutorial substrate (Phase 104): serialized correctly via __map encoding in
+  // toJSON / serializeValue, so it DOES survive HMR (loadSerializedState restores
+  // it). Framework-managed, not user-defined volatile state.
+  'tutorialProgress',
+  'tutorialDefinition',
 ]);
 
 /**
