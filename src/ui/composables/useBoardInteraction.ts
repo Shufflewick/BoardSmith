@@ -394,6 +394,26 @@ export function createBoardInteraction(): BoardInteraction {
 }
 
 /**
+ * Map an ElementRef to its stable `data-bs-el-*` anchor attributes.
+ *
+ * Emits only the keys that are present on the ref (undefined keys are omitted).
+ * All values are String()-coerced so they are safe to bind as HTML attributes.
+ *
+ * This is the SINGLE SOURCE for all anchor attribute names — no other file may
+ * define `data-bs-el-id`, `data-bs-el-notation`, or `data-bs-el-name` as
+ * string literals. Overlay targeting queries only these attributes; emitting all
+ * present keys means a notation- or name-keyed custom UI can still be matched by
+ * the overlay without duplicating the matchesRef precedence logic here.
+ */
+export function anchorAttrs(ref: ElementRef): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  if (ref.id !== undefined) attrs['data-bs-el-id'] = String(ref.id);
+  if (ref.notation !== undefined) attrs['data-bs-el-notation'] = String(ref.notation);
+  if (ref.name !== undefined) attrs['data-bs-el-name'] = String(ref.name);
+  return attrs;
+}
+
+/**
  * Provide board interaction (call in GameShell setup)
  */
 export function provideBoardInteraction(interaction: BoardInteraction): void {
