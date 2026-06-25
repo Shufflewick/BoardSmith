@@ -43,7 +43,11 @@
   2. Tutorial progress serializes with the game state and restores identically after checkpoint/replay (round-trip safe).
   3. A game author can gate a step to a restricted subset of legal actions; out-of-step actions are blocked and surface a reason (reusing the v2.8 disabled-reason mechanism), not silently ignored.
   4. Action gating reuses the engine's existing action validation — no parallel or duplicate validation path is introduced.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 104-01-PLAN.md — Tutorial substrate: contracts, serialized progress field, definition threading, serialization round-trip guard (Wave 1)
+- [ ] 104-02-PLAN.md — Action & target gating via the v2.8 disabled path + action-level reason (Wave 2)
+- [ ] 104-03-PLAN.md — Auto-fill suppressibility for taught selections (Wave 2)
+- [ ] 104-04-PLAN.md — Lifecycle controller (start/advance/skip/exit) + dual-projection parity (Wave 3)
 
 ### Phase 105: Annotation Overlay (UI Parity)
 **Goal**: A tutorial step can render a text bubble plus a targeted highlight on a board cell, piece, panel, or action control — and it renders identically in a custom UI and AutoUI.
