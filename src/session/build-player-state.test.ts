@@ -510,7 +510,7 @@ describe('end-to-end suppressAutoFill: buildPlayerState projection → useAction
       isMyTurn: ref(true),
       autoExecute: false,
       playerSeat: ref(1),
-      getChoices: fetchChoices,
+      fetchPickChoices: fetchChoices,
       tutorialStep,
     });
 
@@ -552,7 +552,7 @@ describe('end-to-end suppressAutoFill: buildPlayerState projection → useAction
       isMyTurn: ref(true),
       autoExecute: false,
       playerSeat: ref(1),
-      getChoices: fetchChoices,
+      fetchPickChoices: fetchChoices,
       // No tutorialStep → auto-fill is not suppressed
     });
 
