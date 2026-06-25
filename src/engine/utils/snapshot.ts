@@ -3,6 +3,8 @@ import { Player } from '../player/player.js';
 import type { SerializedAction } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
 import type { ElementJSON } from '../element/types.js';
+import type { TutorialStepView } from '../tutorial/types.js';
+import { getActiveTutorialStepView } from '../tutorial/gate.js';
 
 /**
  * Complete game state snapshot for persistence/transmission
@@ -122,6 +124,24 @@ export interface PlayerStateView {
    *  consumers read this; the dev server builds its own via buildPlayerState).
    *  Populated by the executor, not by createPlayerView. */
   actionMetadata?: Record<string, unknown>;
+
+  /**
+   * Active tutorial step projected for this player.
+   *
+   * `undefined` when no tutorial is running for this seat. Mirrors
+   * `PlayerGameState.tutorial` (parity hard-rule). Populated by
+   * `createPlayerView` when `game.tutorialProgress.get(seat)?.status === 'running'`.
+   */
+  tutorial?: TutorialStepView;
+
+  /**
+   * Action-level gate reasons for this seat.
+   *
+   * Maps action name → human-readable reason string for actions blocked by the
+   * active tutorial step's gate. `undefined` when no tutorial is running.
+   * Mirrors `PlayerGameState.disabledActions` (parity hard-rule).
+   */
+  disabledActions?: Record<string, string>;
 }
 
 /**
@@ -203,6 +223,16 @@ export function createPlayerView(
     }
   }
 
+  // Tutorial projection — parity with buildPlayerState (T-104-07).
+  // Uses the shared getActiveTutorialStepView helper so this call site and
+  // buildPlayerState cannot diverge.
+  const tutorial = playerPosition > 0
+    ? getActiveTutorialStepView(game, playerPosition)
+    : undefined;
+  const disabledActions = tutorial !== undefined
+    ? game.getTutorialDisabledActions(playerPosition)
+    : undefined;
+
   return {
     player: playerPosition,
     state: game.toJSONForPlayer(playerPosition),
@@ -215,6 +245,8 @@ export function createPlayerView(
     phase: game.phase,
     complete: flowState?.complete ?? false,
     winners: flowState?.complete ? game.getWinners().map(p => p.seat) : undefined,
+    ...(tutorial !== undefined ? { tutorial } : {}),
+    ...(disabledActions !== undefined && Object.keys(disabledActions).length > 0 ? { disabledActions } : {}),
   };
 }
 

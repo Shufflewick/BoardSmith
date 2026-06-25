@@ -21,7 +21,7 @@
  */
 
 import type { Game } from '../element/game.js';
-import type { TutorialStep } from './types.js';
+import type { TutorialStep, TutorialStepView } from './types.js';
 
 // ============================================================
 // Internal helpers
@@ -189,4 +189,36 @@ export function getActionLevelDisabledReasons(
   }
 
   return result;
+}
+
+// ============================================================
+// Client projection helper (shared by buildPlayerState + createPlayerView)
+// ============================================================
+
+/**
+ * Derive the `TutorialStepView` client projection for the given seat, or
+ * `undefined` when no tutorial is actively running.
+ *
+ * This is the SHARED helper used by BOTH `buildPlayerState` (session layer)
+ * and `createPlayerView` (engine layer) so the two call sites cannot drift
+ * (parity hard-rule, T-104-07). Sourced from `getActiveStep` so the
+ * "active = running + stepId resolves" invariant is enforced in one place.
+ *
+ * Carries only the fields that have authored values (undefined fields are
+ * omitted from the projected object to keep the wire shape lean).
+ *
+ * @param game - Game instance.
+ * @param seat - 1-indexed player seat.
+ */
+export function getActiveTutorialStepView(game: Game, seat: number): TutorialStepView | undefined {
+  const step = getActiveStep(game, seat);
+  if (!step) return undefined;
+
+  const view: TutorialStepView = { stepId: step.id };
+  // Only copy optional fields when they carry a value; omitting them keeps the
+  // wire shape identical to `undefined` (clients check "field in obj" correctly).
+  if (step.content !== undefined) view.content = step.content;
+  if (step.suppressAutoFill !== undefined) view.suppressAutoFill = step.suppressAutoFill;
+  if (step.suppressAutoFillFor !== undefined) view.suppressAutoFillFor = step.suppressAutoFillFor;
+  return view;
 }

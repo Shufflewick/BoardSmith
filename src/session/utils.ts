@@ -3,6 +3,7 @@
  */
 
 import { Player, evaluateCondition, canSeatAct, availableActionsForSeat, type FlowState, type Game, type Selection, type ActionDefinition, type ActionTrace } from '../engine/index.js';
+import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata } from './types.js';
 
@@ -442,6 +443,20 @@ export function buildPlayerState(
   if (animationEvents.length > 0) {
     state.animationEvents = animationEvents;
     state.lastAnimationEventId = animationEvents[animationEvents.length - 1].id;
+  }
+
+  // Tutorial projection — parity with createPlayerView (T-104-07).
+  // Uses the shared getActiveTutorialStepView helper so this call site and
+  // createPlayerView cannot diverge. Skip for spectators (position 0).
+  if (playerPosition > 0) {
+    const tutorial = getActiveTutorialStepView(runner.game, playerPosition);
+    if (tutorial !== undefined) {
+      state.tutorial = tutorial;
+      const disabled = runner.game.getTutorialDisabledActions(playerPosition);
+      if (Object.keys(disabled).length > 0) {
+        state.disabledActions = disabled;
+      }
+    }
   }
 
   return state;
