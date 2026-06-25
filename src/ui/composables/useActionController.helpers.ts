@@ -160,6 +160,31 @@ export function createTestMetadata(): Record<string, ActionMetadata> {
         },
       ],
     },
+    // Two-selection action where both have exactly one enabled choice.
+    // Used for tutorial suppressAutoFillFor Case C tests: the first selection
+    // is "taught" (suppressed), the second auto-fills once the first is filled.
+    twoStepSingle: {
+      name: 'twoStepSingle',
+      prompt: 'Move a piece (tutorial two-step)',
+      selections: [
+        {
+          name: 'from',
+          type: 'choice',
+          prompt: 'Select piece to move',
+          choices: [
+            { value: 'c3', display: 'Piece at c3' },
+          ],
+        },
+        {
+          name: 'to',
+          type: 'choice',
+          prompt: 'Select destination',
+          choices: [
+            { value: 'd4', display: 'Square d4' },
+          ],
+        },
+      ],
+    },
     // Action with multiSelect
     discardMultiple: {
       name: 'discardMultiple',

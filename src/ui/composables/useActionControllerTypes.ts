@@ -8,6 +8,7 @@
 import type { Ref, ComputedRef } from 'vue';
 import type { GameElement } from '../types.js';
 import type { UseAnimationEventsReturn } from './useAnimationEvents.js';
+import type { TutorialStepView } from '../../engine/tutorial/types.js';
 
 // Re-export GameElement as GameViewElement for external use
 export type { GameElement as GameViewElement };
@@ -278,6 +279,19 @@ export interface UseActionControllerOptions {
    * If not provided, animationsPending is always false and showActionPanel equals isMyTurn.
    */
   animationEvents?: UseAnimationEventsReturn;
+  /**
+   * Active tutorial step for the current player, sourced from `PlayerGameState.tutorial`.
+   *
+   * When set and the step has `suppressAutoFill: true`, `tryAutoFillSelection`
+   * will NOT auto-fill the single enabled choice for that selection, preserving
+   * the teaching click interaction.
+   *
+   * If `suppressAutoFillFor` is also set on the step, suppression is scoped to
+   * that named selection only; other selections still auto-fill normally.
+   *
+   * Defaults to `undefined` (no tutorial active, default auto-fill behavior).
+   */
+  tutorialStep?: Ref<TutorialStepView | undefined>;
 }
 
 /** State for repeating selections */

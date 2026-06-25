@@ -23,6 +23,7 @@ import {
   type ActionMetadata,
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
+import type { TutorialStepView } from '../../engine/tutorial/types.js';
 
 describe('useActionController', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
@@ -32,7 +33,7 @@ describe('useActionController', () => {
 
   beforeEach(() => {
     sendAction = createMockSendAction();
-    availableActions = ref(['endTurn', 'playCard', 'forcedPlay', 'optionalDiscard', 'optionalSingleChoice', 'twoStepOptionalSecond', 'movePiece', 'attack', 'discardMultiple']);
+    availableActions = ref(['endTurn', 'playCard', 'forcedPlay', 'optionalDiscard', 'optionalSingleChoice', 'twoStepOptionalSecond', 'movePiece', 'attack', 'discardMultiple', 'twoStepSingle']);
     actionMetadata = ref(createTestMetadata());
     isMyTurn = ref(true);
   });
@@ -2099,6 +2100,102 @@ describe('useActionController', () => {
       expect(controller.currentChoices.value).toHaveLength(2);
       // D-02: choice picks keep the footer regardless of ref type (validElements is [] for choice).
       expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+    });
+  });
+
+  // ============================================================
+  // Tutorial auto-fill suppression (Plan 104-03, TUT-02)
+  // ============================================================
+  describe('tutorial suppressAutoFill', () => {
+    /**
+     * Case A: Default path unchanged — no tutorial step active.
+     * A single enabled choice auto-fills as usual.
+     */
+    it('Case A (default): single enabled choice auto-fills when no tutorial step is set', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+
+      // Card auto-fills because there is only one choice and no tutorial suppression
+      expect(controller.currentArgs.value.card).toBe(42);
+      expect(controller.isReady.value).toBe(true);
+    });
+
+    /**
+     * Case B: Tutorial step-wide suppression.
+     * `suppressAutoFill: true` (no `suppressAutoFillFor`) prevents auto-fill
+     * for the selection, preserving the teaching click.
+     */
+    it('Case B (suppressed): suppressAutoFill: true keeps the taught selection unfilled', async () => {
+      const tutorialStep = ref<TutorialStepView | undefined>({
+        stepId: 'teach-click',
+        suppressAutoFill: true,
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+        tutorialStep,
+      });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+
+      // The global autoFill is on, but tutorial suppresses the taught selection.
+      // The controller must await the learner's click rather than auto-resolving.
+      expect(controller.currentArgs.value.card).toBeUndefined();
+      expect(controller.currentPick.value?.name).toBe('card');
+    });
+
+    /**
+     * Case C: Per-selection (scoped) suppression.
+     * `suppressAutoFillFor: 'from'` suppresses only the first selection;
+     * the second selection (not taught) still auto-fills after the learner
+     * fills the first one manually.
+     */
+    it('Case C (scoped): suppressAutoFillFor scopes suppression to the taught selection; other selections auto-fill', async () => {
+      const tutorialStep = ref<TutorialStepView | undefined>({
+        stepId: 'teach-piece-select',
+        suppressAutoFill: true,
+        suppressAutoFillFor: 'from',
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: false,
+        tutorialStep,
+      });
+
+      // Only 'from' is suppressed; 'to' should auto-fill after 'from' is provided.
+      await controller.start('twoStepSingle');
+      await nextTick();
+
+      // Taught selection ('from') must NOT be auto-filled
+      expect(controller.currentArgs.value.from).toBeUndefined();
+      expect(controller.currentPick.value?.name).toBe('from');
+
+      // Learner fills the taught selection manually
+      await controller.fill('from', 'c3');
+      await nextTick();
+
+      // Non-taught selection ('to') auto-fills because it is not suppressed
+      expect(controller.currentArgs.value.to).toBe('d4');
     });
   });
 

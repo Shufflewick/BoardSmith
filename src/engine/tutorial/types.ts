@@ -136,6 +136,22 @@ export interface TutorialStep {
    * this flag is the substrate's suppression signal wired by Plan 104-03.
    */
   suppressAutoFill?: boolean;
+
+  /**
+   * When set, scopes `suppressAutoFill` to a single named selection.
+   *
+   * If `suppressAutoFill` is `true` and this field is set to a selection name,
+   * only that selection's auto-fill is suppressed. Other selections in the same
+   * action still auto-fill normally.
+   *
+   * If `suppressAutoFill` is `true` and this field is absent, ALL selections
+   * in the step are suppressed (step-wide).
+   *
+   * Example: a two-step move (select piece → select destination) where only
+   * the piece selection is taught. Set `suppressAutoFillFor: 'piece'` so the
+   * destination still auto-fills to the single valid square.
+   */
+  suppressAutoFillFor?: string;
 }
 
 // ============================================
@@ -236,4 +252,11 @@ export interface TutorialStepView {
    * Phase 104-03 wires this into `tryAutoFillSelection`.
    */
   suppressAutoFill?: boolean;
+
+  /**
+   * When set, scopes `suppressAutoFill` to the named selection only.
+   * Carried from `TutorialStep.suppressAutoFillFor`.
+   * Other selections in the same action still auto-fill normally.
+   */
+  suppressAutoFillFor?: string;
 }
