@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives (Checkers)
-status: verifying
+status: executing
 stopped_at: roadmap complete, 15/15 requirements mapped
-last_updated: "2026-06-25T20:43:30.184Z"
-last_activity: 2026-06-25
+last_updated: "2026-06-25T21:39:27.110Z"
+last_activity: 2026-06-25 -- Phase 105 execution started
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 4
+  total_plans: 9
   completed_plans: 4
   percent: 14
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 104 — Tutorial Lifecycle & Action Gating
+**Current focus:** Phase 105 — Annotation Overlay (UI Parity)
 
 ## Current Position
 
-Phase: 104 (Tutorial Lifecycle & Action Gating) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-06-25
+Phase: 105 (Annotation Overlay (UI Parity)) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 105
+Last activity: 2026-06-25 -- Phase 105 execution started
 
 ## Milestones
 
@@ -101,6 +101,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Carried from v4.0 (non-blocking): dev-standalone shell height gap; pre-existing dev-host AI-turn issue; orphaned tokens / lint scope / focus-ring naming / platform-mode connection-announce seam. See `.planning/todos/pending/`.
 
 **Carry-forward from Phase 104 code review (Medium/Low — address in the consuming phase, see 104-REVIEW.md):**
+
 - **MR-01 → Phase 105:** `suppressAutoFill`/active-tutorial-step is accepted by `useActionController` but no PRODUCTION code yet passes the projected `PlayerGameState.tutorial` into it — inert end-to-end (works only in tests that inject it). Phase 105 (UI consumes the tutorial) must wire the projection → the real ActionPanel/board controller.
 - **MR-02 → Phase 106:** predicate-form gates are currently all-or-nothing/permissive; flesh out when predicate triggers land.
 - **LR-02 → Phase 109:** gate `from`/`to` are lumped into one set, blind to selection name — checkers "piece c3 → square d4" needs per-selection-name gating.
