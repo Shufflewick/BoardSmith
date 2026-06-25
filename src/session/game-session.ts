@@ -195,6 +195,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #debugController: DebugController<G>;
   /** Tutorial lifecycle controller — peer to PendingActionManager */
   #tutorialController: TutorialController<G>;
+  /**
+   * Tutorial definition kept on the session so `replaceRunner` can re-supply
+   * it after undo/rewind (fromCheckpoint creates a runner without tutorial,
+   * because tutorial is excluded from snapshot.gameOptions — see Game constructor).
+   */
+  readonly #tutorialDefinition?: TutorialDefinition;
   /** Dev checkpoint manager for fast HMR recovery (dev only) */
   #checkpointManager?: DevCheckpointManager<G>;
   /** Circuit breaker: consecutive AI failures before giving up */
@@ -218,6 +224,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#aiController = aiController;
     this.#displayName = displayName;
     this.#lobbyManager = lobbyManager;
+    // Capture the tutorial definition from the initial runner so replaceRunner
+    // can re-supply it (tutorial is excluded from snapshot.gameOptions and is
+    // therefore absent on runners created by fromCheckpoint / fromSnapshot).
+    this.#tutorialDefinition = runner.game.tutorialDefinition;
 
     // Initialize handlers - create them if not provided
     // The factory methods will create and pass these in
@@ -241,6 +251,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       {
         replaceRunner: (newRunner) => {
           this.#runner = newRunner;
+          // Re-supply tutorial definition: fromCheckpoint creates a runner
+          // without it (tutorial is excluded from snapshot.gameOptions so it
+          // is not persisted — it must be re-threaded by the session layer).
+          if (this.#tutorialDefinition) {
+            newRunner.game.tutorialDefinition = this.#tutorialDefinition;
+          }
           // Update handlers with new runner reference
           this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
           this.#pendingActionManager.updateRunner(newRunner);
