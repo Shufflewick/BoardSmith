@@ -646,7 +646,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     storedState: StoredGameState,
     GameClass: GameClass<G>,
     storage?: StorageAdapter,
-    botAIConfig?: BotAIConfig
+    botAIConfig?: BotAIConfig,
+    tutorial?: TutorialDefinition,
   ): GameSession<G> {
     // Snapshot-authoritative restore (audit F42). Reconstruct game state directly
     // from the persisted snapshot via GameRunner.fromSnapshot — NOT by replaying
@@ -668,6 +669,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     }
 
     const runner = GameRunner.fromSnapshot<G>(storedState.snapshot, GameClass);
+
+    // Re-supply static config that is intentionally excluded from the snapshot
+    // (see Game constructor — tutorial is stripped from _constructorOptions so
+    // serialization never tries to JSON.stringify predicate-style gates).
+    // Mirrors create()'s threading: effectiveGameOptions.tutorial → runner.game.tutorialDefinition.
+    // Also mirrors replaceRunner's guard so #tutorialDefinition stays live after restore.
+    if (tutorial) runner.game.tutorialDefinition = tutorial;
 
     const aiController = storedState.aiConfig
       ? new AIController(GameClass, storedState.gameType, storedState.playerCount, storedState.aiConfig, botAIConfig)
