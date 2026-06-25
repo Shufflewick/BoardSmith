@@ -8,6 +8,7 @@
 
 import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
+import type { TutorialDefinition, TutorialStepView } from '../engine/tutorial/types.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -45,6 +46,18 @@ export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '
 import type { RefWithRole } from '../engine/action/types.js';
 export type { RefWithRole };
 
+// Re-export tutorial types for consumers of the session surface
+export type {
+  TutorialDefinition,
+  TutorialStep,
+  TutorialGate,
+  TutorialGateAllowList,
+  TutorialGatePredicate,
+  TutorialGateContext,
+  TutorialProgress,
+  TutorialStepView,
+} from '../engine/tutorial/types.js';
+
 // ============================================
 // Game Class Types
 // ============================================
@@ -75,6 +88,15 @@ export interface GameDefinition {
   playerOptions?: Record<string, PlayerOptionDefinition>;
   /** Preset configurations for quick setup */
   presets?: GamePreset[];
+  /**
+   * Optional tutorial definition for this game.
+   *
+   * Threaded un-serialized (like `ai`) from here into the engine via
+   * `GameSession.create()` → `GameOptions.tutorial` → `Game.tutorialDefinition`.
+   * The definition is static config (step ids, gates, reserved content) and
+   * must NOT be serialized — mirrors the `_actions` / `ai` pattern.
+   */
+  tutorial?: TutorialDefinition;
 }
 
 // ============================================
@@ -383,6 +405,29 @@ export interface PlayerGameState {
   colorSelectionEnabled?: boolean;
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
+  /**
+   * RESERVED (Plan 104-04): Active tutorial step projected for this player.
+   *
+   * `undefined` when no tutorial is running for this seat. Populated by
+   * `buildPlayerState` when `game.tutorialProgress.get(seat)?.status === 'running'`.
+   *
+   * Typed as the exported `TutorialStepView` so that the producer (104-04)
+   * and all consumers (104-03 `suppressAutoFill`, Phase 105 annotation
+   * overlay) bind to one named contract.
+   */
+  tutorial?: TutorialStepView;
+  /**
+   * RESERVED (Plan 104-02): Action-level gate reasons for this seat.
+   *
+   * Maps action name → human-readable reason string for actions that are
+   * blocked by the active tutorial step's gate. `undefined` when no tutorial
+   * is running or no actions are gated.
+   *
+   * This fills the gap identified in RESEARCH Pitfall 3: action availability
+   * is currently a binary `string[]`; this field surfaces the "why" for gated
+   * actions so the UI can render a tooltip / disabled state with a reason.
+   */
+  disabledActions?: Record<string, string>;
 }
 
 // ============================================
