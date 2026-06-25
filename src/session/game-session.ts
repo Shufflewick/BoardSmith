@@ -17,6 +17,7 @@
  */
 
 import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions } from '../engine/index.js';
+import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -85,6 +86,14 @@ export interface GameSessionOptions<G extends Game = Game> {
   minPlayers?: number;
   /** Maximum number of players allowed (for lobby slot management) */
   maxPlayers?: number;
+  /**
+   * Tutorial definition threaded from `GameDefinition.tutorial`.
+   *
+   * Passed un-serialized into `GameOptions.tutorial` so the engine stores it
+   * as `Game.tutorialDefinition` (in `unserializableAttributes`). Mirrors how
+   * `botAIConfig` reaches `AIController` without touching the serialized state.
+   */
+  tutorial?: TutorialDefinition;
 }
 
 /**
@@ -405,6 +414,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       botAIConfig,
       minPlayers,
       maxPlayers,
+      tutorial,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -432,6 +442,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       ...customGameOptions,
       ...(extractedColors ? { colors: extractedColors } : {}),
       ...(colorLabels ? { colorLabels } : {}),
+      // Thread tutorial definition un-serialized into the game constructor
+      // (mirrors how aiConfig/botAIConfig reach AIController). The engine stores
+      // it as Game.tutorialDefinition (in unserializableAttributes) so gate
+      // evaluation can reach the definition without a session-layer round-trip.
+      ...(tutorial ? { tutorial } : {}),
     };
 
     const runner = new GameRunner<G>({

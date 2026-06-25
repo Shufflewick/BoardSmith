@@ -8,6 +8,7 @@ import { createInverseCommand } from '../command/inverse.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
+import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -159,6 +160,15 @@ export type GameOptions = {
   colorLabels?: Record<string, string>;
   /** Whether players can change colors in lobby (default: true) */
   colorSelectionEnabled?: boolean;
+  /**
+   * Tutorial definition (static config, never serialized).
+   *
+   * Threaded un-serialized from `GameDefinition.tutorial` via
+   * `GameSession.create()`. Mirrors how `ai` / `_actions` / flow definitions
+   * live on the instance. Stored in `Game.tutorialDefinition` (listed in
+   * `unserializableAttributes`).
+   */
+  tutorial?: TutorialDefinition;
 };
 
 /**
@@ -441,6 +451,32 @@ export class Game<
   /** Original constructor options (for snapshot restoration) */
   private _constructorOptions: Record<string, unknown> = {};
 
+  /**
+   * Per-seat tutorial progress (serialized).
+   *
+   * PLAIN PUBLIC FIELD — required for `toJSON()` to include it via
+   * `Object.keys(this)`. A `#private` field or getter would silently fail to
+   * round-trip (RESEARCH Pitfall 1). Initialized to an empty Map so it is
+   * present as an own-enumerable key even before any tutorial is started.
+   *
+   * Keys are seat numbers (1-indexed integers). `Map<number, …>` is chosen
+   * over `Record<number, …>` so `serializeValue` encodes it as
+   * `{ __map: [[1, …]] }` and `deserializeValue` restores numeric keys
+   * intact — JSON object-key coercion would turn `1` into `"1"`.
+   */
+  tutorialProgress: Map<number, TutorialProgress> = new Map();
+
+  /**
+   * Tutorial definition (NOT serialized).
+   *
+   * Static config threaded from `GameDefinition.tutorial` via
+   * `GameSession.create()` → `GameOptions.tutorial` → constructor. Listed in
+   * `unserializableAttributes` so `toJSON()` / `loadSerializedState()` skip
+   * it — the definition is re-supplied each time a runner is constructed,
+   * mirroring how `_actions` and flow definitions live on the instance.
+   */
+  tutorialDefinition?: TutorialDefinition;
+
   static override unserializableAttributes = [
     ...Space.unserializableAttributes,
     'pile',
@@ -452,6 +488,7 @@ export class Game<
     '_flowEngine',
     '_debugRegistry',
     '_constructorOptions',
+    'tutorialDefinition',
   ];
 
   /**
@@ -501,6 +538,12 @@ export class Game<
     // Store all constructor options for snapshot restoration
     // This enables MCTS clones and other restores to receive full options
     this._constructorOptions = { ...options, seed };
+
+    // Wire tutorial definition (un-serialized static config, see tutorialDefinition JSDoc).
+    // Listed in unserializableAttributes so toJSON/loadSerializedState skip it.
+    if (options.tutorial) {
+      this.tutorialDefinition = options.tutorial;
+    }
 
     // Register base classes
     this._ctx.classRegistry.set('Space', Space as unknown as ElementClass);
