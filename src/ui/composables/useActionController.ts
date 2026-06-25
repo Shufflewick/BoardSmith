@@ -472,6 +472,26 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Returns true when the active tutorial step is suppressing auto-fill for
+   * the given selection name.
+   *
+   * The step-wide `suppressAutoFill: true` flag suppresses every selection in
+   * the step unless `suppressAutoFillFor` narrows it to a single named selection.
+   * Callers must check this before auto-filling; the global `getAutoFill()` knob
+   * is unchanged and remains the primary gate.
+   *
+   * @param selectionName - The selection name currently being considered for auto-fill
+   */
+  function isTutorialSuppressingAutoFill(selectionName: string): boolean {
+    const step = options.tutorialStep?.value;
+    if (!step?.suppressAutoFill) return false;
+    const scopedTo = step.suppressAutoFillFor;
+    // Step-wide: no scoping → suppress all selections
+    // Scoped: only suppress the named selection
+    return !scopedTo || scopedTo === selectionName;
+  }
+
+  /**
    * Attempt to auto-fill a selection if it has exactly one non-optional choice.
    * Updates both currentArgs and collectedPicks in actionSnapshot.
    *
@@ -480,6 +500,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   function tryAutoFillSelection(selection: PickMetadata): boolean {
     if (!getAutoFill() || isExecuting.value) return false;
+
+    // Tutorial auto-fill suppression: when a step wants the learner to perform
+    // the click, preserve the teaching interaction instead of auto-resolving.
+    // The global `getAutoFill()` knob is separate; this is an additional,
+    // per-selection suppressor that applies only to the active taught selection.
+    if (isTutorialSuppressingAutoFill(selection.name)) return false;
 
     const choices = getChoices(selection);
     const enabledChoices = choices.filter(c => !c.disabled);
@@ -1196,7 +1222,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // After fetch, check for auto-fill on the next selection
         // (the watch may have fired before cache was populated)
         // Don't auto-fill optional selections - user must consciously choose or skip
-        if (getAutoFill() && !isExecuting.value) {
+        // Don't auto-fill if the active tutorial step suppresses it for this selection
+        if (getAutoFill() && !isExecuting.value && !isTutorialSuppressingAutoFill(nextSel.name)) {
           const choices = getChoices(nextSel);
           const enabledChoices = choices.filter(c => !c.disabled);
           if (enabledChoices.length === 1 && !nextSel.optional) {
