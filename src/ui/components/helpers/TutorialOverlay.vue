@@ -2,18 +2,24 @@
 /**
  * TutorialOverlay — single annotation layer for tutorial highlights.
  *
- * Mounts as an `position: absolute; inset: 0` sibling inside `.boardregion`
- * and reads `state.tutorial.content` to render:
- *   - A **ring** (3px accent stroke + glow + non-color marker chip) drawn over
- *     the measured rect of the resolved anchor element.
- *   - A **BoardMessage annotation bubble** (prose card, caret toward ring) near
- *     the ring or in fallback placement when no target is resolved.
+ * Renders via `<Teleport to="body">` as a `position:fixed; inset:0` layer over
+ * the entire viewport. This escapes `.boardregion`'s `overflow:hidden` clip and
+ * the sibling-boundary between `.boardregion` and `.actionbar`, so ALL three
+ * `AnnotationTarget` kinds resolve correctly:
  *
- * Targets are resolved ONLY through the shared `data-bs-*` attribute set
- * placed by Plan 02 (`anchorAttrs` / `useBoardInteraction`):
  *   - element: `[data-bs-el-id]` > `[data-bs-el-notation]` > `[data-bs-el-name]`
+ *     (emitted by anchorAttrs / useSelectable inside .boardregion)
  *   - action:  `[data-bs-action="<name>"]`
+ *     (emitted by ActionPanel inside .actionbar — SIBLING of .boardregion)
  *   - panel:   `[data-bs-panel]`
+ *     (emitted by ActionPanel inside .actionbar — SIBLING of .boardregion)
+ *
+ * Target resolution uses `document.querySelector` (not a `.boardregion`-scoped
+ * query) so action/panel targets in .actionbar are found (BL-01 fix).
+ *
+ * Ring + bubble coordinates are viewport-relative (`getBoundingClientRect()`
+ * minus nothing — the fixed overlay starts at (0,0) viewport). This also fixes
+ * the bubble-clip issue (WR-03) since the overlay has no `overflow:hidden`.
  *
  * The overlay NEVER queries renderer-specific selectors — parity is structural
  * (UI-SPEC §5). Custom UIs and AutoUI share the anchor layer and get annotations
@@ -21,12 +27,13 @@
  *
  * Security:
  *  - T-105-05: annotation text rendered via Vue text interpolation only (never raw HTML).
- *  - T-105-06: attribute selectors built via CSS.escape(); queries scoped to .boardregion.
+ *  - T-105-06: attribute selectors built via CSS.escape(); queries scoped to document.
  *  - T-105-07: ring is pointer-events:none — decorative, never intercepts input.
  *
  * Accessibility (UI-SPEC §4):
  *  - Ring + marker chip are aria-hidden (decorative visual).
- *  - Bubble uses BoardMessage's role=status / aria-live=polite.
+ *  - Overlay root has NO aria-hidden so the bubble's role=status / aria-live=polite
+ *    is announced (CR-01 fix — aria-hidden on root silenced all descendants).
  *  - No focus steal, no key handlers — lifecycle is Phase 104/106.
  *
  * Z-index: 20 (above turn prompt z-5, below modal/game-over z-50 — UI-SPEC §3).
@@ -66,7 +73,7 @@ function cssEscape(value: string): string {
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface ResolvedRing {
-  /** Absolute position + size covering the target rect, offset 3px outside. */
+  /** Viewport-fixed position + size covering the target rect, offset 3px outside. */
   left: number;
   top: number;
   width: number;
@@ -135,19 +142,57 @@ function readRadius(el: Element): string {
 
 const resolvedAnnotations = ref<ResolvedAnnotation[]>([]);
 
+/**
+ * Compute viewport-fixed position for an untargeted or explicit-placement bubble.
+ *
+ * Uses boardRegion's viewport rect so the bubble appears over the board area.
+ * Falls back to window dimensions when no boardRegion is available.
+ *
+ * This fixes WR-01: untargeted bubbles previously had anchorStyle={} (0,0).
+ */
+function bubbleFallbackStyle(
+  placement: Annotation['placement'],
+  boardRect: DOMRect | null,
+): Record<string, string> {
+  const GAP = 8; // var(--bsg-s2)
+  const BUBBLE_HEIGHT_ESTIMATE = 80;
+
+  // Compute fallback bounds from boardRect or full viewport
+  const left = boardRect ? boardRect.left + boardRect.width / 2 : window.innerWidth / 2;
+  const top = boardRect?.top ?? 0;
+  const bottom = boardRect ? boardRect.top + boardRect.height : window.innerHeight;
+
+  if (placement === 'center') {
+    return {
+      left: `${left}px`,
+      top: `${top + (bottom - top) / 2}px`,
+      transform: 'translate(-50%, -50%)',
+    };
+  }
+  if (placement === 'bottom') {
+    return {
+      left: `${left}px`,
+      top: `${Math.max(top, bottom - BUBBLE_HEIGHT_ESTIMATE - GAP)}px`,
+      transform: 'translateX(-50%)',
+    };
+  }
+  // 'top' or default (no placement / 'auto' with no target)
+  return {
+    left: `${left}px`,
+    top: `${top + GAP}px`,
+    transform: 'translateX(-50%)',
+  };
+}
+
 function measure() {
-  // Locate .boardregion: walk up from the overlay's own root so we don't
-  // accidentally match a stale or duplicate element in the document.
+  // Locate .boardregion for scroll/resize observation and fallback bubble placement.
+  // With Teleport, overlayRoot is in <body> so .closest('.boardregion') returns null;
+  // fall back to document.querySelector('.boardregion').
   const boardRegion: Element | null =
     overlayRoot.value?.closest('.boardregion') ??
     document.querySelector('.boardregion');
 
-  if (!boardRegion) {
-    resolvedAnnotations.value = [];
-    return;
-  }
-
-  const boardRect = boardRegion.getBoundingClientRect();
+  const boardRect = boardRegion?.getBoundingClientRect() ?? null;
 
   resolvedAnnotations.value = annotations.value.map((ann) => {
     let ring: ResolvedRing | null = null;
@@ -157,36 +202,41 @@ function measure() {
     // ── Resolve target ───────────────────────────────────────────────────────
     if (ann.target) {
       const selector = buildSelector(ann.target);
-      const targetEl = selector
-        ? boardRegion.querySelector(selector)
-        : null;
+      // BL-01 fix: query the entire document, not just .boardregion.
+      // action/panel targets live in .actionbar (sibling of .boardregion);
+      // element targets still live in .boardregion — document query finds both.
+      const targetEl = selector ? document.querySelector(selector) : null;
 
       if (targetEl) {
         const rect = targetEl.getBoundingClientRect();
         const OFFSET = 3; // px outside the target rect
 
+        // Ring coordinates are viewport-fixed (overlay is position:fixed inset:0).
         ring = {
-          left: rect.left - boardRect.left - OFFSET,
-          top: rect.top - boardRect.top - OFFSET,
+          left: rect.left - OFFSET,
+          top: rect.top - OFFSET,
           width: rect.width + OFFSET * 2,
           height: rect.height + OFFSET * 2,
           radius: readRadius(targetEl),
         };
 
-        // ── Bubble placement (auto) ──────────────────────────────────────────
-        if (!ann.placement || ann.placement === 'auto') {
+        // ── Bubble placement ─────────────────────────────────────────────────
+        if (ann.placement && ann.placement !== 'auto') {
+          // Explicit placement: position bubble at board-level named position.
+          anchorStyle = bubbleFallbackStyle(ann.placement, boardRect);
+        } else {
+          // Auto-placement: bubble near the target, flip if too close to bottom.
           const GAP = 8; // var(--bsg-s2)
           const BUBBLE_HEIGHT_ESTIMATE = 80; // conservative estimate
 
-          const preferredTop =
-            rect.top - boardRect.top + rect.height + GAP;
+          const preferredTop = rect.top + rect.height + GAP;
           const fitsBelow =
-            preferredTop + BUBBLE_HEIGHT_ESTIMATE <= boardRect.height;
+            preferredTop + BUBBLE_HEIGHT_ESTIMATE <= window.innerHeight;
 
           if (fitsBelow) {
             caretSide = 'top';
             anchorStyle = {
-              left: `${Math.max(0, rect.left - boardRect.left + rect.width / 2)}px`,
+              left: `${Math.max(0, rect.left + rect.width / 2)}px`,
               top: `${preferredTop}px`,
               transform: 'translateX(-50%)',
             };
@@ -194,23 +244,20 @@ function measure() {
             // Flip above
             caretSide = 'bottom';
             anchorStyle = {
-              left: `${Math.max(0, rect.left - boardRect.left + rect.width / 2)}px`,
-              top: `${Math.max(0, rect.top - boardRect.top - GAP - BUBBLE_HEIGHT_ESTIMATE)}px`,
+              left: `${Math.max(0, rect.left + rect.width / 2)}px`,
+              top: `${Math.max(0, rect.top - GAP - BUBBLE_HEIGHT_ESTIMATE)}px`,
               transform: 'translateX(-50%)',
             };
           }
         }
       } else {
-        // Null target → bubble-only fallback (top of board region)
-        anchorStyle = {
-          left: '50%',
-          top: 'var(--bsg-s3)',
-          transform: 'translateX(-50%)',
-        };
+        // Null target → bubble-only fallback at top of board area.
+        anchorStyle = bubbleFallbackStyle('top', boardRect);
       }
     } else {
-      // No target at all → bubble only, position prop handles placement
-      anchorStyle = {};
+      // No target → floating bubble; honor placement (WR-01 fix).
+      // Previously: anchorStyle = {} → bubble rendered at (0,0).
+      anchorStyle = bubbleFallbackStyle(ann.placement, boardRect);
     }
 
     return {
@@ -229,6 +276,7 @@ let observedElements: Element[] = [];
 function rebuildObservers() {
   if (!overlayRoot.value) return;
 
+  // With Teleport, overlayRoot is in <body>; closest() returns null, fall back.
   const boardRegion =
     overlayRoot.value.closest('.boardregion') ??
     document.querySelector('.boardregion');
@@ -247,12 +295,12 @@ function rebuildObservers() {
     resizeObserver.observe(boardRegion);
     observedElements.push(boardRegion);
 
-    // Observe each resolved target
+    // Observe each resolved target (BL-01: use document.querySelector)
     for (const ann of annotations.value) {
       if (!ann.target) continue;
       const selector = buildSelector(ann.target);
       if (!selector) continue;
-      const el = boardRegion.querySelector(selector);
+      const el = document.querySelector(selector);
       if (el && !observedElements.includes(el)) {
         resizeObserver.observe(el);
         observedElements.push(el);
@@ -311,68 +359,93 @@ function ringStyle(ring: ResolvedRing): Record<string, string> {
 </script>
 
 <template>
-  <!-- Overlay root: zero markup when no tutorial content (v-if guard). -->
-  <div
-    v-if="hasContent"
-    ref="overlayRoot"
-    class="bsg-tutorial-overlay"
-    aria-hidden="true"
-  >
-    <template v-for="(resolved, i) in resolvedAnnotations" :key="i">
-      <!--
-        Highlight ring — drawn over the measured target rect.
-        pointer-events:none so it never intercepts the underlying control (T-105-07).
-        aria-hidden: ring is decorative; the bubble text is the accessible description.
-      -->
-      <div
-        v-if="resolved.ring"
-        class="bsg-tutorial-ring"
-        :style="ringStyle(resolved.ring)"
-        aria-hidden="true"
-      >
-        <!--
-          Non-color cue marker chip (WCAG 2.2 AA 1.4.1 — UI-SPEC §2).
-          An "i" glyph in an --bsg-accent chip pinned to the ring corner
-          identifies the ring as a tutorial highlight independent of hue.
-        -->
-        <span class="bsg-tutorial-ring__chip" aria-hidden="true">i</span>
-      </div>
+  <!--
+    Teleport to body: renders the overlay as a fixed viewport layer.
 
-      <!--
-        Annotation bubble — reuses BoardMessage for role=status / aria-live=polite /
-        reduced-motion for free (UI-SPEC §1, §4).
-        aria-hidden on the outer overlay is lifted here: the bubble carries real
-        accessible text and must be announced. We wrap it outside the aria-hidden
-        root by rendering it as a sibling of the ring — but since it's inside the
-        overlay div (which is aria-hidden), we explicitly undo that on the bubble.
-      -->
-      <BoardMessage
-        v-if="resolved.text"
-        variant="annotation"
-        :visible="true"
-        :anchor-style="resolved.bubble.anchorStyle"
-        :caret-side="resolved.bubble.caretSide"
-        aria-hidden="false"
-      >{{ resolved.text }}</BoardMessage>
-    </template>
-  </div>
+    This escapes .boardregion's overflow:hidden clip and the sibling-boundary
+    so action/panel targets in .actionbar resolve correctly (BL-01 fix). Ring and
+    bubble positions are viewport-fixed (getBoundingClientRect coords, no offset
+    subtraction). Bubble clip (WR-03) is also resolved — no overflow:hidden here.
+
+    The root div has NO aria-hidden: the bubble (BoardMessage / role=status) must
+    be announced by screen readers (CR-01 fix — aria-hidden on root silenced all
+    descendants including the aria-live region). Only the decorative ring elements
+    carry aria-hidden="true".
+  -->
+  <Teleport to="body">
+    <div
+      v-if="hasContent"
+      ref="overlayRoot"
+      class="bsg-tutorial-overlay"
+    >
+      <template v-for="(resolved, i) in resolvedAnnotations" :key="i">
+        <!--
+          Highlight ring — drawn at the target's viewport-fixed rect.
+          pointer-events:none so it never intercepts the underlying control (T-105-07).
+          aria-hidden: ring is decorative; the bubble text is the accessible description.
+        -->
+        <div
+          v-if="resolved.ring"
+          class="bsg-tutorial-ring"
+          :style="ringStyle(resolved.ring)"
+          aria-hidden="true"
+        >
+          <!--
+            Non-color cue marker chip (WCAG 2.2 AA 1.4.1 — UI-SPEC §2).
+            An "i" glyph in an --bsg-accent chip pinned to the ring corner
+            identifies the ring as a tutorial highlight independent of hue.
+          -->
+          <span class="bsg-tutorial-ring__chip" aria-hidden="true">i</span>
+        </div>
+
+        <!--
+          Annotation bubble — reuses BoardMessage for role=status / aria-live=polite /
+          reduced-motion for free (UI-SPEC §1, §4).
+
+          CR-01 fix: no aria-hidden="true" on this element or any ancestor (the
+          overlay root no longer carries aria-hidden). The bubble is announced by
+          screen readers. Only the ring above is aria-hidden (decorative).
+
+          WR-01 fix: anchorStyle is always set to a non-empty object so the bubble
+          never renders at (0,0). Untargeted and explicit-placement bubbles use
+          board-relative viewport coords computed by bubbleFallbackStyle().
+        -->
+        <BoardMessage
+          v-if="resolved.text"
+          variant="annotation"
+          :visible="true"
+          :anchor-style="resolved.bubble.anchorStyle"
+          :caret-side="resolved.bubble.caretSide"
+        >{{ resolved.text }}</BoardMessage>
+      </template>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
 /* ── Overlay root ─────────────────────────────────────────────────────────── */
 /*
- * Covers the full .boardregion without affecting layout.
+ * Fixed viewport layer via <Teleport to="body">.
+ *
+ * position:fixed + inset:0 makes the overlay cover the full viewport so that
+ * ring/bubble children positioned with position:absolute use viewport coords
+ * (matching getBoundingClientRect() output). This is required for action/panel
+ * targets in .actionbar (outside .boardregion) — the old position:absolute
+ * inside .boardregion could not reach them (BL-01 fix).
+ *
+ * overflow:visible (no longer hidden): rings that extend slightly outside the
+ * board edge remain visible (WR-03 fix). Viewport edge clipping is handled
+ * naturally by the browser.
+ *
  * z-index 20: above BoardMessage turn prompt (z-5), below modal/game-over (z-50).
  * pointer-events:none on the root; the bubble re-enables them on its content box.
  */
 .bsg-tutorial-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 20;
   pointer-events: none;
-  /* overflow:hidden clips rings that extend beyond the board edge; the bubble
-     is position:absolute too but clamped by TutorialOverlay logic (UI-SPEC §3). */
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* ── Highlight ring ──────────────────────────────────────────────────────── */

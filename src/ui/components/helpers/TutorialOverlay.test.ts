@@ -144,7 +144,10 @@ describe('TutorialOverlay', () => {
       );
 
       const wrapper = mount(TutorialOverlay, {
-        global: { provide: { gameState } },
+        global: {
+          provide: { gameState },
+          stubs: { Teleport: true },
+        },
         attachTo: fixture,
       });
       await nextTick();
