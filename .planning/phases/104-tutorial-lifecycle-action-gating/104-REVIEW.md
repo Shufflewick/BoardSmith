@@ -1,6 +1,7 @@
 ---
 phase: 104-tutorial-lifecycle-action-gating
 reviewed: 2026-06-25T00:00:00Z
+resolved: 2026-06-25T00:00:00Z
 depth: deep
 files_reviewed: 13
 files_reviewed_list:
@@ -25,14 +26,14 @@ findings:
   medium: 3
   low: 4
   total: 9
-status: issues_found
+status: partially_resolved
 ---
 
 # Phase 104: Tutorial Lifecycle & Action Gating — Code Review
 
 **Reviewed:** 2026-06-25
 **Depth:** deep (cross-file: engine ⇄ session ⇄ ui)
-**Status:** issues_found (1 BLOCKER, 1 HIGH)
+**Status:** BL-01 and HR-01 resolved; MR-01 deferred to Phase 105 (per decision)
 
 ## Summary
 
@@ -63,7 +64,14 @@ Two serious gaps undercut the phase, however:
 
 ## Blocker Issues
 
-### BL-01: `GameSession.restore()` loses `tutorialDefinition` on every restore-from-storage
+### BL-01: `GameSession.restore()` loses `tutorialDefinition` on every restore-from-storage — **RESOLVED**
+
+**Fix commit:** `74de8b2` (fix(104): re-supply tutorialDefinition in GameSession.restore())
+**Test commit:** `12ec52c` (test(104): add failing restore-with-tutorial tests for BL-01)
+**New tests:** 3 tests in `src/session/restore-snapshot-authoritative.test.ts` (BL-01 describe block).
+Covers: gating reason survives snapshot → restore; advance() succeeds post-restore; pre-fix behavior documented.
+
+**Original finding:**
 
 **File:** `src/session/game-session.ts:645-693` (capture site `:230`; design comment `src/engine/element/game.ts:544`)
 
@@ -122,7 +130,14 @@ The caller that holds the `GameDefinition` (platform/dev host) must pass
 
 ## High / Warning Issues
 
-### HR-01: Action-level gating is never enforced at execution — it only annotates a reason
+### HR-01: Action-level gating is never enforced at execution — it only annotates a reason — **RESOLVED**
+
+**Fix commit:** `cb2bc57` (fix(104): enforce tutorial action-level gating in Game.performAction())
+**Test commit:** `4c4bf54` (test(104): add failing action-enforcement tests for HR-01)
+**New tests:** 6 tests in `src/engine/action/tutorial-gate.test.ts` (HR-01 describe block).
+Covers: out-of-step action rejected with gate reason; in-step action allowed; non-tutorialized seat unaffected; normal play unaffected; step change unblocks newly-allowed action.
+
+**Original finding:**
 
 **File:** `src/engine/tutorial/gate.ts:159-192`, `src/engine/element/game.ts:896-919`, `src/engine/action/action.ts:330-470`
 
