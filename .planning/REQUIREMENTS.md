@@ -12,7 +12,7 @@ Requirements for milestone v4.1. Each maps to roadmap phases. The substrate (TUT
 The reusable engine/session/UI primitives. Design constraint: parity across custom UI and AutoUI through `useBoardInteraction` is mandatory — no primitive may work in only one UI path.
 
 - [ ] **TUT-01**: A game author can attach an annotation overlay (text bubble + a targeted highlight on a board cell, piece, panel, or action control) to a tutorial step, and it renders identically in a custom UI and AutoUI via `useBoardInteraction`.
-- [ ] **TUT-02**: A game author can gate a tutorial step to a restricted set of legal actions, reusing the engine's existing action validation; out-of-step actions are blocked and surface a reason (building on the v2.8 disabled-reason mechanism).
+- [x] **TUT-02**: A game author can gate a tutorial step to a restricted set of legal actions, reusing the engine's existing action validation; out-of-step actions are blocked and surface a reason (building on the v2.8 disabled-reason mechanism).
 - [ ] **TUT-03**: A game author can define triggers that fire tutorial content when a game-state predicate or engine event matches (e.g. before the player's first turn, after N turns, the first time a capture becomes forced).
 - [ ] **TUT-04**: A game author can author a tutorial as a CI-verifiable artifact using the `testing` DSL, so a game-rule change that breaks the tutorial fails a test rather than rotting silently.
 - [x] **TUT-05**: A player can start, advance, skip a step, and exit a tutorial; tutorial progress serializes with the game state so it is checkpoint/replay safe.
@@ -75,7 +75,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | TUT-01 | Phase 105 | Pending |
-| TUT-02 | Phase 104 | Pending |
+| TUT-02 | Phase 104 | Complete |
 | TUT-03 | Phase 106 | Pending |
 | TUT-04 | Phase 106 | Pending |
 | TUT-05 | Phase 104 | Complete |
