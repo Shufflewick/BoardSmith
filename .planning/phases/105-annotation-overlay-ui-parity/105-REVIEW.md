@@ -21,7 +21,9 @@ findings:
   warning: 3
   info: 2
   total: 7
-status: issues_found
+status: resolved
+resolved: 2026-06-25T00:00:00Z
+resolved_by: Claude Sonnet 4.6
 ---
 
 # Phase 105: Code Review Report — Tutorial Annotation Overlay (UI Parity)
@@ -37,9 +39,27 @@ The shared-anchor architecture is sound and the headline parity concern is genui
 
 However, two of the three documented `AnnotationTarget` kinds — `'action'` and `'panel'` — **cannot resolve in production** because the overlay scopes target queries to `.boardregion` while `ActionPanel` (the only host of `data-bs-action` / `data-bs-panel`) renders in `.actionbar`, a sibling *outside* `.boardregion`. The parity test masks this by planting the action button inside `.boardregion`, so the suite passes while the feature is broken. Separately, the annotation bubble is nested under an `aria-hidden="true"` root and will not be announced despite the explicit a11y intent, and explicit `placement` values plus the untargeted-bubble case render at (0,0).
 
+## Resolution Summary (2026-06-25)
+
+All four actionable findings (BL-01, CR-01, WR-01, WR-02) resolved in commits
+`d466ce0` (RED tests) and `72041ef` (fix). WR-03 resolved as a side-effect of BL-01.
+IN-01 and IN-02 are informational — not addressed (within accepted scope). Full
+suite green: 1371/1371. lint:css clean.
+
+---
+
 ## Blocker Issues
 
-### BL-01: `action` and `panel` annotation targets never resolve in production (overlay scoped to `.boardregion`; ActionPanel lives in `.actionbar` sibling)
+### BL-01: `action` and `panel` annotation targets never resolve in production (overlay scoped to `.boardregion`; ActionPanel lives in `.actionbar` sibling) — RESOLVED
+
+**Status:** Fixed in `72041ef`. Guarded by new test in `TutorialOverlay.test.ts`
+("action target outside .boardregion (BL-01 guard — production topology)").
+
+**Fix:** Added `<Teleport to="body">` wrapping the overlay div (position:fixed,
+inset:0, overflow:visible). Changed `boardRegion.querySelector(selector)` →
+`document.querySelector(selector)` in both `measure()` and `rebuildObservers()`.
+Ring/bubble coordinates are now viewport-fixed (getBoundingClientRect() values
+with no boardRect subtraction). WR-03 resolved as a side-effect (no overflow:hidden).
 
 **File:** `src/ui/components/helpers/TutorialOverlay.vue:141-162` (+ `src/ui/components/GameShell.vue:1585-1817`)
 
@@ -53,7 +73,15 @@ Even resolving against `document` would not fix it: ring coordinates are compute
 
 ## Critical Issues
 
-### CR-01: Annotation bubble is inside an `aria-hidden="true"` subtree — `role=status`/`aria-live` is never announced
+### CR-01: Annotation bubble is inside an `aria-hidden="true"` subtree — `role=status`/`aria-live` is never announced — RESOLVED
+
+**Status:** Fixed in `72041ef`. Guarded by new test "role=status bubble has no
+aria-hidden='true' ancestor" in `TutorialOverlay.test.ts`.
+
+**Fix:** Removed `aria-hidden="true"` from the overlay root div. Only the
+decorative ring elements retain `aria-hidden="true"`. The bubble (BoardMessage /
+role=status / aria-live=polite) has no aria-hidden ancestor and is now announced.
+Also removed the contradictory `aria-hidden="false"` that was on BoardMessage.
 
 **File:** `src/ui/components/helpers/TutorialOverlay.vue:315-356`
 
@@ -71,7 +99,16 @@ Even resolving against `document` would not fix it: ring coordinates are compute
 
 ## Warnings
 
-### WR-01: Explicit `placement` ('top'/'bottom'/'center') and untargeted bubbles render at (0,0)
+### WR-01: Explicit `placement` ('top'/'bottom'/'center') and untargeted bubbles render at (0,0) — RESOLVED
+
+**Status:** Fixed in `72041ef`. Guarded by 3 new tests in `TutorialOverlay.test.ts`:
+untargeted bubble, placement='top', placement='bottom'.
+
+**Fix:** Added `bubbleFallbackStyle(placement, boardRect)` helper. Untargeted
+annotations (no target field) and annotations with explicit placement use
+board-region-relative viewport coords (top/bottom/center of the board rect).
+The null-target branch (target specified but not found) also uses this helper.
+Previously all these cases set `anchorStyle = {}` → no style → bubble at (0,0).
 
 **File:** `src/ui/components/helpers/TutorialOverlay.vue:176-214`
 
@@ -79,7 +116,13 @@ Even resolving against `document` would not fix it: ring coordinates are compute
 
 **Fix:** Honor explicit placements (compute board-relative `top`/`bottom`/`center` anchorStyle for non-auto values and for the untargeted case), or narrow `AnnotationPlacement` to the values actually implemented. At minimum, make the untargeted floating bubble center/top of the board region rather than (0,0).
 
-### WR-02: Parity test plants the action anchor inside `.boardregion`, giving false confidence for BL-01
+### WR-02: Parity test plants the action anchor inside `.boardregion`, giving false confidence for BL-01 — RESOLVED
+
+**Status:** Fixed in `d466ce0` (test commit). Both fixture builders now put the
+action button as a sibling of `.boardregion` (inside a `shell-wrapper`), mirroring
+the production ActionPanel-in-.actionbar relationship. `stubs: { Teleport: true }`
+added to all VTU `mount()` calls so `wrapper.find()` works after the BL-01 Teleport fix.
+The action-target assertions now fail against the pre-fix code and pass after.
 
 **File:** `src/ui/components/helpers/TutorialOverlay.parity.test.ts:145,184` (+ assertions 237-248, 272-283, 338-371)
 
@@ -87,7 +130,12 @@ Even resolving against `document` would not fix it: ring coordinates are compute
 
 **Fix:** Make the action/panel fixtures mirror production topology (action button as a sibling of `.boardregion`, both under a common shell ancestor) so the test exercises the same resolution scope the overlay uses in GameShell. The test should fail until BL-01 is fixed.
 
-### WR-03: Annotation bubble can be clipped by the overlay's `overflow:hidden`
+### WR-03: Annotation bubble can be clipped by the overlay's `overflow:hidden` — RESOLVED (subsumed by BL-01)
+
+**Status:** Resolved as a side-effect of the BL-01 Teleport fix. The overlay
+now uses `position:fixed; overflow:visible` — there is no clip context. Bubbles
+and rings are visible at their full viewport coordinates regardless of position
+relative to the board edge.
 
 **File:** `src/ui/components/helpers/TutorialOverlay.vue:375` (+ placement clamping 186-201)
 
