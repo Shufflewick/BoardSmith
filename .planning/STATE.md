@@ -102,7 +102,7 @@ Carried from v4.0 (non-blocking): dev-standalone shell height gap; pre-existing 
 
 **Carry-forward from Phase 104 code review (Medium/Low — address in the consuming phase, see 104-REVIEW.md):**
 
-- **MR-01 → Phase 105:** `suppressAutoFill`/active-tutorial-step is accepted by `useActionController` but no PRODUCTION code yet passes the projected `PlayerGameState.tutorial` into it — inert end-to-end (works only in tests that inject it). Phase 105 (UI consumes the tutorial) must wire the projection → the real ActionPanel/board controller.
+- **MR-01 → ✅ CLOSED in Phase 105:** `tutorialStep` threaded into `useActionController` via GameShell production wiring; behavioral suppress-auto-fill test guards it. Phase 105 review also fixed BL-01 (action/panel targets were dead → overlay now teleports to body + `position:fixed` + `document.querySelector`, highlights targets in `.actionbar` outside `.boardregion`), CR-01 (bubble announced — root aria-hidden removed), WR-01/WR-02. Suite 1371 green.
 - **MR-02 → Phase 106:** predicate-form gates are currently all-or-nothing/permissive; flesh out when predicate triggers land.
 - **LR-02 → Phase 109:** gate `from`/`to` are lumped into one set, blind to selection name — checkers "piece c3 → square d4" needs per-selection-name gating.
 - **MR-03 / LR-01 (minor):** `start()` on empty `steps` is a silent no-op (should fail loud); `skip()` records identically to `advance()` (no distinction). Address opportunistically.
