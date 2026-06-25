@@ -100,6 +100,14 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 Carried from v4.0 (non-blocking): dev-standalone shell height gap; pre-existing dev-host AI-turn issue; orphaned tokens / lint scope / focus-ring naming / platform-mode connection-announce seam. See `.planning/todos/pending/`.
 
+**Carry-forward from Phase 104 code review (Medium/Low — address in the consuming phase, see 104-REVIEW.md):**
+- **MR-01 → Phase 105:** `suppressAutoFill`/active-tutorial-step is accepted by `useActionController` but no PRODUCTION code yet passes the projected `PlayerGameState.tutorial` into it — inert end-to-end (works only in tests that inject it). Phase 105 (UI consumes the tutorial) must wire the projection → the real ActionPanel/board controller.
+- **MR-02 → Phase 106:** predicate-form gates are currently all-or-nothing/permissive; flesh out when predicate triggers land.
+- **LR-02 → Phase 109:** gate `from`/`to` are lumped into one set, blind to selection name — checkers "piece c3 → square d4" needs per-selection-name gating.
+- **MR-03 / LR-01 (minor):** `start()` on empty `steps` is a silent no-op (should fail loud); `skip()` records identically to `advance()` (no distinction). Address opportunistically.
+
+**Phase 104 pre-existing tech debt surfaced (NOT introduced by 104, out of scope):** `tsc --noEmit` reports type-looseness errors in test files this repo does not gate on `tsc` (HandRenderer.a11y, GameHistory, DebugPanel, notation-serialization). Repo gates on vitest + eslint. Candidate for a future cleanup pass.
+
 ### Blockers/Concerns
 
 None.
