@@ -61,7 +61,7 @@
 - [x] 105-01-PLAN.md — Annotation content model: narrow TutorialStep/TutorialStepView `content` to `Annotation[]` + AnnotationTarget union (Wave 1)
 - [x] 105-02-PLAN.md — Shared anchor substrate: `anchorAttrs` single source → `data-bs-el-*`/`data-bs-action`/`data-bs-panel` via useSelectable/useSelectableGrid (Wave 1)
 - [x] 105-03-PLAN.md — TutorialOverlay + BoardMessage annotation variant: ring + bubble resolved by anchor only (Wave 2)
-- [ ] 105-04-PLAN.md — GameShell wiring: mount overlay in `.boardregion` + close MR-01 (thread tutorialStep into useActionController) (Wave 3)
+- [x] 105-04-PLAN.md — GameShell wiring: mount overlay in `.boardregion` + close MR-01 (thread tutorialStep into useActionController) (Wave 3)
 - [ ] 105-05-PLAN.md — Dual-path parity test: same annotation renders in AutoUI + custom-UI fixtures (criterion #3) (Wave 3)
 **UI hint**: yes
 
@@ -128,7 +128,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
-| 105. Annotation Overlay (UI Parity) | 3/5 | In Progress|  |
+| 105. Annotation Overlay (UI Parity) | 4/5 | In Progress|  |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 0/? | Not started | - |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
 | 108. Lightweight Action Help | 0/? | Not started | - |
