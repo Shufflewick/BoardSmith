@@ -19,6 +19,75 @@
 import type { Game } from '../element/game.js';
 
 // ============================================
+// Annotation content model (Phase 105)
+// ============================================
+
+/**
+ * Engine-local element reference for annotation targeting.
+ *
+ * Structurally identical to `useBoardInteraction.ElementRef` from the UI layer
+ * (kept in sync by convention — both carry `{id?, name?, notation?}`). The
+ * engine must not import upward from the UI layer; this re-declaration preserves
+ * the correct dependency direction (engine → never → ui).
+ *
+ * Match precedence (parity contract, mirrors `matchesRef` in useBoardInteraction):
+ *   id wins, else notation, else name.
+ *
+ * At least one field must be set to form a meaningful ref.
+ */
+export interface ElementRef {
+  /** Engine-assigned numeric element id. Takes precedence over notation + name. */
+  id?: number;
+  /** Logical element name (e.g. 'queen'). Matched after id, before notation. */
+  name?: string;
+  /** Board notation (e.g. 'd4'). Matched after id; beats name when both present. */
+  notation?: string;
+}
+
+/**
+ * Discriminated union describing what a tutorial annotation points at.
+ *
+ * Pit-of-Success: the `kind` discriminant makes invalid shapes unrepresentable
+ * (T-105-01). Three variants:
+ *   - `'element'` – a board element identified by `ElementRef` (id/notation/name).
+ *   - `'action'`  – an action control (button) identified by action name.
+ *   - `'panel'`   – the action panel as a whole.
+ */
+export type AnnotationTarget =
+  | { kind: 'element'; ref: ElementRef }
+  | { kind: 'action'; actionName: string }
+  | { kind: 'panel' };
+
+/**
+ * Placement hint for an annotation bubble.
+ *
+ * `'auto'` (default): anchor near the target element when one is present;
+ * fall back to a board-level top/bottom position when no target is set.
+ */
+export type AnnotationPlacement = 'auto' | 'top' | 'bottom' | 'center';
+
+/**
+ * A single annotation attached to a tutorial step.
+ *
+ * An annotation always carries explanatory `text` (required — a ring-only
+ * highlight still provides describing prose per UI-SPEC §4). `target` and
+ * `placement` are optional:
+ *   - Without `target`: renders as a floating text bubble (no highlight ring).
+ *   - Without `placement`: defaults to `'auto'` positioning.
+ *
+ * A step may carry multiple annotations — one annotation per target, plus an
+ * optional untargeted prose bubble — so `TutorialStep.content` is an array.
+ */
+export interface Annotation {
+  /** Explanatory text shown in the annotation bubble. Required. */
+  text: string;
+  /** What to highlight. Omit for a floating bubble with no highlight ring. */
+  target?: AnnotationTarget;
+  /** Bubble placement hint. Defaults to `'auto'`. */
+  placement?: AnnotationPlacement;
+}
+
+// ============================================
 // Gate types
 // ============================================
 
@@ -111,10 +180,15 @@ export interface TutorialStep {
   gate: TutorialGate;
 
   /**
-   * RESERVED (Phase 105): Annotation overlay content shown during this step.
-   * Typed `unknown` to avoid type churn across phases; Phase 105 will narrow.
+   * Annotation overlay content shown during this step (Phase 105).
+   *
+   * An array of annotations, each describing a text bubble and an optional
+   * element/action/panel highlight. An array lets a single step combine a
+   * targeted highlight ring with an independent floating prose bubble.
+   *
+   * When absent the step shows no annotation overlay.
    */
-  content?: unknown;
+  content?: Annotation[];
 
   /**
    * RESERVED (Phase 106): Predicate or event that automatically advances the
@@ -241,10 +315,13 @@ export interface TutorialStepView {
   stepId: string;
 
   /**
-   * RESERVED (Phase 105): Annotation overlay content for this step.
-   * Carried from `TutorialStep.content`; `undefined` until Phase 105 fills it.
+   * Annotation overlay content for this step (Phase 105).
+   *
+   * Carried verbatim from `TutorialStep.content` by `getActiveTutorialStepView`.
+   * Each entry describes a text bubble and an optional targeted highlight.
+   * Absent when the step carries no annotations.
    */
-  content?: unknown;
+  content?: Annotation[];
 
   /**
    * Whether the substrate should suppress single-enabled-choice auto-fill for
