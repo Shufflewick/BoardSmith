@@ -49,6 +49,7 @@ import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
 import { DebugController } from './debug-controller.js';
 import { DevCheckpointManager } from './dev-checkpoint-manager.js';
+import { TutorialController } from './tutorial-controller.js';
 
 // ============================================
 // Types
@@ -192,6 +193,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #stateHistory: StateHistory<G>;
   /** Debug controller for deck manipulation */
   #debugController: DebugController<G>;
+  /** Tutorial lifecycle controller — peer to PendingActionManager */
+  #tutorialController: TutorialController<G>;
   /** Dev checkpoint manager for fast HMR recovery (dev only) */
   #checkpointManager?: DevCheckpointManager<G>;
   /** Circuit breaker: consecutive AI failures before giving up */
@@ -247,6 +250,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       }
     );
     this.#debugController = new DebugController(
+      () => this.#runner,
+      {
+        broadcast: () => this.broadcast(),
+      }
+    );
+    this.#tutorialController = new TutorialController(
       () => this.#runner,
       {
         broadcast: () => this.broadcast(),
@@ -1444,6 +1453,55 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    */
   hasRepeatingSelections(actionName: string): boolean {
     return this.#pendingActionManager.hasRepeatingSelections(actionName);
+  }
+
+  // ============================================
+  // Tutorial Lifecycle Methods (delegated to TutorialController)
+  // ============================================
+
+  /**
+   * Start the tutorial for the given seat.
+   *
+   * Sets progress to the first step with status `'running'` and broadcasts.
+   * Throws if no tutorial definition is registered (`GameDefinition.tutorial`).
+   *
+   * @param seat - 1-indexed seat number of the learner.
+   */
+  startTutorial(seat: number): void {
+    this.#tutorialController.start(seat);
+  }
+
+  /**
+   * Advance the tutorial to the next step for the given seat.
+   *
+   * If on the last step, marks the tutorial as `'completed'`. Broadcasts once.
+   *
+   * @param seat - 1-indexed seat number of the learner.
+   */
+  advanceTutorial(seat: number): void {
+    this.#tutorialController.advance(seat);
+  }
+
+  /**
+   * Skip the current step for the given seat (same forward move as advance).
+   *
+   * Broadcasts once.
+   *
+   * @param seat - 1-indexed seat number of the learner.
+   */
+  skipTutorial(seat: number): void {
+    this.#tutorialController.skip(seat);
+  }
+
+  /**
+   * Exit the tutorial for the given seat.
+   *
+   * Sets status to `'exited'`; gate enforcement is lifted. Broadcasts once.
+   *
+   * @param seat - 1-indexed seat number of the learner.
+   */
+  exitTutorial(seat: number): void {
+    this.#tutorialController.exit(seat);
   }
 
   // ============================================

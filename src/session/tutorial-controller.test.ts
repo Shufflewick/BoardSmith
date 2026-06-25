@@ -35,7 +35,7 @@ class TutorialTestGame extends Game<TutorialTestGame, Player> {
 
     const moveAction = Action.create('move')
       .prompt('Move a piece')
-      .chooseFrom('piece', ['a', 'b', 'c'])
+      .chooseFrom('piece', { choices: ['a', 'b', 'c'] })
       .execute(() => {});
 
     const passAction = Action.create('pass')
@@ -82,8 +82,7 @@ function makeRunner(tutorial?: TutorialDefinition): GameRunner<TutorialTestGame>
   const runner = new GameRunner<TutorialTestGame>({
     GameClass: TutorialTestGame,
     gameType: 'tutorial-test',
-    gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'test' },
-    tutorial,
+    gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'test', tutorial },
   });
   runner.start();
   return runner;
