@@ -27,11 +27,14 @@ import {
   Action,
   defineFlow,
   actionStep,
+  loop,
+  eachPlayer,
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import { GameSession } from './game-session.js';
 import type { StorageAdapter, StoredGameState } from './types.js';
+import type { TutorialDefinition } from '../engine/tutorial/types.js';
 
 // ---------------------------------------------------------------------------
 // Test game: a repeating-selection action whose onEach moves pieces. The moves
@@ -239,5 +242,165 @@ describe('F42: GameSession.restore is snapshot-authoritative', () => {
     expect(() => GameSession.restore<CollectGame>(snapshotless, CollectGame)).toThrow(
       /no snapshot/
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BL-01: restore() must re-supply tutorialDefinition so gating + lifecycle
+// survive a cold server restart (snapshot round-trip).
+// ---------------------------------------------------------------------------
+
+class TutorialRestoreGame extends Game<TutorialRestoreGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+
+    const moveAction = Action.create('move')
+      .prompt('Move')
+      .chooseFrom('piece', { choices: ['a', 'b', 'c'] })
+      .execute(() => {});
+
+    const passAction = Action.create('pass')
+      .prompt('Pass')
+      .execute(() => {});
+
+    this.registerActions(moveAction, passAction);
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => true,
+          maxIterations: 20,
+          do: eachPlayer({
+            do: actionStep({ actions: ['move', 'pass'] }),
+          }),
+        }),
+      })
+    );
+  }
+}
+
+const RESTORE_TUTORIAL: TutorialDefinition = {
+  steps: [
+    { id: 'step-1', gate: { action: 'move' } },
+    { id: 'step-2', gate: { action: 'pass' } },
+  ],
+};
+
+class TutorialRoundTripStorage implements StorageAdapter {
+  saved: string | null = null;
+  async save(state: StoredGameState): Promise<void> {
+    this.saved = JSON.stringify(state);
+  }
+  async load(): Promise<StoredGameState | null> {
+    return this.saved ? (JSON.parse(this.saved) as StoredGameState) : null;
+  }
+}
+
+describe('BL-01: GameSession.restore() re-supplies tutorialDefinition', () => {
+  it('gating reason survives snapshot → restore when tutorial param is passed', async () => {
+    // Create a session with a tutorial definition
+    const storage = new TutorialRoundTripStorage();
+    const session = GameSession.create<TutorialRestoreGame>({
+      gameType: 'tutorial-restore',
+      GameClass: TutorialRestoreGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'bl01-seed',
+      storage,
+      tutorial: RESTORE_TUTORIAL,
+    });
+
+    // Start the tutorial for seat 1 (step-1 gates to 'move')
+    session.startTutorial(1);
+
+    // Re-snapshot after startTutorial so the persisted snapshot carries
+    // tutorialProgress (the snapshot at create() time predates the mutation).
+    session.storedState.snapshot = session.runner.getSnapshot();
+
+    // Force a save so storage has the snapshot
+    await (storage as TutorialRoundTripStorage).save(session.storedState);
+
+    // Cold restart: JSON round-trip, then restore WITH the tutorial definition
+    const loaded = await storage.load();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.snapshot).toBeDefined();
+
+    const restored = GameSession.restore<TutorialRestoreGame>(
+      loaded!,
+      TutorialRestoreGame,
+      undefined,
+      undefined,
+      RESTORE_TUTORIAL,
+    );
+
+    // After restore, gating must still be active:
+    // 'pass' is out-of-step and must have a disabled reason
+    const disabledActions = restored.runner.game.getTutorialDisabledActions(1);
+    expect('pass' in disabledActions).toBe(true);
+    expect(disabledActions['pass']).toBeTruthy();
+
+    // The allowed action 'move' must NOT be disabled
+    expect('move' in disabledActions).toBe(false);
+  });
+
+  it('getActiveStep resolves to the running step after restore', async () => {
+    const storage = new TutorialRoundTripStorage();
+    const session = GameSession.create<TutorialRestoreGame>({
+      gameType: 'tutorial-restore',
+      GameClass: TutorialRestoreGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'bl01-seed-2',
+      storage,
+      tutorial: RESTORE_TUTORIAL,
+    });
+
+    session.startTutorial(1);
+    session.storedState.snapshot = session.runner.getSnapshot();
+    await (storage as TutorialRoundTripStorage).save(session.storedState);
+
+    const loaded = await storage.load();
+    const restored = GameSession.restore<TutorialRestoreGame>(
+      loaded!,
+      TutorialRestoreGame,
+      undefined,
+      undefined,
+      RESTORE_TUTORIAL,
+    );
+
+    // advance() must succeed (tutorialDefinition is present on the runner)
+    expect(() => restored.advanceTutorial(1)).not.toThrow();
+    // After advancing from step-1, gating should now be 'pass' (step-2)
+    const disabledAfter = restored.runner.game.getTutorialDisabledActions(1);
+    expect('move' in disabledAfter).toBe(true);
+    expect('pass' in disabledAfter).toBe(false);
+  });
+
+  it('restore() WITHOUT tutorial param loses gating (documents the pre-fix behavior)', async () => {
+    // This test documents what happens when restore() is called without the tutorial
+    // definition — gating silently vanishes. This is the bug BL-01 fixes when the
+    // tutorial param IS supplied; WITHOUT it, the definition remains undefined.
+    const storage = new TutorialRoundTripStorage();
+    const session = GameSession.create<TutorialRestoreGame>({
+      gameType: 'tutorial-restore',
+      GameClass: TutorialRestoreGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'bl01-seed-3',
+      storage,
+      tutorial: RESTORE_TUTORIAL,
+    });
+
+    session.startTutorial(1);
+    session.storedState.snapshot = session.runner.getSnapshot();
+    await (storage as TutorialRoundTripStorage).save(session.storedState);
+
+    const loaded = await storage.load();
+    // Restore WITHOUT tutorial — tutorialDefinition is not re-supplied
+    const restored = GameSession.restore<TutorialRestoreGame>(loaded!, TutorialRestoreGame);
+
+    // tutorialDefinition is absent — gating is completely gone
+    const disabledActions = restored.runner.game.getTutorialDisabledActions(1);
+    expect(disabledActions).toEqual({});
   });
 });
