@@ -8,6 +8,19 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
+## Current Milestone: v4.1 Tutorial Primitives (Checkers)
+
+**Goal:** Build a reusable, CI-verifiable tutorial substrate, prove it by shipping a complete checkers tutorial plus AI-assisted teaching, then demonstrate it for refinement — setting up a future milestone to apply the same primitives to cribbage.
+
+**Target features:**
+- **Substrate** — annotation overlay (text bubbles + targeted highlight, routed through `useBoardInteraction` for custom-UI/AutoUI parity), action gating (restrict the legal action set per step), predicate triggers (fire content on game-state predicate/event), CI-verifiable authoring via the testing DSL.
+- **AI-assisted teaching** — MCTS-powered hint button, narrated AI-vs-AI demo, evaluation heatmap overlay (leverages checkers' existing MCTS bot).
+- **Lightweight help** — per-action help text/tooltips with a global toggle (builds on the v2.8 disabled-reason surface for "why-disabled" friction).
+- **Checkers tutorial** — guided selection/movement, a mandatory-capture tip, a multi-jump walkthrough, launchable in GameShell/dev host.
+- **Demo & refine** — end-to-end browser demonstration as the final step, for hands-on refinement before applying the substrate to cribbage.
+
+**Key context:** Chosen test bed after profiling all five non-demo games this session. Checkers is the Goldilocks pick — it exercises the most substrate primitives (multi-step actions, action gating, surprise mechanics for predicate tips, a real board to target) at moderate authoring cost, has a working MCTS for the AI features, and is universally familiar so design effort isn't spent on game comprehension. Cribbage (rules-dense, 5 phases) is the deliberate phase-2 stretch bed — explicitly **not** allowed to drive the substrate design, since its post-hoc scoring shape is an outlier. Polyhedral-potions is excluded (empty AI placeholder would silently kill the AI features). Depth-first: one polished checkers experience before generalizing.
+
 ## Previous: v4.0 Shipped
 
 UI Redesign (Slate) — rebuilt the entire BoardSmith UI on a single load-bearing `--bsg-*` token system in the neutral "Slate" design language (graphite palette, single teal accent, Hanken Grotesk + JetBrains Mono, OS light/dark), got the chrome out of the board's way, and closed the critical accessibility gaps — without breaking a single game.
@@ -223,7 +236,9 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-Planning next milestone. Carried forward (deferred from v4.0):
+**v4.1 Tutorial Primitives (Checkers)** — see REQUIREMENTS.md (TUT, AI, HELP, CHK, DEMO). Building the tutorial substrate + checkers showcase + AI teaching, then demo.
+
+Carried forward (deferred from v4.0):
 - ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
 - v4.0 polish todos (non-blocking): dev-standalone shell height gap; pre-existing dev-host AI-turn issue; orphaned tokens / lint scope / focus-ring naming / platform-mode connection-announce seam. See `.planning/todos/pending/`.
 
@@ -352,4 +367,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-23 — shipped v4.0 UI Redesign (Slate) milestone*
+*Last updated: 2026-06-25 — started v4.1 Tutorial Primitives (Checkers) milestone*

@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: milestone
-status: Awaiting next milestone
-stopped_at: context exhaustion at 75% (2026-06-23)
-last_updated: "2026-06-23T19:45:34.706Z"
-last_activity: 2026-06-23 — Milestone v4.0 completed and archived
+milestone: v4.1
+milestone_name: Tutorial Primitives (Checkers)
+status: planning
+last_updated: "2026-06-25T18:43:22.142Z"
+last_activity: 2026-06-25
 progress:
-  total_phases: 100
-  completed_phases: 95
-  total_plans: 190
-  completed_plans: 188
-  percent: 95
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-22)
 
 ## Current Position
 
-Phase: Milestone v4.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-23 — Milestone v4.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-25 — Milestone v4.1 started
 
 ## Milestones
 
