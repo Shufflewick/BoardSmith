@@ -385,6 +385,11 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
   });
 }
 
+// MR-01 closure: thread the projected tutorial step into the action controller so
+// suppressAutoFill fires in production (not just in the unit tests that passed it
+// directly). The controller already accepts tutorialStep; this is the missing wire.
+const tutorialStep = computed(() => state.value?.state?.tutorial);
+
 // Action controller - unified action handling for ActionPanel and custom UIs
 // This provides 100% parity: same auto-fill, validation, and server communication
 const actionController = useActionController({
@@ -408,6 +413,9 @@ const actionController = useActionController({
   // When auto mode is OFF, user must manually select each option even if only one choice
   autoFill: autoEndTurn,
   autoExecute: true, // Always auto-execute once all selections are manually filled
+  // Tutorial step: gates tryAutoFillSelection when suppressAutoFill is active.
+  // Computed from state so it stays reactive to server-projected step changes.
+  tutorialStep,
   // Animation events for gating (shows "Playing animations..." during playback)
   animationEvents,
   // Selection choices - fetched from server on-demand for each selection
