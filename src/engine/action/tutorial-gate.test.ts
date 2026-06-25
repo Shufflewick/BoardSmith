@@ -378,3 +378,113 @@ describe('Tutorial gate — TUT-02', () => {
     });
   });
 });
+
+// ===========================================================
+// HR-01: Action-level gating must be enforced at EXECUTION
+// ===========================================================
+//
+// The existing tests above verify that `getTutorialDisabledActions` surfaces a
+// reason for out-of-step actions to the projection layer.  HR-01 requires that
+// `Game.performAction` ALSO consults that reason and REJECTS execution of a
+// gated action, so enforcement is server-side and not opt-in per UI.
+
+describe('HR-01: Tutorial action-level gate enforced at execution', () => {
+  /** Tutorial definition: step 1 allows only `move`. */
+  const moveOnlyTutorial: TutorialDefinition = {
+    steps: [
+      { id: 'step-move', gate: { action: 'move' } },
+    ],
+  };
+
+  function makeEnforcementGame(): TutorialTestGame {
+    const g = new TutorialTestGame({ playerCount: 2 });
+    g.registerActions(makeMoveAction(), makePassAction());
+    g.tutorialDefinition = moveOnlyTutorial;
+    // Seat 1 is in the tutorial, seat 2 is not
+    g.tutorialProgress.set(1, { stepId: 'step-move', status: 'running' });
+    return g;
+  }
+
+  it('performAction rejects an out-of-step action for the tutorialized seat', () => {
+    const g = makeEnforcementGame();
+    const p1 = g.getPlayer(1)!;
+
+    // `pass` is out-of-step: step only allows `move`.
+    const result = g.performAction('pass', p1, {});
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    expect(result.error!.length).toBeGreaterThan(0);
+    // Error must mention the action name and be actionable (contains the reason)
+    expect(result.error).toMatch(/pass/i);
+  });
+
+  it('rejection error contains the gate reason from getActionLevelDisabledReasons', () => {
+    const g = makeEnforcementGame();
+    const p1 = g.getPlayer(1)!;
+
+    const gateReasons = g.getTutorialDisabledActions(1);
+    const expectedReason = gateReasons['pass'];
+    expect(expectedReason).toBeTruthy();
+
+    const result = g.performAction('pass', p1, {});
+
+    expect(result.success).toBe(false);
+    // The execution error must embed the same reason the projection layer surfaces
+    expect(result.error).toContain(expectedReason);
+  });
+
+  it('performAction allows the in-step action for the tutorialized seat', () => {
+    const g = makeEnforcementGame();
+    const p1 = g.getPlayer(1)!;
+
+    // `move` IS the allowed action — execution must not be blocked by the gate
+    const result = g.performAction('move', p1, { piece: 'c3', destination: 'd4' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('performAction is unaffected for a non-tutorialized seat', () => {
+    const g = makeEnforcementGame();
+    const p2 = g.getPlayer(2)!;
+
+    // Seat 2 has no tutorial progress — `pass` must execute freely
+    const result = g.performAction('pass', p2, {});
+
+    expect(result.success).toBe(true);
+  });
+
+  it('performAction is unaffected when no tutorial is active (normal play)', () => {
+    const g = new TutorialTestGame({ playerCount: 2 });
+    g.registerActions(makeMoveAction(), makePassAction());
+    // No tutorialDefinition, no tutorialProgress
+    const p1 = g.getPlayer(1)!;
+
+    const result = g.performAction('pass', p1, {});
+
+    expect(result.success).toBe(true);
+  });
+
+  it('performAction unblocks `pass` once the tutorial step advances to pass', () => {
+    const twoStepTutorial: TutorialDefinition = {
+      steps: [
+        { id: 'step-move', gate: { action: 'move' } },
+        { id: 'step-pass', gate: { action: 'pass' } },
+      ],
+    };
+    const g = new TutorialTestGame({ playerCount: 2 });
+    g.registerActions(makeMoveAction(), makePassAction());
+    g.tutorialDefinition = twoStepTutorial;
+    g.tutorialProgress.set(1, { stepId: 'step-pass', status: 'running' });
+    const p1 = g.getPlayer(1)!;
+
+    // Now `pass` is the allowed action — must succeed
+    const passResult = g.performAction('pass', p1, {});
+    expect(passResult.success).toBe(true);
+
+    // And `move` is now blocked
+    const moveResult = g.performAction('move', p1, { piece: 'c3', destination: 'd4' });
+    expect(moveResult.success).toBe(false);
+    expect(moveResult.error).toMatch(/move/i);
+  });
+});
