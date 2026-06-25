@@ -784,7 +784,7 @@ function clearBoardSelection() {
   </div>
 
   <!-- Normal action panel content, gated on showActionPanel -->
-  <div class="action-panel" v-else-if="showActionPanel">
+  <div class="action-panel" data-bs-panel v-else-if="showActionPanel">
     <!-- No action being configured -->
     <!-- Key forces re-render when available actions change -->
     <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
@@ -792,6 +792,7 @@ function clearBoardSelection() {
         v-for="action in visibleActions"
         :key="action.name"
         class="action-btn"
+        :data-bs-action="action.name"
         @click="startAction(action.name)"
         :disabled="isExecuting"
       >

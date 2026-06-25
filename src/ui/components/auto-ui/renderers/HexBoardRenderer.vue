@@ -253,7 +253,7 @@ const hexRows = computed(() => {
   return maxR - minR + 1;
 });
 
-const { currentIdx, focusCell, handleGridKeydown: _composableKeydown } = useSelectableGrid(
+const { currentIdx, focusCell, handleGridKeydown: _composableKeydown, cellAttrs } = useSelectableGrid(
   hexCells,
   hexCols,
   cellIdentity,
@@ -346,6 +346,7 @@ function hexCellAriaLabel(cell: GameElement): string {
         v-for="(cell, idx) in hexCells"
         :key="cell.id"
         :ref="(el) => setHexCellRef(el as Element | null, idx)"
+        v-bind="cellAttrs(cell)"
         class="hex-cell-group"
         role="gridcell"
         :tabindex="idx === currentIdx ? '0' : '-1'"

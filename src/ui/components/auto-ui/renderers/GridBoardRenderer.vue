@@ -156,7 +156,7 @@ function isCellDisabled(cell: GameElement): boolean {
 const colsRef = computed(() => (gridResult.value.ok ? gridResult.value.cols : 0));
 const rowsRef = computed(() => (gridResult.value.ok ? gridResult.value.rows : 0));
 
-const { currentIdx, focusCell, handleGridKeydown: _composableKeydown } = useSelectableGrid(
+const { currentIdx, focusCell, handleGridKeydown: _composableKeydown, cellAttrs } = useSelectableGrid(
   children,
   colsRef,
   cellIdentity,
@@ -278,6 +278,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
             v-for="(cell, idx) in children"
             :key="cell.id"
             :ref="(el) => setCellRef(el as Element | null, idx)"
+            v-bind="cellAttrs(cell)"
             class="grid-cell"
             role="gridcell"
             :tabindex="idx === currentIdx ? '0' : '-1'"

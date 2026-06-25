@@ -178,3 +178,29 @@ describe('HandRenderer a11y — keyboard activation (Enter fires triggerElementS
     expect(triggerSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('HandRenderer — anchor attributes (105-02 structural-parity blocker fix)', () => {
+  it('.hand-container carries data-bs-el-id matching the hand element id', () => {
+    const bi = createBoardInteraction();
+    // id:10 from buildHandElement → anchorAttrs emits data-bs-el-id="10"
+    const wrapper = mountWithInteraction(buildHandElement([buildCardElement(1)]), bi);
+    const container = wrapper.find('.hand-container');
+    expect(container.attributes('data-bs-el-id')).toBe('10');
+  });
+
+  it('.hand-container carries data-bs-el-name matching the hand element name', () => {
+    const bi = createBoardInteraction();
+    const wrapper = mountWithInteraction(buildHandElement([buildCardElement(1)]), bi);
+    const container = wrapper.find('.hand-container');
+    expect(container.attributes('data-bs-el-name')).toBe('hand');
+  });
+
+  it('anchor does not collide with existing :data-zone-id attribute', () => {
+    const bi = createBoardInteraction();
+    const wrapper = mountWithInteraction(buildHandElement([buildCardElement(1)]), bi);
+    const container = wrapper.find('.hand-container');
+    // Both must coexist on the same element
+    expect(container.attributes('data-bs-el-id')).toBe('10');
+    expect(container.attributes('data-zone-id')).toBe('10');
+  });
+});
