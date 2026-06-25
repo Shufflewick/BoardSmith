@@ -36,6 +36,7 @@ import WaitingRoom from './WaitingRoom.vue';
 import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import GameOverCard from './GameOverCard.vue';
+import TutorialOverlay from './helpers/TutorialOverlay.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge';
@@ -1693,6 +1694,14 @@ if ((import.meta as any).hot) {
             @new-game="handleMenuItemClick('new-game')"
             @rematch="handleRestartGame"
           />
+          <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
+               the #game-board slot (custom UI) and the dev UI-switcher <component>
+               path. Position is absolute inside .boardregion (inset: 0, z-index: 20).
+               Sits above the turn prompt (z-5) and below GameOverCard scrim (z-50).
+               No props — injects gameState and renders only when tutorial.content
+               is present (v-if internal). Not inside zoom-container so it measures
+               boardregion rects unscaled by --zoom-level. -->
+          <TutorialOverlay />
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
             <!--
               Game Board Slot Props:
