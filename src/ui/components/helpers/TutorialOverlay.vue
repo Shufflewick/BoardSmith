@@ -55,20 +55,8 @@ import {
 import BoardMessage from './BoardMessage.vue';
 import type {
   Annotation,
-  AnnotationTarget,
 } from '../../../engine/tutorial/types.js';
-
-// ── CSS.escape polyfill ───────────────────────────────────────────────────────
-// jsdom and some environments don't expose CSS.escape. Provide a minimal
-// fallback that escapes characters which could break an attribute selector.
-// In production browsers CSS.escape is universally available.
-function cssEscape(value: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(value);
-  }
-  // Minimal fallback: escape characters that would break an attribute selector.
-  return value.replace(/["\\]/g, '\\$&');
-}
+import { buildSelector } from './overlay-utils.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -110,29 +98,6 @@ const hasContent = computed(() => annotations.value.length > 0);
 // ── DOM measurement ───────────────────────────────────────────────────────────
 
 const overlayRoot = ref<HTMLElement | null>(null);
-
-/** Build an attribute selector for an AnnotationTarget, using CSS.escape. */
-function buildSelector(target: AnnotationTarget): string {
-  switch (target.kind) {
-    case 'element': {
-      const { ref: elRef } = target;
-      if (elRef.id !== undefined) {
-        return `[data-bs-el-id="${cssEscape(String(elRef.id))}"]`;
-      }
-      if (elRef.notation !== undefined) {
-        return `[data-bs-el-notation="${cssEscape(elRef.notation)}"]`;
-      }
-      if (elRef.name !== undefined) {
-        return `[data-bs-el-name="${cssEscape(elRef.name)}"]`;
-      }
-      return '';
-    }
-    case 'action':
-      return `[data-bs-action="${cssEscape(target.actionName)}"]`;
-    case 'panel':
-      return '[data-bs-panel]';
-  }
-}
 
 /** Read border-radius from a target element, falling back to the token variable. */
 function readRadius(el: Element): string {

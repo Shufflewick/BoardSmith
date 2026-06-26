@@ -60,8 +60,11 @@ withDefaults(
      * - `'default'` (default): pill chip centered in the board — the turn-prompt form.
      * - `'annotation'`: left-aligned prose card (--bsg-r-md, --bsg-shadow, caret)
      *   for tutorial annotation bubbles. Requires `anchorStyle` to position the card.
+     * - `'narration'`: centered card anchored top of the board area for AI demo
+     *   pre-move announcements (z-10, --bsg-surface-3, --bsg-r-md card shape).
+     *   Renders text as plain interpolation only (T-107-08).
      */
-    variant?: 'default' | 'annotation';
+    variant?: 'default' | 'annotation' | 'narration';
     /**
      * Absolute CSS position overrides for the annotation variant.
      *
@@ -92,7 +95,9 @@ withDefaults(
     :class="
       variant === 'annotation'
         ? 'bsg-board-message--annotation'
-        : `bsg-board-message--${position}`
+        : variant === 'narration'
+          ? 'bsg-board-message--narration'
+          : `bsg-board-message--${position}`
     "
     :style="variant === 'annotation' ? anchorStyle : undefined"
   >
@@ -100,7 +105,11 @@ withDefaults(
       <div
         v-if="visible"
         class="bsg-board-message__content"
-        :class="variant === 'annotation' && 'bsg-board-message__content--annotation'"
+        :class="variant === 'annotation'
+          ? 'bsg-board-message__content--annotation'
+          : variant === 'narration'
+            ? 'bsg-board-message__content--narration'
+            : undefined"
         role="status"
         aria-live="polite"
       >
@@ -193,6 +202,40 @@ withDefaults(
   line-height: var(--bsg-line-normal);
   box-shadow: var(--bsg-shadow);
   position: relative; /* anchors the caret pseudo-element / span */
+}
+
+/* ── Narration variant: centered AI demo announcement card ────────────────── */
+/*
+ * Displays the pre-move announcement during the AI demo (AI-02). Sits at the
+ * top of the board area, horizontally centered, above turn-prompt (z-5) but
+ * below heatmap (z-15) and tutorial ring (z-20).
+ *
+ * The wrapper position here is relative to the overlay stacking context (the
+ * HintOverlay/TutorialOverlay teleport that mounts it at the board top).
+ */
+.bsg-board-message--narration {
+  position: fixed;
+  top: var(--bsg-s3);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Narration card — more prominent surface than the default pill */
+.bsg-board-message__content--narration {
+  display: block;
+  text-align: left;
+  padding: var(--bsg-s2) var(--bsg-s4);
+  max-width: min(280px, 90%);
+  background: var(--bsg-surface-3);
+  border: 1px solid var(--bsg-line-2);
+  border-radius: var(--bsg-r-md);
+  line-height: var(--bsg-line-normal);
+  box-shadow: var(--bsg-shadow-sm);
+  position: relative;
 }
 
 /* ── Connector caret (CSS border triangle) ────────────────────────────────── */
