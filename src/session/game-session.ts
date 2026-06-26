@@ -1030,9 +1030,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       return;
     }
 
-    // Skip if a recompute is already in progress or the AI is thinking
+    // Fail-loud if a recompute is already in progress or the AI is thinking.
+    // Consistent with requestHint() which also throws on concurrent access.
+    // The caller (platform bridge) catches this and surfaces a "Busy" toast.
     if (this.#heatmapUpdating || this.#aiController?.isThinking()) {
-      return;
+      throw new Error('Heatmap evaluation is already in progress — please wait.');
     }
     this.#heatmapUpdating = true;
     try {

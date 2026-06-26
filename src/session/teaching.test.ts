@@ -310,6 +310,16 @@ describe('teaching state — heatmap', () => {
       expect(bestCount).toBe(1);
     }
   });
+
+  it('setHeatmapVisible(seat, true) throws when a recompute is already in flight (WR-03)', async () => {
+    const session = makeSession();
+    // Fire two concurrent setHeatmapVisible(true) calls; the second must throw.
+    const setVisible = (session as unknown as { setHeatmapVisible(s: number, v: boolean): Promise<void> }).setHeatmapVisible.bind(session);
+    const first = setVisible(1, true);
+    await expect(setVisible(1, true)).rejects.toThrow('Heatmap evaluation is already in progress');
+    // Let the first resolve cleanly.
+    await first.catch(() => {});
+  });
 });
 
 // ============================================
