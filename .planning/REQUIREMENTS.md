@@ -22,7 +22,7 @@ The reusable engine/session/UI primitives. Design constraint: parity across cust
 Leverages a game's existing MCTS bot. Authoring cost is near-zero and the value persists beyond the first play. (Checkers is perfect-information, so move suggestions do not leak hidden state.)
 
 - [x] **AI-01**: A player can request a move hint at any decision point; the existing MCTS suggests a legal move and the suggested target is highlighted via the annotation overlay (TUT-01).
-- [ ] **AI-02**: A player can watch an AI-vs-AI narrated demo in which each move is announced before it executes.
+- [x] **AI-02**: A player can watch an AI-vs-AI narrated demo in which each move is announced before it executes.
 - [x] **AI-03**: A player can toggle an evaluation heatmap that visualizes the AI's per-move evaluation across the board.
 
 ### Lightweight Help (HELP)
@@ -80,7 +80,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | TUT-04 | Phase 106 | Complete |
 | TUT-05 | Phase 104 | Complete |
 | AI-01 | Phase 107 | Complete |
-| AI-02 | Phase 107 | Pending |
+| AI-02 | Phase 107 | Complete |
 | AI-03 | Phase 107 | Complete |
 | HELP-01 | Phase 108 | Pending |
 | HELP-02 | Phase 108 | Pending |
