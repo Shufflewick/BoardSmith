@@ -26,7 +26,7 @@
 
 - [x] **Phase 104: Tutorial Lifecycle & Action Gating** — Engine/session run a gated, resumable tutorial; steps restrict the legal action set and progress is checkpoint/replay safe. (completed 2026-06-25)
 - [x] **Phase 105: Annotation Overlay (UI Parity)** — Text-bubble + targeted highlight on any cell/piece/panel/control, rendered identically in custom UI and AutoUI via `useBoardInteraction`. (completed 2026-06-25)
-- [ ] **Phase 106: Predicate Triggers & CI-Verifiable Authoring** — Fire content on game-state predicate/event, and author the tutorial as a test that fails when the rules drift.
+- [x] **Phase 106: Predicate Triggers & CI-Verifiable Authoring** — Fire content on game-state predicate/event, and author the tutorial as a test that fails when the rules drift. (completed 2026-06-26)
 - [ ] **Phase 107: AI-Assisted Teaching** — MCTS-powered move hint, narrated AI-vs-AI demo, and evaluation heatmap, surfaced from checkers' existing bot.
 - [ ] **Phase 108: Lightweight Action Help** — Per-action help text revealed on hover/tap, with a global toggle.
 - [ ] **Phase 109: Checkers Tutorial Content** — The cross-repo showcase: guided selection/movement, mandatory-capture tip, multi-jump walkthrough, launchable in GameShell + dev host.
@@ -78,7 +78,7 @@
 - [x] 106-02-PLAN.md — Named-predicate helpers: beforeFirstTurn / afterTurns(n) / whenForced (Wave 2)
 - [x] 106-03-PLAN.md — Server-side auto-advance hook + re-broadcast + MR-03 fail-loud lifecycle (Wave 2)
 - [x] 106-04-PLAN.md — testing DSL: simulateTutorial + assertTutorialStep/Completes, fails on rule drift (Wave 2)
-- [ ] 106-05-PLAN.md — CI-verifiable demonstration: green-when-intact, red-when-rule-broken (Wave 3)
+- [x] 106-05-PLAN.md — CI-verifiable demonstration: green-when-intact, red-when-rule-broken (Wave 3)
 
 ### Phase 107: AI-Assisted Teaching
 **Goal**: A player can get MCTS-powered help — a move hint, a narrated AI-vs-AI demo, and an evaluation heatmap — all surfaced from the game's existing bot with no new training.
@@ -134,7 +134,7 @@
 |-------|----------------|--------|-----------|
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
-| 106. Predicate Triggers & CI-Verifiable Authoring | 4/5 | In Progress|  |
+| 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete   | 2026-06-26 |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
 | 108. Lightweight Action Help | 0/? | Not started | - |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
