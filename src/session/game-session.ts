@@ -50,6 +50,7 @@ import { StateHistory, type UndoResult, type ElementDiff } from './state-history
 import { DebugController } from './debug-controller.js';
 import { DevCheckpointManager } from './dev-checkpoint-manager.js';
 import { TutorialController } from './tutorial-controller.js';
+import { autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 
 // ============================================
 // Types
@@ -903,6 +904,22 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Broadcast to all connected clients
     this.broadcast();
+
+    // Post-action auto-advance: evaluate advanceWhen predicates server-side for every
+    // seat with a running tutorial. An opponent's action can satisfy a learner's predicate,
+    // so we iterate ALL running-tutorial seats (not just the acting player).
+    // If any seat advanced, re-broadcast so clients render the new step.
+    // This is a no-op (zero extra broadcast) when no tutorial is running (T-106-04).
+    {
+      const game = this.#runner.game;
+      let anyAdvanced = false;
+      for (const [seat, progress] of game.tutorialProgress) {
+        if (progress.status !== 'running') continue;
+        const { advanced } = autoAdvanceTutorial(game, seat);
+        if (advanced) anyAdvanced = true;
+      }
+      if (anyAdvanced) this.broadcast();
+    }
 
     // Check if AI should respond
     this.#scheduleAICheck();
