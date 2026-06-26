@@ -1,4 +1,4 @@
-import type { Game, FlowState } from '../engine/index.js';
+import type { Game, FlowState, ElementRef } from '../engine/index.js';
 
 /**
  * Configuration options for the MCTS bot
@@ -46,6 +46,19 @@ export interface BotMove {
   action: string;
   /** The arguments for the action */
   args: Record<string, unknown>;
+}
+
+/**
+ * Per-candidate evaluation stats from a completed MCTS search.
+ * Returned by MCTSBot.playWithStats() for hint + heatmap features.
+ */
+export interface BotMoveStats {
+  /** The candidate move */
+  move: BotMove;
+  /** Visit count for this child node — proportional to confidence */
+  visits: number;
+  /** Normalized win-rate [0, 1] — 1.0 = certain win, 0.0 = certain loss */
+  value: number;
 }
 
 /**
@@ -172,6 +185,20 @@ export interface AIConfig {
    * @returns Moves sorted by priority (explore first → last)
    */
   moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+
+  /**
+   * Optional function to map the chosen move to its target element for hint and
+   * heatmap anchoring. Return an `ElementRef` (id/notation/name) identifying the
+   * destination cell so the overlay can highlight the right board element.
+   *
+   * Defaults to common destination arg-name extraction at the session layer
+   * (tries `to`, `destination`, `target`, `square`, `cell`, `position` in order).
+   * Provide this override when the game uses non-standard arg names.
+   *
+   * @param move - The chosen move from the MCTS search
+   * @returns The target element reference, or `undefined` to fall back to session-layer extraction
+   */
+  hintTargetFromMove?: (move: BotMove) => ElementRef | undefined;
 
   /**
    * Optional function for dynamic UCT exploration constant based on game state.

@@ -8,6 +8,7 @@ export { MCTSBot } from './mcts-bot.js';
 export type {
   BotConfig,
   BotMove,
+  BotMoveStats,
   AIConfig,
   Objective,
   ThreatResponse,
