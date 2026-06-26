@@ -76,7 +76,7 @@
 **Plans**: 5 plans (Waves 1-3)
 - [x] 106-01-PLAN.md — Engine predicate substrate: shared evaluator + labeled advanceWhen/gate (MR-02) + auto-advance pump + fail-loud validation (MR-03) (Wave 1)
 - [x] 106-02-PLAN.md — Named-predicate helpers: beforeFirstTurn / afterTurns(n) / whenForced (Wave 2)
-- [ ] 106-03-PLAN.md — Server-side auto-advance hook + re-broadcast + MR-03 fail-loud lifecycle (Wave 2)
+- [x] 106-03-PLAN.md — Server-side auto-advance hook + re-broadcast + MR-03 fail-loud lifecycle (Wave 2)
 - [ ] 106-04-PLAN.md — testing DSL: simulateTutorial + assertTutorialStep/Completes, fails on rule drift (Wave 2)
 - [ ] 106-05-PLAN.md — CI-verifiable demonstration: green-when-intact, red-when-rule-broken (Wave 3)
 
@@ -134,7 +134,7 @@
 |-------|----------------|--------|-----------|
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
-| 106. Predicate Triggers & CI-Verifiable Authoring | 2/5 | In Progress|  |
+| 106. Predicate Triggers & CI-Verifiable Authoring | 3/5 | In Progress|  |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
 | 108. Lightweight Action Help | 0/? | Not started | - |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |

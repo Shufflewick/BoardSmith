@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v4.1
-milestone_name: Tutorial Primitives (Checkers)
+milestone_name: Tutorial Primitives
 status: executing
-stopped_at: roadmap complete, 15/15 requirements mapped
-last_updated: "2026-06-26T05:08:45.828Z"
+stopped_at: context exhaustion at 76% (2026-06-26)
+last_updated: "2026-06-26T14:24:03.018Z"
 last_activity: 2026-06-26
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 12
   percent: 29
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 106 — Predicate Triggers & CI-Verifiable Authoring
+**Current focus:** Phase 106 — predicate-triggers-ci-verifiable-authoring
 
 ## Current Position
 
-Phase: 106 (Predicate Triggers & CI-Verifiable Authoring) — EXECUTING
-Plan: 3 of 5
+Phase: 106 (predicate-triggers-ci-verifiable-authoring) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
 Last activity: 2026-06-26
 
@@ -115,8 +115,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-26T05:08:45.821Z
-Stopped at: roadmap complete, 15/15 requirements mapped
+Last session: 2026-06-26T14:24:03.011Z
+Stopped at: context exhaustion at 76% (2026-06-26)
 Resume file: None
 Next action: `/gsd:plan-phase 104`
 
