@@ -9,7 +9,7 @@ import type {
   GameStateSnapshot,
 } from '../engine/index.js';
 import { createSnapshot, canSeatAct } from '../engine/index.js';
-import type { BotConfig, BotMove, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
+import type { BotConfig, BotMove, BotMoveStats, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { SeededRandom } from '../utils/random.js';
 
@@ -94,7 +94,28 @@ export class MCTSBot<G extends Game = Game> {
     if (this.config.parallel && this.config.parallel > 1) {
       return this.playParallel();
     }
-    return this.playSingle();
+    return (await this.runSearch()).move;
+  }
+
+  /**
+   * Run MCTS and return the best move together with per-candidate evaluation stats.
+   *
+   * Always runs a single-mode search regardless of the `parallel` config value.
+   * Parallel ensemble searches aggregate by vote count across independent trees,
+   * which loses per-child stats — forcing single mode is intentional.
+   *
+   * Stats are captured from root.children BEFORE the post-search cleanup discards
+   * the tree, so callers always receive a valid (possibly empty) stats array.
+   */
+  async playWithStats(): Promise<{ move: BotMove; stats: BotMoveStats[] }> {
+    // Force single-mode search — parallel mode loses per-child stats.
+    const { move, root } = await this.runSearch();
+    const stats: BotMoveStats[] = root.children.map(child => ({
+      move: child.parentMove!,
+      visits: child.visits,
+      value: child.visits > 0 ? child.value / child.visits : 0,
+    }));
+    return { move, stats };
   }
 
   /**
@@ -162,16 +183,19 @@ export class MCTSBot<G extends Game = Game> {
 
     // Safety: if somehow no votes, fall back to single search
     if (!best) {
-      return this.playSingle();
+      return (await this.runSearch()).move;
     }
 
     return best;
   }
 
   /**
-   * Run a single MCTS search and return the best move
+   * Run a single MCTS search and return the best move together with the root node.
+   * The root node reference is returned BEFORE cleanup nulls the bot's own
+   * snapshot fields — callers can safely read root.children after this returns.
+   * Called by both play() and playWithStats().
    */
-  private async playSingle(): Promise<BotMove> {
+  private async runSearch(): Promise<{ move: BotMove; root: MCTSNode }> {
     // Cache UCT constant once per move (not per selectChild call)
     this.cachedUctC = this.uctConstant?.(this.game, this.playerIndex)
       ?? this.config.uctC
@@ -193,9 +217,12 @@ export class MCTSBot<G extends Game = Game> {
       throw new Error('No available moves');
     }
 
-    // If only one move, return it immediately
+    // If only one move, skip MCTS search entirely.
+    // Return a minimal root with no children — playWithStats() callers get empty stats,
+    // which is correct: there is nothing meaningful to evaluate for a forced move.
     if (allMoves.length === 1) {
-      return allMoves[0];
+      const root = this.createNode(flowState, null, null, allMoves, 0);
+      return { move: allMoves[0], root };
     }
 
     // Check for threats BEFORE sampling - this is critical!
@@ -288,14 +315,16 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
 
-    // Cleanup search state
+    // Cleanup search state — null the bot's own snapshot fields.
+    // The local `root` reference is returned to callers so they can read
+    // root.children AFTER this point (cleanup only nulls instance fields).
     this.searchGame = null;
     this.rootSnapshot = null;
 
     // Select best child (most visits for robustness)
     if (root.children.length === 0) {
       // No children explored, pick random from initial moves
-      return this.rng.pick(moves);
+      return { move: this.rng.pick(moves), root };
     }
 
     // Debug logging for proof number analysis
@@ -314,7 +343,7 @@ export class MCTSBot<G extends Game = Game> {
         if (this.config.debug) {
           console.log(`[MCTS] Selecting proven win!`);
         }
-        return provenWin.parentMove!;
+        return { move: provenWin.parentMove!, root };
       }
 
       // Check if all children are disproven (all moves lead to loss)
@@ -322,14 +351,14 @@ export class MCTSBot<G extends Game = Game> {
       if (allDisproven) {
         // Select most-visited to delay loss (might find opponent mistake)
         const best = root.children.reduce((a, b) => a.visits > b.visits ? a : b);
-        return best.parentMove!;
+        return { move: best.parentMove!, root };
       }
 
       // Filter out disproven children (known losses) for final selection
       const validChildren = root.children.filter(c => !c.isDisproven || c.visits < 5);
       if (validChildren.length > 0) {
         const best = validChildren.reduce((a, b) => a.visits > b.visits ? a : b);
-        return best.parentMove!;
+        return { move: best.parentMove!, root };
       }
     }
 
@@ -338,7 +367,7 @@ export class MCTSBot<G extends Game = Game> {
       a.visits > b.visits ? a : b
     );
 
-    return best.parentMove!;
+    return { move: best.parentMove!, root };
   }
 
   // ============================================================================
