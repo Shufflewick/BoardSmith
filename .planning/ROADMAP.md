@@ -73,7 +73,12 @@
   1. An author can define a trigger that fires tutorial content when a game-state predicate or engine event matches (e.g. before the player's first turn, after N turns, the first time a capture becomes forced).
   2. An author can express a complete tutorial using the `testing` DSL, and it runs as a normal CI test.
   3. A game-rule change that breaks the tutorial fails that test (demonstrated by a deliberately broken rule), rather than failing silently at runtime.
-**Plans**: TBD
+**Plans**: 5 plans (Waves 1-3)
+- [ ] 106-01-PLAN.md — Engine predicate substrate: shared evaluator + labeled advanceWhen/gate (MR-02) + auto-advance pump + fail-loud validation (MR-03) (Wave 1)
+- [ ] 106-02-PLAN.md — Named-predicate helpers: beforeFirstTurn / afterTurns(n) / whenForced (Wave 2)
+- [ ] 106-03-PLAN.md — Server-side auto-advance hook + re-broadcast + MR-03 fail-loud lifecycle (Wave 2)
+- [ ] 106-04-PLAN.md — testing DSL: simulateTutorial + assertTutorialStep/Completes, fails on rule drift (Wave 2)
+- [ ] 106-05-PLAN.md — CI-verifiable demonstration: green-when-intact, red-when-rule-broken (Wave 3)
 
 ### Phase 107: AI-Assisted Teaching
 **Goal**: A player can get MCTS-powered help — a move hint, a narrated AI-vs-AI demo, and an evaluation heatmap — all surfaced from the game's existing bot with no new training.
@@ -129,7 +134,7 @@
 |-------|----------------|--------|-----------|
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
-| 106. Predicate Triggers & CI-Verifiable Authoring | 0/? | Not started | - |
+| 106. Predicate Triggers & CI-Verifiable Authoring | 0/5 | Planned | - |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
 | 108. Lightweight Action Help | 0/? | Not started | - |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
