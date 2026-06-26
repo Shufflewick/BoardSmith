@@ -242,6 +242,25 @@ describe('TutorialController — error handling', () => {
       /GameDefinition\.tutorial/
     );
   });
+
+  // MR-03: start() on a tutorial with zero steps must fail loud with an actionable error.
+  it('start() throws an actionable error when the tutorial definition has zero steps', () => {
+    const emptyTutorial: TutorialDefinition = { steps: [] };
+    const runner = makeRunner(emptyTutorial);
+    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
+
+    expect(() => controller.start(1)).toThrow(/steps/i);
+  });
+
+  it('error message for zero-steps tutorial mentions TutorialDefinition.steps', () => {
+    const emptyTutorial: TutorialDefinition = { steps: [] };
+    const runner = makeRunner(emptyTutorial);
+    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
+
+    expect(() => controller.start(1)).toThrow(
+      /TutorialDefinition\.steps|no steps|at least one step/i
+    );
+  });
 });
 
 // ============================================
