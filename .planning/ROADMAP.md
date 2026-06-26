@@ -91,7 +91,7 @@
   4. All three features reuse checkers' existing MCTS bot (`~/BoardSmithGames/checkers/src/rules/ai.ts`) — no new training, weights, or models.
 **Plans**: 4 plans (Waves 1-4)
 - [x] 107-01-PLAN.md — MCTS stats API: runSearch() + playWithStats() + BotMoveStats/hintTargetFromMove (Wave 1)
-- [ ] 107-02-PLAN.md — Session teaching state: transient hint/heatmap/narration injection + requestHint/setHeatmapVisible (Wave 2)
+- [x] 107-02-PLAN.md — Session teaching state: transient hint/heatmap/narration injection + requestHint/setHeatmapVisible (Wave 2)
 - [ ] 107-03-PLAN.md — Narration hook (onBeforeMove) + AI-vs-AI demo mode (startDemo/stopDemo) (Wave 3)
 - [ ] 107-04-PLAN.md — UI overlays (HintOverlay/HeatmapOverlay) + BoardMessage narration + ControlsMenu/GameShell + parity tests (Wave 4)
 **UI hint**: yes
@@ -139,7 +139,7 @@
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
-| 107. AI-Assisted Teaching | 1/4 | In Progress|  |
+| 107. AI-Assisted Teaching | 2/4 | In Progress|  |
 | 108. Lightweight Action Help | 0/? | Not started | - |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
 | 110. Demonstration & Refinement | 0/? | Not started | - |
