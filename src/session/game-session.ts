@@ -957,7 +957,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         difficulty,
         this.#botAIConfig
       );
-      const { move } = await bot.playWithStats();
+      // Use play() (not playWithStats()) so parallel mode is honoured for
+      // 'hard' difficulty. playWithStats() forces single-mode search and the
+      // returned stats are unused here — the hint only needs the best move (WR-05).
+      const move = await bot.play();
       const ref = this.#extractMoveTarget(move);
       const target = ref ? { kind: 'element' as const, ref } : undefined;
       const annotation: Annotation = { text: 'Suggested move', ...(target ? { target } : {}) };
