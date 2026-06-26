@@ -173,8 +173,16 @@ export function simulateTutorial<G extends Game>(
   // 2. Attach the tutorial definition to the game instance.
   testGame.game.tutorialDefinition = tutorialDef;
 
-  // 3. Set initial progress for the primary seat.
-  testGame.game.tutorialProgress.set(seat, initialProgress(tutorialDef));
+  // 3. Set initial progress for all seats referenced in the scenario so gate-drift
+  //    detection works correctly for non-primary seats (WR-02). Without this,
+  //    getTutorialDisabledActions() returns {} for uninitialized seats, causing the
+  //    gate-legality check to silently pass even when a gate should block the action.
+  const scenarioSeats = new Set<number>([seat, ...scenario.map(m => m.seat).filter((s): s is number => s !== undefined)]);
+  for (const s of scenarioSeats) {
+    if (!testGame.game.tutorialProgress.has(s)) {
+      testGame.game.tutorialProgress.set(s, initialProgress(tutorialDef));
+    }
+  }
 
   // 4. Track steps visited (deduplicated, visit order).
   const stepsVisited: string[] = [];

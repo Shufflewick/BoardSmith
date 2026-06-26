@@ -316,4 +316,58 @@ describe('simulateTutorial', () => {
       ).toThrow(/no steps|empty/i);
     });
   });
+
+  describe('WR-02 — gate-drift detection for non-primary seats', () => {
+    it('detects a gate violation on a non-primary seat (seat override in scenario)', () => {
+      // Two-player game: seat 1 is the learner (primary), seat 2 performs a move.
+      // The tutorial definition blocks 'pass' on step-1 for ALL seats.
+      // Without WR-02 fix, seat 2's gate would be unchecked (uninitialized progress → {} disabled actions).
+      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02' });
+
+      const def: TutorialDefinition = {
+        steps: [
+          { id: 'step-1', gate: { action: 'move' } }, // 'pass' is blocked on step-1
+        ],
+      };
+
+      // Move from seat 1 is fine (gate allows 'move'). Then seat 2 tries 'pass', which is gated.
+      expect(() =>
+        simulateTutorial(testGame, def, {
+          seat: 1,
+          scenario: [
+            { action: 'move' },           // seat 1 moves — OK
+            { action: 'pass', seat: 2 },  // seat 2 passes — should throw (gate blocks 'pass')
+          ],
+        })
+      ).toThrow(/gate|disabled|step-1|pass/i);
+    });
+
+    it('initializes all scenario seats so gate checks work for non-primary seats', () => {
+      // After simulateTutorial initializes all seats, seat 2 must also have progress
+      // and its gate checks must be evaluated (not silently bypassed). Verify by running a
+      // two-seat scenario where both seats perform the gate-allowed action 'move'.
+      // No advanceWhen — the tutorial does not auto-advance, keeping all seats on step-move.
+      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02-init' });
+
+      const def: TutorialDefinition = {
+        steps: [
+          // No advanceWhen — gate check only. Both seats remain on this step.
+          { id: 'step-move', gate: { action: 'move' } },
+          { id: 'done', gate: { action: 'pass' } },
+        ],
+      };
+
+      // Both seats use 'move', which is allowed on step-move. The scenario must
+      // not throw even though seat 2 is a non-primary seat.
+      expect(() =>
+        simulateTutorial(testGame, def, {
+          seat: 1,
+          scenario: [
+            { action: 'move' },           // seat 1 moves — allowed on step-move
+            { action: 'move', seat: 2 },  // seat 2 moves — seat 2 must be initialized with progress
+          ],
+        })
+      ).not.toThrow();
+    });
+  });
 });
