@@ -144,6 +144,33 @@ describe('nextProgress', () => {
     nextProgress(def, 'a');
     expect(def.steps).toHaveLength(2); // unchanged
   });
+
+  it('throws a fail-loud error when currentStepId is not null but not found in steps (WR-01)', () => {
+    // Simulates stale persisted progress after a tutorial step was renamed or removed.
+    expect(() => nextProgress(THREE_STEP_DEF, 'stale-step-id')).toThrow(
+      /stale-step-id.*not found|not found.*stale-step-id/i
+    );
+  });
+
+  it('error message names the stale step and lists known steps (WR-01)', () => {
+    let message = '';
+    try {
+      nextProgress(THREE_STEP_DEF, 'old-name');
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('old-name');
+    expect(message).toContain('step-1');
+    expect(message).toContain('step-2');
+    expect(message).toContain('step-3');
+  });
+
+  it('starts from index 0 when currentStepId is null (initial advance with no prior step)', () => {
+    // null means "no prior step" — advance to index 1 (step-2) from step-1.
+    const next = nextProgress(THREE_STEP_DEF, null);
+    expect(next.stepId).toBe('step-2');
+    expect(next.status).toBe('running');
+  });
 });
 
 // ============================================================

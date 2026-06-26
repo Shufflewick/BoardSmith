@@ -41,7 +41,12 @@ export function initialProgress(def: TutorialDefinition): TutorialProgress {
  * `currentStepId`.
  *
  * - If the current step is the last step, returns `{ stepId: last, status: 'completed' }`.
- * - If `currentStepId` is not found, advances from index 0 (guards against stale state).
+ * - If `currentStepId` is null, starts from step 0 (initial advance from no prior step).
+ *
+ * @throws {Error} if `currentStepId` is non-null but not found in `def.steps` — this
+ *   means persisted tutorial progress references a step that no longer exists in the
+ *   definition (stale data after a tutorial refactor). Fail loud so authors catch this
+ *   at dev/test time rather than silently skipping to the wrong step.
  *
  * Does NOT mutate the game. Callers (TutorialController, autoAdvanceTutorial)
  * are responsible for writing the returned progress.
@@ -50,6 +55,14 @@ export function nextProgress(def: TutorialDefinition, currentStepId: string | nu
   const currentIndex = currentStepId !== null
     ? def.steps.findIndex(s => s.id === currentStepId)
     : -1;
+
+  if (currentStepId !== null && currentIndex === -1) {
+    throw new Error(
+      `Tutorial step '${currentStepId}' not found in the tutorial definition. ` +
+      `If you renamed or removed this step, update the persisted tutorialProgress. ` +
+      `Known steps: [${def.steps.map(s => s.id).join(', ')}]`
+    );
+  }
 
   const resolvedIndex = currentIndex === -1 ? 0 : currentIndex;
   const nextIndex = resolvedIndex + 1;
