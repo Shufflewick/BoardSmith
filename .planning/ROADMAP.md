@@ -27,7 +27,7 @@
 - [x] **Phase 104: Tutorial Lifecycle & Action Gating** — Engine/session run a gated, resumable tutorial; steps restrict the legal action set and progress is checkpoint/replay safe. (completed 2026-06-25)
 - [x] **Phase 105: Annotation Overlay (UI Parity)** — Text-bubble + targeted highlight on any cell/piece/panel/control, rendered identically in custom UI and AutoUI via `useBoardInteraction`. (completed 2026-06-25)
 - [x] **Phase 106: Predicate Triggers & CI-Verifiable Authoring** — Fire content on game-state predicate/event, and author the tutorial as a test that fails when the rules drift. (completed 2026-06-26)
-- [ ] **Phase 107: AI-Assisted Teaching** — MCTS-powered move hint, narrated AI-vs-AI demo, and evaluation heatmap, surfaced from checkers' existing bot.
+- [x] **Phase 107: AI-Assisted Teaching** — MCTS-powered move hint, narrated AI-vs-AI demo, and evaluation heatmap, surfaced from checkers' existing bot. (completed 2026-06-26)
 - [ ] **Phase 108: Lightweight Action Help** — Per-action help text revealed on hover/tap, with a global toggle.
 - [ ] **Phase 109: Checkers Tutorial Content** — The cross-repo showcase: guided selection/movement, mandatory-capture tip, multi-jump walkthrough, launchable in GameShell + dev host.
 - [ ] **Phase 110: Demonstration & Refinement** — End-to-end browser demo of the tutorial + AI + HELP as a hands-on refinement gate before applying the substrate to cribbage.
@@ -93,7 +93,7 @@
 - [x] 107-01-PLAN.md — MCTS stats API: runSearch() + playWithStats() + BotMoveStats/hintTargetFromMove (Wave 1)
 - [x] 107-02-PLAN.md — Session teaching state: transient hint/heatmap/narration injection + requestHint/setHeatmapVisible (Wave 2)
 - [x] 107-03-PLAN.md — Narration hook (onBeforeMove) + AI-vs-AI demo mode (startDemo/stopDemo) (Wave 3)
-- [ ] 107-04-PLAN.md — UI overlays (HintOverlay/HeatmapOverlay) + BoardMessage narration + ControlsMenu/GameShell + parity tests (Wave 4)
+- [x] 107-04-PLAN.md — UI overlays (HintOverlay/HeatmapOverlay) + BoardMessage narration + ControlsMenu/GameShell + parity tests (Wave 4)
 **UI hint**: yes
 
 ### Phase 108: Lightweight Action Help
@@ -139,7 +139,7 @@
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
-| 107. AI-Assisted Teaching | 3/4 | In Progress|  |
+| 107. AI-Assisted Teaching | 4/4 | Complete   | 2026-06-26 |
 | 108. Lightweight Action Help | 0/? | Not started | - |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
 | 110. Demonstration & Refinement | 0/? | Not started | - |

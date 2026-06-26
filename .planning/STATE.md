@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives
-status: executing
-stopped_at: Phase 107 UI-SPEC approved
-last_updated: "2026-06-26T16:50:31.072Z"
+status: verifying
+stopped_at: Phase 107 complete — ready for Phase 108 planning
+last_updated: "2026-06-26T17:30:00.000Z"
 last_activity: 2026-06-26
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 18
-  completed_plans: 17
-  percent: 43
+  completed_plans: 18
+  percent: 57
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 
 ## Current Position
 
-Phase: 107 (ai-assisted-teaching) — EXECUTING
+Phase: 107 (ai-assisted-teaching) — COMPLETE
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — 4/4 plans done; AI-01/02/03 requirements fulfilled
 Last activity: 2026-06-26
 
 ## Milestones
@@ -89,6 +89,14 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Checkers tutorial content (CHK-*) lands cross-repo in `~/BoardSmithGames/checkers`; substrate stays in this repo's `src/`.
 - DEMO-01 framed as a refinement checkpoint, not a sign-off — captured friction feeds the substrate before cribbage (v2 CRIB).
 
+**Phase 107 UI decisions (2026-06-26):**
+
+- overlay-utils.ts dedup: cssEscape + buildSelector extracted from TutorialOverlay to shared module — zero copy-paste across overlay components.
+- isDemoRunning tracked as local ref in GameShell — session getter not broadcast; cleared on flowState.complete.
+- Teaching controls wired via platformRequest ops (hint/demo-start/demo-stop/heatmap-toggle) — bridge integration deferred to Phase 109.
+- showHintProp computed from lobbyInfo AI slots — cleanest client-side AI detection; platform mode hidden (Phase 110 wires production).
+- Parity proven at component level: dual-fixture tests (custom-UI-like div vs AutoUI-grid-like table cell, same data-bs-el-id) in both HintOverlay and HeatmapOverlay test suites.
+
 ### Highest-Risk Items
 
 1. `useBoardInteraction` parity for the annotation overlay (Phase 105) — a primitive that works in only one UI path violates the hard-rule; verify both paths.
@@ -115,11 +123,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-26T16:50:31.065Z
-Stopped at: Phase 107 UI-SPEC approved
+Last session: 2026-06-26T17:30:00.000Z
+Stopped at: Phase 107 plan 04 complete — HintOverlay, HeatmapOverlay, ControlsMenu Teaching group, GameShell wired
 Resume file: None
-Next action: `/gsd:plan-phase 104`
+Next action: `/gsd:plan-phase 108`
 
 ## Operator Next Steps
 
-- Plan the first phase with `/gsd:plan-phase 104`
+- Plan Phase 108 (help/hint system) with `/gsd:plan-phase 108`
