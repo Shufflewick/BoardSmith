@@ -115,7 +115,9 @@ describe('F10: seat is resolved only from an authenticated identity', () => {
 });
 
 describe('F10: non-lobby games still resolve seats from registered playerIds', () => {
-  it('maps a registered playerId to its index and rejects unknowns', () => {
+  it('maps a registered playerId to its 1-indexed seat and rejects unknowns', () => {
+    // Seats in BoardSmith are 1-indexed (seat 0 = spectator). The playerIds array
+    // is 0-indexed, so playerIds[0] → seat 1, playerIds[1] → seat 2, etc. (WR-04)
     const session = GameSession.create<TestLobbyGame>({
       gameType: 'test-lobby',
       GameClass: TestLobbyGame,
@@ -123,8 +125,8 @@ describe('F10: non-lobby games still resolve seats from registered playerIds', (
       playerNames: ['Alice', 'Bob'],
       playerIds: ['alice-id', 'bob-id'],
     });
-    expect(session.resolveSeatForPlayer('alice-id')).toBe(0);
-    expect(session.resolveSeatForPlayer('bob-id')).toBe(1);
+    expect(session.resolveSeatForPlayer('alice-id')).toBe(1);  // index 0 → seat 1
+    expect(session.resolveSeatForPlayer('bob-id')).toBe(2);    // index 1 → seat 2
     expect(session.resolveSeatForPlayer('intruder')).toBe(-1);
   });
 });

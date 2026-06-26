@@ -1738,7 +1738,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const ids = this.#storedState.playerIds;
     if (ids) {
       const idx = ids.indexOf(playerId);
-      if (idx >= 0) return idx;
+      if (idx >= 0) return idx + 1;  // Convert 0-indexed array position to 1-indexed seat
     }
     return -1;
   }
