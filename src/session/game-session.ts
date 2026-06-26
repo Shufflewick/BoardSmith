@@ -45,7 +45,7 @@ import {
 } from './types.js';
 import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
-import type { AIConfig as BotAIConfig, BotMove } from '../ai/index.js';
+import type { AIConfig as BotAIConfig, BotMove, BotMoveStats } from '../ai/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import type { ElementRef } from './types.js';
 import { LobbyManager, type LobbyManagerCallbacks } from './lobby-manager.js';
@@ -966,6 +966,85 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   clearHint(seat: number): void {
     this.#hint.delete(seat);
     this.broadcast();
+  }
+
+  /**
+   * Guard: at most one heatmap recompute in flight across all seats (T-107-03).
+   * This is session-wide (not per-seat) because MCTS is CPU-bound and concurrent
+   * full-board evaluations would compete for the same CPU resources.
+   */
+  #heatmapUpdating = false;
+
+  /**
+   * Build per-cell HeatmapEntry[] from MCTS stats.
+   *
+   * Deduplication: multiple BotMoves targeting the same cell are collapsed into
+   * one entry keeping the highest normalizedValue. Exactly one entry has
+   * `isBest === true` (the highest normalizedValue in the set).
+   */
+  #buildHeatmapEntries(stats: BotMoveStats[]): HeatmapEntry[] {
+    const byCell = new Map<string, HeatmapEntry>();
+    for (const stat of stats) {
+      const ref = this.#extractMoveTarget(stat.move);
+      if (!ref) continue;
+      // Stable key: prefer id > notation > name
+      const key = ref.id !== undefined ? `id:${ref.id}`
+        : ref.notation !== undefined ? `notation:${ref.notation}`
+        : `name:${ref.name}`;
+      const existing = byCell.get(key);
+      if (!existing || stat.value > existing.normalizedValue) {
+        byCell.set(key, { cellRef: ref, normalizedValue: stat.value, isBest: false });
+      }
+    }
+    const entries = [...byCell.values()];
+    if (entries.length > 0) {
+      const best = entries.reduce((a, b) => a.normalizedValue > b.normalizedValue ? a : b);
+      best.isBest = true;
+    }
+    return entries;
+  }
+
+  /**
+   * Show or hide the evaluation heatmap for a seat.
+   *
+   * When `visible = true`: runs an ephemeral MCTS search, builds per-cell
+   * entries (deduped, best-marked), stores them, and broadcasts.
+   *
+   * When `visible = false`: clears entries and broadcasts.
+   *
+   * Concurrent recompute attempts are skipped (not queued) — the AI search
+   * is expensive and concurrent searches serve no purpose.
+   */
+  async setHeatmapVisible(seat: number, visible: boolean): Promise<void> {
+    if (!visible) {
+      this.#heatmap.set(seat, { visible: false, entries: [] });
+      this.broadcast();
+      return;
+    }
+
+    // Skip if a recompute is already in progress or the AI is thinking
+    if (this.#heatmapUpdating || this.#aiController?.isThinking()) {
+      return;
+    }
+    this.#heatmapUpdating = true;
+    try {
+      const difficulty = parseAILevel(this.#storedState.aiConfig?.level ?? 'medium');
+      const bot = createBot(
+        this.#runner.game,
+        this.#GameClass,
+        this.#storedState.gameType,
+        seat,
+        this.#storedState.actionHistory,
+        difficulty,
+        this.#botAIConfig
+      );
+      const { stats } = await bot.playWithStats();
+      const entries = this.#buildHeatmapEntries(stats);
+      this.#heatmap.set(seat, { visible: true, entries });
+      this.broadcast();
+    } finally {
+      this.#heatmapUpdating = false;
+    }
   }
 
   // ============================================

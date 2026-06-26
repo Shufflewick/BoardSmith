@@ -250,3 +250,64 @@ describe('teaching state — clear-on-replace', () => {
     expect(lastState.hint).toBeUndefined();
   });
 });
+
+// ============================================
+// Task 3: setHeatmapVisible + buildHeatmapEntries
+// ============================================
+
+describe('teaching state — heatmap', () => {
+  it('setHeatmapVisible(seat, false) yields visible:false with empty entries', async () => {
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+
+    // RED: setHeatmapVisible doesn't exist yet
+    await (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, false);
+    const state = captured.at(-1)!.state;
+    expect(state.heatmap).toBeDefined();
+    expect(state.heatmap!.visible).toBe(false);
+    expect(state.heatmap!.entries).toHaveLength(0);
+  });
+
+  it('setHeatmapVisible(seat, true) populates heatmap entries with normalizedValue in [0,1]', async () => {
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+
+    await (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, true);
+    const state = captured.at(-1)!.state;
+    expect(state.heatmap).toBeDefined();
+    expect(state.heatmap!.visible).toBe(true);
+    // All normalizedValues must be in [0, 1]
+    for (const entry of state.heatmap!.entries) {
+      expect(entry.normalizedValue).toBeGreaterThanOrEqual(0);
+      expect(entry.normalizedValue).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('buildHeatmapEntries: exactly one isBest across non-empty entry set', async () => {
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+
+    await (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, true);
+    const state = captured.at(-1)!.state;
+    const entries = state.heatmap!.entries;
+    if (entries.length > 0) {
+      const bestCount = entries.filter(e => e.isBest).length;
+      expect(bestCount).toBe(1);
+    }
+  });
+});
