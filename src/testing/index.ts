@@ -78,3 +78,16 @@ export {
   type ActionTraceResult,
   type ActionTraceDetail,
 } from './debug.js';
+
+// Tutorial DSL
+export {
+  simulateTutorial,
+  type TutorialScenarioMove,
+  type SimulateTutorialOptions,
+  type SimulateTutorialResult,
+} from './simulate-tutorial.js';
+
+export {
+  assertTutorialStep,
+  assertTutorialCompletes,
+} from './tutorial-assertions.js';
