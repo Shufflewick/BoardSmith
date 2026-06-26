@@ -918,7 +918,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         const { advanced } = autoAdvanceTutorial(game, seat);
         if (advanced) anyAdvanced = true;
       }
-      if (anyAdvanced) this.broadcast();
+      if (anyAdvanced) {
+        await this.#save();   // persist the advanced tutorial progress
+        this.broadcast();
+      }
     }
 
     // Check if AI should respond
@@ -1643,8 +1646,20 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           const result = this.#runner.performAction(action, player, args);
           if (result.success) {
             this.#storedState.actionHistory = this.#runner.actionHistory;
+            // Auto-advance tutorial for all running seats after an AI action.
+            // Mirrors the post-action pump in performAction — opponent moves must
+            // trigger advanceWhen evaluation for every learner seat (CR-02).
+            const game = this.#runner.game;
+            let anyAdvanced = false;
+            for (const [seat, progress] of game.tutorialProgress) {
+              if (progress.status === 'running') {
+                const { advanced } = autoAdvanceTutorial(game, seat);
+                if (advanced) anyAdvanced = true;
+              }
+            }
             await this.#save();
             this.broadcast();
+            if (anyAdvanced) this.broadcast();
             return true;
           }
           return false;
