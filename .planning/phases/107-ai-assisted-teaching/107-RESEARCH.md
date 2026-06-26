@@ -629,22 +629,25 @@ get isDemoRunning(): boolean { ... }
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Heatmap re-computation after each AI move (if heatmap visible)**
    - What we know: After an AI move, the board position changes. The heatmap entries from before the move are stale.
    - What's unclear: Should the session automatically re-compute (adding MCTS latency after every AI move) or just clear the entries (player must re-toggle)?
    - Recommendation: Schedule async re-computation after AI moves when heatmap is visible — mirrors how `#scheduleAICheck()` works. But gate it on `!#aiController.isThinking()` to prevent concurrent searches.
+   - **RESOLVED:** Adopt the recommendation — async re-compute after an AI move when the heatmap is visible, gated on a `#heatmapUpdating`/`!isThinking()` guard to prevent concurrent searches. Implemented in Plan 02 T3 + Plan 03 T2.
 
 2. **`stopDemo()` destination when game-over occurs mid-demo**
    - What we know: If the AI plays to game completion, `flowState.complete = true`, and `#scheduleAICheck()` stops.
    - What's unclear: Does the session automatically call `stopDemo()`? Or does the GameShell watch for `game-over` and call it?
    - Recommendation: GameShell watches for `flowState.complete` (already does for GameOverCard) — add `stopDemo()` call there. Keep `GameSession` passive.
+   - **RESOLVED:** Adopt the recommendation — GameShell's `flowState.complete` watcher calls `session.stopDemo()`; `GameSession` stays passive. Implemented in Plan 04 T2.
 
 3. **Multi-seat game support for hint/heatmap**
    - What we know: Hint and heatmap are designed with `seat` parameter. Checkers is 2-player.
    - What's unclear: For a 3+ player game where only one player has a bot, can players 2 and 3 (non-bot) request hints?
    - Recommendation: Hint/heatmap should be gated on the game having an `ai` config in its `GameDefinition` (which is already how ControlsMenu shows/hides the Teaching group per UI-SPEC). The session can create an ephemeral bot for the hinting seat even if that seat is not normally AI-controlled.
+   - **RESOLVED:** Adopt the recommendation — the Teaching group / hint is gated on the `GameDefinition` having a non-null `ai` config; the session creates an ephemeral bot for the requesting seat. Implemented in Plan 04 T2 (`showHint` gating) + Plan 02 (hint request path).
 
 ---
 
