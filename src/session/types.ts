@@ -469,6 +469,17 @@ export interface PlayerGameState {
    * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
    */
   narration?: { text: string };
+  /**
+   * Session-layer only, never serialized. True while an AI-vs-AI demo is
+   * running (startDemo() has been called and stopDemo() has not). Present in
+   * broadcast state so all connected clients (including reconnecting windows
+   * and second-window scenarios) derive this flag from session truth rather
+   * than a local Vue ref that can desync (WR-04).
+   *
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   * Absent (undefined) when no demo is running.
+   */
+  isDemoRunning?: boolean;
 }
 
 // ============================================

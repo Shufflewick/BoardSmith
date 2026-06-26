@@ -651,9 +651,12 @@ const { previewState } = useZoomPreview();
 const toast = useToast();
 
 // ── Teaching controls state (AI-01/02/03) ────────────────────────────────────
-// isDemoRunning is tracked locally; the session-side getter is not broadcast.
-// It is set on 'demo-toggle' and cleared when flowState.complete fires.
-const isDemoRunning = ref(false);
+// isDemoRunning is derived from broadcast state — injected by GameSession.broadcast()
+// when #demoMode is true. This ensures all connections (second window, reconnect)
+// see the correct toggle state rather than a local ref that can desync (WR-04).
+const isDemoRunning = computed(
+  () => (state.value?.state as any)?.isDemoRunning ?? false
+);
 
 // Show Teaching group when the lobby has at least one AI slot.
 // In platform mode (no lobbyInfo), the group is hidden — bridge integration
@@ -688,14 +691,14 @@ async function handleTeachingAction(
     if (isDemoRunning.value) {
       try {
         await platformRequest('demo-stop', {});
-        isDemoRunning.value = false;
+        // isDemoRunning updates from the next broadcast — no local mutation needed.
       } catch {
         toast.error('Failed to stop demo.');
       }
     } else {
       try {
         await platformRequest('demo-start', {});
-        isDemoRunning.value = true;
+        // isDemoRunning updates from the next broadcast — no local mutation needed.
       } catch {
         toast.error('Failed to start demo.');
       }
@@ -1527,12 +1530,11 @@ watch(
       assertiveMessage.value = text;
       emitAnnounce('assertive', text);
 
-      // Stop any running AI demo when the game completes. GameSession is passive
-      // (it doesn't know the UI stopped the demo); we mirror the isDemoRunning
-      // state locally and call the session via platformRequest.
+      // Stop any running AI demo when the game completes. isDemoRunning is
+      // now derived from broadcast state (WR-04), so we only fire the request;
+      // the session broadcasts the updated state on its own.
       if (isDemoRunning.value) {
         void platformRequest('demo-stop', {}).catch(() => {/* best-effort */});
-        isDemoRunning.value = false;
       }
     }
   },

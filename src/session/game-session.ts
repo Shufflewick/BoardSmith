@@ -1081,6 +1081,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     narrator?: (action: string, player: number, args: Record<string, unknown>) => string;
     delay?: number;
   }): void {
+    // Idempotency guard: a second call before stopDemo() would overwrite
+    // #savedAIController with the demo controller, making stopDemo() unable to
+    // restore the original. Return early to prevent that corruption.
+    if (this.#demoMode) return;
+
     // Save the current controller (may be undefined for human-only games).
     this.#savedAIController = this.#aiController;
     this.#demoDelay = options?.delay ?? 1200;
@@ -1127,6 +1132,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     };
 
     this.#demoMode = true;
+    // Broadcast immediately so all connected clients (including other windows)
+    // see isDemoRunning=true before the first AI move fires (WR-04).
+    this.broadcast();
     this.#scheduleAICheck();
   }
 
@@ -1895,6 +1903,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       const heatmap = this.#heatmap.get(effectivePosition);
       if (heatmap) state.heatmap = heatmap;
       if (this.#narrationText) state.narration = { text: this.#narrationText };
+      // isDemoRunning broadcast so all windows derive their state from the
+      // session rather than local Vue refs (WR-04).
+      if (this.#demoMode) state.isDemoRunning = true;
 
       const update: StateUpdate = {
         type: 'state',
