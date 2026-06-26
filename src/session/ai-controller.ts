@@ -70,7 +70,8 @@ export class AIController<G extends Game = Game> {
   async checkAndPlay(
     runner: GameRunner<G>,
     actionHistory: SerializedAction[],
-    onMove: (action: string, player: number, args: Record<string, unknown>) => Promise<boolean>
+    onMove: (action: string, player: number, args: Record<string, unknown>) => Promise<boolean>,
+    onBeforeMove?: (action: string, player: number, args: Record<string, unknown>) => Promise<void>
   ): Promise<{ action: string; player: number; args: Record<string, unknown> } | null> {
     // Prevent concurrent AI thinking
     if (this.#thinking) {
@@ -126,6 +127,9 @@ export class AIController<G extends Game = Game> {
 
       // Get the AI's move
       const move = await bot.play();
+
+      // Announce the move before it executes (optional narration seam)
+      if (onBeforeMove) await onBeforeMove(move.action, aiPlayer, move.args);
 
       // Execute the move via callback
       const success = await onMove(move.action, aiPlayer, move.args);
