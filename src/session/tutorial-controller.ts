@@ -13,6 +13,7 @@
 import type { Game } from '../engine/element/game.js';
 import type { TutorialProgress } from '../engine/tutorial/types.js';
 import type { GameRunner } from '../runtime/index.js';
+import { nextProgress, initialProgress, validateTutorialDefinition } from '../engine/tutorial/progress.js';
 
 // ============================================
 // Callbacks
@@ -83,6 +84,7 @@ export class TutorialController<G extends Game = Game> {
   /**
    * Move to the next step, or complete, for the given seat.
    * Shared by advance() and skip() — both forward-advance the step index.
+   * Delegates to engine `nextProgress` — single source of truth for step transitions.
    */
   #forwardAdvance(seat: number): TutorialProgress {
     const def = this.#requireDefinition();
@@ -92,20 +94,8 @@ export class TutorialController<G extends Game = Game> {
     // If no progress yet, treat as if we're on the first step (shouldn't happen in
     // normal usage but guards against calling advance before start).
     const currentStepId = current?.stepId ?? def.steps[0]?.id ?? null;
-    const currentIndex = currentStepId !== null
-      ? def.steps.findIndex(s => s.id === currentStepId)
-      : -1;
 
-    const nextIndex = currentIndex + 1;
-    if (nextIndex >= def.steps.length) {
-      // Already on last step or beyond — complete the tutorial
-      const completed: TutorialProgress = { stepId: currentStepId, status: 'completed' };
-      game.tutorialProgress.set(seat, completed);
-      return completed;
-    }
-
-    const nextStep = def.steps[nextIndex];
-    const progress: TutorialProgress = { stepId: nextStep.id, status: 'running' };
+    const progress = nextProgress(def, currentStepId);
     game.tutorialProgress.set(seat, progress);
     return progress;
   }
@@ -124,13 +114,11 @@ export class TutorialController<G extends Game = Game> {
    */
   start(seat: number): void {
     const def = this.#requireDefinition();
+    // MR-03: fail loud on empty steps or non-function predicates at start time.
+    validateTutorialDefinition(def);
     const game = this.#getRunner().game;
-
-    const firstStep = def.steps[0];
-    const progress: TutorialProgress = {
-      stepId: firstStep?.id ?? null,
-      status: 'running',
-    };
+    // Delegate first-step construction to engine initialProgress — single source of truth.
+    const progress = initialProgress(def);
     game.tutorialProgress.set(seat, progress);
     this.#callbacks.broadcast();
   }
