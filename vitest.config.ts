@@ -17,6 +17,7 @@ export default defineConfig({
       // Exclude tests that depend on external game packages not in this repo
       'src/ai/mcts-bot.test.ts',
       'src/ai/mcts-cache.test.ts',
+      'src/ai/mcts-stats-checkers.test.ts',
       'src/ai/cribbage-bot.test.ts',
       'src/ai-trainer/parallel-simulator.test.ts',
     ],

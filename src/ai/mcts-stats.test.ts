@@ -55,7 +55,9 @@ function createThreeChoiceGame(): ThreeChoiceGame {
 }
 
 // ============================================================================
-// Task 2 tests — RED until runSearch() + playWithStats() are implemented
+// Unit tests — no external dependencies, always included in vitest.
+// Checkers-bot integration test lives in src/ai/mcts-stats-checkers.test.ts
+// (excluded from vitest when @boardsmith/checkers-rules symlink is absent).
 // ============================================================================
 
 describe('MCTSBot.playWithStats()', () => {
@@ -138,5 +140,38 @@ describe('MCTSBot.playWithStats()', () => {
 
     const { stats } = await bot.playWithStats();
     expect(stats.length).toBeGreaterThan(0);
+  });
+
+  it('each stat has a valid BotMove with action and args', async () => {
+    const game = createThreeChoiceGame();
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+      iterations: 100,
+      async: false,
+    });
+
+    const { stats } = await bot.playWithStats();
+    for (const stat of stats) {
+      // Every stat's move must be a valid BotMove
+      expect(typeof stat.move.action).toBe('string');
+      expect(stat.move.action.length).toBeGreaterThan(0);
+      expect(stat.move.args).toBeDefined();
+      expect(typeof stat.move.args).toBe('object');
+      // visits must be a non-negative integer
+      expect(Number.isInteger(stat.visits)).toBe(true);
+      expect(stat.visits).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('the recommended move is present among the stats entries', async () => {
+    const game = createThreeChoiceGame();
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+      iterations: 100,
+      async: false,
+    });
+
+    const { move, stats } = await bot.playWithStats();
+    // The move returned must be one of the moves in stats
+    const statMoves = stats.map(s => JSON.stringify(s.move));
+    expect(statMoves).toContain(JSON.stringify(move));
   });
 });
