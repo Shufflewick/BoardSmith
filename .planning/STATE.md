@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives (Checkers)
-status: verifying
+status: executing
 stopped_at: roadmap complete, 15/15 requirements mapped
-last_updated: "2026-06-25T22:24:44.660Z"
-last_activity: 2026-06-25
+last_updated: "2026-06-26T04:29:55.705Z"
+last_activity: 2026-06-26 -- Phase 106 execution started
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 9
+  total_plans: 14
   completed_plans: 9
   percent: 29
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 105 — Annotation Overlay (UI Parity)
+**Current focus:** Phase 106 — Predicate Triggers & CI-Verifiable Authoring
 
 ## Current Position
 
-Phase: 105 (Annotation Overlay (UI Parity)) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-06-25
+Phase: 106 (Predicate Triggers & CI-Verifiable Authoring) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 106
+Last activity: 2026-06-26 -- Phase 106 execution started
 
 ## Milestones
 
