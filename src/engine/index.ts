@@ -241,3 +241,22 @@ export type {
   RestoreFromDevCheckpointOptions,
   DevCheckpointRestoreResult,
 } from './utils/index.js';
+
+// Tutorial predicate helpers (TUT-03)
+export { afterFirstTurn, afterTurns, whenForced } from './tutorial/predicates.js';
+
+export type {
+  TutorialGateContext,
+  TutorialAdvanceCondition,
+  TutorialGateCondition,
+  TutorialGate,
+  TutorialGateAllowList,
+  TutorialStep,
+  TutorialDefinition,
+  TutorialProgress,
+  TutorialStepView,
+  Annotation,
+  AnnotationTarget,
+  AnnotationPlacement,
+  ElementRef,
+} from './tutorial/types.js';
