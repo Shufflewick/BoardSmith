@@ -289,14 +289,14 @@ describe('Tutorial gate — TUT-02', () => {
   // Predicate gate variant (escape hatch)
   // ------------------------------------------------------------------
 
-  describe('predicate gate (escape hatch)', () => {
-    it('blocks all available actions when predicate returns false', () => {
+  describe('predicate gate (labeled condition escape hatch)', () => {
+    it('blocks all available actions when labeled predicate returns false', () => {
       const predicateGame = makeGame(false);
       predicateGame.tutorialDefinition = {
         steps: [
           {
             id: 'pred-step',
-            gate: (_ctx) => false, // always block
+            gate: { 'must be player turn': (_ctx) => false }, // always block
           },
         ],
       };
@@ -309,13 +309,13 @@ describe('Tutorial gate — TUT-02', () => {
       expect('pass' in disabled).toBe(true);
     });
 
-    it('permits all actions when predicate returns true', () => {
+    it('permits all actions when labeled predicate returns true', () => {
       const predicateGame = makeGame(false);
       predicateGame.tutorialDefinition = {
         steps: [
           {
             id: 'pred-step',
-            gate: (_ctx) => true, // always permit
+            gate: { 'must be player turn': (_ctx) => true }, // always permit
           },
         ],
       };
@@ -327,13 +327,32 @@ describe('Tutorial gate — TUT-02', () => {
       expect(disabled).toEqual({});
     });
 
-    it('does not apply per-value gating for predicate gates', () => {
+    it('surfaces the failing label in the disabled reason', () => {
       const predicateGame = makeGame(false);
       predicateGame.tutorialDefinition = {
         steps: [
           {
             id: 'pred-step',
-            gate: (_ctx) => false, // block at action level
+            gate: { 'must be player turn': (_ctx) => false },
+          },
+        ],
+      };
+      predicateGame.tutorialProgress.set(1, { stepId: 'pred-step', status: 'running' });
+      predicateGame.registerActions(makeMoveAction(), makePassAction());
+
+      const disabled = predicateGame.getTutorialDisabledActions(1);
+
+      expect(disabled['move']).toContain('must be player turn');
+      expect(disabled['pass']).toContain('must be player turn');
+    });
+
+    it('does not apply per-value gating for labeled-condition gates', () => {
+      const predicateGame = makeGame(false);
+      predicateGame.tutorialDefinition = {
+        steps: [
+          {
+            id: 'pred-step',
+            gate: { 'always block': (_ctx) => false }, // block at action level
           },
         ],
       };

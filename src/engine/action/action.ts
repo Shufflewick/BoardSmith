@@ -29,12 +29,17 @@ import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 export { Action };
 
 /**
- * Evaluate a condition, returning result and trace details.
+ * Evaluate a labeled-predicate condition record, returning result and trace details.
  * All predicates are evaluated (AND semantics) and their results captured.
+ *
+ * Context-generic so it can be shared across action conditions, tutorial gates,
+ * and advanceWhen predicates without duplicating the evaluation logic.
+ *
+ * @typeParam Ctx - The context object passed to each predicate (e.g. ActionContext, TutorialGateContext).
  */
-function evaluateConditionWithTrace(
-  condition: ConditionConfig,
-  context: ActionContext
+export function evaluateConditionWithTrace<Ctx>(
+  condition: Record<string, (ctx: Ctx) => boolean>,
+  context: Ctx
 ): { passed: boolean; details: ConditionDetail[] } {
   const details: ConditionDetail[] = [];
   let allPassed = true;

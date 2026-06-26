@@ -21,7 +21,8 @@
  */
 
 import type { Game } from '../element/game.js';
-import type { TutorialStep, TutorialStepView } from './types.js';
+import type { TutorialGate, TutorialGateAllowList, TutorialStep, TutorialStepView } from './types.js';
+import { evaluateConditionWithTrace } from '../action/action.js';
 
 // ============================================================
 // Internal helpers
@@ -43,6 +44,17 @@ function gateValuesEqual(a: unknown, b: unknown): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Discriminate between an allow-list gate (has a string `action` field) and a
+ * labeled-predicate condition record.
+ *
+ * TutorialGateAllowList always carries `action: string`.
+ * TutorialGateCondition is a plain record of predicate functions.
+ */
+function isAllowListGate(gate: TutorialGate): gate is TutorialGateAllowList {
+  return typeof (gate as TutorialGateAllowList).action === 'string';
 }
 
 // ============================================================
@@ -109,8 +121,9 @@ export function getGateReasonForValue(
 ): string | null {
   const { gate } = step;
 
-  // Predicate gate: no per-value discrimination possible.
-  if (typeof gate === 'function') {
+  // Labeled-predicate condition gate: no per-value discrimination possible.
+  // The condition is consulted at the action level via getActionLevelDisabledReasons.
+  if (!isAllowListGate(gate)) {
     return null;
   }
 
@@ -167,15 +180,16 @@ export function getActionLevelDisabledReasons(
   const { gate } = step;
   const result: Record<string, string> = {};
 
-  if (typeof gate === 'function') {
-    // Predicate gate: call once with { game, seat }.
-    // true  = permitted (gate does not block)
-    // false = blocked  (gate is active)
-    // Since the predicate cannot discriminate by action, apply the result uniformly.
-    const permitted = gate({ game, seat });
-    if (!permitted) {
+  if (!isAllowListGate(gate)) {
+    // Labeled-predicate condition gate: evaluate via the shared evaluator.
+    // All predicates must pass (AND semantics). On failure, surface the first
+    // failing label so the author knows exactly which condition blocked progress.
+    const { passed, details } = evaluateConditionWithTrace(gate, { game, seat });
+    if (!passed) {
+      const failingLabel = details.find(d => !d.passed)?.label
+        ?? 'tutorial gate condition not met';
       for (const actionName of availableActionNames) {
-        result[actionName] = 'This action is not part of the current tutorial step';
+        result[actionName] = `Tutorial step blocked: "${failingLabel}"`;
       }
     }
     return result;

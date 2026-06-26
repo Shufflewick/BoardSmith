@@ -113,7 +113,7 @@ export interface TutorialGateContext {
  *   - `to`     – (RESERVED, Phase 109) restrict the "to" element/choice.
  *
  * When an element-targeted step must leave multiple elements enabled for a
- * teaching beat, use the predicate form (`TutorialGatePredicate`) instead.
+ * teaching beat, use the labeled predicate form (`TutorialGateCondition`) instead.
  */
 export interface TutorialGateAllowList {
   /** The single action name the learner must perform on this step. */
@@ -131,19 +131,35 @@ export interface TutorialGateAllowList {
 }
 
 /**
- * Predicate gate: full escape hatch for complex multi-condition gates.
+ * Labeled predicate gate: each key is a human-readable label describing the
+ * condition, and each value is a predicate that returns `true` when permitted.
  *
- * Return `true` to permit the current action/choice, `false` to block it.
+ * All predicates must return `true` for the gate to pass. The failing label is
+ * surfaced in disabled-reason strings (MR-02), mirroring action `ObjectCondition`.
+ *
  * The predicate MUST NOT mutate game state.
+ *
+ * @example
+ * ```typescript
+ * { 'must be player turn': (ctx) => ctx.game.currentSeat === ctx.seat }
+ * ```
  */
-export type TutorialGatePredicate = (ctx: TutorialGateContext) => boolean;
+export type TutorialGateCondition = Record<string, (ctx: TutorialGateContext) => boolean>;
 
 /**
  * A tutorial gate restricts which actions / choices the learner may perform
  * on a given step. Either a declarative allow-list (pit-of-success) or a
- * predicate escape hatch.
+ * labeled predicate condition (escape hatch).
  */
-export type TutorialGate = TutorialGateAllowList | TutorialGatePredicate;
+export type TutorialGate = TutorialGateAllowList | TutorialGateCondition;
+
+/**
+ * Labeled predicate record for `advanceWhen` on a tutorial step.
+ *
+ * Shares the same shape as `TutorialGateCondition` and is evaluated by the
+ * same `evaluateConditionWithTrace` — one evaluator for all tutorial predicates.
+ */
+export type TutorialAdvanceCondition = Record<string, (ctx: TutorialGateContext) => boolean>;
 
 // ============================================
 // Step types
@@ -191,11 +207,21 @@ export interface TutorialStep {
   content?: Annotation[];
 
   /**
-   * RESERVED (Phase 106): Predicate or event that automatically advances the
-   * tutorial to the next step when satisfied. Typed `unknown` to avoid type
-   * churn; Phase 106 will narrow.
+   * Labeled predicate record that automatically advances the tutorial to the
+   * next step when all predicates return `true`.
+   *
+   * Keys are human-readable labels (surfaced in debug traces when a predicate
+   * fails to fire). Values are predicates that MUST NOT mutate game state.
+   *
+   * Mirrors action `ObjectCondition` and shares the same `evaluateConditionWithTrace`
+   * evaluator, giving consistent debug traces across gates and advance triggers.
+   *
+   * @example
+   * ```typescript
+   * { 'first capture forced': (ctx) => getForcedCaptures(ctx.game, ctx.seat).length > 0 }
+   * ```
    */
-  advanceWhen?: unknown;
+  advanceWhen?: TutorialAdvanceCondition;
 
   /**
    * When `true`, the substrate suppresses the engine's single-enabled-choice
