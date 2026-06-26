@@ -1079,7 +1079,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Call `stopDemo()` to restore the original AI controller.
    *
    * @param options.narrator - Optional custom text formatter (action, player, args) → string.
-   *   Defaults to `"PlayerName: actionName key=value ..."`.
+   *   Defaults to `"PlayerName: actionName key=value ..."`. Object/array arg values are
+   *   formatted with JSON.stringify in the default narrator. Games with rich arg types
+   *   (e.g., move objects, nested references) should supply a custom `narrator` function
+   *   for human-readable output.
    * @param options.delay - Delay (ms) between announcement and move execution. Default: 1200.
    */
   startDemo(options?: {
@@ -1121,9 +1124,16 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         text = options.narrator(action, player, args);
       } else {
         // Default: "PlayerName: actionName key=val ..."
+        // Object/array values use JSON.stringify so game args like
+        // { to: 42 } or { card: { id: 7 } } are legible rather than
+        // producing the useless "[object Object]" (WR-06).
+        // Games with rich arg types should supply a custom `narrator` function.
         const name = playerNames[player - 1] ?? `Player ${player}`;
         const argSummary = Object.entries(args)
-          .map(([k, v]) => `${k}=${String(v)}`)
+          .map(([k, v]) => {
+            if (v !== null && typeof v === 'object') return `${k}=${JSON.stringify(v)}`;
+            return `${k}=${String(v)}`;
+          })
           .join(' ');
         text = argSummary ? `${name}: ${action} ${argSummary}` : `${name}: ${action}`;
       }
