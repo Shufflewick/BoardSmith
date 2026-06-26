@@ -224,7 +224,18 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   // post-buildPlayerState() and cleared on undo/rewind (replaceRunner).
   // ============================================
 
-  /** Per-seat thinking guard to prevent concurrent MCTS searches per seat (T-107-03). */
+  /**
+   * Per-seat thinking guard. Prevents two simultaneous hint searches for the
+   * SAME seat (pointless work), but deliberately allows two different seats to
+   * run hint searches concurrently in simultaneous-action games where both seats
+   * can be awaiting input at the same time.
+   *
+   * Note: heatmap uses a session-wide boolean (#heatmapUpdating) because it
+   * evaluates the full board across all candidate moves — a significantly more
+   * expensive search that should not run concurrently for any pair of seats.
+   * Hint searches are targeted at a single seat's decision and are cheaper.
+   * (WR-07: deliberate scope difference, not an accidental inconsistency.)
+   */
   #hintThinking = new Set<number>();
   /** Per-seat move hint annotation. Set by requestHint(), cleared after action or undo. */
   #hint = new Map<number, { annotation: Annotation }>();
