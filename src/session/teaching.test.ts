@@ -161,12 +161,70 @@ describe('teaching state — broadcast injection', () => {
 });
 
 // ============================================
+// Task 2: requestHint / clearHint additional behaviors
+// ============================================
+
+describe('teaching state — requestHint / clearHint', () => {
+  it('requestHint on non-acting seat throws actionable error', async () => {
+    const session = makeSession();
+    // Seat 2 (Bob) is NOT currently awaiting input (seat 1 goes first)
+    await expect(
+      (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(2)
+    ).rejects.toThrow('Cannot hint: seat 2 is not awaiting input');
+  });
+
+  it('requestHint while already in-flight throws actionable error', async () => {
+    const session = makeSession();
+    const hint = session as unknown as { requestHint(seat: number): Promise<void> };
+    // Fire two concurrent requests — second must be rejected loudly
+    const first = hint.requestHint(1);
+    await expect(hint.requestHint(1)).rejects.toThrow('Hint already in progress for seat 1');
+    // Let the first finish (may succeed or fail depending on AI availability)
+    await first.catch(() => {});
+  });
+
+  it('hint clears after the next performAction on that seat', async () => {
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+
+    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
+    expect(captured.at(-1)!.state.hint).toBeDefined();
+    captured.length = 0;
+
+    await session.performAction('pick', 1, { option: 'a' });
+    expect(captured.at(-1)!.state.hint).toBeUndefined();
+  });
+
+  it('clearHint removes hint and broadcasts', async () => {
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+
+    await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
+    expect(captured.at(-1)!.state.hint).toBeDefined();
+    captured.length = 0;
+
+    (session as unknown as { clearHint(seat: number): void }).clearHint(1);
+    expect(captured).toHaveLength(1);
+    expect(captured.at(-1)!.state.hint).toBeUndefined();
+  });
+});
+
+// ============================================
 // Task 1: clear-on-replace (undo/rewind)
 // ============================================
 
 describe('teaching state — clear-on-replace', () => {
   // After requestHint + undo, stale hint must be gone.
-  // RED until Task 2 implements requestHint().
   it('undo clears stale hint from broadcast state', async () => {
     const session = makeSession();
     const captured: CapturedState[] = [];
@@ -176,15 +234,18 @@ describe('teaching state — clear-on-replace', () => {
     );
     session.setBroadcaster(broadcaster);
 
-    // Perform an action so undo is available
-    await session.performAction('pick', 1, { option: 'a' });
-    captured.length = 0; // Reset captured
-
-    // Set a hint (RED: not yet implemented)
+    // Set a hint for seat 1 (who is currently awaiting input)
     await (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1);
+    expect(captured.at(-1)!.state.hint).toBeDefined();
 
-    // Undo replaces the runner; clear-on-replace must remove the hint
-    await session.undo(1);
+    // Perform an action to record an undo checkpoint, then undo it
+    await session.performAction('pick', 1, { option: 'a' });
+    // After seat 1 acts, seat 2 awaits. Now undo to turn start (seat 1 is back awaiting)
+    await session.undoToTurnStart(1);
+    captured.length = 0;
+    session.broadcast();
+
+    // After undo (replaceRunner), the hint must have been cleared
     const lastState = captured.at(-1)!.state;
     expect(lastState.hint).toBeUndefined();
   });

@@ -17,6 +17,7 @@
  */
 
 import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions } from '../engine/index.js';
+import { canSeatAct } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
 import type { HeatmapEntry } from './types.js';
@@ -44,7 +45,9 @@ import {
 } from './types.js';
 import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
 import { AIController } from './ai-controller.js';
-import type { AIConfig as BotAIConfig } from '../ai/index.js';
+import type { AIConfig as BotAIConfig, BotMove } from '../ai/index.js';
+import { createBot, parseAILevel } from '../ai/index.js';
+import type { ElementRef } from './types.js';
 import { LobbyManager, type LobbyManagerCallbacks } from './lobby-manager.js';
 import { PickHandler } from './pick-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
@@ -208,6 +211,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #checkpointManager?: DevCheckpointManager<G>;
   /** Circuit breaker: consecutive AI failures before giving up */
   #aiConsecutiveFailures = 0;
+  /**
+   * Bot AI config (objectives, hintTargetFromMove) kept on the session so
+   * ephemeral bots for requestHint() and setHeatmapVisible() can use the
+   * same game-specific extraction hook as the main AIController.
+   */
+  #botAIConfig?: BotAIConfig;
 
   // ============================================
   // Transient teaching state (Phase 107)
@@ -215,6 +224,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   // post-buildPlayerState() and cleared on undo/rewind (replaceRunner).
   // ============================================
 
+  /** Per-seat thinking guard to prevent concurrent MCTS searches per seat (T-107-03). */
+  #hintThinking = new Set<number>();
   /** Per-seat move hint annotation. Set by requestHint(), cleared after action or undo. */
   #hint = new Map<number, { annotation: Annotation }>();
   /** Per-seat evaluation heatmap. Set by setHeatmapVisible(), cleared on undo. */
@@ -231,7 +242,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     displayName?: string,
     lobbyManager?: LobbyManager<TSession>,
     pickHandler?: PickHandler<G>,
-    pendingActionManager?: PendingActionManager<G>
+    pendingActionManager?: PendingActionManager<G>,
+    botAIConfig?: BotAIConfig
   ) {
     this.#runner = runner;
     this.#storedState = storedState;
@@ -240,6 +252,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#aiController = aiController;
     this.#displayName = displayName;
     this.#lobbyManager = lobbyManager;
+    this.#botAIConfig = botAIConfig;
     // Capture the tutorial definition from the initial runner so replaceRunner
     // can re-supply it (tutorial is excluded from snapshot.gameOptions and is
     // therefore absent on runners created by fromCheckpoint / fromSnapshot).
@@ -644,7 +657,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Explicit annotation breaks the type-inference cycle: the lobby callbacks
     // capture `getSession: () => session` above, so `session` must have a known
     // type independent of its own initializer.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig);
 
     // Persist initial state (fire-and-forget to keep create synchronous)
     if (storage) {
@@ -718,7 +731,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Explicit annotation breaks the type-inference cycle with the lobby
     // callbacks' `getSession: () => session` capture above.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, undefined, lobbyManager);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, undefined, lobbyManager, undefined, undefined, botAIConfig);
     return session;
   }
 
@@ -876,6 +889,86 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   // ============================================
+  // Teaching API (Phase 107)
+  // ============================================
+
+  /**
+   * Extract the destination ElementRef from a bot move.
+   *
+   * Priority:
+   *  1. `config.hintTargetFromMove` — game-specific override
+   *  2. Common destination arg names: `to`, `destination`, `target`, `square`, `cell`, `position`
+   *  3. `undefined` — hint shows a floating bubble with no highlight ring
+   */
+  #extractMoveTarget(move: BotMove): ElementRef | undefined {
+    if (this.#botAIConfig?.hintTargetFromMove) {
+      return this.#botAIConfig.hintTargetFromMove(move);
+    }
+    const DEST_ARGS = ['to', 'destination', 'target', 'square', 'cell', 'position'] as const;
+    for (const key of DEST_ARGS) {
+      const val = move.args[key];
+      // Accept numeric IDs and string notation/names as element refs
+      if (typeof val === 'number') return { id: val };
+      if (typeof val === 'string') return { notation: val };
+    }
+    return undefined;
+  }
+
+  /**
+   * Request a move hint for the given seat.
+   *
+   * Runs an ephemeral MCTS search, extracts the suggested move's destination
+   * cell, stores a transient hint annotation in `#hint`, and broadcasts. The
+   * hint is cleared automatically after the next action on that seat or after
+   * an undo/rewind.
+   *
+   * Throws (fail-loud) if:
+   * - The seat is not currently awaiting input.
+   * - A hint request for this seat is already in flight.
+   *
+   * On MCTS failure, the error is re-thrown so the UI can surface a
+   * "Hint unavailable" toast — no fallback/silent failure.
+   */
+  async requestHint(seat: number): Promise<void> {
+    const flowState = this.#runner.getFlowState();
+    if (!flowState || !canSeatAct(flowState, seat)) {
+      throw new Error(`Cannot hint: seat ${seat} is not awaiting input`);
+    }
+    if (this.#hintThinking.has(seat)) {
+      throw new Error(`Hint already in progress for seat ${seat}`);
+    }
+    this.#hintThinking.add(seat);
+    try {
+      const difficulty = parseAILevel(this.#storedState.aiConfig?.level ?? 'medium');
+      const bot = createBot(
+        this.#runner.game,
+        this.#GameClass,
+        this.#storedState.gameType,
+        seat,
+        this.#storedState.actionHistory,
+        difficulty,
+        this.#botAIConfig
+      );
+      const { move } = await bot.playWithStats();
+      const ref = this.#extractMoveTarget(move);
+      const target = ref ? { kind: 'element' as const, ref } : undefined;
+      const annotation: Annotation = { text: 'Suggested move', ...(target ? { target } : {}) };
+      this.#hint.set(seat, { annotation });
+      this.broadcast();
+    } finally {
+      this.#hintThinking.delete(seat);
+    }
+  }
+
+  /**
+   * Clear the move hint for the given seat and broadcast.
+   */
+  clearHint(seat: number): void {
+    this.#hint.delete(seat);
+    this.broadcast();
+  }
+
+  // ============================================
   // Action Methods
   // ============================================
 
@@ -922,6 +1015,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Persist if storage adapter is provided (refreshes the authoritative
     // snapshot first — see #save).
     await this.#save();
+
+    // Clear hint for the acting player: any hint shown before this action is
+    // now stale (the board state has changed). Cleared before broadcast so
+    // the first post-action frame never shows a stale ring.
+    this.#hint.delete(player);
 
     // Broadcast to all connected clients
     this.broadcast();
