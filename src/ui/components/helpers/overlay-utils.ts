@@ -21,7 +21,10 @@ export function cssEscape(value: string): string {
     return CSS.escape(value);
   }
   // Minimal fallback: escape characters that would break an attribute selector.
-  return value.replace(/["\\]/g, '\\$&');
+  // Covers double-quote and backslash (attribute value terminators) plus null
+  // byte, newline, carriage return, and form-feed (CSS string terminators that
+  // can appear in programmatically-constructed element names in jsdom tests).
+  return value.replace(/[\0\n\r\f"\\]/g, '\\$&');
 }
 
 /**
