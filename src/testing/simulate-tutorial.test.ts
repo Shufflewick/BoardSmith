@@ -46,13 +46,13 @@ class TutSimGame extends Game<TutSimGame, Player> {
 
     const moveAction = Action.create('move')
       .prompt('Move a piece')
-      .execute((ctx) => {
+      .execute((_args, ctx) => {
         (ctx.game as TutSimGame).moveCount++;
       });
 
     const passAction = Action.create('pass')
       .prompt('Pass your turn')
-      .execute((ctx) => {
+      .execute((_args, ctx) => {
         (ctx.game as TutSimGame).passCount++;
       });
 
@@ -110,7 +110,8 @@ const NO_AUTO_ADVANCE_TUTORIAL: TutorialDefinition = {
 describe('simulateTutorial', () => {
   describe('happy path', () => {
     it('runs a two-step scripted tutorial to completion', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'happy-seed' });
+      // Single-player: tutorial seat always has the next turn.
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
         seat: 1,
         scenario: [
@@ -125,7 +126,7 @@ describe('simulateTutorial', () => {
     });
 
     it('assertTutorialCompletes does not throw when tutorial completed', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'happy-seed' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
         seat: 1,
         scenario: [
@@ -139,7 +140,7 @@ describe('simulateTutorial', () => {
 
     it('seed makes the run reproducible: same seed → same result', () => {
       const run1 = () => {
-        const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'pinned' });
+        const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
           seat: 1,
           scenario: [{ action: 'move' }, { action: 'pass' }],
@@ -148,7 +149,7 @@ describe('simulateTutorial', () => {
       };
 
       const run2 = () => {
-        const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'pinned' });
+        const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
           seat: 1,
           scenario: [{ action: 'move' }, { action: 'pass' }],
@@ -166,7 +167,7 @@ describe('simulateTutorial', () => {
 
   describe('Drift A (gate): scripted action excluded by active gate', () => {
     it('throws when scenario action is blocked by the current step gate', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'drift-a' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-a' });
       const def: TutorialDefinition = {
         steps: [
           { id: 'step-1', gate: { action: 'move' } }, // 'pass' is blocked
@@ -182,7 +183,7 @@ describe('simulateTutorial', () => {
     });
 
     it('error message names the blocked action and the step id', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'drift-a' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-a' });
       const def: TutorialDefinition = {
         steps: [
           { id: 'gated-step', gate: { action: 'move' } },
@@ -206,7 +207,7 @@ describe('simulateTutorial', () => {
 
   describe('Drift B (predicate): advanceWhen does not fire when expected', () => {
     it('throws when expectStep is set but predicate does not fire', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'drift-b' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'drift-b' });
       const def: TutorialDefinition = {
         steps: [
           {
@@ -234,7 +235,7 @@ describe('simulateTutorial', () => {
 
   describe('non-completion', () => {
     it('result.completed is false when scenario ends before last step', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'non-complete' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
         seat: 1,
         scenario: [
@@ -246,7 +247,7 @@ describe('simulateTutorial', () => {
     });
 
     it('assertTutorialCompletes throws when tutorial is not complete', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'non-complete' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
         seat: 1,
         scenario: [
@@ -260,7 +261,7 @@ describe('simulateTutorial', () => {
 
   describe('assertTutorialStep', () => {
     it('throws when step does not match expected (TestGame overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'assert-step' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step' });
       simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
         seat: 1,
         scenario: [], // no moves — still on step-1
@@ -271,7 +272,7 @@ describe('simulateTutorial', () => {
     });
 
     it('passes without throwing when step matches expected (TestGame overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'assert-step' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step' });
       simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
         seat: 1,
         scenario: [], // no moves — still on step-1
@@ -281,7 +282,7 @@ describe('simulateTutorial', () => {
     });
 
     it('throws when finalStepId does not match expected (result overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'assert-step-result' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step-result' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
         seat: 1,
         scenario: [],
@@ -292,7 +293,7 @@ describe('simulateTutorial', () => {
     });
 
     it('passes when finalStepId matches expected (result overload)', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'assert-step-result' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'assert-step-result' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
         seat: 1,
         scenario: [],
@@ -304,7 +305,7 @@ describe('simulateTutorial', () => {
 
   describe('validateTutorialDefinition surfaces on call', () => {
     it('throws synchronously when tutorial definition has no steps', () => {
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'validate' });
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'validate' });
       const emptyDef: TutorialDefinition = { steps: [] };
 
       expect(() =>
