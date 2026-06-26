@@ -134,7 +134,7 @@
 |-------|----------------|--------|-----------|
 | 104. Tutorial Lifecycle & Action Gating | 4/4 | Complete   | 2026-06-25 |
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
-| 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete   | 2026-06-26 |
+| 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
 | 107. AI-Assisted Teaching | 0/? | Not started | - |
 | 108. Lightweight Action Help | 0/? | Not started | - |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
