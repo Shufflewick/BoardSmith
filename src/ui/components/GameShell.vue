@@ -37,6 +37,9 @@ import Toast from './Toast.vue';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import GameOverCard from './GameOverCard.vue';
 import TutorialOverlay from './helpers/TutorialOverlay.vue';
+import HintOverlay from './helpers/HintOverlay.vue';
+import HeatmapOverlay from './helpers/HeatmapOverlay.vue';
+import BoardMessage from './helpers/BoardMessage.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge';
@@ -646,6 +649,69 @@ const { previewState } = useZoomPreview();
 
 // Toast notifications
 const toast = useToast();
+
+// ── Teaching controls state (AI-01/02/03) ────────────────────────────────────
+// isDemoRunning is tracked locally; the session-side getter is not broadcast.
+// It is set on 'demo-toggle' and cleared when flowState.complete fires.
+const isDemoRunning = ref(false);
+
+// Show Teaching group when the lobby has at least one AI slot.
+// In platform mode (no lobbyInfo), the group is hidden — bridge integration
+// for platform/production demo is deferred to Phase 109/110.
+const showHintProp = computed<boolean | undefined>(() =>
+  lobbyInfo.value?.slots?.some(s => s.aiLevel != null) ? true : undefined
+);
+
+// Hint is disabled when the local player is not at a decision point.
+const hintDisabledProp = computed(
+  () => !isMyTurn.value || availableActions.value.length === 0
+);
+
+// Heatmap visible state comes from the broadcast state.
+const isHeatmapVisibleProp = computed(
+  () => (state.value?.state as any)?.heatmap?.visible ?? false
+);
+
+// Handle 'teaching-action' emits from ControlsMenu.
+// Each action delegates to the appropriate platformRequest op so the dev bridge
+// (Phase 109) and production host can implement the server-side handler.
+async function handleTeachingAction(
+  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle'
+) {
+  if (teachAction === 'hint') {
+    try {
+      await platformRequest('hint', { seat: playerSeat.value });
+    } catch {
+      toast.error('Hint unavailable — the AI could not suggest a move.');
+    }
+  } else if (teachAction === 'demo-toggle') {
+    if (isDemoRunning.value) {
+      try {
+        await platformRequest('demo-stop', {});
+        isDemoRunning.value = false;
+      } catch {
+        toast.error('Failed to stop demo.');
+      }
+    } else {
+      try {
+        await platformRequest('demo-start', {});
+        isDemoRunning.value = true;
+      } catch {
+        toast.error('Failed to start demo.');
+      }
+    }
+  } else if (teachAction === 'heatmap-toggle') {
+    const currentVisible = isHeatmapVisibleProp.value;
+    try {
+      await platformRequest('heatmap-toggle', {
+        seat: playerSeat.value,
+        visible: !currentVisible,
+      });
+    } catch {
+      toast.error('Failed to toggle move quality display.');
+    }
+  }
+}
 
 // Helper to fetch playerOptions from game definitions
 async function fetchPlayerOptions(gameType: string): Promise<Record<string, unknown> | undefined> {
@@ -1460,6 +1526,14 @@ watch(
       const text = announceGameOver(winnerNames);
       assertiveMessage.value = text;
       emitAnnounce('assertive', text);
+
+      // Stop any running AI demo when the game completes. GameSession is passive
+      // (it doesn't know the UI stopped the demo); we mirror the isDemoRunning
+      // state locally and call the session via platformRequest.
+      if (isDemoRunning.value) {
+        void platformRequest('demo-stop', {}).catch(() => {/* best-effort */});
+        isDemoRunning.value = false;
+      }
     }
   },
   { immediate: false },
@@ -1702,6 +1776,24 @@ if ((import.meta as any).hot) {
                is present (v-if internal). Not inside zoom-container so it measures
                boardregion rects unscaled by --zoom-level. -->
           <TutorialOverlay />
+          <!-- AI hint overlay (AI-01): renders when state.hint is set.
+               Shares z-index 20 with TutorialOverlay — both may coexist (Phase 109).
+               Teleports to body (position:fixed); resolves data-bs-el-* anchors the
+               same way TutorialOverlay does — no renderer coupling (project hard-rule). -->
+          <HintOverlay />
+          <!-- Heatmap overlay (AI-03): renders when state.heatmap.visible is true.
+               z-index 15 — below TutorialOverlay/HintOverlay, above turn prompt (z-5).
+               pointer-events:none throughout. Resolves same data-bs-el-* anchors. -->
+          <HeatmapOverlay />
+          <!-- AI demo narration card (AI-02): announces each move before it executes.
+               Rendered via BoardMessage variant="narration" (position:fixed, top, z-10).
+               Text is from broadcast state.narration (engine-derived, plain string —
+               never v-html, T-107-08 mitigated). -->
+          <BoardMessage
+            v-if="(state?.state as any)?.narration?.text"
+            variant="narration"
+            :visible="true"
+          >{{ (state?.state as any)?.narration?.text }}</BoardMessage>
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
             <!--
               Game Board Slot Props:
@@ -1781,8 +1873,13 @@ if ((import.meta as any).hot) {
           v-model:auto-end-turn="autoEndTurn"
           v-model:zoom="zoomLevel"
           :can-undo="canUndo && !isViewingHistory"
+          :show-hint="showHintProp"
+          :hint-disabled="hintDisabledProp"
+          :is-demo-running="isDemoRunning"
+          :is-heatmap-visible="isHeatmapVisibleProp"
           @undo="handleUndo"
           @menu-item-click="handleMenuItemClick"
+          @teaching-action="handleTeachingAction"
         />
         <!-- Dock: only render when player is actionable (IA-04) -->
         <template v-if="isMyTurn || awaitingPlayerNames.length">

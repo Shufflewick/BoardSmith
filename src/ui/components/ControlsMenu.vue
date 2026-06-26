@@ -27,6 +27,18 @@ const props = withDefaults(defineProps<{
   openUp?: boolean;
   /** Horizontal edge the popover aligns to. */
   align?: 'left' | 'right';
+  /**
+   * When defined (true), renders the Teaching group. When undefined, the
+   * Teaching group is hidden entirely (game has no AI / AI not configured).
+   * Pass `true` when the session has an AI player; omit otherwise.
+   */
+  showHint?: boolean;
+  /** Disable the "Get a hint" item when the local player is not at a decision point. */
+  hintDisabled?: boolean;
+  /** Whether an AI demo is currently running (toggles "Watch AI demo" / "Stop demo"). */
+  isDemoRunning?: boolean;
+  /** Whether the move quality heatmap overlay is currently visible (drives aria-checked). */
+  isHeatmapVisible?: boolean;
 }>(), {
   openUp: false,
   align: 'right',
@@ -37,6 +49,13 @@ const emit = defineEmits<{
   'update:zoom': [value: number];
   'undo': [];
   'menu-item-click': [id: string];
+  /**
+   * Emitted when the user selects a Teaching group item.
+   * - 'hint': request a one-shot move hint from the AI
+   * - 'demo-toggle': start or stop the AI narrated demo
+   * - 'heatmap-toggle': toggle the per-cell move quality overlay
+   */
+  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle'];
 }>();
 
 const isOpen = ref(false);
@@ -212,6 +231,51 @@ function handleLeave() {
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5v16h-5M9 8l-4 4 4 4M5 12h9" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Leave game
       </button>
+
+      <!-- Teaching group: visible only when the game has an AI player (showHint !== undefined) -->
+      <template v-if="showHint !== undefined">
+        <div class="sep"></div>
+        <div class="grouplabel">Teaching</div>
+
+        <!-- Get a hint: request a one-shot AI move suggestion -->
+        <button
+          class="mi"
+          type="button"
+          role="menuitem"
+          :disabled="hintDisabled"
+          :aria-disabled="hintDisabled"
+          @click="emit('teaching-action', 'hint'); close()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8v.01" stroke-linecap="round"/></svg>
+          Get a hint
+        </button>
+
+        <!-- Watch AI demo / Stop demo: toggle the narrated AI demo mode -->
+        <button
+          class="mi"
+          type="button"
+          role="menuitem"
+          @click="emit('teaching-action', 'demo-toggle'); close()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 9-14 9V3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          {{ isDemoRunning ? 'Stop demo' : 'Watch AI demo' }}
+        </button>
+
+        <!-- Show move quality: toggle the per-cell MCTS evaluation heatmap -->
+        <button
+          class="mi"
+          type="button"
+          role="menuitemcheckbox"
+          :aria-checked="isHeatmapVisible"
+          @click="emit('teaching-action', 'heatmap-toggle')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Show move quality
+          <span class="r">
+            <span class="toggle" :class="{ on: isHeatmapVisible }"></span>
+          </span>
+        </button>
+      </template>
     </div>
     </Teleport>
   </div>
