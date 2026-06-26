@@ -311,3 +311,118 @@ describe('teaching state — heatmap', () => {
     }
   });
 });
+
+// ============================================
+// Task 2 (Plan 03): Demo mode — startDemo / stopDemo / isDemoRunning
+// ============================================
+
+type DemoSession = {
+  startDemo(options?: { narrator?: (action: string, player: number, args: Record<string, unknown>) => string; delay?: number }): void;
+  stopDemo(): void;
+  isDemoRunning: boolean;
+};
+
+describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
+  it('isDemoRunning is false by default', () => {
+    const session = makeSession();
+    // RED: isDemoRunning does not exist yet
+    expect((session as unknown as DemoSession).isDemoRunning).toBe(false);
+  });
+
+  it('startDemo sets isDemoRunning to true', () => {
+    const session = makeSession();
+    (session as unknown as DemoSession).startDemo({ delay: 0 });
+    expect((session as unknown as DemoSession).isDemoRunning).toBe(true);
+    // Clean up
+    (session as unknown as DemoSession).stopDemo();
+  });
+
+  it('stopDemo sets isDemoRunning to false', () => {
+    const session = makeSession();
+    (session as unknown as DemoSession).startDemo({ delay: 0 });
+    (session as unknown as DemoSession).stopDemo();
+    expect((session as unknown as DemoSession).isDemoRunning).toBe(false);
+  });
+
+  it('stopDemo clears narration text in broadcast state', () => {
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }, { playerSeat: 2, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+
+    (session as unknown as DemoSession).startDemo({ delay: 0 });
+    (session as unknown as DemoSession).stopDemo();
+
+    // After stopDemo, broadcast state should have no narration
+    const lastCapture = captured.at(-1);
+    expect(lastCapture?.state.narration).toBeUndefined();
+  });
+
+  it('narration hook sets state.narration before the move executes', async () => {
+    const session = makeSession();
+    const narrationTexts: (string | undefined)[] = [];
+    const captured: CapturedState[] = [];
+
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }, { playerSeat: 2, isSpectator: false }],
+      captured
+    );
+    // Intercept sends to track narration timing
+    const originalSend = broadcaster.send.bind(broadcaster);
+    (broadcaster as { send: typeof broadcaster.send }).send = (
+      _session: { playerSeat: number; isSpectator: boolean },
+      update: Record<string, unknown>
+    ) => {
+      const st = (update as { state: PlayerGameState }).state;
+      narrationTexts.push(st.narration?.text);
+      originalSend(_session, update);
+    };
+
+    session.setBroadcaster(broadcaster);
+
+    // Use a narrator that returns a fixed string
+    (session as unknown as DemoSession).startDemo({
+      delay: 0,
+      narrator: (action, player) => `Seat ${player}: ${action}`,
+    });
+
+    // Wait for at least one AI move to be announced
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    (session as unknown as DemoSession).stopDemo();
+
+    // At least one broadcast should have had narration text set
+    const narrationBroadcasts = narrationTexts.filter(t => t !== undefined);
+    expect(narrationBroadcasts.length).toBeGreaterThan(0);
+    // Each narration text should follow the "Seat N: action" format
+    for (const text of narrationBroadcasts) {
+      expect(text).toMatch(/^Seat \d+: /);
+    }
+  });
+
+  it('stopDemo restores the original AI controller and clears narration', () => {
+    // Session created WITHOUT AI config — aiController is undefined
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+
+    // Start demo (sets a demo AI controller)
+    (session as unknown as DemoSession).startDemo({ delay: 0 });
+    expect((session as unknown as DemoSession).isDemoRunning).toBe(true);
+
+    // Stop demo — should restore the original (undefined) AI controller
+    (session as unknown as DemoSession).stopDemo();
+    expect((session as unknown as DemoSession).isDemoRunning).toBe(false);
+
+    // After stop, no narration in broadcast
+    const lastState = captured.at(-1);
+    expect(lastState?.state.narration).toBeUndefined();
+  });
+});

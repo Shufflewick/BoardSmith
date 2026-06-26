@@ -232,6 +232,14 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #heatmap = new Map<number, { visible: boolean; entries: HeatmapEntry[] }>();
   /** Narration text for the current AI demo move (between onBeforeMove and broadcast). */
   #narrationText: string | null = null;
+  /** True while a demo (all-seats AI with narration) is running. */
+  #demoMode = false;
+  /** Saved AIController replaced by startDemo(); restored by stopDemo(). */
+  #savedAIController?: AIController<G>;
+  /** Delay (ms) between narration announcement and move execution in demo mode. */
+  #demoDelay = 1200;
+  /** Narration hook closure used as onBeforeMove in demo mode. Cleared by stopDemo(). */
+  #onBeforeMove?: (action: string, player: number, args: Record<string, unknown>) => Promise<void>;
 
   private constructor(
     runner: GameRunner<G>,
@@ -1045,6 +1053,94 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     } finally {
       this.#heatmapUpdating = false;
     }
+  }
+
+  // ============================================
+  // Demo Mode (Phase 107 Plan 03)
+  // ============================================
+
+  /**
+   * Whether a demo (narrated AI-vs-AI) is currently running.
+   */
+  get isDemoRunning(): boolean {
+    return this.#demoMode;
+  }
+
+  /**
+   * Start an AI-vs-AI demo: all seats are AI-controlled; each move is announced
+   * (narration text set and broadcast) before it executes, paced by `delay` ms.
+   *
+   * The demo reuses the existing all-seats AI mechanism — no new bot or training.
+   * Call `stopDemo()` to restore the original AI controller.
+   *
+   * @param options.narrator - Optional custom text formatter (action, player, args) → string.
+   *   Defaults to `"PlayerName: actionName key=value ..."`.
+   * @param options.delay - Delay (ms) between announcement and move execution. Default: 1200.
+   */
+  startDemo(options?: {
+    narrator?: (action: string, player: number, args: Record<string, unknown>) => string;
+    delay?: number;
+  }): void {
+    // Save the current controller (may be undefined for human-only games).
+    this.#savedAIController = this.#aiController;
+    this.#demoDelay = options?.delay ?? 1200;
+
+    // Build an all-seats AI controller using the existing AI level (or 'medium' default).
+    const aiLevel = this.#storedState.aiConfig?.level ?? 'medium';
+    const allPlayers = Array.from(
+      { length: this.#storedState.playerCount },
+      (_, i) => i + 1
+    );
+    this.#aiController = new AIController(
+      this.#GameClass,
+      this.#storedState.gameType,
+      this.#storedState.playerCount,
+      { players: allPlayers, level: aiLevel },
+      this.#botAIConfig
+    );
+
+    // Build the narration closure.
+    const playerNames = this.#storedState.playerNames;
+    const demoDelay = this.#demoDelay;
+    const session = this;
+
+    this.#onBeforeMove = async (action: string, player: number, args: Record<string, unknown>) => {
+      // Compute narration text.
+      let text: string;
+      if (options?.narrator) {
+        text = options.narrator(action, player, args);
+      } else {
+        // Default: "PlayerName: actionName key=val ..."
+        const name = playerNames[player - 1] ?? `Player ${player}`;
+        const argSummary = Object.entries(args)
+          .map(([k, v]) => `${k}=${String(v)}`)
+          .join(' ');
+        text = argSummary ? `${name}: ${action} ${argSummary}` : `${name}: ${action}`;
+      }
+
+      // Set narration and broadcast the announcement BEFORE the move executes.
+      session.#narrationText = text;
+      session.broadcast();
+
+      // Pace the demo — the move executes after this resolves.
+      await new Promise<void>(r => setTimeout(r, demoDelay));
+    };
+
+    this.#demoMode = true;
+    this.#scheduleAICheck();
+  }
+
+  /**
+   * Stop the AI-vs-AI demo. Restores the original AI controller, clears the
+   * narration hook and narration text, and broadcasts the cleared state.
+   */
+  stopDemo(): void {
+    this.#aiController = this.#savedAIController;
+    this.#savedAIController = undefined;
+    this.#onBeforeMove = undefined;
+    this.#narrationText = null;
+    this.#demoMode = false;
+    this.broadcast();
   }
 
   // ============================================
@@ -1864,12 +1960,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
               }
             }
             await this.#save();
+            // Clear narration after the move executes so the announcement is
+            // transient (shown during the delay, gone after the move lands).
+            this.#narrationText = null;
             this.broadcast();
             if (anyAdvanced) this.broadcast();
             return true;
           }
           return false;
-        }
+        },
+        // Demo narration hook: undefined outside demo mode (no-op to standard AI turns).
+        this.#onBeforeMove
       );
     } catch (error) {
       // AI threw (e.g., failed to clone game for MCTS search)
