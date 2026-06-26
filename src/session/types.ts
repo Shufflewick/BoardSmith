@@ -8,7 +8,7 @@
 
 import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
-import type { TutorialDefinition, TutorialStepView } from '../engine/tutorial/types.js';
+import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -378,6 +378,22 @@ export interface PickChoicesResponse {
 }
 
 /**
+ * A single per-cell entry in the evaluation heatmap.
+ *
+ * Session-layer only, never serialized. Built from {@link BotMoveStats} by
+ * `GameSession.#buildHeatmapEntries()` — one entry per distinct destination
+ * cell, keeping the highest normalizedValue when multiple moves share a cell.
+ */
+export interface HeatmapEntry {
+  /** Board element reference for this candidate move's destination cell. */
+  cellRef: ElementRef;
+  /** Normalized win-rate in [0, 1] from MCTS stats (value / visits). */
+  normalizedValue: number;
+  /** True for the single entry with the maximum normalizedValue in the set. */
+  isBest: boolean;
+}
+
+/**
  * Player-facing game state - what clients receive
  */
 export interface PlayerGameState {
@@ -429,6 +445,30 @@ export interface PlayerGameState {
    * actions so the UI can render a tooltip / disabled state with a reason.
    */
   disabledActions?: Record<string, string>;
+  /**
+   * Session-layer only, never serialized. Transient move hint annotation for
+   * this seat. Present only after `GameSession.requestHint(seat)` is called
+   * and before the next action on that seat or an undo/rewind clears it.
+   *
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   */
+  hint?: { annotation: Annotation };
+  /**
+   * Session-layer only, never serialized. Evaluation heatmap for this seat.
+   * Present (and updated) while the player has the heatmap overlay toggled on
+   * via `GameSession.setHeatmapVisible(seat, true)`.
+   *
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   */
+  heatmap?: { visible: boolean; entries: HeatmapEntry[] };
+  /**
+   * Session-layer only, never serialized. Narration text for the current AI
+   * demo move. Present between the `onBeforeMove` hook firing and the move
+   * broadcasting; `undefined` otherwise.
+   *
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   */
+  narration?: { text: string };
 }
 
 // ============================================

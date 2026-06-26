@@ -18,6 +18,8 @@
 
 import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
+import type { Annotation } from '../engine/tutorial/types.js';
+import type { HeatmapEntry } from './types.js';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -207,6 +209,19 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   /** Circuit breaker: consecutive AI failures before giving up */
   #aiConsecutiveFailures = 0;
 
+  // ============================================
+  // Transient teaching state (Phase 107)
+  // These fields are NEVER serialized. They are injected into broadcast state
+  // post-buildPlayerState() and cleared on undo/rewind (replaceRunner).
+  // ============================================
+
+  /** Per-seat move hint annotation. Set by requestHint(), cleared after action or undo. */
+  #hint = new Map<number, { annotation: Annotation }>();
+  /** Per-seat evaluation heatmap. Set by setHeatmapVisible(), cleared on undo. */
+  #heatmap = new Map<number, { visible: boolean; entries: HeatmapEntry[] }>();
+  /** Narration text for the current AI demo move (between onBeforeMove and broadcast). */
+  #narrationText: string | null = null;
+
   private constructor(
     runner: GameRunner<G>,
     storedState: StoredGameState,
@@ -258,6 +273,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
           if (this.#tutorialDefinition) {
             newRunner.game.tutorialDefinition = this.#tutorialDefinition;
           }
+          // Clear transient teaching state: element IDs from the old runner
+          // are stale after undo/rewind (AnnotationTarget refs point at
+          // elements that may no longer exist at the same IDs in the
+          // restored snapshot). Callers must re-request a hint if needed.
+          this.#hint.clear();
+          this.#heatmap.clear();
           // Update handlers with new runner reference
           this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
           this.#pendingActionManager.updateRunner(newRunner);
@@ -1593,6 +1614,14 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     for (const session of sessions) {
       const effectivePosition = session.isSpectator ? 0 : session.playerSeat;
       const state = buildPlayerState(this.#runner, this.#storedState.playerNames, effectivePosition, { includeActionMetadata: true, includeDebugData: true });
+
+      // Inject transient teaching state — never derived from engine, never serialized.
+      // These fields are injected after buildPlayerState() to keep that function pure.
+      const hint = this.#hint.get(effectivePosition);
+      if (hint) state.hint = hint;
+      const heatmap = this.#heatmap.get(effectivePosition);
+      if (heatmap) state.heatmap = heatmap;
+      if (this.#narrationText) state.narration = { text: this.#narrationText };
 
       const update: StateUpdate = {
         type: 'state',
