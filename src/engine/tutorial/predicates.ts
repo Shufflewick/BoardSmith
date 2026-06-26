@@ -85,6 +85,12 @@ export function afterFirstTurn(): TutorialAdvanceCondition {
  * @param n - Number of learner turns that must complete before firing.
  */
 export function afterTurns(n: number): TutorialAdvanceCondition {
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(
+      `afterTurns(n): n must be a positive integer, got ${n}. ` +
+      `Use afterFirstTurn() for n=1, or afterTurns(2), afterTurns(3), etc.`
+    );
+  }
   return {
     [`after ${n} turn${n === 1 ? '' : 's'}`]: (ctx: TutorialGateContext): boolean => {
       const flowState = ctx.game.getFlowState();

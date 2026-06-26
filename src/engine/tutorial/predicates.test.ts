@@ -266,6 +266,26 @@ describe('afterTurns(n)', () => {
     const condition = afterTurns(1);
     expect(evalCondition(condition, bareGame, 1)).toBe(false);
   });
+
+  // WR-03 — fail-loud validation for non-positive n
+  it('throws when n is 0 (WR-03)', () => {
+    expect(() => afterTurns(0)).toThrow(/n must be a positive integer/i);
+  });
+
+  it('throws when n is negative (WR-03)', () => {
+    expect(() => afterTurns(-5)).toThrow(/n must be a positive integer/i);
+  });
+
+  it('throws when n is a non-integer (WR-03)', () => {
+    expect(() => afterTurns(1.5)).toThrow(/n must be a positive integer/i);
+  });
+
+  it('error message from afterTurns(0) is actionable — mentions afterFirstTurn() (WR-03)', () => {
+    let message = '';
+    try { afterTurns(0); } catch (err) { message = (err as Error).message; }
+    expect(message).toContain('afterFirstTurn()');
+    expect(message).toContain('0');
+  });
 });
 
 // ============================================================
