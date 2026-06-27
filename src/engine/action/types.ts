@@ -452,6 +452,12 @@ export interface ActionDefinition {
    * When a non-undoable action is executed, undo is disabled for the rest of the turn.
    */
   undoable?: boolean;
+  /**
+   * Help text shown to players on hover/tap. Display-only; never used as a predicate.
+   * Set via the `.help(text)` builder method. Propagates into ActionMetadata for both
+   * initial and followUp actions.
+   */
+  help?: string;
 }
 
 /**

@@ -98,6 +98,16 @@ export class Action<
   }
 
   /**
+   * Set the player-facing help text for this action.
+   * Shown in the action help popover on hover/tap.
+   * Display-only; never used as a predicate.
+   */
+  help(text: string): this {
+    this.definition.help = text;
+    return this;
+  }
+
+  /**
    * Add a condition for when this action is available.
    *
    * Conditions use an object format where keys are human-readable labels and
