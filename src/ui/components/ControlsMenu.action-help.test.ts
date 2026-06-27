@@ -2,6 +2,9 @@
 /**
  * ControlsMenu — "Show action help" toggle (Plan 108-03, Task 1)
  *
+ * The popover is Teleported to <body>, so assertions use document.body
+ * queries rather than wrapper.findAll (which only searches inside the wrapper).
+ *
  * Behaviors under test:
  *   A. A "Show action help" menuitemcheckbox renders even when `showHint` is
  *      undefined (non-AI game / Teaching group hidden).
@@ -41,6 +44,12 @@ function mountMenu(props: Record<string, unknown> = {}) {
   });
 }
 
+/** Find a menuitemcheckbox by label text within document.body (handles Teleport). */
+function findHelpToggle(): Element | undefined {
+  const buttons = document.body.querySelectorAll('[role="menuitemcheckbox"]');
+  return Array.from(buttons).find(b => b.textContent?.includes('Show action help'));
+}
+
 describe('ControlsMenu — Show action help toggle', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -50,9 +59,7 @@ describe('ControlsMenu — Show action help toggle', () => {
     const wrapper = mountMenu({ isActionHelpVisible: true });
     // Open the menu
     await wrapper.find('button.menubtn').trigger('click');
-    // The toggle must be present without showHint
-    const buttons = wrapper.findAll('[role="menuitemcheckbox"]');
-    const helpBtn = buttons.find(b => b.text().includes('Show action help'));
+    const helpBtn = findHelpToggle();
     expect(helpBtn, 'Expected "Show action help" menuitemcheckbox to be present').toBeDefined();
     wrapper.unmount();
   });
@@ -60,10 +67,9 @@ describe('ControlsMenu — Show action help toggle', () => {
   it('B: clicking emits teaching-action with payload "help-toggle"', async () => {
     const wrapper = mountMenu({ isActionHelpVisible: false });
     await wrapper.find('button.menubtn').trigger('click');
-    const buttons = wrapper.findAll('[role="menuitemcheckbox"]');
-    const helpBtn = buttons.find(b => b.text().includes('Show action help'));
-    expect(helpBtn).toBeDefined();
-    await helpBtn!.trigger('click');
+    const helpBtn = findHelpToggle();
+    expect(helpBtn, 'Expected "Show action help" button to be present').toBeDefined();
+    (helpBtn as HTMLElement).click();
     const emitted = wrapper.emitted('teaching-action') as string[][];
     expect(emitted).toBeDefined();
     expect(emitted.some(args => args[0] === 'help-toggle')).toBe(true);
@@ -73,44 +79,40 @@ describe('ControlsMenu — Show action help toggle', () => {
   it('C: aria-checked is true when isActionHelpVisible prop is true', async () => {
     const wrapper = mountMenu({ isActionHelpVisible: true });
     await wrapper.find('button.menubtn').trigger('click');
-    const buttons = wrapper.findAll('[role="menuitemcheckbox"]');
-    const helpBtn = buttons.find(b => b.text().includes('Show action help'));
+    const helpBtn = findHelpToggle();
     expect(helpBtn).toBeDefined();
-    expect(helpBtn!.attributes('aria-checked')).toBe('true');
+    expect(helpBtn!.getAttribute('aria-checked')).toBe('true');
     wrapper.unmount();
   });
 
   it('C: aria-checked is false when isActionHelpVisible prop is false', async () => {
     const wrapper = mountMenu({ isActionHelpVisible: false });
     await wrapper.find('button.menubtn').trigger('click');
-    const buttons = wrapper.findAll('[role="menuitemcheckbox"]');
-    const helpBtn = buttons.find(b => b.text().includes('Show action help'));
+    const helpBtn = findHelpToggle();
     expect(helpBtn).toBeDefined();
-    expect(helpBtn!.attributes('aria-checked')).toBe('false');
+    expect(helpBtn!.getAttribute('aria-checked')).toBe('false');
     wrapper.unmount();
   });
 
   it('D: .toggle pill has "on" class when isActionHelpVisible is true', async () => {
     const wrapper = mountMenu({ isActionHelpVisible: true });
     await wrapper.find('button.menubtn').trigger('click');
-    const buttons = wrapper.findAll('[role="menuitemcheckbox"]');
-    const helpBtn = buttons.find(b => b.text().includes('Show action help'));
+    const helpBtn = findHelpToggle();
     expect(helpBtn).toBeDefined();
-    const pill = helpBtn!.find('.toggle');
-    expect(pill.exists()).toBe(true);
-    expect(pill.classes()).toContain('on');
+    const pill = helpBtn!.querySelector('.toggle');
+    expect(pill).toBeTruthy();
+    expect(pill!.classList.contains('on')).toBe(true);
     wrapper.unmount();
   });
 
   it('D: .toggle pill does NOT have "on" class when isActionHelpVisible is false', async () => {
     const wrapper = mountMenu({ isActionHelpVisible: false });
     await wrapper.find('button.menubtn').trigger('click');
-    const buttons = wrapper.findAll('[role="menuitemcheckbox"]');
-    const helpBtn = buttons.find(b => b.text().includes('Show action help'));
+    const helpBtn = findHelpToggle();
     expect(helpBtn).toBeDefined();
-    const pill = helpBtn!.find('.toggle');
-    expect(pill.exists()).toBe(true);
-    expect(pill.classes()).not.toContain('on');
+    const pill = helpBtn!.querySelector('.toggle');
+    expect(pill).toBeTruthy();
+    expect(pill!.classList.contains('on')).toBe(false);
     wrapper.unmount();
   });
 
@@ -119,9 +121,8 @@ describe('ControlsMenu — Show action help toggle', () => {
     // it would be absent. This verifies it is in the Play group.
     const wrapper = mountMenu({ isActionHelpVisible: true, showHint: undefined });
     await wrapper.find('button.menubtn').trigger('click');
-    const buttons = wrapper.findAll('[role="menuitemcheckbox"]');
-    const helpBtn = buttons.find(b => b.text().includes('Show action help'));
-    expect(helpBtn).toBeDefined();
+    const helpBtn = findHelpToggle();
+    expect(helpBtn, 'Toggle must be visible in non-AI games (Play group, not Teaching group)').toBeDefined();
     wrapper.unmount();
   });
 });

@@ -39,6 +39,8 @@ const props = withDefaults(defineProps<{
   isDemoRunning?: boolean;
   /** Whether the move quality heatmap overlay is currently visible (drives aria-checked). */
   isHeatmapVisible?: boolean;
+  /** Whether action help affordances are currently visible (drives aria-checked). */
+  isActionHelpVisible?: boolean;
 }>(), {
   openUp: false,
   align: 'right',
@@ -50,12 +52,13 @@ const emit = defineEmits<{
   'undo': [];
   'menu-item-click': [id: string];
   /**
-   * Emitted when the user selects a Teaching group item.
+   * Emitted when the user selects a Teaching group item or a global display toggle.
    * - 'hint': request a one-shot move hint from the AI
    * - 'demo-toggle': start or stop the AI narrated demo
    * - 'heatmap-toggle': toggle the per-cell move quality overlay
+   * - 'help-toggle': toggle action help affordances (Play group, always visible)
    */
-  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle'];
+  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle'];
 }>();
 
 const isOpen = ref(false);
@@ -172,6 +175,25 @@ function handleLeave() {
         Auto end turn
         <span class="r">
           <span class="toggle" :class="{ on: autoEndTurn }"></span>
+        </span>
+      </button>
+
+      <!-- Show action help (Play group — always visible, not AI-gated) -->
+      <button
+        class="mi"
+        type="button"
+        role="menuitemcheckbox"
+        :aria-checked="isActionHelpVisible"
+        @click="emit('teaching-action', 'help-toggle')"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 16v-.5c0-.8.5-1.5 1.2-1.8C14.4 13.2 15 12 15 10.5a3 3 0 0 0-6 0" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="12" cy="18.5" r="0.75" fill="currentColor" stroke="none"/>
+        </svg>
+        Show action help
+        <span class="r">
+          <span class="toggle" :class="{ on: isActionHelpVisible }"></span>
         </span>
       </button>
 
