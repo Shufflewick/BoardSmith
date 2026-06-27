@@ -143,6 +143,6 @@
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
-| 108. Lightweight Action Help | 3/3 | Complete   | 2026-06-27 |
+| 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
 | 110. Demonstration & Refinement | 0/? | Not started | - |

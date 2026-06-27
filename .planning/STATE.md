@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives
-status: verifying
-stopped_at: Phase 108 UI-SPEC approved
-last_updated: "2026-06-27T01:50:09.655Z"
+status: ready_to_plan
+stopped_at: Phase 108 complete (3/3) — ready to discuss Phase 109
+last_updated: 2026-06-27T16:23:35.882Z
 last_activity: 2026-06-27
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 21
-  completed_plans: 21
+  completed_plans: 209
   percent: 71
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 108 — lightweight-action-help
+**Current focus:** Phase 109 — checkers tutorial content
 
 ## Current Position
 
-Phase: 108 (lightweight-action-help) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 109
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-27
 
 ## Milestones
