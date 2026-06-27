@@ -44,6 +44,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   openUp: false,
   align: 'right',
+  isActionHelpVisible: false,
 });
 
 const emit = defineEmits<{

@@ -116,6 +116,19 @@ describe('ControlsMenu — Show action help toggle', () => {
     wrapper.unmount();
   });
 
+  it('WR-04: aria-checked is "false" (not absent) when isActionHelpVisible prop is omitted', async () => {
+    // When the prop is omitted, withDefaults must supply false so the DOM has
+    // aria-checked="false" rather than a missing attribute. A missing aria-checked
+    // on role="menuitemcheckbox" is technically valid per ARIA spec but the contract
+    // is fragile — any consumer that forgets the prop should still get a well-formed checkbox.
+    const wrapper = mountMenu(/* no isActionHelpVisible */);
+    await wrapper.find('button.menubtn').trigger('click');
+    const helpBtn = findHelpToggle();
+    expect(helpBtn).toBeDefined();
+    expect(helpBtn!.getAttribute('aria-checked')).toBe('false');
+    wrapper.unmount();
+  });
+
   it('toggle is NOT inside the Teaching group (showHint-gated) — visible without showHint', async () => {
     // Mount without showHint — if the toggle was inside v-if="showHint !== undefined",
     // it would be absent. This verifies it is in the Play group.
