@@ -1857,6 +1857,7 @@ if ((import.meta as any).hot) {
               :undo="handleUndo"
               :action-controller="actionController"
               :is-action-help-visible="isActionHelpVisible"
+              :disabled-actions="disabledActions"
               :flow-state="state?.flowState"
               @retry="handleRetry"
             />
@@ -1876,6 +1877,7 @@ if ((import.meta as any).hot) {
               :undo="handleUndo"
               :action-controller="actionController"
               :is-action-help-visible="isActionHelpVisible"
+              :disabled-actions="disabledActions"
             >
               <div class="empty-game-area">
                 <p>Add your game board in the #game-board slot</p>

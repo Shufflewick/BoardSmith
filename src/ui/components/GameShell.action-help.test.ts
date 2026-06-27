@@ -364,4 +364,55 @@ describe('disabledActions computed from broadcast state', () => {
     expect(panel.attributes('data-has-disabled-actions')).toBe('true');
     wrapper.unmount();
   });
+
+  it('DIS-5: #game-board slot receives disabledActions as a named prop', async () => {
+    // Verifies GameShell threads disabledActions to the custom-UI slot path (parity gap fix).
+    // Custom UI authors must be able to consume :disabled-actions without casting through state.
+    let capturedSlotProps: Record<string, unknown> | null = null;
+    const wrapper = mount(ParityHarness, {
+      props: {
+        initialHelpVisible: true,
+        broadcastState: {
+          state: { disabledActions: { move: 'Not your turn' } },
+        },
+      },
+      slots: {
+        'game-board': (slotProps: Record<string, unknown>) => {
+          capturedSlotProps = slotProps;
+          return '<div class="custom-ui-stub" />';
+        },
+      },
+    });
+    await nextTick();
+    expect(capturedSlotProps).not.toBeNull();
+    expect((capturedSlotProps as any).disabledActions).toEqual({ move: 'Not your turn' });
+    wrapper.unmount();
+  });
+
+  it('DIS-6: ActionPanel and #game-board slot both receive the SAME disabledActions object', async () => {
+    // Verifies parity: both paths (AutoUI ActionPanel and custom-UI slot) see identical
+    // disabledActions data so ActionHelpPopover renders the same popover in either context.
+    let slotDisabledActions: unknown;
+    const wrapper = mount(ParityHarness, {
+      props: {
+        initialHelpVisible: true,
+        broadcastState: {
+          state: { disabledActions: { defend: 'No shield equipped' } },
+        },
+      },
+      slots: {
+        'game-board': (slotProps: Record<string, unknown>) => {
+          slotDisabledActions = slotProps.disabledActions;
+          return '<div />';
+        },
+      },
+    });
+    await nextTick();
+    // ActionPanel stub reflects disabledActions presence via data-has-disabled-actions
+    const panelHasDA = wrapper.find('.action-panel-stub').attributes('data-has-disabled-actions');
+    expect(panelHasDA).toBe('true');
+    // Slot received the same value
+    expect(slotDisabledActions).toEqual({ defend: 'No shield equipped' });
+    wrapper.unmount();
+  });
 });
