@@ -304,3 +304,129 @@ describe('ActionPanel QUICK-02 — accessible names on icon-only controls', () =
     expect(cancelBtn.attributes('aria-label')).toBe('Cancel action');
   });
 });
+
+// ---------------------------------------------------------------------------
+// ActionPanel 108-02 — ActionHelpPopover integration
+// ---------------------------------------------------------------------------
+
+/**
+ * Helper: mount ActionPanel with isMyTurn=true, no currentAction, and the given
+ * action metadata + props, with Teleport stubbed to render inline.
+ */
+function mountWithHelp(opts: {
+  actions: string[];
+  actionMetadata?: Record<string, { name: string; prompt?: string; help?: string; selections: [] }>;
+  isActionHelpVisible?: boolean;
+  disabledActions?: Record<string, string>;
+}) {
+  const controller = makeTestController();
+  return mount(ActionPanel, {
+    global: {
+      provide: { actionController: controller },
+      stubs: { Teleport: true },
+    },
+    props: {
+      availableActions: opts.actions,
+      actionMetadata: opts.actionMetadata,
+      playerSeat: 1,
+      isMyTurn: true,
+      isActionHelpVisible: opts.isActionHelpVisible,
+      disabledActions: opts.disabledActions,
+    },
+  });
+}
+
+describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () => {
+  it('renders .action-help-btn when toggle is ON and action has help text', () => {
+    const wrapper = mountWithHelp({
+      actions: ['move'],
+      actionMetadata: {
+        move: { name: 'move', prompt: 'Move Piece', help: 'Click a square to move.', selections: [] },
+      },
+      isActionHelpVisible: true,
+    });
+    expect(wrapper.find('.action-help-btn').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('does NOT render .action-help-btn when toggle is OFF, even if help exists', () => {
+    const wrapper = mountWithHelp({
+      actions: ['move'],
+      actionMetadata: {
+        move: { name: 'move', prompt: 'Move Piece', help: 'Click a square to move.', selections: [] },
+      },
+      isActionHelpVisible: false,
+    });
+    expect(wrapper.find('.action-help-btn').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('does NOT render .action-help-btn when toggle is ON but action has no help and no disabledActions entry', () => {
+    const wrapper = mountWithHelp({
+      actions: ['move'],
+      actionMetadata: {
+        move: { name: 'move', prompt: 'Move Piece', selections: [] },
+      },
+      isActionHelpVisible: true,
+      disabledActions: {},
+    });
+    expect(wrapper.find('.action-help-btn').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renders .action-help-btn when toggle is ON and action has a disabledActions reason (no help)', () => {
+    const wrapper = mountWithHelp({
+      actions: ['build'],
+      actionMetadata: {
+        build: { name: 'build', prompt: 'Build', selections: [] },
+      },
+      isActionHelpVisible: true,
+      disabledActions: { build: 'You need more resources.' },
+    });
+    expect(wrapper.find('.action-help-btn').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('existing .action-btn still dispatches startAction (behavior unchanged)', async () => {
+    const startSpy = vi.fn().mockResolvedValue(undefined);
+    const controller = makeTestController({ start: startSpy });
+
+    const wrapper = mount(ActionPanel, {
+      global: {
+        provide: { actionController: controller },
+        stubs: { Teleport: true },
+      },
+      props: {
+        availableActions: ['attack'],
+        actionMetadata: {
+          attack: { name: 'attack', prompt: 'Attack', help: 'Strike an adjacent enemy.', selections: [] },
+        },
+        playerSeat: 1,
+        isMyTurn: true,
+        isActionHelpVisible: true,
+      },
+    });
+
+    const actionBtn = wrapper.find('.action-btn');
+    expect(actionBtn.exists()).toBe(true);
+    await actionBtn.trigger('click');
+    await Promise.resolve();
+
+    expect(startSpy).toHaveBeenCalledWith('attack');
+    wrapper.unmount();
+  });
+
+  it('wraps each action in .action-btn-group', () => {
+    const wrapper = mountWithHelp({
+      actions: ['move', 'skip'],
+      actionMetadata: {
+        move: { name: 'move', prompt: 'Move', help: 'Move piece.', selections: [] },
+        skip: { name: 'skip', prompt: 'Skip', selections: [] },
+      },
+      isActionHelpVisible: true,
+    });
+    const groups = wrapper.findAll('.action-btn-group');
+    expect(groups).toHaveLength(2);
+    wrapper.unmount();
+  });
+});
