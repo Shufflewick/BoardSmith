@@ -96,6 +96,24 @@ function setPlayerName(name: string): void {
   localStorage.setItem(KEY, name);
 }
 
+// Get or set the global "Show action help" preference.
+// Key: boardsmith_action_help; default ON (true) when absent.
+// Wrapped in try/catch for graceful degradation in private browsing / SSR.
+function getActionHelpEnabled(): boolean {
+  try {
+    const stored = localStorage.getItem('boardsmith_action_help');
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function setActionHelpEnabled(value: boolean): void {
+  try {
+    localStorage.setItem('boardsmith_action_help', String(value));
+  } catch { /* ignore — private browsing or storage full */ }
+}
+
 interface GameShellProps {
   /** Game type identifier (e.g., 'go-fish', 'cribbage') */
   gameType: string;
@@ -324,6 +342,18 @@ watch(state, (s) => {
 const actionMetadata = computed(() => {
   return state.value?.state?.actionMetadata as Record<string, ActionMetadata> | undefined;
 });
+
+// Per-action disabled reasons from PlayerGameState.disabledActions.
+// Mirrors the actionMetadata computed; cast via `any` because PlayerGameState
+// is typed in session/types but not imported here.
+const disabledActions = computed(() => {
+  return (state.value?.state as any)?.disabledActions as Record<string, string> | undefined;
+});
+
+// Global "Show action help" preference — persisted to localStorage.
+// Initialized from localStorage on mount (default ON when key is absent).
+// Mutated only by handleTeachingAction('help-toggle'); no server round-trip.
+const isActionHelpVisible = ref(getActionHelpEnabled());
 
 // Available actions (from flow state)
 const availableActions = computed(() => {
@@ -679,7 +709,7 @@ const isHeatmapVisibleProp = computed(
 // Each action delegates to the appropriate platformRequest op so the dev bridge
 // (Phase 109) and production host can implement the server-side handler.
 async function handleTeachingAction(
-  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle'
+  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle'
 ) {
   if (teachAction === 'hint') {
     try {
@@ -713,6 +743,10 @@ async function handleTeachingAction(
     } catch {
       toast.error('Failed to toggle move quality display.');
     }
+  } else if (teachAction === 'help-toggle') {
+    // Pure client display preference — no server round-trip.
+    isActionHelpVisible.value = !isActionHelpVisible.value;
+    setActionHelpEnabled(isActionHelpVisible.value);
   }
 }
 
@@ -1822,6 +1856,7 @@ if ((import.meta as any).hot) {
               :can-undo="canUndo && !isViewingHistory"
               :undo="handleUndo"
               :action-controller="actionController"
+              :is-action-help-visible="isActionHelpVisible"
               :flow-state="state?.flowState"
               @retry="handleRetry"
             />
@@ -1840,6 +1875,7 @@ if ((import.meta as any).hot) {
               :can-undo="canUndo && !isViewingHistory"
               :undo="handleUndo"
               :action-controller="actionController"
+              :is-action-help-visible="isActionHelpVisible"
             >
               <div class="empty-game-area">
                 <p>Add your game board in the #game-board slot</p>
@@ -1879,6 +1915,7 @@ if ((import.meta as any).hot) {
           :hint-disabled="hintDisabledProp"
           :is-demo-running="isDemoRunning"
           :is-heatmap-visible="isHeatmapVisibleProp"
+          :is-action-help-visible="isActionHelpVisible"
           @undo="handleUndo"
           @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
@@ -1916,6 +1953,8 @@ if ((import.meta as any).hot) {
               <ActionPanel
                 :available-actions="isViewingHistory ? [] : availableActions"
                 :action-metadata="isViewingHistory ? {} : actionMetadata"
+                :is-action-help-visible="isActionHelpVisible"
+                :disabled-actions="isViewingHistory ? undefined : disabledActions"
                 :players="players"
                 :player-seat="playerSeat"
                 :is-my-turn="isMyTurn && !isViewingHistory"
