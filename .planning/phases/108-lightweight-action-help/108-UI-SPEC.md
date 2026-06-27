@@ -1,10 +1,11 @@
 ---
 phase: 108
 slug: lightweight-action-help
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-26
+reviewed_at: 2026-06-26
 ---
 
 # Phase 108 — UI Design Contract
@@ -33,11 +34,13 @@ Color literals are never permitted outside that file (existing project rule).
 
 This phase uses the existing Slate spacing tokens. No new tokens are introduced.
 
+**Authoritative spacing authority:** The `--bsg-s*` token system in `src/ui/theme.ts` is the single source of truth for spacing in this project and **supersedes the generic standard set** {4, 8, 16, 24, 32, 48, 64}. These tokens are pre-existing, locked v4.0 Slate design tokens (shipped in the v4.0 milestone) — this phase only references them, it does not introduce new spacing values. `--bsg-s3 = 12px` is a multiple of 4 and a long-standing project token; it is referenced here, not newly declared.
+
 | Token | Value | Usage in this phase |
 |-------|-------|---------------------|
 | --bsg-s1 | 4px | Gap between "?" glyph and circle border; caret triangle half-size |
 | --bsg-s2 | 8px | Popover internal padding (vertical); gap between help section and divider |
-| --bsg-s3 | 12px | Popover internal padding (horizontal) |
+| --bsg-s3 | 12px | Popover internal padding (horizontal) — pre-existing locked Slate token (theme.ts) |
 | --bsg-s4 | 16px | Min space above/below popover before flip threshold triggers |
 | --bsg-s5 | 24px | Not used in new elements |
 | --bsg-s6 | 32px | Not used in new elements |
@@ -45,7 +48,7 @@ This phase uses the existing Slate spacing tokens. No new tokens are introduced.
 Exceptions:
 - "?" affordance button: 24x24px minimum tap target (WCAG 2.2 SC 2.5.8). This is not in the scale but matches the existing `.cancel-btn` / `.clear-selection-btn` minimum tap-target precedent.
 - Popover max-width: 240px (not a spacing token — a layout constraint).
-- Popover caret: 6px CSS triangle (3px per axis).
+- Popover caret: 8px CSS triangle (4px per axis — multiple of 4).
 
 ---
 
@@ -185,7 +188,7 @@ box-shadow: var(--bsg-shadow-sm);
 padding: var(--bsg-s2) var(--bsg-s3);  /* 8px 12px */
 ```
 
-**Caret:** 6px CSS triangle (border-trick, `aria-hidden="true"`), same fill as
+**Caret:** 8px CSS triangle (4px per axis — multiple of 4; border-trick, `aria-hidden="true"`), same fill as
 `var(--bsg-surface-3)`, border-color `var(--bsg-line-2)`. Points upward when popover
 is below trigger; points downward when flipped above.
 
