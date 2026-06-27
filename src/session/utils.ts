@@ -73,6 +73,7 @@ export function buildActionMetadata(
     metadata[actionName] = {
       name: actionName,
       prompt: actionDef.prompt,
+      help: actionDef.help,
       selections: pickMetas,
     };
   }
@@ -111,6 +112,7 @@ export function buildSingleActionMetadata(
   return {
     name: actionName,
     prompt: actionDef.prompt,
+    help: actionDef.help,
     selections: pickMetas,
   };
 }

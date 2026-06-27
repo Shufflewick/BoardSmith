@@ -102,6 +102,8 @@ export interface PickMetadata {
 export interface ActionMetadata {
   name: string;
   prompt?: string;
+  /** Help text shown to players on hover/tap. Display-only; never a predicate. */
+  help?: string;
   selections: PickMetadata[];
 }
 
