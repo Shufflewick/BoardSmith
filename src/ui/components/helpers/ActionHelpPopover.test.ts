@@ -185,11 +185,11 @@ describe('ActionHelpPopover', () => {
       const tooltip = wrapper.find('[role="tooltip"]');
       expect(tooltip.text()).toContain('Place a structure on an empty tile.');
       expect(wrapper.find('.help-divider').exists()).toBe(false);
-      expect(tooltip.text()).not.toContain('Why disabled:');
+      expect(tooltip.text()).not.toContain('Note:');
       wrapper.unmount();
     });
 
-    it('with disabledReason only: shows "Why disabled:" + reason, no divider', async () => {
+    it('with disabledReason only: shows "Note:" + reason, no divider', async () => {
       const wrapper = mountPopover({
         actionName: 'build',
         triggerLabel: 'Build',
@@ -199,7 +199,7 @@ describe('ActionHelpPopover', () => {
       await nextTick();
 
       const tooltip = wrapper.find('[role="tooltip"]');
-      expect(tooltip.text()).toContain('Why disabled:');
+      expect(tooltip.text()).toContain('Note:');
       expect(tooltip.text()).toContain('You need at least 3 wood.');
       expect(wrapper.find('.help-divider').exists()).toBe(false);
       wrapper.unmount();
@@ -217,7 +217,7 @@ describe('ActionHelpPopover', () => {
 
       const tooltip = wrapper.find('[role="tooltip"]');
       expect(tooltip.text()).toContain('Cast a powerful arcane bolt.');
-      expect(tooltip.text()).toContain('Why disabled:');
+      expect(tooltip.text()).toContain('Note:');
       expect(tooltip.text()).toContain('Not enough mana.');
       expect(wrapper.find('.help-divider').exists()).toBe(true);
       wrapper.unmount();
@@ -428,11 +428,11 @@ describe('ActionHelpPopover', () => {
 
       // Both must contain identical help text and disabled reason
       expect(textA).toContain('Click a square to move.');
-      expect(textA).toContain('Why disabled:');
+      expect(textA).toContain('Note:');
       expect(textA).toContain('No valid moves.');
 
       expect(textB).toContain('Click a square to move.');
-      expect(textB).toContain('Why disabled:');
+      expect(textB).toContain('Note:');
       expect(textB).toContain('No valid moves.');
 
       // And they must be equal
@@ -476,6 +476,103 @@ describe('ActionHelpPopover', () => {
 
       divHost.remove();
       table.remove();
+    });
+  });
+
+  // ── Case 8: positioning — WR-01 (actual height) + WR-02 (caret offset) ──────
+  //
+  // jsdom returns 0 for all layout metrics, so we test the logic via mocked
+  // offsetHeight / getBoundingClientRect rather than real pixel positions.
+
+  describe('positioning (WR-01: actual height, WR-02: caret offset)', () => {
+    it('WR-01: popover renders below trigger when there is enough viewport space', async () => {
+      // jsdom innerHeight = 768; trigger at bottom = 100 → 100 + actualHeight should fit
+      Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true, writable: true });
+
+      const wrapper = mountPopover({
+        actionName: 'move',
+        triggerLabel: 'Move',
+        helpText: 'Move to an adjacent tile.',
+      });
+
+      await wrapper.find('.action-help-btn').trigger('mouseenter');
+      await nextTick();
+      await nextTick(); // second tick for Phase 2 position update
+
+      const tooltip = wrapper.find('[role="tooltip"]');
+      expect(tooltip.exists()).toBe(true);
+      // Caret should point up (popover is below trigger)
+      expect(wrapper.find('.ahp-caret--top').exists()).toBe(true);
+      expect(wrapper.find('.ahp-caret--bottom').exists()).toBe(false);
+
+      wrapper.unmount();
+    });
+
+    it('WR-01: popover flips above trigger when viewport has no room below (mocked offsetHeight)', async () => {
+      // Simulate trigger near the viewport bottom so there is not enough room below.
+      const originalInnerHeight = window.innerHeight;
+      Object.defineProperty(window, 'innerHeight', { value: 200, configurable: true, writable: true });
+
+      // Patch getBoundingClientRect on the mounted trigger so it reports bottom=190
+      // (only 2px above our 200-8=192 threshold → not enough room for any height > 2).
+      const wrapper = mountPopover({
+        actionName: 'cast',
+        triggerLabel: 'Cast',
+        helpText: 'Cast a powerful spell.',
+        disabledReason: 'No mana remaining.',
+      });
+
+      const triggerEl = wrapper.find('.action-help-btn').element as HTMLButtonElement;
+      const origRect = triggerEl.getBoundingClientRect.bind(triggerEl);
+      vi.spyOn(triggerEl, 'getBoundingClientRect').mockReturnValue({
+        top: 180, bottom: 190, left: 50, right: 74, width: 24, height: 10,
+        x: 50, y: 180, toJSON: origRect().toJSON ?? (() => ({})),
+      } as DOMRect);
+
+      // Patch offsetHeight on the popover element by overriding the ref after mount
+      // via a MutationObserver shim: instead, patch it globally after nextTick.
+      await wrapper.find('.action-help-btn').trigger('mouseenter');
+      await nextTick(); // Phase 1 renders the element
+
+      // Now the popoverRef element is in the DOM; mock its offsetHeight to 200
+      // (tall dual-section popover — the value the check must use, not 80).
+      const popoverEl = document.querySelector('.action-help-popover') as HTMLElement | null;
+      if (popoverEl) {
+        Object.defineProperty(popoverEl, 'offsetHeight', { value: 200, configurable: true });
+      }
+
+      await nextTick(); // Phase 2 reads offsetHeight and recomputes
+
+      const tooltip = wrapper.find('[role="tooltip"]');
+      expect(tooltip.exists()).toBe(true);
+      // With bottom=190 and innerHeight=200 (threshold 8), top+200=190+4+200=394 > 192 → flip
+      expect(wrapper.find('.ahp-caret--bottom').exists()).toBe(true);
+      expect(wrapper.find('.ahp-caret--top').exists()).toBe(false);
+
+      // Restore
+      Object.defineProperty(window, 'innerHeight', { value: originalInnerHeight, configurable: true, writable: true });
+      wrapper.unmount();
+    });
+
+    it('WR-02: caret --ahp-caret-left style is set on the caret span', async () => {
+      const wrapper = mountPopover({
+        actionName: 'defend',
+        triggerLabel: 'Defend',
+        helpText: 'Reduce incoming damage.',
+      });
+
+      await wrapper.find('.action-help-btn').trigger('mouseenter');
+      await nextTick();
+      await nextTick(); // Phase 2
+
+      const caret = wrapper.find('.ahp-caret');
+      expect(caret.exists()).toBe(true);
+      // The --ahp-caret-left CSS variable should be set inline on the caret element
+      const caretLeft = (caret.element as HTMLElement).style.getPropertyValue('--ahp-caret-left');
+      // In jsdom, getBoundingClientRect returns zeros → caretLeft clamped to 12px (Math.max(12, 0-0))
+      expect(caretLeft).toBe('12px');
+
+      wrapper.unmount();
     });
   });
 });

@@ -21,7 +21,7 @@
  *  - Reduced motion: @media (prefers-reduced-motion: reduce) → transition: none
  */
 
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ const props = defineProps<{
   actionName: string;
   /** From ActionMetadata.help (Plan 01). Display-only; never a predicate. */
   helpText?: string;
-  /** From disabledActions[name]. Rendered under "Why disabled:" label. */
+  /** From disabledActions[name]. Rendered under "Note:" label. */
   disabledReason?: string;
   /** The action prompt/display name — aria-label "Help for {triggerLabel}". */
   triggerLabel: string;
@@ -40,6 +40,7 @@ const props = defineProps<{
 
 const isOpen = ref(false);
 const triggerRef = ref<HTMLButtonElement | null>(null);
+const popoverRef = ref<HTMLDivElement | null>(null);
 
 // ── Position ──────────────────────────────────────────────────────────────────
 
@@ -47,40 +48,58 @@ interface PopoverPosition {
   top: number;
   left: number;
   caretSide: 'top' | 'bottom';
+  /** Horizontal center of caret relative to the popover left edge (px). */
+  caretLeft: number;
 }
 
-const position = ref<PopoverPosition>({ top: 0, left: 0, caretSide: 'top' });
+/**
+ * Conservative fallback height used when offsetHeight is unavailable (e.g. jsdom).
+ * 220 px covers a dual-section popover (help text + divider + disabled reason).
+ */
+const POPOVER_FALLBACK_HEIGHT = 220;
+const POPOVER_MAX_WIDTH = 240;
+
+const position = ref<PopoverPosition>({ top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2 });
 
 /**
  * Compute fixed position for popover anchored below (or above) the trigger button.
  * Mirrors HeatmapOverlay / TutorialOverlay getBoundingClientRect pattern.
  * Stale position on scroll/resize is acceptable per RESEARCH.md Pitfall 4.
+ *
+ * @param actualHeight - The rendered height of the popover element in px. Used for
+ *   flip detection and above-placement offset so the popover sits fully above the
+ *   trigger when flipped (WR-01). Pass POPOVER_FALLBACK_HEIGHT when the DOM element
+ *   is not yet available.
  */
-function computePosition(): PopoverPosition {
+function computePosition(actualHeight: number): PopoverPosition {
   const el = triggerRef.value;
-  if (!el) return { top: 0, left: 0, caretSide: 'top' };
+  if (!el) return { top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2 };
 
   const rect = el.getBoundingClientRect();
   const FLIP_THRESHOLD = 8;
-  const POPOVER_ESTIMATED_HEIGHT = 80;
-  const POPOVER_MAX_WIDTH = 240;
 
   let top = rect.bottom + 4;
   let left = rect.left;
   let caretSide: 'top' | 'bottom' = 'top';
 
-  // Flip above if too close to viewport bottom
-  if (top + POPOVER_ESTIMATED_HEIGHT > window.innerHeight - FLIP_THRESHOLD) {
-    top = rect.top - POPOVER_ESTIMATED_HEIGHT - 4;
+  // Flip above if the popover's bottom edge would fall within FLIP_THRESHOLD px of viewport bottom.
+  // Uses actualHeight so a tall dual-section popover flips at the correct trigger position (WR-01).
+  if (top + actualHeight > window.innerHeight - FLIP_THRESHOLD) {
+    top = rect.top - actualHeight - 4;
     caretSide = 'bottom';
   }
 
-  // Right-edge constraint: shift left if popover would overflow
+  // Right-edge constraint: shift left if popover would overflow the viewport right edge.
   if (left + POPOVER_MAX_WIDTH > window.innerWidth - 8) {
     left = window.innerWidth - POPOVER_MAX_WIDTH - 8;
   }
 
-  return { top, left, caretSide };
+  // WR-02: Track the trigger's horizontal center relative to the (possibly clamped) popover
+  // left edge so the caret still points at the "?" button after right-edge shifting.
+  const triggerMidX = rect.left + rect.width / 2;
+  const caretLeft = Math.min(POPOVER_MAX_WIDTH - 12, Math.max(12, triggerMidX - left));
+
+  return { top, left, caretSide, caretLeft };
 }
 
 const popoverStyle = computed(() => ({
@@ -92,9 +111,19 @@ const popoverStyle = computed(() => ({
 
 // ── Open/close ────────────────────────────────────────────────────────────────
 
-function show() {
-  position.value = computePosition();
+async function show() {
+  const el = triggerRef.value;
+  if (!el) return;
+  // Phase 1: place popover at an initial position so the element mounts and can be measured.
+  const rect = el.getBoundingClientRect();
+  position.value = { top: rect.bottom + 4, left: rect.left, caretSide: 'top', caretLeft: rect.width / 2 };
   isOpen.value = true;
+  // Phase 2: after Vue renders the teleported element, measure its actual rendered height
+  // and recompute — this prevents viewport overflow for tall dual-section popovers (WR-01).
+  await nextTick();
+  if (!isOpen.value) return; // hide() was called during the async tick
+  const actualHeight = popoverRef.value?.offsetHeight ?? POPOVER_FALLBACK_HEIGHT;
+  position.value = computePosition(actualHeight);
 }
 
 function hide() {
@@ -185,6 +214,7 @@ onUnmounted(() => {
   <Teleport to="body">
     <Transition name="action-help-popover">
       <div
+        ref="popoverRef"
         v-if="isOpen"
         :id="`${actionName}-help-tip`"
         role="tooltip"
@@ -192,10 +222,14 @@ onUnmounted(() => {
         class="action-help-popover"
         :style="popoverStyle"
       >
-        <!-- Caret: points toward trigger (upward when popover is below, downward when above) -->
+        <!-- Caret: points toward trigger (upward when popover is below, downward when above).
+             --ahp-caret-left tracks the trigger's horizontal center relative to the
+             (possibly right-edge-clamped) popover box so the caret always points at the
+             "?" button even when the popover has been shifted left (WR-02). -->
         <span
           class="ahp-caret"
           :class="`ahp-caret--${position.caretSide}`"
+          :style="{ '--ahp-caret-left': `${position.caretLeft}px` }"
           aria-hidden="true"
         ></span>
 
@@ -205,9 +239,12 @@ onUnmounted(() => {
         <!-- Divider — only when BOTH sections exist (UI-SPEC "Content layout") -->
         <hr v-if="helpText && disabledReason" class="help-divider" aria-hidden="true" />
 
-        <!-- Disabled-reason section — text interpolation only (T-108-03) -->
+        <!-- Disabled-reason section — text interpolation only (T-108-03).
+             Label is "Note:" rather than "Why disabled:" because the action button
+             may still be clickable (tutorial-gated actions remain in availableActions);
+             the label must not assert non-functionality that doesn't match the UI state (WR-03). -->
         <template v-if="disabledReason">
-          <span class="ahp-disabled-label">Why disabled:</span>
+          <span class="ahp-disabled-label">Note:</span>
           <p class="ahp-disabled-body">{{ disabledReason }}</p>
         </template>
       </div>
@@ -216,6 +253,34 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* ── "?" affordance trigger button ───────────────────────────────────────── */
+/* Self-contained styles so the button is correctly sized and positioned when
+   ActionHelpPopover is used in both ActionPanel (AutoUI) and custom UI slots
+   (IN-02 parity fix). The button uses position:absolute so it must be placed
+   inside a position:relative container (e.g. .action-btn-group in ActionPanel). */
+.action-help-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 4px 5px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--bsg-ink-3);
+  line-height: 1;
+  z-index: 1;
+}
+
+.action-help-btn:hover {
+  color: var(--bsg-ink-2);
+}
+
+.action-help-btn[aria-expanded="true"] {
+  color: var(--bsg-accent);
+}
+
 /* ── Popover container ────────────────────────────────────────────────────── */
 .action-help-popover {
   /* position: fixed provided via inline :style binding (computed from trigger rect) */
@@ -242,7 +307,7 @@ onUnmounted(() => {
 /* caret--top: popover is BELOW the trigger, caret points UP */
 .ahp-caret--top {
   top: -8px;
-  left: 50%;
+  left: var(--ahp-caret-left, 50%);
   transform: translateX(-50%);
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
@@ -262,7 +327,7 @@ onUnmounted(() => {
 /* caret--bottom: popover is ABOVE the trigger, caret points DOWN */
 .ahp-caret--bottom {
   bottom: -8px;
-  left: 50%;
+  left: var(--ahp-caret-left, 50%);
   transform: translateX(-50%);
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
