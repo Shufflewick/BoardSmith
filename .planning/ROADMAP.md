@@ -28,7 +28,7 @@
 - [x] **Phase 105: Annotation Overlay (UI Parity)** — Text-bubble + targeted highlight on any cell/piece/panel/control, rendered identically in custom UI and AutoUI via `useBoardInteraction`. (completed 2026-06-25)
 - [x] **Phase 106: Predicate Triggers & CI-Verifiable Authoring** — Fire content on game-state predicate/event, and author the tutorial as a test that fails when the rules drift. (completed 2026-06-26)
 - [x] **Phase 107: AI-Assisted Teaching** — MCTS-powered move hint, narrated AI-vs-AI demo, and evaluation heatmap, surfaced from checkers' existing bot. (completed 2026-06-26)
-- [ ] **Phase 108: Lightweight Action Help** — Per-action help text revealed on hover/tap, with a global toggle.
+- [x] **Phase 108: Lightweight Action Help** — Per-action help text revealed on hover/tap, with a global toggle. (completed 2026-06-27)
 - [ ] **Phase 109: Checkers Tutorial Content** — The cross-repo showcase: guided selection/movement, mandatory-capture tip, multi-jump walkthrough, launchable in GameShell + dev host.
 - [ ] **Phase 110: Demonstration & Refinement** — End-to-end browser demo of the tutorial + AI + HELP as a hands-on refinement gate before applying the substrate to cribbage.
 
@@ -107,7 +107,7 @@
 **Plans**: 3 plans (Waves 1-3)
 - [x] 108-01-PLAN.md — Engine + session substrate: help?: string + .help() builder + propagation through both buildActionMetadata paths + UI ActionMetadata type (Wave 1)
 - [x] 108-02-PLAN.md — ActionHelpPopover.vue + ActionPanel "?" affordance + dead disabledActions reason rendered in the same popover (Wave 2)
-- [ ] 108-03-PLAN.md — Global "Show action help" toggle in ControlsMenu + localStorage persistence + GameShell dual-path wiring/parity (Wave 3)
+- [x] 108-03-PLAN.md — Global "Show action help" toggle in ControlsMenu + localStorage persistence + GameShell dual-path wiring/parity (Wave 3)
 **UI hint**: yes
 
 ### Phase 109: Checkers Tutorial Content
@@ -143,6 +143,6 @@
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
-| 108. Lightweight Action Help | 2/3 | In Progress|  |
+| 108. Lightweight Action Help | 3/3 | Complete   | 2026-06-27 |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
 | 110. Demonstration & Refinement | 0/? | Not started | - |

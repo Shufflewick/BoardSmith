@@ -28,7 +28,7 @@ Leverages a game's existing MCTS bot. Authoring cost is near-zero and the value 
 ### Lightweight Help (HELP)
 
 - [x] **HELP-01**: A game author can attach help text to each action; a player can reveal it on hover (pointer) or tap (touch).
-- [ ] **HELP-02**: A player can toggle action help text on or off globally.
+- [x] **HELP-02**: A player can toggle action help text on or off globally.
 
 ### Checkers Tutorial (CHK)
 
@@ -83,7 +83,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | AI-02 | Phase 107 | Complete |
 | AI-03 | Phase 107 | Complete |
 | HELP-01 | Phase 108 | Complete |
-| HELP-02 | Phase 108 | Pending |
+| HELP-02 | Phase 108 | Complete |
 | CHK-01 | Phase 109 | Pending |
 | CHK-02 | Phase 109 | Pending |
 | CHK-03 | Phase 109 | Pending |

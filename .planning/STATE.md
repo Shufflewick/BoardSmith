@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives
-status: executing
+status: verifying
 stopped_at: Phase 108 UI-SPEC approved
-last_updated: "2026-06-27T01:42:33.621Z"
+last_updated: "2026-06-27T01:50:09.655Z"
 last_activity: 2026-06-27
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 21
-  completed_plans: 20
-  percent: 57
+  completed_plans: 21
+  percent: 71
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 
 Phase: 108 (lightweight-action-help) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-27
 
 ## Milestones
@@ -96,6 +96,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Teaching controls wired via platformRequest ops (hint/demo-start/demo-stop/heatmap-toggle) — bridge integration deferred to Phase 109.
 - showHintProp computed from lobbyInfo AI slots — cleanest client-side AI detection; platform mode hidden (Phase 110 wires production).
 - Parity proven at component level: dual-fixture tests (custom-UI-like div vs AutoUI-grid-like table cell, same data-bs-el-id) in both HintOverlay and HeatmapOverlay test suites.
+- [Phase ?]: Phase 108 Plan 03 complete
 
 ### Highest-Risk Items
 
@@ -123,7 +124,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-27T01:42:33.612Z
+Last session: 2026-06-27T01:49:42.923Z
 Stopped at: Phase 108 UI-SPEC approved
 Resume file: None
 Next action: `/gsd:plan-phase 108`
