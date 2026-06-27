@@ -33,6 +33,29 @@ describe('Action Builder', () => {
     expect(action.selections).toHaveLength(0);
   });
 
+  describe('.help() builder', () => {
+    it('sets help text on ActionDefinition', () => {
+      const action = Action.create('move')
+        .help('Select a piece to move to an adjacent square.')
+        .execute(() => {});
+      expect(action.help).toBe('Select a piece to move to an adjacent square.');
+    });
+
+    it('leaves help undefined when .help() is not called', () => {
+      const action = Action.create('pass').execute(() => {});
+      expect(action.help).toBeUndefined();
+    });
+
+    it('is chainable like .prompt()', () => {
+      const action = Action.create('move')
+        .prompt('Move piece')
+        .help('Select a piece to move.')
+        .execute(() => {});
+      expect(action.prompt).toBe('Move piece');
+      expect(action.help).toBe('Select a piece to move.');
+    });
+  });
+
   it('should add choice selection', () => {
     const action = Action.create('test')
       .chooseFrom('color', {
