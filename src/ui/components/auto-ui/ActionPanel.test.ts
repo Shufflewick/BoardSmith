@@ -387,9 +387,10 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
     wrapper.unmount();
   });
 
-  it('existing .action-btn still dispatches startAction (behavior unchanged)', async () => {
-    const startSpy = vi.fn().mockResolvedValue(undefined);
-    const controller = makeTestController({ start: startSpy });
+  it('existing .action-btn still dispatches the action on click (behavior unchanged)', async () => {
+    // With selections:[], startAction calls executeAction → actionController.execute.
+    const executeSpy = vi.fn().mockResolvedValue({ success: true });
+    const controller = makeTestController({ execute: executeSpy });
 
     const wrapper = mount(ActionPanel, {
       global: {
@@ -412,7 +413,7 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
     await actionBtn.trigger('click');
     await Promise.resolve();
 
-    expect(startSpy).toHaveBeenCalledWith('attack');
+    expect(executeSpy).toHaveBeenCalledWith('attack', {});
     wrapper.unmount();
   });
 

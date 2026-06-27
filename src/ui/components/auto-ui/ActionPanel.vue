@@ -27,6 +27,7 @@ import type {
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
+import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
@@ -64,6 +65,10 @@ const props = defineProps<{
   currentPlayerColor?: string;
   /** Players currently awaiting action during simultaneous steps */
   awaitingPlayers?: Array<{ seat: number; name: string; color?: string }>;
+  /** Global action-help visibility — driven by localStorage toggle in GameShell (Plan 03) */
+  isActionHelpVisible?: boolean;
+  /** Per-action disabled reasons from PlayerGameState.disabledActions */
+  disabledActions?: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -788,17 +793,33 @@ function clearBoardSelection() {
     <!-- No action being configured -->
     <!-- Key forces re-render when available actions change -->
     <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
-      <button
+      <!-- Each action wrapped in .action-btn-group: positioning context for "?" affordance.
+           .action-buttons { display: contents } propagates the parent flex context so
+           .action-btn-group (inline-flex) becomes a direct dock flex item — no layout change. -->
+      <div
         v-for="action in visibleActions"
         :key="action.name"
-        class="action-btn"
-        :data-bs-action="action.name"
-        @click="startAction(action.name)"
-        :disabled="isExecuting"
+        class="action-btn-group"
       >
-        {{ action.prompt || formatActionName(action.name) }}
-      </button>
-      <!-- Undo button - shows when player has made actions this turn -->
+        <button
+          class="action-btn"
+          :data-bs-action="action.name"
+          @click="startAction(action.name)"
+          :disabled="isExecuting"
+        >
+          {{ action.prompt || formatActionName(action.name) }}
+        </button>
+        <!-- "?" affordance: shown when global toggle is ON and content exists.
+             Disabled-reason-only case also shows the affordance (UI-SPEC Interaction States). -->
+        <ActionHelpPopover
+          v-if="isActionHelpVisible && (action.help || disabledActions?.[action.name])"
+          :action-name="action.name"
+          :help-text="action.help"
+          :disabled-reason="disabledActions?.[action.name]"
+          :trigger-label="action.prompt || formatActionName(action.name)"
+        />
+      </div>
+      <!-- Undo button — no help affordance (outside the group) -->
       <button
         v-if="canUndo"
         class="action-btn undo-btn"
@@ -1141,6 +1162,43 @@ function clearBoardSelection() {
   /* Flattened into the dock flow so available-action buttons wrap inline with the
      ⋯ menu + token (see .action-panel). */
   display: contents;
+}
+
+/* Action button group — wraps each action + its "?" affordance.
+   inline-flex becomes a direct dock flex item (because .action-buttons has
+   display:contents, propagating the parent flex context). The "?" is absolutely
+   positioned so it does NOT affect the group's intrinsic width (RESEARCH Pitfall 5).
+   No width or flex-grow set — action-btn retains its own sizing rules. */
+.action-btn-group {
+  display: inline-flex;
+  align-items: stretch;
+  position: relative;
+}
+
+/* "?" affordance button — absolutely positioned in the top-right corner of the group.
+   24×24px minimum tap target (WCAG 2.2 SC 2.5.8).
+   Absolutely positioned so it does NOT add to the group's intrinsic width. */
+.action-help-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 4px 5px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--bsg-ink-3);
+  line-height: 1;
+  z-index: 1;
+}
+
+.action-help-btn:hover {
+  color: var(--bsg-ink-2);
+}
+
+.action-help-btn[aria-expanded="true"] {
+  color: var(--bsg-accent);
 }
 
 /* Primary action button — Slate teal plate */
