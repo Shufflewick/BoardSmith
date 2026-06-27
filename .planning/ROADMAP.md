@@ -105,7 +105,7 @@
   2. A player can reveal an action's help text on hover (pointer) or tap (touch).
   3. A player can toggle action help text on or off globally, and the setting holds across actions.
 **Plans**: 3 plans (Waves 1-3)
-- [ ] 108-01-PLAN.md — Engine + session substrate: help?: string + .help() builder + propagation through both buildActionMetadata paths + UI ActionMetadata type (Wave 1)
+- [x] 108-01-PLAN.md — Engine + session substrate: help?: string + .help() builder + propagation through both buildActionMetadata paths + UI ActionMetadata type (Wave 1)
 - [ ] 108-02-PLAN.md — ActionHelpPopover.vue + ActionPanel "?" affordance + dead disabledActions reason rendered in the same popover (Wave 2)
 - [ ] 108-03-PLAN.md — Global "Show action help" toggle in ControlsMenu + localStorage persistence + GameShell dual-path wiring/parity (Wave 3)
 **UI hint**: yes
@@ -143,6 +143,6 @@
 | 105. Annotation Overlay (UI Parity) | 5/5 | Complete   | 2026-06-25 |
 | 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
-| 108. Lightweight Action Help | 0/3 | Not started | - |
+| 108. Lightweight Action Help | 1/3 | In Progress|  |
 | 109. Checkers Tutorial Content | 0/? | Not started | - |
 | 110. Demonstration & Refinement | 0/? | Not started | - |
