@@ -1175,32 +1175,6 @@ function clearBoardSelection() {
   position: relative;
 }
 
-/* "?" affordance button — absolutely positioned in the top-right corner of the group.
-   24×24px minimum tap target (WCAG 2.2 SC 2.5.8).
-   Absolutely positioned so it does NOT add to the group's intrinsic width. */
-.action-help-btn {
-  position: absolute;
-  top: 0;
-  right: 0;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 4px 5px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--bsg-ink-3);
-  line-height: 1;
-  z-index: 1;
-}
-
-.action-help-btn:hover {
-  color: var(--bsg-ink-2);
-}
-
-.action-help-btn[aria-expanded="true"] {
-  color: var(--bsg-accent);
-}
-
 /* Primary action button — Slate teal plate */
 .action-btn {
   /* min-height floor meets the WCAG 2.2 AA 44px touch-target target (SC 2.5.8);
