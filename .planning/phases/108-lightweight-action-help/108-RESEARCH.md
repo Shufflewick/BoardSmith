@@ -644,17 +644,17 @@ Step 2.6: SKIPPED — phase is purely code/config changes. No external tools, ru
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`disabledActions` as a prop vs injected from `gameState`**
    - What we know: `gameState` is already injected in GameShell-adjacent components (HeatmapOverlay, TutorialOverlay); ActionPanel currently does NOT inject `gameState` — it only uses the injected `actionController`.
    - What's unclear: Should ActionPanel inject `gameState` directly (reduces prop count) or receive `disabledActions` as a prop (more explicit, more testable)?
-   - Recommendation: Pass as a prop (`:disabled-actions`) to match the established `action-metadata` prop pattern. This keeps ActionPanel's dependencies explicit and makes the test fixture simpler (no `provide('gameState', ...)` needed, just pass the prop).
+   - **RESOLVED:** Pass as a prop (`:disabled-actions`) to match the established `action-metadata` prop pattern. This keeps ActionPanel's dependencies explicit and makes the test fixture simpler (no `provide('gameState', ...)` needed, just pass the prop). Implemented in Plan 02 (ActionPanel prop) + Plan 03 (GameShell computed + binding).
 
 2. **`isActionHelpVisible` prop threading to custom UI slot**
    - What we know: Custom UIs use the `#game-board` slot and wire `ActionHelpPopover` themselves by importing it and calling `actionController.getActionMetadata(name)?.help`.
    - What's unclear: Does `isActionHelpVisible` need to be surfaced in the `#game-board` slot props so custom UI authors can implement the visibility rule?
-   - Recommendation: Yes — add `is-action-help-visible` to the `#game-board` slot props alongside `action-controller` (line 1838). The parity test fixture will confirm this is threaded correctly.
+   - **RESOLVED:** Yes — add `is-action-help-visible` to the `#game-board` slot props alongside `action-controller` (line 1838). Implemented in Plan 03; the parity fixture test confirms it is threaded correctly.
 
 ---
 
