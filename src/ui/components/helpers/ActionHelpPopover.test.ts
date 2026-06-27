@@ -545,7 +545,7 @@ describe('ActionHelpPopover', () => {
 
       const tooltip = wrapper.find('[role="tooltip"]');
       expect(tooltip.exists()).toBe(true);
-      // With bottom=190 and innerHeight=200 (threshold 8), top+200=190+4+200=394 > 192 → flip
+      // With bottom=190 and innerHeight=200 (threshold 16), top+200=190+4+200=394 > 184 → flip
       expect(wrapper.find('.ahp-caret--bottom').exists()).toBe(true);
       expect(wrapper.find('.ahp-caret--top').exists()).toBe(false);
 

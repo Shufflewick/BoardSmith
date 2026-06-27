@@ -76,7 +76,12 @@ function computePosition(actualHeight: number): PopoverPosition {
   if (!el) return { top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2 };
 
   const rect = el.getBoundingClientRect();
-  const FLIP_THRESHOLD = 8;
+  // FLIP_THRESHOLD: min clearance between popover bottom edge and viewport bottom before flip triggers.
+  // Spec: --bsg-s4 = 16px (UI-SPEC §Spacing, "Min space above/below popover before flip threshold").
+  const FLIP_THRESHOLD = 16;
+  // EDGE_MARGIN: horizontal clearance between popover right edge and viewport right edge.
+  // Spec: --bsg-s2 = 8px (correct at 8; named constant to distinguish from FLIP_THRESHOLD).
+  const EDGE_MARGIN = 8;
 
   let top = rect.bottom + 4;
   let left = rect.left;
@@ -90,8 +95,8 @@ function computePosition(actualHeight: number): PopoverPosition {
   }
 
   // Right-edge constraint: shift left if popover would overflow the viewport right edge.
-  if (left + POPOVER_MAX_WIDTH > window.innerWidth - 8) {
-    left = window.innerWidth - POPOVER_MAX_WIDTH - 8;
+  if (left + POPOVER_MAX_WIDTH > window.innerWidth - EDGE_MARGIN) {
+    left = window.innerWidth - POPOVER_MAX_WIDTH - EDGE_MARGIN;
   }
 
   // WR-02: Track the trigger's horizontal center relative to the (possibly clamped) popover
