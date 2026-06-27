@@ -87,7 +87,7 @@ Neutral ink tokens for new elements:
 
 | Token | Usage |
 |-------|-------|
-| var(--bsg-ink-3) | "?" affordance in idle (closed) state; "Why disabled:" section label; popover border color in line-2 |
+| var(--bsg-ink-3) | "?" affordance in idle (closed) state; "Note:" section label; popover border color in line-2 |
 | var(--bsg-ink-2) | Help text body copy; disabled-reason body text |
 | var(--bsg-line-2) | Popover border; divider between help-text section and disabled-reason section |
 
@@ -203,8 +203,13 @@ is below trigger; points downward when flipped above.
 Help text section: plain string at var(--bsg-text-sm), var(--bsg-ink-2), line-height 1.5.
 
 Disabled-reason section:
-- Label: "Why disabled:" at var(--bsg-text-xs), var(--bsg-ink-3), displayed as a block
+- Label: "Note:" at var(--bsg-text-xs), var(--bsg-ink-3), displayed as a block
 - Reason text: at var(--bsg-text-sm), var(--bsg-ink-2), line-height 1.5
+
+> **Label change (Phase 108 code review, WR-03):** The original spec used "Why disabled:" but
+> the implementation uses "Note:" — this is the authoritative label. Tutorial-gated actions
+> appear in `disabledActions` but remain fully clickable (they are in `availableActions`), so
+> "Why disabled:" falsely implied non-functionality. "Note:" is neutral and accurate.
 
 When only one section exists, no divider is rendered.
 
@@ -301,7 +306,7 @@ reload.
 |---------|------|
 | Primary CTA (toggle label) | "Show action help" |
 | "?" affordance aria-label | "Help for {action prompt}" (e.g., "Help for Move Piece") |
-| Disabled-reason section label | "Why disabled:" |
+| Disabled-reason section label | "Note:" (changed from "Why disabled:" per WR-03 — gated actions remain clickable, label must not assert non-functionality) |
 | Empty state | Not applicable — "?" affordance is hidden entirely when there is no content to show (help text absent AND no disabled reason). No empty state message. |
 | Error state | Not applicable — help text is read-only metadata; no user-authored input or network request. |
 | Destructive confirmation | Not applicable — no destructive actions in this phase. |
@@ -309,7 +314,7 @@ reload.
 **Disabled action with reason — full popover copy:**
 
 ```
-Why disabled:
+Note:
 {disabledActions[name] reason string verbatim}
 ```
 
@@ -324,7 +329,7 @@ Why disabled:
 ```
 {actionDef.help string verbatim}
 ────────────────────────
-Why disabled:
+Note:
 {disabledActions[name] reason string verbatim}
 ```
 
@@ -351,8 +356,8 @@ No new dependencies. Zero third-party registries. This phase adds one new Vue SF
 | Toggle OFF | No | N/A |
 | Toggle ON, no help, no disabled reason | No | N/A |
 | Toggle ON, help text only, action enabled | Yes | help text |
-| Toggle ON, help text only, action disabled | Yes | help text + divider + "Why disabled:" + reason |
-| Toggle ON, no help text, action disabled, reason exists | Yes | "Why disabled:" + reason |
+| Toggle ON, help text only, action disabled | Yes | help text + divider + "Note:" + reason |
+| Toggle ON, no help text, action disabled, reason exists | Yes | "Note:" + reason |
 | Toggle ON, no help text, action disabled, no reason | No | N/A |
 
 ---
