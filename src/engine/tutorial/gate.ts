@@ -21,7 +21,7 @@
  */
 
 import type { Game } from '../element/game.js';
-import type { TutorialGate, TutorialGateAllowList, TutorialStep, TutorialStepView } from './types.js';
+import type { SelectionMatcher, TutorialGate, TutorialGateAllowList, TutorialStep, TutorialStepView } from './types.js';
 import { evaluateConditionWithTrace } from '../action/action.js';
 
 // ============================================================
@@ -44,6 +44,31 @@ function gateValuesEqual(a: unknown, b: unknown): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Field-equality match for a single selection value against a SelectionMatcher.
+ *
+ * ElementRef precedence (mirrors `matchesRef` in useBoardInteraction):
+ *   id wins, then notation, then name. When one of these keys is present in
+ *   the matcher, only that field is checked.
+ *
+ * For choice objects (e.g. DestinationChoice): all matcher fields must equal
+ * the corresponding fields on the value.
+ *
+ * Returns false for non-object/null values — they cannot match any matcher.
+ */
+function selectionMatchesValue(matcher: SelectionMatcher, value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const val = value as Record<string, unknown>;
+
+  // ElementRef precedence: if matcher specifies id, that alone determines match.
+  if ('id' in matcher) return val['id'] === matcher['id'];
+  if ('notation' in matcher) return val['notation'] === matcher['notation'];
+  if ('name' in matcher) return val['name'] === matcher['name'];
+
+  // General field equality for choice objects (DestinationChoice, etc.).
+  return Object.entries(matcher).every(([k, v]) => val[k] === v);
 }
 
 /**
@@ -94,9 +119,11 @@ export function getActiveStep(game: Game, seat: number): TutorialStep | null {
  * active step's gate for the given `actionName`, or `null` if the value is
  * permitted.
  *
- * @param step       - The active tutorial step (from `getActiveStep`).
- * @param actionName - The name of the action whose selection is being evaluated.
- * @param value      - The specific choice/element value to check.
+ * @param step          - The active tutorial step (from `getActiveStep`).
+ * @param actionName    - The name of the action whose selection is being evaluated.
+ * @param value         - The specific choice/element value to check.
+ * @param selectionName - The `selection.name` from `BaseSelection` identifying
+ *                        which selection slot produced this value.
  *
  * Rules:
  *  - **Predicate gate**: the predicate signature `(ctx) => boolean` does not
@@ -108,16 +135,18 @@ export function getActiveStep(game: Game, seat: number): TutorialStep | null {
  *    action itself is flagged at the action level — individual values of
  *    non-allowed actions do not receive per-value disabled reasons here.
  *    Returns `null`.
- *  - **Allow-list, no `from`/`to`**: all values within the allowed action are
+ *  - **Allow-list, no `selections`**: all values within the allowed action are
  *    permitted. Returns `null`.
- *  - **Allow-list, with `from`/`to`**: the allowed value set is
- *    `{ gate.from, gate.to }` (whichever are defined). A value NOT in that
- *    set receives a descriptive gate reason.
+ *  - **Allow-list, with `selections`**: if the selection name has an entry, the
+ *    value is matched against that entry's `SelectionMatcher`. Non-matching
+ *    values receive a descriptive gate reason. Selection names with no entry
+ *    permit all their values (back-compatible).
  */
 export function getGateReasonForValue(
   step: TutorialStep,
   actionName: string,
   value: unknown,
+  selectionName: string,
 ): string | null {
   const { gate } = step;
 
@@ -132,22 +161,15 @@ export function getGateReasonForValue(
     return null;
   }
 
-  // No from/to constraints: all values of the allowed action are permitted.
-  if (gate.from === undefined && gate.to === undefined) {
-    return null;
+  // Per-selection matching: check only the restriction for this selection name.
+  if (gate.selections && selectionName in gate.selections) {
+    const matcher = gate.selections[selectionName];
+    if (selectionMatchesValue(matcher, value)) return null;
+    return `Tutorial step requires a specific ${selectionName}: ${JSON.stringify(matcher)}`;
   }
 
-  // Build the allowed set from from/to (whichever are defined).
-  const allowedSet: unknown[] = [];
-  if (gate.from !== undefined) allowedSet.push(gate.from);
-  if (gate.to !== undefined) allowedSet.push(gate.to);
-
-  const isAllowed = allowedSet.some(v => gateValuesEqual(v, value));
-  if (isAllowed) return null;
-
-  // Produce an actionable reason string listing the allowed values.
-  const allowedStr = allowedSet.map(v => JSON.stringify(v)).join(', ');
-  return `Tutorial step requires selecting from: ${allowedStr}`;
+  // No selections entry for this selection name: all values permitted.
+  return null;
 }
 
 // ============================================================

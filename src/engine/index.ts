@@ -246,6 +246,7 @@ export type {
 export { afterFirstTurn, afterTurns, whenForced } from './tutorial/predicates.js';
 
 export type {
+  SelectionMatcher,
   TutorialGateContext,
   TutorialAdvanceCondition,
   TutorialGateCondition,

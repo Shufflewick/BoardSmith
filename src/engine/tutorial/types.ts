@@ -105,12 +105,25 @@ export interface TutorialGateContext {
 }
 
 /**
+ * Matches a single selection value against authored criteria.
+ *
+ * For element selections (type: 'element' | 'elements'): use ElementRef-style
+ * fields — id takes precedence, then notation, then name. Match is field
+ * equality: `{ id: 5 }` matches any element where `el.id === 5`.
+ *
+ * For choice selections (type: 'choice'): field equality on the choice object —
+ * `{ toNotation: 'd4' }` matches any choice where `choice.toNotation === 'd4'`.
+ *
+ * Supply only the fields you care about; unspecified fields are ignored.
+ */
+export type SelectionMatcher = Record<string, unknown>;
+
+/**
  * Declarative static allow-list gate.
  *
  * The pit-of-success path for simple on-rails tutorial steps:
- *   - `action` – the only action name allowed on this step.
- *   - `from`   – (RESERVED, Phase 109) restrict the "from" element/choice.
- *   - `to`     – (RESERVED, Phase 109) restrict the "to" element/choice.
+ *   - `action`     – the only action name allowed on this step.
+ *   - `selections` – optional per-selection value restrictions.
  *
  * When an element-targeted step must leave multiple elements enabled for a
  * teaching beat, use the labeled predicate form (`TutorialGateCondition`) instead.
@@ -119,15 +132,20 @@ export interface TutorialGateAllowList {
   /** The single action name the learner must perform on this step. */
   action: string;
   /**
-   * RESERVED (Phase 109): restrict the source element / choice value.
-   * Type is `unknown` to avoid type churn; Phase 109 will narrow it.
+   * Optional per-selection value restrictions.
+   *
+   * Keys are selection names (matching `selection.name` in the action
+   * definition). Values are `SelectionMatcher` objects: each field in the
+   * matcher must equal the corresponding field on the value for a match.
+   *
+   * When absent (or a selection name has no entry), all values for that
+   * selection are permitted.
+   *
+   * @example
+   * // Gate the 'piece' selection to element id 42, destination to square e5:
+   * { action: 'move', selections: { piece: { id: 42 }, destination: { toNotation: 'e5' } } }
    */
-  from?: unknown;
-  /**
-   * RESERVED (Phase 109): restrict the destination element / choice value.
-   * Type is `unknown` to avoid type churn; Phase 109 will narrow it.
-   */
-  to?: unknown;
+  selections?: Record<string, SelectionMatcher>;
 }
 
 /**
