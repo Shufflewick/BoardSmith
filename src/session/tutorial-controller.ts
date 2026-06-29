@@ -117,6 +117,10 @@ export class TutorialController<G extends Game = Game> {
     // MR-03: fail loud on empty steps or non-function predicates at start time.
     validateTutorialDefinition(def);
     const game = this.#getRunner().game;
+    // R-01: apply the tutorial's setup callback before setting initial progress so
+    // the board is in the deterministic tutorial position before any advanceWhen
+    // predicates fire. setup is optional; games without a preset omit it.
+    def.setup?.(game);
     // Delegate first-step construction to engine initialProgress — single source of truth.
     const progress = initialProgress(def);
     game.tutorialProgress.set(seat, progress);

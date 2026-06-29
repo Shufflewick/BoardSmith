@@ -60,6 +60,7 @@ export type Op =
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
   | { type: 'startTutorial'; player: number }
+  | { type: 'exitTutorial'; player: number }
   | { type: 'hint'; seat: number }
   | { type: 'heatmapToggle'; seat: number; visible: boolean }
   // aiSuggest: read-only preview — runs MCTS and returns the suggested move WITHOUT
@@ -1019,11 +1020,33 @@ export async function executeOp(
         // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
         validateTutorialDefinition(def.tutorial);
         const runner = runnerFromSnapshot(snap, def);
+        // R-01: apply the tutorial's setup callback before setting initial progress so
+        // the board is in the deterministic tutorial position before any advanceWhen
+        // predicates fire. setup is optional; games without a preset omit it.
+        def.tutorial.setup?.(runner.game as Game);
         runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
         // CR-01: pump auto-advance immediately after setting initial progress so steps
         // with always-true advanceWhen predicates (e.g. capture-tip) advance before
         // the learner's first action, matching the simulate-tutorial parity invariant.
         autoAdvanceTutorial(runner.game as Game, op.player);
+        return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+      }
+      case 'exitTutorial': {
+        if (!def.tutorial) {
+          return errorResult('No tutorial definition on this game.', 'protocol');
+        }
+        if (op.player < 1 || op.player > gameOptions.playerCount) {
+          return errorResult(
+            `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
+            'protocol',
+          );
+        }
+        const runner = runnerFromSnapshot(snap, def);
+        const current = runner.game.tutorialProgress.get(op.player);
+        runner.game.tutorialProgress.set(op.player, {
+          stepId: current?.stepId ?? null,
+          status: 'exited',
+        });
         return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
       }
     }

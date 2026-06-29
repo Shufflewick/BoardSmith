@@ -879,4 +879,191 @@ describe('executeOp', () => {
     });
 
   });
+
+  // ── startTutorial with setup callback (R-01 regression) ───────────────────
+
+  describe('startTutorial setup callback (R-01)', () => {
+    // A game with a mutable 'marker' property so setup can stamp it.
+    // This isolates the test from board elements and keeps it minimal.
+    class MarkerGame extends Game<MarkerGame, Player> {
+      markerSet = false;
+
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create('pass').execute(() => ({ success: true }))
+        );
+        this.setFlow(defineFlow({
+          root: loop({
+            maxIterations: 1000,
+            do: actionStep({
+              actions: ['pass'],
+              player: (ctx) => ctx.game.getPlayer(1)!,
+            }),
+          }),
+        }));
+      }
+    }
+
+    const SETUP_TUTORIAL: TutorialDefinition = {
+      setup: (game) => { (game as MarkerGame).markerSet = true; },
+      steps: [{ id: 'step-1', gate: { action: 'pass' } }],
+    };
+
+    const markerGameDef: GameDefinitionLike = {
+      gameClass: MarkerGame as new (...args: unknown[]) => unknown,
+      gameType: 'marker',
+      minPlayers: 1,
+      maxPlayers: 2,
+      tutorial: SETUP_TUTORIAL,
+    };
+
+    it('calls setup before activating the first step so advanceWhen predicates see the preset state', async () => {
+      // Verify setup runs by using an advanceWhen predicate that reads markerSet.
+      // If setup runs BEFORE initialProgress + autoAdvance, and the step's
+      // advanceWhen fires on markerSet===true, the tutorial immediately advances
+      // to step-2 (which does not exist → status becomes 'completed').
+      const SETUP_ADVANCE_TUTORIAL: TutorialDefinition = {
+        setup: (game) => { (game as MarkerGame).markerSet = true; },
+        steps: [
+          {
+            id: 'step-1',
+            gate: { action: 'pass' },
+            advanceWhen: {
+              'marker set by setup': (ctx) => (ctx.game as MarkerGame).markerSet,
+            },
+          },
+          { id: 'step-2', gate: { action: 'pass' } },
+        ],
+      };
+
+      const advanceDef: GameDefinitionLike = {
+        ...markerGameDef,
+        tutorial: SETUP_ADVANCE_TUTORIAL,
+      };
+
+      const startResult = await startGame(advanceDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        advanceDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'startTutorial', player: 1 },
+      );
+
+      expect(result.success).toBe(true);
+      // setup set markerSet=true; the advanceWhen predicate fired → tutorial advanced to step-2.
+      const view = (result.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
+      expect(view?.state?.tutorial?.stepId).toBe('step-2');
+    });
+
+    it('startTutorial without a setup callback leaves game state unchanged', async () => {
+      const NO_SETUP_TUTORIAL: TutorialDefinition = {
+        steps: [{ id: 'only', gate: { action: 'pass' } }],
+      };
+      const noSetupDef: GameDefinitionLike = {
+        ...markerGameDef,
+        tutorial: NO_SETUP_TUTORIAL,
+      };
+
+      const startResult = await startGame(noSetupDef, simpleGameOptions);
+      const result = await executeOp(
+        noSetupDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'startTutorial', player: 1 },
+      );
+
+      expect(result.success).toBe(true);
+      const view = (result.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
+      expect(view?.state?.tutorial?.stepId).toBe('only');
+    });
+  });
+
+  // ── exitTutorial op (R-02) ────────────────────────────────────────────────
+
+  describe('exitTutorial', () => {
+    const EXIT_TUTORIAL: TutorialDefinition = {
+      steps: [
+        { id: 'step-1', gate: { action: 'pass' } },
+        { id: 'step-2', gate: { action: 'pass' } },
+      ],
+    };
+
+    const gameWithExitTutorialDef: GameDefinitionLike = {
+      ...simpleGameDef,
+      tutorial: EXIT_TUTORIAL,
+    };
+
+    it('sets tutorial status to exited and removes the gate', async () => {
+      const startResult = await startGame(gameWithExitTutorialDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      // Start tutorial first.
+      const tutorialStarted = await executeOp(
+        gameWithExitTutorialDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'startTutorial', player: 1 },
+      );
+      expect(tutorialStarted.success).toBe(true);
+      // Tutorial is running on step-1.
+      const viewRunning = (tutorialStarted.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
+      expect(viewRunning?.state?.tutorial?.stepId).toBe('step-1');
+
+      // Exit the tutorial.
+      const exitResult = await executeOp(
+        gameWithExitTutorialDef,
+        simpleGameOptions,
+        tutorialStarted.snapshot,
+        null,
+        { type: 'exitTutorial', player: 1 },
+      );
+
+      expect(exitResult.success).toBe(true);
+      // After exit, tutorialProgress status is 'exited'; the tutorial step view
+      // should no longer appear (gate is lifted, progress status is not 'running').
+      const viewExited = (exitResult.playerViews as Array<{ state: { tutorial?: unknown } }>)?.[0];
+      // The tutorial projection is absent when status is not 'running'.
+      expect(viewExited?.state?.tutorial).toBeUndefined();
+    });
+
+    it('fails with a protocol error when the game has no tutorial definition', async () => {
+      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        simpleGameDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'exitTutorial', player: 1 },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/No tutorial definition/);
+      expect(result.category).toBe('protocol');
+    });
+
+    it('rejects invalid seat with a protocol error', async () => {
+      const startResult = await startGame(gameWithExitTutorialDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        gameWithExitTutorialDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'exitTutorial', player: 0 },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/Invalid player seat/);
+      expect(result.category).toBe('protocol');
+    });
+  });
 });

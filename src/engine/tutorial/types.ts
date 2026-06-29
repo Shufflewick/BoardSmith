@@ -309,6 +309,22 @@ export interface TutorialStep {
 export interface TutorialDefinition {
   /** Ordered list of tutorial steps. */
   steps: TutorialStep[];
+
+  /**
+   * Optional setup callback applied by `startTutorial` (and `TutorialController.start`)
+   * to put the board into the tutorial's deterministic starting position before the
+   * first step is activated.
+   *
+   * Called with the live `Game` instance immediately before `initialProgress` is set
+   * and the auto-advance pump runs, so the board state is authoritative for any
+   * `advanceWhen` predicates that fire on the very first step.
+   *
+   * @example
+   * ```typescript
+   * setup: (game) => (game as CheckersGame).resetToTutorialPreset()
+   * ```
+   */
+  setup?: (game: Game) => void;
 }
 
 // ============================================

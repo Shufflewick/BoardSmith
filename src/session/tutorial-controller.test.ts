@@ -293,3 +293,37 @@ describe('TutorialController — three-step tutorial', () => {
     expect(runner.game.tutorialProgress.get(1)?.stepId).toBe('step-c');
   });
 });
+
+// ============================================
+// R-01: setup callback tests
+// ============================================
+
+describe('TutorialController — setup callback (R-01)', () => {
+  it('start() calls the setup callback before setting initial progress', () => {
+    const setupSpy = vi.fn();
+    const tutorialWithSetup: TutorialDefinition = {
+      setup: setupSpy,
+      steps: [{ id: 'step-1', gate: { action: 'move' } }],
+    };
+    const runner = makeRunner(tutorialWithSetup);
+    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
+
+    controller.start(1);
+
+    // setup must have been called exactly once.
+    expect(setupSpy).toHaveBeenCalledTimes(1);
+    // setup receives the live game instance.
+    expect(setupSpy).toHaveBeenCalledWith(runner.game);
+    // progress is set after setup runs.
+    expect(runner.game.tutorialProgress.get(1)?.stepId).toBe('step-1');
+  });
+
+  it('start() works correctly when no setup callback is provided', () => {
+    // Should not throw; tutorial starts normally without setup.
+    const runner = makeRunner(TWO_STEP_TUTORIAL);
+    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
+
+    expect(() => controller.start(1)).not.toThrow();
+    expect(runner.game.tutorialProgress.get(1)?.stepId).toBe('step-1');
+  });
+});
