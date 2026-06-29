@@ -1005,22 +1005,25 @@ testGame.doAction(1, 'move', { piece: move.piece, destination: destinationArg })
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact tutorial preset board position**
    - What we know: needs ≥1 seat-1 piece positioned to force a capture, plus the capture target in the jump path for a second jump
    - What's unclear: exact checkers notation squares that satisfy the two-jump requirement within the board coordinate system (row 0 = rank 8, col 0 = file a)
    - Recommendation: implementer calculates valid two-jump sequence from a minimal 2-3 piece position; commit as named constants in `game.ts`
+   - **RESOLVED:** Implementer derives a minimal (~2–3 piece) deterministic position that forces a single capture then a multi-jump continuation, committed as named constants in the checkers repo (`game.ts`/preset), and the CI test asserts the exact step transitions against it. Exact squares are an implementation detail finalized during execution from `getValidMoves()`.
 
 2. **Should hint/heatmap/demo bridge ops be in Phase 109 scope?**
    - What we know: STATE.md records "bridge integration deferred to Phase 109"; CONTEXT.md Phase 109 only mentions `start-tutorial` explicitly
    - What's unclear: whether the user intends Phase 109 to also fix hint/heatmap/demo in `boardsmith dev`
    - Recommendation: defer to Phase 110 (DEMO-01 browser demo) where they'll be exercised and the gap is visible
+   - **RESOLVED:** Phase 109 scopes ONLY the `start-tutorial` op (a stateless op). The hint/heatmap/demo bridge wiring (stateful AI layer) is deferred to Phase 110 where it is exercised in the browser. CONTEXT.md Area 2 confirms only the launch surface is in 109 scope.
 
 3. **Tutorial step count and exact advanceWhen timing relative to endTurn**
    - What we know: capture moves do NOT require `endTurn` (multi-jump auto-continues); non-capture moves require `endTurn` before flow advances
    - What's unclear: whether the preset design fully avoids non-capture intro moves, or whether explicit `endTurn` steps are needed
    - Recommendation: design preset to start with captures forced (eliminate intro non-capture moves); re-evaluate if a non-capture intro is educationally necessary
+   - **RESOLVED:** Design the preset so the first teaching beat is an immediate mandatory capture, avoiding intro non-capture moves and explicit `endTurn` tutorial steps. If a brief non-capture intro proves educationally necessary during authoring, add a single gated intro step + `endTurn` — but default to capture-first.
 
 ---
 
