@@ -1013,8 +1013,10 @@ describe('SnapshotSessionHost', () => {
       const b1 = broadcastState(broadcastLog, 1, 1);
       expect(b1.isDemoRunning).toBe(true);
       expect(b1.narration?.text).toBeDefined();
-      // Stub canned move is 'move direction=left' → narration should reflect that
-      expect(b1.narration!.text).toBe('Player 1: move direction=left');
+      // Stub canned move is 'move' with args { direction: 'left' }.
+      // 'direction' is not a SAFE_DEST_ARG, so the safe default omits it → "Player 1: move".
+      // (Hidden-info games must supply adapters.narrateMove for full arg inclusion.)
+      expect(b1.narration!.text).toBe('Player 1: move');
 
       // Broadcast 2: state after move (apply broadcast); narration cleared
       const b2 = broadcastState(broadcastLog, 2, 1);
@@ -1055,15 +1057,18 @@ describe('SnapshotSessionHost', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    // ── Test 3: CANCELLATION — demo-stop before delay fires ──────────────────
+    // ── Test 3: CANCELLATION — immediate: timer cleared synchronously, finally
+    //           runs without advancing fake timers (CR-02 hard guarantee)
     //
-    // Start demo with a 5-second delay. The loop calls aiSuggest (sync stub),
-    // broadcasts narration, then awaits setTimeout(5000). Call demoStop BEFORE
-    // the 5s fires (setting demoAbort). Then advance timers: the 5s fires,
-    // the loop sees demoAbort and breaks WITHOUT executing the move.
-    // No additional broadcasts after the cleanup broadcast; timer count = 0.
+    // demoStop invokes _demoDelayCancel() which calls clearTimeout() synchronously
+    // and resolve() which schedules the loop continuation as a microtask.
+    //
+    // Three hard assertions (must hold WITHOUT vi.runAllTimersAsync):
+    //   (a) vi.getTimerCount() === 0 immediately after demoStop returns
+    //   (b) host.demoRunning === false after microtask drain (no timer advance)
+    //   (c) final broadcast with isDemoRunning:undefined fired without timer advance
 
-    it('CANCELLATION: demo-stop halts loop before delay fires, no extra move executes, timer count 0', async () => {
+    it('CANCELLATION: demoStop clears timer immediately (a), demoRunning=false (b), cleanup broadcast (c) — no timer advance needed', async () => {
       vi.useFakeTimers();
 
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
@@ -1075,33 +1080,33 @@ describe('SnapshotSessionHost', () => {
       void host.handleOp(1, { type: 'demoStart', delay: 5000 });
 
       // Flush microtasks so the loop runs through aiSuggest + narration broadcast
-      // and reaches the await setTimeout(5000) pause point.
-      // (stub aiSuggest is async → needs microtask flushes, not timer advancement)
+      // and reaches the `await new Promise<void>(...)` with setTimeout(5000).
       for (let i = 0; i < 20; i++) await Promise.resolve();
 
-      // At this point: broadcastLog has [0]=isDemoRunning + [1]=narration
-      // The loop is now waiting at the 5000ms setTimeout (not yet fired)
+      // Sanity: exactly one pending fake timer (the 5s delay)
+      expect(vi.getTimerCount()).toBe(1);
+      const broadcastsBeforeStop = broadcastLog.length;
 
-      // Call demo-stop: sets demoAbort=true
+      // Call demoStop — must clear the timer synchronously via _demoDelayCancel()
       await host.handleOp(1, { type: 'demoStop' });
 
-      // Record broadcast count BEFORE advancing timers
-      const broadcastCountAfterStop = broadcastLog.length;
+      // (a) Timer is cleared immediately — no runAllTimersAsync needed
+      expect(vi.getTimerCount()).toBe(0);
 
-      // Advance all fake timers: the 5s setTimeout fires
-      // After firing, the loop checks demoAbort → true → breaks
-      // Finally block fires: cleanup broadcast (isDemoRunning=false)
-      await vi.runAllTimersAsync();
+      // (b)+(c): flush microtasks so the loop's finally block runs.
+      // resolve() was called synchronously inside demoStop, so the loop
+      // continuation is a microtask — it runs here without advancing fake timers.
+      for (let i = 0; i < 20; i++) await Promise.resolve();
 
-      // After advance: exactly one more broadcast (the cleanup), OR zero
-      // if the loop already exited before the timer (demoAbort check after aiSuggest)
-      const newBroadcasts = broadcastLog.length - broadcastCountAfterStop;
-      expect(newBroadcasts).toBeLessThanOrEqual(1);
-
-      // Demo loop is stopped
+      // (b) demoRunning is now false (finally block ran without timer advance)
       expect(host.demoRunning).toBe(false);
 
-      // CLAUDE.md hard rule: no pending timer after demo-stop
+      // (c) At least one new broadcast fired (the cleanup), WITHOUT advancing timers
+      expect(broadcastLog.length).toBeGreaterThan(broadcastsBeforeStop);
+      const lastState = broadcastState(broadcastLog, broadcastLog.length - 1, 1);
+      expect(lastState.isDemoRunning).toBeUndefined(); // not set = not running
+
+      // Still no pending timers
       expect(vi.getTimerCount()).toBe(0);
     });
 
@@ -1137,9 +1142,14 @@ describe('SnapshotSessionHost', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    // ── Test 5: buildNarration produces "Player N: action key=val" format ─────
+    // ── Test 5a: buildNarration safe-default — non-DEST_ARG keys are omitted ───
+    //
+    // The default narration excludes args that are not in SAFE_DEST_ARGS
+    // (to, destination, target, square, cell, position) to avoid leaking
+    // hidden-information data (e.g. card element IDs) to all seats on LAN.
+    // BotGame uses 'direction' which is NOT a SAFE_DEST_ARG → action name only.
 
-    it('narration text follows "Player N: action key=val" format', async () => {
+    it('buildNarration safe default: non-DEST_ARG keys omitted ("Player N: action")', async () => {
       vi.useFakeTimers();
 
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 1 });
@@ -1159,8 +1169,45 @@ describe('SnapshotSessionHost', () => {
       expect(narrationBroadcast).toBeDefined();
       const [views] = narrationBroadcast as [Array<{ state: { narration?: { text: string } } }>, unknown];
       const text = views[0].state.narration!.text;
-      // Canned move: 'move' with direction='left'
-      // Expected: "Player 1: move direction=left"
+      // Canned move: 'move' with args { direction: 'left' }
+      // 'direction' is NOT a SAFE_DEST_ARG → omitted from the safe default narration
+      expect(text).toBe('Player 1: move');
+    });
+
+    // ── Test 5b: narrateMove hook overrides the safe default ─────────────────
+    //
+    // Game authors supply adapters.narrateMove to include the full arg list for
+    // open-information games, or to produce a custom human-readable description
+    // for hidden-information games (showing safe info only, determined by the author).
+
+    it('buildNarration: custom narrateMove hook overrides safe default and receives full args', async () => {
+      vi.useFakeTimers();
+
+      const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 1 });
+
+      // Supply a custom narrator that formats all args (open-info game scenario)
+      adapters.narrateMove = (player, action, args) => {
+        const summary = Object.entries(args).map(([k, v]) => `${k}=${String(v)}`).join(' ');
+        return summary ? `Player ${player}: ${action} ${summary}` : `Player ${player}: ${action}`;
+      };
+
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      await host.handleOp(1, { type: 'demoStart', delay: 0 });
+      await vi.runAllTimersAsync();
+
+      // Find the narration broadcast
+      const narrationBroadcast = broadcastLog.find((entry) => {
+        const [views] = entry as [Array<{ state: { narration?: { text: string } } }>, unknown];
+        return views[0]?.state?.narration?.text != null;
+      });
+
+      expect(narrationBroadcast).toBeDefined();
+      const [views] = narrationBroadcast as [Array<{ state: { narration?: { text: string } } }>, unknown];
+      const text = views[0].state.narration!.text;
+      // Custom narrator includes all args — 'direction=left' is now visible
       expect(text).toBe('Player 1: move direction=left');
     });
 

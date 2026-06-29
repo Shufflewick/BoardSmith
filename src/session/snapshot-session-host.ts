@@ -13,6 +13,23 @@ export interface SnapshotSessionAdapters {
   broadcast: (playerViews: unknown[], meta: { isComplete: boolean; winners: number[] }) => void;
   aiSeats?: Array<{ seat: number; level?: string }>;
   persist?: (state: { snapshot: unknown; pendingStates: Record<string, Record<string, unknown>> }) => void | Promise<void>;
+  /**
+   * Optional narrator hook for game authors.
+   *
+   * Supplying this hook is required for hidden-information games: the default
+   * narration only includes destination-like args (to, destination, target,
+   * square, cell, position) and omits all other args (e.g. card element IDs)
+   * that must not be broadcast to every seat on a LAN multiplayer session.
+   *
+   * Open-information games do not need this hook — the destination-only default
+   * is sufficient and safe.
+   *
+   * @param player - 1-based seat index of the acting player
+   * @param action - action name (e.g. "playCard")
+   * @param args   - full action args from aiSuggest (may contain hidden data)
+   * @returns      a narration string safe to broadcast to all seats
+   */
+  narrateMove?: (player: number, action: string, args: Record<string, unknown>) => string;
 }
 
 export class SnapshotSessionHost {
@@ -33,10 +50,13 @@ export class SnapshotSessionHost {
   narrationText: string | null = null;
   private lastPlayerViews: unknown[] = [];
 
-  // Demo loop cancellation flag and move cap.
+  // Demo loop cancellation flag, move cap, and cancellable-delay handle.
   // demoAbort: set by demoStop to cancel the in-flight runDemoLoop.
   // MAX_DEMO_MOVES: hard cap to guard against infinite/very long games (STRIDE T-110-06).
+  // _demoDelayCancel: invoke to clear the pending setTimeout and resolve the delay
+  //   promise synchronously — guarantees no timer survives after demoStop (CLAUDE.md).
   private demoAbort = false;
+  private _demoDelayCancel: (() => void) | null = null;
   private readonly MAX_DEMO_MOVES = 200;
 
   constructor(private readonly adapters: SnapshotSessionAdapters) {}
@@ -134,7 +154,19 @@ export class SnapshotSessionHost {
     }
     if (op.type === 'demoStop') {
       this.demoAbort = true;
-      // The loop's finally block will set demoRunning=false + broadcastCurrent().
+      // CR-01: clear narration immediately so any apply() broadcast during the
+      // stop window does not inject stale narration text into all clients' views.
+      this.narrationText = null;
+      // CR-02: cancel the pending delay timer synchronously — clearTimeout runs
+      // inside the cancel callback, dropping the timer count to 0 immediately.
+      // resolve() is also called, scheduling the loop continuation as a microtask
+      // so the finally block runs (sets demoRunning=false + broadcastCurrent)
+      // without waiting for the original timer to fire.
+      this._demoDelayCancel?.();
+      this._demoDelayCancel = null;
+      // Broadcast the clean state (narration cleared, still shows isDemoRunning=true
+      // until the finally block fires in the next microtask drain).
+      this.broadcastCurrent();
       return {
         success: true,
         snapshot: this.snapshot,
@@ -276,8 +308,14 @@ export class SnapshotSessionHost {
       while (!this.demoAbort && !this.isComplete && moves < this.MAX_DEMO_MOVES) {
         moves++;
 
+        // WR-01: Capture the snapshot once per iteration so both aiSuggest and
+        // the action execute op use the SAME snapshot. A concurrent human handleOp
+        // can mutate this.snapshot between the two awaits; using a frozen reference
+        // prevents the narrate/execute state desync.
+        const iterSnapshot = this.snapshot;
+
         // Phase 1: Preview the move (read-only — no state mutation).
-        const suggestRes = await this.adapters.executeOp(this.snapshot, null, {
+        const suggestRes = await this.adapters.executeOp(iterSnapshot, null, {
           type: 'aiSuggest',
           seats: allSeats,
         });
@@ -295,8 +333,15 @@ export class SnapshotSessionHost {
         this.narrationText = this.buildNarration(aiPlayer, suggestedAction, suggestedArgs as Record<string, unknown>);
         this.broadcastCurrent(); // announcement broadcast (isDemoRunning + narration)
 
-        // Phase 3: Wait the configured delay (cancellable).
-        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+        // Phase 3: Wait the configured delay (cancellable via _demoDelayCancel).
+        // CR-02: store the timer handle so demoStop can clear it and call resolve()
+        // synchronously, dropping the timer count to 0 and scheduling the loop
+        // continuation as a microtask — no timer survives after demoStop (CLAUDE.md).
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, delay);
+          this._demoDelayCancel = () => { clearTimeout(timer); resolve(); };
+        });
+        this._demoDelayCancel = null;
 
         // Check abort AFTER the delay — this is the critical second check from
         // RESEARCH Pitfall 1: if demo-stop fires mid-delay, we must not execute
@@ -307,8 +352,10 @@ export class SnapshotSessionHost {
         // ANTI-PATTERN AVOIDED: Do NOT re-run aiSuggest/aiTurn here — a second
         // MCTS call could produce a different move, making the narration a lie
         // (RESEARCH: "narrate/execute mismatch" anti-pattern).
+        // WR-01: use iterSnapshot (captured at iteration start) to match the
+        // snapshot that aiSuggest used — prevents state desync under concurrent ops.
         this.narrationText = null;
-        const execRes = await this.adapters.executeOp(this.snapshot, null, {
+        const execRes = await this.adapters.executeOp(iterSnapshot, null, {
           type: 'action',
           actionName: suggestedAction,
           player: aiPlayer,
@@ -349,14 +396,34 @@ export class SnapshotSessionHost {
 
   /**
    * Format a narration string for one loop iteration.
+   *
+   * This string is broadcast to ALL seats — including opponents in hidden-
+   * information games. Two strategies are used in priority order:
+   *
+   * 1. `adapters.narrateMove` hook (supplied by the game author): full control.
+   *    Required for hidden-info games where the default would expose private data.
+   *
+   * 2. Safe default: only args whose keys appear in SAFE_DEST_ARGS
+   *    (to, destination, target, square, cell, position) are included in the
+   *    summary. All other args (e.g. card element IDs) are omitted to avoid
+   *    leaking hidden information on LAN sessions. Open-information games
+   *    (Checkers, Hex) are unaffected because their destination args use these
+   *    standard key names.
+   *
    * Mirrors the default narrator in game-session.ts:1142-1149 but uses
    * "Player N" instead of the player name (no player-name threading in
    * the stateless path — RESEARCH open-Q2 RESOLVED).
    */
   private buildNarration(player: number, action: string, args: Record<string, unknown>): string {
-    const argSummary = Object.entries(args)
+    if (this.adapters.narrateMove) {
+      return this.adapters.narrateMove(player, action, args);
+    }
+    // Safe default: include only destination-like args (never raw element IDs).
+    const SAFE_DEST_ARGS = new Set(['to', 'destination', 'target', 'square', 'cell', 'position']);
+    const safeSummary = Object.entries(args)
+      .filter(([k]) => SAFE_DEST_ARGS.has(k))
       .map(([k, v]) => (v !== null && typeof v === 'object' ? `${k}=${JSON.stringify(v)}` : `${k}=${String(v)}`))
       .join(' ');
-    return argSummary ? `Player ${player}: ${action} ${argSummary}` : `Player ${player}: ${action}`;
+    return safeSummary ? `Player ${player}: ${action} ${safeSummary}` : `Player ${player}: ${action}`;
   }
 }
