@@ -37,7 +37,7 @@ The showcase that proves the substrate end-to-end. Targets checkers' real teachi
 - [x] **CHK-01**: A new player can complete a guided checkers tutorial that teaches the two-step piece selection → destination move, using action gating (TUT-02) and annotation overlays (TUT-01).
 - [ ] **CHK-02**: The checkers tutorial teaches the mandatory-capture rule via a predicate-triggered tip (TUT-03) shown the first time a capture becomes forced.
 - [ ] **CHK-03**: The checkers tutorial walks the player through a forced multi-jump, teaching continuation (turn does not end while further jumps exist).
-- [ ] **CHK-04**: The checkers tutorial is launchable from the game and runs inside GameShell and the `boardsmith dev` host.
+- [x] **CHK-04**: The checkers tutorial is launchable from the game and runs inside GameShell and the `boardsmith dev` host.
 
 ### Demonstration & Refinement (DEMO)
 
@@ -87,7 +87,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | CHK-01 | Phase 109 | Complete |
 | CHK-02 | Phase 109 | Pending |
 | CHK-03 | Phase 109 | Pending |
-| CHK-04 | Phase 109 | Pending |
+| CHK-04 | Phase 109 | Complete |
 | DEMO-01 | Phase 110 | Pending |
 
 **Coverage:**
