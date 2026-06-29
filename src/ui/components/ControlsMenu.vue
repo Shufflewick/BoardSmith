@@ -41,6 +41,11 @@ const props = withDefaults(defineProps<{
   isHeatmapVisible?: boolean;
   /** Whether action help affordances are currently visible (drives aria-checked). */
   isActionHelpVisible?: boolean;
+  /**
+   * When true, renders the Tutorial group showing the "Start tutorial" item.
+   * Absent/false hides the group (game has no tutorial definition).
+   */
+  hasTutorial?: boolean;
 }>(), {
   openUp: false,
   align: 'right',
@@ -53,13 +58,15 @@ const emit = defineEmits<{
   'undo': [];
   'menu-item-click': [id: string];
   /**
-   * Emitted when the user selects a Teaching group item or a global display toggle.
+   * Emitted when the user selects a Teaching group item, a Tutorial item, or
+   * a global display toggle.
    * - 'hint': request a one-shot move hint from the AI
    * - 'demo-toggle': start or stop the AI narrated demo
    * - 'heatmap-toggle': toggle the per-cell move quality overlay
    * - 'help-toggle': toggle action help affordances (Play group, always visible)
+   * - 'start-tutorial': (re)start the tutorial from step 0
    */
-  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle'];
+  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial'];
 }>();
 
 const isOpen = ref(false);
@@ -297,6 +304,21 @@ function handleLeave() {
           <span class="r">
             <span class="toggle" :class="{ on: isHeatmapVisible }"></span>
           </span>
+        </button>
+      </template>
+
+      <!-- Tutorial group: visible only when the game has a tutorial definition -->
+      <template v-if="hasTutorial">
+        <div class="sep"></div>
+        <div class="grouplabel">Tutorial</div>
+        <button
+          class="mi"
+          type="button"
+          role="menuitem"
+          @click="emit('teaching-action', 'start-tutorial'); close()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm-1 13V9l6 3-6 3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Start tutorial
         </button>
       </template>
     </div>

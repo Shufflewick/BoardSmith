@@ -695,6 +695,12 @@ const showHintProp = computed<boolean | undefined>(() =>
   lobbyInfo.value?.slots?.some(s => s.aiLevel != null) ? true : undefined
 );
 
+// Show Tutorial group when the game definition has a tutorial attached.
+// Reads from broadcast state (hasTutorial is set by buildPlayerState).
+const hasTutorialProp = computed<boolean>(
+  () => (state.value?.state as any)?.hasTutorial ?? false
+);
+
 // Hint is disabled when the local player is not at a decision point.
 const hintDisabledProp = computed(
   () => !isMyTurn.value || availableActions.value.length === 0
@@ -709,7 +715,7 @@ const isHeatmapVisibleProp = computed(
 // Each action delegates to the appropriate platformRequest op so the dev bridge
 // (Phase 109) and production host can implement the server-side handler.
 async function handleTeachingAction(
-  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle'
+  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial'
 ) {
   if (teachAction === 'hint') {
     try {
@@ -747,6 +753,12 @@ async function handleTeachingAction(
     // Pure client display preference — no server round-trip.
     isActionHelpVisible.value = !isActionHelpVisible.value;
     setActionHelpEnabled(isActionHelpVisible.value);
+  } else if (teachAction === 'start-tutorial') {
+    try {
+      await platformRequest('start-tutorial', { seat: playerSeat.value });
+    } catch {
+      toast.error('Failed to start tutorial.');
+    }
   }
 }
 
@@ -1918,6 +1930,7 @@ if ((import.meta as any).hot) {
           :is-demo-running="isDemoRunning"
           :is-heatmap-visible="isHeatmapVisibleProp"
           :is-action-help-visible="isActionHelpVisible"
+          :has-tutorial="hasTutorialProp"
           @undo="handleUndo"
           @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
