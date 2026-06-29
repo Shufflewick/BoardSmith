@@ -688,12 +688,19 @@ const isDemoRunning = computed(
   () => (state.value?.state as any)?.isDemoRunning ?? false
 );
 
-// Show Teaching group when the lobby has at least one AI slot.
-// In platform mode (no lobbyInfo), the group is hidden — bridge integration
-// for platform/production demo is deferred to Phase 109/110.
-const showHintProp = computed<boolean | undefined>(() =>
-  lobbyInfo.value?.slots?.some(s => s.aiLevel != null) ? true : undefined
-);
+// Show Teaching group when:
+//   (a) Production lobby path: at least one AI slot in lobbyInfo — unchanged.
+//   (b) Dev-host (platform mode) path: SnapshotSessionHost injects hasAIPlayers
+//       into broadcast state when aiSeats are present. GameSession (production)
+//       never sets hasAIPlayers, so this branch is unreachable in prod (safe
+//       by construction — RESEARCH Pitfall 5).
+const showHintProp = computed<boolean | undefined>(() => {
+  // Production lobby path — unchanged
+  if (lobbyInfo.value?.slots?.some(s => s.aiLevel != null)) return true;
+  // Dev-host path: SnapshotSessionHost injects hasAIPlayers into broadcast state
+  if ((state.value?.state as any)?.hasAIPlayers) return true;
+  return undefined;
+});
 
 // Show Tutorial group when the game definition has a tutorial attached.
 // Reads from broadcast state (hasTutorial is set by buildPlayerState).
