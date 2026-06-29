@@ -73,6 +73,14 @@ describe('dev host bridge', () => {
       });
       expect(translateOp('cancel_action', 4, {})).toEqual({ type: 'cancelAction', player: 4 });
       expect(translateOp('undo', 4, {})).toEqual({ type: 'undo', player: 4 });
+      // Teaching wire ops
+      expect(translateOp('hint', 2, { seat: 2 })).toEqual({ type: 'hint', seat: 2 });
+      expect(translateOp('heatmap-toggle', 1, { seat: 1, visible: true })).toEqual({
+        type: 'heatmapToggle', seat: 1, visible: true,
+      });
+      expect(translateOp('heatmap-toggle', 1, { seat: 1, visible: false })).toEqual({
+        type: 'heatmapToggle', seat: 1, visible: false,
+      });
       expect(translateOp('bogus', 1, {})).toBeUndefined();
     });
   });
@@ -105,6 +113,26 @@ describe('dev host bridge', () => {
         winners: [],
       });
       expect(r.choices).toEqual(['red', 'blue']);
+    });
+
+    it('returns only {success,error} for hint and heatmap-toggle (no playerViews leak)', () => {
+      const base = {
+        success: true,
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [{ state: { secret: 'should-not-appear' } }],
+        isComplete: false,
+        winners: [],
+      };
+
+      const hintResult = shapeResult('hint', base);
+      expect(hintResult).toEqual({ success: true, error: undefined });
+      expect((hintResult as Record<string, unknown>).playerViews).toBeUndefined();
+
+      const heatmapResult = shapeResult('heatmap-toggle', base);
+      expect(heatmapResult).toEqual({ success: true, error: undefined });
+      expect((heatmapResult as Record<string, unknown>).playerViews).toBeUndefined();
     });
   });
 

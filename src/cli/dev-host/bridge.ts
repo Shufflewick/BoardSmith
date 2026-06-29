@@ -25,6 +25,10 @@ export type WireOp =
   | 'cancel_action'
   | 'undo'
   | 'start-tutorial'
+  // Teaching wire ops — hint/heatmap-toggle request AI suggestions;
+  // results flow back via game_state broadcasts (not via the op response).
+  | 'hint'
+  | 'heatmap-toggle'
   // Debug-panel wire ops (dev only). `debug:restart` / `debug:switch-seat` are
   // host-chrome ops handled in DevHost, not here.
   | 'debug:history'
@@ -126,6 +130,10 @@ export function translateOp(
       return { type: 'undo', player: seat };
     case 'start-tutorial':
       return { type: 'startTutorial', player: seat };
+    case 'hint':
+      return { type: 'hint', seat: (payload.seat as number) ?? seat };
+    case 'heatmap-toggle':
+      return { type: 'heatmapToggle', seat: (payload.seat as number) ?? seat, visible: payload.visible as boolean };
     case 'debug:history':
       return { type: 'debugHistory' };
     case 'debug:state-at':
@@ -190,6 +198,11 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
     case 'cancel_action':
     case 'undo':
     case 'start-tutorial':
+    case 'hint':
+    case 'heatmap-toggle':
+      // Teaching ops: results flow via game_state broadcasts (never via op response).
+      // Return only {success, error} — the client reads state.hint/state.heatmap
+      // from the broadcast, not from this response (RESEARCH Pitfall 7).
       return { success: result.success, error: result.error };
     case 'debug:history':
       return { success: result.success, error: result.error, actionHistory: result.actionHistory };
