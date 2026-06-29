@@ -210,22 +210,55 @@ describe('allow-list gate — unchanged by MR-02 refactor', () => {
     expect('move' in disabled).toBe(false);
   });
 
-  it('applies per-value gating when from/to are specified', () => {
-    const runner = makeRunner({ seed: 'per-value' });
-    runner.game.tutorialDefinition = {
-      steps: [
-        {
-          id: 'step-1',
-          gate: { action: 'move', from: 'a', to: 'b' },
-        },
-      ],
+  it('applies per-selection gating by element id: matching element is allowed, non-matching is blocked', () => {
+    const step: TutorialStep = {
+      id: 's',
+      gate: { action: 'move', selections: { piece: { id: 42 } } },
     };
-    runner.game.tutorialProgress.set(1, { stepId: 'step-1', status: 'running' });
+    // matching element: allowed
+    expect(getGateReasonForValue(step, 'move', { id: 42 }, 'piece')).toBeNull();
+    // non-matching element: blocked
+    expect(getGateReasonForValue(step, 'move', { id: 99 }, 'piece')).not.toBeNull();
+  });
 
-    const step = getActiveStep(runner.game, 1)!;
-    expect(getGateReasonForValue(step, 'move', 'a')).toBeNull();
-    expect(getGateReasonForValue(step, 'move', 'b')).toBeNull();
-    expect(getGateReasonForValue(step, 'move', 'c')).not.toBeNull();
+  it('unspecified selection name permits all its values (back-compatible)', () => {
+    const step: TutorialStep = {
+      id: 's',
+      gate: { action: 'move', selections: { piece: { id: 42 } } },
+    };
+    // 'destination' has no entry in selections → all values allowed
+    expect(getGateReasonForValue(step, 'move', { toNotation: 'a1' }, 'destination')).toBeNull();
+    expect(getGateReasonForValue(step, 'move', { toNotation: 'h8' }, 'destination')).toBeNull();
+  });
+
+  it('applies per-selection field equality for choice objects (toNotation)', () => {
+    const step: TutorialStep = {
+      id: 's',
+      gate: { action: 'move', selections: { destination: { toNotation: 'd4' } } },
+    };
+    // matching destination: allowed
+    expect(getGateReasonForValue(step, 'move', { toNotation: 'd4', pieceId: 1 }, 'destination')).toBeNull();
+    // non-matching destination: blocked
+    expect(getGateReasonForValue(step, 'move', { toNotation: 'e5', pieceId: 1 }, 'destination')).not.toBeNull();
+  });
+
+  it('non-object/null value never matches a non-empty matcher (no crash, returns reason)', () => {
+    const step: TutorialStep = {
+      id: 's',
+      gate: { action: 'move', selections: { piece: { id: 42 } } },
+    };
+    expect(getGateReasonForValue(step, 'move', null, 'piece')).not.toBeNull();
+    expect(getGateReasonForValue(step, 'move', 'string-value', 'piece')).not.toBeNull();
+    expect(getGateReasonForValue(step, 'move', 99, 'piece')).not.toBeNull();
+  });
+
+  it('no selections on gate: all values of the allowed action are permitted (legacy back-compat)', () => {
+    const step: TutorialStep = {
+      id: 's',
+      gate: { action: 'move' },
+    };
+    expect(getGateReasonForValue(step, 'move', { id: 1 }, 'piece')).toBeNull();
+    expect(getGateReasonForValue(step, 'move', { toNotation: 'x5' }, 'destination')).toBeNull();
   });
 });
 
