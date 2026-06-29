@@ -4,14 +4,14 @@ milestone: v4.1
 milestone_name: Tutorial Primitives
 status: executing
 stopped_at: Phase 108 UI-SPEC approved
-last_updated: "2026-06-29T15:35:11.885Z"
+last_updated: "2026-06-29T15:54:34.615Z"
 last_activity: 2026-06-29
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 30
-  completed_plans: 27
-  percent: 86
+  completed_plans: 28
+  percent: 90
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 ## Current Position
 
 Phase: 110 (demonstration-refinement) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-06-29
 
@@ -104,6 +104,13 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - `selectionMatchesValue` uses ElementRef id > notation > name precedence for element values; all-field equality for choice objects (DestinationChoice etc.).
 - Non-object/null values never match a non-empty matcher (returns reason, no crash) — satisfies T-109-01 threat mitigation.
 
+**Phase 110 Plan 03 decisions (2026-06-29):**
+
+- aiSuggest previews MCTS move read-only; demo loop executes same args via action op (MCTS never re-runs for execution — avoids narrate/execute mismatch).
+- demoAbort checked before AND after delay (RESEARCH Pitfall 1) — critical for timer-leak-free cancellation (CLAUDE.md hard rule).
+- demoStart/demoStop in Op union but NOT in executeOp switch — host lifecycle ops; fallback error if they reach executeOp.
+- Demo tests stub aiSuggest to avoid MCTS setImmediate conflicts with vi.useFakeTimers().
+
 ### Highest-Risk Items
 
 1. `useBoardInteraction` parity for the annotation overlay (Phase 105) — a primitive that works in only one UI path violates the hard-rule; verify both paths.
@@ -130,7 +137,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-29T15:35:11.874Z
+Last session: 2026-06-29T15:54:34.604Z
 Stopped at: Phase 108 UI-SPEC approved
 Resume file: None
 Next action: `/gsd:plan-phase 108`
