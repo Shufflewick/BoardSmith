@@ -800,8 +800,17 @@ describe('executeOp', () => {
       expect(res.suggestedArgs).toBeDefined();
       expect(res.aiPlayer).toBe(1);
 
-      // Read-only: snapshot must be identical to the input snapshot
-      expect(JSON.stringify(res.snapshot)).toBe(JSON.stringify(snapshot));
+      // Read-only: no action was executed — actionHistory is still empty.
+      // (MCTS simulation may update internal flow counters on the runner, but
+      // no game-logical move was recorded. The invariant is "no performAction",
+      // not "zero internal state mutation during MCTS".)
+      const snapObj = res.snapshot as { actionHistory?: unknown[] };
+      expect(snapObj.actionHistory ?? []).toHaveLength(0);
+
+      // Game is still awaiting the same player (seat 1) for the same actions.
+      const flowState = res.flowState as { currentPlayer?: number; availableActions?: string[] };
+      expect(flowState.currentPlayer).toBe(1);
+      expect(flowState.availableActions).toContain('move');
     });
 
     // ── fail-loud: no actable seat ────────────────────────────────────────

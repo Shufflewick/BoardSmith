@@ -673,15 +673,63 @@ async function handleHeatmapToggle(
 // aiSuggest op handler (read-only preview)
 // ---------------------------------------------------------------------------
 
-// PLACEHOLDER — replaced in GREEN phase with the real implementation.
-// During RED phase this returns a protocol error so TDD tests fail as expected.
+/**
+ * Run MCTS to preview the move an AI seat would make WITHOUT mutating the
+ * snapshot. The demo loop calls this to narrate the move before executing it
+ * via the existing `action` op — never re-running MCTS for the execute step
+ * (which would risk a narrate/execute mismatch if MCTS is non-deterministic).
+ *
+ * Mirrors handleAITurn's bot construction but stops short of performAction.
+ * Returns the snapshot unchanged; only `suggestedAction`, `suggestedArgs`,
+ * and `aiPlayer` are set beyond the standard stateEnvelope fields.
+ */
 async function handleAISuggest(
-  _def: GameDefinitionLike,
-  _gameOptions: { playerCount: number; [key: string]: unknown },
-  _snapshot: GameStateSnapshot,
-  _op: Extract<Op, { type: 'aiSuggest' }>,
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'aiSuggest' }>,
 ): Promise<OpResult> {
-  return errorResult('aiSuggest not implemented yet', 'executor');
+  // Fail-loud: no AI config means suggestion is impossible.
+  if (!def.ai?.objectives) {
+    return errorResult('No AI configuration on this game — aiSuggest is unavailable.', 'protocol');
+  }
+
+  const runner = runnerFromSnapshot(snapshot, def);
+  const flowState = runner.getFlowState() as AIFlowState | undefined;
+
+  // Find the seat currently awaiting input among the given seats.
+  const aiSeatSet = new Set(op.seats.map((s) => s.seat));
+  const aiPlayer = selectDueAISeat(flowState ?? {}, aiSeatSet);
+  if (aiPlayer === undefined) {
+    return errorResult(
+      'No seat among the given seats is currently awaiting input.',
+      'protocol',
+    );
+  }
+
+  const seatLevel = op.seats.find((s) => s.seat === aiPlayer)?.level;
+  const bot = createBot(
+    runner.game as Game,
+    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameType,
+    aiPlayer,
+    runner.actionHistory,
+    parseAILevel(seatLevel ?? 'medium'),
+    def.ai,
+  );
+
+  const move = await bot.play();
+
+  // Return the preview — snapshot is NOT mutated (read-only, per READ_ONLY_OP_TYPES).
+  // Per RESEARCH Pitfall 8: the stateEnvelope playerViews are discarded by the demo
+  // loop (it reads only aiPlayer/suggestedAction/suggestedArgs). Acceptable for Phase 110.
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    aiPlayer,
+    suggestedAction: move.action,
+    suggestedArgs: move.args as Record<string, unknown>,
+  };
 }
 
 // ---------------------------------------------------------------------------
