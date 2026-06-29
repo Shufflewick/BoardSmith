@@ -136,7 +136,12 @@
   2. The AI move hint, narrated AI-vs-AI demo, and evaluation heatmap are each demonstrated live in the browser.
   3. Action help (hover/tap reveal + global toggle) is demonstrated live.
   4. The demonstration is conducted as a hands-on refinement checkpoint with the user: observed friction and requested refinements are captured to inform the substrate before it is applied to cribbage (the deferred v2 CRIB milestone).
-**Plans**: TBD
+**Plans**: 5 plans (Waves 1-4) — CROSS-REPO: mostly BoardSmith src/, plus one checkers hintTargetFromMove change
+- [ ] 110-01-PLAN.md — Foundation: transient teaching-state injection + hasAIPlayers signal + un-hide Teaching controls (Wave 1)
+- [ ] 110-02-PLAN.md — hint + heatmap ops through bridge/stateless-ops + transient store/clear (Wave 2)
+- [ ] 110-03-PLAN.md — AI-vs-AI narrated demo loop (aiSuggest preview + cancellable, timer-leak-free) (Wave 3)
+- [ ] 110-04-PLAN.md — checkers hintTargetFromMove for destination-square highlight (checkers repo, Wave 3)
+- [ ] 110-05-PLAN.md — Demo script + live browser demonstration & refinement capture (human gate, Wave 4)
 **UI hint**: yes
 
 ## Progress
@@ -149,4 +154,4 @@
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 4/4 | Complete    | 2026-06-29 |
-| 110. Demonstration & Refinement | 0/? | Not started | - |
+| 110. Demonstration & Refinement | 0/5 | Planned | - |
