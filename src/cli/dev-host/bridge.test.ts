@@ -81,6 +81,10 @@ describe('dev host bridge', () => {
       expect(translateOp('heatmap-toggle', 1, { seat: 1, visible: false })).toEqual({
         type: 'heatmapToggle', seat: 1, visible: false,
       });
+      // Demo lifecycle wire ops
+      expect(translateOp('demo-start', 1, { delay: 0 })).toEqual({ type: 'demoStart', delay: 0 });
+      expect(translateOp('demo-start', 1, {})).toEqual({ type: 'demoStart', delay: undefined });
+      expect(translateOp('demo-stop', 1, {})).toEqual({ type: 'demoStop' });
       expect(translateOp('bogus', 1, {})).toBeUndefined();
     });
   });
@@ -133,6 +137,27 @@ describe('dev host bridge', () => {
       const heatmapResult = shapeResult('heatmap-toggle', base);
       expect(heatmapResult).toEqual({ success: true, error: undefined });
       expect((heatmapResult as Record<string, unknown>).playerViews).toBeUndefined();
+    });
+
+    it('returns only {success,error} for demo-start and demo-stop (no playerViews leak, RESEARCH Pitfall 7)', () => {
+      const base = {
+        success: true,
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [{ state: { isDemoRunning: true } }],
+        isComplete: false,
+        winners: [],
+      };
+
+      const demoStartResult = shapeResult('demo-start', base);
+      expect(demoStartResult).toEqual({ success: true, error: undefined });
+      expect((demoStartResult as Record<string, unknown>).playerViews).toBeUndefined();
+      expect((demoStartResult as Record<string, unknown>).isDemoRunning).toBeUndefined();
+
+      const demoStopResult = shapeResult('demo-stop', base);
+      expect(demoStopResult).toEqual({ success: true, error: undefined });
+      expect((demoStopResult as Record<string, unknown>).playerViews).toBeUndefined();
     });
   });
 
