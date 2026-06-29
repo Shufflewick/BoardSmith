@@ -138,7 +138,7 @@
   4. The demonstration is conducted as a hands-on refinement checkpoint with the user: observed friction and requested refinements are captured to inform the substrate before it is applied to cribbage (the deferred v2 CRIB milestone).
 **Plans**: 5 plans (Waves 1-4) — CROSS-REPO: mostly BoardSmith src/, plus one checkers hintTargetFromMove change
 - [x] 110-01-PLAN.md — Foundation: transient teaching-state injection + hasAIPlayers signal + un-hide Teaching controls (Wave 1)
-- [ ] 110-02-PLAN.md — hint + heatmap ops through bridge/stateless-ops + transient store/clear (Wave 2)
+- [x] 110-02-PLAN.md — hint + heatmap ops through bridge/stateless-ops + transient store/clear (Wave 2)
 - [ ] 110-03-PLAN.md — AI-vs-AI narrated demo loop (aiSuggest preview + cancellable, timer-leak-free) (Wave 3)
 - [ ] 110-04-PLAN.md — checkers hintTargetFromMove for destination-square highlight (checkers repo, Wave 3)
 - [ ] 110-05-PLAN.md — Demo script + live browser demonstration & refinement capture (human gate, Wave 4)
@@ -154,4 +154,4 @@
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 4/4 | Complete    | 2026-06-29 |
-| 110. Demonstration & Refinement | 1/5 | In Progress|  |
+| 110. Demonstration & Refinement | 2/5 | In Progress|  |
