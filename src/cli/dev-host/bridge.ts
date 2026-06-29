@@ -25,6 +25,7 @@ export type WireOp =
   | 'cancel_action'
   | 'undo'
   | 'start-tutorial'
+  | 'exit-tutorial'
   // Teaching wire ops — hint/heatmap-toggle request AI suggestions;
   // results flow back via game_state broadcasts (not via the op response).
   | 'hint'
@@ -135,6 +136,8 @@ export function translateOp(
       return { type: 'undo', player: seat };
     case 'start-tutorial':
       return { type: 'startTutorial', player: seat };
+    case 'exit-tutorial':
+      return { type: 'exitTutorial', player: seat };
     case 'hint':
       return { type: 'hint', seat: (payload.seat as number) ?? seat };
     case 'heatmap-toggle':
@@ -207,6 +210,7 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
     case 'cancel_action':
     case 'undo':
     case 'start-tutorial':
+    case 'exit-tutorial':
     case 'hint':
     case 'heatmap-toggle':
       // Teaching ops: results flow via game_state broadcasts (never via op response).

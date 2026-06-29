@@ -708,6 +708,14 @@ const hasTutorialProp = computed<boolean>(
   () => (state.value?.state as any)?.hasTutorial ?? false
 );
 
+// True when this seat's tutorial is currently active (status === 'running').
+// Derived from the projected tutorial step view: when it is defined, the seat
+// is in a running tutorial. When undefined (no tutorial, or exited/completed),
+// the button reverts to "Start tutorial".
+const isTutorialRunningProp = computed(
+  () => tutorialStep.value !== undefined
+);
+
 // Hint is disabled when the local player is not at a decision point.
 const hintDisabledProp = computed(
   () => !isMyTurn.value || availableActions.value.length === 0
@@ -722,7 +730,7 @@ const isHeatmapVisibleProp = computed(
 // Each action delegates to the appropriate platformRequest op so the dev bridge
 // (Phase 109) and production host can implement the server-side handler.
 async function handleTeachingAction(
-  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial'
+  teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial' | 'exit-tutorial'
 ) {
   if (teachAction === 'hint') {
     try {
@@ -765,6 +773,12 @@ async function handleTeachingAction(
       await platformRequest('start-tutorial', { seat: playerSeat.value });
     } catch {
       toast.error('Failed to start tutorial.');
+    }
+  } else if (teachAction === 'exit-tutorial') {
+    try {
+      await platformRequest('exit-tutorial', { seat: playerSeat.value });
+    } catch {
+      toast.error('Failed to exit tutorial.');
     }
   }
 }
@@ -1938,6 +1952,7 @@ if ((import.meta as any).hot) {
           :is-heatmap-visible="isHeatmapVisibleProp"
           :is-action-help-visible="isActionHelpVisible"
           :has-tutorial="hasTutorialProp"
+          :is-tutorial-running="isTutorialRunningProp"
           @undo="handleUndo"
           @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"

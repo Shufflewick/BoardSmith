@@ -46,6 +46,12 @@ const props = withDefaults(defineProps<{
    * Absent/false hides the group (game has no tutorial definition).
    */
   hasTutorial?: boolean;
+  /**
+   * When true (a tutorial is currently active for this seat), the Tutorial
+   * group button reads "Exit tutorial" and emits 'exit-tutorial'.
+   * When false/absent, it reads "Start tutorial" and emits 'start-tutorial'.
+   */
+  isTutorialRunning?: boolean;
 }>(), {
   openUp: false,
   align: 'right',
@@ -65,8 +71,9 @@ const emit = defineEmits<{
    * - 'heatmap-toggle': toggle the per-cell move quality overlay
    * - 'help-toggle': toggle action help affordances (Play group, always visible)
    * - 'start-tutorial': (re)start the tutorial from step 0
+   * - 'exit-tutorial': exit the active tutorial (shown only when isTutorialRunning)
    */
-  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial'];
+  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial' | 'exit-tutorial'];
 }>();
 
 const isOpen = ref(false);
@@ -311,14 +318,15 @@ function handleLeave() {
       <template v-if="hasTutorial">
         <div class="sep"></div>
         <div class="grouplabel">Tutorial</div>
+        <!-- Toggle: "Exit tutorial" when a tutorial is running, "Start tutorial" otherwise. -->
         <button
           class="mi"
           type="button"
           role="menuitem"
-          @click="emit('teaching-action', 'start-tutorial'); close()"
+          @click="emit('teaching-action', isTutorialRunning ? 'exit-tutorial' : 'start-tutorial'); close()"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm-1 13V9l6 3-6 3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Start tutorial
+          {{ isTutorialRunning ? 'Exit tutorial' : 'Start tutorial' }}
         </button>
       </template>
     </div>
