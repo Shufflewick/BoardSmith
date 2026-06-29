@@ -288,11 +288,9 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       const result = await host.handleOp(seat, op);
       opts.postServerResponse(seat, requestId, shapeResult(wireOp, result));
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error(`[boardsmith dev] server_request '${wireOp}' failed:`, err);
-      opts.postServerResponse(seat, requestId, {
-        success: false,
-        error: 'Operation failed',
-      });
+      opts.postServerResponse(seat, requestId, { success: false, error: message });
     }
   }
 
