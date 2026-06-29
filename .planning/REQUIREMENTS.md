@@ -41,7 +41,7 @@ The showcase that proves the substrate end-to-end. Targets checkers' real teachi
 
 ### Demonstration & Refinement (DEMO)
 
-- [ ] **DEMO-01**: The checkers tutorial and all teaching features (TUT/AI/HELP) are demonstrated end-to-end in the browser for hands-on review, so the primitives can be refined before a future milestone applies them to cribbage.
+- [x] **DEMO-01**: The checkers tutorial and all teaching features (TUT/AI/HELP) are demonstrated end-to-end in the browser for hands-on review, so the primitives can be refined before a future milestone applies them to cribbage.
 
 ## v2 Requirements
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | CHK-02 | Phase 109 | Complete |
 | CHK-03 | Phase 109 | Complete |
 | CHK-04 | Phase 109 | Complete |
-| DEMO-01 | Phase 110 | Pending |
+| DEMO-01 | Phase 110 | Complete |
 
 **Coverage:**
 - v1 requirements: 15 total
