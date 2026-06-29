@@ -120,7 +120,11 @@
   3. The tutorial walks the player through a forced multi-jump, teaching that the turn does not end while further jumps exist.
   4. The tutorial is launchable from the game and runs inside both GameShell and the `boardsmith dev` host.
   5. The tutorial is authored as a CI-verifiable artifact (TUT-04), so a checkers-rules change that breaks it fails a test.
-**Plans**: TBD
+**Plans**: 4 plans (Waves 1-3) — CROSS-REPO: substrate in BoardSmith `src/`, content in `~/BoardSmithGames/checkers`
+- [ ] 109-01-PLAN.md — LR-02 per-selection gate: SelectionMatcher + TutorialGateAllowList.selections + thread selection.name (BoardSmith, Wave 1)
+- [ ] 109-02-PLAN.md — start-tutorial launch surface: stateless op + hasTutorial signal + bridge routing + ControlsMenu/GameShell (BoardSmith, Wave 1)
+- [ ] 109-03-PLAN.md — Checkers tutorial content: tutorialSetup preset + CHECKERS_TUTORIAL def + gameDefinition registration (checkers repo, Wave 2)
+- [ ] 109-04-PLAN.md — CI-verifiable tutorial.test.ts: full walkthrough + green→red mandatory-capture break proof (checkers repo, Wave 3)
 **UI hint**: yes
 
 ### Phase 110: Demonstration & Refinement
@@ -144,5 +148,5 @@
 | 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
-| 109. Checkers Tutorial Content | 0/? | Not started | - |
+| 109. Checkers Tutorial Content | 0/4 | Planned | - |
 | 110. Demonstration & Refinement | 0/? | Not started | - |
