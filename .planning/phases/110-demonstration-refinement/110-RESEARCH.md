@@ -594,22 +594,25 @@ SKIPPED — this is a greenfield wiring phase, not a rename/refactor/migration. 
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **demoStart delay configurability**
    - What we know: `game-session.ts` default delay is 1200ms; `startDemo` accepts `options.delay`
    - What's unclear: Should the `demo-start` wire op accept a `delay` payload field? The CONTEXT says Claude's discretion on payloads.
    - Recommendation: Accept `delay?: number` in the `demo-start` payload and pass it through to `runDemoLoop`. Default to 1200. Tests use `delay: 0`.
+   - **RESOLVED:** Accept `delay?: number` in the `demo-start` payload (default 1200ms); tests pass `delay: 0` for determinism. Implemented in the demo-start op + runDemoLoop.
 
 2. **Narrator access to player names**
    - What we know: `game-session.ts:1142` uses `playerNames[player - 1] ?? `Player ${player}`` from `#storedState.playerNames`. `stateless-ops.ts` does not have player names in scope.
    - What's unclear: Should the narration say "Player 1: move..." or the actual player name?
-   - Recommendation: Default to `"Player N: action args"` (no player names in the stateless path). This matches what `buildViews` has access to. Games that want named narration can provide a custom narrator via a future extension.
+   - Recommendation: Default to `"Player N: action args"` (no player names in the stateless path).
+   - **RESOLVED:** Use `"Player N: <action> <args>"` in the dev-host narration (no player-name threading in the stateless path). Named narration is a future extension; not in this phase.
 
 3. **heatmapToggle visible=false in dev host**
    - What we know: `game-session.ts:1041-1043` handles `visible=false` by immediately setting `{ visible: false, entries: [] }` without running the bot.
    - What's unclear: The `heatmapToggle` op in stateless-ops needs this branch.
    - Recommendation: In `handleHeatmapToggle`, if `!op.visible`, return `stateEnvelope + heatmapUpdate({ visible: false, entries: [] })` immediately (no bot call needed).
+   - **RESOLVED:** `handleHeatmapToggle` short-circuits on `visible=false` — return `{ visible:false, entries:[] }` with no bot call; only `visible=true` runs `playWithStats()`. Mirrors the production path.
 
 ---
 
