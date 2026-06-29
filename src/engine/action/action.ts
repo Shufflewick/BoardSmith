@@ -385,7 +385,7 @@ export class ActionExecutor {
           const gameDisabled = choiceSel.disabled ? choiceSel.disabled(choice, context) : false;
           // OR-in gate reason: only when no game-defined reason already applies.
           if (tutorialStep && gameDisabled === false) {
-            const gateReason = getGateReasonForValue(tutorialStep, actionName!, choice);
+            const gateReason = getGateReasonForValue(tutorialStep, actionName!, choice, selection.name);
             if (gateReason) return { value: choice, disabled: gateReason };
           }
           return { value: choice, disabled: gameDisabled };
@@ -437,7 +437,7 @@ export class ActionExecutor {
             : false;
           // OR-in gate reason: only when no game-defined reason already applies.
           if (tutorialStep && gameDisabled === false) {
-            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el);
+            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el, selection.name);
             if (gateReason) return { value: el, disabled: gateReason };
           }
           return { value: el, disabled: gameDisabled };
@@ -457,7 +457,7 @@ export class ActionExecutor {
             : false;
           // OR-in gate reason: only when no game-defined reason already applies.
           if (tutorialStep && gameDisabled === false) {
-            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el);
+            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el, selection.name);
             if (gateReason) return { value: el, disabled: gateReason };
           }
           return { value: el, disabled: gameDisabled };

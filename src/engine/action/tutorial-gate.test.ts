@@ -43,12 +43,12 @@ function makePassAction() {
     .execute(() => {});
 }
 
-/** Tutorial definition: step 1 gates to `move` only, piece c3 → destination d4. */
+/** Tutorial definition: step 1 gates to `move` only (no per-selection restrictions). */
 const tutorialDef: TutorialDefinition = {
   steps: [
     {
       id: 'step1',
-      gate: { action: 'move', from: 'c3', to: 'd4' },
+      gate: { action: 'move' },
     },
   ],
 };
@@ -112,54 +112,26 @@ describe('Tutorial gate — TUT-02', () => {
     });
 
     // ------------------------------------------------------------------
-    // Behavior 2: Target gating — allowed target enabled, others disabled
+    // Behavior 2: With action-only gate, all choices within the allowed
+    //             action are enabled (no per-selection restrictions)
     // ------------------------------------------------------------------
 
-    it('getChoices: piece selection — c3 enabled (matches gate.from), e5 disabled with reason', () => {
+    it('getChoices: piece selection — all choices enabled (action-only gate, no selections map)', () => {
       const moveAction = game.getAction('move')!;
       const pieceSel = moveAction.selections[0]; // 'piece' selection
 
       const choices = executor.getChoices(pieceSel, player1, {}, 'move');
 
-      const c3Entry = choices.find(c => c.value === 'c3');
-      const e5Entry = choices.find(c => c.value === 'e5');
-
-      expect(c3Entry).toBeDefined();
-      expect(c3Entry!.disabled).toBe(false);
-
-      expect(e5Entry).toBeDefined();
-      expect(typeof e5Entry!.disabled).toBe('string');
-      expect((e5Entry!.disabled as string).length).toBeGreaterThan(0);
+      expect(choices.every(c => c.disabled === false)).toBe(true);
     });
 
-    it('getChoices: destination selection — d4 enabled (matches gate.to), f6 disabled with reason', () => {
+    it('getChoices: destination selection — all choices enabled (action-only gate, no selections map)', () => {
       const moveAction = game.getAction('move')!;
       const destSel = moveAction.selections[1]; // 'destination' selection
 
       const choices = executor.getChoices(destSel, player1, {}, 'move');
 
-      const d4Entry = choices.find(c => c.value === 'd4');
-      const f6Entry = choices.find(c => c.value === 'f6');
-
-      expect(d4Entry).toBeDefined();
-      expect(d4Entry!.disabled).toBe(false);
-
-      expect(f6Entry).toBeDefined();
-      expect(typeof f6Entry!.disabled).toBe('string');
-      expect((f6Entry!.disabled as string).length).toBeGreaterThan(0);
-    });
-
-    it('the disabled reason string for a non-allowed target is consistent with getTutorialDisabledActions pattern', () => {
-      const moveAction = game.getAction('move')!;
-      const destSel = moveAction.selections[1];
-
-      const choices = executor.getChoices(destSel, player1, {}, 'move');
-      const f6Entry = choices.find(c => c.value === 'f6')!;
-
-      // Reason must be a non-empty, actionable string
-      expect(f6Entry.disabled).not.toBe(false);
-      expect(typeof f6Entry.disabled).toBe('string');
-      expect((f6Entry.disabled as string).trim().length).toBeGreaterThan(0);
+      expect(choices.every(c => c.disabled === false)).toBe(true);
     });
 
     // ------------------------------------------------------------------
@@ -182,28 +154,21 @@ describe('Tutorial gate — TUT-02', () => {
     });
 
     // ------------------------------------------------------------------
-    // Behavior 4: validateSelection rejects a disabled (non-allowed) value
+    // Behavior 4: validateSelection accepts all values within the allowed
+    //             action when no per-selection restrictions are configured
     // ------------------------------------------------------------------
 
-    it('validateSelection rejects a non-allowed destination with "Selection disabled:"', () => {
+    it('validateSelection accepts any destination within the allowed action (no per-value gate)', () => {
       const moveAction = game.getAction('move')!;
       const destSel = moveAction.selections[1]; // 'destination' selection
 
-      const result = executor.validateSelection(destSel, 'f6', player1, {}, 'move');
+      const d4Result = executor.validateSelection(destSel, 'd4', player1, {}, 'move');
+      const f6Result = executor.validateSelection(destSel, 'f6', player1, {}, 'move');
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors.some(e => e.startsWith('Selection disabled:'))).toBe(true);
-    });
-
-    it('validateSelection accepts the allowed destination', () => {
-      const moveAction = game.getAction('move')!;
-      const destSel = moveAction.selections[1];
-
-      const result = executor.validateSelection(destSel, 'd4', player1, {}, 'move');
-
-      expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
+      expect(d4Result.valid).toBe(true);
+      expect(d4Result.errors).toHaveLength(0);
+      expect(f6Result.valid).toBe(true);
+      expect(f6Result.errors).toHaveLength(0);
     });
 
     // ------------------------------------------------------------------
@@ -223,6 +188,154 @@ describe('Tutorial gate — TUT-02', () => {
       const disabled = game.getTutorialDisabledActions(2);
 
       expect(disabled).toEqual({});
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Per-selection gate pipeline (LR-02 / CHK-01 substrate):
+  // selections map gates each selection independently via selection.name
+  // ------------------------------------------------------------------
+
+  describe('per-selection gate flows through the action pipeline', () => {
+    /**
+     * Object-choice move action: piece and destination are objects so that
+     * SelectionMatcher field-equality can distinguish matching from non-matching values.
+     */
+    function makeObjectMoveAction() {
+      return Action.create('move')
+        .chooseFrom('piece', {
+          choices: [{ notation: 'c3' }, { notation: 'e5' }],
+        })
+        .chooseFrom('destination', {
+          choices: [{ toNotation: 'd4' }, { toNotation: 'f6' }],
+        })
+        .execute(() => {});
+    }
+
+    /** Per-selection tutorial: gate piece to 'c3', destination to 'd4'. */
+    const perSelectionDef: TutorialDefinition = {
+      steps: [{
+        id: 'step-sel',
+        gate: {
+          action: 'move',
+          selections: {
+            piece: { notation: 'c3' },
+            destination: { toNotation: 'd4' },
+          },
+        },
+      }],
+    };
+
+    let selGame: TutorialTestGame;
+    let selExecutor: ActionExecutor;
+    let selPlayer1: Player;
+    let selPlayer2: Player;
+
+    beforeEach(() => {
+      selGame = new TutorialTestGame({ playerCount: 2 });
+      selGame.registerActions(makeObjectMoveAction(), makePassAction());
+      selGame.tutorialDefinition = perSelectionDef;
+      selGame.tutorialProgress.set(1, { stepId: 'step-sel', status: 'running' });
+      selExecutor = selGame.getActionExecutor();
+      selPlayer1 = selGame.getPlayer(1)!;
+      selPlayer2 = selGame.getPlayer(2)!;
+    });
+
+    it('piece c3 is enabled, piece e5 carries a disabled reason (per-selection gate)', () => {
+      const moveAction = selGame.getAction('move')!;
+      const pieceSel = moveAction.selections[0]; // 'piece' selection
+
+      const choices = selExecutor.getChoices(pieceSel, selPlayer1, {}, 'move');
+
+      const c3Entry = choices.find(c => (c.value as any).notation === 'c3');
+      const e5Entry = choices.find(c => (c.value as any).notation === 'e5');
+
+      expect(c3Entry).toBeDefined();
+      expect(c3Entry!.disabled).toBe(false);
+
+      expect(e5Entry).toBeDefined();
+      expect(typeof e5Entry!.disabled).toBe('string');
+      expect((e5Entry!.disabled as string).length).toBeGreaterThan(0);
+    });
+
+    it('destination d4 is enabled, destination f6 carries a disabled reason (per-selection gate)', () => {
+      const moveAction = selGame.getAction('move')!;
+      const destSel = moveAction.selections[1]; // 'destination' selection
+
+      const choices = selExecutor.getChoices(destSel, selPlayer1, {}, 'move');
+
+      const d4Entry = choices.find(c => (c.value as any).toNotation === 'd4');
+      const f6Entry = choices.find(c => (c.value as any).toNotation === 'f6');
+
+      expect(d4Entry).toBeDefined();
+      expect(d4Entry!.disabled).toBe(false);
+
+      expect(f6Entry).toBeDefined();
+      expect(typeof f6Entry!.disabled).toBe('string');
+      expect((f6Entry!.disabled as string).length).toBeGreaterThan(0);
+    });
+
+    it('disabled reason names the selection and the required matcher', () => {
+      const moveAction = selGame.getAction('move')!;
+      const destSel = moveAction.selections[1];
+
+      const choices = selExecutor.getChoices(destSel, selPlayer1, {}, 'move');
+      const f6Entry = choices.find(c => (c.value as any).toNotation === 'f6')!;
+
+      const reason = f6Entry.disabled as string;
+      expect(reason).toMatch(/destination/i);
+    });
+
+    it('each selection is gated independently: piece gate does not affect destination choices', () => {
+      const moveAction = selGame.getAction('move')!;
+      // Passing piece-gated args: gate for 'destination' still runs independently
+      const destSel = moveAction.selections[1];
+      const choices = selExecutor.getChoices(destSel, selPlayer1, {}, 'move');
+
+      // Both entries must exist with correct gating on destination alone
+      expect(choices.some(c => c.disabled === false)).toBe(true);   // d4 allowed
+      expect(choices.some(c => typeof c.disabled === 'string')).toBe(true); // f6 blocked
+    });
+
+    it('player 2 (no tutorial progress) sees all per-selection choices enabled', () => {
+      const moveAction = selGame.getAction('move')!;
+      const destSel = moveAction.selections[1];
+
+      const choices = selExecutor.getChoices(destSel, selPlayer2, {}, 'move');
+
+      expect(choices.every(c => c.disabled === false)).toBe(true);
+    });
+
+    it('validateSelection rejects the non-matching destination (Selection disabled:)', () => {
+      const moveAction = selGame.getAction('move')!;
+      const destSel = moveAction.selections[1];
+
+      const result = selExecutor.validateSelection(
+        destSel,
+        { toNotation: 'f6' },
+        selPlayer1,
+        {},
+        'move',
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.startsWith('Selection disabled:'))).toBe(true);
+    });
+
+    it('validateSelection accepts the matching destination', () => {
+      const moveAction = selGame.getAction('move')!;
+      const destSel = moveAction.selections[1];
+
+      const result = selExecutor.validateSelection(
+        destSel,
+        { toNotation: 'd4' },
+        selPlayer1,
+        {},
+        'move',
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
   });
 
