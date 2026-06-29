@@ -115,6 +115,12 @@ export interface TutorialGateContext {
  * `{ toNotation: 'd4' }` matches any choice where `choice.toNotation === 'd4'`.
  *
  * Supply only the fields you care about; unspecified fields are ignored.
+ *
+ * **NOTE:** `SelectionMatcher` only matches object values (element refs, choice
+ * objects). For `choice` selections with primitive string/number values, use
+ * a `TutorialGateCondition` predicate instead — `SelectionMatcher` returns false
+ * for every primitive value, silently blocking ALL choices rather than the
+ * targeted one.
  */
 export type SelectionMatcher = Record<string, unknown>;
 

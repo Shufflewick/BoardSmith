@@ -56,7 +56,12 @@ function gateValuesEqual(a: unknown, b: unknown): boolean {
  * For choice objects (e.g. DestinationChoice): all matcher fields must equal
  * the corresponding fields on the value.
  *
- * Returns false for non-object/null values — they cannot match any matcher.
+ * **Primitive values (string/number) are not supported by SelectionMatcher.**
+ * If a `choice` selection uses primitive values (e.g. `choices: ['heads', 'tails']`),
+ * this function returns false for every primitive value, blocking ALL choices rather
+ * than just the ones that don't match. Tutorial authors who need to gate a primitive
+ * choice selection must use a `TutorialGateCondition` predicate instead.
+ * See `SelectionMatcher` JSDoc in types.ts for details.
  */
 function selectionMatchesValue(matcher: SelectionMatcher, value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;

@@ -464,5 +464,117 @@ describe('executeOp', () => {
       const view = (startResult.playerViews as Array<{ state: { hasTutorial?: boolean } }>)?.[0];
       expect(view?.state?.hasTutorial).toBe(true);
     });
+
+    it('rejects invalid seat (0) with a protocol error', async () => {
+      const startResult = await startGame(simpleGameWithTutorialDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        simpleGameWithTutorialDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'startTutorial', player: 0 },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/Invalid player seat/);
+      expect(result.category).toBe('protocol');
+    });
+  });
+
+  // ── autoAdvanceTutorial in handleAction (CR-01 regression) ───────────────
+
+  describe('autoAdvanceTutorial in handleAction (CR-01 regression)', () => {
+    // A game with a passCount property so advanceWhen can read game state.
+    // passCount increments when the 'pass' action executes — used to prove the
+    // post-action auto-advance pump fires inside executeOp.
+    class CountingGame extends Game<CountingGame, Player> {
+      passCount = 0;
+
+      constructor(options: GameOptions) {
+        super(options);
+
+        const game = this;
+        this.registerAction(
+          Action.create('pass')
+            .execute(() => {
+              game.passCount++;
+              return { success: true };
+            })
+        );
+
+        this.setFlow(defineFlow({
+          root: loop({
+            maxIterations: 1000,
+            do: actionStep({
+              actions: ['pass'],
+              player: (ctx) => ctx.game.getPlayer(1)!,
+            }),
+          }),
+        }));
+      }
+    }
+
+    const TWO_STEP_TUTORIAL: TutorialDefinition = {
+      steps: [
+        {
+          id: 'step-1',
+          gate: { action: 'pass' },
+          advanceWhen: {
+            'passed once': (ctx) => (ctx.game as CountingGame).passCount >= 1,
+          },
+        },
+        {
+          id: 'step-2',
+          gate: { action: 'pass' },
+        },
+      ],
+    };
+
+    const countingGameDef: GameDefinitionLike = {
+      gameClass: CountingGame as new (...args: unknown[]) => unknown,
+      gameType: 'counting',
+      minPlayers: 1,
+      maxPlayers: 2,
+      tutorial: TWO_STEP_TUTORIAL,
+    };
+
+    const countingGameOptions = { playerCount: 2, seed: 'count-seed' };
+
+    it('tutorial auto-advances after action in the dev-host stateless path', async () => {
+      // Start the game.
+      const startResult = await executeOp(countingGameDef, countingGameOptions, null, null, { type: 'start' });
+      expect(startResult.success).toBe(true);
+
+      // Start tutorial for seat 1 — tutorial should land on step-1.
+      const tutorialStartResult = await executeOp(
+        countingGameDef,
+        countingGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'startTutorial', player: 1 },
+      );
+      expect(tutorialStartResult.success).toBe(true);
+      const viewBefore = (tutorialStartResult.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
+      expect(viewBefore?.state?.tutorial?.stepId).toBe('step-1');
+
+      // Perform 'pass' — advanceWhen fires because passCount goes from 0 to 1.
+      const actionResult = await executeOp(
+        countingGameDef,
+        countingGameOptions,
+        tutorialStartResult.snapshot,
+        null,
+        { type: 'action', actionName: 'pass', player: 1, args: {} },
+      );
+      expect(actionResult.success).toBe(true);
+
+      // Tutorial MUST advance to step-2 — proves autoAdvanceTutorial is called
+      // in handleAction (the dev-host / stateless executor path). Without the
+      // CR-01 fix, the tutorial stays on step-1 because autoAdvanceTutorial was
+      // never called in this path.
+      const viewAfter = (actionResult.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
+      expect(viewAfter?.state?.tutorial?.stepId).toBe('step-2');
+    });
   });
 });

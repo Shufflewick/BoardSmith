@@ -200,9 +200,11 @@ export function simulateTutorial<G extends Game>(
   // Record the initial step before any auto-advance.
   recordCurrentStep();
 
-  // 5. Run auto-advance once at start — parity with the server's start-time
-  //    evaluation (the session post-start hook calls autoAdvanceTutorial before
-  //    the first player action).
+  // 5. Run auto-advance once at start — mirrors the server's FIRST post-action pump.
+  //    In production, capture-tip.advanceWhen fires on the learner's first action,
+  //    not at tutorial start. Running it here before the first scripted move ensures
+  //    steps with immediate advanceWhen predicates (like capture-tip) are counted
+  //    as visited in stepsVisited, matching the effect of the first real action.
   autoAdvanceTutorial(testGame.game, seat);
   recordCurrentStep();
 

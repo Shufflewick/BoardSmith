@@ -11,7 +11,7 @@
 
 import type { Game, GameCommand, TutorialDefinition } from '../engine/index.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
-import { validateTutorialDefinition, initialProgress } from '../engine/tutorial/progress.js';
+import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { PickHandler } from './pick-handler.js';
@@ -254,13 +254,21 @@ function handleAction(
     return errorResult(actionResult.error ?? 'Action failed');
   }
 
+  // Mirror game-session.ts: advance tutorial for all seats with a running tutorial.
+  // This is the CR-01 fix: stateless-ops was the only non-test path missing this pump.
+  const game = runner.game as Game;
+  for (const [seat, progress] of game.tutorialProgress) {
+    if (progress.status === 'running') {
+      autoAdvanceTutorial(game, seat);
+    }
+  }
+
   const rawFollowUp = (
     actionResult.flowState as { followUp?: { action: string; args?: Record<string, unknown> } } | undefined
   )?.followUp;
 
   let followUp: unknown;
   if (rawFollowUp) {
-    const game = runner.game as Game;
     const player = game.getPlayer(op.player);
     const metadata = player
       ? buildSingleActionMetadata(game, player, rawFollowUp.action, rawFollowUp.args)
@@ -302,6 +310,16 @@ async function handleSelectionStep(
 
   if (!step.success) {
     return errorResult(step.error ?? 'Selection step failed');
+  }
+
+  // Mirror game-session.ts: advance tutorial for all seats with a running tutorial.
+  // Fired after every selection step (not just actionComplete) so predicates
+  // that depend on mid-action state still evaluate correctly.
+  const game = runner.game as Game;
+  for (const [seat, progress] of game.tutorialProgress) {
+    if (progress.status === 'running') {
+      autoAdvanceTutorial(game, seat);
+    }
   }
 
   return {
@@ -488,7 +506,7 @@ function runnerFromSnapshot(
     def.gameClass as GameRunnerOptions<never>['GameClass'],
   );
   if (def.tutorial) {
-    (runner.game as any).tutorialDefinition = def.tutorial;
+    (runner.game as Game).tutorialDefinition = def.tutorial;
   }
   return runner;
 }
@@ -509,7 +527,7 @@ function runnerFromCheckpoint(
   // keeps the linear history coherent (mirrors the undo op).
   const runner = GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def));
   if (runner && def.tutorial) {
-    (runner.game as any).tutorialDefinition = def.tutorial;
+    (runner.game as Game).tutorialDefinition = def.tutorial;
   }
   return runner;
 }
@@ -732,9 +750,21 @@ export async function executeOp(
         if (!def.tutorial) {
           return errorResult('No tutorial definition on this game.', 'protocol');
         }
-        const runner = runnerFromSnapshot(snap, def);
+        // WR-01: validate seat range before touching any state — mirrors handleDebugActionTraces.
+        if (op.player < 1 || op.player > gameOptions.playerCount) {
+          return errorResult(
+            `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
+            'protocol',
+          );
+        }
+        // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
         validateTutorialDefinition(def.tutorial);
+        const runner = runnerFromSnapshot(snap, def);
         runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
+        // CR-01: pump auto-advance immediately after setting initial progress so steps
+        // with always-true advanceWhen predicates (e.g. capture-tip) advance before
+        // the learner's first action, matching the simulate-tutorial parity invariant.
+        autoAdvanceTutorial(runner.game as Game, op.player);
         return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
       }
     }
