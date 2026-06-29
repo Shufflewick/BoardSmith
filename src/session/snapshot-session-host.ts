@@ -101,6 +101,47 @@ export class SnapshotSessionHost {
   /** Read-only ops (resolveChoices) do NOT mutate or broadcast. State-mutating
    *  ops broadcast the new state, THEN the caller returns the op response. */
   async handleOp(seat: number, op: Op): Promise<OpResult> {
+    // Teaching ops (hint / heatmapToggle): compute annotation, store in
+    // transient state, re-broadcast via broadcastCurrent() — NOT apply() because
+    // these ops do NOT change game state (mirrors the production GameSession
+    // pattern: transient hints/heatmaps are injected post-buildPlayerState).
+    if (op.type === 'hint' || op.type === 'heatmapToggle') {
+      // RESEARCH Pitfall 3: reject concurrent bot searches while demo is running.
+      if (this.demoRunning) {
+        return {
+          success: false,
+          error: 'Cannot request hint while a demo is running — stop the demo first.',
+          category: 'protocol',
+          snapshot: this.snapshot,
+          pendingState: null,
+          flowState: this.flowState,
+          playerViews: [],
+          isComplete: this.isComplete,
+          winners: this.winners,
+        };
+      }
+      const res = await this.adapters.executeOp(this.snapshot, null, op);
+      if (res.success) {
+        if (res.hintAnnotation) {
+          // Merge with existing seat entry so hint + heatmap coexist (RESEARCH Pitfall 6).
+          const existing = this.transientTeachingState.get(res.hintAnnotation.seat) ?? {};
+          this.transientTeachingState.set(res.hintAnnotation.seat, {
+            ...existing,
+            hint: { annotation: res.hintAnnotation.annotation },
+          });
+        }
+        if (res.heatmapUpdate) {
+          const existing = this.transientTeachingState.get(res.heatmapUpdate.seat) ?? {};
+          this.transientTeachingState.set(res.heatmapUpdate.seat, {
+            ...existing,
+            heatmap: { visible: res.heatmapUpdate.visible, entries: res.heatmapUpdate.entries },
+          });
+        }
+        this.broadcastCurrent();
+      }
+      return res;
+    }
+
     // Read-only ops (resolveChoices + debug queries) report state without
     // mutating or broadcasting — just return the executor's result.
     if (READ_ONLY_OP_TYPES.has(op.type)) {
@@ -113,6 +154,27 @@ export class SnapshotSessionHost {
     if (op.type === 'action') this.pendingStates.delete(seat);
     const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
     if (!res.success) return res;
+
+    // Clear hint for the acting seat on successful action/selectionStep (completion).
+    // Mirrors GameSession.performAction: this.#hint.delete(player).
+    if (op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete)) {
+      const seatTransient = this.transientTeachingState.get(seat);
+      if (seatTransient?.hint) {
+        const { hint: _h, ...rest } = seatTransient;
+        if (Object.keys(rest).length > 0) {
+          this.transientTeachingState.set(seat, rest);
+        } else {
+          this.transientTeachingState.delete(seat);
+        }
+      }
+    }
+
+    // Clear ALL transient state on undo/rewind (mirrors game-session.ts:312-313).
+    if (op.type === 'undo' || op.type === 'debugRewind') {
+      this.transientTeachingState.clear();
+      this.narrationText = null;
+    }
+
     await this.apply(res, seat);
     if (!this.isComplete && (op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete))) {
       await this.runAITurns();

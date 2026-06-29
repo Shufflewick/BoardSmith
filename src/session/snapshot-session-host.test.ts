@@ -124,6 +124,12 @@ const botGameAI: AIConfig = {
       weight: 1,
     },
   }),
+  // Extract 'direction' arg as notation so heatmap entries have extractable cell refs.
+  // Without this, DEST_ARGS fallback wouldn't find 'direction' and entries would be empty.
+  hintTargetFromMove: (move) => {
+    const dir = (move.args as { direction?: string }).direction;
+    return dir ? { notation: dir } : undefined;
+  },
 };
 
 export const botGameDef: BotGameDefinitionLike = {
@@ -702,6 +708,181 @@ describe('SnapshotSessionHost', () => {
         expect(s.narration?.text).toBe('Player 1: pass');
         expect(s.isDemoRunning).toBe(true);
       }
+    });
+
+  });
+
+  // ── 7. hint + heatmapToggle ops via handleOp (Plan 110-02) ────────────────
+  //
+  // These tests verify that hint/heatmapToggle ops store results in
+  // transientTeachingState and re-broadcast via broadcastCurrent; that hint
+  // clears on the acting seat's next action; and that undo clears all transient
+  // state. Uses the BotGame fixture exported from this file.
+
+  describe('hint + heatmapToggle handleOp integration', () => {
+
+    // Helper to get the view for a given seat from the last broadcast
+    type SeatState = {
+      hint?: { annotation: { text: string; target?: unknown } };
+      heatmap?: { visible: boolean; entries: unknown[] };
+    };
+
+    function lastBroadcastState(broadcastLog: unknown[][], seat: number): SeatState {
+      const last = broadcastLog[broadcastLog.length - 1];
+      if (!last) throw new Error('no broadcast');
+      const [views] = last as [Array<{ state: SeatState }>, unknown];
+      return views[seat - 1].state;
+    }
+
+    // ── Test (1): hint op → broadcast carries state.hint for requesting seat ─
+
+    it('hint op stores hintAnnotation and re-broadcasts with state.hint on the seat', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      const res = await host.handleOp(1, { type: 'hint', seat: 1 });
+
+      expect(res.success).toBe(true);
+      // broadcastCurrent should have fired once
+      expect(broadcastLog.length).toBe(1);
+      const s1 = lastBroadcastState(broadcastLog, 1);
+      expect(s1.hint).toBeDefined();
+      expect(s1.hint!.annotation.text).toBe('Suggested move');
+      // Seat 2 must NOT have seat 1's hint (per-seat isolation)
+      const s2 = lastBroadcastState(broadcastLog, 2);
+      expect(s2.hint).toBeUndefined();
+    });
+
+    // ── Test (2a): heatmap-toggle visible=true → state.heatmap.visible===true ─
+
+    it('heatmapToggle visible=true broadcasts heatmap.visible===true with entries', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      const res = await host.handleOp(1, { type: 'heatmapToggle', seat: 1, visible: true });
+
+      expect(res.success).toBe(true);
+      expect(broadcastLog.length).toBe(1);
+      const s1 = lastBroadcastState(broadcastLog, 1);
+      expect(s1.heatmap?.visible).toBe(true);
+      expect(Array.isArray(s1.heatmap?.entries)).toBe(true);
+      expect((s1.heatmap?.entries ?? []).length).toBeGreaterThan(0);
+    });
+
+    // ── Test (2b): heatmap-toggle visible=false → state.heatmap.visible===false ─
+
+    it('heatmapToggle visible=false broadcasts heatmap.visible===false with empty entries', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      const res = await host.handleOp(1, { type: 'heatmapToggle', seat: 1, visible: false });
+
+      expect(res.success).toBe(true);
+      expect(broadcastLog.length).toBe(1);
+      const s1 = lastBroadcastState(broadcastLog, 1);
+      expect(s1.heatmap?.visible).toBe(false);
+      expect(s1.heatmap?.entries).toHaveLength(0);
+    });
+
+    // ── Test (3): hint clears on seat's next successful action ───────────────
+
+    it('clears seat hint from transient state after a successful action by that seat', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // Request a hint for seat 1
+      await host.handleOp(1, { type: 'hint', seat: 1 });
+      broadcastLog.length = 0;
+
+      // Seat 1 performs an action
+      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' } });
+
+      // The broadcast after the action must NOT carry state.hint for seat 1
+      const s1 = lastBroadcastState(broadcastLog, 1);
+      expect(s1.hint).toBeUndefined();
+    });
+
+    // ── Test (4): undo clears all transient state ─────────────────────────────
+
+    it('clears all transient state (hint + heatmap) on undo', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // First perform an action so undo has something to undo
+      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' } });
+
+      // Request a hint for seat 1 (seeded into transient state)
+      await host.handleOp(1, { type: 'hint', seat: 1 });
+      expect(host.transientTeachingState.size).toBeGreaterThan(0);
+
+      broadcastLog.length = 0;
+
+      // Undo — must clear all transient state
+      await host.handleOp(1, { type: 'undo', player: 1 });
+
+      expect(host.transientTeachingState.size).toBe(0);
+      // The broadcast after undo must NOT carry any hint
+      const s1 = lastBroadcastState(broadcastLog, 1);
+      expect(s1.hint).toBeUndefined();
+    });
+
+    // ── Test (5): hint + heatmap coexist on the same seat ────────────────────
+
+    it('per-seat hint and heatmap coexist — storing heatmap does not overwrite hint', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // Request hint then heatmap for seat 1
+      await host.handleOp(1, { type: 'hint', seat: 1 });
+      await host.handleOp(1, { type: 'heatmapToggle', seat: 1, visible: true });
+
+      // Final broadcast must carry BOTH hint and heatmap for seat 1
+      const s1 = lastBroadcastState(broadcastLog, 1);
+      expect(s1.hint).toBeDefined();
+      expect(s1.heatmap?.visible).toBe(true);
+    });
+
+    // ── Test (6): hint rejected while demoRunning guard ──────────────────────
+
+    it('rejects hint with an actionable error while demoRunning is true', async () => {
+      const { adapters } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // Directly set demoRunning to simulate a running demo
+      host.demoRunning = true;
+
+      const res = await host.handleOp(1, { type: 'hint', seat: 1 });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/demo is running/i);
+
+      // Restore
+      host.demoRunning = false;
     });
 
   });
