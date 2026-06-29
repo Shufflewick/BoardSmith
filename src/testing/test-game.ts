@@ -26,6 +26,19 @@ export interface TestGameOptions {
   seed?: string;
   /** Whether to auto-start the game */
   autoStart?: boolean;
+  /**
+   * Extra game-specific constructor options passed through to the game class.
+   *
+   * Any fields other than `playerCount`, `playerNames`, `seed`, and `autoStart`
+   * are spread into `gameOptions` so game subclasses can receive custom options
+   * (e.g. `{ tutorialSetup: true }` for a tutorial-mode board position).
+   *
+   * @example
+   * ```typescript
+   * TestGame.create(CheckersGame, { playerCount: 2, tutorialSetup: true });
+   * ```
+   */
+  [key: string]: unknown;
 }
 
 /**
@@ -73,11 +86,16 @@ export class TestGame<G extends Game = Game> {
     const playerNames = options.playerNames ??
       Array.from({ length: options.playerCount }, (_, i) => `Player ${i + 1}`);
 
+    // Separate known TestGame fields from extra game-specific options so the
+    // extras can be forwarded to the game constructor unchanged.
+    const { playerCount, playerNames: _pn, seed: _s, autoStart: _a, ...extraOptions } = options;
+
     const runner = new GameRunner({
       GameClass,
       gameType: GameClass.name.toLowerCase(),
       gameOptions: {
-        playerCount: options.playerCount,
+        ...extraOptions,  // game-specific options (e.g. tutorialSetup, variant flags)
+        playerCount,
         playerNames,
         seed,
       },
