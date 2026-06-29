@@ -725,6 +725,34 @@ describe('executeOp', () => {
       expect(res.heatmapUpdate!.entries).toHaveLength(0);
     });
 
+    // ── heatmapToggle visible=false: seat validation applied BEFORE short-circuit
+
+    it('heatmapToggle visible=false fails loud for out-of-range seat (WR-02: seat validation before short-circuit)', async () => {
+      const snapshot = await startBotGame();
+
+      // seat:0 is out-of-range — must fail the same way as visible=true does
+      const res0 = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+        type: 'heatmapToggle', seat: 0, visible: false,
+      });
+      expect(res0.success).toBe(false);
+      expect(res0.category).toBe('protocol');
+      expect(res0.error).toMatch(/invalid seat/i);
+
+      // seat:99 is also out-of-range
+      const res99 = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+        type: 'heatmapToggle', seat: 99, visible: false,
+      });
+      expect(res99.success).toBe(false);
+      expect(res99.category).toBe('protocol');
+
+      // seat:1 is valid — visible=false must still succeed for in-range seats
+      const resOk = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+        type: 'heatmapToggle', seat: 1, visible: false,
+      });
+      expect(resOk.success).toBe(true);
+      expect(resOk.heatmapUpdate!.visible).toBe(false);
+    });
+
   });
 
   // ── aiSuggest op (Plan 110-03) ────────────────────────────────────────────

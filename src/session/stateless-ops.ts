@@ -593,6 +593,16 @@ async function handleHeatmapToggle(
 ): Promise<OpResult> {
   const runner = runnerFromSnapshot(snapshot, def);
 
+  // WR-02: validate seat range before the visible=false short-circuit so that
+  // out-of-range seats (e.g. seat:0 or seat:99) fail-loud on BOTH paths,
+  // matching the visible=true validation contract (CLAUDE.md fail-fast rule).
+  if (op.seat < 1 || op.seat > gameOptions.playerCount) {
+    return errorResult(
+      `Invalid seat ${op.seat}: must be between 1 and ${gameOptions.playerCount}.`,
+      'protocol',
+    );
+  }
+
   // visible=false short-circuit: clear heatmap entries without running the bot
   // (mirrors game-session.ts:1041-1043 — no MCTS needed to hide the overlay).
   if (!op.visible) {
@@ -607,12 +617,6 @@ async function handleHeatmapToggle(
   // Fail-loud: no AI config means heatmap is impossible.
   if (!def.ai?.objectives) {
     return errorResult('No AI configuration on this game — heatmap is unavailable.', 'protocol');
-  }
-  if (op.seat < 1 || op.seat > gameOptions.playerCount) {
-    return errorResult(
-      `Invalid seat ${op.seat}: must be between 1 and ${gameOptions.playerCount}.`,
-      'protocol',
-    );
   }
 
   const flowState = runner.getFlowState() as AIFlowState;
