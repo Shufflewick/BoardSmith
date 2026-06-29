@@ -1,5 +1,7 @@
 import type { Op, OpResult } from './stateless-ops.js';
 import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
+import type { Annotation } from '../engine/index.js';
+import type { HeatmapEntry } from './types.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 
@@ -21,7 +23,59 @@ export class SnapshotSessionHost {
   private pendingStates = new Map<number, Record<string, unknown>>();
   private aiPumpRunning = false;
 
+  // Transient teaching state — persists between ops, merged into every broadcast
+  // post-buildPlayerState (mirrors GameSession.broadcast() injection pattern).
+  transientTeachingState = new Map<number, {
+    hint?: { annotation: Annotation };
+    heatmap?: { visible: boolean; entries: HeatmapEntry[] };
+  }>();
+  demoRunning = false;
+  narrationText: string | null = null;
+  private lastPlayerViews: unknown[] = [];
+
   constructor(private readonly adapters: SnapshotSessionAdapters) {}
+
+  /**
+   * Merge transient teaching state into player views post-buildPlayerState.
+   *
+   * Short-circuits when there is no transient state AND no AI seats (identity
+   * return — the common case for non-teaching games). This mirrors the
+   * GameSession.broadcast() injection pattern (game-session.ts:1925-1934).
+   *
+   * Per-seat: hint, heatmap (keyed strictly by seat = i+1; no cross-seat leak).
+   * Game-wide: narration, isDemoRunning, hasAIPlayers (applied to all seats).
+   */
+  private mergeTransientState(playerViews: unknown[]): unknown[] {
+    const hasTransient = this.transientTeachingState.size > 0
+      || this.demoRunning
+      || this.narrationText !== null
+      || (this.adapters.aiSeats?.length ?? 0) > 0;
+    if (!hasTransient) return playerViews;
+
+    return (playerViews as Array<{ flowState: unknown; state: Record<string, unknown> } | null>).map((view, i) => {
+      // Guard: stub/empty views (e.g. from AI pump tests) pass through unchanged.
+      if (view == null || typeof view !== 'object' || !('state' in view)) return view;
+      const seat = i + 1;
+      const transient = this.transientTeachingState.get(seat);
+      const state = { ...view.state };
+      if (transient?.hint) state.hint = transient.hint;
+      if (transient?.heatmap) state.heatmap = transient.heatmap;
+      if (this.narrationText) state.narration = { text: this.narrationText };
+      if (this.demoRunning) state.isDemoRunning = true;
+      if (this.adapters.aiSeats?.length) state.hasAIPlayers = true;
+      return { ...view, state };
+    });
+  }
+
+  /**
+   * Re-broadcast the last player views with the current transient teaching state
+   * merged in. Used by future plans (hint/heatmap/demo ops) to re-broadcast
+   * transient changes without re-running an op through executeOp.
+   */
+  broadcastCurrent(): void {
+    const mergedViews = this.mergeTransientState(this.lastPlayerViews);
+    this.adapters.broadcast(mergedViews, { isComplete: this.isComplete, winners: this.winners });
+  }
 
   private async apply(res: OpResult, seat?: number): Promise<void> {
     this.snapshot = res.snapshot;
@@ -32,7 +86,9 @@ export class SnapshotSessionHost {
       if (res.pendingState) this.pendingStates.set(seat, res.pendingState);
       else this.pendingStates.delete(seat);
     }
-    this.adapters.broadcast(res.playerViews, { isComplete: res.isComplete, winners: res.winners });
+    this.lastPlayerViews = res.playerViews;
+    const mergedViews = this.mergeTransientState(res.playerViews);
+    this.adapters.broadcast(mergedViews, { isComplete: res.isComplete, winners: res.winners });
     await this.adapters.persist?.({ snapshot: this.snapshot, pendingStates: Object.fromEntries(this.pendingStates) });
   }
 
