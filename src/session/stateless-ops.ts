@@ -9,8 +9,9 @@
  * no memory between calls.
  */
 
-import type { Game, GameCommand } from '../engine/index.js';
+import type { Game, GameCommand, TutorialDefinition } from '../engine/index.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
+import { validateTutorialDefinition, initialProgress } from '../engine/tutorial/progress.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
 import { PickHandler } from './pick-handler.js';
@@ -56,7 +57,8 @@ export type Op =
   | { type: 'debugRewind'; actionIndex: number }
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
-  | { type: 'debugShuffle'; deckId: number };
+  | { type: 'debugShuffle'; deckId: number }
+  | { type: 'startTutorial'; player: number };
 
 /** The read-only debug ops — reported without mutating or broadcasting state. */
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
@@ -117,6 +119,12 @@ export interface GameDefinitionLike {
   gameType: string;
   minPlayers: number;
   maxPlayers: number;
+  /**
+   * Optional tutorial definition — threaded un-serialized into each runner
+   * (mirrors how game-session.ts re-supplies it after fromSnapshot/fromCheckpoint).
+   * When present, `buildPlayerState` emits `hasTutorial: true` in every broadcast.
+   */
+  tutorial?: TutorialDefinition;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,10 +214,16 @@ function handleStart(
   def: GameDefinitionLike,
   gameOptions: { playerCount: number; [key: string]: unknown },
 ): OpResult {
+  // Thread tutorial definition un-serialized (mirrors game-session.ts create()).
+  // The game constructor strips `tutorial` from _constructorOptions so it is not
+  // persisted in the snapshot; runnerFromSnapshot re-supplies it on restore.
+  const effectiveOptions = def.tutorial
+    ? { ...gameOptions, tutorial: def.tutorial }
+    : gameOptions;
   const runner = new GameRunner({
     GameClass: def.gameClass as GameRunnerOptions<never>['GameClass'],
     gameType: def.gameType,
-    gameOptions,
+    gameOptions: effectiveOptions,
   } as GameRunnerOptions<never>);
 
   const flowState = runner.start();
@@ -232,10 +246,7 @@ function handleAction(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'action' }>,
 ): OpResult {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
+  const runner = runnerFromSnapshot(snapshot, def);
 
   const actionResult = runner.performAction(op.actionName, op.player, op.args);
 
@@ -277,10 +288,7 @@ async function handleSelectionStep(
   pendingState: Record<string, unknown> | null,
   op: Extract<Op, { type: 'selectionStep' }>,
 ): Promise<OpResult> {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
+  const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);
   const step = await handler.processSelectionStep(
@@ -313,10 +321,7 @@ function handleResolveChoices(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'resolveChoices' }>,
 ): OpResult {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
+  const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);
   const result = handler.getPickChoices(op.actionName, op.selectionName, op.player, op.args);
@@ -341,10 +346,7 @@ function handleCancelAction(
   pendingState: Record<string, unknown> | null,
   op: Extract<Op, { type: 'cancelAction' }>,
 ): OpResult {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
+  const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner, gameOptions.playerCount);
   handler.cancelPendingAction(op.player, pendingState);
@@ -361,10 +363,7 @@ function handleUndo(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'undo' }>,
 ): OpResult {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
+  const runner = runnerFromSnapshot(snapshot, def);
 
   const flowState = runner.getFlowState() as AIFlowState | undefined;
   if (flowState?.currentPlayer !== op.player) {
@@ -395,11 +394,7 @@ function handleUndo(
   // Restore from the per-action checkpoint authoritatively. fromCheckpoint
   // rehydrates the lean checkpoint and carries the prefix `[0..turnStartActionIndex]`
   // forward so further undos (e.g. undoing the now-current turn) still resolve.
-  const restored = GameRunner.fromCheckpoint(
-    snapshot,
-    turnStartActionIndex,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
+  const restored = runnerFromCheckpoint(def, snapshot, turnStartActionIndex);
   if (!restored) {
     return errorResult(
       `Cannot undo: no turn-start checkpoint at action index ${turnStartActionIndex} ` +
@@ -420,10 +415,7 @@ async function handleAITurn(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'aiTurn' }>,
 ): Promise<OpResult> {
-  const runner = GameRunner.fromSnapshot(
-    snapshot,
-    def.gameClass as GameRunnerOptions<never>['GameClass'],
-  );
+  const runner = runnerFromSnapshot(snapshot, def);
 
   const flowState = runner.getFlowState() as AIFlowState | undefined;
 
@@ -482,6 +474,26 @@ function gameClassOf(def: GameDefinitionLike): GameRunnerOptions<never>['GameCla
 }
 
 /**
+ * Restore a runner from a snapshot and thread the tutorial definition back onto
+ * the game (tutorials are unserializable attributes excluded from the snapshot;
+ * the session layer must re-supply them on every fromSnapshot/fromCheckpoint call,
+ * mirroring game-session.ts's replaceRunner guard).
+ */
+function runnerFromSnapshot(
+  snapshot: GameStateSnapshot,
+  def: GameDefinitionLike,
+): GameRunner {
+  const runner = GameRunner.fromSnapshot(
+    snapshot,
+    def.gameClass as GameRunnerOptions<never>['GameClass'],
+  );
+  if (def.tutorial) {
+    (runner.game as any).tutorialDefinition = def.tutorial;
+  }
+  return runner;
+}
+
+/**
  * Reconstruct the runner at a historical action index AUTHORITATIVELY from the
  * snapshot's per-action checkpoints — never by replay. `actionCheckpoints[k]` is
  * the exact serialized state when k actions had been recorded (the same data the
@@ -495,7 +507,11 @@ function runnerFromCheckpoint(
 ): GameRunner | null {
   // Carry checkpoints up to and including the restore point so a later getSnapshot
   // keeps the linear history coherent (mirrors the undo op).
-  return GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def));
+  const runner = GameRunner.fromCheckpoint(snap, actionIndex, gameClassOf(def));
+  if (runner && def.tutorial) {
+    (runner.game as any).tutorialDefinition = def.tutorial;
+  }
+  return runner;
 }
 
 function handleDebugHistory(
@@ -503,7 +519,7 @@ function handleDebugHistory(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
 ): OpResult {
-  const runner = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const runner = runnerFromSnapshot(snapshot, def);
   return {
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
@@ -517,7 +533,7 @@ function handleDebugStateAt(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateAt' }>,
 ): OpResult {
-  const current = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const current = runnerFromSnapshot(snapshot, def);
   const historyLength = current.actionHistory.length;
   if (op.actionIndex < 0 || op.actionIndex > historyLength) {
     return errorResult(
@@ -542,7 +558,7 @@ function handleDebugStateDiff(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateDiff' }>,
 ): OpResult {
-  const current = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const current = runnerFromSnapshot(snapshot, def);
   const historyLength = current.actionHistory.length;
   if (op.fromIndex < 0 || op.fromIndex > historyLength) {
     return errorResult(`Invalid fromIndex: ${op.fromIndex}`, 'protocol');
@@ -576,7 +592,7 @@ function handleDebugActionTraces(
   if (op.player < 1 || op.player > gameOptions.playerCount) {
     return errorResult(`Invalid player seat: ${op.player}.`, 'protocol');
   }
-  const runner = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const runner = runnerFromSnapshot(snapshot, def);
   const traces = buildActionTraces(runner, op.player);
 
   const flowState = runner.getFlowState();
@@ -605,7 +621,7 @@ function handleDebugRewind(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugRewind' }>,
 ): OpResult {
-  const current = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const current = runnerFromSnapshot(snapshot, def);
   const historyLength = current.actionHistory.length;
   if (op.actionIndex < 0 || op.actionIndex > historyLength) {
     return errorResult(
@@ -626,7 +642,7 @@ function handleDebugCommand(
   snapshot: GameStateSnapshot,
   command: GameCommand,
 ): OpResult {
-  const runner = GameRunner.fromSnapshot(snapshot, gameClassOf(def));
+  const runner = runnerFromSnapshot(snapshot, def);
   const result = executeCommand(runner.game as Game, command);
   if (!result.success) {
     return errorResult(result.error ?? 'Debug command failed');
@@ -712,6 +728,15 @@ export async function executeOp(
           type: 'SHUFFLE',
           spaceId: op.deckId,
         });
+      case 'startTutorial': {
+        if (!def.tutorial) {
+          return errorResult('No tutorial definition on this game.', 'protocol');
+        }
+        const runner = runnerFromSnapshot(snap, def);
+        validateTutorialDefinition(def.tutorial);
+        runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
+        return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+      }
     }
   } catch (err) {
     return errorResult(err, 'executor');

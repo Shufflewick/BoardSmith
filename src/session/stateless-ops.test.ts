@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 
 // ---------------------------------------------------------------------------
@@ -399,6 +399,70 @@ describe('executeOp', () => {
 
       expect(aiResult.success).toBe(true);
       expect(aiResult.aiMoved).toBe(false);
+    });
+  });
+
+  // ── startTutorial ─────────────────────────────────────────────────────────
+
+  describe('startTutorial', () => {
+    const SIMPLE_TUTORIAL: TutorialDefinition = {
+      steps: [
+        {
+          id: 'intro',
+          gate: { action: 'pass' },
+          content: [{ text: 'Take a pass action.' }],
+        },
+      ],
+    };
+
+    const simpleGameWithTutorialDef: GameDefinitionLike = {
+      ...simpleGameDef,
+      tutorial: SIMPLE_TUTORIAL,
+    };
+
+    it('succeeds and sets tutorialProgress for the given seat when tutorial definition is present', async () => {
+      const startResult = await startGame(simpleGameWithTutorialDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        simpleGameWithTutorialDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'startTutorial', player: 1 },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.snapshot).toBeTruthy();
+      // The tutorial step view for seat 1 should now be present in the player view
+      const view = (result.playerViews as Array<{ state: { tutorial?: unknown } }>)?.[0];
+      expect(view?.state?.tutorial).toBeDefined();
+    });
+
+    it('fails with an error when the game has no tutorial definition', async () => {
+      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        simpleGameDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'startTutorial', player: 1 },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/No tutorial definition/);
+      expect(result.category).toBe('protocol');
+    });
+
+    it('broadcasts hasTutorial: true in state when tutorial definition is present', async () => {
+      const startResult = await startGame(simpleGameWithTutorialDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      // hasTutorial must be present in the initial broadcast (not just after startTutorial)
+      const view = (startResult.playerViews as Array<{ state: { hasTutorial?: boolean } }>)?.[0];
+      expect(view?.state?.hasTutorial).toBe(true);
     });
   });
 });

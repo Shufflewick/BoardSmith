@@ -482,6 +482,15 @@ export interface PlayerGameState {
    * Absent (undefined) when no demo is running.
    */
   isDemoRunning?: boolean;
+  /**
+   * Whether the current game definition has a tutorial attached.
+   *
+   * Set by `buildPlayerState` when `runner.game.tutorialDefinition` is defined.
+   * Consumers (GameShell, ControlsMenu) use this to show the "Start tutorial"
+   * menu item. Undefined when no tutorial is defined — omitted to keep the
+   * wire shape lean (not `false`, just absent).
+   */
+  hasTutorial?: boolean;
 }
 
 // ============================================

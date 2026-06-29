@@ -447,6 +447,12 @@ export function buildPlayerState(
     state.lastAnimationEventId = animationEvents[animationEvents.length - 1].id;
   }
 
+  // Signal whether the game has a tutorial definition (for ControlsMenu gating).
+  // No seat guard — the menu item shows for any connected player or spectator.
+  if (runner.game.tutorialDefinition) {
+    state.hasTutorial = true;
+  }
+
   // Tutorial projection — parity with createPlayerView (T-104-07).
   // Uses the shared getActiveTutorialStepView helper so this call site and
   // createPlayerView cannot diverge. Skip for spectators (position 0).

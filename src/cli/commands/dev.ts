@@ -569,6 +569,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
       gameType: gameDefinition.gameType,
       minPlayers,
       maxPlayers,
+      // Thread tutorial definition un-serialized (mirrors game-session.ts).
+      // Required so buildPlayerState emits hasTutorial in all state broadcasts
+      // and the startTutorial op can access it from def.tutorial.
+      tutorial: gameDefinition.tutorial,
     };
     const baseGameOptions = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
     const clients = new Map<string, WebSocket>();

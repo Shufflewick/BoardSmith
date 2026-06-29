@@ -24,6 +24,7 @@ export type WireOp =
   | 'selection_step'
   | 'cancel_action'
   | 'undo'
+  | 'start-tutorial'
   // Debug-panel wire ops (dev only). `debug:restart` / `debug:switch-seat` are
   // host-chrome ops handled in DevHost, not here.
   | 'debug:history'
@@ -123,6 +124,8 @@ export function translateOp(
       return { type: 'cancelAction', player: seat };
     case 'undo':
       return { type: 'undo', player: seat };
+    case 'start-tutorial':
+      return { type: 'startTutorial', player: seat };
     case 'debug:history':
       return { type: 'debugHistory' };
     case 'debug:state-at':
@@ -186,6 +189,7 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
       };
     case 'cancel_action':
     case 'undo':
+    case 'start-tutorial':
       return { success: result.success, error: result.error };
     case 'debug:history':
       return { success: result.success, error: result.error, actionHistory: result.actionHistory };

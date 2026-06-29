@@ -564,3 +564,51 @@ describe('end-to-end suppressAutoFill: buildPlayerState projection → useAction
     expect(currentArgs['piece']).toBe('a');
   });
 });
+
+// ============================================
+// hasTutorial field (CHK-04 substrate)
+// ============================================
+
+describe('buildPlayerState - hasTutorial field', () => {
+  let runner: GameRunner<TestGame>;
+
+  beforeEach(() => {
+    runner = new GameRunner({
+      GameClass: TestGame,
+      gameType: 'test-game',
+      gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'tutorial-test' },
+    });
+    runner.start();
+  });
+
+  it('hasTutorial is true when runner.game has a tutorialDefinition', () => {
+    // Simulate threading the tutorial definition (mirrors runnerFromSnapshot behavior)
+    (runner.game as any).tutorialDefinition = {
+      steps: [{ id: 'intro', gate: { action: 'pass' }, content: [{ text: 'Test.' }] }],
+    };
+
+    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    expect(state.hasTutorial).toBe(true);
+  });
+
+  it('hasTutorial is absent when game has no tutorialDefinition', () => {
+    // Default: tutorialDefinition is undefined (no tutorial in options)
+    expect((runner.game as any).tutorialDefinition).toBeUndefined();
+
+    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    expect(state.hasTutorial).toBeUndefined();
+  });
+
+  it('hasTutorial is present for all seats, including spectator (position 0)', () => {
+    (runner.game as any).tutorialDefinition = {
+      steps: [{ id: 'intro', gate: { action: 'pass' }, content: [{ text: 'Test.' }] }],
+    };
+
+    // Seat 1 (active player)
+    expect(buildPlayerState(runner, ['Alice', 'Bob'], 1).hasTutorial).toBe(true);
+    // Seat 2 (non-active player)
+    expect(buildPlayerState(runner, ['Alice', 'Bob'], 2).hasTutorial).toBe(true);
+    // Position 0 (spectator)
+    expect(buildPlayerState(runner, ['Alice', 'Bob'], 0).hasTutorial).toBe(true);
+  });
+});
