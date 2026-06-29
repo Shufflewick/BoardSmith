@@ -1018,7 +1018,13 @@ function clearBoardSelection() {
             >
               {{ choice.display }}
             </button>
-            <span v-if="filteredChoices.length === 0" class="no-choices">
+            <!-- Loading guard (R-06): show loading indicator while choices are being fetched
+                 so we never flash "No options available" when choices are in-flight.
+                 Only show "No options available" once the fetch completes with zero results. -->
+            <div v-if="filteredChoices.length === 0 && isLoadingChoices" class="loading-choices">
+              Loading choices...
+            </div>
+            <span v-else-if="filteredChoices.length === 0" class="no-choices">
               No options available
             </span>
           </div>

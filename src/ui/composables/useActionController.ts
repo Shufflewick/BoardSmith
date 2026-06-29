@@ -174,6 +174,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // (and its fetched choices) wiped, so the panel could never render the picker.
   let actionStartSeq = 0;
 
+  // Monotonic counter bumped in clearAdvancedState (every action tear-down).
+  // Captured at the start of each fetchChoicesForPick call; compared after the
+  // await resolves. If they differ the action was cleared/replaced while the
+  // fetch was in-flight (R-06: post-multijump stale-choice race) — the result
+  // is discarded rather than written to the new action's snapshot.
+  let choiceFetchGen = 0;
+
   // Args storage for the in-progress action.
   // Use fill/start/clear to keep collectedPicks snapshot and args in sync.
   const currentArgs = ref<Record<string, unknown>>({});
@@ -237,6 +244,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value = null;
     actionSnapshot.value = null;
     pendingOnServer.value = false;
+    // Bump the fetch-generation counter so any in-flight fetchChoicesForPick
+    // calls that resolve after this point discard their results instead of
+    // writing them to the next action's snapshot (R-06 stale-choice race fix).
+    choiceFetchGen++;
   }
 
   /**
@@ -583,6 +594,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const player = playerSeat?.value ?? 0;
 
+    // Capture the generation before the await. clearAdvancedState() (called
+    // on action completion/cancel/start) bumps this counter. If it differs
+    // after the round-trip the action is gone/replaced — discard the result
+    // rather than writing it to the new action's snapshot (R-06).
+    const capturedFetchGen = choiceFetchGen;
+
     isLoadingChoices.value = true;
     const fetchStartTime = Date.now();
     try {
@@ -594,6 +611,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         player,
         buildServerArgs()
       );
+
+      // Discard stale result: the action was completed/cancelled/replaced while
+      // this fetch was in-flight (R-06: post-multijump stale-choice race).
+      if (choiceFetchGen !== capturedFetchGen) return;
 
       const fetchDuration = Date.now() - fetchStartTime;
 

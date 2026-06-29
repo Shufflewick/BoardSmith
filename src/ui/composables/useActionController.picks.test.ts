@@ -15,6 +15,7 @@ import { ref, nextTick } from 'vue';
 import {
   useActionController,
   type ActionMetadata,
+  type PickChoicesResult,
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
@@ -1330,6 +1331,188 @@ describe('useActionController picks', () => {
       const lastCall = sendAction.mock.calls[1];
       expect(lastCall[0]).toBe('collect');
       expect(lastCall[1]).toHaveProperty('sector', 3);
+    });
+  });
+
+  describe('R-06: stale choice-fetch race after action completion', () => {
+    // Regression tests for the post-multijump stale-choice race:
+    // When fetchChoicesForPick is in-flight and the action is cleared
+    // (completed/cancelled/replaced), the resolved result must be DISCARDED —
+    // not written to the snapshot of any later action.
+    //
+    // Fix: a monotonic `choiceFetchGen` counter is bumped by clearAdvancedState().
+    // Each fetchChoicesForPick call captures the counter before the await and
+    // checks it after. If they differ the result is silently dropped.
+    //
+    // These tests FAIL without the generation guard and PASS with it.
+
+    it('discards in-flight fetch result after cancel() bumps the generation (R-06)', async () => {
+      // Deferred fetch: we control when it resolves.
+      let resolveOldFetch!: (result: PickChoicesResult) => void;
+      const oldFetchPromise = new Promise<PickChoicesResult>((resolve) => {
+        resolveOldFetch = resolve;
+      });
+
+      const fetchPickChoices = vi.fn().mockReturnValueOnce(oldFetchPromise);
+
+      const moveMeta: Record<string, ActionMetadata> = {
+        move: {
+          name: 'move',
+          prompt: 'Move piece',
+          selections: [
+            { name: 'destination', type: 'choice', prompt: 'Select destination' },
+          ],
+        },
+      };
+      actionMetadata.value = { ...createTestMetadata(), ...moveMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'move'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        autoFill: false,
+        playerSeat: ref(0),
+        fetchPickChoices,
+      });
+
+      // Start the action — fetchChoicesForPick('destination') suspends on oldFetchPromise.
+      const startPromise = controller.start('move');
+
+      // Cancel while the fetch is still in-flight: this bumps choiceFetchGen.
+      controller.cancel();
+
+      // Resolve the old fetch with stale choices — the action is already gone.
+      resolveOldFetch({ success: true, choices: [{ value: 'stale', display: 'Stale Destination' }] });
+
+      // Allow the suspended fetchChoicesForPick to resume and start() to settle.
+      await startPromise;
+      await nextTick();
+
+      // Action was cancelled — snapshot must be null. Stale choices must NOT persist.
+      expect(controller.currentAction.value).toBeNull();
+      expect(controller.actionSnapshot?.value).toBeNull();
+      // isLoadingChoices must be false — the finally block ran despite the early return.
+      expect(controller.isLoadingChoices.value).toBe(false);
+    });
+
+    it('does not write stale choices into the new action snapshot (R-06 new-action pollution)', async () => {
+      // Deferred first fetch (for action #1, pre-cancel).
+      let resolveOldFetch!: (result: PickChoicesResult) => void;
+      const oldFetchPromise = new Promise<PickChoicesResult>((resolve) => {
+        resolveOldFetch = resolve;
+      });
+
+      // First fetchPickChoices call is the stale in-flight fetch (old action).
+      // Subsequent calls (from the new action) return empty immediately.
+      const fetchPickChoices = vi.fn()
+        .mockReturnValueOnce(oldFetchPromise)
+        .mockResolvedValue({ success: true, choices: [] });
+
+      const moveMeta: Record<string, ActionMetadata> = {
+        move: {
+          name: 'move',
+          prompt: 'Move piece',
+          selections: [
+            { name: 'destination', type: 'choice', prompt: 'Select destination' },
+          ],
+        },
+      };
+      actionMetadata.value = { ...createTestMetadata(), ...moveMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'move'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        autoFill: false,
+        playerSeat: ref(0),
+        fetchPickChoices,
+      });
+
+      // Action #1 starts — fetch #1 suspends (captured gen = N).
+      const startPromise1 = controller.start('move');
+
+      // Cancel action #1: bumps gen to N+1.
+      controller.cancel();
+
+      // Action #2 starts: bumps gen to N+2, fetch #2 captured gen = N+2, resolves immediately.
+      const startPromise2 = controller.start('move');
+
+      // Resolve the stale fetch with old data: gen check will see N !== N+2, discard.
+      resolveOldFetch({ success: true, choices: [{ value: 'stale', display: 'Stale Destination' }] });
+
+      await startPromise1;
+      await startPromise2;
+      await nextTick();
+
+      // The new action's snapshot must NOT contain the stale choice value.
+      const snapshot = controller.actionSnapshot?.value;
+      const destSnapshot = snapshot?.pickSnapshots.get('destination');
+      if (destSnapshot?.choices) {
+        expect(destSnapshot.choices.map(c => c.value)).not.toContain('stale');
+      }
+      // isLoadingChoices must be settled.
+      expect(controller.isLoadingChoices.value).toBe(false);
+    });
+
+    it('isLoadingChoices is true while fetch is in-flight and false after (R-06 loading guard)', async () => {
+      // This validates the loading-state invariant that ActionPanel uses to decide
+      // whether to show "Loading choices..." vs "No options available".
+      let resolveDeferred!: (result: PickChoicesResult) => void;
+      const deferredPromise = new Promise<PickChoicesResult>((resolve) => {
+        resolveDeferred = resolve;
+      });
+
+      const fetchPickChoices = vi.fn().mockReturnValue(deferredPromise);
+
+      const moveMeta: Record<string, ActionMetadata> = {
+        move: {
+          name: 'move',
+          prompt: 'Move piece',
+          selections: [
+            { name: 'destination', type: 'choice', prompt: 'Select destination' },
+          ],
+        },
+      };
+      actionMetadata.value = { ...createTestMetadata(), ...moveMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'move'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        autoFill: false,
+        playerSeat: ref(0),
+        fetchPickChoices,
+      });
+
+      // Start the action (fetch is now in-flight).
+      const startPromise = controller.start('move');
+
+      // Give the JS event loop a tick so fetchChoicesForPick sets isLoadingChoices = true.
+      await nextTick();
+
+      // While fetch is in-flight, isLoadingChoices must be true.
+      expect(controller.isLoadingChoices.value).toBe(true);
+
+      // Resolve the fetch with an empty result (genuinely no choices).
+      resolveDeferred({ success: true, choices: [] });
+      await startPromise;
+      await nextTick();
+
+      // After fetch completes, isLoadingChoices must be false.
+      expect(controller.isLoadingChoices.value).toBe(false);
+      // The snapshot should have an empty choices array (no crash, no stale data).
+      const snapshot = controller.actionSnapshot?.value;
+      const destSnapshot = snapshot?.pickSnapshots.get('destination');
+      expect(destSnapshot?.choices).toEqual([]);
     });
   });
 
