@@ -997,6 +997,224 @@ describe('useActionController picks', () => {
     });
   });
 
+  describe('followUp auto-fill submission (R-04)', () => {
+    // Regression tests for the multi-jump hang bug:
+    // When a followUp action's remaining selections are ALL auto-filled to a single legal
+    // choice, the auto-execute watcher is gated by pendingOnServer = true and never fires.
+    // The fix: after fetchAndAutoFill completes with isReady = true, route the first
+    // auto-filled selection through handleOnSelectFill to submit via the server's
+    // selection-step path.
+    //
+    // IMPORTANT: These tests use pickStep (selection-step path), NOT sendAction with full
+    // args. A full-args doAction would bypass the bug entirely — this path is what the live
+    // checkers UI exercises when the only legal continuation jump is auto-filled.
+
+    it('should submit continuation through pickStep when all followUp selections auto-fill to single choice', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
+        success: true,
+        actionComplete: true,
+      });
+
+      // The followUp action: piece is pre-filled by server, destination has exactly ONE
+      // legal choice (auto-fills) — mirrors the checkers forced multi-jump scenario.
+      const multiJumpMeta: Record<string, ActionMetadata> = {
+        jump: {
+          name: 'jump',
+          prompt: 'Continue jump',
+          selections: [
+            {
+              name: 'piece',
+              type: 'choice',
+              prompt: 'Jumping piece (pre-filled)',
+              choices: [{ value: 5, display: 'Piece 5' }],
+            },
+            {
+              name: 'destination',
+              type: 'choice',
+              prompt: 'Jump destination (one legal choice)',
+              choices: [{ value: 'd4', display: 'Square d4' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...multiJumpMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'jump'];
+
+      // Initial action (the first jump) returns a followUp with piece pre-filled.
+      sendAction.mockResolvedValueOnce({
+        success: true,
+        followUp: {
+          action: 'jump',
+          args: { piece: 5 },
+          display: { piece: 'Piece 5' },
+        },
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: true,
+        playerSeat: ref(0),
+        pickStep,
+      });
+
+      // Execute the first jump — triggers the followUp
+      await controller.execute('endTurn');
+      // Allow the async followUp IIFE (nextTick + startFollowUp + handleOnSelectFill) to settle
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await nextTick();
+
+      // pickStep must have been called with the auto-filled destination.
+      // This is the server-side submission that was missing (the hang).
+      expect(pickStep).toHaveBeenCalled();
+      const call = pickStep.mock.calls[0];
+      expect(call[0]).toBe(0);           // player seat
+      expect(call[1]).toBe('destination'); // selection name
+      expect(call[2]).toBe('d4');          // auto-filled value
+      expect(call[3]).toBe('jump');        // action name
+      // initialArgs must contain both the pre-filled piece AND the auto-filled destination
+      // (buildServerArgs reflects collectedPicks at time of call).
+      expect(call[4]).toMatchObject({ piece: 5, destination: 'd4' });
+
+      // The action must be complete — not hanging.
+      expect(controller.currentAction.value).toBeNull();
+      expect(controller.pendingOnServer.value).toBe(false);
+
+      // sendAction was called exactly once (the initial action, NOT the followUp).
+      // The followUp is handled via pickStep (selection-step path), never via sendAction.
+      expect(sendAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT submit via pickStep when followUp has multiple destination choices (user must choose)', async () => {
+      const pickStep = vi.fn().mockResolvedValue({
+        success: true,
+        actionComplete: false,
+      });
+
+      const multiChoiceMeta: Record<string, ActionMetadata> = {
+        jump: {
+          name: 'jump',
+          prompt: 'Continue jump',
+          selections: [
+            {
+              name: 'piece',
+              type: 'choice',
+              prompt: 'Jumping piece (pre-filled)',
+              choices: [{ value: 5, display: 'Piece 5' }],
+            },
+            {
+              name: 'destination',
+              type: 'choice',
+              prompt: 'Jump destination (two choices — user picks)',
+              choices: [
+                { value: 'd4', display: 'Square d4' },
+                { value: 'f4', display: 'Square f4' },
+              ],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...multiChoiceMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'jump'];
+
+      sendAction.mockResolvedValueOnce({
+        success: true,
+        followUp: {
+          action: 'jump',
+          args: { piece: 5 },
+          display: { piece: 'Piece 5' },
+        },
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: true,
+        playerSeat: ref(0),
+        pickStep,
+      });
+
+      await controller.execute('endTurn');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await nextTick();
+
+      // pickStep must NOT have been called — user must choose among the two destinations.
+      expect(pickStep).not.toHaveBeenCalled();
+      // Action is still in progress, waiting for user input.
+      expect(controller.currentAction.value).toBe('jump');
+    });
+
+    it('should NOT change behavior when followUp has no pickStep (sendAction path)', async () => {
+      // A followUp without pickStep uses the sendAction path (existing, unmodified behavior).
+      // This test ensures the R-04 fix does not break that path.
+      const noPickStepMeta: Record<string, ActionMetadata> = {
+        collect: {
+          name: 'collect',
+          prompt: 'Collect item',
+          selections: [
+            {
+              name: 'item',
+              type: 'choice',
+              prompt: 'Select item (one choice, optional)',
+              optional: true,
+              choices: [{ value: 'coin', display: 'Coin' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...noPickStepMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'collect'];
+
+      sendAction.mockResolvedValueOnce({
+        success: true,
+        followUp: {
+          action: 'collect',
+          args: { sector: 3 },
+          display: { sector: 'Sector 3' },
+        },
+      });
+      // Second sendAction call for the followUp action itself (after skip)
+      sendAction.mockResolvedValueOnce({ success: true });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: false, // autoFill off → destination won't be auto-filled
+        playerSeat: ref(0),
+        // NO pickStep provided
+      });
+
+      await controller.execute('endTurn');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await nextTick();
+
+      // followUp started, action is waiting for user to choose or skip
+      expect(controller.currentAction.value).toBe('collect');
+
+      // Skip the optional selection — triggers executeCurrentAction (sendAction path)
+      controller.skip('item');
+      await nextTick();
+      await nextTick();
+
+      expect(sendAction).toHaveBeenCalledTimes(2);
+      const lastCall = sendAction.mock.calls[1];
+      expect(lastCall[0]).toBe('collect');
+      expect(lastCall[1]).toHaveProperty('sector', 3);
+    });
+  });
+
   describe('multiSelect validation', () => {
     // Note: Current implementation validates array elements individually,
     // which means multiSelect arrays pass if any element matches a choice.

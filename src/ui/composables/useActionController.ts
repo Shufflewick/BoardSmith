@@ -1095,6 +1095,27 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       if (selectionToFetch) {
         await fetchAndAutoFill(selectionToFetch);
+
+        // R-04: If fetchAndAutoFill auto-filled ALL remaining selections (isReady),
+        // the auto-execute watcher is permanently blocked by pendingOnServer = true.
+        // Route the first auto-filled selection through handleOnSelectFill so the server
+        // processes the continuation (selection-step path), completing the multi-jump.
+        //
+        // Guard: only fires when truly all-auto-filled (isReady), auto-execute is on,
+        // not already executing, and pickStep is available (server-pending path requires it).
+        // Does NOT affect:
+        //   - followUps with multiple choices (isReady = false → guard blocks)
+        //   - non-followUp actions (pendingOnServer = false → auto-execute watcher fires normally)
+        //   - tutorial-suppressed selections (tryAutoFillSelection skips them → isReady stays false)
+        if (isReady.value && getAutoExecute() && !isExecuting.value && options.pickStep) {
+          const firstAutoFilled = meta.selections.find(s => initialArgs[s.name] === undefined);
+          if (firstAutoFilled) {
+            const autoFilledValue = currentArgs.value[firstAutoFilled.name];
+            if (autoFilledValue !== undefined) {
+              await handleOnSelectFill(firstAutoFilled, autoFilledValue);
+            }
+          }
+        }
       }
     }
   }
