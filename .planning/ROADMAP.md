@@ -140,7 +140,7 @@
 - [x] 110-01-PLAN.md — Foundation: transient teaching-state injection + hasAIPlayers signal + un-hide Teaching controls (Wave 1)
 - [x] 110-02-PLAN.md — hint + heatmap ops through bridge/stateless-ops + transient store/clear (Wave 2)
 - [x] 110-03-PLAN.md — AI-vs-AI narrated demo loop (aiSuggest preview + cancellable, timer-leak-free) (Wave 3)
-- [ ] 110-04-PLAN.md — checkers hintTargetFromMove for destination-square highlight (checkers repo, Wave 3)
+- [x] 110-04-PLAN.md — checkers hintTargetFromMove for destination-square highlight (checkers repo, Wave 3)
 - [ ] 110-05-PLAN.md — Demo script + live browser demonstration & refinement capture (human gate, Wave 4)
 **UI hint**: yes
 
@@ -154,4 +154,4 @@
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 4/4 | Complete    | 2026-06-29 |
-| 110. Demonstration & Refinement | 3/5 | In Progress|  |
+| 110. Demonstration & Refinement | 4/5 | In Progress|  |
