@@ -29,7 +29,7 @@
 - [x] **Phase 106: Predicate Triggers & CI-Verifiable Authoring** — Fire content on game-state predicate/event, and author the tutorial as a test that fails when the rules drift. (completed 2026-06-26)
 - [x] **Phase 107: AI-Assisted Teaching** — MCTS-powered move hint, narrated AI-vs-AI demo, and evaluation heatmap, surfaced from checkers' existing bot. (completed 2026-06-26)
 - [x] **Phase 108: Lightweight Action Help** — Per-action help text revealed on hover/tap, with a global toggle. (completed 2026-06-27)
-- [ ] **Phase 109: Checkers Tutorial Content** — The cross-repo showcase: guided selection/movement, mandatory-capture tip, multi-jump walkthrough, launchable in GameShell + dev host.
+- [x] **Phase 109: Checkers Tutorial Content** — The cross-repo showcase: guided selection/movement, mandatory-capture tip, multi-jump walkthrough, launchable in GameShell + dev host. (completed 2026-06-29)
 - [ ] **Phase 110: Demonstration & Refinement** — End-to-end browser demo of the tutorial + AI + HELP as a hands-on refinement gate before applying the substrate to cribbage.
 
 ## Phase Details
@@ -124,7 +124,7 @@
 - [x] 109-01-PLAN.md — LR-02 per-selection gate: SelectionMatcher + TutorialGateAllowList.selections + thread selection.name (BoardSmith, Wave 1)
 - [x] 109-02-PLAN.md — start-tutorial launch surface: stateless op + hasTutorial signal + bridge routing + ControlsMenu/GameShell (BoardSmith, Wave 1)
 - [x] 109-03-PLAN.md — Checkers tutorial content: tutorialSetup preset + CHECKERS_TUTORIAL def + gameDefinition registration (checkers repo, Wave 2)
-- [ ] 109-04-PLAN.md — CI-verifiable tutorial.test.ts: full walkthrough + green→red mandatory-capture break proof (checkers repo, Wave 3)
+- [x] 109-04-PLAN.md — CI-verifiable tutorial.test.ts: full walkthrough + green→red mandatory-capture break proof (checkers repo, Wave 3)
 **UI hint**: yes
 
 ### Phase 110: Demonstration & Refinement
@@ -148,5 +148,5 @@
 | 106. Predicate Triggers & CI-Verifiable Authoring | 5/5 | Complete    | 2026-06-26 |
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
-| 109. Checkers Tutorial Content | 3/4 | In Progress|  |
+| 109. Checkers Tutorial Content | 4/4 | Complete   | 2026-06-29 |
 | 110. Demonstration & Refinement | 0/? | Not started | - |
