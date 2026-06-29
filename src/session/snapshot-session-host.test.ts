@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
+import type { Annotation } from '../engine/index.js';
+import type { AIConfig } from '../ai/types.js';
 import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 
@@ -71,6 +73,68 @@ const twoStepGameDef: GameDefinitionLike = {
 };
 
 const twoStepGameOptions = { playerCount: 2, seed: 'step-seed' };
+
+// ---------------------------------------------------------------------------
+// Inline game: two players alternating with 2+ legal moves each turn.
+// Reusable fixture for Plans 02/03 (hint/heatmap/demo ops); also used to prove
+// that aiTurn picks from multiple choices.
+//
+// MEMORY note: MCTS short-circuits when only 1 move is available — the bot
+// skips the clone step. Tests that need real MCTS branching require 2+ choices.
+// BotGame uses chooseFrom('direction', ['left', 'right']) to provide 2 legal moves.
+// ---------------------------------------------------------------------------
+
+class BotGame extends Game<BotGame, Player> {
+  moveCount = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create('move')
+        .chooseFrom('direction', { choices: ['left', 'right'] })
+        .execute(() => {
+          this.moveCount++;
+          return { success: true };
+        }),
+    );
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          maxIterations: 100,
+          do: actionStep({
+            actions: ['move'],
+            player: (ctx) => ctx.game.getPlayer(1)!,
+          }),
+        }),
+      }),
+    );
+  }
+}
+
+// Extended def type — supports ai config (Plans 02/03 will add ai? to GameDefinitionLike;
+// for now this test-local interface allows the fixture to carry the ai config).
+interface BotGameDefinitionLike extends GameDefinitionLike {
+  ai?: AIConfig;
+}
+
+const botGameAI: AIConfig = {
+  objectives: (_game, _playerIndex) => ({
+    moves: {
+      checker: (game) => Math.min(1, (game as BotGame).moveCount / 20),
+      weight: 1,
+    },
+  }),
+};
+
+export const botGameDef: BotGameDefinitionLike = {
+  gameClass: BotGame as new (...args: unknown[]) => unknown,
+  gameType: 'bot-game',
+  minPlayers: 1,
+  maxPlayers: 2,
+  ai: botGameAI,
+};
+
+export const botGameOptions = { playerCount: 2, seed: 'bot-seed' };
 
 // ---------------------------------------------------------------------------
 // Helper: build adapters bound to a real game definition
@@ -538,5 +602,107 @@ describe('SnapshotSessionHost', () => {
       expect(saved.snapshot).toBeTruthy();
       expect(typeof saved.pendingStates).toBe('object');
     });
+  });
+
+  // ── 6. Transient teaching state foundation (Plan 110-01) ───────────────────
+  //
+  // These tests verify the mergeTransientState / broadcastCurrent / hasAIPlayers
+  // primitives added in Plan 110-01, Task 1. No hint/heatmap/demo ops are tested
+  // here — that is Plans 02/03.
+
+  describe('transient teaching state foundation', () => {
+
+    // ── Test (1): hasAIPlayers in every broadcast when aiSeats present ────────
+
+    it('injects state.hasAIPlayers === true into every broadcast view when aiSeats is set', async () => {
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+
+      // At least one broadcast must have fired (from apply())
+      expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
+
+      // The broadcast from the action (first entry after reset) must carry hasAIPlayers
+      const [views] = broadcastLog[0] as [Array<{ flowState: unknown; state: Record<string, unknown> }>, unknown];
+      for (const view of views) {
+        expect(view.state.hasAIPlayers).toBe(true);
+      }
+    });
+
+    // ── Test (2): identity short-circuit when no aiSeats and no transient state
+
+    it('returns views unchanged (no hasAIPlayers) when aiSeats is absent and no transient state', async () => {
+      // No aiSeats in adapters
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+
+      expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
+
+      const [views] = broadcastLog[0] as [Array<{ flowState: unknown; state: Record<string, unknown> }>, unknown];
+      for (const view of views) {
+        expect(view.state.hasAIPlayers).toBeUndefined();
+      }
+    });
+
+    // ── Test (3): per-seat hint isolation (RESEARCH Pitfall 6) ───────────────
+
+    it('applies hint only to seat 1, not seat 2 (per-seat isolation)', async () => {
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // Directly seed seat 1's transient state with a fake hint annotation
+      const fakeAnnotation: Annotation = { text: 'Go here!' };
+      host.transientTeachingState.set(1, { hint: { annotation: fakeAnnotation } });
+
+      // broadcastCurrent re-broadcasts lastPlayerViews with merge applied
+      host.broadcastCurrent();
+
+      expect(broadcastLog).toHaveLength(1);
+      const [views] = broadcastLog[0] as [Array<{ flowState: unknown; state: Record<string, unknown> }>, unknown];
+
+      // Seat 1 (index 0) must have the hint
+      const seat1State = views[0].state as { hint?: { annotation: Annotation } };
+      expect(seat1State.hint?.annotation.text).toBe('Go here!');
+
+      // Seat 2 (index 1) must NOT have the hint
+      const seat2State = views[1].state as { hint?: unknown };
+      expect(seat2State.hint).toBeUndefined();
+    });
+
+    // ── Test (4): game-wide narration + isDemoRunning on ALL seats ────────────
+
+    it('applies narration and isDemoRunning to all seats (game-wide signals)', async () => {
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // Directly seed game-wide signals
+      host.narrationText = 'Player 1: pass';
+      host.demoRunning = true;
+
+      host.broadcastCurrent();
+
+      expect(broadcastLog).toHaveLength(1);
+      const [views] = broadcastLog[0] as [Array<{ flowState: unknown; state: Record<string, unknown> }>, unknown];
+
+      for (const view of views) {
+        const s = view.state as { narration?: { text: string }; isDemoRunning?: boolean };
+        expect(s.narration?.text).toBe('Player 1: pass');
+        expect(s.isDemoRunning).toBe(true);
+      }
+    });
+
   });
 });
