@@ -35,8 +35,8 @@ Leverages a game's existing MCTS bot. Authoring cost is near-zero and the value 
 The showcase that proves the substrate end-to-end. Targets checkers' real teaching-difficulty points (mandatory capture, multi-jump) identified in this session's profiling.
 
 - [x] **CHK-01**: A new player can complete a guided checkers tutorial that teaches the two-step piece selection → destination move, using action gating (TUT-02) and annotation overlays (TUT-01).
-- [ ] **CHK-02**: The checkers tutorial teaches the mandatory-capture rule via a predicate-triggered tip (TUT-03) shown the first time a capture becomes forced.
-- [ ] **CHK-03**: The checkers tutorial walks the player through a forced multi-jump, teaching continuation (turn does not end while further jumps exist).
+- [x] **CHK-02**: The checkers tutorial teaches the mandatory-capture rule via a predicate-triggered tip (TUT-03) shown the first time a capture becomes forced.
+- [x] **CHK-03**: The checkers tutorial walks the player through a forced multi-jump, teaching continuation (turn does not end while further jumps exist).
 - [x] **CHK-04**: The checkers tutorial is launchable from the game and runs inside GameShell and the `boardsmith dev` host.
 
 ### Demonstration & Refinement (DEMO)
@@ -85,8 +85,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | HELP-01 | Phase 108 | Complete |
 | HELP-02 | Phase 108 | Complete |
 | CHK-01 | Phase 109 | Complete |
-| CHK-02 | Phase 109 | Pending |
-| CHK-03 | Phase 109 | Pending |
+| CHK-02 | Phase 109 | Complete |
+| CHK-03 | Phase 109 | Complete |
 | CHK-04 | Phase 109 | Complete |
 | DEMO-01 | Phase 110 | Pending |
 
