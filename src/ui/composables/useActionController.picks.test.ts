@@ -17,6 +17,7 @@ import {
   type ActionMetadata,
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
+import type { TutorialStepView } from '../../engine/tutorial/types.js';
 
 describe('useActionController picks', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
@@ -1150,6 +1151,123 @@ describe('useActionController picks', () => {
       expect(pickStep).not.toHaveBeenCalled();
       // Action is still in progress, waiting for user input.
       expect(controller.currentAction.value).toBe('jump');
+    });
+
+    it('should submit continuation through pickStep when tutorialStep suppressAutoFill lifts (R-04 timing race)', async () => {
+      // Regression test for the checkers tutorial multi-jump hang.
+      //
+      // The race: when execute() returns a followUp, startFollowUp runs via nextTick.
+      // At that moment the game_state broadcast (which advances tutorialStep) has NOT
+      // yet arrived. tutorialStep is still the completing step (execute-capture,
+      // suppressAutoFill:true) → auto-fill is suppressed → isReady stays false →
+      // the existing R-04 guard misses → hang.
+      //
+      // After the broadcast, tutorialStep updates to multi-jump-continue (no
+      // suppressAutoFill). The fix watches tutorialStep and retries auto-fill +
+      // R-04 submission when suppressAutoFill changes true → false.
+      //
+      // This test FAILS without the tutorialStep watcher (pickStep never called
+      // after broadcast) and PASSES with it.
+
+      const tutorialStep = ref<TutorialStepView | undefined>({
+        stepId: 'execute-capture',
+        suppressAutoFill: true,
+        content: [],
+      });
+
+      const pickStep = vi.fn().mockResolvedValue({
+        success: true,
+        actionComplete: true,
+      });
+
+      // The followUp action: piece pre-filled, destination has exactly ONE legal
+      // choice (forces auto-fill) — mirrors the checkers forced multi-jump.
+      const multiJumpMeta: Record<string, ActionMetadata> = {
+        jump: {
+          name: 'jump',
+          prompt: 'Continue jump',
+          selections: [
+            {
+              name: 'piece',
+              type: 'choice',
+              prompt: 'Jumping piece (pre-filled)',
+              choices: [{ value: 5, display: 'Piece 5' }],
+            },
+            {
+              name: 'destination',
+              type: 'choice',
+              prompt: 'Jump destination (one legal choice)',
+              choices: [{ value: 'd4', display: 'Square d4' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...multiJumpMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'jump'];
+
+      // First action returns a followUp with piece pre-filled (the state broadcast
+      // that advances tutorialStep will arrive separately — simulated below).
+      sendAction.mockResolvedValueOnce({
+        success: true,
+        followUp: {
+          action: 'jump',
+          args: { piece: 5 },
+          display: { piece: 'Piece 5' },
+        },
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: true,
+        autoFill: true,
+        playerSeat: ref(0),
+        pickStep,
+        tutorialStep,
+      });
+
+      // Execute first action → followUp queued via nextTick.
+      await controller.execute('endTurn');
+      // Settle nextTick + startFollowUp (including fetchAndAutoFill which is sync
+      // here — no fetchPickChoices — so one tick is enough).
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await nextTick();
+
+      // ASSERT: auto-fill was suppressed by the stale execute-capture step.
+      // pickStep must NOT have been called yet — this is the hang state.
+      expect(pickStep).not.toHaveBeenCalled();
+      expect(controller.currentAction.value).toBe('jump');
+      expect(controller.pendingOnServer.value).toBe(true);
+
+      // Simulate game_state broadcast arriving: tutorial advances to multi-jump-continue.
+      // In production this comes from the WebSocket channel after the action op completes.
+      tutorialStep.value = {
+        stepId: 'multi-jump-continue',
+        // suppressAutoFill: not set (= undefined/false) — continuation is forced
+        content: [],
+      };
+
+      // Allow the tutorialStep watcher to fire + handleOnSelectFill to complete.
+      await nextTick();
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // ASSERT: pickStep was called with the auto-filled destination.
+      expect(pickStep).toHaveBeenCalled();
+      const call = pickStep.mock.calls[0];
+      expect(call[1]).toBe('destination'); // selection name
+      expect(call[2]).toBe('d4');          // auto-filled value
+      expect(call[3]).toBe('jump');        // action name
+
+      // Action must be complete — no longer hanging.
+      expect(controller.currentAction.value).toBeNull();
+      expect(controller.pendingOnServer.value).toBe(false);
+
+      // sendAction called once only (the initial action, not the followUp).
+      expect(sendAction).toHaveBeenCalledTimes(1);
     });
 
     it('should NOT change behavior when followUp has no pickStep (sendAction path)', async () => {

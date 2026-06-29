@@ -804,6 +804,45 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   });
 
+  // === Tutorial-step suppression lift watch (R-04 timing fix) ===
+  //
+  // Race condition: startFollowUp (queued via nextTick after an action) runs while
+  // tutorialStep still holds the completing step (e.g. execute-capture with
+  // suppressAutoFill:true). The game_state WebSocket broadcast travels on a
+  // SEPARATE async channel and arrives AFTER the platformRequest action response,
+  // so by the time the followUp starts, the broadcast hasn't been processed yet.
+  // isTutorialSuppressingAutoFill() returns true → destination never auto-fills →
+  // isReady stays false → R-04 guard misses → permanent hang.
+  //
+  // Fix: when suppressAutoFill changes from true→false, and there is a
+  // server-pending action with an unfilled selection, retry auto-fill + R-04.
+  if (options.tutorialStep) {
+    watch(options.tutorialStep, async (newStep, oldStep) => {
+      // Only fire when suppressAutoFill just lifted
+      if (!(oldStep?.suppressAutoFill) || newStep?.suppressAutoFill) return;
+
+      // Only relevant when a followUp / pendingOnServer action is waiting
+      if (!currentAction.value || !pendingOnServer.value || isExecuting.value) return;
+      const sel = currentPick.value;
+      if (!sel) return;
+
+      // Choices were already fetched in startFollowUp (stored in pickSnapshot).
+      // Re-run tryAutoFillSelection — it will now pass because isTutorialSuppressingAutoFill
+      // reads the updated tutorialStep.value and returns false.
+      if (tryAutoFillSelection(sel)) {
+        // Auto-fill succeeded. Route through handleOnSelectFill (R-04 path):
+        // auto-execute watcher is blocked by pendingOnServer, so we must actively
+        // submit the selection through the server's selection-step transport.
+        if (isReady.value && getAutoExecute() && !isExecuting.value && options.pickStep) {
+          const autoFilledValue = currentArgs.value[sel.name];
+          if (autoFilledValue !== undefined) {
+            await handleOnSelectFill(sel, autoFilledValue);
+          }
+        }
+      }
+    });
+  }
+
   /**
    * Register a hook to be called before auto-execute.
    * Use this when using GameShell (which creates the controller internally)
