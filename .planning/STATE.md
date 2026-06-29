@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives
-status: ready_to_plan
-stopped_at: Phase 108 complete (3/3) — ready to discuss Phase 109
-last_updated: 2026-06-27T16:23:35.882Z
-last_activity: 2026-06-27
+status: executing
+stopped_at: Phase 108 UI-SPEC approved
+last_updated: "2026-06-29T02:14:23.261Z"
+last_activity: 2026-06-29
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 21
-  completed_plans: 209
+  total_plans: 25
+  completed_plans: 22
   percent: 71
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 109 — checkers tutorial content
+**Current focus:** Phase 109 — checkers-tutorial-content
 
 ## Current Position
 
-Phase: 109
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-06-27
+Phase: 109 (checkers-tutorial-content) — EXECUTING
+Plan: 2 of 4
+Status: Executing Phase 109
+Last activity: 2026-06-28 -- 109-01 complete (per-selection gate substrate)
 
 ## Milestones
 
@@ -98,6 +98,12 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Parity proven at component level: dual-fixture tests (custom-UI-like div vs AutoUI-grid-like table cell, same data-bs-el-id) in both HintOverlay and HeatmapOverlay test suites.
 - [Phase ?]: Phase 108 Plan 03 complete
 
+**Phase 109 Plan 01 decisions (2026-06-28):**
+
+- LR-02 gate: `TutorialGateAllowList.from`/`to` removed without deprecation; replaced with `selections?: Record<string, SelectionMatcher>` map keyed by selection name.
+- `selectionMatchesValue` uses ElementRef id > notation > name precedence for element values; all-field equality for choice objects (DestinationChoice etc.).
+- Non-object/null values never match a non-empty matcher (returns reason, no crash) — satisfies T-109-01 threat mitigation.
+
 ### Highest-Risk Items
 
 1. `useBoardInteraction` parity for the annotation overlay (Phase 105) — a primitive that works in only one UI path violates the hard-rule; verify both paths.
@@ -113,7 +119,7 @@ Carried from v4.0 (non-blocking): dev-standalone shell height gap; pre-existing 
 
 - **MR-01 → ✅ CLOSED in Phase 105:** `tutorialStep` threaded into `useActionController` via GameShell production wiring; behavioral suppress-auto-fill test guards it. Phase 105 review also fixed BL-01 (action/panel targets were dead → overlay now teleports to body + `position:fixed` + `document.querySelector`, highlights targets in `.actionbar` outside `.boardregion`), CR-01 (bubble announced — root aria-hidden removed), WR-01/WR-02. Suite 1371 green.
 - **MR-02 → Phase 106:** predicate-form gates are currently all-or-nothing/permissive; flesh out when predicate triggers land.
-- **LR-02 → Phase 109:** gate `from`/`to` are lumped into one set, blind to selection name — checkers "piece c3 → square d4" needs per-selection-name gating.
+- **LR-02 → ✅ CLOSED in Phase 109 Plan 01:** `selections` map on `TutorialGateAllowList` keyed by selection name; `selectionMatchesValue` helper; 4th `selectionName` param on `getGateReasonForValue`; all 3 action.ts call sites updated.
 - **MR-03 / LR-01 (minor):** `start()` on empty `steps` is a silent no-op (should fail loud); `skip()` records identically to `advance()` (no distinction). Address opportunistically.
 
 **Phase 104 pre-existing tech debt surfaced (NOT introduced by 104, out of scope):** `tsc --noEmit` reports type-looseness errors in test files this repo does not gate on `tsc` (HandRenderer.a11y, GameHistory, DebugPanel, notation-serialization). Repo gates on vitest + eslint. Candidate for a future cleanup pass.
@@ -124,7 +130,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-27T01:49:42.923Z
+Last session: 2026-06-29T02:14:23.251Z
 Stopped at: Phase 108 UI-SPEC approved
 Resume file: None
 Next action: `/gsd:plan-phase 108`
