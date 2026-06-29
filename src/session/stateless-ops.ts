@@ -9,8 +9,9 @@
  * no memory between calls.
  */
 
-import type { Game, GameCommand, TutorialDefinition } from '../engine/index.js';
+import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
+import type { HeatmapEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
@@ -58,7 +59,9 @@ export type Op =
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
-  | { type: 'startTutorial'; player: number };
+  | { type: 'startTutorial'; player: number }
+  | { type: 'hint'; seat: number }
+  | { type: 'heatmapToggle'; seat: number; visible: boolean };
 
 /** The read-only debug ops — reported without mutating or broadcasting state. */
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
@@ -88,6 +91,11 @@ export interface OpResult {
   multiSelect?: { min: number; max?: number };
   aiMoved?: boolean;
   aiPlayer?: number;
+
+  // Transient teaching annotation results — consumed by SnapshotSessionHost
+  // to update transientTeachingState. Returned by hint/heatmapToggle ops.
+  hintAnnotation?: { seat: number; annotation: Annotation };
+  heatmapUpdate?: { seat: number; visible: boolean; entries: HeatmapEntry[] };
 
   // Debug op fields
   actionHistory?: unknown[];
@@ -125,6 +133,13 @@ export interface GameDefinitionLike {
    * When present, `buildPlayerState` emits `hasTutorial: true` in every broadcast.
    */
   tutorial?: TutorialDefinition;
+  /**
+   * Optional AI configuration — passed to `createBot` for hint/heatmap ops.
+   * Provides `hintTargetFromMove` for per-game board-highlight extraction and
+   * `objectives` for MCTS evaluation. When absent, hint/heatmap ops return a
+   * protocol error (fail-loud: no AI config → no hint available).
+   */
+  ai?: import('../ai/types.js').AIConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +499,160 @@ async function handleAITurn(
 }
 
 // ---------------------------------------------------------------------------
+// Teaching op handlers (hint / heatmapToggle)
+// ---------------------------------------------------------------------------
+
+/** Fallback destination argument names — checked when hintTargetFromMove is absent. */
+const DEST_ARGS = ['to', 'destination', 'target', 'square', 'cell', 'position'] as const;
+
+async function handleHint(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'hint' }>,
+): Promise<OpResult> {
+  // Fail-loud: no AI config means hint is impossible.
+  if (!def.ai?.objectives) {
+    return errorResult('No AI configuration on this game — hint is unavailable.', 'protocol');
+  }
+  // Fail-loud: seat out of range.
+  if (op.seat < 1 || op.seat > gameOptions.playerCount) {
+    return errorResult(
+      `Invalid seat ${op.seat}: must be between 1 and ${gameOptions.playerCount}.`,
+      'protocol',
+    );
+  }
+
+  const runner = runnerFromSnapshot(snapshot, def);
+  const flowState = runner.getFlowState() as AIFlowState;
+
+  // Fail-loud: seat not awaiting input (per-spec: hint only when the seat can act).
+  if (!canSeatAct(flowState as unknown as FlowState, op.seat)) {
+    return errorResult(`Cannot hint: seat ${op.seat} is not awaiting input`, 'protocol');
+  }
+
+  const bot = createBot(
+    runner.game as Game,
+    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameType,
+    op.seat,
+    runner.actionHistory,
+    parseAILevel('medium'),
+    def.ai,
+  );
+
+  const move = await bot.play();
+
+  // Extract the board highlight target using the same priority chain as
+  // GameSession.#extractMoveTarget(): hintTargetFromMove first, then DEST_ARGS fallback.
+  let target: import('../engine/index.js').ElementRef | undefined;
+  if (def.ai.hintTargetFromMove) {
+    target = def.ai.hintTargetFromMove(move);
+  } else {
+    for (const key of DEST_ARGS) {
+      const val = (move.args as Record<string, unknown>)[key];
+      if (typeof val === 'number') { target = { id: val }; break; }
+      if (typeof val === 'string') { target = { notation: val }; break; }
+    }
+  }
+
+  const annotation: Annotation = {
+    text: 'Suggested move',
+    ...(target ? { target: { kind: 'element' as const, ref: target } } : {}),
+  };
+
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    hintAnnotation: { seat: op.seat, annotation },
+  };
+}
+
+async function handleHeatmapToggle(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'heatmapToggle' }>,
+): Promise<OpResult> {
+  const runner = runnerFromSnapshot(snapshot, def);
+
+  // visible=false short-circuit: clear heatmap entries without running the bot
+  // (mirrors game-session.ts:1041-1043 — no MCTS needed to hide the overlay).
+  if (!op.visible) {
+    return {
+      success: true,
+      ...stateEnvelope(runner, gameOptions.playerCount),
+      heatmapUpdate: { seat: op.seat, visible: false, entries: [] },
+    };
+  }
+
+  // visible=true: compute heatmap entries via bot.playWithStats().
+  // Fail-loud: no AI config means heatmap is impossible.
+  if (!def.ai?.objectives) {
+    return errorResult('No AI configuration on this game — heatmap is unavailable.', 'protocol');
+  }
+  if (op.seat < 1 || op.seat > gameOptions.playerCount) {
+    return errorResult(
+      `Invalid seat ${op.seat}: must be between 1 and ${gameOptions.playerCount}.`,
+      'protocol',
+    );
+  }
+
+  const flowState = runner.getFlowState() as AIFlowState;
+  if (!canSeatAct(flowState as unknown as FlowState, op.seat)) {
+    return errorResult(`Cannot show heatmap: seat ${op.seat} is not awaiting input`, 'protocol');
+  }
+
+  const bot = createBot(
+    runner.game as Game,
+    def.gameClass as GameRunnerOptions<never>['GameClass'],
+    def.gameType,
+    op.seat,
+    runner.actionHistory,
+    parseAILevel('medium'),
+    def.ai,
+  );
+
+  const { stats } = await bot.playWithStats();
+
+  // Deduplicate by cell key — mirrors game-session.ts:1007-1026 #buildHeatmapEntries.
+  // Keep the highest normalizedValue per cell key; mark exactly one isBest=true.
+  const byCell = new Map<string, HeatmapEntry>();
+  for (const stat of stats) {
+    // Extract the cell ref from the move using the same priority chain as hint.
+    let ref: import('../engine/index.js').ElementRef | undefined;
+    if (def.ai.hintTargetFromMove) {
+      ref = def.ai.hintTargetFromMove(stat.move);
+    } else {
+      for (const key of DEST_ARGS) {
+        const val = (stat.move.args as Record<string, unknown>)[key];
+        if (typeof val === 'number') { ref = { id: val }; break; }
+        if (typeof val === 'string') { ref = { notation: val }; break; }
+      }
+    }
+    if (!ref) continue;
+    const cellKey = ref.id !== undefined ? `id:${ref.id}`
+      : ref.notation !== undefined ? `notation:${ref.notation}`
+      : `name:${(ref as { name?: string }).name}`;
+    const existing = byCell.get(cellKey);
+    if (!existing || stat.value > existing.normalizedValue) {
+      byCell.set(cellKey, { cellRef: ref, normalizedValue: stat.value, isBest: false });
+    }
+  }
+  const entries = [...byCell.values()];
+  if (entries.length > 0) {
+    const best = entries.reduce((a, b) => a.normalizedValue > b.normalizedValue ? a : b);
+    best.isBest = true;
+  }
+
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    heatmapUpdate: { seat: op.seat, visible: true, entries },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Debug op handlers
 // ---------------------------------------------------------------------------
 
@@ -746,6 +915,10 @@ export async function executeOp(
           type: 'SHUFFLE',
           spaceId: op.deckId,
         });
+      case 'hint':
+        return handleHint(def, gameOptions, snap, op);
+      case 'heatmapToggle':
+        return handleHeatmapToggle(def, gameOptions, snap, op);
       case 'startTutorial': {
         if (!def.tutorial) {
           return errorResult('No tutorial definition on this game.', 'protocol');

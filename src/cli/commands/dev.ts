@@ -573,6 +573,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
       // Required so buildPlayerState emits hasTutorial in all state broadcasts
       // and the startTutorial op can access it from def.tutorial.
       tutorial: gameDefinition.tutorial,
+      // Thread AI config (hintTargetFromMove + objectives) into the stateless executor.
+      // Required so hint/heatmapToggle ops can run MCTS and extract board targets.
+      ai: gameDefinition.ai,
     };
     const baseGameOptions = Object.fromEntries(devConfig.gameOptions.map((o) => [o.id, o.default]));
     const clients = new Map<string, WebSocket>();

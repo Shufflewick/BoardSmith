@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
+import type { AIConfig } from '../ai/types.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 
 // ---------------------------------------------------------------------------
@@ -576,5 +577,153 @@ describe('executeOp', () => {
       const viewAfter = (actionResult.playerViews as Array<{ state: { tutorial?: { stepId?: string } } }>)?.[0];
       expect(viewAfter?.state?.tutorial?.stepId).toBe('step-2');
     });
+  });
+
+  // ── Teaching ops: hint + heatmapToggle (Plan 110-02) ──────────────────────
+  //
+  // Uses an inline BotGame fixture: two-player game where player 1 chooses from
+  // 'direction': ['left', 'right'] — 2+ legal moves so MCTS has a real choice.
+  // MEMORY: MCTS short-circuits when only 1 move is available (skips clone).
+  // 2+ choices guarantee real MCTS branching for hint/heatmap tests.
+
+  describe('hint + heatmapToggle teaching ops', () => {
+
+    // BotGame: player 1 loops choosing from ['left', 'right'] — 2 legal moves.
+    class BotGame extends Game<BotGame, Player> {
+      moveCount = 0;
+
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create('move')
+            .chooseFrom('direction', { choices: ['left', 'right'] })
+            .execute(() => {
+              this.moveCount++;
+              return { success: true };
+            }),
+        );
+        this.setFlow(
+          defineFlow({
+            root: loop({
+              maxIterations: 100,
+              do: actionStep({
+                actions: ['move'],
+                player: (ctx) => ctx.game.getPlayer(1)!,
+              }),
+            }),
+          }),
+        );
+      }
+    }
+
+    interface BotGameDefinitionLike extends GameDefinitionLike {
+      ai?: AIConfig;
+    }
+
+    const botGameAI: AIConfig = {
+      objectives: (_game, _playerIndex) => ({
+        moves: {
+          checker: (game) => Math.min(1, (game as BotGame).moveCount / 20),
+          weight: 1,
+        },
+      }),
+      // Extract 'direction' arg as notation so heatmap entries have a cell ref.
+      // Without this, DEST_ARGS fallback wouldn't find 'direction' and entries would
+      // be empty (heatmap dedup only aggregates moves that have an extractable target).
+      hintTargetFromMove: (move) => {
+        const dir = (move.args as { direction?: string }).direction;
+        return dir ? { notation: dir } : undefined;
+      },
+    };
+
+    const botGameDef: BotGameDefinitionLike = {
+      gameClass: BotGame as new (...args: unknown[]) => unknown,
+      gameType: 'bot-game',
+      minPlayers: 1,
+      maxPlayers: 2,
+      ai: botGameAI,
+    };
+
+    const botGameOptions = { playerCount: 2, seed: 'bot-seed' };
+
+    async function startBotGame() {
+      const res = await executeOp(botGameDef, botGameOptions, null, null, { type: 'start' });
+      if (!res.success) throw new Error('start failed');
+      return res.snapshot;
+    }
+
+    // ── hint: success path ─────────────────────────────────────────────────
+
+    it('hint returns hintAnnotation with text "Suggested move" when seat is awaiting input', async () => {
+      const snapshot = await startBotGame();
+      const res = await executeOp(botGameDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 });
+
+      expect(res.success).toBe(true);
+      expect(res.hintAnnotation).toBeDefined();
+      expect(res.hintAnnotation!.seat).toBe(1);
+      expect(res.hintAnnotation!.annotation.text).toBe('Suggested move');
+    });
+
+    // ── hint: fail-loud — seat not awaiting input ─────────────────────────
+
+    it('hint returns a protocol error when seat is not awaiting input', async () => {
+      const snapshot = await startBotGame();
+      // Seat 2 never acts in BotGame — seat 1 always goes
+      const res = await executeOp(botGameDef, botGameOptions, snapshot, null, { type: 'hint', seat: 2 });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toMatch(/not awaiting input/i);
+    });
+
+    // ── hint: fail-loud — no AI config ────────────────────────────────────
+
+    it('hint returns a protocol error when no AI config is on the definition', async () => {
+      const snapshot = await startBotGame();
+      // Explicitly exclude `ai` so the def has no AI config.
+      const { ai: _ai, ...noAiDef } = botGameDef;
+      const res = await executeOp(noAiDef, botGameOptions, snapshot, null, { type: 'hint', seat: 1 });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toMatch(/No AI configuration/i);
+    });
+
+    // ── heatmapToggle visible=true: success path ───────────────────────────
+
+    it('heatmapToggle visible=true returns heatmapUpdate with exactly one isBest entry', async () => {
+      const snapshot = await startBotGame();
+      const res = await executeOp(botGameDef, botGameOptions, snapshot, null, {
+        type: 'heatmapToggle', seat: 1, visible: true,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.heatmapUpdate).toBeDefined();
+      expect(res.heatmapUpdate!.seat).toBe(1);
+      expect(res.heatmapUpdate!.visible).toBe(true);
+
+      const entries = res.heatmapUpdate!.entries;
+      expect(entries.length).toBeGreaterThan(0);
+      const bestCount = entries.filter((e) => e.isBest).length;
+      expect(bestCount).toBe(1);
+    });
+
+    // ── heatmapToggle visible=false: short-circuit — no bot call ──────────
+
+    it('heatmapToggle visible=false returns empty entries without running MCTS', async () => {
+      // Use a def with NO ai config — if the bot were constructed it would error.
+      // visible=false must short-circuit BEFORE checking for ai config.
+      const { ai: _ai, ...noAiDef } = botGameDef;
+      const snapshot = await startBotGame();
+      const res = await executeOp(noAiDef, botGameOptions, snapshot, null, {
+        type: 'heatmapToggle', seat: 1, visible: false,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.heatmapUpdate).toBeDefined();
+      expect(res.heatmapUpdate!.visible).toBe(false);
+      expect(res.heatmapUpdate!.entries).toHaveLength(0);
+    });
+
   });
 });
