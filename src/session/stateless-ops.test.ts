@@ -726,4 +726,120 @@ describe('executeOp', () => {
     });
 
   });
+
+  // ── aiSuggest op (Plan 110-03) ────────────────────────────────────────────
+  //
+  // Read-only preview: runs MCTS and returns suggestedAction/suggestedArgs
+  // WITHOUT mutating the snapshot. Used by runDemoLoop in SnapshotSessionHost.
+
+  describe('aiSuggest op', () => {
+
+    // Local BotGame fixture: player 1 chooses direction ['left','right'] with AI.
+    // Re-declared here because botGameDef is scoped to 'hint + heatmapToggle' describe.
+    class AISuggestBotGame extends Game<AISuggestBotGame, Player> {
+      moveCount = 0;
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create('move')
+            .chooseFrom('direction', { choices: ['left', 'right'] })
+            .execute(() => { this.moveCount++; return { success: true }; }),
+        );
+        this.setFlow(defineFlow({
+          root: loop({
+            maxIterations: 100,
+            do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! }),
+          }),
+        }));
+      }
+    }
+
+    interface AISuggestBotGameDef extends GameDefinitionLike { ai?: AIConfig; }
+
+    const aiSuggestAI: AIConfig = {
+      objectives: (_game, _playerIndex) => ({
+        moves: {
+          checker: (game) => Math.min(1, (game as AISuggestBotGame).moveCount / 20),
+          weight: 1,
+        },
+      }),
+      hintTargetFromMove: (move) => {
+        const dir = (move.args as { direction?: string }).direction;
+        return dir ? { notation: dir } : undefined;
+      },
+    };
+
+    const aiSuggestGameDef: AISuggestBotGameDef = {
+      gameClass: AISuggestBotGame as new (...args: unknown[]) => unknown,
+      gameType: 'ai-suggest-game',
+      minPlayers: 1,
+      maxPlayers: 2,
+      ai: aiSuggestAI,
+    };
+
+    const aiSuggestOpts = { playerCount: 2, seed: 'ai-suggest-seed' };
+
+    async function startAISuggestGame() {
+      const res = await executeOp(aiSuggestGameDef, aiSuggestOpts, null, null, { type: 'start' });
+      if (!res.success) throw new Error('start failed');
+      return res.snapshot;
+    }
+
+    // ── success path ──────────────────────────────────────────────────────
+
+    it('aiSuggest returns success with suggestedAction + suggestedArgs + aiPlayer, snapshot unchanged', async () => {
+      const snapshot = await startAISuggestGame();
+      const res = await executeOp(aiSuggestGameDef, aiSuggestOpts, snapshot, null, {
+        type: 'aiSuggest',
+        seats: [{ seat: 1 }],
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.suggestedAction).toBeDefined();
+      expect(typeof res.suggestedAction).toBe('string');
+      expect(res.suggestedArgs).toBeDefined();
+      expect(res.aiPlayer).toBe(1);
+
+      // Read-only: snapshot must be identical to the input snapshot
+      expect(JSON.stringify(res.snapshot)).toBe(JSON.stringify(snapshot));
+    });
+
+    // ── fail-loud: no actable seat ────────────────────────────────────────
+
+    it('aiSuggest returns a protocol error when no seat among the given seats is awaiting input', async () => {
+      const snapshot = await startAISuggestGame();
+      // Seat 2 never acts — only seat 1 does
+      const res = await executeOp(aiSuggestGameDef, aiSuggestOpts, snapshot, null, {
+        type: 'aiSuggest',
+        seats: [{ seat: 2 }],
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toBeDefined();
+    });
+
+    // ── fail-loud: no AI config ───────────────────────────────────────────
+
+    it('aiSuggest returns a protocol error when no AI config is on the definition', async () => {
+      const { ai: _ai, ...noAiDef } = aiSuggestGameDef;
+      const snapshot = await startAISuggestGame();
+      const res = await executeOp(noAiDef, aiSuggestOpts, snapshot, null, {
+        type: 'aiSuggest',
+        seats: [{ seat: 1 }],
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toMatch(/No AI configuration/i);
+    });
+
+    // ── read-only classification ──────────────────────────────────────────
+
+    it('aiSuggest is in READ_ONLY_OP_TYPES', async () => {
+      const { READ_ONLY_OP_TYPES } = await import('./stateless-ops.js');
+      expect(READ_ONLY_OP_TYPES.has('aiSuggest')).toBe(true);
+    });
+
+  });
 });

@@ -61,7 +61,17 @@ export type Op =
   | { type: 'debugShuffle'; deckId: number }
   | { type: 'startTutorial'; player: number }
   | { type: 'hint'; seat: number }
-  | { type: 'heatmapToggle'; seat: number; visible: boolean };
+  | { type: 'heatmapToggle'; seat: number; visible: boolean }
+  // aiSuggest: read-only preview — runs MCTS and returns the suggested move WITHOUT
+  // mutating the snapshot. Consumed by runDemoLoop in SnapshotSessionHost.
+  | { type: 'aiSuggest'; seats: Array<{ seat: number; level?: string }> }
+  // demoStart / demoStop are host lifecycle ops handled by SnapshotSessionHost.handleOp
+  // directly (they need the broadcast adapter + cancellable async lifetime that the
+  // stateless executor does not have). They are in the Op union for type-safety when
+  // passed through bridge.ts translateOp → handleOp. They MUST NOT be added to the
+  // executeOp switch — see fallback at the end of the switch for the guard.
+  | { type: 'demoStart'; delay?: number }
+  | { type: 'demoStop' };
 
 /** The read-only debug ops — reported without mutating or broadcasting state. */
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
@@ -70,6 +80,8 @@ export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
   'debugStateAt',
   'debugStateDiff',
   'debugActionTraces',
+  // aiSuggest is read-only: runs MCTS to preview a move but does NOT mutate the snapshot.
+  'aiSuggest',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -96,6 +108,11 @@ export interface OpResult {
   // to update transientTeachingState. Returned by hint/heatmapToggle ops.
   hintAnnotation?: { seat: number; annotation: Annotation };
   heatmapUpdate?: { seat: number; visible: boolean; entries: HeatmapEntry[] };
+
+  // aiSuggest result — the previewed move (read-only; snapshot is NOT mutated).
+  // Consumed by runDemoLoop in SnapshotSessionHost (never by executeOp).
+  suggestedAction?: string;
+  suggestedArgs?: Record<string, unknown>;
 
   // Debug op fields
   actionHistory?: unknown[];
@@ -653,6 +670,21 @@ async function handleHeatmapToggle(
 }
 
 // ---------------------------------------------------------------------------
+// aiSuggest op handler (read-only preview)
+// ---------------------------------------------------------------------------
+
+// PLACEHOLDER — replaced in GREEN phase with the real implementation.
+// During RED phase this returns a protocol error so TDD tests fail as expected.
+async function handleAISuggest(
+  _def: GameDefinitionLike,
+  _gameOptions: { playerCount: number; [key: string]: unknown },
+  _snapshot: GameStateSnapshot,
+  _op: Extract<Op, { type: 'aiSuggest' }>,
+): Promise<OpResult> {
+  return errorResult('aiSuggest not implemented yet', 'executor');
+}
+
+// ---------------------------------------------------------------------------
 // Debug op handlers
 // ---------------------------------------------------------------------------
 
@@ -919,6 +951,8 @@ export async function executeOp(
         return handleHint(def, gameOptions, snap, op);
       case 'heatmapToggle':
         return handleHeatmapToggle(def, gameOptions, snap, op);
+      case 'aiSuggest':
+        return handleAISuggest(def, gameOptions, snap, op);
       case 'startTutorial': {
         if (!def.tutorial) {
           return errorResult('No tutorial definition on this game.', 'protocol');
@@ -941,6 +975,15 @@ export async function executeOp(
         return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
       }
     }
+    // Fallback for host-only ops (demoStart / demoStop) that are intercepted by
+    // SnapshotSessionHost.handleOp before reaching this function. If they somehow
+    // reach executeOp, fail loud rather than silently returning undefined.
+    // This branch also satisfies TypeScript's return-completeness check now that
+    // demoStart/demoStop are in the Op union.
+    return errorResult(
+      `Op type '${(op as { type: string }).type}' is a host lifecycle op and cannot be executed directly`,
+      'protocol',
+    );
   } catch (err) {
     return errorResult(err, 'executor');
   }
