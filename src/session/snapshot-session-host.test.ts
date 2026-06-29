@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../engine/index.js';
 import type { Annotation } from '../engine/index.js';
 import type { AIConfig } from '../ai/types.js';
@@ -883,6 +883,285 @@ describe('SnapshotSessionHost', () => {
 
       // Restore
       host.demoRunning = false;
+    });
+
+  });
+
+  // ── 8. Demo loop (Plan 110-03) ────────────────────────────────────────────
+  //
+  // Tests for the AI-vs-AI narrated demo loop in runDemoLoop + handleOp
+  // demoStart/demoStop. Uses fake timers to control the delay between
+  // narration and execution.
+  //
+  // CLAUDE.md hard rule: no timer may remain pending after demo-stop OR
+  // after game-over. Verified with vi.getTimerCount() === 0.
+  //
+  // DESIGN NOTE: These tests stub the aiSuggest op (returning a deterministic
+  // canned move) to avoid MCTS's internal setImmediate scheduling from
+  // conflicting with vi.useFakeTimers(). The real 'action' op still runs
+  // through executeOp to advance genuine game state. This approach tests
+  // the demo LOOP'S control flow (narrate-before-execute, cancellation, timer
+  // cleanup) in isolation from MCTS timing.
+
+  describe('demo loop (demoStart / demoStop / runDemoLoop)', () => {
+
+    afterEach(() => vi.useRealTimers());
+
+    // ── makeDemoAdapters: stub aiSuggest, real action execution ───────────────
+    //
+    // Stubs aiSuggest to return a deterministic canned move without MCTS.
+    // maxSuggestions: after this many aiSuggest calls, return failure to
+    // simulate a game reaching its end (no more actable seat).
+
+    function makeDemoAdapters(
+      opts: { playerCount: number; seed?: string },
+      extra: { maxSuggestions?: number } = {},
+    ): { adapters: SnapshotSessionAdapters; broadcastLog: unknown[][] } {
+      const broadcastLog: unknown[][] = [];
+      let suggestCount = 0;
+
+      const adapters: SnapshotSessionAdapters = {
+        playerCount: opts.playerCount,
+        executeOp: async (snap, pend, op) => {
+          if (op.type === 'aiSuggest') {
+            suggestCount++;
+            if (extra.maxSuggestions !== undefined && suggestCount > extra.maxSuggestions) {
+              // Simulate no more moves (game-over equivalent)
+              return {
+                success: false,
+                error: 'No actable seat (simulated game-over)',
+                category: 'protocol' as const,
+                snapshot: snap,
+                pendingState: null,
+                flowState: {},
+                playerViews: [],
+                isComplete: false,
+                winners: [],
+              };
+            }
+            // Return a deterministic canned move (direction='left')
+            return {
+              success: true,
+              snapshot: snap,
+              flowState: {},
+              playerViews: [],
+              isComplete: false,
+              winners: [],
+              pendingState: null,
+              aiPlayer: 1,
+              suggestedAction: 'move',
+              suggestedArgs: { direction: 'left' } as Record<string, unknown>,
+            };
+          }
+          // All other ops (including 'action') use the real executeOp for
+          // genuine game state advancement
+          return executeOp(botGameDef, opts, snap, pend, op);
+        },
+        broadcast: (views, meta) => broadcastLog.push([views, meta]),
+        aiSeats: [{ seat: 1 }],
+      };
+      return { adapters, broadcastLog };
+    }
+
+    // Helper: get broadcast state for a seat at a given index
+    type DemoState = {
+      isDemoRunning?: boolean;
+      narration?: { text: string };
+    };
+
+    function broadcastState(broadcastLog: unknown[][], idx: number, seat: number): DemoState {
+      const entry = broadcastLog[idx];
+      if (!entry) throw new Error(`No broadcast at index ${idx}`);
+      const [views] = entry as [Array<{ state: DemoState }>, unknown];
+      return views[seat - 1].state;
+    }
+
+    // ── Test 1: narration broadcast BEFORE move executes ─────────────────────
+
+    it('broadcasts narration BEFORE the move state change (narrated args === executed args)', async () => {
+      vi.useFakeTimers();
+
+      const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // demoStart returns immediately (fire-and-forget loop)
+      await host.handleOp(1, { type: 'demoStart', delay: 0 });
+
+      // Advance all timers (processes the delay:0 setTimeout in the loop)
+      await vi.runAllTimersAsync();
+
+      // With stubs and delay:0, the loop runs until aiSuggest keeps succeeding
+      // (no maxSuggestions limit) until MAX_DEMO_MOVES. Use demo-stop to stop.
+      // Actually the loop runs many iterations. Let's stop it now.
+      await host.handleOp(1, { type: 'demoStop' });
+      await vi.runAllTimersAsync();
+
+      // Broadcast sequence for the first iteration:
+      // [0] isDemoRunning=true (initial broadcastCurrent before first move)
+      // [1] narration broadcast (announce before execute — isDemoRunning + narration)
+      // [2] state after move (apply())
+      expect(broadcastLog.length).toBeGreaterThanOrEqual(3);
+
+      // Broadcast 0: isDemoRunning=true, NO narration yet
+      const b0 = broadcastState(broadcastLog, 0, 1);
+      expect(b0.isDemoRunning).toBe(true);
+      expect(b0.narration).toBeUndefined();
+
+      // Broadcast 1: isDemoRunning=true, narration present (BEFORE move executes)
+      const b1 = broadcastState(broadcastLog, 1, 1);
+      expect(b1.isDemoRunning).toBe(true);
+      expect(b1.narration?.text).toBeDefined();
+      // Stub canned move is 'move direction=left' → narration should reflect that
+      expect(b1.narration!.text).toBe('Player 1: move direction=left');
+
+      // Broadcast 2: state after move (apply broadcast); narration cleared
+      const b2 = broadcastState(broadcastLog, 2, 1);
+      expect(b2.narration).toBeUndefined();
+
+      // Final broadcast: isDemoRunning=false (cleanup)
+      const bLast = broadcastState(broadcastLog, broadcastLog.length - 1, 1);
+      expect(bLast.isDemoRunning).toBeUndefined();
+
+      // CLAUDE.md: no pending timers
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    // ── Test 2: self-terminates when aiSuggest fails (game-over simulation) ──
+
+    it('self-terminates when no more moves available (game-over), final broadcast isDemoRunning=false, timer count 0', async () => {
+      vi.useFakeTimers();
+
+      // maxSuggestions:2 → loop runs 2 full moves then aiSuggest returns failure
+      const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 2 });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      await host.handleOp(1, { type: 'demoStart', delay: 0 });
+
+      // Run all timers: 2 x setTimeout(0) for the 2 move delays, then loop exits on 3rd aiSuggest failure
+      await vi.runAllTimersAsync();
+
+      // Loop should have self-terminated: demoRunning=false
+      expect(host.demoRunning).toBe(false);
+
+      // Final broadcast must show isDemoRunning cleared (undefined = not set = false)
+      const bLast = broadcastState(broadcastLog, broadcastLog.length - 1, 1);
+      expect(bLast.isDemoRunning).toBeUndefined();
+
+      // CLAUDE.md hard rule: no pending timer after game-over / aiSuggest failure
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    // ── Test 3: CANCELLATION — demo-stop before delay fires ──────────────────
+    //
+    // Start demo with a 5-second delay. The loop calls aiSuggest (sync stub),
+    // broadcasts narration, then awaits setTimeout(5000). Call demoStop BEFORE
+    // the 5s fires (setting demoAbort). Then advance timers: the 5s fires,
+    // the loop sees demoAbort and breaks WITHOUT executing the move.
+    // No additional broadcasts after the cleanup broadcast; timer count = 0.
+
+    it('CANCELLATION: demo-stop halts loop before delay fires, no extra move executes, timer count 0', async () => {
+      vi.useFakeTimers();
+
+      const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // Start demo with a 5-second delay
+      void host.handleOp(1, { type: 'demoStart', delay: 5000 });
+
+      // Flush microtasks so the loop runs through aiSuggest + narration broadcast
+      // and reaches the await setTimeout(5000) pause point.
+      // (stub aiSuggest is async → needs microtask flushes, not timer advancement)
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+
+      // At this point: broadcastLog has [0]=isDemoRunning + [1]=narration
+      // The loop is now waiting at the 5000ms setTimeout (not yet fired)
+
+      // Call demo-stop: sets demoAbort=true
+      await host.handleOp(1, { type: 'demoStop' });
+
+      // Record broadcast count BEFORE advancing timers
+      const broadcastCountAfterStop = broadcastLog.length;
+
+      // Advance all fake timers: the 5s setTimeout fires
+      // After firing, the loop checks demoAbort → true → breaks
+      // Finally block fires: cleanup broadcast (isDemoRunning=false)
+      await vi.runAllTimersAsync();
+
+      // After advance: exactly one more broadcast (the cleanup), OR zero
+      // if the loop already exited before the timer (demoAbort check after aiSuggest)
+      const newBroadcasts = broadcastLog.length - broadcastCountAfterStop;
+      expect(newBroadcasts).toBeLessThanOrEqual(1);
+
+      // Demo loop is stopped
+      expect(host.demoRunning).toBe(false);
+
+      // CLAUDE.md hard rule: no pending timer after demo-stop
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    // ── Test 4: second demoStart is a no-op while running ────────────────────
+
+    it('a second demoStart while the demo is running is a no-op (demoRunning guard)', async () => {
+      vi.useFakeTimers();
+
+      const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // Start demo with delay:5000 (stuck at first timer)
+      void host.handleOp(1, { type: 'demoStart', delay: 5000 });
+
+      // Let the loop get past aiSuggest and reach the setTimeout
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+
+      const broadcastsAfterFirstStart = broadcastLog.length;
+
+      // Second demoStart — should be a no-op because demoRunning===true
+      await host.handleOp(1, { type: 'demoStart', delay: 5000 });
+
+      // No additional broadcasts from the second demoStart
+      expect(broadcastLog.length).toBe(broadcastsAfterFirstStart);
+
+      // Clean up
+      await host.handleOp(1, { type: 'demoStop' });
+      await vi.runAllTimersAsync();
+
+      // CLAUDE.md: no pending timers
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    // ── Test 5: buildNarration produces "Player N: action key=val" format ─────
+
+    it('narration text follows "Player N: action key=val" format', async () => {
+      vi.useFakeTimers();
+
+      const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 1 });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      await host.handleOp(1, { type: 'demoStart', delay: 0 });
+      await vi.runAllTimersAsync();
+
+      // Find the narration broadcast (has narration.text)
+      const narrationBroadcast = broadcastLog.find((entry) => {
+        const [views] = entry as [Array<{ state: { narration?: { text: string } } }>, unknown];
+        return views[0]?.state?.narration?.text != null;
+      });
+
+      expect(narrationBroadcast).toBeDefined();
+      const [views] = narrationBroadcast as [Array<{ state: { narration?: { text: string } } }>, unknown];
+      const text = views[0].state.narration!.text;
+      // Canned move: 'move' with direction='left'
+      // Expected: "Player 1: move direction=left"
+      expect(text).toBe('Player 1: move direction=left');
     });
 
   });

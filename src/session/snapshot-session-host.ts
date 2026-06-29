@@ -33,6 +33,12 @@ export class SnapshotSessionHost {
   narrationText: string | null = null;
   private lastPlayerViews: unknown[] = [];
 
+  // Demo loop cancellation flag and move cap.
+  // demoAbort: set by demoStop to cancel the in-flight runDemoLoop.
+  // MAX_DEMO_MOVES: hard cap to guard against infinite/very long games (STRIDE T-110-06).
+  private demoAbort = false;
+  private readonly MAX_DEMO_MOVES = 200;
+
   constructor(private readonly adapters: SnapshotSessionAdapters) {}
 
   /**
@@ -101,6 +107,45 @@ export class SnapshotSessionHost {
   /** Read-only ops (resolveChoices) do NOT mutate or broadcast. State-mutating
    *  ops broadcast the new state, THEN the caller returns the op response. */
   async handleOp(seat: number, op: Op): Promise<OpResult> {
+    // Demo lifecycle ops — handled directly in the host (NOT delegated to executeOp)
+    // because they need the broadcast adapter and a cancellable async lifetime.
+    // demoStart: fire-and-forget runDemoLoop; return minimal envelope immediately.
+    // demoStop: set demoAbort flag; the loop's finally block broadcasts cleanup.
+    if (op.type === 'demoStart') {
+      if (!this.demoRunning) {
+        // Build allSeats from all player seats. If aiSeats is configured, use
+        // the first seat's level as the difficulty for all seats.
+        const allSeats = Array.from({ length: this.adapters.playerCount }, (_, i) => ({
+          seat: i + 1,
+          level: this.adapters.aiSeats?.[0]?.level,
+        }));
+        const delay = typeof op.delay === 'number' ? op.delay : 1200;
+        void this.runDemoLoop(allSeats, delay); // fire-and-forget
+      }
+      return {
+        success: true,
+        snapshot: this.snapshot,
+        flowState: this.flowState,
+        playerViews: [], // clients read demo state from game_state broadcasts (RESEARCH Pitfall 7)
+        isComplete: this.isComplete,
+        winners: this.winners,
+        pendingState: null,
+      };
+    }
+    if (op.type === 'demoStop') {
+      this.demoAbort = true;
+      // The loop's finally block will set demoRunning=false + broadcastCurrent().
+      return {
+        success: true,
+        snapshot: this.snapshot,
+        flowState: this.flowState,
+        playerViews: [],
+        isComplete: this.isComplete,
+        winners: this.winners,
+        pendingState: null,
+      };
+    }
+
     // Teaching ops (hint / heatmapToggle): compute annotation, store in
     // transient state, re-broadcast via broadcastCurrent() — NOT apply() because
     // these ops do NOT change game state (mirrors the production GameSession
@@ -201,5 +246,117 @@ export class SnapshotSessionHost {
     } finally {
       this.aiPumpRunning = false;
     }
+  }
+
+  /**
+   * Run the AI-vs-AI narrated demo loop.
+   *
+   * Each iteration: (1) preview the move via aiSuggest (read-only MCTS),
+   * (2) inject narration and broadcast BEFORE the move executes, (3) wait the
+   * configured delay, (4) execute the EXACT same move via the 'action' op —
+   * never re-running MCTS to avoid the narrate/execute mismatch anti-pattern.
+   *
+   * The loop is cancellable via `demoAbort`: checked at the top of each
+   * iteration AND immediately after the delay (RESEARCH Pitfall 1). A `finally`
+   * block guarantees cleanup on every exit path (stop, game-over, error, cap).
+   *
+   * Fire-and-forget: called via `void this.runDemoLoop(...)` from handleOp so
+   * the demoStart response returns immediately while the loop runs asynchronously.
+   */
+  private async runDemoLoop(
+    allSeats: Array<{ seat: number; level?: string }>,
+    delay: number,
+  ): Promise<void> {
+    this.demoRunning = true;
+    this.demoAbort = false;
+    this.broadcastCurrent(); // clients see isDemoRunning=true before first move
+
+    let moves = 0;
+    try {
+      while (!this.demoAbort && !this.isComplete && moves < this.MAX_DEMO_MOVES) {
+        moves++;
+
+        // Phase 1: Preview the move (read-only — no state mutation).
+        const suggestRes = await this.adapters.executeOp(this.snapshot, null, {
+          type: 'aiSuggest',
+          seats: allSeats,
+        });
+        if (!suggestRes.success || !suggestRes.suggestedAction) break;
+
+        // Check abort AFTER the async aiSuggest (Pitfall 1 — second check).
+        if (this.demoAbort) break;
+
+        const { aiPlayer, suggestedAction, suggestedArgs = {} } = suggestRes;
+        if (!aiPlayer) break;
+
+        // Phase 2: Narrate BEFORE executing (mirrors onBeforeMove semantics).
+        // The annotation broadcast fires so clients see the move description
+        // BEFORE the game state changes — this is the teaching signal.
+        this.narrationText = this.buildNarration(aiPlayer, suggestedAction, suggestedArgs as Record<string, unknown>);
+        this.broadcastCurrent(); // announcement broadcast (isDemoRunning + narration)
+
+        // Phase 3: Wait the configured delay (cancellable).
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+
+        // Check abort AFTER the delay — this is the critical second check from
+        // RESEARCH Pitfall 1: if demo-stop fires mid-delay, we must not execute
+        // the move after the timer fires.
+        if (this.demoAbort) break;
+
+        // Phase 4: Execute the EXACT same move via 'action' op.
+        // ANTI-PATTERN AVOIDED: Do NOT re-run aiSuggest/aiTurn here — a second
+        // MCTS call could produce a different move, making the narration a lie
+        // (RESEARCH: "narrate/execute mismatch" anti-pattern).
+        this.narrationText = null;
+        const execRes = await this.adapters.executeOp(this.snapshot, null, {
+          type: 'action',
+          actionName: suggestedAction,
+          player: aiPlayer,
+          args: suggestedArgs as Record<string, unknown>,
+        });
+
+        if (!execRes.success) break; // illegal move (shouldn't happen; fail-clean)
+
+        // Clear the acting seat's hint (mirrors performAction hint.delete(player)).
+        const seatTransient = this.transientTeachingState.get(aiPlayer);
+        if (seatTransient?.hint) {
+          const { hint: _h, ...rest } = seatTransient;
+          if (Object.keys(rest).length > 0) {
+            this.transientTeachingState.set(aiPlayer, rest);
+          } else {
+            this.transientTeachingState.delete(aiPlayer);
+          }
+        }
+
+        // Phase 5: Apply (broadcasts updated state; narration is already null).
+        await this.apply(execRes);
+
+        // Early-exit check after apply: avoid a wasted aiSuggest MCTS run when
+        // the game just finished (RESEARCH Pitfall 2).
+        if (this.isComplete) break;
+      }
+    } finally {
+      // Always clean up — no leaked state regardless of how the loop exited
+      // (stop, game-over, cap hit, error, or aiSuggest failure).
+      // This is the last line of defence for the CLAUDE.md timer-leak rule:
+      // demoRunning=false is broadcast so every client sees isDemoRunning=false.
+      this.demoRunning = false;
+      this.demoAbort = false;
+      this.narrationText = null;
+      this.broadcastCurrent(); // final broadcast: isDemoRunning=false
+    }
+  }
+
+  /**
+   * Format a narration string for one loop iteration.
+   * Mirrors the default narrator in game-session.ts:1142-1149 but uses
+   * "Player N" instead of the player name (no player-name threading in
+   * the stateless path — RESEARCH open-Q2 RESOLVED).
+   */
+  private buildNarration(player: number, action: string, args: Record<string, unknown>): string {
+    const argSummary = Object.entries(args)
+      .map(([k, v]) => (v !== null && typeof v === 'object' ? `${k}=${JSON.stringify(v)}` : `${k}=${String(v)}`))
+      .join(' ');
+    return argSummary ? `Player ${player}: ${action} ${argSummary}` : `Player ${player}: ${action}`;
   }
 }
