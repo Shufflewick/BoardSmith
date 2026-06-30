@@ -35,20 +35,31 @@ export interface BuildActionArgsOptions {
  * @param actionName    - Registered action name on the game.
  * @param selectionValues - Record of selection name → plain JS value.
  * @param game          - The game instance owning the action.
- * @param _seat         - The player seat (reserved for future per-seat validation).
+ * @param seat          - The player seat (1-indexed). Must resolve to an existing
+ *                        player in the game.
  * @param options       - Format option; defaults to `{ format: 'in-process' }`.
  * @returns A new record ready for `runner.performAction` or wire transmission.
- * @throws If the action is unknown, or if any key in `selectionValues` does not
- *         match a declared selection name for the action.
+ * @throws If the action is unknown, if the seat has no player, if any key in
+ *         `selectionValues` does not match a declared selection name, or if any
+ *         required (non-optional) selection is missing.
  */
 export function buildActionArgs(
   actionName: string,
   selectionValues: Record<string, unknown>,
   game: Game,
-  _seat: number,
+  seat: number,
   options?: BuildActionArgsOptions,
 ): Record<string, unknown> {
-  // 1. Resolve the action definition — validate the action name.
+  // 1. Validate seat resolves to an existing player.
+  const player = game.getPlayer(seat);
+  if (!player) {
+    throw new Error(
+      `buildActionArgs: seat ${seat} has no player in this game. ` +
+      `Provide a valid 1-indexed seat number.`,
+    );
+  }
+
+  // 3. Resolve the action definition — validate the action name.
   const actionDef = game.getAction(actionName);
   if (!actionDef) {
     throw new Error(
@@ -57,10 +68,10 @@ export function buildActionArgs(
     );
   }
 
-  // 2. Build a fast-lookup set of valid selection names for this action.
+  // 4. Build a fast-lookup set of valid selection names for this action.
   const validNames = new Set(actionDef.selections.map(s => s.name));
 
-  // 3. Validate every key supplied by the caller (V5 input validation).
+  // 5. Validate every key supplied by the caller.
   for (const key of Object.keys(selectionValues)) {
     if (!validNames.has(key)) {
       throw new Error(
@@ -70,7 +81,7 @@ export function buildActionArgs(
     }
   }
 
-  // 4. Validate all required (non-optional) selections are present.
+  // 6. Validate all required (non-optional) selections are present.
   const requiredSelections = actionDef.selections.filter(s => !s.optional);
   for (const sel of requiredSelections) {
     if (!(sel.name in selectionValues)) {
@@ -81,7 +92,7 @@ export function buildActionArgs(
     }
   }
 
-  // 5. Produce the output record in the requested format.
+  // 7. Produce the output record in the requested format.
   const format = options?.format ?? 'in-process';
 
   if (format === 'in-process') {

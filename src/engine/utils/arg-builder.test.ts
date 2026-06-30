@@ -197,9 +197,18 @@ describe('buildActionArgs', () => {
       expect(() => buildActionArgs('pick', { target: token }, game, 1)).not.toThrow();
     });
 
-    it('does not throw when no selections are supplied (empty args)', () => {
-      // An empty object is a subset of all selections — no unknown keys
-      expect(() => buildActionArgs('pick', {}, game, 1)).not.toThrow();
+    it('throws when a required selection is missing', () => {
+      // 'pick' has a required 'target' element selection — empty args must throw
+      expect(() => buildActionArgs('pick', {}, game, 1)).toThrow(/required selection "target"/);
+    });
+
+    it('error for missing required selection names the action', () => {
+      expect(() => buildActionArgs('pick', {}, game, 1)).toThrow(/pick/);
+    });
+
+    it('throws with invalid seat number', () => {
+      const token = game.board.first(Token)!;
+      expect(() => buildActionArgs('pick', { target: token }, game, 99)).toThrow(/seat 99/);
     });
   });
 });
