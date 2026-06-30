@@ -67,7 +67,7 @@ Plans:
 **Plans**: 4 plans
 - [x] 118-01-PLAN.md — TEST-01: typed observable state (getPlayerView annotation + JSDoc)
 - [x] 118-02-PLAN.md — TEST-02: playUntilComplete + GameStuckError (sequential + simultaneous)
-- [ ] 118-03-PLAN.md — TEST-03 + TEST-04: assertion trace + actionsMode (exact/contains)
+- [x] 118-03-PLAN.md — TEST-03 + TEST-04: assertion trace + actionsMode (exact/contains)
 - [ ] 118-04-PLAN.md — TEST-05: ActionBuilder multi-step selection builder
 
 ### Phase 119: Dev-Host Devtools Bridge
