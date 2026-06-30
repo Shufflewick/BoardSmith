@@ -85,7 +85,7 @@
   3. When `teachingDisabled` is set, action help text remains visible and functional for go-fish actions (action help is not a teaching affordance).
 **Plans**: 3 plans
 - [x] 114-01-PLAN.md — GFHELP-01: add `.help()` to the go-fish `ask` action + integration test asserting ActionMetadata.help propagation
-- [ ] 114-02-PLAN.md — GFLOCK-01: go-fish host-lockout test (locked session: hint/demo/tutorial throw fail-loud; action help stays — both halves)
+- [x] 114-02-PLAN.md — GFLOCK-01: go-fish host-lockout test (locked session: hint/demo/tutorial throw fail-loud; action help stays — both halves)
 - [ ] 114-03-PLAN.md — Browser checkpoint: ask help reveals in the custom-UI dock + `--lock-teaching` hides the Teaching group while keeping "Show action help" (autonomous:false, kills dev server)
 
 ### Phase 115: Developer Documentation
@@ -106,5 +106,5 @@
 |-------|----------------|--------|-----------|
 | 112. Go-Fish Tutorial Content | 4/4 | Complete   | 2026-06-30 |
 | 113. Go-Fish AI Teaching | 3/3 | Complete   | 2026-06-30 |
-| 114. Go-Fish Action Help & Host Lockout | 1/3 | In Progress|  |
+| 114. Go-Fish Action Help & Host Lockout | 2/3 | In Progress|  |
 | 115. Developer Documentation | 0/? | Not started | - |

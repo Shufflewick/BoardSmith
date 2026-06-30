@@ -30,7 +30,7 @@
 
 ### Go-Fish Host Lockout (GFLOCK)
 
-- [ ] **GFLOCK-01**: When the host teaching-lockout is set, go-fish's hint, AI-demo, and tutorial affordances are hidden and the corresponding ops are rejected fail-loud, while action help stays enabled — verifying the v4.1 `teachingDisabled` substrate generalizes to a card game.
+- [x] **GFLOCK-01**: When the host teaching-lockout is set, go-fish's hint, AI-demo, and tutorial affordances are hidden and the corresponding ops are rejected fail-loud, while action help stays enabled — verifying the v4.1 `teachingDisabled` substrate generalizes to a card game.
 
 ### Developer Documentation (DOC) — BoardSmith `docs/`
 
