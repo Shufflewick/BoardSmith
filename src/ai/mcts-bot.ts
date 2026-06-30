@@ -952,8 +952,11 @@ export class MCTSBot<G extends Game = Game> {
    * Serialize a choice value for action args
    */
   private serializeChoice(choice: unknown, selection: Selection): unknown {
+    // Use the public .id getter for both element types — consistent and immune to
+    // internal tree-node (_t) renames. GameElement.id returns this._t.id but the
+    // public surface is stable.
     if (selection.type === 'element') {
-      return (choice as { _t: { id: number } })._t.id;
+      return (choice as { id: number }).id;
     }
     // For 'elements' type (chooseElements), choices are GameElement objects with id property
     if (selection.type === 'elements') {
