@@ -34,7 +34,7 @@
 ### 🚧 v4.2 Tutorial Primitives — Go Fish & Docs — Phases 112–115
 
 - [x] **Phase 112: Go-Fish Tutorial Content** — Four teaching beats (ask-for-rank gating, Go-Fish-draw tip, forming-a-book, turn-continuation) authored in go-fish and launchable in GameShell + `boardsmith dev`, with CI-verifiable test artifact. (completed 2026-06-30)
-- [ ] **Phase 113: Go-Fish AI Teaching** — MCTS move hint (anchored to cards/hand via `anchorAttrs`) and narrated AI-vs-AI demo, reusing go-fish's existing bot.
+- [x] **Phase 113: Go-Fish AI Teaching** — MCTS move hint (anchored to cards/hand via `anchorAttrs`) and narrated AI-vs-AI demo, reusing go-fish's existing bot. (completed 2026-06-30)
 - [ ] **Phase 114: Go-Fish Action Help & Host Lockout** — Per-action help text on go-fish actions and browser-verified proof that `teachingDisabled` gates all teaching affordances on a card game.
 - [ ] **Phase 115: Developer Documentation** — Full authoring guide covering the whole tutorial substrate + AI teaching + action help + host lockout, with checkers (grid) and go-fish (cards) as worked examples.
 
@@ -71,7 +71,7 @@
 **Plans**: 3 plans
 - [x] 113-01-PLAN.md — getGoFishHintTarget hook + gameDefinition.ai wiring + card-group rank anchor + hint-target.test.ts (GFAI-01, Wave 1)
 - [x] 113-02-PLAN.md — AI-vs-AI narrated demo integration test (narrate-before-execute + clean stop), substrate-driven (GFAI-02, Wave 1)
-- [ ] 113-03-PLAN.md — browser human-verify checkpoint: hint ring on rank cards + narrated demo, dev server killed (GFAI-01, GFAI-02, Wave 2)
+- [x] 113-03-PLAN.md — browser human-verify checkpoint: hint ring on rank cards + narrated demo, dev server killed (GFAI-01, GFAI-02, Wave 2)
 **UI hint**: yes
 
 ### Phase 114: Go-Fish Action Help & Host Lockout
@@ -102,6 +102,6 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 112. Go-Fish Tutorial Content | 4/4 | Complete   | 2026-06-30 |
-| 113. Go-Fish AI Teaching | 2/3 | In Progress|  |
+| 113. Go-Fish AI Teaching | 3/3 | Complete   | 2026-06-30 |
 | 114. Go-Fish Action Help & Host Lockout | 0/? | Not started | - |
 | 115. Developer Documentation | 0/? | Not started | - |
