@@ -155,7 +155,7 @@
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 4/4 | Complete    | 2026-06-29 |
 | 110. Demonstration & Refinement | 5/5 | Complete   | 2026-06-29 |
-| 111. Host-Gated Teaching Lockout | 0/0 | Not Planned |  |
+| 111. Host-Gated Teaching Lockout | 0/5 | Planned |  |
 
 ### Phase 111: Host-Gated Teaching Lockout
 
@@ -168,8 +168,12 @@
   3. **Server enforcement (anti-cheat):** the session rejects the `hint`, `heatmapToggle`, `demoStart`, and `startTutorial`/`start-tutorial` ops fail-loud when teaching is disabled — so a player who crafts the op directly (bypassing the hidden UI) still cannot use the feature. Enforced in BOTH the production `GameSession` and the dev-host `SnapshotSessionHost`/stateless-ops paths.
   4. The flag is reflected into broadcast player state so every connected client (reconnect, second window) hides the affordances consistently.
   5. Default (no flag) behavior is unchanged: all teaching features remain available, verified by the existing Phase 107–110 tests staying green.
-**Plans**: TBD (run `/gsd:plan-phase 111` to break down)
+**Plans**: 5 plans (Waves 1-3)
 **UI hint**: yes
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 111 to break down)
+- [ ] 111-01-PLAN.md — Production GameSession lockout: teachingDisabled config + 4 fail-loud guards + broadcast reflection + PlayerGameState type (Wave 1)
+- [ ] 111-02-PLAN.md — Dev-host lockout enforcement: executeOp + SnapshotSessionHost demoStart guards + broadcast injection + bridge threading (Wave 1)
+- [ ] 111-03-PLAN.md — Client gating: GameShell init/broadcast teachingDisabled computed + ControlsMenu affordance suppression (action help ungated) (Wave 2)
+- [ ] 111-04-PLAN.md — `boardsmith dev --lock-teaching` flag + dev-host server/config/iframe-init wiring (Wave 2)
+- [ ] 111-05-PLAN.md — Full-suite + eslint green + live browser demonstration (human gate, Wave 3)
