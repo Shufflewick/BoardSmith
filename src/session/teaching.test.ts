@@ -23,6 +23,7 @@ import {
 import { GameRunner } from '../runtime/runner.js';
 import { GameSession } from './game-session.js';
 import type { PlayerGameState, BroadcastAdapter } from './types.js';
+import type { AIConfig } from '../ai/index.js';
 
 // ============================================
 // Minimal test game: two players, choose from 3 options per turn.
@@ -319,6 +320,49 @@ describe('teaching state — heatmap', () => {
     await expect(setVisible(1, true)).rejects.toThrow('Heatmap evaluation is already in progress');
     // Let the first resolve cleanly.
     await first.catch(() => {});
+  });
+
+  // ── R-11: a visible heatmap must track the live position, not freeze ───────
+  // The hint is cleared as stale on each action; the heatmap is instead
+  // recomputed for whoever is now on turn and cleared for seats that are not.
+  it('clears a visible heatmap off-turn and recomputes it when the seat is on turn again', async () => {
+    // botAIConfig with hintTargetFromMove so 'pick' choices yield cell refs →
+    // non-empty heatmap entries (the default makeSession() game produces none).
+    const heatmapAI: AIConfig = {
+      objectives: () => ({ moves: { checker: () => 0.5, weight: 1 } }),
+      hintTargetFromMove: (move) => {
+        const opt = (move.args as { option?: string }).option;
+        return opt ? { notation: opt } : undefined;
+      },
+    };
+    const session = GameSession.create({
+      gameType: 'teaching-test',
+      GameClass: TeachingTestGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'test',
+      botAIConfig: heatmapAI,
+    });
+    const captured: CapturedState[] = [];
+    session.setBroadcaster(makeMockBroadcaster([{ playerSeat: 1, isSpectator: false }], captured));
+    const setHeatmapVisible = (session as unknown as { setHeatmapVisible(s: number, v: boolean): Promise<void> }).setHeatmapVisible.bind(session);
+
+    // Seat 1 enables the heatmap on their turn → fresh, non-empty entries.
+    await setHeatmapVisible(1, true);
+    expect(captured.at(-1)!.state.heatmap!.entries.length).toBeGreaterThan(0);
+
+    // Seat 1 acts → eachPlayer advances to seat 2 → seat 1's heatmap is stale.
+    // It must be cleared (entries empty) while staying toggled on (visible true).
+    await session.performAction('pick', 1, { option: 'a' });
+    const afterP1 = captured.at(-1)!.state;
+    expect(afterP1.heatmap!.visible).toBe(true);
+    expect(afterP1.heatmap!.entries).toHaveLength(0);
+
+    // Seat 2 acts → back to seat 1's turn → heatmap recomputes (non-empty again).
+    await session.performAction('pick', 2, { option: 'a' });
+    const afterP2 = captured.at(-1)!.state;
+    expect(afterP2.heatmap!.visible).toBe(true);
+    expect(afterP2.heatmap!.entries.length).toBeGreaterThan(0);
   });
 });
 

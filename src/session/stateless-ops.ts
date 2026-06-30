@@ -15,6 +15,7 @@ import type { HeatmapEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
+import { describeMoveForHint } from './move-summary.js';
 import { PickHandler } from './pick-handler.js';
 import {
   buildSingleActionMetadata,
@@ -72,7 +73,11 @@ export type Op =
   // passed through bridge.ts translateOp → handleOp. They MUST NOT be added to the
   // executeOp switch — see fallback at the end of the switch for the guard.
   | { type: 'demoStart'; delay?: number }
-  | { type: 'demoStop' };
+  | { type: 'demoStop' }
+  // demoControl: live playback control for a running demo (pause/play/step one move/
+  // step back one move) and speed (inter-move delay in ms). Host lifecycle op like
+  // demoStart/demoStop — handled in SnapshotSessionHost.handleOp, never in executeOp.
+  | { type: 'demoControl'; control: 'pause' | 'play' | 'step' | 'back'; delay?: number };
 
 /** The read-only debug ops — reported without mutating or broadcasting state. */
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
@@ -575,7 +580,7 @@ async function handleHint(
   }
 
   const annotation: Annotation = {
-    text: 'Suggested move',
+    text: describeMoveForHint(move.args as Record<string, unknown>),
     ...(target ? { target: { kind: 'element' as const, ref: target } } : {}),
   };
 

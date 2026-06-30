@@ -35,6 +35,9 @@ export type WireOp =
   // the op response carries only { success, error } (RESEARCH Pitfall 7).
   | 'demo-start'
   | 'demo-stop'
+  // Live demo playback controls (pause/play/step/back + speed). Like demo-start/stop,
+  // state flows back via game_state broadcasts.
+  | 'demo-control'
   // Debug-panel wire ops (dev only). `debug:restart` / `debug:switch-seat` are
   // host-chrome ops handled in DevHost, not here.
   | 'debug:history'
@@ -146,6 +149,12 @@ export function translateOp(
       return { type: 'demoStart', delay: payload.delay as number | undefined };
     case 'demo-stop':
       return { type: 'demoStop' };
+    case 'demo-control':
+      return {
+        type: 'demoControl',
+        control: payload.control as 'pause' | 'play' | 'step' | 'back',
+        delay: payload.delay as number | undefined,
+      };
     case 'debug:history':
       return { type: 'debugHistory' };
     case 'debug:state-at':
@@ -219,9 +228,10 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
       return { success: result.success, error: result.error };
     case 'demo-start':
     case 'demo-stop':
+    case 'demo-control':
       // Demo lifecycle ops: demo state flows via game_state broadcasts
-      // (isDemoRunning, narration). Client never reads playerViews from here.
-      // Return only {success, error} (RESEARCH Pitfall 7).
+      // (isDemoRunning, narration, demoPaused/demoDelay/canStepBack). Client never
+      // reads playerViews from here. Return only {success, error} (RESEARCH Pitfall 7).
       return { success: result.success, error: result.error };
     case 'debug:history':
       return { success: result.success, error: result.error, actionHistory: result.actionHistory };

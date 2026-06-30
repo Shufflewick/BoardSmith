@@ -54,6 +54,7 @@ import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
 import { DebugController } from './debug-controller.js';
 import { DevCheckpointManager } from './dev-checkpoint-manager.js';
+import { describeMoveDestination, describeMoveForHint } from './move-summary.js';
 import { TutorialController } from './tutorial-controller.js';
 import { autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 
@@ -974,7 +975,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       const move = await bot.play();
       const ref = this.#extractMoveTarget(move);
       const target = ref ? { kind: 'element' as const, ref } : undefined;
-      const annotation: Annotation = { text: 'Suggested move', ...(target ? { target } : {}) };
+      const annotation: Annotation = { text: describeMoveForHint(move.args), ...(target ? { target } : {}) };
       this.#hint.set(seat, { annotation });
       this.broadcast();
     } finally {
@@ -1052,23 +1053,67 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     }
     this.#heatmapUpdating = true;
     try {
-      const difficulty = parseAILevel(this.#storedState.aiConfig?.level ?? 'medium');
-      const bot = createBot(
-        this.#runner.game,
-        this.#GameClass,
-        this.#storedState.gameType,
-        seat,
-        this.#storedState.actionHistory,
-        difficulty,
-        this.#botAIConfig
-      );
-      const { stats } = await bot.playWithStats();
-      const entries = this.#buildHeatmapEntries(stats);
+      const entries = await this.#computeHeatmapEntries(seat);
       this.#heatmap.set(seat, { visible: true, entries });
       this.broadcast();
     } finally {
       this.#heatmapUpdating = false;
     }
+  }
+
+  /**
+   * Run an ephemeral MCTS search for `seat` and build per-cell heatmap entries.
+   * Shared by setHeatmapVisible() (initial toggle) and #refreshVisibleHeatmaps()
+   * (per-turn recompute) so both paths produce identical entries.
+   */
+  async #computeHeatmapEntries(seat: number): Promise<HeatmapEntry[]> {
+    const difficulty = parseAILevel(this.#storedState.aiConfig?.level ?? 'medium');
+    const bot = createBot(
+      this.#runner.game,
+      this.#GameClass,
+      this.#storedState.gameType,
+      seat,
+      this.#storedState.actionHistory,
+      difficulty,
+      this.#botAIConfig
+    );
+    const { stats } = await bot.playWithStats();
+    return this.#buildHeatmapEntries(stats);
+  }
+
+  /**
+   * Keep every visible heatmap current after a move: recompute for the seat
+   * whose turn it now is, and clear now-stale entries for any other seat whose
+   * heatmap is still toggled on. Called from performAction so "Show move quality"
+   * tracks the live position instead of freezing where it was first enabled
+   * (symmetric with the per-action hint clear). Skips work when no heatmap is
+   * visible or a recompute/AI search is already in flight.
+   */
+  async #refreshVisibleHeatmaps(): Promise<void> {
+    if (this.#heatmap.size === 0) return;
+    const flowState = this.#runner.getFlowState();
+    let needsBroadcast = false;
+    for (const [seat, hm] of this.#heatmap) {
+      if (!hm.visible) continue;
+      if (canSeatAct(flowState, seat)) {
+        // It's this seat's turn — recompute fresh entries (guard against an
+        // overlapping search; the next action will refresh if we skip here).
+        if (this.#heatmapUpdating || this.#aiController?.isThinking()) continue;
+        this.#heatmapUpdating = true;
+        try {
+          const entries = await this.#computeHeatmapEntries(seat);
+          this.#heatmap.set(seat, { visible: true, entries });
+          needsBroadcast = true;
+        } finally {
+          this.#heatmapUpdating = false;
+        }
+      } else if (hm.entries.length > 0) {
+        // Not this seat's turn — drop stale chips, leave the overlay toggled on.
+        this.#heatmap.set(seat, { visible: true, entries: [] });
+        needsBroadcast = true;
+      }
+    }
+    if (needsBroadcast) this.broadcast();
   }
 
   // ============================================
@@ -1134,19 +1179,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       if (options?.narrator) {
         text = options.narrator(action, player, args);
       } else {
-        // Default: "PlayerName: actionName key=val ..."
-        // Object/array values use JSON.stringify so game args like
-        // { to: 42 } or { card: { id: 7 } } are legible rather than
-        // producing the useless "[object Object]" (WR-06).
-        // Games with rich arg types should supply a custom `narrator` function.
+        // Default: "PlayerName: actionName c5 → a3 (capture)". Formats a readable
+        // destination from destination-like args only (never raw element ids), so
+        // the narration reads as prose instead of dumping JSON. Games with rich arg
+        // types should still supply a custom `narrator` function.
         const name = playerNames[player - 1] ?? `Player ${player}`;
-        const argSummary = Object.entries(args)
-          .map(([k, v]) => {
-            if (v !== null && typeof v === 'object') return `${k}=${JSON.stringify(v)}`;
-            return `${k}=${String(v)}`;
-          })
-          .join(' ');
-        text = argSummary ? `${name}: ${action} ${argSummary}` : `${name}: ${action}`;
+        const dest = describeMoveDestination(args);
+        text = dest ? `${name}: ${action} ${dest}` : `${name}: ${action}`;
       }
 
       // Set narration and broadcast the announcement BEFORE the move executes.
@@ -1251,6 +1290,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         this.broadcast();
       }
     }
+
+    // Refresh any visible "Show move quality" heatmaps for the new position
+    // (recompute for whoever is on move, clear stale chips for the rest) before
+    // the AI is scheduled, so the recompute runs while no AI search is active.
+    await this.#refreshVisibleHeatmaps();
 
     // Check if AI should respond
     this.#scheduleAICheck();

@@ -1,6 +1,7 @@
 import type { Op, OpResult } from './stateless-ops.js';
 import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
 import type { Annotation } from '../engine/index.js';
+import { describeMoveForNarration } from './move-summary.js';
 import type { HeatmapEntry } from './types.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
@@ -56,8 +57,36 @@ export class SnapshotSessionHost {
   // _demoDelayCancel: invoke to clear the pending setTimeout and resolve the delay
   //   promise synchronously — guarantees no timer survives after demoStop (CLAUDE.md).
   private demoAbort = false;
-  private _demoDelayCancel: (() => void) | null = null;
   private readonly MAX_DEMO_MOVES = 200;
+
+  // ── Live demo playback controls (issue R-09) ───────────────────────────────
+  // demoDelay: inter-move pacing in ms (speed control; mutable mid-run).
+  // demoPaused: when true the loop parks at the pace-gate instead of advancing.
+  // demoStepConsume: one-shot — released the gate for a single move; re-pauses after.
+  // demoRewound: set by 'back' — tells the loop to re-suggest from the restored
+  //   snapshot instead of executing the now-stale narrated move.
+  // demoHistory: pre-move snapshots so 'back' can rewind one move at a time.
+  // _demoWake: resolves the current pace-gate wait (woken by any control op / stop).
+  private demoDelay = 1200;
+  private demoPaused = false;
+  private demoStepConsume = false;
+  private demoRewound = false;
+  private demoHistory: Array<{
+    snapshot: unknown;
+    flowState: unknown;
+    isComplete: boolean;
+    winners: number[];
+    lastPlayerViews: unknown[];
+  }> = [];
+  private _demoWake: (() => void) | null = null;
+
+  // Re-evaluate the pace-gate. Does NOT null _demoWake — the gate's own finish()
+  // clears it when it actually resolves. (Nulling here would mean: after a 'pause'
+  // re-parks the gate, the next 'play'/'step' wake finds null and no-ops, freezing
+  // the demo — the gate could never be re-armed.)
+  private wakeDemo(): void {
+    this._demoWake?.();
+  }
 
   constructor(private readonly adapters: SnapshotSessionAdapters) {}
 
@@ -87,7 +116,15 @@ export class SnapshotSessionHost {
       if (transient?.hint) state.hint = transient.hint;
       if (transient?.heatmap) state.heatmap = transient.heatmap;
       if (this.narrationText) state.narration = { text: this.narrationText };
-      if (this.demoRunning) state.isDemoRunning = true;
+      if (this.demoRunning) {
+        state.isDemoRunning = true;
+        // Playback-control state so clients can render the demo control bar.
+        state.demoControls = {
+          paused: this.demoPaused,
+          delay: this.demoDelay,
+          canStepBack: this.demoHistory.length > 0,
+        };
+      }
       if (this.adapters.aiSeats?.length) state.hasAIPlayers = true;
       return { ...view, state };
     });
@@ -139,8 +176,13 @@ export class SnapshotSessionHost {
           seat: i + 1,
           level: this.adapters.aiSeats?.[0]?.level,
         }));
-        const delay = typeof op.delay === 'number' ? op.delay : 1200;
-        void this.runDemoLoop(allSeats, delay); // fire-and-forget
+        // Reset playback controls for a fresh run.
+        this.demoDelay = typeof op.delay === 'number' ? op.delay : 1200;
+        this.demoPaused = false;
+        this.demoStepConsume = false;
+        this.demoRewound = false;
+        this.demoHistory = [];
+        void this.runDemoLoop(allSeats); // fire-and-forget
       }
       return {
         success: true,
@@ -157,16 +199,51 @@ export class SnapshotSessionHost {
       // CR-01: clear narration immediately so any apply() broadcast during the
       // stop window does not inject stale narration text into all clients' views.
       this.narrationText = null;
-      // CR-02: cancel the pending delay timer synchronously — clearTimeout runs
-      // inside the cancel callback, dropping the timer count to 0 immediately.
-      // resolve() is also called, scheduling the loop continuation as a microtask
-      // so the finally block runs (sets demoRunning=false + broadcastCurrent)
-      // without waiting for the original timer to fire.
-      this._demoDelayCancel?.();
-      this._demoDelayCancel = null;
+      // CR-02: wake the pace-gate synchronously so its timer (if any) is cleared and
+      // the loop continuation is scheduled as a microtask — the finally block then
+      // runs (demoRunning=false + broadcastCurrent) without waiting for the timer.
+      // Guarantees no timer survives after demoStop (CLAUDE.md timer-leak rule).
+      this.wakeDemo();
       // Broadcast the clean state (narration cleared, still shows isDemoRunning=true
       // until the finally block fires in the next microtask drain).
       this.broadcastCurrent();
+      return {
+        success: true,
+        snapshot: this.snapshot,
+        flowState: this.flowState,
+        playerViews: [],
+        isComplete: this.isComplete,
+        winners: this.winners,
+        pendingState: null,
+      };
+    }
+    if (op.type === 'demoControl') {
+      // No-op if no demo is running (the control bar only renders while running).
+      if (this.demoRunning) {
+        if (typeof op.delay === 'number') this.demoDelay = op.delay;
+        switch (op.control) {
+          case 'pause':
+            this.demoPaused = true;
+            break;
+          case 'play':
+            this.demoPaused = false;
+            this.demoStepConsume = false;
+            break;
+          case 'step':
+            // Advance exactly one move, then re-pause: release the gate once.
+            this.demoPaused = true;
+            this.demoStepConsume = true;
+            break;
+          case 'back':
+            // Rewind one move: restore the pre-move snapshot and re-suggest from it.
+            this.demoRewindOne();
+            break;
+        }
+        // Wake the pace-gate so the control takes effect immediately (pause cancels a
+        // pending delay; play/step release it; speed re-arms with the new delay).
+        this.wakeDemo();
+        this.broadcastCurrent();
+      }
       return {
         success: true,
         snapshot: this.snapshot,
@@ -253,10 +330,54 @@ export class SnapshotSessionHost {
     }
 
     await this.apply(res, seat);
-    if (!this.isComplete && (op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete))) {
+    const actionCompleted = op.type === 'action' || (op.type === 'selectionStep' && res.actionComplete);
+    if (!this.isComplete && actionCompleted) {
       await this.runAITurns();
     }
+    // Keep any visible "Show move quality" heatmaps current as play proceeds:
+    // recompute for the seat whose turn it now is, drop stale chips for the rest.
+    // Mirrors GameSession.#refreshVisibleHeatmaps (the hint is already cleared on
+    // each action above; the heatmap must be refreshed the same way or it freezes
+    // at the position where it was first toggled on).
+    if (actionCompleted) {
+      await this.refreshVisibleHeatmaps();
+    }
     return res;
+  }
+
+  /**
+   * Recompute every visible heatmap against the current snapshot. For the seat
+   * whose turn it now is, re-run the heatmap op (which gates on canSeatAct and
+   * returns fresh per-cell entries); for every other seat with a visible
+   * heatmap, clear the now-stale entries while leaving the overlay toggled on.
+   * Broadcasts once if anything changed.
+   */
+  private async refreshVisibleHeatmaps(): Promise<void> {
+    let changed = false;
+    for (const [seat, transient] of this.transientTeachingState) {
+      if (!transient.heatmap?.visible) continue;
+      // The heatmap op recomputes only when `seat` can act; otherwise it returns
+      // a protocol error, which we treat as "not this seat's turn → clear".
+      const res = await this.adapters.executeOp(this.snapshot, null, {
+        type: 'heatmapToggle',
+        seat,
+        visible: true,
+      });
+      if (res.success && res.heatmapUpdate) {
+        this.transientTeachingState.set(seat, {
+          ...transient,
+          heatmap: { visible: true, entries: res.heatmapUpdate.entries },
+        });
+        changed = true;
+      } else if (transient.heatmap.entries.length > 0) {
+        this.transientTeachingState.set(seat, {
+          ...transient,
+          heatmap: { visible: true, entries: [] },
+        });
+        changed = true;
+      }
+    }
+    if (changed) this.broadcastCurrent();
   }
 
   async runAITurns(): Promise<void> {
@@ -297,7 +418,6 @@ export class SnapshotSessionHost {
    */
   private async runDemoLoop(
     allSeats: Array<{ seat: number; level?: string }>,
-    delay: number,
   ): Promise<void> {
     this.demoRunning = true;
     this.demoAbort = false;
@@ -306,12 +426,10 @@ export class SnapshotSessionHost {
     let moves = 0;
     try {
       while (!this.demoAbort && !this.isComplete && moves < this.MAX_DEMO_MOVES) {
-        moves++;
-
-        // WR-01: Capture the snapshot once per iteration so both aiSuggest and
-        // the action execute op use the SAME snapshot. A concurrent human handleOp
-        // can mutate this.snapshot between the two awaits; using a frozen reference
-        // prevents the narrate/execute state desync.
+        // Capture the snapshot fresh EACH iteration so a 'back' rewind (which restores
+        // this.snapshot) is reflected — the re-suggest then runs from the restored
+        // position. aiSuggest and the execute op below use this same reference so a
+        // concurrent human handleOp cannot desync narrate vs execute (WR-01).
         const iterSnapshot = this.snapshot;
 
         // Phase 1: Preview the move (read-only — no state mutation).
@@ -328,25 +446,36 @@ export class SnapshotSessionHost {
         if (!aiPlayer) break;
 
         // Phase 2: Narrate BEFORE executing (mirrors onBeforeMove semantics).
-        // The annotation broadcast fires so clients see the move description
-        // BEFORE the game state changes — this is the teaching signal.
+        // The announcement broadcast fires so clients see the move description
+        // BEFORE the game state changes — this is the teaching signal. It stays
+        // visible during the pace/pause below so the learner can read it.
         this.narrationText = this.buildNarration(aiPlayer, suggestedAction, suggestedArgs as Record<string, unknown>);
         this.broadcastCurrent(); // announcement broadcast (isDemoRunning + narration)
 
-        // Phase 3: Wait the configured delay (cancellable via _demoDelayCancel).
-        // CR-02: store the timer handle so demoStop can clear it and call resolve()
-        // synchronously, dropping the timer count to 0 and scheduling the loop
-        // continuation as a microtask — no timer survives after demoStop (CLAUDE.md).
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, delay);
-          this._demoDelayCancel = () => { clearTimeout(timer); resolve(); };
-        });
-        this._demoDelayCancel = null;
-
-        // Check abort AFTER the delay — this is the critical second check from
-        // RESEARCH Pitfall 1: if demo-stop fires mid-delay, we must not execute
-        // the move after the timer fires.
+        // Phase 3: Pace (speed delay), park (paused), or release-one (step). The
+        // gate is cancellable: demoStop wakes it and its finally breaks; no timer
+        // survives after stop (CLAUDE.md timer-leak rule).
+        await this.demoPaceOrPause();
         if (this.demoAbort) break;
+
+        // 'back' was pressed during the gate: the host already restored the pre-move
+        // snapshot. Discard this now-stale suggestion and re-suggest from the restored
+        // position on the next iteration (no execute, no move count change).
+        if (this.demoRewound) {
+          this.demoRewound = false;
+          this.narrationText = null;
+          this.broadcastCurrent();
+          continue;
+        }
+
+        // Record the pre-move state so 'back' can rewind exactly one move.
+        this.demoHistory.push({
+          snapshot: this.snapshot,
+          flowState: this.flowState,
+          isComplete: this.isComplete,
+          winners: this.winners,
+          lastPlayerViews: this.lastPlayerViews,
+        });
 
         // Phase 4: Execute the EXACT same move via 'action' op.
         // ANTI-PATTERN AVOIDED: Do NOT re-run aiSuggest/aiTurn here — a second
@@ -362,7 +491,7 @@ export class SnapshotSessionHost {
           args: suggestedArgs as Record<string, unknown>,
         });
 
-        if (!execRes.success) break; // illegal move (shouldn't happen; fail-clean)
+        if (!execRes.success) { this.demoHistory.pop(); break; } // fail-clean: undo the history push
 
         // Clear the acting seat's hint (mirrors performAction hint.delete(player)).
         const seatTransient = this.transientTeachingState.get(aiPlayer);
@@ -377,6 +506,11 @@ export class SnapshotSessionHost {
 
         // Phase 5: Apply (broadcasts updated state; narration is already null).
         await this.apply(execRes);
+        moves++;
+
+        // A 'step' releases the gate for exactly one move — re-pause now that it
+        // has executed (demoPaused stays true; the next gate parks).
+        // (demoStepConsume was already cleared inside the gate.)
 
         // Early-exit check after apply: avoid a wasted aiSuggest MCTS run when
         // the game just finished (RESEARCH Pitfall 2).
@@ -389,9 +523,67 @@ export class SnapshotSessionHost {
       // demoRunning=false is broadcast so every client sees isDemoRunning=false.
       this.demoRunning = false;
       this.demoAbort = false;
+      this.demoPaused = false;
+      this.demoStepConsume = false;
+      this.demoRewound = false;
+      this.demoHistory = [];
+      this._demoWake = null;
       this.narrationText = null;
       this.broadcastCurrent(); // final broadcast: isDemoRunning=false
     }
+  }
+
+  /**
+   * Pace-gate for the demo loop. Resolves when it is time to execute the narrated
+   * move. Behaviour is re-evaluated on every control op (via wakeDemo):
+   *  - abort / rewound  → release immediately (loop handles stop / re-suggest).
+   *  - step             → release once (consume the one-shot), then re-pause.
+   *  - paused           → park (no timer) until a later wake.
+   *  - playing          → resolve after `demoDelay` ms (speed control).
+   * Only ONE timer is ever live and it is always cleared before resolve, so no
+   * timer survives a stop (CLAUDE.md timer-leak rule).
+   */
+  private demoPaceOrPause(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const clearTimer = () => {
+        if (timer !== null) { clearTimeout(timer); timer = null; }
+      };
+      const finish = () => {
+        clearTimer();
+        this._demoWake = null;
+        resolve();
+      };
+      const evaluate = () => {
+        clearTimer();
+        if (this.demoAbort || this.demoRewound) { finish(); return; }
+        if (this.demoStepConsume) { this.demoStepConsume = false; finish(); return; }
+        if (this.demoPaused) return; // park — wait for the next wakeDemo()
+        timer = setTimeout(finish, this.demoDelay);
+      };
+      // wakeDemo() invokes this until finish() nulls it.
+      this._demoWake = evaluate;
+      evaluate();
+    });
+  }
+
+  /**
+   * Rewind the demo by one move: restore the snapshot captured before the last
+   * executed move and flag the loop to re-suggest from it. Pauses on rewind so the
+   * learner can review. No-op when there is nothing to rewind.
+   */
+  private demoRewindOne(): void {
+    const prev = this.demoHistory.pop();
+    if (!prev) return;
+    this.snapshot = prev.snapshot;
+    this.flowState = prev.flowState;
+    this.isComplete = prev.isComplete;
+    this.winners = prev.winners;
+    this.lastPlayerViews = prev.lastPlayerViews;
+    this.narrationText = null;
+    this.demoPaused = true;
+    this.demoStepConsume = false;
+    this.demoRewound = true;
   }
 
   /**
@@ -418,12 +610,8 @@ export class SnapshotSessionHost {
     if (this.adapters.narrateMove) {
       return this.adapters.narrateMove(player, action, args);
     }
-    // Safe default: include only destination-like args (never raw element IDs).
-    const SAFE_DEST_ARGS = new Set(['to', 'destination', 'target', 'square', 'cell', 'position']);
-    const safeSummary = Object.entries(args)
-      .filter(([k]) => SAFE_DEST_ARGS.has(k))
-      .map(([k, v]) => (v !== null && typeof v === 'object' ? `${k}=${JSON.stringify(v)}` : `${k}=${String(v)}`))
-      .join(' ');
-    return safeSummary ? `Player ${player}: ${action} ${safeSummary}` : `Player ${player}: ${action}`;
+    // Safe default: format a readable destination ("c5 → a3 (capture)") from
+    // destination-like args only — never raw element IDs (no hidden-info leak).
+    return describeMoveForNarration(player, action, args);
   }
 }

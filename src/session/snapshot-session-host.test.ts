@@ -725,6 +725,8 @@ describe('SnapshotSessionHost', () => {
     type SeatState = {
       hint?: { annotation: { text: string; target?: unknown } };
       heatmap?: { visible: boolean; entries: unknown[] };
+      isDemoRunning?: boolean;
+      demoControls?: { paused: boolean; delay: number; canStepBack: boolean };
     };
 
     function lastBroadcastState(broadcastLog: unknown[][], seat: number): SeatState {
@@ -817,6 +819,39 @@ describe('SnapshotSessionHost', () => {
       expect(s1.hint).toBeUndefined();
     });
 
+    // ── Test (3b): heatmap recomputes after the owner's action (R-11) ─────────
+    // The hint is cleared as stale on each action; the heatmap must instead be
+    // RECOMPUTED for the seat still on turn, so "Show move quality" tracks the
+    // live position rather than freezing where it was first enabled.
+    it('recomputes a visible heatmap after the owner acts (stays fresh, not frozen)', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      // Count the heatmap recompute calls routed through executeOp.
+      const realExec = adapters.executeOp;
+      let heatmapComputes = 0;
+      adapters.executeOp = (snap, pend, op) => {
+        if (op.type === 'heatmapToggle' && op.visible) heatmapComputes++;
+        return realExec(snap, pend, op);
+      };
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // Toggle the heatmap on for seat 1 (compute #1).
+      await host.handleOp(1, { type: 'heatmapToggle', seat: 1, visible: true });
+      expect(heatmapComputes).toBe(1);
+      broadcastLog.length = 0;
+
+      // Seat 1 acts — BotGame loops on seat 1, so it is STILL seat 1's turn →
+      // the heatmap must recompute (compute #2), NOT clear or stay frozen.
+      await host.handleOp(1, { type: 'action', actionName: 'move', player: 1, args: { direction: 'left' } });
+
+      expect(heatmapComputes).toBe(2);
+      const s1 = lastBroadcastState(broadcastLog, 1);
+      expect(s1.heatmap?.visible).toBe(true);
+      expect((s1.heatmap?.entries ?? []).length).toBeGreaterThan(0);
+    });
+
     // ── Test (4): undo clears all transient state ─────────────────────────────
 
     it('clears all transient state (hint + heatmap) on undo', async () => {
@@ -842,6 +877,58 @@ describe('SnapshotSessionHost', () => {
       // The broadcast after undo must NOT carry any hint
       const s1 = lastBroadcastState(broadcastLog, 1);
       expect(s1.hint).toBeUndefined();
+    });
+
+    // ── Demo playback controls (R-09): pause / speed / stop in broadcast ──────
+
+    it('demoControl pause/speed are reflected in broadcast demoControls, and stop cleans up with no leaked timer', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // Start with a very long delay so the loop parks at the pace-gate after
+      // narrating the first move — deterministic (no auto-advance during the test).
+      await host.handleOp(1, { type: 'demoStart', delay: 100_000 });
+
+      // Poll until the loop has narrated + parked (broadcast carries demoControls).
+      const waitFor = async (pred: () => boolean) => {
+        for (let i = 0; i < 100; i++) {
+          if (pred()) return;
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        throw new Error('condition not met in time');
+      };
+
+      await waitFor(() => lastBroadcastState(broadcastLog, 1).isDemoRunning === true
+        && lastBroadcastState(broadcastLog, 1).demoControls !== undefined);
+
+      // Playing initially: not paused, delay echoes the demoStart value.
+      let s = lastBroadcastState(broadcastLog, 1);
+      expect(s.demoControls?.paused).toBe(false);
+      expect(s.demoControls?.delay).toBe(100_000);
+
+      // Pause → paused: true.
+      await host.handleOp(1, { type: 'demoControl', control: 'pause' });
+      s = lastBroadcastState(broadcastLog, 1);
+      expect(s.demoControls?.paused).toBe(true);
+
+      // Resume at a fast speed → paused: false, delay updated, AND the loop must
+      // actually advance (regression guard: a wakeDemo that nulled the gate handle
+      // froze the demo after pause→play — pause worked but play/step never re-armed).
+      const broadcastsBeforeResume = broadcastLog.length;
+      await host.handleOp(1, { type: 'demoControl', control: 'play', delay: 10 });
+      s = lastBroadcastState(broadcastLog, 1);
+      expect(s.demoControls?.paused).toBe(false);
+      expect(s.demoControls?.delay).toBe(10);
+      // The gate must re-arm and execute the parked move → further broadcasts fire.
+      await waitFor(() => broadcastLog.length > broadcastsBeforeResume + 1);
+
+      // Stop → loop unwinds; the long pace-gate timer must be cleared (no leak).
+      await host.handleOp(1, { type: 'demoStop' });
+      await waitFor(() => lastBroadcastState(broadcastLog, 1).isDemoRunning === undefined);
+      expect(lastBroadcastState(broadcastLog, 1).demoControls).toBeUndefined();
     });
 
     // ── Test (5): hint + heatmap coexist on the same seat ────────────────────
