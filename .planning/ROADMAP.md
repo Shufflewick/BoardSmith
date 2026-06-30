@@ -9,7 +9,7 @@
 
 ## Phases
 
-- [ ] **Phase 116: Verification & API Design** — Verify scout friction claims (confirmed/false/partial + evidence) and lock an approved API-design doc; gates all later phases.
+- [x] **Phase 116: Verification & API Design** — Verify scout friction claims (confirmed/false/partial + evidence) and lock an approved API-design doc; gates all later phases. ✅ 2026-06-30 (3/3 plans, verification passed)
 - [ ] **Phase 117: Action-Space Introspection** — Keystone: one serializable entry point for every legal action (selections, choices, `dependsOn`, arg templates) + per-action schema, validated arg-building, legal-move enumeration, perspective-aware state view.
 - [ ] **Phase 118: Test Ergonomics** — Typed observable state, `playUntilComplete` with stuck-game diagnostics, auto-trace on failed availability assertions, permissive-vs-exact action assertions, multi-step selection builder.
 - [ ] **Phase 119: Dev-Host Devtools Bridge** — Stable `data-element-id` selectors (custom UI + AutoUI), read-only `window.__BOARDSMITH_DEVTOOLS`, observable action-resolved signal — browser-proven.
