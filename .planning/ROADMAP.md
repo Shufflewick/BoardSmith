@@ -30,7 +30,7 @@
 - [x] **Phase 107: AI-Assisted Teaching** — MCTS-powered move hint, narrated AI-vs-AI demo, and evaluation heatmap, surfaced from checkers' existing bot. (completed 2026-06-26)
 - [x] **Phase 108: Lightweight Action Help** — Per-action help text revealed on hover/tap, with a global toggle. (completed 2026-06-27)
 - [x] **Phase 109: Checkers Tutorial Content** — The cross-repo showcase: guided selection/movement, mandatory-capture tip, multi-jump walkthrough, launchable in GameShell + dev host. (completed 2026-06-29)
-- [ ] **Phase 110: Demonstration & Refinement** — End-to-end browser demo of the tutorial + AI + HELP as a hands-on refinement gate before applying the substrate to cribbage.
+- [x] **Phase 110: Demonstration & Refinement** — End-to-end browser demo of the tutorial + AI + HELP as a hands-on refinement gate before applying the substrate to cribbage. (completed 2026-06-29)
 
 ## Phase Details
 
@@ -154,7 +154,7 @@
 | 107. AI-Assisted Teaching | 4/4 | Complete    | 2026-06-26 |
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 4/4 | Complete    | 2026-06-29 |
-| 110. Demonstration & Refinement | 4/5 | In Progress|  |
+| 110. Demonstration & Refinement | 5/5 | Complete   | 2026-06-29 |
 | 111. Host-Gated Teaching Lockout | 0/0 | Not Planned |  |
 
 ### Phase 111: Host-Gated Teaching Lockout

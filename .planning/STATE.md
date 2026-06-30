@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives
 status: executing
-stopped_at: Completed 110-04-PLAN.md
-last_updated: "2026-06-29T18:10:00.000Z"
+stopped_at: DEMO-01 approved — Phase 110 complete
+last_updated: "2026-06-29T19:00:00.000Z"
 last_activity: 2026-06-29
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 30
-  completed_plans: 29
-  percent: 75
+  completed_plans: 30
+  percent: 88
 ---
 
 # Project State
@@ -25,9 +25,8 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 
 ## Current Position
 
-Phase: 110 (demonstration-refinement) — EXECUTING
-Plan: 5 of 5
-Status: Ready to execute
+Phase: 111 (host-gated-teaching-lockout) — NOT PLANNED (autonomous: discuss → plan → execute)
+Status: Phase 110 complete (DEMO-01 approved); Phase 111 is the final v4.1 phase
 Last activity: 2026-06-29
 
 ## Milestones
@@ -138,11 +137,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-29T15:57:15.104Z
-Stopped at: Completed 110-04-PLAN.md
+Last session: 2026-06-29T19:00:00.000Z
+Stopped at: DEMO-01 approved — Phase 110 complete
 Resume file: None
-Next action: `/gsd:plan-phase 108`
+Next action: `/gsd:plan-phase 111` (autonomous mode in progress)
 
 ## Operator Next Steps
 
-- Plan Phase 108 (help/hint system) with `/gsd:plan-phase 108`
+- Phase 111 (Host-Gated Teaching Lockout) — final v4.1 phase. Autonomous: discuss → plan → execute, then milestone lifecycle (audit → complete → cleanup).
