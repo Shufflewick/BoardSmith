@@ -20,7 +20,7 @@
 ### Go-Fish AI Teaching (GFAI)
 
 - [x] **GFAI-01**: A player can request a move hint on their turn; go-fish's existing MCTS bot returns a legal ask and its target is highlighted via the annotation overlay (anchored to cards/hand, not a board cell).
-- [ ] **GFAI-02**: A player can watch a narrated AI-vs-AI go-fish demo in which each move is announced before it executes.
+- [x] **GFAI-02**: A player can watch a narrated AI-vs-AI go-fish demo in which each move is announced before it executes.
 
 > The evaluation heatmap (v4.1 AI-03) is intentionally **out of scope** for go-fish — it shades board cells and go-fish has no grid. It remains available for grid games and is documented as board-only (see DOC-03).
 
