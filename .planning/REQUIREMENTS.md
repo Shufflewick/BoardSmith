@@ -11,7 +11,7 @@
 
 - [x] **DSGN-01**: Each scouted friction claim is verified against the codebase with a recorded verdict (confirmed / false / partial), file:line evidence, and an "already exists vs. needs building" note — so we expose/document rather than rebuild.
 - [x] **DSGN-02**: A single reviewed API-design doc specifies the new introspection / test-ergonomics / devtools surface (names, signatures, return shapes, serialization, ownership across engine/session/runtime/ui) and is approved before implementation begins.
-- [ ] **DSGN-03**: The design doc explicitly records which speculative scout recommendations (e.g. lint rules, hidden-info assertions, programmatic seat-switch) are IN vs. DEFERRED, with rationale.
+- [x] **DSGN-03**: The design doc explicitly records which speculative scout recommendations (e.g. lint rules, hidden-info assertions, programmatic seat-switch) are IN vs. DEFERRED, with rationale.
 
 ### Action-Space Introspection (INTRO)
 
@@ -86,7 +86,7 @@ Which phases cover which requirements. Every v4.3 requirement maps to exactly on
 |-------------|-------|--------|
 | DSGN-01 | Phase 116 | Complete |
 | DSGN-02 | Phase 116 | Complete |
-| DSGN-03 | Phase 116 | Pending |
+| DSGN-03 | Phase 116 | Complete |
 | INTRO-01 | Phase 117 | Pending |
 | INTRO-02 | Phase 117 | Pending |
 | INTRO-03 | Phase 117 | Pending |
