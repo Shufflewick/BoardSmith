@@ -1299,4 +1299,110 @@ describe('SnapshotSessionHost', () => {
     });
 
   });
+
+  // ── 9. teachingDisabled host lockout (Plan 111-02) ────────────────────────
+  //
+  // demoStart must throw when adapters.teachingDisabled is set.
+  // state.teachingDisabled must be reflected into every broadcast view — including
+  // a lockout-only session with no other transient state (criterion 4).
+  // demoStop and default behavior (absent/false) must be unaffected.
+
+  describe('teachingDisabled host lockout', () => {
+
+    // ── Test (1): demoStart rejects when teachingDisabled is set ─────────────
+
+    it('demoStart throws a lockout error when adapters.teachingDisabled is true', async () => {
+      const { adapters } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+        teachingDisabled: true,
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      await expect(host.handleOp(1, { type: 'demoStart' })).rejects.toThrow(
+        'Teaching features are disabled for this session.',
+      );
+    });
+
+    // ── Test (2): demoStop is NOT blocked by teachingDisabled ─────────────────
+
+    it('demoStop succeeds (is not guarded) when teachingDisabled is true', async () => {
+      const { adapters } = makeAdapters(botGameDef, botGameOptions, {
+        aiSeats: [{ seat: 2 }],
+        teachingDisabled: true,
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // demoStop should not throw even when teachingDisabled is true.
+      const res = await host.handleOp(1, { type: 'demoStop' });
+      expect(res.success).toBe(true);
+    });
+
+    // ── Test (3): state.teachingDisabled === true in every broadcast view ─────
+
+    it('broadcasts state.teachingDisabled === true into every seat view when lockout is set', async () => {
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
+        teachingDisabled: true,
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+
+      expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
+      const [views] = broadcastLog[0] as [Array<{ state: { teachingDisabled?: boolean } }>, unknown];
+      for (const view of views) {
+        expect(view.state.teachingDisabled).toBe(true);
+      }
+    });
+
+    // ── Test (4): state.teachingDisabled === true even with NO other transient state ─
+    //
+    // This is the critical criterion 4 case: a lockout-only session with no hint/heatmap/
+    // demo/aiSeats must STILL reflect the flag. The hasTransient short-circuit must not
+    // skip injection for this case.
+
+    it('reflects teachingDisabled into broadcast even when there is no other transient state', async () => {
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
+        teachingDisabled: true,
+        // No aiSeats, no hint/heatmap/demo — pure lockout-only session.
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // broadcastCurrent re-broadcasts with mergeTransientState applied.
+      host.broadcastCurrent();
+
+      expect(broadcastLog.length).toBe(1);
+      const [views] = broadcastLog[0] as [Array<{ state: { teachingDisabled?: boolean } }>, unknown];
+      for (const view of views) {
+        expect(view.state.teachingDisabled).toBe(true);
+      }
+    });
+
+    // ── Test (5): state.teachingDisabled === false when adapter is absent ────
+
+    it('broadcasts state.teachingDisabled === false when teachingDisabled is absent', async () => {
+      // teachingDisabled not set in adapters — must still appear as false in every view.
+      const { adapters, broadcastLog } = makeAdapters(simpleGameDef, gameOptions, {
+        aiSeats: [{ seat: 2 }], // ensure hasTransient is true so mergeTransientState runs
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+
+      expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
+      const [views] = broadcastLog[0] as [Array<{ state: { teachingDisabled?: boolean } }>, unknown];
+      for (const view of views) {
+        expect(view.state.teachingDisabled).toBe(false);
+      }
+    });
+
+  });
+
 });

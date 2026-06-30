@@ -13,6 +13,11 @@ export interface SnapshotSessionAdapters {
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
   broadcast: (playerViews: unknown[], meta: { isComplete: boolean; winners: number[] }) => void;
   aiSeats?: Array<{ seat: number; level?: string }>;
+  /**
+   * When true, demoStart is rejected fail-loud and state.teachingDisabled is broadcast
+   * as true to every seat. Set once at session creation; never toggled mid-session.
+   */
+  teachingDisabled?: boolean;
   persist?: (state: { snapshot: unknown; pendingStates: Record<string, Record<string, unknown>> }) => void | Promise<void>;
   /**
    * Optional narrator hook for game authors.
@@ -101,10 +106,15 @@ export class SnapshotSessionHost {
    * Game-wide: narration, isDemoRunning, hasAIPlayers (applied to all seats).
    */
   private mergeTransientState(playerViews: unknown[]): unknown[] {
+    // teachingDisabled must always be injected — include it in hasTransient so a
+    // lockout-only session (no other transient state) still broadcasts the flag.
+    // Per D-03 (criterion 4): every connected client reads the authoritative value
+    // from broadcast, not local init alone.
     const hasTransient = this.transientTeachingState.size > 0
       || this.demoRunning
       || this.narrationText !== null
-      || (this.adapters.aiSeats?.length ?? 0) > 0;
+      || (this.adapters.aiSeats?.length ?? 0) > 0
+      || (this.adapters.teachingDisabled ?? false);
     if (!hasTransient) return playerViews;
 
     return (playerViews as Array<{ flowState: unknown; state: Record<string, unknown> } | null>).map((view, i) => {
@@ -126,6 +136,9 @@ export class SnapshotSessionHost {
         };
       }
       if (this.adapters.aiSeats?.length) state.hasAIPlayers = true;
+      // Always inject teachingDisabled (true or false) so every broadcast carries the
+      // authoritative session value regardless of other transient state (criterion 4).
+      state.teachingDisabled = this.adapters.teachingDisabled ?? false;
       return { ...view, state };
     });
   }
@@ -169,6 +182,10 @@ export class SnapshotSessionHost {
     // demoStart: fire-and-forget runDemoLoop; return minimal envelope immediately.
     // demoStop: set demoAbort flag; the loop's finally block broadcasts cleanup.
     if (op.type === 'demoStart') {
+      // Fail-loud: teaching features locked out by the host.
+      if (this.adapters.teachingDisabled) {
+        throw new Error('Teaching features are disabled for this session.');
+      }
       if (!this.demoRunning) {
         // Build allSeats from all player seats. If aiSeats is configured, use
         // the first seat's level as the difficulty for all seats.

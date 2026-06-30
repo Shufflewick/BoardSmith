@@ -206,6 +206,62 @@ describe('dev host bridge', () => {
     });
   });
 
+  // ── teachingDisabled threading (Plan 111-02) ─────────────────────────────
+  //
+  // DevSessionOptions.teachingDisabled threads into SnapshotSessionHost's adapters,
+  // so demoStart is rejected fail-loud and every broadcast view carries the flag.
+
+  describe('teachingDisabled threading', () => {
+
+    function makeLockedSession() {
+      const stateViews: Array<Array<{ state: Record<string, unknown> }>> = [];
+      const responses: Array<Record<string, unknown>> = [];
+      const session = createDevSession({
+        playerCount: 2,
+        teachingDisabled: true,
+        executeOp: (snap, pend, op) =>
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
+        postGameState: (_seat, view) => {
+          // Collect first postGameState call per broadcast cycle (both seats fire)
+          const last = stateViews[stateViews.length - 1];
+          if (!last) {
+            stateViews.push([view as { state: Record<string, unknown> }]);
+          } else {
+            last.push(view as { state: Record<string, unknown> });
+          }
+        },
+        postServerResponse: (_seat, _reqId, result) => responses.push(result),
+      });
+      return { session, stateViews, responses };
+    }
+
+    it('demoStart returns success:false error when teachingDisabled is set via DevSessionOptions', async () => {
+      const { session, responses } = makeLockedSession();
+      await session.start();
+      responses.length = 0;
+
+      await session.handleServerRequest(1, 'req-demo', 'demo-start', {});
+
+      expect(responses).toHaveLength(1);
+      expect(responses[0].success).toBe(false);
+      expect(responses[0].error).toBe('Teaching features are disabled for this session.');
+    });
+
+    it('broadcast views carry state.teachingDisabled === true when DevSessionOptions.teachingDisabled is set', async () => {
+      const { session, stateViews } = makeLockedSession();
+      await session.start();
+
+      // The start broadcast should already carry teachingDisabled on every seat view.
+      expect(stateViews.length).toBeGreaterThanOrEqual(1);
+      for (const broadcast of stateViews) {
+        for (const view of broadcast) {
+          expect(view.state.teachingDisabled).toBe(true);
+        }
+      }
+    });
+
+  });
+
   // ── debug wire ops ──────────────────────────────────────────────────────
   describe('debug wire ops', () => {
     /** A session that records the result payload of each server_response. */

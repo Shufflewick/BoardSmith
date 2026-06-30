@@ -55,6 +55,11 @@ export interface DevSessionOptions {
   /** AI seats (1-indexed) with optional per-seat difficulty. */
   aiSeats?: Array<{ seat: number; level?: string }>;
   /**
+   * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
+   * fail-loud for this session. Mirrors `--lock-teaching` in `boardsmith dev`.
+   */
+  teachingDisabled?: boolean;
+  /**
    * In-process op executor bound to the author's gameDefinition. The host calls
    * this with the authoritative snapshot + the acting seat's pending state; the
    * dev host passes it straight to the pure `executeOp(def, gameOptions, …)`.
@@ -273,6 +278,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
   const host = new SnapshotSessionHost({
     playerCount: opts.playerCount,
     aiSeats: opts.aiSeats,
+    teachingDisabled: opts.teachingDisabled,
     executeOp: opts.executeOp,
     broadcast: (playerViews, meta) => {
       lastPlayerViews = playerViews;
