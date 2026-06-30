@@ -4,14 +4,14 @@ milestone: v4.1
 milestone_name: Tutorial Primitives
 status: executing
 stopped_at: DEMO-01 approved — Phase 110 complete
-last_updated: "2026-06-29T19:00:00.000Z"
-last_activity: 2026-06-29
+last_updated: "2026-06-30T01:37:53.963Z"
+last_activity: 2026-06-30 -- Phase 111 execution started
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 30
+  total_plans: 35
   completed_plans: 30
-  percent: 88
+  percent: 86
 ---
 
 # Project State
@@ -21,13 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 110 — demonstration-refinement
+**Current focus:** Phase 111 — host-gated-teaching-lockout
 
 ## Current Position
 
-Phase: 111 (host-gated-teaching-lockout) — NOT PLANNED (autonomous: discuss → plan → execute)
-Status: Phase 110 complete (DEMO-01 approved); Phase 111 is the final v4.1 phase
-Last activity: 2026-06-29
+Phase: 111 (host-gated-teaching-lockout) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 111
+Last activity: 2026-06-30 -- Phase 111 execution started
 
 ## Milestones
 
