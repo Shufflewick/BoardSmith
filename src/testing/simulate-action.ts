@@ -6,7 +6,8 @@
  * @module
  */
 
-import type { Game } from '../engine/index.js';
+import type { Game, FlowState } from '../engine/index.js';
+import { enumerateLegalMoves } from '../engine/index.js';
 import type { TestGame } from './test-game.js';
 import type { ActionExecutionResult } from '../runtime/index.js';
 
@@ -176,4 +177,213 @@ export function assertActionFails<G extends Game>(
   }
 
   return result;
+}
+
+// ─── playUntilComplete + GameStuckError (TEST-02) ────────────────────────────
+
+/**
+ * Thrown by `playUntilComplete` when the game cannot progress:
+ * either all active seats have zero legal moves (dead-end) or the iteration
+ * cap `maxMoves` was reached before the game completed.
+ *
+ * The structured fields make it easy to diagnose *why* the game got stuck —
+ * check `availableActions` for what the engine thinks is callable, and
+ * `flowState` for the full flow snapshot at the moment of failure.
+ */
+export class GameStuckError extends Error {
+  /** Always `'GameStuckError'` — safe for `error.name` switch/comparisons. */
+  readonly name = 'GameStuckError' as const;
+  /** The iteration index at which the loop stopped (0-based for dead-end; equals maxMoves for cap). */
+  readonly iteration: number;
+  /**
+   * Action names that the engine considered available for the stuck seat(s)
+   * at the time of failure. Non-empty means the action exists in the flow but
+   * all its selections had no valid choices (e.g. text inputs, filtered elements).
+   */
+  readonly availableActions: string[];
+  /** Full FlowState snapshot at the moment playUntilComplete gave up. */
+  readonly flowState: FlowState | undefined;
+
+  constructor(
+    message: string,
+    iteration: number,
+    availableActions: string[],
+    flowState: FlowState | undefined,
+  ) {
+    super(message);
+    this.iteration = iteration;
+    this.availableActions = availableActions;
+    this.flowState = flowState;
+    // Required for correct instanceof checks when extending built-in classes in TS.
+    Object.setPrototypeOf(this, GameStuckError.prototype);
+  }
+}
+
+/**
+ * Options for `playUntilComplete`.
+ */
+export interface PlayUntilCompleteOptions {
+  /**
+   * Maximum number of move-selection iterations before giving up.
+   * Defaults to 1000. Increase for games that legitimately take many moves.
+   */
+  maxMoves?: number;
+  /**
+   * Move-selection strategy.
+   * - `'random'` (default): picks a random legal move via `rng`.
+   * - `'first'`: always picks `moves[0]` — deterministic, reproducible.
+   */
+  strategy?: 'random' | 'first';
+  /**
+   * Random number generator to use when `strategy` is `'random'`.
+   * Defaults to `Math.random`. Inject a seeded/stub rng for reproducible runs.
+   *
+   * @example
+   * ```typescript
+   * // Reproducible run with a stub rng:
+   * playUntilComplete(testGame, { rng: () => 0 });
+   * ```
+   */
+  rng?: () => number;
+}
+
+/**
+ * Drive a game to completion by automatically selecting legal moves.
+ *
+ * Calls `enumerateLegalMoves` for each active seat on every iteration and
+ * executes a chosen move via `testGame.doAction`. Handles both sequential
+ * turns (`flowState.currentPlayer`) and simultaneous turns
+ * (`flowState.awaitingPlayers`) — never hangs on either.
+ *
+ * Throws `GameStuckError` instead of hanging when:
+ * - All active seats have zero enumerable legal moves (dead-end).
+ * - `maxMoves` iterations are exhausted without the game completing.
+ *
+ * @param testGame - The test game instance to drive.
+ * @param options - Optional configuration (maxMoves, strategy, rng).
+ *
+ * @throws {GameStuckError} When the game cannot progress or the move cap is reached.
+ *
+ * @example
+ * ```typescript
+ * const testGame = TestGame.create(MyGame, { playerCount: 2 });
+ * playUntilComplete(testGame);
+ * expect(testGame.isComplete()).toBe(true);
+ *
+ * // Reproducible run:
+ * playUntilComplete(testGame, { strategy: 'first' });
+ * ```
+ */
+export function playUntilComplete<G extends Game>(
+  testGame: TestGame<G>,
+  options?: PlayUntilCompleteOptions,
+): void {
+  const maxMoves = options?.maxMoves ?? 1000;
+  const strategy = options?.strategy ?? 'random';
+  const rng = options?.rng ?? Math.random;
+
+  for (let i = 0; i < maxMoves; i++) {
+    if (testGame.isComplete()) return;
+
+    const flowState = testGame.getFlowState();
+
+    // Flow is auto-advancing (no player input needed this tick) — keep iterating.
+    if (!flowState?.awaitingInput) continue;
+
+    // ── Determine active seats ─────────────────────────────────────────────
+    // Simultaneous turns: flowState.awaitingPlayers is non-empty — check it FIRST.
+    //   Each incomplete entry is an active seat.
+    // Sequential turns: fallback to flowState.currentPlayer when awaitingPlayers is absent.
+    //
+    // CRITICAL: awaitingPlayers must be checked before currentPlayer. In a
+    // simultaneousActionStep, currentPlayer may still be set in the flowState
+    // (from engine initialization) even though it is NOT the canonical "who acts"
+    // signal. Checking currentPlayer first causes the loop to act only on seat 1
+    // on every iteration — ignoring seat 2 and hanging indefinitely.
+    // This mirrors the canonical seat-activity.ts dueSeats() logic: awaitingPlayers
+    // takes precedence over currentPlayer.
+    const activeSeats: number[] = [];
+    if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
+      for (const p of flowState.awaitingPlayers) {
+        if (!p.completed) activeSeats.push(p.playerIndex);
+      }
+    } else if (flowState.currentPlayer !== undefined) {
+      activeSeats.push(flowState.currentPlayer);
+    }
+
+    // ── Enumerate and pick a move for each active seat ─────────────────────
+    let anyMoveMade = false;
+    for (const seat of activeSeats) {
+      const moves = enumerateLegalMoves(testGame.game, seat);
+      if (moves.length === 0) continue; // this seat has no enumerable moves
+      const move =
+        strategy === 'first'
+          ? moves[0]
+          : moves[Math.floor(rng() * moves.length)];
+      testGame.doAction(seat, move.action, move.args);
+      anyMoveMade = true;
+    }
+
+    // ── Dead-end check ─────────────────────────────────────────────────────
+    // Active seats exist but none had enumerable moves AND game is not complete.
+    // This is a genuine dead-end, not auto-advancing flow — throw immediately.
+    if (!anyMoveMade && activeSeats.length > 0 && !testGame.isComplete()) {
+      const availableActions = _collectAvailableActions(flowState);
+      const seatDesc = _describeSeat(activeSeats);
+      throw new GameStuckError(
+        `Game stuck at iteration ${i}: ${seatDesc} has no enumerable legal moves. ` +
+        `Available actions: [${availableActions.join(', ')}]. ` +
+        `If these actions require text/number input they cannot be auto-enumerated — use doAction() directly. ` +
+        `Check that all required selections have valid choices for the current game state.`,
+        i,
+        availableActions,
+        flowState,
+      );
+    }
+  }
+
+  // ── maxMoves cap ───────────────────────────────────────────────────────────
+  if (!testGame.isComplete()) {
+    const flowState = testGame.getFlowState();
+    const availableActions = flowState ? _collectAvailableActions(flowState) : [];
+    const activeSeats: number[] = [];
+    if (flowState?.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
+      for (const p of flowState.awaitingPlayers) {
+        if (!p.completed) activeSeats.push(p.playerIndex);
+      }
+    } else if (flowState?.currentPlayer !== undefined) {
+      activeSeats.push(flowState.currentPlayer);
+    }
+    const seatDesc = activeSeats.length > 0 ? _describeSeat(activeSeats) : 'unknown seat';
+    throw new GameStuckError(
+      `Game did not complete after ${maxMoves} moves (${seatDesc} still active). ` +
+      `Available actions: [${availableActions.join(', ')}]. ` +
+      `Increase maxMoves or verify the game can reach a terminal state.`,
+      maxMoves,
+      availableActions,
+      flowState,
+    );
+  }
+}
+
+/** Collect available action names from a flow state (sequential or simultaneous). */
+function _collectAvailableActions(flowState: FlowState): string[] {
+  if (flowState.availableActions && flowState.availableActions.length > 0) {
+    return flowState.availableActions;
+  }
+  if (flowState.awaitingPlayers) {
+    const seen = new Set<string>();
+    for (const p of flowState.awaitingPlayers) {
+      if (!p.completed) {
+        for (const a of p.availableActions) seen.add(a);
+      }
+    }
+    return [...seen];
+  }
+  return [];
+}
+
+/** Human-readable seat description for error messages. */
+function _describeSeat(seats: number[]): string {
+  return seats.length === 1 ? `seat ${seats[0]}` : `seats [${seats.join(', ')}]`;
 }

@@ -39,13 +39,16 @@ export {
   type TestGameOptions,
 } from './test-game.js';
 
-// Action simulation
+// Action simulation + playUntilComplete (TEST-02)
 export {
   simulateAction,
   simulateActions,
   assertActionSucceeds,
   assertActionFails,
   type SimulateActionResult,
+  playUntilComplete,
+  GameStuckError,
+  type PlayUntilCompleteOptions,
 } from './simulate-action.js';
 
 // Random game simulation
