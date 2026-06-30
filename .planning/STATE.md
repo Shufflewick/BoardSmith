@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v4.2
-milestone_name: Tutorial Primitives — Go Fish & Docs — Phases 112–115
+milestone_name: milestone
 status: completed
-stopped_at: v4.2 roadmap created — Phases 112–115 defined
-last_updated: "2026-06-30T17:54:27.043Z"
+stopped_at: context exhaustion at 75% (2026-06-30)
+last_updated: "2026-06-30T18:49:35.750Z"
 last_activity: 2026-06-30 -- Phase 115 marked complete
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 92
 ---
 
 # Project State
@@ -159,8 +159,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-30T17:40:25.617Z
-Stopped at: v4.2 roadmap created — Phases 112–115 defined
+Last session: 2026-06-30T18:49:35.746Z
+Stopped at: context exhaustion at 75% (2026-06-30)
 Resume file: None
 Next action: `/gsd:plan-phase 112`
 
