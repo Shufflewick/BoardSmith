@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.2
 milestone_name: Tutorial Primitives — Go Fish & Docs — Phases 112–115
-status: completed
+status: executing
 stopped_at: v4.2 roadmap created — Phases 112–115 defined
-last_updated: "2026-06-30T16:29:20.439Z"
-last_activity: 2026-06-30 -- Phase 113 marked complete
+last_updated: "2026-06-30T16:52:03.736Z"
+last_activity: 2026-06-30
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
   percent: 50
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 113 — go-fish-ai-teaching
+**Current focus:** Phase 114 — go-fish-action-help-host-lockout
 
 ## Current Position
 
-Phase: 113 — COMPLETE
-Plan: 3 of 3
-Status: Phase 113 complete
-Last activity: 2026-06-30 -- Phase 113 marked complete
+Phase: 114 (go-fish-action-help-host-lockout) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-06-30
 
-Progress: [█████████░] 86%
+Progress: [████████░░] 80%
 
 ## Milestones
 
@@ -158,7 +158,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-30T16:00:46.029Z
+Last session: 2026-06-30T16:52:03.728Z
 Stopped at: v4.2 roadmap created — Phases 112–115 defined
 Resume file: None
 Next action: `/gsd:plan-phase 112`

@@ -26,7 +26,7 @@
 
 ### Go-Fish Action Help (GFHELP)
 
-- [ ] **GFHELP-01**: Each go-fish action has help text revealed on hover/tap, governed by the global "Show action help" toggle.
+- [x] **GFHELP-01**: Each go-fish action has help text revealed on hover/tap, governed by the global "Show action help" toggle.
 
 ### Go-Fish Host Lockout (GFLOCK)
 
