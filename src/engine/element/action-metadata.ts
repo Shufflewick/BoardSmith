@@ -11,6 +11,7 @@
  */
 
 import { evaluateCondition } from '../action/action.js';
+import { devWarn } from '../../utils/dev.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { Selection, ActionDefinition } from '../action/types.js';
@@ -35,7 +36,10 @@ export function buildActionMetadata(
     const actionDef = actions?.get(actionName);
 
     if (!actionDef) {
-      console.warn(`[buildActionMetadata] Action "${actionName}" not found in game._actions`);
+      devWarn(
+        `buildActionMetadata:unknown-action:${actionName}`,
+        `[buildActionMetadata] Action "${actionName}" not found in game._actions`,
+      );
       continue;
     }
 
