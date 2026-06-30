@@ -39,14 +39,19 @@ See [`milestones/v4.3-ROADMAP.md`](milestones/v4.3-ROADMAP.md) for goals, depend
 **Goal**: Ship the keystone primitive every other layer depends on — a single, serializable way to ask "what can this seat do right now, with what choices?" — plus per-action schema, validated arg-building, full legal-move enumeration, and a typed perspective-aware state view.
 **Depends on**: Phase 116 (design doc locks the surface; verification determines what to expose vs. build)
 **Scope**: BoardSmith `src/` — primarily engine/session/runtime; serializable, no-backward-compat clean implementation.
-**Requirements**: INTRO-01, INTRO-02, INTRO-03, INTRO-04, INTRO-05
+**Requirements**: INTRO-01, INTRO-02, INTRO-03, INTRO-04, INTRO-05, INTRO-F1 (promoted)
 **Success Criteria** (what must be TRUE):
   1. A user can call one method to get every legal action for a seat — each with its selections, choices, dependencies (`dependsOn`), and ready-to-submit argument templates — in one serializable structure.
   2. A user can retrieve a single action's schema (selection names, types, optional flags, available choices) without executing it.
   3. A user can build validated, wire-correct action arguments from plain selection values without hand-constructing `{value, display}` / element-id shapes.
   4. A user can enumerate all concrete legal moves (action + fully-resolved args) from the current state, suitable for tree search / brute-force exploration.
   5. A user can obtain a typed, perspective-aware view of game state ("what does seat N see?") with hidden information correctly excluded.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 117-01-PLAN.md — Foundational type exports (ElementDiff + ActionMetadata) to session barrel [INTRO-F1, INTRO-02]
+- [ ] 117-02-PLAN.md — Extract legal-move enumeration core; enumerateLegalMoves + MCTSBot delegation [INTRO-04]
+- [ ] 117-03-PLAN.md — buildActionArgs in-process/wire arg builder [INTRO-03]
+- [ ] 117-04-PLAN.md — getActionSpace + getActionSchema on Game + hidden-info leak regression [INTRO-01, INTRO-02, INTRO-05]
 
 ### Phase 118: Test Ergonomics
 **Goal**: A test author can read state, drive games to completion, and assert availability without parsing snapshot JSON or dropping to low-level selection plumbing — with failures that explain themselves.
