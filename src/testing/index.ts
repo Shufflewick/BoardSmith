@@ -94,3 +94,6 @@ export {
   assertTutorialStep,
   assertTutorialCompletes,
 } from './tutorial-assertions.js';
+
+// ActionBuilder — multi-step / dependent-selection builder (TEST-05)
+export { ActionBuilder } from './action-builder.js';

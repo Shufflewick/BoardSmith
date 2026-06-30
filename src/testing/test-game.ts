@@ -13,6 +13,7 @@ import {
   type FlowState,
 } from '../engine/index.js';
 import { GameRunner, type ActionExecutionResult, type PlayerStateView } from '../runtime/index.js';
+import { ActionBuilder } from './action-builder.js';
 
 /**
  * Options for creating a test game.
@@ -232,6 +233,31 @@ export class TestGame<G extends Game = Game> {
    */
   getSnapshot() {
     return this.runner.getSnapshot();
+  }
+
+  /**
+   * Create an {@link ActionBuilder} for driving a multi-step / dependent-selection
+   * action ergonomically.
+   *
+   * The builder exposes only enabled choices via `getChoices()`, accumulates
+   * selection values via `select()`, and executes the action via `execute()` —
+   * throwing a descriptive error on failure.
+   *
+   * @param actionName - The registered action to build args for
+   * @param seat - The player seat performing the action (1-indexed)
+   * @returns A new ActionBuilder bound to this game, the action, and the seat
+   *
+   * @example
+   * ```typescript
+   * const choices = testGame.action('categorize', 1).getChoices('category');
+   * testGame.action('categorize', 1)
+   *   .select('category', choices[0])
+   *   .select('item', 10)
+   *   .execute();
+   * ```
+   */
+  action(actionName: string, seat: number): ActionBuilder {
+    return new ActionBuilder(this, actionName, seat);
   }
 
   /**

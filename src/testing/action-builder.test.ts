@@ -140,17 +140,21 @@ describe('ActionBuilder — TEST-05: dependent selection', () => {
     expect(items).toEqual([10, 20, 30]);
   });
 
-  it("getChoices('item') with no prior select returns items for any category path", () => {
+  it("getChoices('item') without prior select reflects empty-args state from engine", () => {
     const testGame = makeFixture();
     const builder = new ActionBuilder(testGame, 'categorize', 1);
 
-    // Without any accumulated arg, getSelectionChoices evaluates choices with
-    // args = {} → ctx.args.category is undefined → function returns []
-    // (the integration confirms that passing args={} flows through to the engine).
-    const items = builder.getChoices('item');
+    // Without any accumulated arg, getSelectionChoices is called with args={}.
+    // ctx.args.category is undefined → takes the else branch → returns [40, 50].
+    // This integration confirms that args={} flows through to the engine correctly.
+    const itemsNoCategory = builder.getChoices('item');
+    expect(itemsNoCategory).toEqual([40, 50]);
 
-    // No category selected yet — choices function returns [] (undefined !== 'A')
-    expect(items).toEqual([]);
+    // After selecting category='A', the engine returns the A-branch items.
+    // The CHANGE in choices proves accumulated args flow through (dependent selection).
+    builder.select('category', 'A');
+    const itemsWithCategory = builder.getChoices('item');
+    expect(itemsWithCategory).toEqual([10, 20, 30]);
   });
 });
 
