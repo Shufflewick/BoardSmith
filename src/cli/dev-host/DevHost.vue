@@ -151,7 +151,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
     case 'init':
       lastInitSeat = msg.seat as number;
       mySeat.value = msg.seat as number;
-      postToGame({ type: 'init', seat: msg.seat });
+      postToGame({ type: 'init', seat: msg.seat, teachingDisabled: cfg.teachingDisabled === true });
       break;
     case 'game_state':
       lastGameState = {
@@ -198,7 +198,7 @@ function onIframeLoad(): void {
   if (heartbeatTimer === null) {
     heartbeatTimer = setInterval(() => postToGame({ type: 'heartbeat' }), 3000);
   }
-  if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat });
+  if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat, teachingDisabled: cfg.teachingDisabled === true });
   if (lastGameState) postToGame(lastGameState);
   // Re-request the UI list and re-assert the selection so a (re)mounted game
   // iframe rebuilds the dropdown and keeps the chosen view.
@@ -221,7 +221,7 @@ function onWindowMessage(event: MessageEvent): void {
   // Retry: GameShell's AutoUI retry button asks the host to re-send the
   // last cached state so the iframe can recover without a full reload.
   if (data.type === 'request-state') {
-    if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat });
+    if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat, teachingDisabled: cfg.teachingDisabled === true });
     if (lastGameState) postToGame(lastGameState);
     return;
   }

@@ -36,4 +36,12 @@ export interface DevHostConfig {
   colorPalette: Array<{ value: string; label: string }>;
   /** URL the iframe loads to render the game UI (GameShell, platform mode). */
   gameUrl: string;
+  /**
+   * When true, teaching/assist features (hint, heatmap, demo, tutorial) are disabled
+   * for this session. Set by `boardsmith dev --lock-teaching`. Delivered to the
+   * GameShell iframe via the init postMessage so client gating fires on first render
+   * (before the first broadcast). The authoritative value for reconnects is the
+   * broadcast's `state.teachingDisabled` (Plan 111-02 / Plan 111-03).
+   */
+  teachingDisabled?: boolean;
 }
