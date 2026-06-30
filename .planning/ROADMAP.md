@@ -98,7 +98,9 @@
   2. The guide shows how to author a predicate trigger and how to write a CI-verifiable tutorial test using `simulateTutorial`, including a demonstration that a rule change makes the test fail.
   3. The guide documents the move hint, narrated AI-vs-AI demo, and evaluation heatmap (noting the heatmap is board-only and not applicable to go-fish), plus the `teachingDisabled` host lockout and per-action `.help()` authoring.
   4. Both checkers (grid board, `anchorAttrs` on board squares) and go-fish (card game, `anchorAttrs` on cards/hands) appear as worked examples side-by-side so the parity path is immediately legible to a developer starting a new game.
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 115-01-PLAN.md — Author docs/teaching-and-tutorials.md covering DOC-01..04 with checkers + go-fish worked examples; link from docs/README.md
+- [ ] 115-02-PLAN.md — Doc-verifier accuracy + coverage pass; README link + BoardSmith suite green
 
 ## Progress
 
@@ -107,4 +109,4 @@
 | 112. Go-Fish Tutorial Content | 4/4 | Complete   | 2026-06-30 |
 | 113. Go-Fish AI Teaching | 3/3 | Complete   | 2026-06-30 |
 | 114. Go-Fish Action Help & Host Lockout | 3/3 | Complete   | 2026-06-30 |
-| 115. Developer Documentation | 0/? | Not started | - |
+| 115. Developer Documentation | 0/2 | Not started | - |
