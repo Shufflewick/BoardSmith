@@ -34,10 +34,10 @@
 
 ### Developer Documentation (DOC) — BoardSmith `docs/`
 
-- [ ] **DOC-01**: A developer guide documents authoring a tutorial — `TutorialDefinition`, the start/advance/skip/exit lifecycle, action gating, and the annotation overlay (targets: cell/piece/card/panel/action).
-- [ ] **DOC-02**: The guide documents predicate triggers and CI-verifiable authoring via the `testing` DSL (how a rule change is made to fail a test).
-- [ ] **DOC-03**: The guide documents the AI teaching features (move hint, narrated AI-vs-AI demo, evaluation heatmap) and the host teaching-lockout (`teachingDisabled`) + action help, noting the heatmap is board-only.
-- [ ] **DOC-04**: The guide uses both checkers (grid) and go-fish (cards) as worked examples, showing the parity path (e.g. `anchorAttrs` on board squares vs. on cards/hands).
+- [x] **DOC-01**: A developer guide documents authoring a tutorial — `TutorialDefinition`, the start/advance/skip/exit lifecycle, action gating, and the annotation overlay (targets: cell/piece/card/panel/action).
+- [x] **DOC-02**: The guide documents predicate triggers and CI-verifiable authoring via the `testing` DSL (how a rule change is made to fail a test).
+- [x] **DOC-03**: The guide documents the AI teaching features (move hint, narrated AI-vs-AI demo, evaluation heatmap) and the host teaching-lockout (`teachingDisabled`) + action help, noting the heatmap is board-only.
+- [x] **DOC-04**: The guide uses both checkers (grid) and go-fish (cards) as worked examples, showing the parity path (e.g. `anchorAttrs` on board squares vs. on cards/hands).
 
 ---
 
