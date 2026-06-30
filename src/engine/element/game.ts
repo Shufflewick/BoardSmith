@@ -1009,9 +1009,10 @@ export class Game<
    * @param seat - Player seat (1-indexed)
    */
   getActionSpace(seat: number): ActionSpaceView {
-    const actionNames = availableActionsForSeat(this.getFlowState(), seat);
     const player = this.getPlayer(seat);
     if (!player) return { actions: [] };
+
+    const actionNames = availableActionsForSeat(this.getFlowState(), seat);
 
     // buildActionMetadata handles condition re-checking internally — no parallel validator
     const metadata = buildActionMetadata(this, player, actionNames);
