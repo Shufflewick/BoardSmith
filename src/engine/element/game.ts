@@ -11,7 +11,7 @@ import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
 import { availableActionsForSeat } from '../flow/index.js';
-import { buildActionMetadata } from './action-metadata.js';
+import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../session/types.js';
 
 // ---------------------------------------------------------------------------
@@ -1043,12 +1043,12 @@ export class Game<
    * player.
    *
    * Unlike `getActionSpace`, this does NOT filter by availability — it returns
-   * the schema even for actions whose condition is currently false (mirrors
-   * `buildSingleActionMetadata` semantics). Use `getActionSpace` when you
-   * need condition-checked actions only.
+   * the schema even for actions whose condition is currently false. Use
+   * `getActionSpace` when you need condition-checked actions only.
    *
-   * Implemented by delegating to `buildActionMetadata` with a single-item list
-   * to avoid any engine→session runtime cycle.
+   * Intentionally skips condition evaluation so callers can inspect registered
+   * actions regardless of their current legality (e.g. for grayed-out UI,
+   * tutorial overlays, or agent introspection of the full action space).
    *
    * @param actionName - Registered action name
    * @param seat - Player seat (1-indexed)
@@ -1057,8 +1057,20 @@ export class Game<
     const player = this.getPlayer(seat);
     if (!player) return undefined;
 
-    const metadata = buildActionMetadata(this, player, [actionName]);
-    return metadata[actionName];
+    const actionDef = this._actions.get(actionName);
+    if (!actionDef) return undefined;
+
+    // Intentionally skip condition check — returns schema regardless of current
+    // availability. Use getActionSpace() when you need condition-filtered actions.
+    const selections = actionDef.selections.map(sel =>
+      buildPickMetadata(this, player, sel)
+    );
+    return {
+      name: actionName,
+      prompt: actionDef.prompt,
+      help: actionDef.help,
+      selections,
+    };
   }
 
   /**
