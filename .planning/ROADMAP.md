@@ -36,7 +36,7 @@
 - [x] **Phase 112: Go-Fish Tutorial Content** — Four teaching beats (ask-for-rank gating, Go-Fish-draw tip, forming-a-book, turn-continuation) authored in go-fish and launchable in GameShell + `boardsmith dev`, with CI-verifiable test artifact. (completed 2026-06-30)
 - [x] **Phase 113: Go-Fish AI Teaching** — MCTS move hint (anchored to cards/hand via `anchorAttrs`) and narrated AI-vs-AI demo, reusing go-fish's existing bot. (completed 2026-06-30)
 - [x] **Phase 114: Go-Fish Action Help & Host Lockout** — Per-action help text on go-fish actions and browser-verified proof that `teachingDisabled` gates all teaching affordances on a card game. (completed 2026-06-30)
-- [ ] **Phase 115: Developer Documentation** — Full authoring guide covering the whole tutorial substrate + AI teaching + action help + host lockout, with checkers (grid) and go-fish (cards) as worked examples.
+- [x] **Phase 115: Developer Documentation** — Full authoring guide covering the whole tutorial substrate + AI teaching + action help + host lockout, with checkers (grid) and go-fish (cards) as worked examples. (completed 2026-06-30)
 
 ## Phase Details
 
@@ -100,7 +100,7 @@
   4. Both checkers (grid board, `anchorAttrs` on board squares) and go-fish (card game, `anchorAttrs` on cards/hands) appear as worked examples side-by-side so the parity path is immediately legible to a developer starting a new game.
 **Plans**: 2 plans
 - [x] 115-01-PLAN.md — Author docs/teaching-and-tutorials.md covering DOC-01..04 with checkers + go-fish worked examples; link from docs/README.md
-- [ ] 115-02-PLAN.md — Doc-verifier accuracy + coverage pass; README link + BoardSmith suite green
+- [x] 115-02-PLAN.md — Doc-verifier accuracy + coverage pass; README link + BoardSmith suite green
 
 ## Progress
 
@@ -109,4 +109,4 @@
 | 112. Go-Fish Tutorial Content | 4/4 | Complete   | 2026-06-30 |
 | 113. Go-Fish AI Teaching | 3/3 | Complete   | 2026-06-30 |
 | 114. Go-Fish Action Help & Host Lockout | 3/3 | Complete   | 2026-06-30 |
-| 115. Developer Documentation | 1/2 | In Progress|  |
+| 115. Developer Documentation | 2/2 | Complete   | 2026-06-30 |

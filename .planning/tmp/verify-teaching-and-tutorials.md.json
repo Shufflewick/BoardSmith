@@ -1,0 +1,20 @@
+{
+  "doc_path": "docs/teaching-and-tutorials.md",
+  "claims_checked": 52,
+  "claims_passed": 50,
+  "claims_failed": 2,
+  "failures": [
+    {
+      "line": 562,
+      "claim": "target: { value: 2 },   // opponent (primitive number wrapped in { value })",
+      "expected": "The target selection value is a choice object { value: 2, display: '...' }; { value: 2 } matcher matches it via general field equality (last branch of selectionMatchesValue), not via the primitive { value } branch",
+      "actual": "Comment says 'primitive number wrapped in { value }', but selectionMatchesValue only enters the primitive branch when typeof value !== 'object'; a choice object is an object, so field equality applies. Section 1.3 of the same doc correctly says '{ value, display } choice object'."
+    },
+    {
+      "line": 400,
+      "claim": "Supply a custom narrator for games with rich arg types where the default JSON formatting reads poorly",
+      "expected": "Default narrator uses describeMoveDestination(args), which explicitly avoids JSON; custom narrators are needed when describeMoveDestination cannot extract a readable destination string",
+      "actual": "src/session/game-session.ts line 1213 comment: 'Formats a readable destination from destination-like args only (never raw element ids), so the narration reads as prose instead of dumping JSON.' The default does NOT use JSON formatting; the doc inverts the causality."
+    }
+  ]
+}
