@@ -11,6 +11,7 @@
 
 import type { Game, Player, ActionDefinition, Selection } from '../index.js';
 import { availableActionsForSeat } from '../index.js';
+import { devWarn } from '../../utils/dev.js';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -186,8 +187,24 @@ function _enumerateRecursive(
 
   const results: Record<string, unknown>[] = [];
 
-  // multiSelect: generate combinations then recurse
+  // Dynamic multiSelect (function-based) cannot be statically enumerated.
+  // Treat it like an unenumerable selection: skip if optional, block if required.
+  // (buildPickMetadata already acknowledges this case for the metadata path.)
   const multiSelect = (selection as any).multiSelect;
+  if (typeof multiSelect === 'function') {
+    devWarn(
+      `enumerate-moves:dynamic-multiselect:${actionDef.name}:${selection.name}`,
+      `enumerateLegalMoves: selection "${selection.name}" on action "${actionDef.name}" ` +
+      `uses a function-based multiSelect which cannot be statically enumerated. ` +
+      `This selection will be skipped during enumeration. ` +
+      `Consider using a static multiSelect config, or handle this action via the /selection-choices endpoint.`,
+    );
+    if (selection.optional) {
+      return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs);
+    }
+    return [];
+  }
+
   if (multiSelect) {
     const { min, max } = parseMultiSelect(multiSelect);
     const combinations = generateCombinations(choices, min, max);
