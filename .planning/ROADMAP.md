@@ -31,7 +31,7 @@ See [`milestones/v4.3-ROADMAP.md`](milestones/v4.3-ROADMAP.md) for goals, depend
   2. A single API-design doc specifies the introspection / test-ergonomics / devtools surface — names, signatures, return shapes, serialization, and ownership across engine/session/runtime/ui — and is approved before implementation begins.
   3. The doc explicitly records which speculative scout recommendations (e.g. lint rules, hidden-info assertions, programmatic seat-switch) are IN vs. DEFERRED, each with rationale.
 **Plans**: 3 plans
-- [ ] 116-01-PLAN.md — Verdicts table (DSGN-01) + INTRO/TEST API spec (DSGN-02)
+- [x] 116-01-PLAN.md — Verdicts table (DSGN-01) + INTRO/TEST API spec (DSGN-02)
 - [ ] 116-02-PLAN.md — DEV/PIT API spec (DSGN-02) + speculative-scope disposition (DSGN-03)
 - [ ] 116-03-PLAN.md — No-regression check + human approval gate
 
