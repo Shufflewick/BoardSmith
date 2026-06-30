@@ -313,6 +313,7 @@ export function playUntilComplete<G extends Game>(
 
     // ── Enumerate and pick a move for each active seat ─────────────────────
     let anyMoveMade = false;
+    const moveFailures: string[] = [];
     for (const seat of activeSeats) {
       const moves = enumerateLegalMoves(testGame.game, seat);
       if (moves.length === 0) continue; // this seat has no enumerable moves
@@ -320,8 +321,17 @@ export function playUntilComplete<G extends Game>(
         strategy === 'first'
           ? moves[0]
           : moves[Math.floor(rng() * moves.length)];
-      testGame.doAction(seat, move.action, move.args);
-      anyMoveMade = true;
+      const result = testGame.doAction(seat, move.action, move.args);
+      if (result.success) {
+        anyMoveMade = true;
+      } else {
+        // Action returned by enumerateLegalMoves failed on execution.
+        // Record the failure; the dead-end check below will surface it if
+        // no seat succeeded, rather than looping to the maxMoves cap.
+        moveFailures.push(
+          `seat ${seat}: action "${move.action}" failed — ${result.error ?? 'no error detail'}`
+        );
+      }
     }
 
     // ── Dead-end check ─────────────────────────────────────────────────────
@@ -330,6 +340,21 @@ export function playUntilComplete<G extends Game>(
     if (!anyMoveMade && activeSeats.length > 0 && !testGame.isComplete()) {
       const availableActions = _collectAvailableActions(flowState);
       const seatDesc = _describeSeat(activeSeats);
+
+      if (moveFailures.length > 0) {
+        // Enumerable moves existed but all failed on execution — surface the
+        // failures immediately rather than looping to the maxMoves cap.
+        throw new GameStuckError(
+          `Game stuck at iteration ${i}: every attempted move by ${seatDesc} failed during execution. ` +
+          `Failures:\n${moveFailures.map(f => `  ${f}`).join('\n')}\n` +
+          `This means enumerateLegalMoves returned moves that the action's validation rejects. ` +
+          `Verify the action's validate() / chooseFrom() conditions match its execute() preconditions.`,
+          i,
+          availableActions,
+          flowState,
+        );
+      }
+
       throw new GameStuckError(
         `Game stuck at iteration ${i}: ${seatDesc} has no enumerable legal moves. ` +
         `Available actions: [${availableActions.join(', ')}]. ` +
