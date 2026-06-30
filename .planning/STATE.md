@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v4.1
 milestone_name: Tutorial Primitives
-status: executing
-stopped_at: Phase 111 complete (LOCK-01 verified) — milestone v4.1 ready for lifecycle
-last_updated: "2026-06-30T02:30:00.000Z"
-last_activity: 2026-06-30
+status: Awaiting next milestone
+stopped_at: DEMO-01 approved — Phase 110 complete
+last_updated: "2026-06-30T02:36:35.818Z"
+last_activity: 2026-06-30 — Milestone v4.1 completed and archived
 progress:
   total_phases: 8
   completed_phases: 8
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 
 ## Current Position
 
-Phase: 111 (host-gated-teaching-lockout) — COMPLETE (all 5 plans, LOCK-01 verified)
-Milestone: v4.1 Tutorial Primitives — ALL 8 phases (104–111) complete
-Status: Ready for milestone lifecycle (audit → complete → cleanup)
-Last activity: 2026-06-30
+Phase: Milestone v4.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-30 — Milestone v4.1 completed and archived
 
 ## Milestones
 
@@ -60,9 +60,28 @@ Last activity: 2026-06-30
 - v3.1 Dynamic Auto-UI (Phases 91-96) -- shipped 2026-06-22
 - v4.0 UI Redesign (Slate) (Phases 97-103) -- shipped 2026-06-23
 
+- v4.1 Tutorial Primitives (Checkers) (Phases 104-111) -- shipped 2026-06-30
+
 **In Progress:**
 
-- v4.1 Tutorial Primitives (Checkers) (Phases 104-110) -- started 2026-06-25; roadmap created 2026-06-25
+- None — awaiting next milestone (`/gsd:new-milestone`)
+
+## Deferred Items
+
+Items acknowledged and deferred at v4.1 milestone close on 2026-06-30:
+
+| Category | Item | Status | Note |
+|----------|------|--------|------|
+| verification | 108-VERIFICATION.md | human_needed | Closed by DEMO-01 (Phase 110): action help demonstrated live + user-approved |
+| verification | 109-VERIFICATION.md | human_needed | Closed by DEMO-01 (Phase 110): checkers tutorial demonstrated live + user-approved |
+| uat | 108-HUMAN-UAT.md | partial | Superseded by DEMO-01 live walkthrough |
+| uat | 109-HUMAN-UAT.md | partial | Superseded by DEMO-01 live walkthrough |
+| todo | dev-host-ai-open-seat-not-auto-playing | open | Pre-existing v4.0 carry-forward (non-blocking) |
+| todo | dev-standalone-shell-height-gap | open | Pre-existing v4.0 carry-forward (non-blocking) |
+| todo | (third pending todo) | open | Pre-existing v4.0 carry-forward (non-blocking) |
+| debug | knowledge-base | reference | Debug knowledge-base file, not an active session |
+
+Backlog for a future cribbage (v2 CRIB) milestone: R-05 (suppress Undo during guided tutorial steps), R-12 (strategy tutorial track), pit-of-success lint/dev-warning when a custom board omits `anchorAttrs`. Repo-wide: 3 pre-existing eslint no-shadow errors (game.ts, useAnimationEvents.ts, useFlyingElements.ts) + tsc test-file looseness — future cleanup pass.
 
 ## Accumulated Context
 
@@ -145,4 +164,4 @@ Next action: `/gsd:plan-phase 111` (autonomous mode in progress)
 
 ## Operator Next Steps
 
-- Phase 111 (Host-Gated Teaching Lockout) — final v4.1 phase. Autonomous: discuss → plan → execute, then milestone lifecycle (audit → complete → cleanup).
+- Start the next milestone with /gsd-new-milestone

@@ -1,5 +1,48 @@
 # Project Milestones: BoardSmith
 
+## v4.1 Tutorial Primitives (Shipped: 2026-06-30)
+
+**Phases completed:** 8 phases, 35 plans, 61 tasks
+
+**Key accomplishments:**
+
+- One-liner:
+- `src/engine/tutorial/gate.ts`
+- Per-selection `suppressAutoFill` guard wired into `useActionController.tryAutoFillSelection` so tutorial steps can preserve the learner's click when a single enabled choice would otherwise auto-resolve
+- One-liner:
+- `Annotation[]` discriminated-union content model on TutorialStep and TutorialStepView with AnnotationTarget (element/action/panel), engine-local ElementRef, and a projection round-trip guard test
+- `anchorAttrs(ref: ElementRef): Record<string, string>`
+- 1. [Rule 3 - Blocking] CSS.escape unavailable in jsdom test environment
+- TutorialOverlay mounted in GameShell .boardregion and MR-01 closed: suppressAutoFill now live in production via tutorialStep computed threaded into useActionController
+- Dual-path parity proof via MinimalAutoUIRenderer (useSelectable path) and MinimalCustomUIRenderer (anchorAttrs path) producing identical rings and bubble text for element and action targets, with non-vacuity grep enforced
+- One-liner:
+- `src/engine/tutorial/predicates.ts`
+- Post-action advanceWhen predicate pump wired into GameSession with flash-and-skip guard, fail-loud MR-03 start validation, and engine-delegated step transitions
+- `src/testing/simulate-tutorial.ts`
+- In-repo criterion #3 proof: `simulateTutorial` with `afterTurns`+`whenForced` is GREEN on intact rules and RED on two deliberate breaks (gate drift via tutorial def change, predicate drift via capture-rule removal)
+- 1. [Rule 1 - Bug] Fixed early-return path returning wrong type
+- Transient hint/heatmap teaching state injected post-buildPlayerState into broadcast, with per-seat DoS guards and undo/rewind clear via replaceRunner callback.
+- `onBeforeMove` narration seam in AIController + GameSession all-seats demo mode with configurable delay and narrator, cleanly restoring the original controller on stop.
+- HintOverlay, HeatmapOverlay, and narration card render teaching aids via shared data-bs-el-id anchors — identical in custom UI and AutoUI — with ControlsMenu Teaching group wired to platformRequest ops for Phase 109 bridge integration.
+- 1. [Rule 1 - Bug] Test spy corrected from start() to execute()
+- One-liner:
+- SelectionMatcher type + per-selection getGateReasonForValue: gate piece-by-id and destination-by-toNotation independently within a two-step action
+- `src/session/stateless-ops.ts`
+- CHECKERS_TUTORIAL teaching mandatory-capture + two-step gated move + multi-jump via deterministic b6->d4->b2 preset registered on gameDefinition
+- CI-verifiable checkers tutorial test (TUT-04): intact walkthrough via simulateTutorial + assertTutorialCompletes, plus green→red proof that playerHasCaptures enforces the capture-tip CHK-02 predicate
+- 1. [Rule 1 - Bug] Null guard in mergeTransientState for stub views
+- hint op runs MCTS bot.play() + extracts board target; heatmapToggle runs playWithStats() + deduplicates by cell key; both store results in SnapshotSessionHost transientTeachingState and re-broadcast; hint clears on next action, all clears on undo
+- aiSuggest op previews MCTS move read-only; runDemoLoop narrates before executing the exact same args; demoAbort checked before AND after delay; finally always clears demoRunning; fake-timer tests assert vi.getTimerCount()===0 after stop AND game-over
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+- One-liner:
+
+---
+
 ## v4.0 UI Redesign (Slate) (Shipped: 2026-06-23)
 
 **Delivered:** Rebuilt the entire BoardSmith UI on a single load-bearing `--bsg-*` token system in the neutral "Slate" design language (graphite palette, single teal accent, Hanken Grotesk + JetBrains Mono, OS light/dark), got the chrome out of the board's way, and closed the critical accessibility gaps — without breaking a single game.
@@ -20,7 +63,6 @@
 **Known deferred items at close:** 3 follow-up todos (dev-standalone shell height gap; pre-existing dev-host AI-turn issue — not a v4.0 regression; Slate token/a11y polish incl. the platform-mode connection-announce seam) + Phase 101 manual AT spot-checks (covered by the Phase 103 browser pass). See `.planning/todos/pending/` and `milestones/v4.0-MILESTONE-AUDIT.md`.
 
 **Out of scope (deferred to a future host milestone):** the ShufflewickPub host skin (lobby, GameFrame, PrimeVue preset, connection banner) — HOST-01..04. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
-
 
 ## v3.0 Animation Timeline (Shipped: 2026-02-08)
 

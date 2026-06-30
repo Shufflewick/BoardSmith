@@ -8,18 +8,15 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.1 Tutorial Primitives (Checkers)
+## Current State
 
-**Goal:** Build a reusable, CI-verifiable tutorial substrate, prove it by shipping a complete checkers tutorial plus AI-assisted teaching, then demonstrate it for refinement — setting up a future milestone to apply the same primitives to cribbage.
+**No active milestone** — v4.1 shipped 2026-06-30. Run `/gsd:new-milestone` to start the next cycle. The deliberate next stretch bed is **cribbage (v2 CRIB)** — apply the now-proven tutorial primitives to a rules-dense, 5-phase game.
 
-**Target features:**
-- **Substrate** — annotation overlay (text bubbles + targeted highlight, routed through `useBoardInteraction` for custom-UI/AutoUI parity), action gating (restrict the legal action set per step), predicate triggers (fire content on game-state predicate/event), CI-verifiable authoring via the testing DSL.
-- **AI-assisted teaching** — MCTS-powered hint button, narrated AI-vs-AI demo, evaluation heatmap overlay (leverages checkers' existing MCTS bot).
-- **Lightweight help** — per-action help text/tooltips with a global toggle (builds on the v2.8 disabled-reason surface for "why-disabled" friction).
-- **Checkers tutorial** — guided selection/movement, a mandatory-capture tip, a multi-jump walkthrough, launchable in GameShell/dev host.
-- **Demo & refine** — end-to-end browser demonstration as the final step, for hands-on refinement before applying the substrate to cribbage.
+## Previous: v4.1 Shipped
 
-**Key context:** Chosen test bed after profiling all five non-demo games this session. Checkers is the Goldilocks pick — it exercises the most substrate primitives (multi-step actions, action gating, surprise mechanics for predicate tips, a real board to target) at moderate authoring cost, has a working MCTS for the AI features, and is universally familiar so design effort isn't spent on game comprehension. Cribbage (rules-dense, 5 phases) is the deliberate phase-2 stretch bed — explicitly **not** allowed to drive the substrate design, since its post-hoc scoring shape is an outlier. Polyhedral-potions is excluded (empty AI placeholder would silently kill the AI features). Depth-first: one polished checkers experience before generalizing.
+Tutorial Primitives (Checkers) — built a reusable, CI-verifiable tutorial substrate, proved it by shipping a complete checkers tutorial plus AI-assisted teaching, demonstrated it live for refinement, and added a host-gated lockout so the assist features can't be used to cheat.
+
+**v4.1 Delivered:** Phases 104–111 (16/16 requirements) — tutorial lifecycle + action gating (checkpoint/replay safe); annotation overlay routed through `useBoardInteraction` for custom-UI/AutoUI parity; predicate triggers + CI-verifiable authoring via the `testing` DSL (fails when rules drift); MCTS-powered hint + narrated AI-vs-AI demo + evaluation heatmap (reusing checkers' existing bot); per-action help text with a global toggle; a complete launchable checkers tutorial (guided move, mandatory-capture tip, multi-jump); a live browser demonstration & refinement gate (DEMO-01, 16 refinements R-01..R-16 fixed); and a host-gated teaching lockout (LOCK-01 — single `teachingDisabled` flag, client hides affordances + server rejects crafted ops fail-loud in both session paths, action help stays). Verified: BoardSmith 1706/1706 tests + checkers 38/38, cross-phase integration PASS, audit passed (`milestones/v4.1-MILESTONE-AUDIT.md`). Deferred to a future cleanup/CRIB milestone: suppress-Undo-during-tutorial, strategy tutorial track, anchorAttrs lint dev-warning.
 
 ## Previous: v4.0 Shipped
 
@@ -367,4 +364,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-25 — started v4.1 Tutorial Primitives (Checkers) milestone*
+*Last updated: 2026-06-30 — after v4.1 Tutorial Primitives (Checkers) milestone shipped*
