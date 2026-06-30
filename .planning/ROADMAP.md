@@ -33,7 +33,7 @@ See [`milestones/v4.3-ROADMAP.md`](milestones/v4.3-ROADMAP.md) for goals, depend
 **Plans**: 3 plans
 - [x] 116-01-PLAN.md — Verdicts table (DSGN-01) + INTRO/TEST API spec (DSGN-02)
 - [x] 116-02-PLAN.md — DEV/PIT API spec (DSGN-02) + speculative-scope disposition (DSGN-03)
-- [ ] 116-03-PLAN.md — No-regression check + human approval gate
+- [x] 116-03-PLAN.md — No-regression check + human approval gate
 
 ### Phase 117: Action-Space Introspection
 **Goal**: Ship the keystone primitive every other layer depends on — a single, serializable way to ask "what can this seat do right now, with what choices?" — plus per-action schema, validated arg-building, full legal-move enumeration, and a typed perspective-aware state view.
