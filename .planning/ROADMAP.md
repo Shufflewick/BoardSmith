@@ -65,7 +65,7 @@ Plans:
   4. Action-list assertions support both permissive ("contains these") and exact ("only these") modes, chosen explicitly rather than exact-by-default.
   5. A test author can drive multi-step / dependent selections through an ergonomic builder rather than low-level `resolveChoices` / `selectionStep` calls.
 **Plans**: 4 plans
-- [ ] 118-01-PLAN.md — TEST-01: typed observable state (getPlayerView annotation + JSDoc)
+- [x] 118-01-PLAN.md — TEST-01: typed observable state (getPlayerView annotation + JSDoc)
 - [ ] 118-02-PLAN.md — TEST-02: playUntilComplete + GameStuckError (sequential + simultaneous)
 - [ ] 118-03-PLAN.md — TEST-03 + TEST-04: assertion trace + actionsMode (exact/contains)
 - [ ] 118-04-PLAN.md — TEST-05: ActionBuilder multi-step selection builder
