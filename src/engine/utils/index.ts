@@ -26,6 +26,9 @@ export type {
   PlayerStateView,
 } from './snapshot.js';
 
+// Legal-move enumeration (INTRO-04)
+export { enumerateLegalMoves, enumerateSelectionsCore, parseMultiSelect, generateCombinations, combinationsOfSize } from './enumerate-moves.js';
+
 // Dev state transfer (for HMR)
 export {
   captureDevState,

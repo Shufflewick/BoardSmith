@@ -201,6 +201,7 @@ export type {
 
 // Utilities (serialization, snapshots, replays, action helpers, dev state)
 export {
+  enumerateLegalMoves,
   serializeValue,
   deserializeValue,
   serializeAction,

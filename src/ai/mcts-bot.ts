@@ -9,6 +9,7 @@ import type {
   GameStateSnapshot,
 } from '../engine/index.js';
 import { createSnapshot, canSeatAct } from '../engine/index.js';
+import { enumerateSelectionsCore } from '../engine/utils/enumerate-moves.js';
 import type { BotConfig, BotMove, BotMoveStats, MCTSNode, AIConfig, Objective, ThreatResponse } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { SeededRandom } from '../utils/random.js';
@@ -919,7 +920,12 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Internal method with sampling control
+   * Internal method with sampling control.
+   * Delegates to the shared enumerateSelectionsCore utility (INTRO-04 extraction).
+   *
+   * The core returns in-process element objects. This wrapper applies the bot's
+   * serializeArgs (converting objects to wire IDs) and — when noSampling is
+   * false — limits the result set with the bot's seeded-RNG sampleChoices.
    */
   private enumerateSelectionsInternal(
     game: Game,
@@ -927,170 +933,19 @@ export class MCTSBot<G extends Game = Game> {
     player: Player,
     noSampling: boolean
   ): Record<string, unknown>[] {
-    if (actionDef.selections.length === 0) {
-      return [{}];
-    }
+    // Shared core: full enumeration, element objects (no serialization, no sampling)
+    const combos = enumerateSelectionsCore(game, actionDef, player);
 
-    return this.enumerateSelectionsRecursive(game, actionDef, player, 0, {}, noSampling);
-  }
+    // Bot wire format: convert element objects to numeric IDs
+    const serialized = combos.map(args => this.serializeArgs(args, actionDef.selections));
 
-  /**
-   * Recursively build all valid argument combinations
-   * @param noSampling - If true, don't limit choices (for threat response analysis)
-   */
-  private enumerateSelectionsRecursive(
-    game: Game,
-    actionDef: ActionDefinition,
-    player: Player,
-    index: number,
-    currentArgs: Record<string, unknown>,
-    noSampling: boolean = false
-  ): Record<string, unknown>[] {
-    if (index >= actionDef.selections.length) {
-      // Serialize element objects to IDs only at the end, after all filtering is done
-      return [this.serializeArgs(currentArgs, actionDef.selections)];
-    }
+    if (noSampling) return serialized;
 
-    const selection = actionDef.selections[index];
-    const choices = this.getChoicesForSelection(game, actionDef.name, selection, player, currentArgs);
-
-    // Handle text and number inputs (skip for AI - can't enumerate)
-    if (selection.type === 'text' || selection.type === 'number') {
-      if (selection.optional) {
-        return this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, currentArgs, noSampling);
-      }
-      // Required text/number input - AI can't handle this
-      return [];
-    }
-
-    if (choices.length === 0) {
-      if (selection.optional) {
-        return this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, currentArgs, noSampling);
-      }
-      return [];
-    }
-
-    const results: Record<string, unknown>[] = [];
-
-    // Check for multiSelect - need to generate combinations
-    const multiSelect = (selection as any).multiSelect;
-    if (multiSelect) {
-      const { min, max } = this.parseMultiSelect(multiSelect);
-      const combinations = this.generateCombinations(choices, min, max, selection);
-
-      // Limit combinations to avoid explosion (unless noSampling)
-      const maxCombos = 50;
-      const sampledCombos = (!noSampling && combinations.length > maxCombos)
-        ? this.sampleChoices(combinations, maxCombos)
-        : combinations;
-
-      for (const combo of sampledCombos) {
-        const newArgs = { ...currentArgs, [selection.name]: combo };
-        const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs, noSampling);
-        results.push(...subResults);
-      }
-
-      return results;
-    }
-
-    // Single-select handling
-    // Limit branching factor to avoid combinatorial explosion (unless noSampling)
+    // Bot sampling: limit branching factor using seeded RNG (bot-specific concern)
     const maxChoices = 20;
-    const finalChoices = (!noSampling && choices.length > maxChoices)
-      ? this.sampleChoices(choices, maxChoices)
-      : choices;
-
-    for (const choice of finalChoices) {
-      // Keep element objects during recursion so dependent filters receive proper objects
-      const newArgs = { ...currentArgs, [selection.name]: choice };
-      const subResults = this.enumerateSelectionsRecursive(game, actionDef, player, index + 1, newArgs, noSampling);
-      results.push(...subResults);
-    }
-
-    return results;
-  }
-
-  /**
-   * Parse multiSelect config into min/max values
-   */
-  private parseMultiSelect(multiSelect: unknown): { min: number; max: number } {
-    if (typeof multiSelect === 'number') {
-      return { min: 1, max: multiSelect };
-    }
-    if (typeof multiSelect === 'object' && multiSelect !== null) {
-      const config = multiSelect as { min?: number; max?: number };
-      return {
-        min: config.min ?? 1,
-        max: config.max ?? Infinity,
-      };
-    }
-    return { min: 1, max: Infinity };
-  }
-
-  /**
-   * Generate all combinations of choices for multiSelect
-   */
-  private generateCombinations(
-    choices: unknown[],
-    min: number,
-    max: number,
-    selection: Selection
-  ): unknown[][] {
-    const results: unknown[][] = [];
-
-    // For exact count (min === max), just generate combinations of that size
-    if (min === max) {
-      this.combinationsOfSize(choices, min, [], 0, results, selection);
-    } else {
-      // Generate combinations of all valid sizes
-      for (let size = min; size <= Math.min(max, choices.length); size++) {
-        this.combinationsOfSize(choices, size, [], 0, results, selection);
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Generate combinations of a specific size (recursive helper)
-   */
-  private combinationsOfSize(
-    choices: unknown[],
-    size: number,
-    current: unknown[],
-    startIndex: number,
-    results: unknown[][],
-    selection: Selection
-  ): void {
-    if (current.length === size) {
-      // Keep element objects during recursion - serialization happens at the end
-      results.push([...current]);
-      return;
-    }
-
-    for (let i = startIndex; i < choices.length; i++) {
-      current.push(choices[i]);
-      this.combinationsOfSize(choices, size, current, i + 1, results, selection);
-      current.pop();
-    }
-  }
-
-  /**
-   * Get valid choices for a selection.
-   * Filters out disabled choices (AI should never select disabled items) and extracts raw values.
-   */
-  private getChoicesForSelection(
-    game: Game,
-    actionName: string,
-    selection: Selection,
-    player: Player,
-    currentArgs: Record<string, unknown>
-  ): unknown[] {
-    const annotated = game.getSelectionChoices(actionName, selection.name, player as any, currentArgs);
-    // Filter out disabled choices and extract raw values
-    return annotated
-      .filter(c => c.disabled === false)
-      .map(c => c.value);
+    return serialized.length > maxChoices
+      ? this.sampleChoices(serialized, maxChoices)
+      : serialized;
   }
 
   /**
