@@ -373,6 +373,19 @@ const availableActions = computed(() => {
   return flowState.availableActions || [];
 });
 
+// Whether the "Show action help" toggle has anything to reveal: true when any
+// currently-available action carries help text or a disabled reason — mirrors
+// the exact condition ActionPanel uses to render the per-action "?" affordance
+// (`action.help || disabledActions[name]`). Drives ControlsMenu's `hasActionHelp`
+// so a game that authored no help text never shows a present-but-inert toggle.
+const hasActionHelp = computed(() => {
+  const meta = actionMetadata.value;
+  const disabled = disabledActions.value;
+  return (availableActions.value as string[]).some(
+    (name) => !!meta?.[name]?.help || !!disabled?.[name]
+  );
+});
+
 // Game view - computed here so actionController can use it for element enrichment
 // When viewing historical state (time travel), use that instead of live state
 const gameView = computed(() => {
@@ -688,6 +701,38 @@ const isDemoRunning = computed(
   () => (state.value?.state as any)?.isDemoRunning ?? false
 );
 
+// Live demo playback-control state (paused, current speed delay, whether a
+// step-back is possible), broadcast by SnapshotSessionHost while a demo runs.
+const demoControls = computed(
+  () => (state.value?.state as any)?.demoControls as
+    | { paused: boolean; delay: number; canStepBack: boolean }
+    | undefined
+);
+
+// Speed presets for the demo control bar (inter-move delay, ms).
+const DEMO_SPEEDS = [
+  { label: 'Slow', delay: 2200 },
+  { label: 'Normal', delay: 1200 },
+  { label: 'Fast', delay: 500 },
+] as const;
+
+async function sendDemoControl(
+  control: 'pause' | 'play' | 'step' | 'back',
+  delay?: number
+): Promise<void> {
+  try {
+    await platformRequest('demo-control', delay !== undefined ? { control, delay } : { control });
+  } catch {
+    toast.error('Demo control failed.');
+  }
+}
+
+function setDemoSpeed(delay: number): void {
+  // Re-assert the current play/pause state alongside the new speed so the gate
+  // re-arms its timer with the new delay immediately.
+  void sendDemoControl(demoControls.value?.paused ? 'pause' : 'play', delay);
+}
+
 // Show Teaching group when:
 //   (a) Production lobby path: at least one AI slot in lobbyInfo — unchanged.
 //   (b) Dev-host (platform mode) path: SnapshotSessionHost injects hasAIPlayers
@@ -721,9 +766,22 @@ const hintDisabledProp = computed(
   () => !isMyTurn.value || availableActions.value.length === 0
 );
 
-// Heatmap visible state comes from the broadcast state.
-const isHeatmapVisibleProp = computed(
-  () => (state.value?.state as any)?.heatmap?.visible ?? false
+// Heatmap toggle is optimistic: the server round-trip runs an MCTS search
+// (~1s), and the broadcast `heatmap.visible` only flips when it returns. Without
+// instant feedback the toggle looks unresponsive, so users click again — and
+// because the first request hasn't broadcast yet, both clicks read the stale
+// "off" state and both send visible:true ("had to click twice"). `heatmapPending`
+// holds the requested state while a toggle is in flight so the pill reflects the
+// click immediately; `heatmapToggling` guards against a duplicate request mid-flight.
+const heatmapPending = ref<boolean | null>(null);
+const heatmapToggling = ref(false);
+
+// Heatmap visible state: the optimistic pending value while a toggle is in
+// flight, otherwise the authoritative broadcast state.
+const isHeatmapVisibleProp = computed(() =>
+  heatmapPending.value !== null
+    ? heatmapPending.value
+    : ((state.value?.state as any)?.heatmap?.visible ?? false)
 );
 
 // Handle 'teaching-action' emits from ControlsMenu.
@@ -733,10 +791,19 @@ async function handleTeachingAction(
   teachAction: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial' | 'exit-tutorial'
 ) {
   if (teachAction === 'hint') {
+    // The MCTS search takes ~1s; show a persistent "thinking" toast so the
+    // player gets immediate feedback instead of a dead button. Cleared as soon
+    // as the hint resolves (or fails), just before the bubble/ring appears.
+    const thinkingId = toast.show('Thinking about the best move…', {
+      type: 'info',
+      duration: 0,
+    });
     try {
       await platformRequest('hint', { seat: playerSeat.value });
     } catch {
       toast.error('Hint unavailable — the AI could not suggest a move.');
+    } finally {
+      toast.remove(thinkingId);
     }
   } else if (teachAction === 'demo-toggle') {
     if (isDemoRunning.value) {
@@ -755,14 +822,25 @@ async function handleTeachingAction(
       }
     }
   } else if (teachAction === 'heatmap-toggle') {
-    const currentVisible = isHeatmapVisibleProp.value;
+    // Ignore a second toggle while one is still computing — otherwise rapid
+    // clicks race on the stale broadcast state and the toggle ends up wrong.
+    if (heatmapToggling.value) return;
+    const nextVisible = !isHeatmapVisibleProp.value;
+    heatmapPending.value = nextVisible; // optimistic: flip the pill immediately
+    heatmapToggling.value = true;
     try {
       await platformRequest('heatmap-toggle', {
         seat: playerSeat.value,
-        visible: !currentVisible,
+        visible: nextVisible,
       });
     } catch {
       toast.error('Failed to toggle move quality display.');
+    } finally {
+      // The broadcast carrying the new heatmap state is delivered before the op
+      // response resolves (WS order), so clearing the optimistic value here hands
+      // back to the authoritative server state with no flicker.
+      heatmapToggling.value = false;
+      heatmapPending.value = null;
     }
   } else if (teachAction === 'help-toggle') {
     // Pure client display preference — no server round-trip.
@@ -1863,6 +1941,56 @@ if ((import.meta as any).hot) {
             variant="narration"
             :visible="true"
           >{{ (state?.state as any)?.narration?.text }}</BoardMessage>
+          <!-- AI demo playback controls — speed + step so the learner follows at
+               their own pace. Fixed bottom-center (never over the board). -->
+          <div
+            v-if="isDemoRunning && demoControls"
+            class="bsg-demo-controls"
+            role="group"
+            aria-label="AI demo playback controls"
+          >
+            <div class="bsg-demo-controls__speeds" role="group" aria-label="Speed">
+              <button
+                v-for="s in DEMO_SPEEDS"
+                :key="s.label"
+                type="button"
+                class="bsg-demo-btn bsg-demo-btn--speed"
+                :class="{ 'is-active': demoControls.delay === s.delay }"
+                :aria-pressed="demoControls.delay === s.delay"
+                @click="setDemoSpeed(s.delay)"
+              >{{ s.label }}</button>
+            </div>
+            <span class="bsg-demo-controls__sep" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="bsg-demo-btn"
+              :disabled="!demoControls.canStepBack"
+              aria-label="Step back one move"
+              title="Step back"
+              @click="sendDemoControl('back')"
+            >◀</button>
+            <button
+              type="button"
+              class="bsg-demo-btn bsg-demo-btn--play"
+              :aria-label="demoControls.paused ? 'Play' : 'Pause'"
+              :title="demoControls.paused ? 'Play' : 'Pause'"
+              @click="sendDemoControl(demoControls.paused ? 'play' : 'pause')"
+            >{{ demoControls.paused ? '▶' : '⏸' }}</button>
+            <button
+              type="button"
+              class="bsg-demo-btn"
+              aria-label="Step forward one move"
+              title="Step forward"
+              @click="sendDemoControl('step')"
+            >▶❘</button>
+            <span class="bsg-demo-controls__sep" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="bsg-demo-btn bsg-demo-btn--stop"
+              aria-label="Stop demo"
+              @click="handleTeachingAction('demo-toggle')"
+            >Stop</button>
+          </div>
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
             <!--
               Game Board Slot Props:
@@ -1951,6 +2079,7 @@ if ((import.meta as any).hot) {
           :is-demo-running="isDemoRunning"
           :is-heatmap-visible="isHeatmapVisibleProp"
           :is-action-help-visible="isActionHelpVisible"
+          :has-action-help="hasActionHelp"
           :has-tutorial="hasTutorialProp"
           :is-tutorial-running="isTutorialRunningProp"
           @undo="handleUndo"
@@ -2490,6 +2619,72 @@ if ((import.meta as any).hot) {
     padding-top: 6px;
     padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
+}
+
+/* ── AI demo playback control bar ─────────────────────────────────────────── */
+.bsg-demo-controls {
+  position: fixed;
+  bottom: 88px; /* clears the floating action dock */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 21; /* above the board + narration overlay (z-20), below modals */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bsg-surface-2);
+  border: 1px solid var(--bsg-line-2);
+  border-radius: var(--bsg-r-pill, 999px);
+  box-shadow: var(--bsg-shadow);
+}
+.bsg-demo-controls__speeds {
+  display: flex;
+  gap: 4px;
+}
+.bsg-demo-controls__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: var(--bsg-line-2);
+}
+.bsg-demo-btn {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bsg-surface-3);
+  border: 1px solid var(--bsg-line);
+  border-radius: var(--bsg-r-md, 8px);
+  color: var(--bsg-ink);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.bsg-demo-btn:hover:not(:disabled) {
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
+}
+.bsg-demo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.bsg-demo-btn--speed {
+  font-size: 0.8rem;
+  padding: 0 10px;
+}
+.bsg-demo-btn--speed.is-active {
+  background: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
+  border-color: var(--bsg-accent);
+}
+.bsg-demo-btn--play {
+  font-size: 1.05rem;
+}
+.bsg-demo-btn--stop {
+  font-size: 0.8rem;
+  color: var(--bsg-ink-2);
 }
 
 .game-shell__zoom-container {

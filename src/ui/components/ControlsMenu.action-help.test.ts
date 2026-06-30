@@ -129,6 +129,25 @@ describe('ControlsMenu — Show action help toggle', () => {
     wrapper.unmount();
   });
 
+  it('E: hides the toggle entirely when hasActionHelp is false (no inert no-op toggle)', async () => {
+    // A game that authored no help text on any available action has nothing for the
+    // toggle to reveal — showing it makes a global control that does nothing, which
+    // reads as broken. With hasActionHelp=false the toggle must not render at all.
+    const wrapper = mountMenu({ isActionHelpVisible: true, hasActionHelp: false });
+    await wrapper.find('button.menubtn').trigger('click');
+    const helpBtn = findHelpToggle();
+    expect(helpBtn, 'Toggle must be hidden when no action has help text').toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('F: shows the toggle when hasActionHelp is true', async () => {
+    const wrapper = mountMenu({ isActionHelpVisible: true, hasActionHelp: true });
+    await wrapper.find('button.menubtn').trigger('click');
+    const helpBtn = findHelpToggle();
+    expect(helpBtn, 'Toggle must be visible when at least one action has help').toBeDefined();
+    wrapper.unmount();
+  });
+
   it('toggle is NOT inside the Teaching group (showHint-gated) — visible without showHint', async () => {
     // Mount without showHint — if the toggle was inside v-if="showHint !== undefined",
     // it would be absent. This verifies it is in the Play group.

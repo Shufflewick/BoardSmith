@@ -42,6 +42,13 @@ const props = withDefaults(defineProps<{
   /** Whether action help affordances are currently visible (drives aria-checked). */
   isActionHelpVisible?: boolean;
   /**
+   * Whether any currently-available action actually has help text. When false,
+   * the "Show action help" toggle is hidden entirely — a global toggle with
+   * nothing to reveal is a silent no-op that reads as broken. Defaults to true
+   * so the toggle shows unless the host explicitly reports no help is authored.
+   */
+  hasActionHelp?: boolean;
+  /**
    * When true, renders the Tutorial group showing the "Start tutorial" item.
    * Absent/false hides the group (game has no tutorial definition).
    */
@@ -56,6 +63,7 @@ const props = withDefaults(defineProps<{
   openUp: false,
   align: 'right',
   isActionHelpVisible: false,
+  hasActionHelp: true,
 });
 
 const emit = defineEmits<{
@@ -193,8 +201,10 @@ function handleLeave() {
         </span>
       </button>
 
-      <!-- Show action help (Play group — always visible, not AI-gated) -->
+      <!-- Show action help (Play group — not AI-gated; hidden when no available
+           action has help text, so the toggle is never present-but-inert). -->
       <button
+        v-if="hasActionHelp"
         class="mi"
         type="button"
         role="menuitemcheckbox"
@@ -269,57 +279,58 @@ function handleLeave() {
         Leave game
       </button>
 
-      <!-- Teaching group: visible only when the game has an AI player (showHint !== undefined) -->
-      <template v-if="showHint !== undefined">
+      <!-- Teaching group: one section for ALL teaching aids. Visible when the game
+           has an AI player (showHint !== undefined) OR a tutorial (hasTutorial).
+           The tutorial item lives here too — it is teaching, not a separate group. -->
+      <template v-if="showHint !== undefined || hasTutorial">
         <div class="sep"></div>
         <div class="grouplabel">Teaching</div>
 
-        <!-- Get a hint: request a one-shot AI move suggestion -->
-        <button
-          class="mi"
-          type="button"
-          role="menuitem"
-          :disabled="hintDisabled"
-          :aria-disabled="hintDisabled"
-          @click="emit('teaching-action', 'hint'); close()"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8v.01" stroke-linecap="round"/></svg>
-          Get a hint
-        </button>
+        <!-- AI-driven aids: only when the game has an AI player. -->
+        <template v-if="showHint !== undefined">
+          <!-- Get a hint: request a one-shot AI move suggestion -->
+          <button
+            class="mi"
+            type="button"
+            role="menuitem"
+            :disabled="hintDisabled"
+            :aria-disabled="hintDisabled"
+            @click="emit('teaching-action', 'hint'); close()"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8v.01" stroke-linecap="round"/></svg>
+            Get a hint
+          </button>
 
-        <!-- Watch AI demo / Stop demo: toggle the narrated AI demo mode -->
-        <button
-          class="mi"
-          type="button"
-          role="menuitem"
-          @click="emit('teaching-action', 'demo-toggle'); close()"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 9-14 9V3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          {{ isDemoRunning ? 'Stop demo' : 'Watch AI demo' }}
-        </button>
+          <!-- Watch AI demo / Stop demo: toggle the narrated AI demo mode -->
+          <button
+            class="mi"
+            type="button"
+            role="menuitem"
+            @click="emit('teaching-action', 'demo-toggle'); close()"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 9-14 9V3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {{ isDemoRunning ? 'Stop demo' : 'Watch AI demo' }}
+          </button>
 
-        <!-- Show move quality: toggle the per-cell MCTS evaluation heatmap -->
-        <button
-          class="mi"
-          type="button"
-          role="menuitemcheckbox"
-          :aria-checked="isHeatmapVisible"
-          @click="emit('teaching-action', 'heatmap-toggle')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          Show move quality
-          <span class="r">
-            <span class="toggle" :class="{ on: isHeatmapVisible }"></span>
-          </span>
-        </button>
-      </template>
+          <!-- Show move quality: toggle the per-cell MCTS evaluation heatmap -->
+          <button
+            class="mi"
+            type="button"
+            role="menuitemcheckbox"
+            :aria-checked="isHeatmapVisible"
+            @click="emit('teaching-action', 'heatmap-toggle')"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Show move quality
+            <span class="r">
+              <span class="toggle" :class="{ on: isHeatmapVisible }"></span>
+            </span>
+          </button>
+        </template>
 
-      <!-- Tutorial group: visible only when the game has a tutorial definition -->
-      <template v-if="hasTutorial">
-        <div class="sep"></div>
-        <div class="grouplabel">Tutorial</div>
-        <!-- Toggle: "Exit tutorial" when a tutorial is running, "Start tutorial" otherwise. -->
+        <!-- Tutorial: same Teaching group. Toggle Start ↔ Exit based on run state. -->
         <button
+          v-if="hasTutorial"
           class="mi"
           type="button"
           role="menuitem"

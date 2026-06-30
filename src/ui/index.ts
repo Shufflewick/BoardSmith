@@ -63,6 +63,7 @@ export {
   tryUseBoardInteraction,
   createBoardInteraction,
   provideBoardInteraction,
+  anchorAttrs,
   type BoardInteraction,
   type BoardInteractionState,
   type BoardInteractionActions,

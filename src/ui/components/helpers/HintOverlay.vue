@@ -89,10 +89,15 @@ function bubbleFallbackStyle(
 ): Record<string, string> {
   const GAP = 8;
   const left = boardRect ? boardRect.left + boardRect.width / 2 : window.innerWidth / 2;
-  const top = boardRect?.top ?? 0;
+  // Position the bubble BELOW the board (not at its top) so it never covers the
+  // squares the player needs to read. Used when there is no resolvable target ring;
+  // the descriptive text ("Suggested: c5 → a3") makes the bubble useful on its own.
+  // Clamp into the viewport so a very tall board can't push it off-screen.
+  const below = boardRect ? boardRect.bottom + GAP : window.innerHeight / 2;
+  const top = Math.min(below, window.innerHeight - 56);
   return {
     left: `${left}px`,
-    top: `${top + GAP}px`,
+    top: `${top}px`,
     transform: 'translateX(-50%)',
   };
 }

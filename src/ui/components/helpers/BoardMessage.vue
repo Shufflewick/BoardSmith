@@ -229,7 +229,11 @@ withDefaults(
   display: block;
   text-align: left;
   padding: var(--bsg-s2) var(--bsg-s4);
-  max-width: min(280px, 90%);
+  /* Wide enough for a readable one-line move narration ("Player 1: move c5 → a3
+     (capture)") without wrapping awkwardly; still clamped to the viewport. */
+  max-width: min(440px, 92vw);
+  white-space: normal;
+  overflow-wrap: anywhere;
   background: var(--bsg-surface-3);
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-md);
