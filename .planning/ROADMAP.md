@@ -51,7 +51,7 @@ Plans:
 - [x] 117-01-PLAN.md — Foundational type exports (ElementDiff + ActionMetadata) to session barrel [INTRO-F1, INTRO-02]
 - [x] 117-02-PLAN.md — Extract legal-move enumeration core; enumerateLegalMoves + MCTSBot delegation [INTRO-04]
 - [x] 117-03-PLAN.md — buildActionArgs in-process/wire arg builder [INTRO-03]
-- [ ] 117-04-PLAN.md — getActionSpace + getActionSchema on Game + hidden-info leak regression [INTRO-01, INTRO-02, INTRO-05]
+- [x] 117-04-PLAN.md — getActionSpace + getActionSchema on Game + hidden-info leak regression [INTRO-01, INTRO-02, INTRO-05]
 
 ### Phase 118: Test Ergonomics
 **Goal**: A test author can read state, drive games to completion, and assert availability without parsing snapshot JSON or dropping to low-level selection plumbing — with failures that explain themselves.
