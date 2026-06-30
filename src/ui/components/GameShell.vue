@@ -230,6 +230,11 @@ const colorSelectionEnabled = ref(false);
 // Game state
 const gameId = ref<string | null>(null);
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
+// Host anti-cheat: teaching features disabled for this session.
+// Set from the platform init postMessage (data.teachingDisabled) for first-render
+// before any broadcast. The broadcast-preferred computed below (teachingDisabledProp)
+// uses the authoritative broadcast value once state is available (criterion 4 / D-03).
+const teachingDisabled = ref(false);
 
 // Sync colorSelectionEnabled from lobbyInfo (persists through lobby->game transition)
 watch(lobbyInfo, (lobby) => {
@@ -753,6 +758,15 @@ const hasTutorialProp = computed<boolean>(
   () => (state.value?.state as any)?.hasTutorial ?? false
 );
 
+// Teaching lockout (LOCK-01, criterion 4): PREFER broadcast state.teachingDisabled
+// as the authoritative single source of truth — every connected seat (reconnect,
+// second window) reads the session value, not just the local init snapshot.
+// Falls back to the local `teachingDisabled` ref (set from the init postMessage)
+// for first-render before the first broadcast arrives (criterion 1 / D-02).
+const teachingDisabledProp = computed<boolean>(
+  () => (state.value?.state as any)?.teachingDisabled ?? teachingDisabled.value
+);
+
 // True when this seat's tutorial is currently active (status === 'running').
 // Derived from the projected tutorial step view: when it is defined, the seat
 // is in a running tutorial. When undefined (no tutorial, or exited/completed),
@@ -968,6 +982,10 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     if (data.type === 'init') {
       playerSeat.value = data.seat;
       currentScreen.value = 'game';
+      // D-02 / LOCK-01 criterion 1: consume teachingDisabled for first-render gating
+      // before any broadcast arrives. The broadcast-preferred computed (teachingDisabledProp)
+      // will override this with the authoritative session value on first state update.
+      teachingDisabled.value = data.teachingDisabled === true;
       // TOKEN-05: consume any host-supplied theme override delivered at iframe init.
       // consumeInitMessage calls applyTheme() which enforces the --bsg-* key
       // allowlist — this prevents unknown CSS property names but does NOT prevent
@@ -2082,6 +2100,7 @@ if ((import.meta as any).hot) {
           :has-action-help="hasActionHelp"
           :has-tutorial="hasTutorialProp"
           :is-tutorial-running="isTutorialRunningProp"
+          :teaching-disabled="teachingDisabledProp"
           @undo="handleUndo"
           @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
