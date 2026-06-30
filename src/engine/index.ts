@@ -201,6 +201,7 @@ export type {
 
 // Utilities (serialization, snapshots, replays, action helpers, dev state)
 export {
+  buildActionArgs,
   enumerateLegalMoves,
   serializeValue,
   deserializeValue,
@@ -225,6 +226,7 @@ export {
 } from './utils/index.js';
 
 export type {
+  BuildActionArgsOptions,
   SerializedReference,
   SerializeOptions,
   GameStateSnapshot,

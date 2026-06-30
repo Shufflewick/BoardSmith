@@ -114,10 +114,18 @@ describe('buildActionArgs', () => {
     });
 
     it('result is accepted by runner.performAction without error', () => {
-      const token = game.board.first(Token)!;
-      const args = buildActionArgs('pick', { target: token }, game, 1);
+      // GameRunner constructs its own game — build args from runner.game
+      const runner = new GameRunner({
+        GameClass: ArgBuilderGame,
+        gameType: 'arg-builder-test',
+        gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'runner-test' },
+      });
+      runner.start();
 
-      const runner = new GameRunner({ game });
+      const token = runner.game.board.first(Token)!;
+      expect(token).toBeDefined();
+
+      const args = buildActionArgs('pick', { target: token }, runner.game, 1);
       const outcome = runner.performAction('pick', 1, args);
 
       expect(outcome.success).toBe(true);
