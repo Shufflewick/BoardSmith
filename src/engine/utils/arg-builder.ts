@@ -70,7 +70,18 @@ export function buildActionArgs(
     }
   }
 
-  // 4. Produce the output record in the requested format.
+  // 4. Validate all required (non-optional) selections are present.
+  const requiredSelections = actionDef.selections.filter(s => !s.optional);
+  for (const sel of requiredSelections) {
+    if (!(sel.name in selectionValues)) {
+      throw new Error(
+        `buildActionArgs: required selection "${sel.name}" not provided for action "${actionName}". ` +
+        `Required selections: ${requiredSelections.map(s => s.name).join(', ')}.`,
+      );
+    }
+  }
+
+  // 5. Produce the output record in the requested format.
   const format = options?.format ?? 'in-process';
 
   if (format === 'in-process') {
