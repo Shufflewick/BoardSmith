@@ -56,15 +56,17 @@ function gateValuesEqual(a: unknown, b: unknown): boolean {
  * For choice objects (e.g. DestinationChoice): all matcher fields must equal
  * the corresponding fields on the value.
  *
- * **Primitive values (string/number) are not supported by SelectionMatcher.**
- * If a `choice` selection uses primitive values (e.g. `choices: ['heads', 'tails']`),
- * this function returns false for every primitive value, blocking ALL choices rather
- * than just the ones that don't match. Tutorial authors who need to gate a primitive
- * choice selection must use a `TutorialGateCondition` predicate instead.
+ * For primitive string/number values: use a `{ value: primitiveValue }` matcher.
+ * `{ value: '7' }` matches the primitive string `'7'` with strict (`===`) equality.
  * See `SelectionMatcher` JSDoc in types.ts for details.
  */
 function selectionMatchesValue(matcher: SelectionMatcher, value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
+  // Primitive support: { value: primitiveValue } matches a primitive string/number choice.
+  // Enables gate.selections for chooseFrom() with string/number choices (e.g. rank: { value: '7' }).
+  // Strict equality only: number 7 does NOT match string '7'.
+  if (typeof value !== 'object' || value === null) {
+    return 'value' in matcher && matcher['value'] === value;
+  }
   const val = value as Record<string, unknown>;
 
   // ElementRef precedence: if matcher specifies id, that alone determines match.

@@ -111,16 +111,21 @@ export interface TutorialGateContext {
  * fields — id takes precedence, then notation, then name. Match is field
  * equality: `{ id: 5 }` matches any element where `el.id === 5`.
  *
- * For choice selections (type: 'choice'): field equality on the choice object —
- * `{ toNotation: 'd4' }` matches any choice where `choice.toNotation === 'd4'`.
+ * For choice selections (type: 'choice') whose choices are objects: field equality
+ * on the choice object — `{ toNotation: 'd4' }` matches any choice where
+ * `choice.toNotation === 'd4'`. For player-choice objects like `{ value: 2, display: 'Bob' }`,
+ * `{ value: 2 }` matches via field equality on the object.
+ *
+ * For `chooseFrom()` selections whose choices are **primitive strings or numbers**
+ * (e.g. `go-fish`'s rank selection returns strings like `'7'`, `'Q'`): use the
+ * `{ value: primitiveValue }` form. `{ value: '7' }` matches the primitive string
+ * `'7'` with strict (`===`) equality. Number `7` does NOT match string `'7'`.
+ *
+ * @example
+ * // Gate ask-for-rank to the '7' rank (primitive string choice):
+ * { rank: { value: '7' } }
  *
  * Supply only the fields you care about; unspecified fields are ignored.
- *
- * **NOTE:** `SelectionMatcher` only matches object values (element refs, choice
- * objects). For `choice` selections with primitive string/number values, use
- * a `TutorialGateCondition` predicate instead — `SelectionMatcher` returns false
- * for every primitive value, silently blocking ALL choices rather than the
- * targeted one.
  */
 export type SelectionMatcher = Record<string, unknown>;
 
