@@ -535,6 +535,124 @@ describe('demo mode — isDemoRunning in broadcast state (WR-04)', () => {
 });
 
 // ============================================
+// Phase 111: teachingDisabled config — fail-loud guards (LOCK-01)
+// ============================================
+
+function makeLockedSession() {
+  return GameSession.create({
+    gameType: 'teaching-test',
+    GameClass: TeachingTestGame,
+    playerCount: 2,
+    playerNames: ['Alice', 'Bob'],
+    seed: 'test',
+    teachingDisabled: true,
+  });
+}
+
+describe('teachingDisabled — fail-loud guards (LOCK-01)', () => {
+  it('requestHint rejects with actionable error when teachingDisabled', async () => {
+    const session = makeLockedSession();
+    await expect(
+      (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(1)
+    ).rejects.toThrow('Teaching features are disabled for this session.');
+  });
+
+  it('setHeatmapVisible(true) rejects with actionable error when teachingDisabled', async () => {
+    const session = makeLockedSession();
+    await expect(
+      (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, true)
+    ).rejects.toThrow('Teaching features are disabled for this session.');
+  });
+
+  it('setHeatmapVisible(false) also rejects when teachingDisabled (crafted visible:false op)', async () => {
+    const session = makeLockedSession();
+    await expect(
+      (session as unknown as { setHeatmapVisible(seat: number, visible: boolean): Promise<void> }).setHeatmapVisible(1, false)
+    ).rejects.toThrow('Teaching features are disabled for this session.');
+  });
+
+  it('startDemo rejects with actionable error when teachingDisabled', () => {
+    const session = makeLockedSession();
+    expect(() => {
+      (session as unknown as DemoSession).startDemo();
+    }).toThrow('Teaching features are disabled for this session.');
+  });
+
+  it('startTutorial rejects with actionable error when teachingDisabled', () => {
+    const session = makeLockedSession();
+    expect(() => {
+      (session as unknown as { startTutorial(seat: number): void }).startTutorial(1);
+    }).toThrow('Teaching features are disabled for this session.');
+  });
+
+  it('exitTutorial is NOT blocked by teachingDisabled (D-06: exiting is always safe)', () => {
+    const session = makeLockedSession();
+    // May throw for other reasons (no tutorial running), but NOT the lockout error
+    let caughtMessage: string | undefined;
+    try {
+      (session as unknown as { exitTutorial(seat: number): void }).exitTutorial(1);
+    } catch (e) {
+      caughtMessage = (e as Error).message;
+    }
+    expect(caughtMessage).not.toBe('Teaching features are disabled for this session.');
+  });
+
+  it('default session (no flag) does not reject requestHint with lockout error', async () => {
+    const session = makeSession();
+    // Seat 2 is not acting so requestHint throws the seat-not-awaiting error,
+    // NOT the lockout error — proving default behavior is unchanged.
+    await expect(
+      (session as unknown as { requestHint(seat: number): Promise<void> }).requestHint(2)
+    ).rejects.toThrow('Cannot hint: seat 2 is not awaiting input');
+  });
+
+  it('default session (no flag) does not reject startDemo with lockout error', () => {
+    const session = makeSession();
+    // startDemo on a default session must not throw the lockout error
+    expect(() => {
+      (session as unknown as DemoSession).startDemo({ delay: 0 });
+    }).not.toThrow('Teaching features are disabled for this session.');
+    (session as unknown as DemoSession).stopDemo();
+  });
+});
+
+// ============================================
+// Phase 111: teachingDisabled broadcast reflection (LOCK-01, D-03)
+// ============================================
+
+describe('teachingDisabled — broadcast reflection (D-03)', () => {
+  it('broadcast state includes teachingDisabled:true for every seat when session is locked', () => {
+    const session = makeLockedSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }, { playerSeat: 2, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+    session.broadcast();
+
+    expect(captured).toHaveLength(2);
+    for (const c of captured) {
+      expect(c.state.teachingDisabled).toBe(true);
+    }
+  });
+
+  it('broadcast state includes teachingDisabled:false for default session', () => {
+    const session = makeSession();
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+    session.broadcast();
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.state.teachingDisabled).toBe(false);
+  });
+});
+
+// ============================================
 // WR-06: default narrator formats object args as JSON
 // ============================================
 
