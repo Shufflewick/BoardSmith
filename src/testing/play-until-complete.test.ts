@@ -324,6 +324,61 @@ describe('playUntilComplete — TEST-02', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// WR-02 regression: maxMoves bounds player moves, not loop iterations.
+//
+// The fix introduces movesExecuted (counts only successful doAction calls)
+// separate from the loop counter i. Auto-advancing flow iterations —
+// iterations where awaitingInput=false — do NOT increment movesExecuted
+// and therefore do not consume the maxMoves budget.
+//
+// For the BoardSmith engine, _processFlow() runs synchronously after each
+// performAction, so standard games (actionStep/eachPlayer/loop) land on the
+// next awaitingInput=true state before the next playUntilComplete iteration.
+// The absolute safety cap (10×maxMoves) guards against engine bugs that
+// produce infinite awaitingInput=false loops.
+//
+// Behavior pinned here:
+//   (a) A game needing exactly N player moves completes with maxMoves=N.
+//   (b) A game needing exactly N+1 player moves fails with maxMoves=N.
+//   (c) GameStuckError message mentions "player moves" when the cap fires.
+// ---------------------------------------------------------------------------
+describe('WR-02 regression — maxMoves bounds player moves', () => {
+  it('completes a 2-player simultaneous game with maxMoves=2 (2 player moves needed)', () => {
+    // SimGame: 2 players × 1 move each = 2 player moves total.
+    // maxMoves=2 should be exactly enough.
+    const testGame = TestGame.create(SimGame, { playerCount: 2, seed: 'wr02-pass' });
+    expect(() => playUntilComplete(testGame, { maxMoves: 2 })).not.toThrow();
+    expect(testGame.isComplete()).toBe(true);
+  });
+
+  it('throws GameStuckError with maxMoves=1 when 2 player moves are needed', () => {
+    // maxMoves=1: only 1 player move is allowed; the second player cannot act.
+    const testGame = TestGame.create(SimGame, { playerCount: 2, seed: 'wr02-fail' });
+    expect(() => playUntilComplete(testGame, { maxMoves: 1 })).toThrow(GameStuckError);
+  });
+
+  it('GameStuckError message mentions player moves when the cap fires', () => {
+    const testGame = TestGame.create(SimGame, { playerCount: 2, seed: 'wr02-msg' });
+    let caught: GameStuckError | undefined;
+    try {
+      playUntilComplete(testGame, { maxMoves: 1 });
+    } catch (e) {
+      if (e instanceof GameStuckError) caught = e;
+    }
+    expect(caught).toBeDefined();
+    // Message should document the player-moves cap, not just "moves"
+    expect(caught!.message).toMatch(/player moves/i);
+  });
+
+  it('completes a 3-player simultaneous game with maxMoves=3 (3 player moves needed)', () => {
+    // SimGame with 3 players: 3 player moves needed.
+    const testGame = TestGame.create(SimGame, { playerCount: 3, seed: 'wr02-3p' });
+    expect(() => playUntilComplete(testGame, { maxMoves: 3 })).not.toThrow();
+    expect(testGame.isComplete()).toBe(true);
+  });
+});
+
 describe('GameStuckError — class contract', () => {
   it('is an instance of Error', () => {
     const err = new GameStuckError('test', 5, ['move'], undefined);

@@ -14,11 +14,12 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  simultaneousActionStep,
   type GameOptions,
   type FlowContext,
 } from '../engine/index.js';
 import { TestGame } from './test-game.js';
-import { assertActionAvailable, assertFlowState } from './assertions.js';
+import { assertActionAvailable, assertActionNotAvailable, assertFlowState } from './assertions.js';
 
 // ---------------------------------------------------------------------------
 // Fixture: game for TEST-03 (trace) and TEST-04 (actionsMode)
@@ -187,5 +188,141 @@ describe('assertFlowState — TEST-04: actionsMode option', () => {
         // no actionsMode
       }),
     ).toThrow(/Unexpected available actions/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR-01/02/03 regression: simultaneous-turn support
+//
+// A simultaneousActionStep sets awaitingPlayers (not currentPlayer).
+// The three assertion helpers previously read currentPlayer, which is
+// undefined in simultaneous turns — causing:
+//   CR-01: assertActionAvailable threw false error for active players
+//   CR-02: assertActionNotAvailable silently passed (false pass)
+//   CR-03: assertFlowState reported all actions as missing
+//
+// These tests pin the correct behavior for all three helpers.
+// ---------------------------------------------------------------------------
+
+/** Fixture: both players must bid; game ends when both have acted. */
+class BidPlayer extends Player<BidGame, BidPlayer> {
+  hasBid = false;
+}
+
+class BidGame extends Game<BidGame, BidPlayer> {
+  static PlayerClass = BidPlayer;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<BidGame>('bid').execute((_args, ctx) => {
+        (ctx.player as BidPlayer).hasBid = true;
+        return { success: true };
+      }),
+    );
+
+    // 'fold' is a second action only player 2 should have — used by CR-02 test
+    // to verify assertActionNotAvailable doesn't silently pass for a real action.
+    this.registerAction(
+      Action.create<BidGame>('fold').execute((_args, ctx) => {
+        (ctx.player as BidPlayer).hasBid = true;
+        return { success: true };
+      }),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: simultaneousActionStep({
+          actions: ['bid', 'fold'],
+          playerDone: (_ctx, p) => (p as BidPlayer).hasBid,
+        }),
+      }),
+    );
+  }
+}
+
+function makeBidGame(): TestGame<BidGame> {
+  return TestGame.create(BidGame, { playerCount: 2, seed: 'bid-test' });
+}
+
+describe('assertActionAvailable — CR-01: simultaneous turns', () => {
+  it('does NOT throw for an active simultaneous player with the action available', () => {
+    // Both player 1 and player 2 are active via awaitingPlayers.
+    // Previously the guard used currentPlayer (undefined here), throwing a false error.
+    const testGame = makeBidGame();
+    expect(() => assertActionAvailable(testGame, 1, 'bid')).not.toThrow();
+    expect(() => assertActionAvailable(testGame, 2, 'bid')).not.toThrow();
+  });
+
+  it('throws when the seat is active but the named action is not available', () => {
+    // 'ask' is not registered in BidGame — should still throw the "not available" error.
+    const testGame = makeBidGame();
+    expect(() => assertActionAvailable(testGame, 1, 'ask')).toThrow(/not available/i);
+  });
+
+  it('error message mentions awaitingPlayers when currentPlayer is undefined', () => {
+    // Verify the error message is actionable for a simultaneous-turn game where
+    // the requested seat is not an active awaiting player at all.
+    // Use seat 3 — it does not exist in a 2-player game.
+    const testGame = makeBidGame();
+    let err: Error | undefined;
+    try {
+      assertActionAvailable(testGame, 3, 'bid');
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).toBeDefined();
+    expect(err!.message).toMatch(/awaitingPlayers/i);
+  });
+});
+
+describe('assertActionNotAvailable — CR-02: simultaneous turns', () => {
+  it('does NOT silently pass when a simultaneous player IS active and action IS available', () => {
+    // Previously returned early because currentPlayer (undefined) !== playerSeat.
+    // This was a false pass — the seat IS active, 'bid' IS available.
+    const testGame = makeBidGame();
+    // 'bid' IS available for both players — assertActionNotAvailable should throw.
+    expect(() => assertActionNotAvailable(testGame, 1, 'bid')).toThrow(
+      /should NOT be available/i,
+    );
+  });
+
+  it('passes (no throw) for a seat that is truly not active', () => {
+    // Seat 3 does not exist — canSeatAct returns false → should pass silently.
+    const testGame = makeBidGame();
+    expect(() => assertActionNotAvailable(testGame, 3, 'bid')).not.toThrow();
+  });
+
+  it('passes after a player has completed their simultaneous action', () => {
+    // After player 1 bids, their slot is marked completed; their actions should
+    // not be available any more — assertActionNotAvailable should not throw.
+    const testGame = makeBidGame();
+    testGame.doAction(1, 'bid', {});
+    expect(() => assertActionNotAvailable(testGame, 1, 'bid')).not.toThrow();
+  });
+});
+
+describe('assertFlowState — CR-03: simultaneous turns', () => {
+  it("reports correct actions for a simultaneous step (contains mode)", () => {
+    // availableActions is undefined on a simultaneous step; the fix reads from
+    // awaitingPlayers[*].availableActions instead.
+    const testGame = makeBidGame();
+    expect(() =>
+      assertFlowState(testGame, {
+        actions: ['bid', 'fold'],
+        actionsMode: 'contains',
+      }),
+    ).not.toThrow();
+  });
+
+  it("fails when an expected action is genuinely missing in a simultaneous step", () => {
+    const testGame = makeBidGame();
+    expect(() =>
+      assertFlowState(testGame, {
+        actions: ['nonexistent'],
+        actionsMode: 'contains',
+      }),
+    ).toThrow(/Missing expected actions/i);
   });
 });
