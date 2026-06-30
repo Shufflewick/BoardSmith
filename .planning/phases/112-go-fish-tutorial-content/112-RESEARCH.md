@@ -852,17 +852,19 @@ function selectionMatchesValue(matcher: SelectionMatcher, value: unknown): boole
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Pond top-positioning reliability (Option A)**
    - What we know: `Pond extends Deck`, `pond.setOrder('stacking')`, `pond.drawTo(hand, 1, Card)` draws one card
    - What's unclear: whether `putInto(pond)` as the last call makes that card the first drawn
    - Recommendation: The plan should include a micro-test step: after `resetToTutorialPreset()`, call `pond.drawTo(tmpHand, 1, Card)` and assert the result is `'7C'`. If it fails, switch to Option B preset.
+   - **RESOLVED:** Plan 112-02 Task 1 implements the micro-test verification with the documented Option-B fallback, so the executor verifies the assumption rather than trusting it. No open risk.
 
 2. **advanceWhen: step 3 and step 4 are "instant" (auto-advance via pump)**
    - What we know: `autoAdvanceTutorial` loops up to `def.steps.length` times; steps 3 and 4 have immediately-true conditions after the second ask
    - What's unclear: whether the UX of two steps flashing through instantly is acceptable for the v4.2 demo
    - Recommendation: acceptable for CI (all 4 steps in `stepsVisited`); the UX concern is deferred to a future "dwell time" substrate improvement (R-05 backlog).
+   - **RESOLVED (by deferral):** Accepted for CI completeness; the dwell-time UX improvement is on the R-05 backlog. Not a blocker for Phase 112.
 
 ---
 
