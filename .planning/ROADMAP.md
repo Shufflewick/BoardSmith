@@ -33,7 +33,7 @@
 
 ### 🚧 v4.2 Tutorial Primitives — Go Fish & Docs — Phases 112–115
 
-- [ ] **Phase 112: Go-Fish Tutorial Content** — Four teaching beats (ask-for-rank gating, Go-Fish-draw tip, forming-a-book, turn-continuation) authored in go-fish and launchable in GameShell + `boardsmith dev`, with CI-verifiable test artifact.
+- [x] **Phase 112: Go-Fish Tutorial Content** — Four teaching beats (ask-for-rank gating, Go-Fish-draw tip, forming-a-book, turn-continuation) authored in go-fish and launchable in GameShell + `boardsmith dev`, with CI-verifiable test artifact. (completed 2026-06-30)
 - [ ] **Phase 113: Go-Fish AI Teaching** — MCTS move hint (anchored to cards/hand via `anchorAttrs`) and narrated AI-vs-AI demo, reusing go-fish's existing bot.
 - [ ] **Phase 114: Go-Fish Action Help & Host Lockout** — Per-action help text on go-fish actions and browser-verified proof that `teachingDisabled` gates all teaching affordances on a card game.
 - [ ] **Phase 115: Developer Documentation** — Full authoring guide covering the whole tutorial substrate + AI teaching + action help + host lockout, with checkers (grid) and go-fish (cards) as worked examples.
@@ -56,7 +56,7 @@
 - [x] 112-01-PLAN.md — BoardSmith selectionMatchesValue primitive-matcher fix + unit test (Wave 1)
 - [x] 112-02-PLAN.md — go-fish tutorial preset + GO_FISH_TUTORIAL definition + gameDefinition wiring (Wave 2)
 - [x] 112-03-PLAN.md — CI-verifiable tutorial.test.ts walkthrough + green→red proof (Wave 3)
-- [ ] 112-04-PLAN.md — browser smoke checkpoint: launchable in both hosts + card-anchored overlay (Wave 3)
+- [x] 112-04-PLAN.md — browser smoke checkpoint: launchable in both hosts + card-anchored overlay (Wave 3)
 **UI hint**: yes
 
 ### Phase 113: Go-Fish AI Teaching
@@ -98,7 +98,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 112. Go-Fish Tutorial Content | 3/4 | In Progress|  |
+| 112. Go-Fish Tutorial Content | 4/4 | Complete   | 2026-06-30 |
 | 113. Go-Fish AI Teaching | 0/? | Not started | - |
 | 114. Go-Fish Action Help & Host Lockout | 0/? | Not started | - |
 | 115. Developer Documentation | 0/? | Not started | - |
