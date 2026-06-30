@@ -62,10 +62,11 @@ Progress: [█████████░] 92%
 - v3.1 Dynamic Auto-UI (Phases 91-96) -- shipped 2026-06-22
 - v4.0 UI Redesign (Slate) (Phases 97-103) -- shipped 2026-06-23
 - v4.1 Tutorial Primitives (Checkers) (Phases 104-111) -- shipped 2026-06-30
+- v4.2 Tutorial Primitives — Go Fish & Docs (Phases 112-115) -- shipped 2026-06-30
 
 **In Progress:**
 
-- v4.2 Tutorial Primitives — Go Fish & Docs (Phases 112-115) — started 2026-06-30
+- None — v4.2 shipped 2026-06-30. Run `/gsd:new-milestone` to start the next.
 
 ## Deferred Items
 
