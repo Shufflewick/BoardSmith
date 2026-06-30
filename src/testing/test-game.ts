@@ -12,7 +12,7 @@ import {
   type GameOptions,
   type FlowState,
 } from '../engine/index.js';
-import { GameRunner, type ActionExecutionResult } from '../runtime/index.js';
+import { GameRunner, type ActionExecutionResult, type PlayerStateView } from '../runtime/index.js';
 
 /**
  * Options for creating a test game.
@@ -235,12 +235,37 @@ export class TestGame<G extends Game = Game> {
   }
 
   /**
-   * Get a player's view of the game (with hidden information removed).
+   * Get the perspective-correct observable game state for a player.
+   *
+   * This is the primary API for reading game state in tests. The returned
+   * {@link PlayerStateView} is filtered through the Phase 117 perspective view
+   * so hidden information (opponent hands, face-down decks, etc.) is
+   * automatically excluded — identical to what the production UI receives.
+   *
+   * **Two correct read patterns:**
+   *
+   * **Pattern 1 — observable state (use this for flow/action assertions):**
+   * ```typescript
+   * const view = testGame.getPlayerView(1);  // PlayerStateView — IDE shows the type
+   * view.flowState?.availableActions;         // what actions are available
+   * view.complete;                            // has the game ended?
+   * view.phase;                               // current game phase name
+   * ```
+   *
+   * **Pattern 2 — typed per-game custom properties (use this for domain state):**
+   * ```typescript
+   * testGame.game.score;          // typed as your Game subclass property
+   * testGame.game.deckSize;       // no JSON parsing, full IDE autocomplete
+   * ```
+   *
+   * **What NOT to do:** Do not parse `view.state` JSON to read game-specific
+   * properties — `view.state` is an `ElementJSON` tree intended for the UI
+   * renderer, not for domain assertions. Use `testGame.game.<prop>` instead.
    *
    * @param playerSeat - The player whose view to get (1-indexed)
-   * @returns The game state as visible to that player
+   * @returns The game state as visible to that player, with hidden info excluded
    */
-  getPlayerView(playerSeat: number) {
+  getPlayerView(playerSeat: number): PlayerStateView {
     return this.runner.getPlayerView(playerSeat);
   }
 }
