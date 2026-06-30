@@ -265,3 +265,66 @@ describe('GoFish ask interaction tests', () => {
     expect(renderedId).toBe(-42);
   });
 });
+
+// ── Tutorial board-path parity: the ask-for-rank step must auto-fill the single
+//    opponent so the learner can click a rank card directly. Regression guard for
+//    two v4.2 bugs: action-wide suppressAutoFill blocked the target auto-fill,
+//    leaving the action stuck on 'target' so board card-clicks (which only fire on
+//    the 'rank' pick) did nothing. suppressAutoFillFor:'rank' scopes it correctly.
+describe('GoFish tutorial ask-for-rank — auto-fill scoping (board-path parity)', () => {
+  const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) => {
+    if (selectionName === 'target') {
+      return { success: true, choices: [
+        { value: 2, display: 'Player 2', refs: [{ ref: { id: 99 }, role: 'target' as const }] },
+      ] };
+    }
+    if (selectionName === 'rank') {
+      // Tutorial gate restricts to a single rank ('7').
+      return { success: true, choices: [
+        { value: '7', display: 'Sevens', refs: [{ ref: { id: 11 }, role: 'target' as const }] },
+      ] };
+    }
+    return { success: true, choices: [] };
+  });
+
+  function makeController(tutorialStep: Record<string, unknown> | undefined) {
+    return useActionController({
+      sendAction: vi.fn().mockResolvedValue({ success: true }),
+      availableActions: ref(['ask']),
+      actionMetadata: ref({ ask: goFishAskAction }),
+      isMyTurn: ref(true),
+      autoFill: true,
+      autoExecute: false,
+      fetchPickChoices,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tutorialStep: ref(tutorialStep) as any,
+    });
+  }
+
+  it('FIXED: with suppressAutoFillFor:rank, the single opponent auto-fills → pick advances to rank (board click reachable)', async () => {
+    const controller = makeController({
+      id: 'ask-for-rank',
+      gate: { action: 'ask' },
+      suppressAutoFill: true,
+      suppressAutoFillFor: 'rank',
+    });
+    await controller.start('ask');
+    await nextTick();
+    // target auto-filled despite the tutorial; rank is the active pick the learner
+    // completes by clicking the 7 card on the board.
+    expect(controller.currentPick.value?.name).toBe('rank');
+  });
+
+  it('BUG GUARD: action-wide suppressAutoFill (no scope) leaves the action stuck on target (board click would be dead)', async () => {
+    const controller = makeController({
+      id: 'ask-for-rank',
+      gate: { action: 'ask' },
+      suppressAutoFill: true,
+    });
+    await controller.start('ask');
+    await nextTick();
+    // The single opponent was NOT auto-filled → still on 'target' → a board card
+    // click (which only fires on 'rank') does nothing. This is the bug the fix avoids.
+    expect(controller.currentPick.value?.name).toBe('target');
+  });
+});
