@@ -35,6 +35,7 @@ program
   .option('--players <count>', 'Initial number of players', '2')
   .option('--ai <players...>', 'Player positions to be AI (e.g., --ai 1 or --ai 2 4)')
   .option('--ai-level <level>', 'AI difficulty: easy, medium, hard, expert, or iteration count', 'medium')
+  .option('--lock-teaching', 'Disable AI hint, move-quality heatmap, AI-vs-AI demo, and tutorial (action help stays enabled)')
   .action(devCommand);
 
 // Testing

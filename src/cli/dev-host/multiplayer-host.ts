@@ -69,6 +69,13 @@ export interface MultiplayerHostOptions {
   /** Game-level options merged into the `start` op (the author's gameOptions). */
   baseGameOptions?: Record<string, unknown>;
   /**
+   * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
+   * fail-loud for this session. Set by `boardsmith dev --lock-teaching`.
+   * Threaded into the executeOp gameOptions bag and the SnapshotSessionHost adapters
+   * so all enforcement guards in Plans 111-01 and 111-02 fire on the real running host.
+   */
+  teachingDisabled?: boolean;
+  /**
    * Run one op against a snapshot for the given gameOptions, bound to the
    * author's gameDefinition: `(gameOptions, snapshot, pendingState, op) =>
    * executeOp(def, gameOptions, …)`. The host computes the start gameOptions
@@ -397,6 +404,7 @@ export class MultiplayerHost {
       playerCount,
       seed: (this.opts.makeSeed ?? defaultSeed)(),
       ...this.opts.baseGameOptions,
+      teachingDisabled: this.opts.teachingDisabled,
       playerOptions: perSeatOptions,
       playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
       // Mirror the production lobby's playerConfigs (game-session.ts builds the
@@ -412,13 +420,14 @@ export class MultiplayerHost {
         ...perSeatOptions[i],
       })),
     };
-    const baseOptions = { playerCount };
+    const baseOptions = { playerCount, teachingDisabled: this.opts.teachingDisabled };
     const executeOp = (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) =>
       this.opts.executeOp(op.type === 'start' ? startGameOptions : baseOptions, snapshot, pendingState, op);
 
     const session = createDevSession({
       playerCount,
       aiSeats: this.aiSeats,
+      teachingDisabled: this.opts.teachingDisabled,
       executeOp,
       postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
       postServerResponse: (seat, requestId, result) =>

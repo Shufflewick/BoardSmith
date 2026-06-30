@@ -358,3 +358,89 @@ describe('MultiplayerHost — follow active seat', () => {
     expect((gs.view as any).state.isMyTurn).toBe(true);
   });
 });
+
+// ── Teaching lockout (cross-layer, --lock-teaching wiring) ────────────────────
+// These tests exercise the full stack: MultiplayerHost with teachingDisabled:true
+// → baseOptions.teachingDisabled → executeOp guards (hint/heatmapToggle/startTutorial)
+// AND createDevSession adapters.teachingDisabled → SnapshotSessionHost.handleOp
+// (demoStart). No stubs — the REAL executeOp and SnapshotSessionHost are used.
+
+function makeLockedHost() {
+  const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+  const host = new MultiplayerHost({
+    playerCount: 2,
+    minPlayers: 1,
+    makeSeed: () => 'locked',
+    teachingDisabled: true,
+    executeOp: (gameOptions, snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
+    send: (clientId, msg) => sent.push({ clientId, msg }),
+  });
+  const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
+  const lastOfType = (clientId: string, type: HostOutbound['type']) =>
+    [...to(clientId)].reverse().find((m) => m.type === type) as any;
+  const serverReq = (clientId: string, requestId: string, op: string, payload: Record<string, unknown> = {}) =>
+    host.handleMessage(clientId, { type: 'server_request', requestId, op, payload });
+  return { host, sent, to, lastOfType, serverReq, clear: () => (sent.length = 0) };
+}
+
+describe('MultiplayerHost — teaching lockout (cross-layer: teachingDisabled:true)', () => {
+  it('hint op is rejected fail-loud through the real executeOp guard', async () => {
+    const { host, lastOfType, serverReq } = makeLockedHost();
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1, game starts
+
+    await serverReq('A', 'r-hint', 'hint', { seat: 1 });
+    const resp = lastOfType('A', 'server_response');
+    expect(resp.requestId).toBe('r-hint');
+    expect(resp.result.success).toBe(false);
+    expect(resp.result.error).toMatch(/disabled/i);
+  });
+
+  it('heatmap-toggle op is rejected fail-loud through the real executeOp guard', async () => {
+    const { host, lastOfType, serverReq } = makeLockedHost();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await serverReq('A', 'r-heatmap', 'heatmap-toggle', { visible: true });
+    const resp = lastOfType('A', 'server_response');
+    expect(resp.requestId).toBe('r-heatmap');
+    expect(resp.result.success).toBe(false);
+    expect(resp.result.error).toMatch(/disabled/i);
+  });
+
+  it('start-tutorial op is rejected fail-loud through the real executeOp guard', async () => {
+    const { host, lastOfType, serverReq } = makeLockedHost();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await serverReq('A', 'r-tutorial', 'start-tutorial');
+    const resp = lastOfType('A', 'server_response');
+    expect(resp.requestId).toBe('r-tutorial');
+    expect(resp.result.success).toBe(false);
+    expect(resp.result.error).toMatch(/disabled/i);
+  });
+
+  it('demo-start op is rejected fail-loud through the real SnapshotSessionHost.handleOp guard', async () => {
+    const { host, lastOfType, serverReq } = makeLockedHost();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await serverReq('A', 'r-demo', 'demo-start');
+    const resp = lastOfType('A', 'server_response');
+    expect(resp.requestId).toBe('r-demo');
+    expect(resp.result.success).toBe(false);
+    expect(resp.result.error).toMatch(/disabled/i);
+  });
+
+  it('without teachingDisabled, a pass action routes normally (default unchanged)', async () => {
+    // Uses the standard makeHost (teachingDisabled absent) to confirm lockout is
+    // NOT active when the flag is omitted.
+    const { host, lastOfType, clear } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    clear();
+    await host.handleMessage('A', {
+      type: 'server_request',
+      requestId: 'r-pass',
+      op: 'action',
+      payload: { actionName: 'pass', args: {} },
+    });
+    const resp = lastOfType('A', 'server_response');
+    expect(resp.result.success).toBe(true);
+  });
+});

@@ -46,6 +46,7 @@ interface DevOptions {
   players: string;
   ai?: string[];
   aiLevel?: string;
+  lockTeaching?: boolean;
 }
 
 /** Option definition in boardsmith.json array format (id/name is a field, not a key) */
@@ -155,7 +156,7 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
 
   return {
     name: 'boardsmith-resolve',
-    setup(build) {
+    setup(esbuildBuild) {
       const packageDirs: Record<string, string> = {
         'boardsmith': 'engine',
         'boardsmith/ai': 'ai',
@@ -167,7 +168,7 @@ function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlu
         'boardsmith/ui': 'ui',
       };
 
-      build.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
+      esbuildBuild.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
         const importPath = args.path;
         const dirName = packageDirs[importPath];
         if (dirName) {
@@ -316,6 +317,7 @@ function buildDevConfig(args: {
   aiSeats: number[];
   aiLevel: string;
   colorPalette: Array<{ value: string; label: string }>;
+  teachingDisabled: boolean;
 }): DevHostConfig {
   const gd = args.gameDefinition as GameDefinition & {
     gameOptions?: Record<string, unknown>;
@@ -333,6 +335,7 @@ function buildDevConfig(args: {
     playerOptions: optionRecordToList(gd.playerOptions),
     colorPalette: args.colorPalette,
     gameUrl: GAME_IFRAME_PATH,
+    teachingDisabled: args.teachingDisabled,
   };
 }
 
@@ -354,6 +357,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
     ? options.ai.flatMap(s => s.split(',').map(n => parseInt(n.trim(), 10))).filter(n => !isNaN(n))
     : [];
   const aiLevel = options.aiLevel ?? 'medium';
+  // Single source of truth for the teaching lockout — passed into both the server
+  // (MultiplayerHost → createDevSession adapters) and the client (buildDevConfig →
+  // DevHost.vue init postMessage → GameShell).
+  const teachingDisabled = options.lockTeaching === true;
 
   const invalidAiPlayers = aiPlayers.filter(p => p < 1 || p > playerCount);
   if (invalidAiPlayers.length > 0) {
@@ -455,6 +462,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     aiSeats: aiPlayers,
     aiLevel,
     colorPalette,
+    teachingDisabled,
   });
 
   const devHostDir = resolveDevHostDir();
@@ -503,10 +511,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
           const parts = source.replace('boardsmith/', '').split('/');
           const pkgName = parts[0];
           const subpath = parts.slice(1).join('/');
-          const srcDir = srcDirs[`boardsmith/${pkgName}`];
+          const pkgSrcDir = srcDirs[`boardsmith/${pkgName}`];
 
-          if (srcDir && subpath) {
-            const srcPath = join(cliMonorepoRoot, 'src', srcDir);
+          if (pkgSrcDir && subpath) {
+            const srcPath = join(cliMonorepoRoot, 'src', pkgSrcDir);
             if (subpath.endsWith('.css')) {
               return join(srcPath, 'src', subpath);
             }
@@ -586,6 +594,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       designatedAiSeats: aiPlayers,
       colorPalette,
       baseGameOptions,
+      teachingDisabled,
       executeOp: (gameOptions, snapshot, pendingState, op) =>
         runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op),
       send: (clientId, message) => {
@@ -662,6 +671,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     console.log(chalk.dim(`  Multiplayer: each browser is a player; open the page on another computer to join.`));
     console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as AI${aiPlayers.length ? `; --ai ${aiPlayers.join(',')} pre-marked` : ''}, level ${aiLevel}).`));
+    if (teachingDisabled) {
+      console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
+    }
 
     await open(hostUrl);
 
