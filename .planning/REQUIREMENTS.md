@@ -45,7 +45,7 @@ The showcase that proves the substrate end-to-end. Targets checkers' real teachi
 
 ### Host-Gated Teaching Lockout (LOCK)
 
-- [ ] **LOCK-01**: The embedding host can disable the assist/teaching features (AI hint, move-quality heatmap, AI-vs-AI demo, tutorial) via the iframe so they cannot be used to cheat in a real game. Action help stays enabled. BoardSmith is host-agnostic (no "ranked" concept) — it receives a single "teaching disabled" signal and enforces it both client-side (hide affordances) and server-side (reject the ops fail-loud, so the hidden UI can't be bypassed).
+- [x] **LOCK-01**: The embedding host can disable the assist/teaching features (AI hint, move-quality heatmap, AI-vs-AI demo, tutorial) via the iframe so they cannot be used to cheat in a real game. Action help stays enabled. BoardSmith is host-agnostic (no "ranked" concept) — it receives a single "teaching disabled" signal and enforces it both client-side (hide affordances) and server-side (reject the ops fail-loud, so the hidden UI can't be bypassed).
 
 ## v2 Requirements
 
