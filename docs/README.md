@@ -13,6 +13,7 @@ This folder contains documentation for the BoardSmith game framework.
 | [UI Components](./ui-components.md) | Vue components and composables |
 | [AI System](./ai-system.md) | MCTS bot and AI integration |
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
+| [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, AI hints, narrated demo, heatmap, action help, and host lockout |
 | [LLM Overview](./llm-overview.md) | Quick-reference for LLMs |
 | [Nomenclature](./nomenclature.md) | Standard terminology reference |
 
