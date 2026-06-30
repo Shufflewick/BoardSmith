@@ -433,9 +433,10 @@ help(text: string): this {
 This sets `ActionDefinition.help` (declared in `src/engine/action/types.ts`), which propagates through `buildActionMetadata` into `ActionMetadata.help`. The `ActionHelpPopover` component surfaces it as a "?" affordance — hovering or tapping shows the help text.
 
 ```typescript
-// Example from go-fish: explain the ask action
+// Real example from go-fish (src/rules/actions.ts) — the authored ASK_HELP_TEXT
 Action.create('ask')
-  .help('Ask another player if they have a card of a specific rank. If they do, you take it and your turn continues.')
+  .prompt('Ask another player for cards')
+  .help('Ask an opponent for a rank you already hold. If they have it they give you all of them and you go again; if not, you draw from the pond (Go Fish!).')
   .chooseFrom(...)
 ```
 
