@@ -260,6 +260,31 @@ describe('allow-list gate — unchanged by MR-02 refactor', () => {
     expect(getGateReasonForValue(step, 'move', { id: 1 }, 'piece')).toBeNull();
     expect(getGateReasonForValue(step, 'move', { toNotation: 'x5' }, 'destination')).toBeNull();
   });
+
+  it('selections: primitive rank string matched via { value } key — allows matching, blocks non-matching', () => {
+    const step: TutorialStep = {
+      id: 's',
+      gate: { action: 'ask', selections: { rank: { value: '7' } } },
+    };
+    // (a) matching primitive string: should be allowed (returns null).
+    // FAILS against current code — the opening guard returns false for all primitives.
+    expect(getGateReasonForValue(step, 'ask', '7', 'rank')).toBeNull();
+    // (b) non-matching string: gated (returns non-null reason)
+    expect(getGateReasonForValue(step, 'ask', 'K', 'rank')).not.toBeNull();
+    // (c) strict equality: number 7 must NOT match string '7'
+    expect(getGateReasonForValue(step, 'ask', 7, 'rank')).not.toBeNull();
+  });
+
+  it('selections: existing object field-equality path unchanged after primitive-matcher change (regression guard)', () => {
+    const step: TutorialStep = {
+      id: 's',
+      gate: { action: 'ask', selections: { target: { value: 2 } } },
+    };
+    // matching object via general field equality: allowed
+    expect(getGateReasonForValue(step, 'ask', { value: 2, display: 'Bob' }, 'target')).toBeNull();
+    // non-matching object: gated
+    expect(getGateReasonForValue(step, 'ask', { value: 3, display: 'Cat' }, 'target')).not.toBeNull();
+  });
 });
 
 // ============================================================
