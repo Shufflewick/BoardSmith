@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.2
 milestone_name: Tutorial Primitives — Go Fish & Docs — Phases 112–115
-status: completed
+status: executing
 stopped_at: v4.2 roadmap created — Phases 112–115 defined
-last_updated: "2026-06-30T15:18:05.812Z"
-last_activity: 2026-06-30 -- Phase 112 marked complete
+last_updated: "2026-06-30T15:48:38.265Z"
+last_activity: 2026-06-30
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 7
+  completed_plans: 5
   percent: 25
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 112 — go-fish-tutorial-content
+**Current focus:** Phase 113 — go-fish-ai-teaching
 
 ## Current Position
 
-Phase: 112 — COMPLETE
-Plan: 4 of 4
-Status: Phase 112 complete
-Last activity: 2026-06-30 -- Phase 112 marked complete
+Phase: 113 (go-fish-ai-teaching) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-06-30
 
-Progress: [████████░░] 75%
+Progress: [███████░░░] 71%
 
 ## Milestones
 
@@ -130,6 +130,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - demoAbort checked before AND after delay (RESEARCH Pitfall 1) — critical for timer-leak-free cancellation (CLAUDE.md hard rule).
 - demoStart/demoStop in Op union but NOT in executeOp switch — host lifecycle ops; fallback error if they reach executeOp.
 - Demo tests stub aiSuggest to avoid MCTS setImmediate conflicts with vi.useFakeTimers().
+- [Phase ?]: Go-fish move hint wiring
 
 ### Highest-Risk Items
 
@@ -157,7 +158,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-30T04:44:18.600Z
+Last session: 2026-06-30T15:48:26.419Z
 Stopped at: v4.2 roadmap created — Phases 112–115 defined
 Resume file: None
 Next action: `/gsd:plan-phase 112`

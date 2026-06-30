@@ -69,7 +69,7 @@
   2. A player can start a narrated AI-vs-AI go-fish demo in which each move is announced in the narration card before it executes, using the same demo infrastructure as checkers.
   3. The hint clears on the next player action and the demo can be stopped mid-game, both without leaving orphaned state (mirrors v4.1's R-06 and demo-stop correctness criteria).
 **Plans**: 3 plans
-- [ ] 113-01-PLAN.md — getGoFishHintTarget hook + gameDefinition.ai wiring + card-group rank anchor + hint-target.test.ts (GFAI-01, Wave 1)
+- [x] 113-01-PLAN.md — getGoFishHintTarget hook + gameDefinition.ai wiring + card-group rank anchor + hint-target.test.ts (GFAI-01, Wave 1)
 - [ ] 113-02-PLAN.md — AI-vs-AI narrated demo integration test (narrate-before-execute + clean stop), substrate-driven (GFAI-02, Wave 1)
 - [ ] 113-03-PLAN.md — browser human-verify checkpoint: hint ring on rank cards + narrated demo, dev server killed (GFAI-01, GFAI-02, Wave 2)
 **UI hint**: yes
@@ -102,6 +102,6 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 112. Go-Fish Tutorial Content | 4/4 | Complete   | 2026-06-30 |
-| 113. Go-Fish AI Teaching | 0/3 | Not started | - |
+| 113. Go-Fish AI Teaching | 1/3 | In Progress|  |
 | 114. Go-Fish Action Help & Host Lockout | 0/? | Not started | - |
 | 115. Developer Documentation | 0/? | Not started | - |
