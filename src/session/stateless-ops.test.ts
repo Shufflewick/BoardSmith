@@ -755,6 +755,139 @@ describe('executeOp', () => {
 
   });
 
+  // ── teachingDisabled lockout (Plan 111-02) ────────────────────────────────
+  //
+  // When gameOptions.teachingDisabled is true, hint / heatmapToggle / startTutorial
+  // must each return a protocol error with the canonical lockout message. exitTutorial
+  // must remain functional (D-06). Default (absent/false) leaves all ops working.
+
+  describe('teachingDisabled lockout guards', () => {
+
+    // Re-use a minimal BotGame (2 choices) for hint + heatmapToggle tests.
+    class LockBotGame extends Game<LockBotGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create('move')
+            .chooseFrom('direction', { choices: ['left', 'right'] })
+            .execute(() => ({ success: true })),
+        );
+        this.setFlow(defineFlow({
+          root: loop({
+            maxIterations: 100,
+            do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! }),
+          }),
+        }));
+      }
+    }
+
+    const lockBotAI: AIConfig = {
+      objectives: (_game, _playerIndex) => ({
+        moves: { checker: () => 0.5, weight: 1 },
+      }),
+    };
+
+    const lockBotDef: GameDefinitionLike & { ai?: AIConfig; tutorial?: TutorialDefinition } = {
+      gameClass: LockBotGame as new (...args: unknown[]) => unknown,
+      gameType: 'lock-bot',
+      minPlayers: 1,
+      maxPlayers: 2,
+      ai: lockBotAI,
+      tutorial: {
+        steps: [{ id: 'step-1', gate: { action: 'move' }, content: [{ text: 'Make a move.' }] }],
+      },
+    };
+
+    const lockedOpts = { playerCount: 2, seed: 'lock-seed', teachingDisabled: true };
+    const openOpts = { playerCount: 2, seed: 'lock-seed' };
+
+    async function startLockGame() {
+      const res = await executeOp(lockBotDef, openOpts, null, null, { type: 'start' });
+      if (!res.success) throw new Error('start failed');
+      return res.snapshot;
+    }
+
+    it('hint returns a protocol lockout error when teachingDisabled is true', async () => {
+      const snapshot = await startLockGame();
+      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, { type: 'hint', seat: 1 });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toBe('Teaching features are disabled for this session.');
+    });
+
+    it('hint succeeds normally when teachingDisabled is absent', async () => {
+      const snapshot = await startLockGame();
+      const res = await executeOp(lockBotDef, openOpts, snapshot, null, { type: 'hint', seat: 1 });
+
+      expect(res.success).toBe(true);
+      expect(res.hintAnnotation).toBeDefined();
+    });
+
+    it('heatmapToggle returns a protocol lockout error when teachingDisabled is true', async () => {
+      const snapshot = await startLockGame();
+      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, {
+        type: 'heatmapToggle', seat: 1, visible: true,
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toBe('Teaching features are disabled for this session.');
+    });
+
+    it('heatmapToggle visible=false also returns a lockout error when teachingDisabled is true', async () => {
+      const snapshot = await startLockGame();
+      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, {
+        type: 'heatmapToggle', seat: 1, visible: false,
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toBe('Teaching features are disabled for this session.');
+    });
+
+    it('startTutorial returns a protocol lockout error when teachingDisabled is true', async () => {
+      const snapshot = await startLockGame();
+      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, {
+        type: 'startTutorial', player: 1,
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.category).toBe('protocol');
+      expect(res.error).toBe('Teaching features are disabled for this session.');
+    });
+
+    it('exitTutorial succeeds even when teachingDisabled is true (D-06)', async () => {
+      // Start the tutorial in an open session first so we have a tutorial-in-progress snapshot.
+      const snapshot = await startLockGame();
+      const started = await executeOp(lockBotDef, openOpts, snapshot, null, {
+        type: 'startTutorial', player: 1,
+      });
+      expect(started.success).toBe(true);
+
+      // exitTutorial under the locked options must still succeed.
+      const res = await executeOp(lockBotDef, lockedOpts, started.snapshot, null, {
+        type: 'exitTutorial', player: 1,
+      });
+
+      expect(res.success).toBe(true);
+    });
+
+    it('teachingDisabled:false leaves all three ops functional', async () => {
+      const falseOpts = { ...openOpts, teachingDisabled: false };
+      const snapshot = await startLockGame();
+
+      const hintRes = await executeOp(lockBotDef, falseOpts, snapshot, null, { type: 'hint', seat: 1 });
+      expect(hintRes.success).toBe(true);
+
+      const tutRes = await executeOp(lockBotDef, falseOpts, snapshot, null, {
+        type: 'startTutorial', player: 1,
+      });
+      expect(tutRes.success).toBe(true);
+    });
+
+  });
+
   // ── aiSuggest op (Plan 110-03) ────────────────────────────────────────────
   //
   // Read-only preview: runs MCTS and returns suggestedAction/suggestedArgs

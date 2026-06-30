@@ -534,6 +534,10 @@ async function handleHint(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'hint' }>,
 ): Promise<OpResult> {
+  // Fail-loud: teaching features locked out by the host.
+  if (gameOptions.teachingDisabled) {
+    return errorResult('Teaching features are disabled for this session.', 'protocol');
+  }
   // Fail-loud: no AI config means hint is impossible.
   if (!def.ai?.objectives) {
     return errorResult('No AI configuration on this game — hint is unavailable.', 'protocol');
@@ -597,6 +601,11 @@ async function handleHeatmapToggle(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'heatmapToggle' }>,
 ): Promise<OpResult> {
+  // Fail-loud: teaching features locked out by the host.
+  if (gameOptions.teachingDisabled) {
+    return errorResult('Teaching features are disabled for this session.', 'protocol');
+  }
+
   const runner = runnerFromSnapshot(snapshot, def);
 
   // WR-02: validate seat range before the visible=false short-circuit so that
@@ -1012,6 +1021,10 @@ export async function executeOp(
       case 'aiSuggest':
         return handleAISuggest(def, gameOptions, snap, op);
       case 'startTutorial': {
+        // Fail-loud: teaching features locked out by the host.
+        if (gameOptions.teachingDisabled) {
+          return errorResult('Teaching features are disabled for this session.', 'protocol');
+        }
         if (!def.tutorial) {
           return errorResult('No tutorial definition on this game.', 'protocol');
         }
