@@ -491,6 +491,17 @@ export interface PlayerGameState {
    * wire shape lean (not `false`, just absent).
    */
   hasTutorial?: boolean;
+  /**
+   * Session-layer only, never serialized. True when the host created this session
+   * with `teachingDisabled: true` (LOCK-01). Reflected unconditionally into every
+   * broadcast player state so reconnecting clients and second windows derive their
+   * gating from session truth rather than a local init message that may not replay.
+   *
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()` (D-03).
+   * Always present (both true and false) so consumers can rely on it without
+   * undefined-checks.
+   */
+  teachingDisabled?: boolean;
 }
 
 // ============================================

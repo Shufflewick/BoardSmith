@@ -102,6 +102,18 @@ export interface GameSessionOptions<G extends Game = Game> {
    * `botAIConfig` reaches `AIController` without touching the serialized state.
    */
   tutorial?: TutorialDefinition;
+  /**
+   * When `true`, disables all teaching/assist features for this session (LOCK-01).
+   *
+   * The four assist ops — requestHint, setHeatmapVisible, startDemo, startTutorial —
+   * are rejected fail-loud with "Teaching features are disabled for this session."
+   * Action help (help-toggle) and exitTutorial are never gated (D-06).
+   *
+   * This is a host anti-cheat control, not a game rule. Keeping it separate from
+   * `gameOptions` prevents collision with a game that names its own option
+   * `teachingDisabled` (D-01).
+   */
+  teachingDisabled?: boolean;
 }
 
 /**
@@ -252,6 +264,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #demoDelay = 1200;
   /** Narration hook closure used as onBeforeMove in demo mode. Cleared by stopDemo(). */
   #onBeforeMove?: (action: string, player: number, args: Record<string, unknown>) => Promise<void>;
+  /**
+   * When true, the four teach/assist ops are rejected fail-loud (LOCK-01, D-01).
+   * Set once at construction from `GameSessionOptions.teachingDisabled`; never toggled.
+   */
+  #teachingDisabled = false;
 
   private constructor(
     runner: GameRunner<G>,
@@ -263,7 +280,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     lobbyManager?: LobbyManager<TSession>,
     pickHandler?: PickHandler<G>,
     pendingActionManager?: PendingActionManager<G>,
-    botAIConfig?: BotAIConfig
+    botAIConfig?: BotAIConfig,
+    teachingDisabled?: boolean
   ) {
     this.#runner = runner;
     this.#storedState = storedState;
@@ -273,6 +291,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#displayName = displayName;
     this.#lobbyManager = lobbyManager;
     this.#botAIConfig = botAIConfig;
+    this.#teachingDisabled = teachingDisabled ?? false;
     // Capture the tutorial definition from the initial runner so replaceRunner
     // can re-supply it (tutorial is excluded from snapshot.gameOptions and is
     // therefore absent on runners created by fromCheckpoint / fromSnapshot).
@@ -495,6 +514,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       minPlayers,
       maxPlayers,
       tutorial,
+      teachingDisabled,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -677,7 +697,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Explicit annotation breaks the type-inference cycle: the lobby callbacks
     // capture `getSession: () => session` above, so `session` must have a known
     // type independent of its own initializer.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig, teachingDisabled);
 
     // Persist initial state (fire-and-forget to keep create synchronous)
     if (storage) {
@@ -950,6 +970,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * "Hint unavailable" toast — no fallback/silent failure.
    */
   async requestHint(seat: number): Promise<void> {
+    if (this.#teachingDisabled) {
+      throw new Error('Teaching features are disabled for this session.');
+    }
     const flowState = this.#runner.getFlowState();
     if (!flowState || !canSeatAct(flowState, seat)) {
       throw new Error(`Cannot hint: seat ${seat} is not awaiting input`);
@@ -1039,6 +1062,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * is expensive and concurrent searches serve no purpose.
    */
   async setHeatmapVisible(seat: number, visible: boolean): Promise<void> {
+    if (this.#teachingDisabled) {
+      throw new Error('Teaching features are disabled for this session.');
+    }
     if (!visible) {
       this.#heatmap.set(seat, { visible: false, entries: [] });
       this.broadcast();
@@ -1145,6 +1171,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     narrator?: (action: string, player: number, args: Record<string, unknown>) => string;
     delay?: number;
   }): void {
+    if (this.#teachingDisabled) {
+      throw new Error('Teaching features are disabled for this session.');
+    }
     // Idempotency guard: a second call before stopDemo() would overwrite
     // #savedAIController with the demo controller, making stopDemo() unable to
     // restore the original. Return early to prevent that corruption.
@@ -1884,6 +1913,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * @param seat - 1-indexed seat number of the learner.
    */
   startTutorial(seat: number): void {
+    if (this.#teachingDisabled) {
+      throw new Error('Teaching features are disabled for this session.');
+    }
     this.#tutorialController.start(seat);
   }
 
@@ -1976,6 +2008,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // isDemoRunning broadcast so all windows derive their state from the
       // session rather than local Vue refs (WR-04).
       if (this.#demoMode) state.isDemoRunning = true;
+      // teachingDisabled broadcast unconditionally (both true and false) so
+      // reconnecting clients and second windows always read the authoritative
+      // session value rather than relying on a local init message (D-03, LOCK-01).
+      state.teachingDisabled = this.#teachingDisabled;
 
       const update: StateUpdate = {
         type: 'state',
