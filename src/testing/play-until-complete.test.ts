@@ -270,11 +270,14 @@ describe('playUntilComplete — TEST-02', () => {
 
     it('GameStuckError from maxMoves carries the capped iteration count', () => {
       const maxMoves = 2;
+      // Use strategy:'first' to make the test deterministic — always picks value=1,
+      // so total increases by 1 per move. 2 moves → total=2 < 6 → game cannot complete
+      // in 2 moves, ensuring the cap always fires.
       const testGame = TestGame.create(PickGame, { playerCount: 2, seed: 'maxmoves-iter' });
 
       let caught: GameStuckError | undefined;
       try {
-        playUntilComplete(testGame, { maxMoves });
+        playUntilComplete(testGame, { maxMoves, strategy: 'first' });
       } catch (e) {
         if (e instanceof GameStuckError) caught = e;
       }
@@ -339,27 +342,32 @@ describe('playUntilComplete — TEST-02', () => {
 // produce infinite awaitingInput=false loops.
 //
 // Behavior pinned here:
-//   (a) A game needing exactly N player moves completes with maxMoves=N.
-//   (b) A game needing exactly N+1 player moves fails with maxMoves=N.
+//   (a) Sequential game: cap fires between player turns (1 seat per iteration).
+//   (b) Simultaneous game: all seats in one step act in 1 iteration, so the
+//       cap does not interrupt mid-step. The game completes if all required
+//       seats act in a single iteration.
 //   (c) GameStuckError message mentions "player moves" when the cap fires.
 // ---------------------------------------------------------------------------
 describe('WR-02 regression — maxMoves bounds player moves', () => {
-  it('completes a 2-player simultaneous game with maxMoves=2 (2 player moves needed)', () => {
-    // SimGame: 2 players × 1 move each = 2 player moves total.
-    // maxMoves=2 should be exactly enough.
+  it('completes a 2-player simultaneous game with maxMoves=2 (all seats act in 1 iteration)', () => {
+    // SimGame: both players are in activeSeats together, acting in 1 iteration.
+    // maxMoves=2 is generous; even maxMoves=1 would complete because all seats
+    // act before the cap is re-checked (cap is per outer iteration, not per seat).
     const testGame = TestGame.create(SimGame, { playerCount: 2, seed: 'wr02-pass' });
     expect(() => playUntilComplete(testGame, { maxMoves: 2 })).not.toThrow();
     expect(testGame.isComplete()).toBe(true);
   });
 
-  it('throws GameStuckError with maxMoves=1 when 2 player moves are needed', () => {
-    // maxMoves=1: only 1 player move is allowed; the second player cannot act.
-    const testGame = TestGame.create(SimGame, { playerCount: 2, seed: 'wr02-fail' });
+  it('throws GameStuckError with maxMoves=1 on a sequential game needing >1 turns', () => {
+    // PickGame (sequential, eachPlayer): each outer iteration processes one seat.
+    // maxMoves=1 allows 1 outer iteration (player 1 acts), then the cap fires before
+    // player 2 has a chance to act. PickGame needs 6 player moves to complete.
+    const testGame = TestGame.create(PickGame, { playerCount: 2, seed: 'wr02-fail' });
     expect(() => playUntilComplete(testGame, { maxMoves: 1 })).toThrow(GameStuckError);
   });
 
   it('GameStuckError message mentions player moves when the cap fires', () => {
-    const testGame = TestGame.create(SimGame, { playerCount: 2, seed: 'wr02-msg' });
+    const testGame = TestGame.create(PickGame, { playerCount: 2, seed: 'wr02-msg' });
     let caught: GameStuckError | undefined;
     try {
       playUntilComplete(testGame, { maxMoves: 1 });
@@ -371,8 +379,8 @@ describe('WR-02 regression — maxMoves bounds player moves', () => {
     expect(caught!.message).toMatch(/player moves/i);
   });
 
-  it('completes a 3-player simultaneous game with maxMoves=3 (3 player moves needed)', () => {
-    // SimGame with 3 players: 3 player moves needed.
+  it('completes a 3-player simultaneous game with maxMoves=3', () => {
+    // SimGame with 3 players: all 3 seats act in a single iteration.
     const testGame = TestGame.create(SimGame, { playerCount: 3, seed: 'wr02-3p' });
     expect(() => playUntilComplete(testGame, { maxMoves: 3 })).not.toThrow();
     expect(testGame.isComplete()).toBe(true);
