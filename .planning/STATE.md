@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.1
-milestone_name: Tutorial Primitives
-status: Awaiting next milestone
-stopped_at: DEMO-01 approved — Phase 110 complete
-last_updated: "2026-06-30T02:36:35.818Z"
-last_activity: 2026-06-30 — Milestone v4.1 completed and archived
+milestone: v4.2
+milestone_name: Tutorial Primitives — Go Fish & Docs
+status: planning
+last_updated: "2026-06-30T02:57:51.518Z"
+last_activity: 2026-06-30
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 35
-  completed_plans: 35
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 
 ## Current Position
 
-Phase: Milestone v4.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-30 — Milestone v4.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-30 — Milestone v4.2 started
 
 ## Milestones
 

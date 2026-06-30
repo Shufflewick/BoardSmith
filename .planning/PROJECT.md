@@ -8,9 +8,18 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State
+## Current Milestone: v4.2 Tutorial Primitives — Go Fish & Docs
 
-**No active milestone** — v4.1 shipped 2026-06-30. Run `/gsd:new-milestone` to start the next cycle. The deliberate next stretch bed is **cribbage (v2 CRIB)** — apply the now-proven tutorial primitives to a rules-dense, 5-phase game.
+**Goal:** Prove the v4.1 tutorial substrate generalizes beyond a grid board by applying it to go-fish (a hidden-information card game), and write the developer documentation for authoring tutorials and teaching features.
+
+**Target features:**
+- **Go-fish tutorial (CI-verifiable)** — guided *ask-for-a-rank* (action gating + annotation overlay), a *Go Fish!* draw predicate-tip, *forming a book*, and *turn-continues-on-a-hit* continuation; launchable in GameShell + `boardsmith dev`.
+- **AI teaching for go-fish** — MCTS move hint (target highlighted on cards/hand via `anchorAttrs`) + narrated AI-vs-AI demo, reusing go-fish's existing `ai.ts` bot. **Heatmap excluded** — it shades board cells and go-fish has no grid; documented as a board-only feature.
+- **Action help** — per-action help text on go-fish actions + the global toggle.
+- **Host lockout** — verify the v4.1 `teachingDisabled` lockout gates go-fish's teaching affordances (client hide + server fail-loud), with action help staying enabled.
+- **Developer documentation** — a full authoring guide covering the whole substrate (tutorial definition/lifecycle, annotation overlay, action gating, predicate triggers, CI-verifiable authoring, AI teaching, action help, host lockout), with checkers (grid) + go-fish (cards) as worked examples.
+
+**Key context:** go-fish is cards-only with hidden information and **no board grid** — it is the deliberate second showcase that proves the substrate's parity beyond grid boards (overlays anchor to cards/hands/actions, not cells). The substrate already lives in BoardSmith `src/` (built in v4.1); go-fish tutorial content lands cross-repo in `~/BoardSmithGames/go-fish` (symlinked to `node_modules/boardsmith`), and the docs land in BoardSmith `docs/`. Reuses go-fish's existing MCTS bot — no new training. Cribbage (rules-dense, 5 phases) remains the deferred phase-3 stretch bed.
 
 ## Previous: v4.1 Shipped
 
@@ -364,4 +373,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-30 — after v4.1 Tutorial Primitives (Checkers) milestone shipped*
+*Last updated: 2026-06-30 — started v4.2 Tutorial Primitives — Go Fish & Docs milestone*
