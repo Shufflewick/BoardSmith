@@ -334,6 +334,23 @@ export function playUntilComplete<G extends Game>(
       activeSeats.push(flowState.currentPlayer);
     }
 
+    // ── Engine-invariant guard: awaitingInput with no active seats ─────────
+    // If the engine says input is needed but cannot identify any active seat,
+    // this is an engine-state inconsistency. Throw immediately rather than
+    // burning the entire iteration budget on no-op loops before the cap fires.
+    if (!testGame.isComplete() && activeSeats.length === 0) {
+      const availableActions = _collectAvailableActions(flowState);
+      throw new GameStuckError(
+        `Game stuck at iteration ${i}: flow reports awaitingInput but no active seats ` +
+        `could be determined (currentPlayer=${flowState.currentPlayer}, ` +
+        `awaitingPlayers=${JSON.stringify(flowState.awaitingPlayers ?? [])}). ` +
+        `This is likely an engine-state inconsistency.`,
+        i,
+        availableActions,
+        flowState,
+      );
+    }
+
     // ── Enumerate and pick a move for each active seat ─────────────────────
     let anyMoveMade = false;
     const moveFailures: string[] = [];
