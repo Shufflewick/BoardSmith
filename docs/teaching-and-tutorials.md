@@ -397,7 +397,7 @@ startDemo(options?: {
 stopDemo(): void
 ```
 
-The default narrator formats: `"PlayerName: actionName destination"`. Supply a custom `narrator` for games with rich arg types (objects, nested references) where the default JSON formatting reads poorly.
+The default narrator formats: `"PlayerName: actionName destination"` — it uses a destination-extraction heuristic (`describeMoveDestination`) rather than dumping JSON. Supply a custom `narrator` for games with rich arg types (objects, nested references) where that heuristic cannot produce a readable move description.
 
 Internally, `startDemo` saves the current `AIController`, builds an all-seats AI controller, installs an `onBeforeMove` hook that sets `#narrationText` and broadcasts before each move, then starts the AI loop. `stopDemo` restores the original controller and clears the narration hook.
 
@@ -557,8 +557,8 @@ Both games anchor tutorial annotations to game elements, but via different ref f
   gate: {
     action: 'ask',
     selections: {
-      target: { value: 2 },   // opponent (primitive number wrapped in { value })
-      rank: { value: '7' },   // rank '7' as primitive string
+      target: { value: 2 },   // opponent at seat 2; { value, display } choice object — matched via field equality
+      rank: { value: '7' },   // rank '7' as primitive string — matched via the { value } primitive branch
     },
   },
   content: [
