@@ -255,12 +255,14 @@ export function assertActionNotAvailable(
 ): void {
   const flowState = testGame.getFlowState();
 
-  // If it's not this player's turn, action is definitely not available
-  if (flowState?.currentPlayer !== playerSeat) {
+  // If the seat cannot act at all, the action is definitely not available.
+  // Uses canSeatAct() to handle both sequential (currentPlayer) and
+  // simultaneous (awaitingPlayers) turns correctly.
+  if (!canSeatAct(flowState, playerSeat)) {
     return;
   }
 
-  const availableActions = flowState?.availableActions ?? [];
+  const availableActions = availableActionsForSeat(flowState, playerSeat);
   if (availableActions.includes(actionName)) {
     throw new Error(
       `Action "${actionName}" should NOT be available for player ${playerSeat}, but it is`
