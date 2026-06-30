@@ -52,7 +52,11 @@
   4. The tutorial demonstrates that a successful ask lets the same player go again (the turn does not end on a hit).
   5. The go-fish tutorial is launchable from within the game in both GameShell and the `boardsmith dev` host, identical to the checkers tutorial entry point.
   6. `tutorial.test.ts` (or equivalent) in the go-fish repo uses `simulateTutorial` + `assertTutorialCompletes` and fails (goes red) when a go-fish rule is deliberately broken.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 112-01-PLAN.md — BoardSmith selectionMatchesValue primitive-matcher fix + unit test (Wave 1)
+- [ ] 112-02-PLAN.md — go-fish tutorial preset + GO_FISH_TUTORIAL definition + gameDefinition wiring (Wave 2)
+- [ ] 112-03-PLAN.md — CI-verifiable tutorial.test.ts walkthrough + green→red proof (Wave 3)
+- [ ] 112-04-PLAN.md — browser smoke checkpoint: launchable in both hosts + card-anchored overlay (Wave 3)
 **UI hint**: yes
 
 ### Phase 113: Go-Fish AI Teaching
