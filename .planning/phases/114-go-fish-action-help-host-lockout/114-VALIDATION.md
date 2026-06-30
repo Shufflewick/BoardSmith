@@ -1,9 +1,9 @@
 ---
 phase: 114
 slug: go-fish-action-help-host-lockout
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-30
 ---
 

@@ -1,9 +1,9 @@
 ---
 phase: 113
 slug: go-fish-ai-teaching
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-06-30
 ---
 
