@@ -83,7 +83,10 @@
   1. Hovering or tapping any go-fish action (ask for a rank, draw from deck) reveals author-supplied help text; the global "Show action help" toggle shows and hides it correctly.
   2. When the host sets `teachingDisabled`, the go-fish hint button, AI-demo button, and tutorial entry point are all hidden in the UI and the corresponding ops are rejected fail-loud at the server — exactly as checkers' affordances are gated.
   3. When `teachingDisabled` is set, action help text remains visible and functional for go-fish actions (action help is not a teaching affordance).
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 114-01-PLAN.md — GFHELP-01: add `.help()` to the go-fish `ask` action + integration test asserting ActionMetadata.help propagation
+- [ ] 114-02-PLAN.md — GFLOCK-01: go-fish host-lockout test (locked session: hint/demo/tutorial throw fail-loud; action help stays — both halves)
+- [ ] 114-03-PLAN.md — Browser checkpoint: ask help reveals in the custom-UI dock + `--lock-teaching` hides the Teaching group while keeping "Show action help" (autonomous:false, kills dev server)
 
 ### Phase 115: Developer Documentation
 **Goal**: A developer can author a BoardSmith tutorial, predicate triggers, CI-verifiable tests, AI teaching features, action help, and host lockout by reading a single guide — illustrated with both a grid game (checkers) and a card game (go-fish) as worked examples.
