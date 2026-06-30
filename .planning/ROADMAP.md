@@ -11,7 +11,7 @@
 
 - [x] **Phase 116: Verification & API Design** — Verify scout friction claims (confirmed/false/partial + evidence) and lock an approved API-design doc; gates all later phases. ✅ 2026-06-30 (3/3 plans, verification passed)
 - [x] **Phase 117: Action-Space Introspection** — Keystone: one serializable entry point for every legal action (selections, choices, `dependsOn`, arg templates) + per-action schema, validated arg-building, legal-move enumeration, perspective-aware state view. ✅ 2026-06-30 (4/4 plans, verification 6/6, code review clean)
-- [ ] **Phase 118: Test Ergonomics** — Typed observable state, `playUntilComplete` with stuck-game diagnostics, auto-trace on failed availability assertions, permissive-vs-exact action assertions, multi-step selection builder.
+- [x] **Phase 118: Test Ergonomics** — Typed observable state, `playUntilComplete` with stuck-game diagnostics, auto-trace on failed availability assertions, permissive-vs-exact action assertions, multi-step selection builder. ✅ 2026-06-30 (4/4 plans, verification 6/6, code review fixed 3 critical simultaneous-turn bugs)
 - [ ] **Phase 119: Dev-Host Devtools Bridge** — Stable `data-element-id` selectors (custom UI + AutoUI), read-only `window.__BOARDSMITH_DEVTOOLS`, observable action-resolved signal — browser-proven.
 - [ ] **Phase 120: Authoring Pit-of-Success Guards** — Fail-fast `maxIterations`, element-registration validation, flow-reachability validation, and lint coverage for confirmed identity/state footguns.
 - [ ] **Phase 121: Game & MERC Migration** — Migrate all `~/BoardSmithGames/` games onto the new APIs, keep BoardSmith green, re-vendor + verify the MERC canary.
