@@ -10,6 +10,50 @@ import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
+import { availableActionsForSeat } from '../flow/index.js';
+import { buildActionMetadata } from './action-metadata.js';
+import type { ActionMetadata, PickMetadata } from '../../session/types.js';
+
+// ---------------------------------------------------------------------------
+// INTRO-01 / INTRO-02 view types
+// ---------------------------------------------------------------------------
+
+/**
+ * A ready-to-submit argument template for one action.
+ * - Optional selections → `null`  (valid to omit)
+ * - Required selections → `{ __required: true }`  (must be filled before submit)
+ *
+ * Design decision D-01: the sentinel object for required picks makes the
+ * template self-describing — any tool inspecting it can identify unfilled
+ * required slots without re-reading the PickMetadata array.
+ */
+export type ArgTemplate = Record<string, null | { __required: true }>;
+
+/**
+ * Schema view for a single legal action: static metadata + a D-01 arg template.
+ * Plain JSON-serializable — safe to send over WebSocket / postMessage.
+ */
+export interface ActionSchemaView {
+  name: string;
+  prompt?: string;
+  help?: string;
+  /** Ordered list of static selection metadata (choices fetched on-demand) */
+  selections: PickMetadata[];
+  /**
+   * Ready-to-submit argument template — one key per selection.
+   * Placeholder values: null = optional, { __required: true } = required.
+   */
+  argTemplate: ArgTemplate;
+}
+
+/**
+ * The full action space for one seat: every legal action with its schema.
+ * Plain JSON-serializable.
+ */
+export interface ActionSpaceView {
+  /** Only the actions this seat can legally execute right now */
+  actions: ActionSchemaView[];
+}
 
 /**
  * A Map-like structure that persists through HMR by syncing to game.settings.
@@ -944,6 +988,77 @@ export class Game<
     if (!selection) return [];
 
     return this._actionExecutor.getChoices(selection, player, args, actionName);
+  }
+
+  // -------------------------------------------------------------------------
+  // INTRO-01: getActionSpace — full legal action space for a seat
+  // -------------------------------------------------------------------------
+
+  /**
+   * Return every action this seat can legally execute right now, each with its
+   * static selection metadata and a D-01 `argTemplate`.
+   *
+   * Implementation order (locked — do NOT call evaluateCondition directly):
+   *   1. availableActionsForSeat(this.getFlowState(), seat) → string[]
+   *   2. resolve Player for seat; return { actions: [] } if absent
+   *   3. buildActionMetadata(this, player, actionNames) → condition-checked metadata
+   *   4. map each ActionMetadata → ActionSchemaView, deriving argTemplate per D-01
+   *
+   * The returned object is plain JSON-serializable (no element refs).
+   *
+   * @param seat - Player seat (1-indexed)
+   */
+  getActionSpace(seat: number): ActionSpaceView {
+    const actionNames = availableActionsForSeat(this.getFlowState(), seat);
+    const player = this.getPlayer(seat);
+    if (!player) return { actions: [] };
+
+    // buildActionMetadata handles condition re-checking internally — no parallel validator
+    const metadata = buildActionMetadata(this, player, actionNames);
+
+    const actions: ActionSchemaView[] = Object.values(metadata).map((m: ActionMetadata) => {
+      const argTemplate: ArgTemplate = {};
+      for (const sel of m.selections) {
+        argTemplate[sel.name] = sel.optional ? null : { __required: true };
+      }
+      return {
+        name: m.name,
+        ...(m.prompt !== undefined && { prompt: m.prompt }),
+        ...(m.help !== undefined && { help: m.help }),
+        selections: m.selections,
+        argTemplate,
+      };
+    });
+
+    return { actions };
+  }
+
+  // -------------------------------------------------------------------------
+  // INTRO-02: getActionSchema — single-action convenience method
+  // -------------------------------------------------------------------------
+
+  /**
+   * Return the static `ActionMetadata` for one action name from this seat's
+   * perspective, or `undefined` if the action is unknown or the seat has no
+   * player.
+   *
+   * Unlike `getActionSpace`, this does NOT filter by availability — it returns
+   * the schema even for actions whose condition is currently false (mirrors
+   * `buildSingleActionMetadata` semantics). Use `getActionSpace` when you
+   * need condition-checked actions only.
+   *
+   * Implemented by delegating to `buildActionMetadata` with a single-item list
+   * to avoid any engine→session runtime cycle.
+   *
+   * @param actionName - Registered action name
+   * @param seat - Player seat (1-indexed)
+   */
+  getActionSchema(actionName: string, seat: number): ActionMetadata | undefined {
+    const player = this.getPlayer(seat);
+    if (!player) return undefined;
+
+    const metadata = buildActionMetadata(this, player, [actionName]);
+    return metadata[actionName];
   }
 
   /**

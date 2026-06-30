@@ -59,7 +59,7 @@ class SpaceGame extends Game<SpaceGame, Player> {
           choices: ['quiet', 'loud'],
           optional: true,
         })
-        .execute(() => ({})),
+        .execute(() => {}),
     );
 
     /**
@@ -68,7 +68,7 @@ class SpaceGame extends Game<SpaceGame, Player> {
     this.registerAction(
       Action.create<SpaceGame>('pass')
         .prompt('Pass your turn')
-        .execute(() => ({})),
+        .execute(() => {}),
     );
 
     this.setFlow(

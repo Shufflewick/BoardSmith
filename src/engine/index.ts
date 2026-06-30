@@ -39,6 +39,10 @@ export type {
   LayoutAlignment,
   DieSides,
   AnimationEvent,
+  // INTRO-01/02: action-space introspection view types
+  ActionSpaceView,
+  ActionSchemaView,
+  ArgTemplate,
 } from './element/index.js';
 
 

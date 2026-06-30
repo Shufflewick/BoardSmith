@@ -22,7 +22,7 @@ export type {
   ImageRef,
 } from './types.js';
 
-export type { GameOptions, GamePhase, PlayerViewFunction, AnimationEvent } from './game.js';
+export type { GameOptions, GamePhase, PlayerViewFunction, AnimationEvent, ActionSpaceView, ActionSchemaView, ArgTemplate } from './game.js';
 export type { ElementLayout } from './grid.js';
 export type { HexOrientation, HexCoordSystem } from './hex-grid.js';
 export type { LayoutDirection, LayoutAlignment } from './space.js';
