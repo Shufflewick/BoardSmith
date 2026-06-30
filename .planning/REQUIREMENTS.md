@@ -27,7 +27,7 @@
 - [x] **TEST-02**: A test author can play a game to completion with one call that guards against infinite/stuck loops and throws a structured, actionable diagnostic (e.g. `GameStuckError`) instead of hanging.
 - [x] **TEST-03**: When an availability/action assertion fails, the failure message automatically includes a trace explaining *why* the action is unavailable (which selection/condition failed).
 - [x] **TEST-04**: Action-list assertions support both permissive ("contains these") and exact ("only these") modes, chosen explicitly rather than exact-by-default.
-- [ ] **TEST-05**: A test author can drive multi-step / dependent selections through an ergonomic builder rather than low-level `resolveChoices`/`selectionStep` calls.
+- [x] **TEST-05**: A test author can drive multi-step / dependent selections through an ergonomic builder rather than low-level `resolveChoices`/`selectionStep` calls.
 
 ### Dev-Host Devtools Bridge (DEV)
 
@@ -96,7 +96,7 @@ Which phases cover which requirements. Every v4.3 requirement maps to exactly on
 | TEST-02 | Phase 118 | Complete |
 | TEST-03 | Phase 118 | Complete |
 | TEST-04 | Phase 118 | Complete |
-| TEST-05 | Phase 118 | Pending |
+| TEST-05 | Phase 118 | Complete |
 | DEV-01 | Phase 119 | Pending |
 | DEV-02 | Phase 119 | Pending |
 | DEV-03 | Phase 119 | Pending |

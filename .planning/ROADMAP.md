@@ -68,7 +68,7 @@ Plans:
 - [x] 118-01-PLAN.md — TEST-01: typed observable state (getPlayerView annotation + JSDoc)
 - [x] 118-02-PLAN.md — TEST-02: playUntilComplete + GameStuckError (sequential + simultaneous)
 - [x] 118-03-PLAN.md — TEST-03 + TEST-04: assertion trace + actionsMode (exact/contains)
-- [ ] 118-04-PLAN.md — TEST-05: ActionBuilder multi-step selection builder
+- [x] 118-04-PLAN.md — TEST-05: ActionBuilder multi-step selection builder
 
 ### Phase 119: Dev-Host Devtools Bridge
 **Goal**: Agents (and humans) can drive the `boardsmith dev` host by stable element id and confirm outcomes via an observable signal — no coordinate-clicking, no vision, no polling — in both custom UI and AutoUI.
