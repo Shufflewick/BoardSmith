@@ -35,7 +35,7 @@
 
 - [x] **Phase 112: Go-Fish Tutorial Content** — Four teaching beats (ask-for-rank gating, Go-Fish-draw tip, forming-a-book, turn-continuation) authored in go-fish and launchable in GameShell + `boardsmith dev`, with CI-verifiable test artifact. (completed 2026-06-30)
 - [x] **Phase 113: Go-Fish AI Teaching** — MCTS move hint (anchored to cards/hand via `anchorAttrs`) and narrated AI-vs-AI demo, reusing go-fish's existing bot. (completed 2026-06-30)
-- [ ] **Phase 114: Go-Fish Action Help & Host Lockout** — Per-action help text on go-fish actions and browser-verified proof that `teachingDisabled` gates all teaching affordances on a card game.
+- [x] **Phase 114: Go-Fish Action Help & Host Lockout** — Per-action help text on go-fish actions and browser-verified proof that `teachingDisabled` gates all teaching affordances on a card game. (completed 2026-06-30)
 - [ ] **Phase 115: Developer Documentation** — Full authoring guide covering the whole tutorial substrate + AI teaching + action help + host lockout, with checkers (grid) and go-fish (cards) as worked examples.
 
 ## Phase Details
@@ -86,7 +86,7 @@
 **Plans**: 3 plans
 - [x] 114-01-PLAN.md — GFHELP-01: add `.help()` to the go-fish `ask` action + integration test asserting ActionMetadata.help propagation
 - [x] 114-02-PLAN.md — GFLOCK-01: go-fish host-lockout test (locked session: hint/demo/tutorial throw fail-loud; action help stays — both halves)
-- [ ] 114-03-PLAN.md — Browser checkpoint: ask help reveals in the custom-UI dock + `--lock-teaching` hides the Teaching group while keeping "Show action help" (autonomous:false, kills dev server)
+- [x] 114-03-PLAN.md — Browser checkpoint: ask help reveals in the custom-UI dock + `--lock-teaching` hides the Teaching group while keeping "Show action help" (autonomous:false, kills dev server)
 
 ### Phase 115: Developer Documentation
 **Goal**: A developer can author a BoardSmith tutorial, predicate triggers, CI-verifiable tests, AI teaching features, action help, and host lockout by reading a single guide — illustrated with both a grid game (checkers) and a card game (go-fish) as worked examples.
@@ -106,5 +106,5 @@
 |-------|----------------|--------|-----------|
 | 112. Go-Fish Tutorial Content | 4/4 | Complete   | 2026-06-30 |
 | 113. Go-Fish AI Teaching | 3/3 | Complete   | 2026-06-30 |
-| 114. Go-Fish Action Help & Host Lockout | 2/3 | In Progress|  |
+| 114. Go-Fish Action Help & Host Lockout | 3/3 | Complete   | 2026-06-30 |
 | 115. Developer Documentation | 0/? | Not started | - |
