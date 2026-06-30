@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { Game, Card, Deck, Hand, Space, Player, type ElementJSON } from '../index.js';
+import { Game, Card, Deck, Hand, Space, Player, Action, defineFlow, loop, eachPlayer, actionStep, type ElementJSON, type GameOptions } from '../index.js';
 
 // ---------------------------------------------------------------------------
 // Test fixture types
@@ -508,6 +508,128 @@ describe('WR-01: anonymized zone placeholders must never expose a real element i
         `every anonymized-zone placeholder id must be negative, found ${id}`
       ).toBeLessThan(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INTRO-05 / T-117-01: getActionSpace must not leak hidden element IDs
+//
+// SECURITY-CRITICAL (blocking): a hidden element owned by one seat must NEVER
+// appear in another seat's getActionSpace(seat).actions[].selections[].validElements.
+//
+// Sanctioned hidden-info path (INTRO-05 — document, do NOT rebuild):
+//   createPlayerView(game, playerPosition)  — src/engine/utils/snapshot.ts:194
+//   runner.getPlayerView(playerPosition)    — src/runtime/runner.ts:281
+// These are the ONLY correct perspective-aware paths. Any new caller that uses
+// raw game.toJSON() to build per-seat data is creating an information leak.
+//
+// This suite proves that getActionSpace's static metadata path (via
+// buildActionMetadata → buildPickMetadata) does not eagerly populate validElements
+// with element IDs from the game state, which would bypass the toJSONForPlayer
+// filtering path and expose hidden element IDs across seats.
+// ---------------------------------------------------------------------------
+
+describe('T-117-01 / INTRO-05: getActionSpace must not leak hidden-element IDs across seats', () => {
+  // Test game: player 1 holds hidden cards in a hand; an action selects cards
+  // of that class. We call getActionSpace from seat 2 (non-owner) and verify
+  // that no card ID from player 1's hidden hand appears in any validElements.
+  class SecretCard extends Card<LeakTestGame> {
+    rank!: string;
+  }
+
+  class LeakTestGame extends Game<LeakTestGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      this.registerElements([SecretCard]);
+
+      // Player 1's hand: hidden from everyone except the owner
+      const hand = this.create(Hand, 'hand-p1');
+      hand.player = this.getPlayer(1)!;
+      hand.contentsVisibleToOwner();
+      hand.create(SecretCard, 'secret-1', { rank: 'A' });
+      hand.create(SecretCard, 'secret-2', { rank: 'K' });
+
+      // An action that could theoretically pick any SecretCard in the game
+      // (including the hidden ones). getActionSpace must not expose hidden IDs.
+      this.registerAction(
+        Action.create<LeakTestGame>('play')
+          .chooseElement('card', {
+            prompt: 'Play a card',
+            elementClass: SecretCard,
+          })
+          .execute(() => {}),
+      );
+
+      this.setFlow(
+        defineFlow({
+          root: loop({
+            maxIterations: 10,
+            do: eachPlayer({
+              do: actionStep({ actions: ['play'] }),
+            }),
+          }),
+        }),
+      );
+    }
+  }
+
+  let game: LeakTestGame;
+
+  beforeEach(() => {
+    game = new LeakTestGame({
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'leak-test',
+    });
+    game.startFlow();
+  });
+
+  it('[BLOCKING] hidden card IDs owned by seat 1 do not appear in seat 2\'s getActionSpace validElements', () => {
+    // Collect the real IDs of the cards hidden in player 1's hand
+    const hand = game.first(Hand, 'hand-p1')!;
+    const hiddenCards = hand.all(SecretCard);
+    const hiddenCardIds = new Set(hiddenCards.map(c => c.id));
+    expect(hiddenCardIds.size, 'expected 2 hidden cards to be present').toBe(2);
+
+    // Ask for the action space from seat 2's perspective
+    const space = game.getActionSpace(2);
+
+    // Collect every element ID across all validElements in every returned selection
+    const exposedElementIds = new Set<number>();
+    for (const actionView of space.actions) {
+      for (const sel of actionView.selections) {
+        if (sel.validElements) {
+          for (const ve of sel.validElements) {
+            exposedElementIds.add(ve.id);
+          }
+        }
+      }
+    }
+
+    // BLOCKING assertion: none of the hidden card IDs may appear
+    for (const hiddenId of hiddenCardIds) {
+      expect(
+        exposedElementIds.has(hiddenId),
+        `Hidden card id=${hiddenId} (from player 1's hand) must NOT appear in ` +
+        `seat 2's getActionSpace validElements — this is an information leak. ` +
+        `Use createPlayerView()/runner.getPlayerView() for perspective-aware state.`
+      ).toBe(false);
+    }
+  });
+
+  it('getActionSpace static metadata returns no validElements (choices fetched on-demand only)', () => {
+    // The static metadata path (buildPickMetadata) intentionally omits validElements.
+    // This confirms that element IDs are never in the static template — they are only
+    // resolved when the client fetches choices on-demand (via getSelectionChoices).
+    const space = game.getActionSpace(1);
+    const playView = space.actions.find(a => a.name === 'play');
+    expect(playView, 'play action must be in seat 1\'s action space').toBeDefined();
+
+    const cardSel = playView!.selections.find(s => s.name === 'card');
+    expect(cardSel, 'card selection must be present').toBeDefined();
+
+    // No validElements in the static template — choices fetched on-demand
+    expect(cardSel!.validElements).toBeUndefined();
   });
 });
 
