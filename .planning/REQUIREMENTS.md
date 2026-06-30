@@ -15,7 +15,7 @@
 - [x] **GFT-03**: The tutorial teaches *forming a book* — completing four of a rank scores it and removes it from the hand.
 - [x] **GFT-04**: The tutorial teaches *turn continuation* — a successful ask lets the same player go again (the turn does not end on a hit).
 - [x] **GFT-05**: The go-fish tutorial is launchable from the game in both GameShell and the `boardsmith dev` host.
-- [ ] **GFT-06**: The go-fish tutorial is authored as a CI-verifiable artifact (the `testing` DSL) that fails a test when a go-fish rule change breaks it.
+- [x] **GFT-06**: The go-fish tutorial is authored as a CI-verifiable artifact (the `testing` DSL) that fails a test when a go-fish rule change breaks it.
 
 ### Go-Fish AI Teaching (GFAI)
 
