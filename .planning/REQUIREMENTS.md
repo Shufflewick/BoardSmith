@@ -24,7 +24,7 @@
 ### Test Ergonomics (TEST)
 
 - [x] **TEST-01**: A test author can read observable game state through a typed API without parsing snapshot JSON or knowing per-game accessor methods.
-- [ ] **TEST-02**: A test author can play a game to completion with one call that guards against infinite/stuck loops and throws a structured, actionable diagnostic (e.g. `GameStuckError`) instead of hanging.
+- [x] **TEST-02**: A test author can play a game to completion with one call that guards against infinite/stuck loops and throws a structured, actionable diagnostic (e.g. `GameStuckError`) instead of hanging.
 - [ ] **TEST-03**: When an availability/action assertion fails, the failure message automatically includes a trace explaining *why* the action is unavailable (which selection/condition failed).
 - [ ] **TEST-04**: Action-list assertions support both permissive ("contains these") and exact ("only these") modes, chosen explicitly rather than exact-by-default.
 - [ ] **TEST-05**: A test author can drive multi-step / dependent selections through an ergonomic builder rather than low-level `resolveChoices`/`selectionStep` calls.
@@ -93,7 +93,7 @@ Which phases cover which requirements. Every v4.3 requirement maps to exactly on
 | INTRO-04 | Phase 117 | Complete |
 | INTRO-05 | Phase 117 | Complete |
 | TEST-01 | Phase 118 | Complete |
-| TEST-02 | Phase 118 | Pending |
+| TEST-02 | Phase 118 | Complete |
 | TEST-03 | Phase 118 | Pending |
 | TEST-04 | Phase 118 | Pending |
 | TEST-05 | Phase 118 | Pending |
