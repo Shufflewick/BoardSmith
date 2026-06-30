@@ -93,7 +93,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | CHK-03 | Phase 109 | Complete |
 | CHK-04 | Phase 109 | Complete |
 | DEMO-01 | Phase 110 | Complete |
-| LOCK-01 | Phase 111 | Not Started |
+| LOCK-01 | Phase 111 | Complete |
 
 **Coverage:**
 - v1 requirements: 15 total
