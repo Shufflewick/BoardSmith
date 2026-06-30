@@ -29,24 +29,6 @@ import { evaluateConditionWithTrace } from '../action/action.js';
 // ============================================================
 
 /**
- * Structural equality check for gate value comparison.
- * Falls back to JSON.stringify for objects (covers most authored gate values).
- */
-function gateValuesEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a === null || a === undefined || b === null || b === undefined) return false;
-  if (typeof a !== typeof b) return false;
-  if (typeof a === 'object') {
-    try {
-      return JSON.stringify(a) === JSON.stringify(b);
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
-/**
  * Field-equality match for a single selection value against a SelectionMatcher.
  *
  * ElementRef precedence (mirrors `matchesRef` in useBoardInteraction):

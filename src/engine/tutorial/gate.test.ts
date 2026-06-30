@@ -165,7 +165,7 @@ describe('labeled-predicate condition gate (MR-02)', () => {
 
     const step = getActiveStep(runner.game, 1)!;
     // Per-value gating must be null for labeled-condition gates
-    const reason = getGateReasonForValue(step, 'move', 'a');
+    const reason = getGateReasonForValue(step, 'move', 'a', 'piece');
     expect(reason).toBeNull();
   });
 });
