@@ -192,8 +192,20 @@ export function assertActionAvailable(
 
   const availableActions = flowState?.availableActions ?? [];
   if (!availableActions.includes(actionName)) {
+    // Resolve the player object and call debugActionAvailability to produce an
+    // actionable trace — called ONLY on the failure path (no perf regression).
+    const player = testGame.getPlayer(playerSeat);
+    const debugInfo = testGame.game.debugActionAvailability(actionName, player);
+    const selLines = debugInfo.details.selections
+      .map(s =>
+        `  ${s.passed ? '✓' : '✗'} '${s.name}': ${s.choices} choices${s.note ? ` — ${s.note}` : ''}`
+      )
+      .join('\n');
     throw new Error(
-      `Action "${actionName}" is not available for player ${playerSeat}. Available actions: [${availableActions.join(', ')}]`
+      `Action "${actionName}" is not available for player ${playerSeat}.\n` +
+      `Available actions: [${availableActions.join(', ')}]\n` +
+      `Why: ${debugInfo.reason}` +
+      (selLines ? `\nSelections:\n${selLines}` : '')
     );
   }
 }
