@@ -1020,11 +1020,17 @@ function clearBoardSelection() {
             </button>
             <!-- Loading guard (R-06): show loading indicator while choices are being fetched
                  so we never flash "No options available" when choices are in-flight.
-                 Only show "No options available" once the fetch completes with zero results. -->
-            <div v-if="filteredChoices.length === 0 && isLoadingChoices" class="loading-choices">
+                 Only show "No options available" once the fetch completes with zero results.
+                 R-06b: notation-anchored choices render in the secondary "Select on board
+                 or choose here" list (anchoredChoices), NOT in filteredChoices. When EVERY
+                 choice is board-anchored (e.g. checkers move destinations — every square has
+                 a notation), filteredChoices is empty but valid options DO exist. Gate the
+                 empty/loading states on BOTH lists so we never claim "No options available"
+                 while the anchored list is showing real choices. -->
+            <div v-if="filteredChoices.length === 0 && anchoredChoices.length === 0 && isLoadingChoices" class="loading-choices">
               Loading choices...
             </div>
-            <span v-else-if="filteredChoices.length === 0" class="no-choices">
+            <span v-else-if="filteredChoices.length === 0 && anchoredChoices.length === 0" class="no-choices">
               No options available
             </span>
           </div>
@@ -1110,29 +1116,31 @@ function clearBoardSelection() {
           </div>
         </div>
 
-        <!-- A11Y-02: Secondary list for notation-anchored choices.
-             When all (or some) choices are anchored to board positions, keyboard and
-             screen-reader users need an operable control in the panel. These buttons
-             call triggerElementSelect on the choice's notation — identical selection
-             path as clicking the board element. -->
-        <div v-if="anchoredChoices.length" class="anchored-choices">
-          <p class="anchored-choices-label">Select on board or choose here:</p>
-          <ul role="list" class="anchored-choices-list">
-            <li v-for="choice in anchoredChoices" :key="String(choice.value)">
-              <button
-                class="choice-btn anchored-choice-btn"
-                :disabled="!!choice.disabled"
-                :title="choice.disabled || undefined"
-                :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
-                @click="boardInteraction?.triggerElementSelect({ notation: choice.refs?.find(r => r.ref.notation !== undefined)?.ref.notation })"
-                @mouseenter="handleChoiceHover(choice)"
-                @mouseleave="handleChoiceLeave"
-              >
-                {{ choice.display }}
-              </button>
-            </li>
-          </ul>
-        </div>
+        <!-- A11Y-02: notation-anchored choices (board squares). Rendered INLINE as
+             flow buttons — direct siblings of the prompt in the dock's flex flow — so
+             the action reads as one wrapping sentence (e.g. "Move · b6 · Select
+             destination · a5 · c5"), in parity with primary choice buttons. They remain
+             keyboard/SR-operable: each is a real <button> whose activation resolves
+             the choice directly via executeChoice — identical to the primary choice
+             buttons — and the aria-label carries the square notation. (It must NOT
+             route through triggerElementSelect on a notation: a destination choice's
+             first notation ref is its SOURCE square, which is shared by every
+             destination from the same piece and so cannot disambiguate the target.) -->
+        <template v-if="anchoredChoices.length">
+          <button
+            v-for="choice in anchoredChoices"
+            :key="String(choice.value)"
+            class="choice-btn anchored-choice-btn"
+            :disabled="!!choice.disabled"
+            :title="choice.disabled || undefined"
+            :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
+            @click="executeChoice(currentPick.name, choice)"
+            @mouseenter="handleChoiceHover(choice)"
+            @mouseleave="handleChoiceLeave"
+          >
+            {{ choice.display }}
+          </button>
+        </template>
       </div>
     </div>
   </div>
@@ -1410,33 +1418,9 @@ function clearBoardSelection() {
   background: var(--bsg-selectable);
 }
 
-/* A11Y-02: Secondary list for notation-anchored choices */
-.anchored-choices {
-  margin-top: 10px;
-  width: 100%;
-}
-
-.anchored-choices-label {
-  color: var(--bsg-ink-3);
-  font-size: 0.8rem;
-  margin: 0 0 6px;
-  text-align: center;
-}
-
-.anchored-choices-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-}
-
-.anchored-choices-list li {
-  display: contents;
-}
-
+/* A11Y-02: notation-anchored choices now flow inline as flow buttons (see template).
+   No wrapper block / centered label — they are direct dock flex items that wrap with
+   the prompt. The accent border distinguishes them as board-anchored options. */
 .anchored-choice-btn {
   border-color: var(--bsg-accent);
 }

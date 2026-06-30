@@ -251,6 +251,16 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // ── Auto-start single action ─────────────────────────────────────────────────
 
+  // Armed when an action completes via the selection-step transport (the controller
+  // pulses actionCompletedTick). It survives the gap until the game_state broadcast
+  // updates availableActions to the sole no-selection endTurn — that broadcast lands
+  // on a SEPARATE async channel AFTER the completion, so a one-shot skip=false at
+  // completion time evaluates against stale actions and misses (the bug: a checkers
+  // capture chain leaves a manual End Turn + Undo on a real client; follow mode just
+  // won the race). While armed, the availableActions watcher requests skip=false, so
+  // the sole endTurn auto-executes whenever the action set finally settles.
+  let autoEndArmed = false;
+
   function tryAutoStartSingleAction(skipNoSelections = false): void {
     if (autoEndTurn.value === false) return;
     if (!isMyTurn.value) return;
@@ -263,8 +273,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     const action = actions[0];
 
     if (action.selections.length > 0) {
+      autoEndArmed = false; // a selection action auto-started — the auto-end intent is moot
       void startAction(action.name);
     } else if (!skipNoSelections && actionMetadata.value) {
+      autoEndArmed = false; // consumed: the sole no-selection action (endTurn) is firing
       void executeAction(action.name, {});
     }
   }
@@ -311,6 +323,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // Auto-start on initial render and when turn/actions change.
   watch([() => isMyTurn.value, actionsWithMetadata], () => {
+    // Once the turn passes off this seat the pending auto-end intent is stale — drop
+    // it so it can never leak into a later turn.
+    if (!isMyTurn.value) autoEndArmed = false;
     scheduleAutoStart(false);
   }, { immediate: true });
 
@@ -335,12 +350,39 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         board.clear();
       }
     }
-    scheduleAutoStart(/* skipNoSelections */ true);
+    // While an auto-end is armed (a step-wise action just completed), a settling
+    // action set must be treated as skip=false so the sole no-selection endTurn
+    // auto-executes the moment the broadcast lands — not skip=true, which would
+    // leave it as a manual button.
+    scheduleAutoStart(/* skipNoSelections */ autoEndArmed ? false : true);
   });
 
   // Retry auto-start when an execution completes (next action may auto-start).
   watch(isExecuting, (executing, wasExecuting) => {
     if (wasExecuting && !executing) scheduleAutoStart(false);
+  });
+
+  // Parity for the selection-step transport: an action completed step-wise (e.g. a
+  // checkers multi-jump capture chain whose final hop lands on handleOnSelectFill)
+  // never toggles isExecuting, so the isExecuting watcher never fires. The controller
+  // pulses actionCompletedTick on such completions. ARM the auto-end (the endTurn
+  // broadcast arrives later on a separate channel) and also try immediately in case
+  // the action set is already settled — so a capture chain auto-ends the turn just
+  // like a single move, regardless of broadcast timing.
+  watch(() => controller.actionCompletedTick.value, () => {
+    autoEndArmed = true;
+    scheduleAutoStart(false);
+  });
+
+  // The capture-chain's final hop is submitted by the R-04 tutorialStep watcher from
+  // INSIDE queueFollowUp's async body, so actionCompletedTick pulses while
+  // pendingFollowUp is still true (its `finally` hasn't run). The armed auto-start
+  // bails on the pendingFollowUp guard, and without this nothing re-fires once it
+  // clears → the turn stays at a manual End Turn + Undo. Retry when pendingFollowUp
+  // settles false: skip=false only while armed (a turn-ending completion is pending),
+  // so ordinary mid-chain followUp transitions are unaffected.
+  watch(() => controller.pendingFollowUp.value, (pending, wasPending) => {
+    if (wasPending && !pending) scheduleAutoStart(autoEndArmed ? false : true);
   });
 
   // Feed the board substrate's selectable elements + click callback for the

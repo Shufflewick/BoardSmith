@@ -2197,6 +2197,82 @@ describe('useActionController', () => {
       // Non-taught selection ('to') auto-fills because it is not suppressed
       expect(controller.currentArgs.value.to).toBe('d4');
     });
+
+    /**
+     * Case D (R-07): Starting a tutorial RESETS a stale in-progress action.
+     *
+     * A tutorial's setup() hook may replace the board (e.g. checkers
+     * resetToTutorialPreset deletes the standard pieces and creates preset
+     * pieces). Any action that was already in progress — including one
+     * auto-started against the PRE-tutorial position — then holds a snapshot
+     * whose picks reference removed elements. If it survives, clicking the new
+     * preset piece matches none of the stale choices and the action can never
+     * advance → the tutorial hangs on the very first move.
+     *
+     * The controller watches tutorialStep: when it transitions inactive→active
+     * it cancels the stale (non-server-pending) in-progress action so the UI
+     * re-starts it fresh against the new board.
+     */
+    it('Case D (R-07): turning the tutorial on resets a stale in-progress action', async () => {
+      const tutorialStep = ref<TutorialStepView | undefined>(undefined);
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+        tutorialStep,
+      });
+
+      // An action is in progress (auto-started against the pre-tutorial board).
+      await controller.start('movePiece');
+      await nextTick();
+      expect(controller.currentAction.value).toBe('movePiece');
+
+      // Tutorial turns ON (setup replaced the board out from under the action).
+      tutorialStep.value = { stepId: 'execute-capture', suppressAutoFill: true };
+      await nextTick();
+
+      // The stale action is cleared so the UI can re-start fresh against the
+      // new board. Without the fix it stays 'movePiece' with dead choices → hang.
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+    });
+
+    /**
+     * Case E (R-07 guard): a step-to-step advance must NOT reset the action.
+     * Only the inactive→active transition resets; defined→defined (e.g.
+     * execute-capture → multi-jump-continue) leaves a live action intact, so the
+     * R-04 suppress-lift continuation path is preserved.
+     */
+    it('Case E (R-07 guard): advancing between tutorial steps does not reset the action', async () => {
+      const tutorialStep = ref<TutorialStepView | undefined>({
+        stepId: 'execute-capture',
+        suppressAutoFill: true,
+      });
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+        tutorialStep,
+      });
+
+      await controller.start('movePiece');
+      await nextTick();
+      expect(controller.currentAction.value).toBe('movePiece');
+
+      // Step advances (both defined) — must not tear down the in-progress action.
+      tutorialStep.value = { stepId: 'multi-jump-continue' };
+      await nextTick();
+
+      expect(controller.currentAction.value).toBe('movePiece');
+    });
   });
 
 });

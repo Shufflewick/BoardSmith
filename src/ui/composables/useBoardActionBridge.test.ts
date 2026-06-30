@@ -27,6 +27,7 @@ function makeController(opts: {
   const currentPick = computed<PickMetadata | null>(() => opts.pick ?? null);
   const currentArgs = ref<Record<string, unknown>>({});
   const isExecuting = ref(false);
+  const actionCompletedTick = ref(0);
   const multiSelectDraft = ref(null);
   const actionSnapshot = ref(null);
   const pendingFollowUp = ref(false);
@@ -48,6 +49,7 @@ function makeController(opts: {
     currentPick,
     currentArgs,
     isExecuting,
+    actionCompletedTick,
     multiSelectDraft,
     actionSnapshot,
     pendingFollowUp,
@@ -216,5 +218,77 @@ describe('useBoardActionBridge', () => {
     // so the sole action starts on the next microtask, not synchronously at setup.
     await nextTick();
     expect(start).toHaveBeenCalledWith('placeStone', undefined);
+  });
+
+  // Parity for the selection-step transport: a multi-jump capture chain completes via
+  // handleOnSelectFill (never toggling isExecuting), so the controller pulses
+  // actionCompletedTick instead. The bridge must treat that pulse as a real
+  // execution-complete and auto-execute the sole no-selection endTurn — i.e. the
+  // capture chain auto-ends the turn, just like a single move. Without the fix the
+  // turn was left at a manual End Turn + Undo.
+  it('auto-executes a sole no-selection endTurn when an action completes via the selection-step path (actionCompletedTick)', async () => {
+    const board = createBoardInteraction();
+    const { controller, execute } = makeController({ pick: null, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      // After a multi-jump completes, endTurn is the sole available action and has
+      // no selections — so it should auto-execute (commit the turn).
+      actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
+      availableActions: ref(['endTurn']),
+    });
+
+    await nextTick(); // settle the initial auto-start evaluation
+    execute.mockClear();
+
+    // Simulate the selection-step completion of the capture chain's final hop.
+    controller.actionCompletedTick.value++;
+    await nextTick(); // watcher fires → scheduleAutoStart queues its own nextTick
+    await nextTick(); // coalesced auto-start evaluation runs
+
+    expect(execute).toHaveBeenCalledWith('endTurn', {});
+  });
+
+  // The REAL bug (proven by live [autoend-debug] logs): the capture chain's final hop is
+  // submitted by the R-04 tutorialStep watcher from INSIDE queueFollowUp's async body, so
+  // actionCompletedTick pulses while pendingFollowUp is STILL true (its `finally` hasn't
+  // run). availableActions is already ['endTurn'] and currentAction is null, but the
+  // armed auto-start bails on the pendingFollowUp guard — and nothing re-fires once it
+  // clears, leaving a manual End Turn + Undo. The fix retries when pendingFollowUp settles.
+  it('auto-ends after a capture chain when pendingFollowUp is still true at completion, then clears', async () => {
+    const board = createBoardInteraction();
+    const { controller, execute } = makeController({ pick: null, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
+      availableActions: ref(['endTurn']),
+    });
+
+    await nextTick();
+    execute.mockClear();
+
+    // Mirror the live state at completion: endTurn is the sole action, currentAction is
+    // cleared, but the followUp machinery hasn't unwound yet → pendingFollowUp is true.
+    controller.pendingFollowUp.value = true;
+    controller.actionCompletedTick.value++;
+    await nextTick();
+    await nextTick();
+    // Bails on pendingFollowUp — must NOT have auto-executed endTurn yet.
+    expect(execute).not.toHaveBeenCalledWith('endTurn', {});
+
+    // queueFollowUp's `finally` runs: pendingFollowUp clears. The armed retry must now
+    // fire and auto-execute the sole endTurn.
+    controller.pendingFollowUp.value = false;
+    await nextTick();
+    await nextTick();
+
+    expect(execute).toHaveBeenCalledWith('endTurn', {});
   });
 });

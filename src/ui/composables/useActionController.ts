@@ -174,6 +174,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // (and its fetched choices) wiped, so the panel could never render the picker.
   let actionStartSeq = 0;
 
+  // Monotonic counter pulsed when an action FULLY completes via the selection-step
+  // transport (handleOnSelectFill) with no further followUp in the chain. The
+  // execute() path signals "an action just finished" by toggling isExecuting (which
+  // the board bridge watches to auto-start the next action — e.g. auto-execute a
+  // sole endTurn). The selection-step path never toggles isExecuting, so without
+  // this signal a move completed step-wise — notably a checkers multi-jump capture
+  // chain, whose final hop ALWAYS lands on this path — would not auto-end the turn,
+  // leaving a stale manual End Turn + Undo. The bridge watches this counter and runs
+  // the same skip=false auto-start, so single moves and capture chains behave alike.
+  const actionCompletedTick = ref(0);
+
   // Monotonic counter bumped in clearAdvancedState (every action tear-down).
   // Captured at the start of each fetchChoicesForPick call; compared after the
   // await resolves. If they differ the action was cleared/replaced while the
@@ -839,6 +850,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // server-pending action with an unfilled selection, retry auto-fill + R-04.
   if (options.tutorialStep) {
     watch(options.tutorialStep, async (newStep, oldStep) => {
+      // R-07: Tutorial just turned ON (inactive → active). The tutorial's setup()
+      // hook may REPLACE the board (e.g. checkers resetToTutorialPreset deletes the
+      // standard pieces and creates the preset pieces). Any action that was already
+      // in progress — including one auto-started against the PRE-tutorial position —
+      // now holds a snapshot whose collected/pending picks reference removed elements
+      // (e.g. the sole "Move" action's piece choices still point at the standard
+      // front-row pieces). Clicking the new preset piece matches none of those stale
+      // choices, so the action can never advance past its first selection → the
+      // tutorial hangs on the very first move. Reset the stale action so it re-starts
+      // fresh against the new board. Skip server-pending actions (a live followUp
+      // chain must never be torn down here — a tutorial cannot start mid-action).
+      const tutorialJustStarted = !oldStep && !!newStep;
+      if (tutorialJustStarted) {
+        if (currentAction.value && !pendingOnServer.value) cancel();
+        return;
+      }
+
       // Only fire when suppressAutoFill just lifted
       if (!(oldStep?.suppressAutoFill) || newStep?.suppressAutoFill) return;
 
@@ -1468,6 +1496,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
           queueFollowUp(result.followUp);
+        } else {
+          // Chain is fully done (no further followUp): signal completion so the
+          // board bridge can auto-start the next action — parity with the execute()
+          // path's isExecuting toggle. This is what auto-ends the turn after a
+          // multi-jump capture chain (whose final hop completes here), matching a
+          // single move. A followUp (mid-chain) must NOT signal — the turn continues.
+          actionCompletedTick.value++;
         }
 
         return { valid: true };
@@ -1769,6 +1804,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     validElements,           // Reactive! Use this in custom UIs
     isReady,
     isExecuting,
+    // Pulses (monotonic) when an action fully completes via the selection-step
+    // transport with no further followUp — the board bridge watches it to auto-start
+    // the next action (parity with the execute() path's isExecuting toggle), which is
+    // what auto-ends the turn after a multi-jump capture chain.
+    actionCompletedTick: readonly(actionCompletedTick),
     lastError,
     isLoadingChoices,
     repeatingState,
