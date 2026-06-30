@@ -8,6 +8,7 @@
  */
 
 import type { TestGame } from './test-game.js';
+import { canSeatAct, availableActionsForSeat } from '../engine/index.js';
 
 /**
  * Expected flow state for assertions.
@@ -204,13 +205,15 @@ export function assertActionAvailable(
 ): void {
   const flowState = testGame.getFlowState();
 
-  if (flowState?.currentPlayer !== playerSeat) {
+  if (!canSeatAct(flowState, playerSeat)) {
     throw new Error(
-      `Cannot check action availability for player ${playerSeat} - current player is ${flowState?.currentPlayer}`
+      `Cannot check action availability for player ${playerSeat} — seat is not active. ` +
+      `currentPlayer=${flowState?.currentPlayer}, ` +
+      `awaitingPlayers=${JSON.stringify(flowState?.awaitingPlayers ?? [])}`
     );
   }
 
-  const availableActions = flowState?.availableActions ?? [];
+  const availableActions = availableActionsForSeat(flowState, playerSeat);
   if (!availableActions.includes(actionName)) {
     // Resolve the player object and call debugActionAvailability to produce an
     // actionable trace — called ONLY on the failure path (no perf regression).
