@@ -20,10 +20,10 @@
  * test('player can draw a card', () => {
  *   const game = createTestGame(MyGame, { playerCount: 2 });
  *
- *   assertActionSucceeds(game, 0, 'draw');
+ *   assertActionSucceeds(game, 1, 'draw');
  *
  *   assertFlowState(game, {
- *     currentPlayer: 0,
+ *     currentPlayer: 1,
  *     actions: ['play', 'discard'],
  *   });
  * });

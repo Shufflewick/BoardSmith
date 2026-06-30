@@ -57,7 +57,7 @@ export interface TestGameOptions {
  *   seed: 'deterministic',
  * });
  *
- * testGame.doAction(0, 'ask', { target: 1, rank: 'K' });
+ * testGame.doAction(1, 'ask', { target: 2, rank: 'K' });
  * expect(testGame.isComplete()).toBe(false);
  * ```
  */
@@ -316,7 +316,7 @@ export class TestGame<G extends Game = Game> {
  *     seed: 'test-seed',
  *   });
  *
- *   const result = game.doAction(0, 'ask', { target: 1, rank: 'K' });
+ *   const result = game.doAction(1, 'ask', { target: 2, rank: 'K' });
  *   expect(result.success).toBe(true);
  * });
  * ```
