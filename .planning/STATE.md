@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-06-30T20:00:25.128Z"
 last_activity: 2026-06-30
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 115 — developer-documentation
+**Current focus:** Phase 116 — Verification & API Design (gates the milestone)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap defined, awaiting Phase 116 planning)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-30 — Milestone v4.3 started
+Status: Roadmap complete — 7 phases (116–122), 27/27 requirements mapped
+Last activity: 2026-06-30 — v4.3 roadmap created
 
 ## Milestones
 
@@ -63,7 +63,7 @@ Last activity: 2026-06-30 — Milestone v4.3 started
 
 **In Progress:**
 
-- None — v4.2 shipped 2026-06-30. Run `/gsd:new-milestone` to start the next.
+- v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools (Phases 116-122) — planning; roadmap created 2026-06-30.
 
 ## Deferred Items
 
@@ -86,12 +86,21 @@ Backlog for a future cribbage (v2 CRIB) milestone: R-05 (suppress Undo during gu
 
 ### Roadmap Evolution
 
+- v4.3 roadmap defined (2026-06-30): 7 phases (116–122), 27 requirements (DSGN, INTRO, TEST, DEV, PIT, MIG, DOC). Three logical stages honored: (1) verify scout findings + lock API design [116]; (2) implement then migrate [117–121]; (3) docs [122].
+- Phase 116 (DSGN) is a hard gate for everything: it decides what already exists vs. what must be built (scout claims like `getPlayerView()`, private checkpoint APIs, an existing action-resolved signal are UNVERIFIED) and which speculative items are IN vs. DEFERRED. No implementation begins until its design doc is approved.
+- INTRO (117) is the keystone primitive — "what can this seat do right now, with what choices?" — and is sequenced BEFORE TEST (118) and DEV (119), which both build on it. Splitting them keeps each independently shippable/reviewable.
+- PIT (120) authoring guards are largely independent of INTRO; depends only on 116 (PIT-04 lint targets the footguns DSGN-01 confirms).
+- MIG (121) is its own phase after the surface is built and stabilized — spans cross-repo work: symlinked `~/BoardSmithGames/` games (live HMR) + the MERC vendored copy which must be re-vendored.
+- DOC (122) is last so docs describe the shipped, migrated surface.
+- Reuse-not-rebuild discipline carries from v4.2: where DSGN finds an API already exists, expose/document rather than duplicate.
+
+**v4.2 roadmap notes (2026-06-30):**
+
 - v4.2 roadmap defined (2026-06-30): 4 phases (112–115), 14 requirements. Reuse-not-rebuild: all substrate lives in v4.1 `src/`; phases are cross-repo content authoring (go-fish) + BoardSmith docs.
 - Phase 112 (go-fish tutorial content + CI) mirrors Phase 109 (checkers tutorial content) from v4.1 — same pattern, different game type (card game vs grid game).
 - Phase 113 (go-fish AI teaching) mirrors Phase 107 (checkers AI teaching) — surfaces existing MCTS bot; key difference is `anchorAttrs` must anchor to cards/hand, not board squares.
 - Phase 114 (action help + host lockout) folds GFHELP-01 and GFLOCK-01 together as both are light verification/surface tasks that share a dependency on all teaching affordances existing (Phase 113 complete).
 - Phase 115 (documentation) is last so both worked examples (checkers + go-fish) are complete and documentable.
-- Substrate gap risk: if a real go-fish-driven gap is found in BoardSmith `src/`, flag it, handle it within the phase, and note the change — do not assume one exists.
 - Heatmap is intentionally excluded from go-fish AI teaching (board-only feature); documented as such in DOC-03.
 
 ### Decisions
@@ -107,48 +116,12 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - Checkers tutorial content (CHK-*) lands cross-repo in `~/BoardSmithGames/checkers`; substrate stays in this repo's `src/`.
 - DEMO-01 framed as a refinement checkpoint, not a sign-off — captured friction feeds the substrate before cribbage (v2 CRIB).
 
-**Phase 107 UI decisions (2026-06-26):**
+### Highest-Risk Items (v4.3)
 
-- overlay-utils.ts dedup: cssEscape + buildSelector extracted from TutorialOverlay to shared module — zero copy-paste across overlay components.
-- isDemoRunning tracked as local ref in GameShell — session getter not broadcast; cleared on flowState.complete.
-- Teaching controls wired via platformRequest ops (hint/demo-start/demo-stop/heatmap-toggle) — bridge integration deferred to Phase 109.
-- showHintProp computed from lobbyInfo AI slots — cleanest client-side AI detection; platform mode hidden (Phase 110 wires production).
-- Parity proven at component level: dual-fixture tests (custom-UI-like div vs AutoUI-grid-like table cell, same data-bs-el-id) in both HintOverlay and HeatmapOverlay test suites.
-- [Phase ?]: Phase 108 Plan 03 complete
-
-**Phase 109 Plan 01 decisions (2026-06-28):**
-
-- LR-02 gate: `TutorialGateAllowList.from`/`to` removed without deprecation; replaced with `selections?: Record<string, SelectionMatcher>` map keyed by selection name.
-- `selectionMatchesValue` uses ElementRef id > notation > name precedence for element values; all-field equality for choice objects (DestinationChoice etc.).
-- Non-object/null values never match a non-empty matcher (returns reason, no crash) — satisfies T-109-01 threat mitigation.
-
-**Phase 110 Plan 03 decisions (2026-06-29):**
-
-- aiSuggest previews MCTS move read-only; demo loop executes same args via action op (MCTS never re-runs for execution — avoids narrate/execute mismatch).
-- demoAbort checked before AND after delay (RESEARCH Pitfall 1) — critical for timer-leak-free cancellation (CLAUDE.md hard rule).
-- demoStart/demoStop in Op union but NOT in executeOp switch — host lifecycle ops; fallback error if they reach executeOp.
-- Demo tests stub aiSuggest to avoid MCTS setImmediate conflicts with vi.useFakeTimers().
-- [Phase ?]: Go-fish move hint wiring
-
-### Highest-Risk Items
-
-1. `anchorAttrs` card-anchoring parity (Phase 112/113) — go-fish has no board grid; `anchorAttrs` must anchor to card elements and hand panels instead of board squares. Verify the overlay renders correctly on card targets (not just cells).
-2. Substrate gap discovery (any phase) — if a real go-fish-driven gap is found in `src/`, it must be handled within the phase; do not work around it. Flag and fix.
-3. Cross-repo symlink dev loop (Phase 112) — go-fish node_modules symlinks to this repo; keep BoardSmith tests green while authoring go-fish content.
-4. CI-verifiable go-fish tutorial test (Phase 112) — must fail on a deliberately broken rule, not pass vacuously; prove with a broken rule (same standard as Phase 106 / checkers).
-
-### Pending Todos
-
-Carried from v4.0 (non-blocking): dev-standalone shell height gap; pre-existing dev-host AI-turn issue; orphaned tokens / lint scope / focus-ring naming / platform-mode connection-announce seam. See `.planning/todos/pending/`.
-
-**Carry-forward from Phase 104 code review (Medium/Low — address in the consuming phase, see 104-REVIEW.md):**
-
-- **MR-01 → CLOSED in Phase 105:** `tutorialStep` threaded into `useActionController` via GameShell production wiring; behavioral suppress-auto-fill test guards it.
-- **MR-02 → CLOSED in Phase 106:** predicate-form gates fleshed out.
-- **LR-02 → CLOSED in Phase 109 Plan 01:** `selections` map on `TutorialGateAllowList` keyed by selection name.
-- **MR-03 / LR-01 (minor):** `start()` on empty `steps` is a silent no-op (should fail loud); `skip()` records identically to `advance()` (no distinction). Address opportunistically.
-
-**Phase 104 pre-existing tech debt surfaced (NOT introduced by 104, out of scope):** `tsc --noEmit` reports type-looseness errors in test files this repo does not gate on `tsc` (HandRenderer.a11y, GameHistory, DebugPanel, notation-serialization). Repo gates on vitest + eslint. Candidate for a future cleanup pass.
+1. **DSGN accuracy (Phase 116)** — several scout claims about what "already exists" are unverified; getting verdicts wrong means either rebuilding existing APIs or planning to build something that's missing. Verdicts must carry file:line evidence.
+2. **INTRO serialization + perspective correctness (Phase 117)** — the action-space structure must be serializable end-to-end and the perspective-aware view must exclude hidden info correctly (INTRO-05); a leak here is a security regression.
+3. **Cross-repo migration breadth (Phase 121)** — all `~/BoardSmithGames/` games (symlinked, live HMR) plus the MERC vendored canary (must re-vendor) — keep every suite green; gaps surfaced during migration must be fixed in `src/`, not worked around.
+4. **Dev-host parity (Phase 119)** — `data-element-id` and the devtools global must work identically in custom UI and AutoUI (hard rule); browser-prove both before completion.
 
 ### Blockers/Concerns
 
@@ -156,11 +129,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-30T18:49:35.746Z
-Stopped at: context exhaustion at 75% (2026-06-30)
+Last session: 2026-06-30 — v4.3 roadmap created
+Stopped at: roadmap complete
 Resume file: None
-Next action: `/gsd:plan-phase 112`
+Next action: `/gsd:plan-phase 116`
 
 ## Operator Next Steps
 
-- Begin Phase 112 with `/gsd:plan-phase 112`
+- Begin Phase 116 (Verification & API Design) with `/gsd:plan-phase 116`. This phase gates all later phases — no implementation until its API-design doc is approved.

@@ -80,14 +80,34 @@ Deferred unless DSGN promotes them.
 
 ## Traceability
 
-Which phases cover which requirements. Filled during roadmap creation.
+Which phases cover which requirements. Every v4.3 requirement maps to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DSGN-01..03 | TBD | Pending |
-| INTRO-01..05 | TBD | Pending |
-| TEST-01..05 | TBD | Pending |
-| DEV-01..04 | TBD | Pending |
-| PIT-01..04 | TBD | Pending |
-| MIG-01..02 | TBD | Pending |
-| DOC-01..04 | TBD | Pending |
+| DSGN-01 | Phase 116 | Pending |
+| DSGN-02 | Phase 116 | Pending |
+| DSGN-03 | Phase 116 | Pending |
+| INTRO-01 | Phase 117 | Pending |
+| INTRO-02 | Phase 117 | Pending |
+| INTRO-03 | Phase 117 | Pending |
+| INTRO-04 | Phase 117 | Pending |
+| INTRO-05 | Phase 117 | Pending |
+| TEST-01 | Phase 118 | Pending |
+| TEST-02 | Phase 118 | Pending |
+| TEST-03 | Phase 118 | Pending |
+| TEST-04 | Phase 118 | Pending |
+| TEST-05 | Phase 118 | Pending |
+| DEV-01 | Phase 119 | Pending |
+| DEV-02 | Phase 119 | Pending |
+| DEV-03 | Phase 119 | Pending |
+| DEV-04 | Phase 119 | Pending |
+| PIT-01 | Phase 120 | Pending |
+| PIT-02 | Phase 120 | Pending |
+| PIT-03 | Phase 120 | Pending |
+| PIT-04 | Phase 120 | Pending |
+| MIG-01 | Phase 121 | Pending |
+| MIG-02 | Phase 121 | Pending |
+| DOC-01 | Phase 122 | Pending |
+| DOC-02 | Phase 122 | Pending |
+| DOC-03 | Phase 122 | Pending |
+| DOC-04 | Phase 122 | Pending |
