@@ -53,7 +53,7 @@
   5. The go-fish tutorial is launchable from within the game in both GameShell and the `boardsmith dev` host, identical to the checkers tutorial entry point.
   6. `tutorial.test.ts` (or equivalent) in the go-fish repo uses `simulateTutorial` + `assertTutorialCompletes` and fails (goes red) when a go-fish rule is deliberately broken.
 **Plans**: 4 plans
-- [ ] 112-01-PLAN.md — BoardSmith selectionMatchesValue primitive-matcher fix + unit test (Wave 1)
+- [x] 112-01-PLAN.md — BoardSmith selectionMatchesValue primitive-matcher fix + unit test (Wave 1)
 - [ ] 112-02-PLAN.md — go-fish tutorial preset + GO_FISH_TUTORIAL definition + gameDefinition wiring (Wave 2)
 - [ ] 112-03-PLAN.md — CI-verifiable tutorial.test.ts walkthrough + green→red proof (Wave 3)
 - [ ] 112-04-PLAN.md — browser smoke checkpoint: launchable in both hosts + card-anchored overlay (Wave 3)
@@ -98,7 +98,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 112. Go-Fish Tutorial Content | 0/? | Not started | - |
+| 112. Go-Fish Tutorial Content | 1/4 | In Progress|  |
 | 113. Go-Fish AI Teaching | 0/? | Not started | - |
 | 114. Go-Fish Action Help & Host Lockout | 0/? | Not started | - |
 | 115. Developer Documentation | 0/? | Not started | - |
