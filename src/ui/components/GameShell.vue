@@ -10,6 +10,7 @@ import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 // that ships even when the branch is dead.
 import AutoUIDev from './auto-ui/AutoUI.vue';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
+import { selectArchetype } from './auto-ui/archetype-selector.js';
 import {
   announceTurnChange,
   announceConnectionChange,
@@ -751,6 +752,18 @@ const showHintProp = computed<boolean | undefined>(() => {
   if ((state.value?.state as any)?.hasAIPlayers) return true;
   return undefined;
 });
+
+// The move-quality heatmap paints a per-move score chip onto a distinct board
+// cell. That is only meaningful when each candidate move maps to its own spatial
+// cell — i.e. a grid/hex board. For gridless games (e.g. card games like Go Fish)
+// every "ask" move anchors to the same rank group, so the chips collide and the
+// overlay collapses to one chip per rank — misleading, not informative. Reuse the
+// same archetype signal the AutoUI renderer dispatches on ($layout grid/hex-grid)
+// as the single source of truth, so the toggle hides exactly when the heatmap
+// cannot render meaningfully.
+const heatmapSupportedProp = computed<boolean>(
+  () => selectArchetype(gameView.value?.children ?? []) === 'grid-board'
+);
 
 // Show Tutorial group when the game definition has a tutorial attached.
 // Reads from broadcast state (hasTutorial is set by buildPlayerState).
@@ -2096,6 +2109,7 @@ if ((import.meta as any).hot) {
           :hint-disabled="hintDisabledProp"
           :is-demo-running="isDemoRunning"
           :is-heatmap-visible="isHeatmapVisibleProp"
+          :heatmap-supported="heatmapSupportedProp"
           :is-action-help-visible="isActionHelpVisible"
           :has-action-help="hasActionHelp"
           :has-tutorial="hasTutorialProp"

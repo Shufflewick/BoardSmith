@@ -39,6 +39,15 @@ const props = withDefaults(defineProps<{
   isDemoRunning?: boolean;
   /** Whether the move quality heatmap overlay is currently visible (drives aria-checked). */
   isHeatmapVisible?: boolean;
+  /**
+   * Whether the game has a spatial board (grid/hex) where a per-cell move-quality
+   * heatmap is meaningful. When false — e.g. gridless card games like Go Fish,
+   * where every move anchors to the same rank group and the chips collide — the
+   * "Show move quality" toggle is hidden entirely (a toggle that renders a
+   * misleading overlay reads as broken). Defaults to true so the toggle shows
+   * unless the host explicitly reports the game has no spatial board.
+   */
+  heatmapSupported?: boolean;
   /** Whether action help affordances are currently visible (drives aria-checked). */
   isActionHelpVisible?: boolean;
   /**
@@ -74,6 +83,7 @@ const props = withDefaults(defineProps<{
   align: 'right',
   isActionHelpVisible: false,
   hasActionHelp: true,
+  heatmapSupported: true,
   teachingDisabled: false,
 });
 
@@ -324,8 +334,11 @@ function handleLeave() {
             {{ isDemoRunning ? 'Stop demo' : 'Watch AI demo' }}
           </button>
 
-          <!-- Show move quality: toggle the per-cell MCTS evaluation heatmap -->
+          <!-- Show move quality: toggle the per-cell MCTS evaluation heatmap.
+               Hidden for gridless games (heatmapSupported=false) where the
+               overlay cannot anchor moves to distinct board cells. -->
           <button
+            v-if="heatmapSupported"
             class="mi"
             type="button"
             role="menuitemcheckbox"

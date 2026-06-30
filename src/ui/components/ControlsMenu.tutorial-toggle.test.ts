@@ -199,3 +199,61 @@ describe('ControlsMenu — teachingDisabled lockout (Phase 111 LOCK-01)', () => 
     wrapper.unmount();
   });
 });
+
+// ── Heatmap toggle gating: heatmapSupported prop (gridless games) ──────────────
+//
+// The "Show move quality" heatmap paints a per-move score chip onto a distinct
+// board cell. For gridless games (e.g. card games like Go Fish) every move
+// anchors to the same rank group, so the chips collide and the overlay is
+// misleading. GameShell computes heatmapSupported from the game's archetype
+// ($layout grid/hex-grid → grid-board) and hides the toggle when false.
+//
+// Only the heatmap toggle is gated — Get a hint and Watch AI demo still render,
+// since they remain meaningful for gridless games (hint highlights the rank to
+// ask; demo narrates AI play).
+
+describe('ControlsMenu — heatmap toggle gating (heatmapSupported)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  /** Find the "Show move quality" heatmap toggle within the teleported popover. */
+  function findHeatmapToggle(): Element | undefined {
+    const buttons = document.body.querySelectorAll('[role="menuitemcheckbox"]');
+    return Array.from(buttons).find(b => b.textContent?.includes('Show move quality'));
+  }
+
+  /** Find a Teaching menuitem by visible label. */
+  function findTeachingItem(label: string): Element | undefined {
+    const all = document.body.querySelectorAll('[role="menuitem"], [role="menuitemcheckbox"]');
+    return Array.from(all).find(el => el.textContent?.includes(label));
+  }
+
+  it('shows the heatmap toggle when heatmapSupported=true (spatial board)', async () => {
+    const wrapper = mountMenu({ showHint: true, heatmapSupported: true });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    expect(findHeatmapToggle(), 'Show move quality must render for grid/hex games').toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('shows the heatmap toggle when heatmapSupported is omitted (defaults to true)', async () => {
+    const wrapper = mountMenu({ showHint: true /* heatmapSupported absent → default true */ });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    expect(findHeatmapToggle(), 'Show move quality must default to visible').toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('hides ONLY the heatmap toggle when heatmapSupported=false (gridless game)', async () => {
+    const wrapper = mountMenu({ showHint: true, heatmapSupported: false });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    // Heatmap toggle gone…
+    expect(findHeatmapToggle(), 'Show move quality must hide for gridless games').toBeUndefined();
+    // …but the other AI aids remain (only the heatmap is gated).
+    expect(findTeachingItem('Get a hint'), 'Get a hint stays available for gridless games').toBeDefined();
+    expect(findTeachingItem('Watch AI demo'), 'Watch AI demo stays available for gridless games').toBeDefined();
+    wrapper.unmount();
+  });
+});
