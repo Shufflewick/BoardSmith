@@ -48,8 +48,11 @@ export function buildActionMetadata(
           continue; // Skip actions whose condition is now false
         }
       } catch (error) {
-        console.error(`[buildActionMetadata] Error checking condition for "${actionName}":`, error);
-        continue; // Skip on error
+        throw new Error(
+          `[buildActionMetadata] Condition for action "${actionName}" threw an error. ` +
+          `Fix the condition function before this action can be used.\n` +
+          `Original error: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
