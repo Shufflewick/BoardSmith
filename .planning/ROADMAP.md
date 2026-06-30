@@ -50,7 +50,7 @@ See [`milestones/v4.3-ROADMAP.md`](milestones/v4.3-ROADMAP.md) for goals, depend
 Plans:
 - [x] 117-01-PLAN.md — Foundational type exports (ElementDiff + ActionMetadata) to session barrel [INTRO-F1, INTRO-02]
 - [x] 117-02-PLAN.md — Extract legal-move enumeration core; enumerateLegalMoves + MCTSBot delegation [INTRO-04]
-- [ ] 117-03-PLAN.md — buildActionArgs in-process/wire arg builder [INTRO-03]
+- [x] 117-03-PLAN.md — buildActionArgs in-process/wire arg builder [INTRO-03]
 - [ ] 117-04-PLAN.md — getActionSpace + getActionSchema on Game + hidden-info leak regression [INTRO-01, INTRO-02, INTRO-05]
 
 ### Phase 118: Test Ergonomics
