@@ -4,14 +4,14 @@ milestone: v4.1
 milestone_name: Tutorial Primitives
 status: executing
 stopped_at: Completed 110-04-PLAN.md
-last_updated: "2026-06-29T15:57:15.113Z"
+last_updated: "2026-06-29T18:10:00.000Z"
 last_activity: 2026-06-29
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 6
   total_plans: 30
   completed_plans: 29
-  percent: 86
+  percent: 75
 ---
 
 # Project State
@@ -68,6 +68,7 @@ Last activity: 2026-06-29
 
 ### Roadmap Evolution
 
+- Phase 111 added (2026-06-29): Host-Gated Teaching Lockout — host (shufflewick.pub) can disable hint/heatmap/demo/tutorial via the iframe init signal so they can't be used to cheat; action help stays on. Enforced both client-side (hide affordances) and server-side (reject the ops fail-loud). Surfaced during the Phase 110 live demo. Requirement LOCK-01.
 - v4.1 roadmap derives 7 substrate-first phases (104–110) from 15 v1 requirements. The TUT substrate (104–106) is foundational and must land before the checkers showcase (CHK, Phase 109) and the AI hint (AI-01, Phase 107).
 - Phase 104 (lifecycle + action gating) is the engine/session base; Phase 105 (annotation overlay) is the UI base; Phase 106 (predicate triggers + CI-verifiable authoring) completes authoring.
 - The annotation overlay (TUT-01, Phase 105) has a HARD parity constraint — it MUST route through `useBoardInteraction` so it works identically in custom UI and AutoUI (project hard-rule).

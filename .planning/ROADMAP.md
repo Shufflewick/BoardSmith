@@ -155,3 +155,21 @@
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 4/4 | Complete    | 2026-06-29 |
 | 110. Demonstration & Refinement | 4/5 | In Progress|  |
+| 111. Host-Gated Teaching Lockout | 0/0 | Not Planned |  |
+
+### Phase 111: Host-Gated Teaching Lockout
+
+**Goal**: Give the embedding host (e.g. shufflewick.pub) a way to disable the teaching/assist features through the iframe so they cannot be used to cheat in a real game. BoardSmith stays host-agnostic — it does NOT model "ranked" or any host concept; it simply receives a "teaching disabled" signal and complies. When disabled, the **AI move hint**, **move-quality / evaluation heatmap**, **AI-vs-AI narrated demo**, and **tutorial** are all unavailable. **Action help** (the hover/tap text that explains what an action does) stays enabled — it explains the rules, not a good move, so it is not a cheat.
+**Depends on**: Phase 107 (AI teaching: hint/heatmap/demo), Phase 108 (action help), Phase 109/110 (tutorial + demo surfaces)
+**Requirements**: LOCK-01
+**Success Criteria** (what must be TRUE):
+  1. The host can set a single "teaching disabled" flag at session creation (single source of truth), delivered to the embedded GameShell via the existing platform-mode `init` postMessage and to the session as a config flag.
+  2. **Client gating:** when the flag is set, GameShell/ControlsMenu does not render the Get-a-hint, Show-move-quality, Watch-AI-demo, or Start-tutorial affordances. Action help remains visible and functional.
+  3. **Server enforcement (anti-cheat):** the session rejects the `hint`, `heatmapToggle`, `demoStart`, and `startTutorial`/`start-tutorial` ops fail-loud when teaching is disabled — so a player who crafts the op directly (bypassing the hidden UI) still cannot use the feature. Enforced in BOTH the production `GameSession` and the dev-host `SnapshotSessionHost`/stateless-ops paths.
+  4. The flag is reflected into broadcast player state so every connected client (reconnect, second window) hides the affordances consistently.
+  5. Default (no flag) behavior is unchanged: all teaching features remain available, verified by the existing Phase 107–110 tests staying green.
+**Plans**: TBD (run `/gsd:plan-phase 111` to break down)
+**UI hint**: yes
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 111 to break down)

@@ -43,6 +43,10 @@ The showcase that proves the substrate end-to-end. Targets checkers' real teachi
 
 - [x] **DEMO-01**: The checkers tutorial and all teaching features (TUT/AI/HELP) are demonstrated end-to-end in the browser for hands-on review, so the primitives can be refined before a future milestone applies them to cribbage.
 
+### Host-Gated Teaching Lockout (LOCK)
+
+- [ ] **LOCK-01**: The embedding host can disable the assist/teaching features (AI hint, move-quality heatmap, AI-vs-AI demo, tutorial) via the iframe so they cannot be used to cheat in a real game. Action help stays enabled. BoardSmith is host-agnostic (no "ranked" concept) — it receives a single "teaching disabled" signal and enforces it both client-side (hide affordances) and server-side (reject the ops fail-loud, so the hidden UI can't be bypassed).
+
 ## v2 Requirements
 
 Deferred to a future milestone (not in this roadmap).
@@ -89,6 +93,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | CHK-03 | Phase 109 | Complete |
 | CHK-04 | Phase 109 | Complete |
 | DEMO-01 | Phase 110 | Complete |
+| LOCK-01 | Phase 111 | Not Started |
 
 **Coverage:**
 - v1 requirements: 15 total
