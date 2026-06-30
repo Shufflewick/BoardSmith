@@ -9,6 +9,7 @@
 
 import type { TestGame } from './test-game.js';
 import { canSeatAct, availableActionsForSeat } from '../engine/index.js';
+import { _collectAvailableActions } from './simulate-action.js';
 
 /**
  * Expected flow state for assertions.
@@ -88,7 +89,11 @@ export function assertFlowState(
 
   const actual = {
     currentPlayer: flowState?.currentPlayer,
-    actions: flowState?.availableActions,
+    // Collect actions from both sequential (availableActions) and simultaneous
+    // (awaitingPlayers[*].availableActions) turns. flowState?.availableActions is
+    // undefined during simultaneous steps, so reading it directly caused false
+    // "missing action" failures. _collectAvailableActions handles both modes.
+    actions: flowState ? _collectAvailableActions(flowState) : undefined,
     complete: testGame.isComplete(),
     awaitingInput: testGame.isAwaitingInput(),
     phase: flowState?.currentPhase,

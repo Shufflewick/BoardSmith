@@ -366,8 +366,17 @@ export function playUntilComplete<G extends Game>(
   }
 }
 
-/** Collect available action names from a flow state (sequential or simultaneous). */
-function _collectAvailableActions(flowState: FlowState): string[] {
+/**
+ * Collect the union of available action names from a flow state.
+ *
+ * Works for both sequential turns (`availableActions`) and simultaneous
+ * turns (`awaitingPlayers[*].availableActions`). This is the canonical
+ * single source of truth for "what actions can currently be taken?"
+ * and is shared by `playUntilComplete` and `assertFlowState`.
+ *
+ * @internal Exported for use by assertion helpers; not part of the public API.
+ */
+export function _collectAvailableActions(flowState: FlowState): string[] {
   if (flowState.availableActions && flowState.availableActions.length > 0) {
     return flowState.availableActions;
   }
