@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v4.2
 milestone_name: Tutorial Primitives — Go Fish & Docs
-status: planning
-last_updated: "2026-06-30T02:57:51.518Z"
+status: active
+last_updated: "2026-06-30"
 last_activity: 2026-06-30
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-25)
+See: .planning/PROJECT.md (updated 2026-06-30)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** v4.1 milestone lifecycle (audit → complete → cleanup)
+**Current focus:** v4.2 — Go-Fish tutorial content authoring, AI teaching, action help, host lockout verification, and developer documentation.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 112 (Go-Fish Tutorial Content) — Not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-30 — Milestone v4.2 started
+Status: Roadmap defined; ready to begin Phase 112
+Last activity: 2026-06-30 — v4.2 roadmap created (Phases 112–115)
+
+Progress: [----------] 0% (0/4 phases complete)
 
 ## Milestones
 
@@ -58,12 +60,11 @@ Last activity: 2026-06-30 — Milestone v4.2 started
 - v3.0 Animation Timeline (Phases 85-90) -- shipped 2026-02-08
 - v3.1 Dynamic Auto-UI (Phases 91-96) -- shipped 2026-06-22
 - v4.0 UI Redesign (Slate) (Phases 97-103) -- shipped 2026-06-23
-
 - v4.1 Tutorial Primitives (Checkers) (Phases 104-111) -- shipped 2026-06-30
 
 **In Progress:**
 
-- None — awaiting next milestone (`/gsd:new-milestone`)
+- v4.2 Tutorial Primitives — Go Fish & Docs (Phases 112-115) — started 2026-06-30
 
 ## Deferred Items
 
@@ -86,14 +87,13 @@ Backlog for a future cribbage (v2 CRIB) milestone: R-05 (suppress Undo during gu
 
 ### Roadmap Evolution
 
-- Phase 111 added (2026-06-29): Host-Gated Teaching Lockout — host (shufflewick.pub) can disable hint/heatmap/demo/tutorial via the iframe init signal so they can't be used to cheat; action help stays on. Enforced both client-side (hide affordances) and server-side (reject the ops fail-loud). Surfaced during the Phase 110 live demo. Requirement LOCK-01.
-- v4.1 roadmap derives 7 substrate-first phases (104–110) from 15 v1 requirements. The TUT substrate (104–106) is foundational and must land before the checkers showcase (CHK, Phase 109) and the AI hint (AI-01, Phase 107).
-- Phase 104 (lifecycle + action gating) is the engine/session base; Phase 105 (annotation overlay) is the UI base; Phase 106 (predicate triggers + CI-verifiable authoring) completes authoring.
-- The annotation overlay (TUT-01, Phase 105) has a HARD parity constraint — it MUST route through `useBoardInteraction` so it works identically in custom UI and AutoUI (project hard-rule).
-- CI-verifiable authoring via the `testing` DSL (TUT-04, Phase 106) lands before/alongside CHK so the checkers tutorial is authored as a verifiable artifact, not retrofitted.
-- AI-01/02/03 (Phase 107) reuse checkers' EXISTING MCTS bot (`~/BoardSmithGames/checkers/src/rules/ai.ts`) — no new training; the work is surfacing existing evaluations to the UI.
-- CHK-* (Phase 109) authored cross-repo in `~/BoardSmithGames/checkers` (symlinked to this repo's node_modules) while the substrate lands in this repo's `src/`.
-- DEMO-01 (Phase 110) is the FINAL phase — the user's explicit "demonstrate to me so we can refine" gate, browser-verified end-to-end, before the future cribbage (CRIB) milestone.
+- v4.2 roadmap defined (2026-06-30): 4 phases (112–115), 14 requirements. Reuse-not-rebuild: all substrate lives in v4.1 `src/`; phases are cross-repo content authoring (go-fish) + BoardSmith docs.
+- Phase 112 (go-fish tutorial content + CI) mirrors Phase 109 (checkers tutorial content) from v4.1 — same pattern, different game type (card game vs grid game).
+- Phase 113 (go-fish AI teaching) mirrors Phase 107 (checkers AI teaching) — surfaces existing MCTS bot; key difference is `anchorAttrs` must anchor to cards/hand, not board squares.
+- Phase 114 (action help + host lockout) folds GFHELP-01 and GFLOCK-01 together as both are light verification/surface tasks that share a dependency on all teaching affordances existing (Phase 113 complete).
+- Phase 115 (documentation) is last so both worked examples (checkers + go-fish) are complete and documentable.
+- Substrate gap risk: if a real go-fish-driven gap is found in BoardSmith `src/`, flag it, handle it within the phase, and note the change — do not assume one exists.
+- Heatmap is intentionally excluded from go-fish AI teaching (board-only feature); documented as such in DOC-03.
 
 ### Decisions
 
@@ -132,10 +132,10 @@ Decisions are logged in PROJECT.md Key Decisions table.
 
 ### Highest-Risk Items
 
-1. `useBoardInteraction` parity for the annotation overlay (Phase 105) — a primitive that works in only one UI path violates the hard-rule; verify both paths.
-2. Tutorial progress serialization round-trip (Phase 104) — must be checkpoint/replay safe like prior engine state.
-3. CI-verifiable authoring (Phase 106) — the test must actually fail on a broken rule, not pass vacuously; prove with a deliberately broken rule.
-4. Cross-repo authoring (Phase 109) — substrate in `src/` vs content in `~/BoardSmithGames/checkers`; keep the symlinked dev loop green.
+1. `anchorAttrs` card-anchoring parity (Phase 112/113) — go-fish has no board grid; `anchorAttrs` must anchor to card elements and hand panels instead of board squares. Verify the overlay renders correctly on card targets (not just cells).
+2. Substrate gap discovery (any phase) — if a real go-fish-driven gap is found in `src/`, it must be handled within the phase; do not work around it. Flag and fix.
+3. Cross-repo symlink dev loop (Phase 112) — go-fish node_modules symlinks to this repo; keep BoardSmith tests green while authoring go-fish content.
+4. CI-verifiable go-fish tutorial test (Phase 112) — must fail on a deliberately broken rule, not pass vacuously; prove with a broken rule (same standard as Phase 106 / checkers).
 
 ### Pending Todos
 
@@ -143,9 +143,9 @@ Carried from v4.0 (non-blocking): dev-standalone shell height gap; pre-existing 
 
 **Carry-forward from Phase 104 code review (Medium/Low — address in the consuming phase, see 104-REVIEW.md):**
 
-- **MR-01 → ✅ CLOSED in Phase 105:** `tutorialStep` threaded into `useActionController` via GameShell production wiring; behavioral suppress-auto-fill test guards it. Phase 105 review also fixed BL-01 (action/panel targets were dead → overlay now teleports to body + `position:fixed` + `document.querySelector`, highlights targets in `.actionbar` outside `.boardregion`), CR-01 (bubble announced — root aria-hidden removed), WR-01/WR-02. Suite 1371 green.
-- **MR-02 → Phase 106:** predicate-form gates are currently all-or-nothing/permissive; flesh out when predicate triggers land.
-- **LR-02 → ✅ CLOSED in Phase 109 Plan 01:** `selections` map on `TutorialGateAllowList` keyed by selection name; `selectionMatchesValue` helper; 4th `selectionName` param on `getGateReasonForValue`; all 3 action.ts call sites updated.
+- **MR-01 → CLOSED in Phase 105:** `tutorialStep` threaded into `useActionController` via GameShell production wiring; behavioral suppress-auto-fill test guards it.
+- **MR-02 → CLOSED in Phase 106:** predicate-form gates fleshed out.
+- **LR-02 → CLOSED in Phase 109 Plan 01:** `selections` map on `TutorialGateAllowList` keyed by selection name.
 - **MR-03 / LR-01 (minor):** `start()` on empty `steps` is a silent no-op (should fail loud); `skip()` records identically to `advance()` (no distinction). Address opportunistically.
 
 **Phase 104 pre-existing tech debt surfaced (NOT introduced by 104, out of scope):** `tsc --noEmit` reports type-looseness errors in test files this repo does not gate on `tsc` (HandRenderer.a11y, GameHistory, DebugPanel, notation-serialization). Repo gates on vitest + eslint. Candidate for a future cleanup pass.
@@ -156,11 +156,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-30T02:10:06.295Z
-Stopped at: DEMO-01 approved — Phase 110 complete
+Last session: 2026-06-30
+Stopped at: v4.2 roadmap created — Phases 112–115 defined
 Resume file: None
-Next action: `/gsd:plan-phase 111` (autonomous mode in progress)
+Next action: `/gsd:plan-phase 112`
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Begin Phase 112 with `/gsd:plan-phase 112`

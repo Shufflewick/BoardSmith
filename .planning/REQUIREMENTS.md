@@ -59,17 +59,17 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GFT-01 | TBD | Not Started |
-| GFT-02 | TBD | Not Started |
-| GFT-03 | TBD | Not Started |
-| GFT-04 | TBD | Not Started |
-| GFT-05 | TBD | Not Started |
-| GFT-06 | TBD | Not Started |
-| GFAI-01 | TBD | Not Started |
-| GFAI-02 | TBD | Not Started |
-| GFHELP-01 | TBD | Not Started |
-| GFLOCK-01 | TBD | Not Started |
-| DOC-01 | TBD | Not Started |
-| DOC-02 | TBD | Not Started |
-| DOC-03 | TBD | Not Started |
-| DOC-04 | TBD | Not Started |
+| GFT-01 | Phase 112 | Not Started |
+| GFT-02 | Phase 112 | Not Started |
+| GFT-03 | Phase 112 | Not Started |
+| GFT-04 | Phase 112 | Not Started |
+| GFT-05 | Phase 112 | Not Started |
+| GFT-06 | Phase 112 | Not Started |
+| GFAI-01 | Phase 113 | Not Started |
+| GFAI-02 | Phase 113 | Not Started |
+| GFHELP-01 | Phase 114 | Not Started |
+| GFLOCK-01 | Phase 114 | Not Started |
+| DOC-01 | Phase 115 | Not Started |
+| DOC-02 | Phase 115 | Not Started |
+| DOC-03 | Phase 115 | Not Started |
+| DOC-04 | Phase 115 | Not Started |
