@@ -155,7 +155,7 @@
 | 108. Lightweight Action Help | 3/3 | Complete    | 2026-06-27 |
 | 109. Checkers Tutorial Content | 4/4 | Complete    | 2026-06-29 |
 | 110. Demonstration & Refinement | 5/5 | Complete   | 2026-06-29 |
-| 111. Host-Gated Teaching Lockout | 4/5 | In Progress|  |
+| 111. Host-Gated Teaching Lockout | 5/5 | Complete   | 2026-06-30 |
 
 ### Phase 111: Host-Gated Teaching Lockout
 
@@ -176,4 +176,4 @@ Plans:
 - [x] 111-02-PLAN.md — Dev-host lockout enforcement: executeOp + SnapshotSessionHost demoStart guards + broadcast injection + bridge threading (Wave 1)
 - [x] 111-03-PLAN.md — Client gating: GameShell init/broadcast teachingDisabled computed + ControlsMenu affordance suppression (action help ungated) (Wave 2)
 - [x] 111-04-PLAN.md — `boardsmith dev --lock-teaching` flag + dev-host server/config/iframe-init wiring (Wave 2)
-- [ ] 111-05-PLAN.md — Full-suite + eslint green + live browser demonstration (human gate, Wave 3)
+- [x] 111-05-PLAN.md — Full-suite + eslint green + live browser demonstration (human gate, Wave 3)
