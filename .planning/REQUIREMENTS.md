@@ -16,9 +16,9 @@
 ### Action-Space Introspection (INTRO)
 
 - [ ] **INTRO-01**: A user can call one method to get every legal action for a seat — each with its selections, choices, dependencies (`dependsOn`), and ready-to-submit argument templates — in one serializable structure.
-- [ ] **INTRO-02**: A user can retrieve a single action's schema (selection names, types, optional flags, available choices) without executing it.
+- [x] **INTRO-02**: A user can retrieve a single action's schema (selection names, types, optional flags, available choices) without executing it.
 - [ ] **INTRO-03**: A user can build validated, wire-correct action arguments from plain selection values without hand-constructing `{value, display}`/element-id shapes.
-- [ ] **INTRO-04**: A user can enumerate all concrete legal moves (action + fully-resolved args) from the current state, suitable for tree search / brute-force exploration.
+- [x] **INTRO-04**: A user can enumerate all concrete legal moves (action + fully-resolved args) from the current state, suitable for tree search / brute-force exploration.
 - [ ] **INTRO-05**: A user can obtain a typed, perspective-aware view of game state ("what does seat N see?") with hidden information correctly excluded.
 
 ### Test Ergonomics (TEST)
@@ -88,9 +88,9 @@ Which phases cover which requirements. Every v4.3 requirement maps to exactly on
 | DSGN-02 | Phase 116 | Complete |
 | DSGN-03 | Phase 116 | Complete |
 | INTRO-01 | Phase 117 | Pending |
-| INTRO-02 | Phase 117 | Pending |
+| INTRO-02 | Phase 117 | Complete |
 | INTRO-03 | Phase 117 | Pending |
-| INTRO-04 | Phase 117 | Pending |
+| INTRO-04 | Phase 117 | Complete |
 | INTRO-05 | Phase 117 | Pending |
 | TEST-01 | Phase 118 | Pending |
 | TEST-02 | Phase 118 | Pending |
