@@ -224,8 +224,15 @@ export class GameStuckError extends Error {
  */
 export interface PlayUntilCompleteOptions {
   /**
-   * Maximum number of move-selection iterations before giving up.
-   * Defaults to 1000. Increase for games that legitimately take many moves.
+   * Maximum number of **player moves** (successful `doAction` calls) before
+   * giving up. Defaults to 1000. Increase for games that legitimately take
+   * many player moves.
+   *
+   * Auto-advancing flow iterations (where the engine progresses without
+   * player input) do NOT count against this cap — only iterations in which
+   * at least one player successfully executes a move are counted. A separate
+   * absolute iteration safety cap (10× maxMoves) prevents infinite
+   * auto-advance loops from hanging indefinitely.
    */
   maxMoves?: number;
   /**
@@ -257,7 +264,10 @@ export interface PlayUntilCompleteOptions {
  *
  * Throws `GameStuckError` instead of hanging when:
  * - All active seats have zero enumerable legal moves (dead-end).
- * - `maxMoves` iterations are exhausted without the game completing.
+ * - `maxMoves` **player moves** are made without the game completing.
+ * - An absolute iteration safety cap (10× maxMoves) is reached, which
+ *   catches infinite auto-advance loops where the engine never reaches
+ *   an `awaitingInput` state.
  *
  * @param testGame - The test game instance to drive.
  * @param options - Optional configuration (maxMoves, strategy, rng).
@@ -279,11 +289,24 @@ export function playUntilComplete<G extends Game>(
   options?: PlayUntilCompleteOptions,
 ): void {
   const maxMoves = options?.maxMoves ?? 1000;
+  // Absolute iteration safety cap: prevents infinite auto-advancing loops from
+  // hanging. Set generously (10× maxMoves) so it only fires on genuine engine
+  // bugs, not on games with many auto-advance steps between player moves.
+  const maxIterations = maxMoves * 10;
   const strategy = options?.strategy ?? 'random';
   const rng = options?.rng ?? Math.random;
 
-  for (let i = 0; i < maxMoves; i++) {
+  // movesExecuted counts only successful player-move iterations (where at
+  // least one seat successfully executed a doAction call). Auto-advancing flow
+  // iterations — where awaitingInput is false — do NOT increment movesExecuted.
+  let movesExecuted = 0;
+
+  for (let i = 0; i < maxIterations; i++) {
     if (testGame.isComplete()) return;
+
+    // Player-moves cap: if we've already executed maxMoves successful player
+    // moves and the game still hasn't ended, give up and report the cap.
+    if (movesExecuted >= maxMoves) break;
 
     const flowState = testGame.getFlowState();
 
@@ -324,6 +347,7 @@ export function playUntilComplete<G extends Game>(
       const result = testGame.doAction(seat, move.action, move.args);
       if (result.success) {
         anyMoveMade = true;
+        movesExecuted = movesExecuted + 1;
       } else {
         // Action returned by enumerateLegalMoves failed on execution.
         // Record the failure; the dead-end check below will surface it if
@@ -381,7 +405,8 @@ export function playUntilComplete<G extends Game>(
     }
     const seatDesc = activeSeats.length > 0 ? _describeSeat(activeSeats) : 'unknown seat';
     throw new GameStuckError(
-      `Game did not complete after ${maxMoves} moves (${seatDesc} still active). ` +
+      `Game did not complete after ${maxMoves} player moves / ${maxMoves * 10} loop iterations ` +
+      `(${seatDesc} still active). ` +
       `Available actions: [${availableActions.join(', ')}]. ` +
       `Increase maxMoves or verify the game can reach a terminal state.`,
       maxMoves,
