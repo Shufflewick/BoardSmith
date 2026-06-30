@@ -8,18 +8,23 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.2 Tutorial Primitives — Go Fish & Docs
+## Current Milestone: v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools
 
-**Goal:** Prove the v4.1 tutorial substrate generalizes beyond a grid board by applying it to go-fish (a hidden-information card game), and write the developer documentation for authoring tutorials and teaching features.
+**Goal:** Make BoardSmith easy to test and to drive programmatically so AI-agent-based development is a first-class workflow — verify the friction findings against the codebase, design and ship a coherent introspection / test-ergonomics / dev-host devtools API, migrate every example game onto it, and bring the docs in line.
 
 **Target features:**
-- **Go-fish tutorial (CI-verifiable)** — guided *ask-for-a-rank* (action gating + annotation overlay), a *Go Fish!* draw predicate-tip, *forming a book*, and *turn-continues-on-a-hit* continuation; launchable in GameShell + `boardsmith dev`.
-- **AI teaching for go-fish** — MCTS move hint (target highlighted on cards/hand via `anchorAttrs`) + narrated AI-vs-AI demo, reusing go-fish's existing `ai.ts` bot. **Heatmap excluded** — it shades board cells and go-fish has no grid; documented as a board-only feature.
-- **Action help** — per-action help text on go-fish actions + the global toggle.
-- **Host lockout** — verify the v4.1 `teachingDisabled` lockout gates go-fish's teaching affordances (client hide + server fail-loud), with action help staying enabled.
-- **Developer documentation** — a full authoring guide covering the whole substrate (tutorial definition/lifecycle, annotation overlay, action gating, predicate triggers, CI-verifiable authoring, AI teaching, action help, host lockout), with checkers (grid) + go-fish (cards) as worked examples.
+- **Verification & API design** — verify each scouted friction claim against the real code (confirmed / false / partial, with evidence and "already exists vs. needs building"), then a reviewed API-design doc that locks the new surface before any implementation. The keystone insight (echoed by every scout): there is no single way to ask "what can this seat do right now, with what choices?" — that primitive sits upstream of testing, headless control, browser driving, and AI.
+- **Action-space introspection** — one entry point that returns every legal action for a seat with its selections, choices, dependencies, and ready-to-submit arg templates (serializable); plus per-action schema, validated arg-building, and full legal-move enumeration for tree search.
+- **Test ergonomics** — typed perspective-aware observable state (no snapshot-JSON parsing), a `playUntilComplete` driver with structured stuck-game diagnostics, auto-trace on failed availability assertions, and explicit permissive-vs-exact action assertions.
+- **Dev-host devtools bridge** — stable `data-element-id` selectors on every rendered element (custom UI + AutoUI), a read-only `window.__BOARDSMITH_DEVTOOLS` global to inspect game/board state, and an observable action-resolved signal so agents stop coordinate-clicking and polling.
+- **Authoring pit-of-success guards** — turn silent footguns into fail-fast errors: required `maxIterations`, element-registration validation, flow-reachability validation for registered actions, and lint coverage for element-identity / element-array-as-state mistakes.
+- **Game migration & docs** — migrate all `~/BoardSmithGames/` games (and the MERC vendored canary) onto the new APIs, and update the documentation (agent-control guide, testing, browser-testing, authoring/common-pitfalls) to match.
 
-**Key context:** go-fish is cards-only with hidden information and **no board grid** — it is the deliberate second showcase that proves the substrate's parity beyond grid boards (overlays anchor to cards/hands/actions, not cells). The substrate already lives in BoardSmith `src/` (built in v4.1); go-fish tutorial content lands cross-repo in `~/BoardSmithGames/go-fish` (symlinked to `node_modules/boardsmith`), and the docs land in BoardSmith `docs/`. Reuses go-fish's existing MCTS bot — no new training. Cribbage (rules-dense, 5 phases) remains the deferred phase-3 stretch bed.
+**Key context:** This milestone is driven by a four-front adversarial scout of BoardSmith + the example games (testing ergonomics, headless control, browser/dev-host control, authoring API). All four independently converged on the missing action-space introspection primitive. Several scout claims about what "already exists" (e.g. `getPlayerView()`, private checkpoint APIs, an existing action-resolved signal) are **unverified** — Phase 1 verifies them so we expose/document rather than rebuild. No backward-compatibility burden (library in active development). Games are symlinked (`~/BoardSmithGames/`, live HMR) except MERC, which is a vendored copy that must be re-vendored to pick up changes.
+
+## Previous: v4.2 Shipped
+
+Tutorial Primitives (Go Fish & Docs) — proved the v4.1 tutorial substrate generalizes from a grid board to a hidden-information card game (go-fish): CI-verifiable ask-for-a-rank / Go-Fish-draw / book / turn-continues tutorial, MCTS teaching (hint + narrated AI-vs-AI demo, heatmap excluded as board-only), per-action help, host lockout parity, and a full developer authoring guide with checkers (grid) + go-fish (cards) as worked examples. Two post-ship fixes (flow-restart-to-learner-turn, board-path auto-fill scoping).
 
 ## Previous: v4.1 Shipped
 
@@ -242,7 +247,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-**v4.1 Tutorial Primitives (Checkers)** — see REQUIREMENTS.md (TUT, AI, HELP, CHK, DEMO). Building the tutorial substrate + checkers showcase + AI teaching, then demo.
+**v4.3 Agent-Ready Engine** — see REQUIREMENTS.md (DSGN, INTRO, TEST, DEV, PIT, MIG, DOC). Verify the friction findings, design + ship the introspection / test-ergonomics / devtools API, migrate all games, update docs.
 
 Carried forward (deferred from v4.0):
 - ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
@@ -373,4 +378,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-30 — started v4.2 Tutorial Primitives — Go Fish & Docs milestone*
+*Last updated: 2026-06-30 — started v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools milestone*
