@@ -15,8 +15,25 @@ import type { TestGame } from './test-game.js';
 export interface ExpectedFlowState {
   /** Player position who should be acting */
   currentPlayer?: number;
-  /** Exact set of actions that should be available (extras fail the assertion) */
+  /**
+   * Actions that should be available.
+   *
+   * Use `actionsMode` to control whether this must be an exact set or a subset:
+   * - `'exact'` (default) — both missing AND extra actions fail the assertion.
+   * - `'contains'` — only missing actions fail; extra available actions are allowed.
+   */
   actions?: string[];
+  /**
+   * How to compare the `actions` list against available actions.
+   *
+   * - `'exact'` (default) — the available actions must match `actions` exactly;
+   *   both missing and extra actions are assertion failures.
+   *   This is backward-compatible with the pre-actionsMode behavior (D-06).
+   * - `'contains'` — only checks that every action in `actions` is available;
+   *   extra available actions are permitted. Opt into this for tests that only
+   *   care about a subset of actions being present.
+   */
+  actionsMode?: 'exact' | 'contains';
   /** Whether game should be complete */
   complete?: boolean;
   /** Whether game should be awaiting input */
@@ -98,11 +115,14 @@ export function assertFlowState(
     if (missingActions.length > 0) {
       errors.push(`Missing expected actions: ${missingActions.join(', ')}`);
     }
-    // Exact-set match: extra available actions are a failure too, so a test
-    // locking down which actions are legal cannot silently accept extras.
-    const extraActions = actualActions.filter(a => !expected.actions!.includes(a));
-    if (extraActions.length > 0) {
-      errors.push(`Unexpected available actions: ${extraActions.join(', ')}`);
+    // Extra-actions check: only runs in 'exact' mode (default).
+    // Use actionsMode:'contains' to allow extra available actions.
+    const mode = expected.actionsMode ?? 'exact';
+    if (mode === 'exact') {
+      const extraActions = actualActions.filter(a => !expected.actions!.includes(a));
+      if (extraActions.length > 0) {
+        errors.push(`Unexpected available actions: ${extraActions.join(', ')}`);
+      }
     }
   }
 
