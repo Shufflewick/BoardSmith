@@ -76,6 +76,8 @@ export type {
   PickFilter,
   PickChoicesResponse,
   PickTrace,
+  // Action schema types
+  ActionMetadata,
 } from './types.js';
 
 // Error codes enum (value export, not just type)
@@ -112,6 +114,7 @@ export {
   type GameSessionOptions,
   type ActionResult,
   type UndoResult,
+  type ElementDiff,
 } from './game-session.js';
 
 export { AIController } from './ai-controller.js';
