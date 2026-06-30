@@ -110,3 +110,92 @@ describe('ControlsMenu — Tutorial group toggle (R-02)', () => {
     wrapper.unmount();
   });
 });
+
+// ── Host teaching lockout: teachingDisabled prop (Phase 111, Plan 03) ─────────
+//
+// LOCK-01 criterion 2 — client-side gating:
+//   When teachingDisabled is true, the Teaching group and Tutorial group do NOT
+//   render, regardless of showHint and hasTutorial. Action help (Show action help
+//   toggle) is NEVER gated — it explains the rules, not a good move (D-06).
+//
+// Parity note: ControlsMenu is shared by custom UI and AutoUI (both use the same
+// component via GameShell). A single render assertion here covers BOTH UI modes.
+
+describe('ControlsMenu — teachingDisabled lockout (Phase 111 LOCK-01)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  /** Find any Teaching group item (hint, demo, heatmap, tutorial) in document.body. */
+  function findTeachingItems(): HTMLElement[] {
+    const all = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]'));
+    const teachingLabels = ['Get a hint', 'Watch AI demo', 'Stop demo', 'Show move quality', 'Start tutorial', 'Exit tutorial'];
+    return all.filter(el => {
+      const text = el.textContent?.trim() ?? '';
+      return teachingLabels.some(label => text.includes(label));
+    });
+  }
+
+  /** Find the "Show action help" toggle (must remain unaffected by lockout). */
+  function findActionHelpToggle(): Element | undefined {
+    const buttons = document.body.querySelectorAll('[role="menuitemcheckbox"]');
+    return Array.from(buttons).find(b => b.textContent?.includes('Show action help'));
+  }
+
+  it('LOCK-01-A: hides ALL four teaching affordances when teachingDisabled=true, even with showHint=true and hasTutorial=true', async () => {
+    const wrapper = mountMenu({
+      showHint: true,
+      hasTutorial: true,
+      teachingDisabled: true,
+    });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    const items = findTeachingItems();
+    expect(items, 'No Teaching/Tutorial items should render when teachingDisabled=true').toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it('LOCK-01-B: action help toggle (Show action help) still renders when teachingDisabled=true and hasActionHelp=true', async () => {
+    // D-06: Action help is in the Play group (not Teaching) and is never gated by teachingDisabled.
+    const wrapper = mountMenu({
+      showHint: true,
+      hasTutorial: true,
+      teachingDisabled: true,
+      hasActionHelp: true,
+    });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    const toggle = findActionHelpToggle();
+    expect(toggle, 'Show action help toggle must be visible when teachingDisabled=true (D-06)').toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('LOCK-01-C: existing render is unchanged when teachingDisabled=false (default behavior)', async () => {
+    // teachingDisabled=false must not suppress the Teaching group.
+    const wrapper = mountMenu({
+      showHint: true,
+      hasTutorial: true,
+      teachingDisabled: false,
+    });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    const items = findTeachingItems();
+    // Expect Get a hint, Watch AI demo, Show move quality, Start tutorial
+    expect(items.length, 'Teaching items should render when teachingDisabled=false').toBeGreaterThanOrEqual(4);
+    wrapper.unmount();
+  });
+
+  it('LOCK-01-D: existing render is unchanged when teachingDisabled is absent (default behavior)', async () => {
+    // Omitting teachingDisabled (defaults to false) must behave identically to false.
+    const wrapper = mountMenu({
+      showHint: true,
+      hasTutorial: true,
+      // teachingDisabled: absent — defaults to false
+    });
+    await wrapper.find('button.menubtn').trigger('click');
+
+    const items = findTeachingItems();
+    expect(items.length, 'Teaching items should render when teachingDisabled is omitted').toBeGreaterThanOrEqual(4);
+    wrapper.unmount();
+  });
+});

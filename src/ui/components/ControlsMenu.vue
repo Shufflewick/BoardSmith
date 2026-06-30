@@ -59,11 +59,22 @@ const props = withDefaults(defineProps<{
    * When false/absent, it reads "Start tutorial" and emits 'start-tutorial'.
    */
   isTutorialRunning?: boolean;
+  /**
+   * When true, suppresses the entire Teaching group and Tutorial group
+   * (host anti-cheat lockout). Get-a-hint, Watch-AI-demo, Show-move-quality,
+   * and Start-tutorial will not render.
+   *
+   * Action help (the "Show action help" toggle in the Play group) is NEVER
+   * gated by this prop — action help explains the rules, not a good move,
+   * so it is always available (D-06).
+   */
+  teachingDisabled?: boolean;
 }>(), {
   openUp: false,
   align: 'right',
   isActionHelpVisible: false,
   hasActionHelp: true,
+  teachingDisabled: false,
 });
 
 const emit = defineEmits<{
@@ -280,14 +291,15 @@ function handleLeave() {
       </button>
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
-           has an AI player (showHint !== undefined) OR a tutorial (hasTutorial).
+           has an AI player (showHint !== undefined) OR a tutorial (hasTutorial),
+           AND teaching is not disabled by the host (teachingDisabled).
            The tutorial item lives here too — it is teaching, not a separate group. -->
-      <template v-if="showHint !== undefined || hasTutorial">
+      <template v-if="(showHint !== undefined || hasTutorial) && !teachingDisabled">
         <div class="sep"></div>
         <div class="grouplabel">Teaching</div>
 
         <!-- AI-driven aids: only when the game has an AI player. -->
-        <template v-if="showHint !== undefined">
+        <template v-if="showHint !== undefined && !teachingDisabled">
           <!-- Get a hint: request a one-shot AI move suggestion -->
           <button
             class="mi"
@@ -330,7 +342,7 @@ function handleLeave() {
 
         <!-- Tutorial: same Teaching group. Toggle Start ↔ Exit based on run state. -->
         <button
-          v-if="hasTutorial"
+          v-if="hasTutorial && !teachingDisabled"
           class="mi"
           type="button"
           role="menuitem"
