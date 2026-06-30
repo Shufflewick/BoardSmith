@@ -121,6 +121,16 @@ export class TutorialController<G extends Game = Game> {
     // the board is in the deterministic tutorial position before any advanceWhen
     // predicates fire. setup is optional; games without a preset omit it.
     def.setup?.(game);
+    // A tutorial is a controlled scenario that must begin on the learner's turn.
+    // setup() only resets ELEMENT state (the preset board/hands); it does not
+    // touch the flow's turn position. Launching the tutorial on a live game
+    // (e.g. during the opponent's turn) would otherwise deal the preset but leave
+    // the flow on the wrong seat — the learner gets no available action (empty
+    // action panel, dead clicks on the highlighted target). Restart the flow so
+    // eachPlayer begins at seat 1 (the learner) regardless of the live turn.
+    // Safe on a fresh game too (re-inits to the same seat-1 turn). No re-deal:
+    // the deal lives in the game constructor, not the flow definition.
+    game.startFlow();
     // Delegate first-step construction to engine initialProgress — single source of truth.
     const progress = initialProgress(def);
     game.tutorialProgress.set(seat, progress);

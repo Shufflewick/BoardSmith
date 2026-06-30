@@ -327,3 +327,41 @@ describe('TutorialController — setup callback (R-01)', () => {
     expect(runner.game.tutorialProgress.get(1)?.stepId).toBe('step-1');
   });
 });
+
+// ============================================
+// Regression: starting a tutorial mid-game restarts the flow to the learner
+// ============================================
+
+describe('TutorialController.start — restarts the flow to the learner (mid-game launch)', () => {
+  it('resets the active turn to seat 1 even when launched on the opponent\'s turn', () => {
+    const runner = new GameRunner<TutorialTestGame>({
+      GameClass: TutorialTestGame,
+      gameType: 'tutorial-test',
+      gameOptions: {
+        playerCount: 2,
+        playerNames: ['Alice', 'Bob'],
+        seed: 'restart-flow',
+        tutorial: TWO_STEP_TUTORIAL,
+      },
+    });
+    runner.start();
+
+    // Fresh game starts on the learner (seat 1). Capture the index rather than
+    // assuming a 0- vs 1-base for playerIndex.
+    const learnerIdx = runner.getFlowState()!.position.playerIndex;
+
+    // The learner (seat 1) passes — eachPlayer advances to the opponent's turn.
+    runner.performAction('pass', 1, {});
+    expect(runner.getFlowState()!.position.playerIndex).not.toBe(learnerIdx);
+
+    // Launch the tutorial while it is the OPPONENT's turn. Before the flow-restart
+    // fix this left the turn on the opponent, so the learner had no available
+    // action (empty action panel, dead clicks). start() must restart the flow to
+    // the learner.
+    const controller = new TutorialController(() => runner, { broadcast: vi.fn() });
+    controller.start(1);
+
+    expect(runner.getFlowState()!.position.playerIndex).toBe(learnerIdx);
+    expect(runner.game.tutorialProgress.get(1)?.stepId).toBe('step-1');
+  });
+});
