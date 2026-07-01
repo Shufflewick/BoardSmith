@@ -1,9 +1,9 @@
 ---
 phase: 123
 slug: determinism-flow-introspection
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: planned
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-01
 ---
 
@@ -38,7 +38,16 @@ created: 2026-07-01
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | FLOW-01..04 | — | N/A (internal dev tooling) | unit/integration | `npm test` | ✅ | ⬜ pending |
+| 01-T1 | 123-01 | 1 | FLOW-01 | T-123-01 | Flow position is public game structure (no seat filtering needed) | unit | `npx vitest run src/engine/flow/describe-flow-position.test.ts --silent` | ❌ new (Wave 0) | ⬜ pending |
+| 01-T2 | 123-01 | 1 | FLOW-01 | T-123-01 | Graceful no-active-flow branch, no throw | unit | `npx vitest run src/engine/flow --silent` | ✅ | ⬜ pending |
+| 02-T1 | 123-02 | 1 | FLOW-04 | T-123-02 | Shuffle fails loud (throw / required rng) instead of silent Math.random | unit | `npx vitest run src/engine/element/space.test.ts src/engine/element/element-collection.test.ts --silent` | ❌ new (Wave 0) | ⬜ pending |
+| 02-T2 | 123-02 | 1 | FLOW-04 | T-123-03 | Deterministic seeded default; seed retrievable/replayable | unit/integration | `npx vitest run src/testing/play-until-complete.test.ts --silent` | ✅ (new cases) | ⬜ pending |
+| 03-T1 | 123-03 | 2 | FLOW-03 | T-123-05 | getPendingAction returns immutable copy; out-of-range seat -> undefined | unit | `npx vitest run src/testing/test-game.test.ts -t "getPendingAction" --silent` | ✅ (new cases) | ⬜ pending |
+| 03-T2 | 123-03 | 2 | FLOW-02 | T-123-06 | Introspection surfaces disabled choices; gameplay path still rejects submission | unit | `npx vitest run src/testing/test-game.test.ts -t "disabled" --silent && npx vitest run src/session/pick-handler.test.ts --silent` | ✅ | ⬜ pending |
+| 03-T3 | 123-03 | 2 | FLOW-01 | — | Error messages embed readable flow position | unit | `npx vitest run src/testing/assertions.test.ts -t "assertActionAvailable" --silent` | ✅ (new cases) | ⬜ pending |
+| 04-T1 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-07 | pendingAction perspective-isolated (seat N never sees seat M) | unit | `npx vitest run src/session/game-session.test.ts -t "pendingAction" --silent` | ✅ (new cases) | ⬜ pending |
+| 04-T2 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-09 | Devtools getters stay inside DEV guard (production dead-code-eliminated) | typecheck | `npx tsc --noEmit -p tsconfig.json` | ✅ | ⬜ pending |
+| 04-T3 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-07 | Browser parity: getFlowDebugInfo()/getPendingAction() return correct values | manual (browser) | see Manual-Only Verifications | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

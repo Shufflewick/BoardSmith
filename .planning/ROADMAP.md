@@ -35,7 +35,11 @@
   2. A developer can query pick choices and see disabled choices alongside their disable reasons, rather than having them filtered out by `getPickChoices`.
   3. A developer can inspect mid-multi-step action state (`PendingActionState`) directly from TestGame.
   4. Two runs started with the same seed produce identical results — no `Math.random` fallback remains in `space.ts`/`element-collection.ts`, and `playUntilComplete` is deterministic by default (no unseeded fallback).
-**Plans**: TBD
+**Plans**: 4 plans (2 waves)
+- [ ] 123-01-PLAN.md — Flow-position debug primitive: describeFlowPosition + FlowDebugInfo + Game.getFlowDebugInfo() (FLOW-01) [wave 1]
+- [ ] 123-02-PLAN.md — Determinism enforcement: fix RNG fallbacks in space.ts/element-collection.ts, deterministic playUntilComplete, seed retrievability (FLOW-04) [wave 1]
+- [ ] 123-03-PLAN.md — TestGame introspection surface: getPendingAction snapshot, disabled-choices helper, flow-position in error messages (FLOW-01/02/03) [wave 2]
+- [ ] 123-04-PLAN.md — Devtools bridge parity: broadcast serialized flow-debug + own-seat pending action, __BOARDSMITH_DEVTOOLS getters (FLOW-01/03) [wave 2]
 
 #### Phase 124: Hidden-Info Test Utilities
 **Goal**: Developers can verify hidden information stays hidden — in test assertions and in the rendered DOM — without hand-parsing ElementJSON or manually inspecting markup.
@@ -121,7 +125,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
-| 123. Determinism & Flow Introspection | 0/TBD | Not started | - |
+| 123. Determinism & Flow Introspection | 0/4 | Planned | - |
 | 124. Hidden-Info Test Utilities | 0/TBD | Not started | - |
 | 125. Headless Simulation | 0/TBD | Not started | - |
 | 126. Structured Error Surfacing | 0/TBD | Not started | - |
