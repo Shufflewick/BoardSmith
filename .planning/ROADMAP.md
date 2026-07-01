@@ -14,7 +14,7 @@
 - [x] **Phase 118: Test Ergonomics** — Typed observable state, `playUntilComplete` with stuck-game diagnostics, auto-trace on failed availability assertions, permissive-vs-exact action assertions, multi-step selection builder. ✅ 2026-06-30 (4/4 plans, verification 6/6, code review fixed 3 critical simultaneous-turn bugs)
 - [x] **Phase 119: Dev-Host Devtools Bridge** — Stable `data-element-id` selectors (custom UI + AutoUI), read-only `window.__BOARDSMITH_DEVTOOLS`, observable action-resolved signal — browser-proven. ✅ 2026-07-01 (4/4 plans, verification passed; live custom-UI proof + documented pit-of-success finding on the `success:false` demo)
 - [x] **Phase 120: Authoring Pit-of-Success Guards** — Fail-fast `maxIterations`, element-registration validation, flow-reachability validation, and lint coverage for confirmed identity/state footguns. ✅ 2026-07-01 (5/5 plans, verification 4/4, code review 5 findings resolved; full suite 1872 green)
-- [ ] **Phase 121: Game & MERC Migration** — Migrate all `~/BoardSmithGames/` games onto the new APIs, keep BoardSmith green, re-vendor + verify the MERC canary.
+- [x] **Phase 121: Game & MERC Migration** — Migrate all `~/BoardSmithGames/` games onto the new APIs, keep BoardSmith green, re-vendor + verify the MERC canary. ✅ 2026-07-01 (verification 3/3; one src/ gap fixed — PIT-02 built-in exemption; 7 games + BoardSmith 1873 + MERC 738 green)
 - [ ] **Phase 122: Documentation** — Agent-control guide, updated testing + browser/dev-host docs, and authoring/common-pitfalls updates for the shipped surface.
 
 See [`milestones/v4.3-ROADMAP.md`](milestones/v4.3-ROADMAP.md) for goals, dependencies, requirement mappings, and success criteria.
@@ -113,7 +113,10 @@ Plans:
   1. All `~/BoardSmithGames/` example games adopt the new introspection/test APIs where they replace hand-rolled patterns, and every game test suite passes.
   2. BoardSmith's own test suite passes with the new surface.
   3. The MERC vendored canary is re-vendored against the new surface and verified green.
-**Plans**: TBD
+**Plans**: scouting-driven (minimal scope) — 1 src/ fix + verification + re-vendor
+  - [x] PIT-02 built-in-element-class exemption (unblocks polyhedral-potions) + regression test
+  - [x] All 7 game suites + BoardSmith (1873) verified green; no game code refactor needed (reuse-not-rebuild)
+  - [x] MERC re-vendored (boardsmith-0.0.1-20260701000512.tgz) + verified green (738/7)
 
 ### Phase 122: Documentation
 **Goal**: Bring the docs in line with the shipped, migrated surface so an agent or author can learn headless driving, the new test ergonomics, browser/dev-host driving, and the new authoring guards from the docs alone.

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.3
 milestone_name: Agent-Ready Engine — Introspection, Test Ergonomics & Devtools
 status: executing
-stopped_at: phase 120 complete
-last_updated: "2026-07-01T04:50:00.000Z"
+stopped_at: phase 121 complete
+last_updated: "2026-07-01T05:10:00.000Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 20
   completed_plans: 20
-  percent: 71
+  percent: 86
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 
 ## Current Position
 
-Phase: 121 (game-merc-migration) — NOT STARTED
+Phase: 122 (documentation) — NOT STARTED
 Plan: none yet
-Status: Phase 120 complete (5/5 plans, verification 4/4, code review 5 findings resolved, full suite 1872 green); ready to plan Phase 121
+Status: Phase 121 complete (verification 3/3; PIT-02 built-in exemption fix; 7 games + BoardSmith 1873 + MERC 738 green). Only Phase 122 (docs) remains.
 Last activity: 2026-07-01
 
 ## Milestones
