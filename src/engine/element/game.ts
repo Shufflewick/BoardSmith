@@ -1,6 +1,28 @@
 import { Space } from './space.js';
 import { GameElement } from './game-element.js';
+import { Piece } from './piece.js';
+import { Card } from './card.js';
+import { Hand } from './hand.js';
+import { Deck } from './deck.js';
+import { Die } from './die.js';
+import { DicePool } from './dice-pool.js';
+import { Grid, GridCell } from './grid.js';
+import { HexGrid, HexCell } from './hex-grid.js';
 import type { ElementContext, ElementClass, ElementJSON } from './types.js';
+
+/**
+ * Built-in element classes provided by the framework. These are implicitly
+ * "registered" at construction so that polymorphic queries by a built-in base
+ * class (e.g. `dicePool.all(Die)`, `hand.all(Card)`) — including the engine's
+ * own internal queries — never trip the PIT-02 unregistered-class guard, which
+ * exists only to catch UNREGISTERED CUSTOM element classes. A game that defines
+ * `class IngredientDie extends Die` still registers its OWN subclass; it must
+ * not be forced to register the framework's base class.
+ */
+const BUILTIN_ELEMENT_CLASSES: ReadonlyArray<ElementClass> = [
+  GameElement, Space, Piece, Card, Hand, Deck, Die, DicePool,
+  Grid, GridCell, HexGrid, HexCell,
+] as unknown as ElementClass[];
 import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
@@ -600,9 +622,16 @@ export class Game<
       this.tutorialDefinition = _tutorialOption;
     }
 
-    // Register base classes
-    this._ctx.classRegistry.set('Space', Space as unknown as ElementClass);
-    this._ctx.classRegistry.set('GameElement', GameElement as unknown as ElementClass);
+    // Register built-in framework element classes. Seeding these means the
+    // PIT-02 registration guard only ever flags a genuinely unregistered CUSTOM
+    // class, and polymorphic base-class queries (dicePool.all(Die), hand.all(Card))
+    // — including the engine's own internal ones — resolve without a game having
+    // to register the framework's own classes.
+    this._ctx._builtinSeededNames = new Set<string>();
+    for (const cls of BUILTIN_ELEMENT_CLASSES) {
+      this._ctx.classRegistry.set(cls.name, cls);
+      this._ctx._builtinSeededNames.add(cls.name);
+    }
 
     // Create removed elements pile
     this.pile = this.createElement(Space, '__pile__');
@@ -746,11 +775,13 @@ export class Game<
   protected registerElements(
     classes: (new (...args: any[]) => GameElement)[]
   ): void {
+    // Unconditional set: an explicit game registration is authoritative and
+    // overrides the built-in default seed (see BUILTIN_ELEMENT_CLASSES). This
+    // lets a game register a custom class that happens to share a built-in name
+    // instead of being silently shadowed by the framework class.
     for (const cls of classes) {
-      const className = cls.name;
-      if (!this._ctx.classRegistry.has(className)) {
-        this._ctx.classRegistry.set(className, cls as ElementClass);
-      }
+      this._ctx.classRegistry.set(cls.name, cls as ElementClass);
+      this._ctx._builtinSeededNames?.delete(cls.name);
     }
   }
 
@@ -766,8 +797,12 @@ export class Game<
     element.game = this as unknown as Game;
 
     const className = elementClass.name;
-    if (!this._ctx.classRegistry.has(className)) {
+    // Register unless already registered as a non-builtin (custom) class. A
+    // built-in default seed is overridden by the class actually instantiated,
+    // so a custom class sharing a built-in name is not silently shadowed.
+    if (!this._ctx.classRegistry.has(className) || this._ctx._builtinSeededNames?.has(className)) {
       this._ctx.classRegistry.set(className, elementClass);
+      this._ctx._builtinSeededNames?.delete(className);
     }
 
     return element;

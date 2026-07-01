@@ -58,6 +58,14 @@ export type ElementContext = {
    * never registered. Not part of the public API.
    */
   _pit02RecordedClasses?: Set<ElementClass>;
+  /**
+   * Internal: names of built-in framework element classes seeded into
+   * `classRegistry` at construction (e.g. Die, Card, Hand). These are defaults
+   * so polymorphic base-class queries resolve; a game that actually
+   * registers/instantiates its OWN class of the same name overrides the default
+   * (the seed name is removed from this set on override). Not public API.
+   */
+  _builtinSeededNames?: Set<string>;
 };
 
 /**

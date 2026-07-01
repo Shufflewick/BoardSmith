@@ -356,10 +356,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Add to tree
     this.addChild(element);
 
-    // Register class for deserialization (using Map)
+    // Register class for deserialization (using Map). A built-in default seed
+    // is overridden by the class actually instantiated, so a custom class
+    // sharing a built-in name is not silently shadowed.
     const className = elementClass.name;
-    if (!this._ctx.classRegistry.has(className)) {
+    if (!this._ctx.classRegistry.has(className) || this._ctx._builtinSeededNames?.has(className)) {
       this._ctx.classRegistry.set(className, elementClass);
+      this._ctx._builtinSeededNames?.delete(className);
     }
 
     return element;

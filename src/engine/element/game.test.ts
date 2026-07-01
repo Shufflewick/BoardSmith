@@ -17,6 +17,7 @@ import {
   Space,
   Card,
   Piece,
+  Die,
   defineFlow,
   loop,
   eachPlayer,
@@ -197,9 +198,48 @@ class UnregisteredHasQueryGame extends Game<UnregisteredHasQueryGame, Player> {
   }
 }
 
+class TestBagB extends Space<BuiltinBaseQueryGame> {}
+
+/**
+ * Flow queries the framework built-in `Die` polymorphically during the first
+ * traversal WITHOUT the game ever registering `Die`. Built-in element classes
+ * are seeded at construction, so this must NOT throw — PIT-02 exists to catch
+ * unregistered CUSTOM classes, and games (and the engine's own DicePool.all(Die))
+ * legitimately query built-in base classes. Mirrors the polyhedral-potions
+ * migration finding.
+ */
+class BuiltinBaseQueryGame extends Game<BuiltinBaseQueryGame, Player> {
+  dieCount = -1;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([TestBagB]);
+    const bag = this.create(TestBagB, 'bag');
+    // A subclass author would create their own Die subclass; here we create the
+    // built-in Die directly to prove the base class need not be registered.
+    bag.create(Die, 'd6');
+    this.setFlow(
+      defineFlow({
+        setup: (ctx) => {
+          this.dieCount = (ctx.game as BuiltinBaseQueryGame).all(Die).length;
+        },
+        root: eachPlayer({
+          do: actionStep({ actions: [] }),
+        }),
+      }),
+    );
+  }
+}
+
 describe('PIT-02', () => {
   beforeEach(() => {
     _clearShownWarnings();
+  });
+
+  it('does not throw when the flow queries a built-in element class (Die) that was never explicitly registered', () => {
+    const game = new BuiltinBaseQueryGame(makeOptions());
+    expect(() => game.startFlow()).not.toThrow();
+    expect(game.dieCount).toBe(1);
   });
 
   it('throws naming an element class queried but never registered during first traversal', () => {
