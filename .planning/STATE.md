@@ -4,7 +4,7 @@ milestone: v4.3
 milestone_name: Agent-Ready Engine — Introspection, Test Ergonomics & Devtools
 status: completed
 stopped_at: roadmap complete
-last_updated: "2026-07-01T04:26:57.679Z"
+last_updated: "2026-07-01T04:28:10.551Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 7
@@ -121,6 +121,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase ?]: INTRO-F1 promoted to IN-scope (trivial expose-not-build); flagged for user sign-off at approval gate
 - [Phase ?]: ElementDiff reached through game-session.js barrel re-export; ActionMetadata added to types.js block; UndoResult not duplicated
 - [Phase 120]: PIT-01: loop() missing maxIterations now throws at construction time; devWarn path removed; 6 test call sites patched
+- [Phase 120]: PIT-03: unregistered actionStep-referenced action throws (naming registerActions); registered-but-unreferenced action is a devWarn, not a throw; function-valued actions are a documented static-walk blind spot
 
 ### Highest-Risk Items (v4.3)
 

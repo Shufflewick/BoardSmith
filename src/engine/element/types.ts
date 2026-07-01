@@ -45,6 +45,19 @@ export type ElementContext = {
   classRegistry: Map<string, ElementClass>;
   /** Random number generator (seeded for replay) */
   random: () => number;
+  /**
+   * Internal (PIT-02): true while `startFlow()`'s first traversal is
+   * recording element-class queries made through the `GameElement` finder
+   * methods (all/first/firstN/last/lastN). Not part of the public API.
+   */
+  _pit02RecordingActive?: boolean;
+  /**
+   * Internal (PIT-02): element classes queried through the `GameElement`
+   * finder methods while `_pit02RecordingActive` is true. Diffed against
+   * `classRegistry` after the first traversal to catch classes queried but
+   * never registered. Not part of the public API.
+   */
+  _pit02RecordedClasses?: Set<ElementClass>;
 };
 
 /**

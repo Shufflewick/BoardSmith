@@ -14,6 +14,32 @@ import type { VisibilityState } from '../command/visibility.js';
 import { DEFAULT_VISIBILITY, canPlayerSee, resolveVisibility } from '../command/visibility.js';
 
 /**
+ * Check if a value is an ElementClass (a GameElement subclass constructor).
+ * Mirrors the equivalent private guard in ElementCollection — duplicated
+ * here (rather than imported) because ElementCollection has no `_ctx`/game
+ * linkage and cannot be the recording hook (see PIT-02 plan notes).
+ */
+function isElementClass<F extends GameElement>(value: unknown): value is ElementClass<F> {
+  return (
+    typeof value === 'function' &&
+    'isGameElement' in value &&
+    (value as ElementClass<F>).isGameElement === true
+  );
+}
+
+/**
+ * PIT-02: record a class-typed finder arg into the per-game `_ctx` recorded
+ * set, but only while recording is active (first `startFlow()` traversal).
+ * No-op (single boolean check, no allocation) when recording is inactive —
+ * this keeps the finder hot path free of overhead during normal play.
+ */
+function recordQueriedClassIfActive(ctx: ElementContext, classNameOrFinder: unknown): void {
+  if (!ctx._pit02RecordingActive) return;
+  if (!isElementClass(classNameOrFinder)) return;
+  ctx._pit02RecordedClasses!.add(classNameOrFinder);
+}
+
+/**
  * Base class for all game elements. Elements form a tree structure representing
  * the game state.
  *
@@ -413,6 +439,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
     ...finders: ElementFinder<F>[]
   ): ElementCollection<F> {
+    recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
     return collection.all(classNameOrFinder as ElementClass<F>, ...finders);
   }
@@ -448,6 +475,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
     ...finders: ElementFinder<F>[]
   ): F | undefined {
+    recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
     return collection.first(classNameOrFinder as ElementClass<F>, ...finders);
   }
@@ -480,6 +508,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
     ...finders: ElementFinder<F>[]
   ): ElementCollection<F> {
+    recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
     return collection.firstN(n, classNameOrFinder as ElementClass<F>, ...finders);
   }
@@ -512,6 +541,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
     ...finders: ElementFinder<F>[]
   ): F | undefined {
+    recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
     return collection.last(classNameOrFinder as ElementClass<F>, ...finders);
   }
@@ -541,6 +571,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
     ...finders: ElementFinder<F>[]
   ): ElementCollection<F> {
+    recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
     return collection.lastN(n, classNameOrFinder as ElementClass<F>, ...finders);
   }
