@@ -29,11 +29,12 @@ import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
-import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
+import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
 import { availableActionsForSeat } from '../flow/index.js';
 import { walkFlowNodes } from '../flow/walk-flow-nodes.js';
+import { describeFlowPosition } from '../flow/describe-flow-position.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../session/types.js';
 import { devWarn } from '../../utils/dev.js';
@@ -1753,6 +1754,42 @@ export class Game<
    */
   getFlowState(): FlowState | undefined {
     return this._flowEngine?.getState();
+  }
+
+  /**
+   * Get a structured, human- and machine-readable description of "where in
+   * the flow are we right now" — phase, step, raw path, and who's being
+   * awaited. Mirrors the `debugActionAvailability()` facade pattern: gather
+   * raw data (flow definition root + current position/state), then delegate
+   * to a dedicated formatter (`describeFlowPosition()`).
+   *
+   * Never throws and never returns `undefined` — when there is no active
+   * flow (no flow definition set, or the flow hasn't started/has no
+   * position yet), returns a well-formed `FlowDebugInfo` whose `describe()`
+   * states there is no active flow.
+   *
+   * @example
+   * ```typescript
+   * const info = game.getFlowDebugInfo();
+   * console.log(info.describe());
+   * // "phase *pegging* -> step *player-turn*, waiting on seat 2"
+   * ```
+   */
+  getFlowDebugInfo(): FlowDebugInfo {
+    const flowState = this.getFlowState();
+    const root = this._flowDefinition?.root;
+
+    if (!root || !flowState) {
+      return {
+        phase: undefined,
+        step: undefined,
+        path: [],
+        awaiting: { currentPlayer: undefined, awaitingPlayers: undefined },
+        describe: () => 'no active flow',
+      };
+    }
+
+    return describeFlowPosition(root, flowState.position, flowState);
   }
 
   /**
