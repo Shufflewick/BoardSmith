@@ -45,6 +45,23 @@ ruleTester.run('no-element-identity-comparison', rule, {
     {
       code: `function f(a, b) { return a === b; }`,
     },
+    // Scope-hygiene regression (WR-03): the same identifier name (`card`)
+    // is a GameElement-typed variable in one function and a plain string
+    // in a different, unrelated function. Before the scope-resolution fix,
+    // the rule matched by bare name across the whole file, so the `string`
+    // comparison in the second function would have been falsely flagged
+    // because `card` was seen with a `Card` type annotation elsewhere.
+    {
+      code: `
+        class Card extends GameElement {}
+        function usesElementCard(card: Card, other: Card) {
+          return card.id === other.id;
+        }
+        function usesStringCard(card: string, other: string) {
+          return card === other;
+        }
+      `,
+    },
   ],
   invalid: [
     // Simple binary identity comparison between same-file-typed GameElement

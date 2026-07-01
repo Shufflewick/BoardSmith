@@ -27,6 +27,14 @@ import type { Rule } from 'eslint';
  *       `.lastN(...)`) is treated as GameElement[]-looking for the
  *       `.includes()` check, regardless of type annotation.
  *
+ * SCOPE RESOLUTION (WR-03 fix): a used Identifier is matched against the
+ * evidence in (a)/(c) by resolving it to its actual binding via the ESLint
+ * scope manager (`sourceCode.getScope(node)` + the resolved `Reference`),
+ * not by bare variable name. This means two unrelated same-named variables
+ * declared in different functions/scopes in one file (e.g. a `Card`-typed
+ * `card` in one function and a `string`-typed `card` in another) are never
+ * conflated -- only the actual GameElement-typed binding is flagged.
+ *
  * ACCEPTED BOUNDS (documented, not bugs):
  *   - False negatives: untyped operands with no same-file type/class/
  *     collection-call evidence (e.g. plain function params with no type
@@ -130,8 +138,41 @@ const rule: Rule.RuleModule = {
 
   create(context) {
     const elementTypeNames = new Set<string>(['GameElement']);
-    const elementVarNames = new Set<string>();
-    const elementArrayVarNames = new Set<string>();
+    // Scope-hygiene fix (WR-03): membership is tracked by the *declaration*
+    // Identifier AST node (the param/variable-declarator `id` node that
+    // carried the GameElement(-ish) type annotation, or was initialized
+    // from a collection-returning call) rather than by bare variable name.
+    // A used Identifier is resolved to its binding via the ESLint scope
+    // manager, then checked against these node sets -- so two unrelated
+    // same-named variables in different functions (e.g. `card: Card` in one
+    // function and `card: string` in another) are never conflated.
+    const elementVarDeclNodes = new Set<object>();
+    const elementArrayVarDeclNodes = new Set<object>();
+
+    /**
+     * Resolve a used Identifier node to its declaration node(s) via the
+     * ESLint scope manager. Falls back to `null` (no match) if scope
+     * information is unavailable or the identifier cannot be resolved --
+     * NOT to name-based matching, since that would reintroduce the exact
+     * cross-scope false positive this fix removes.
+     */
+    function resolveDeclNodes(identifierNode: Record<string, unknown>): object[] {
+      const sourceCode = context.sourceCode ?? context.getSourceCode();
+      if (typeof sourceCode.getScope !== 'function') return [];
+      const scope = sourceCode.getScope(identifierNode as unknown as Rule.Node);
+      const ref = scope.references.find((r) => (r.identifier as unknown) === identifierNode);
+      const variable = ref?.resolved;
+      if (!variable) return [];
+      return variable.identifiers as unknown as object[];
+    }
+
+    function isElementDecl(identifierNode: Record<string, unknown>): boolean {
+      return resolveDeclNodes(identifierNode).some((n) => elementVarDeclNodes.has(n));
+    }
+
+    function isElementArrayDecl(identifierNode: Record<string, unknown>): boolean {
+      return resolveDeclNodes(identifierNode).some((n) => elementArrayVarDeclNodes.has(n));
+    }
 
     return {
       Program(program) {
@@ -162,16 +203,15 @@ const rule: Rule.RuleModule = {
           }
         }
 
-        // Pass 2: collect variables/params with a resolved GameElement(-ish)
-        // type annotation, and variables initialized from a known
-        // collection-returning call.
+        // Pass 2: collect declaration nodes (params/variable-declarator ids)
+        // with a resolved GameElement(-ish) type annotation, and variables
+        // initialized from a known collection-returning call.
         walk(program, (node) => {
           if (node.type === 'Identifier' && node.typeAnnotation) {
             const { name, isArray } = resolveTypeAnnotation(node.typeAnnotation);
             if (name && elementTypeNames.has(name)) {
-              const varName = node.name as string;
-              if (isArray) elementArrayVarNames.add(varName);
-              else elementVarNames.add(varName);
+              if (isArray) elementArrayVarDeclNodes.add(node);
+              else elementVarDeclNodes.add(node);
             }
           }
 
@@ -190,7 +230,7 @@ const rule: Rule.RuleModule = {
               init.callee.property.name &&
               COLLECTION_CALL_NAMES.has(init.callee.property.name)
             ) {
-              elementArrayVarNames.add(id.name);
+              elementArrayVarDeclNodes.add(id as unknown as object);
             }
           }
         });
@@ -201,7 +241,8 @@ const rule: Rule.RuleModule = {
 
         const left = node.left;
         const right = node.right;
-        const isElementLike = (n: typeof left) => n.type === 'Identifier' && elementVarNames.has(n.name);
+        const isElementLike = (n: typeof left) =>
+          n.type === 'Identifier' && isElementDecl(n as unknown as Record<string, unknown>);
 
         if (!isElementLike(left) || !isElementLike(right)) return;
 
@@ -231,7 +272,7 @@ const rule: Rule.RuleModule = {
           callee.property.type === 'Identifier' &&
           callee.property.name === 'includes' &&
           callee.object.type === 'Identifier' &&
-          elementArrayVarNames.has(callee.object.name) &&
+          isElementArrayDecl(callee.object as unknown as Record<string, unknown>) &&
           node.arguments.length === 1
         ) {
           const sourceCode = context.sourceCode ?? context.getSourceCode();

@@ -57,6 +57,24 @@ ruleTester.run('no-element-array-state', rule, {
         }
       `,
     },
+    // Scope-hygiene regression (WR-03): a same-named field (`items`)
+    // appears in two different classes -- one an element-tree owner
+    // (correctly storing a Piece[] child array), one a plain string field
+    // in an unrelated class. Since this rule checks each PropertyDefinition
+    // by its own type annotation (not a file-wide bare-name set), the
+    // unrelated `items: string[]` field must not be flagged just because
+    // another class in the file has a same-named GameElement[] field.
+    {
+      code: `
+        class Piece extends GameElement {}
+        class Board extends GameElement {
+          items: Piece[] = [];
+        }
+        class Inventory {
+          items: string[] = [];
+        }
+      `,
+    },
   ],
   invalid: [
     // GameElement[]-typed class field in a non-GameElement class.

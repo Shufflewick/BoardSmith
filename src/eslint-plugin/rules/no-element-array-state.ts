@@ -38,6 +38,15 @@ import type { Rule } from 'eslint';
  *       declared type, but ONLY when the result is persisted onto `this.*`
  *       (a class property), never for locals.
  *
+ * SCOPE HYGIENE (WR-03 audit note): unlike no-element-identity-comparison.ts,
+ * this rule never aggregates matched variables/fields into a file-wide
+ * bare-name set -- (b) checks each `PropertyDefinition`'s own type
+ * annotation directly, and (c) checks each assignment's own call shape
+ * directly. Both are therefore already scoped per-declaration/per-site, not
+ * per-name, so the same-named-variable-in-a-different-scope false positive
+ * that affected no-element-identity-comparison.ts does not apply here. See
+ * the regression fixture in this rule's .test.ts confirming this.
+ *
  * ACCEPTED BOUNDS (documented, not bugs):
  *   - False negatives: a persisted element array with no same-file type
  *     evidence and no recognizable collection-call shape (e.g. an
