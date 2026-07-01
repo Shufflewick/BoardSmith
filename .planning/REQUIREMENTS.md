@@ -31,7 +31,7 @@
 
 ### Dev-Host Devtools Bridge (DEV)
 
-- [ ] **DEV-01**: Every rendered board element exposes a stable selector (`data-element-id`, plus notation where applicable) in both custom UI and AutoUI, so agents select by id instead of coordinates/vision.
+- [x] **DEV-01**: Every rendered board element exposes a stable selector (`data-element-id`, plus notation where applicable) in both custom UI and AutoUI, so agents select by id instead of coordinates/vision.
 - [ ] **DEV-02**: A `boardsmith dev` page exposes a read-only `window.__BOARDSMITH_DEVTOOLS` global to synchronously inspect current game state, available actions, and board-interaction state (valid elements, current selection).
 - [ ] **DEV-03**: The dev-host page emits an observable signal (custom event and/or devtools log) when an action resolves, distinguishing success from failure, so agents confirm outcomes without polling.
 - [ ] **DEV-04**: The fastest agent UI loop (change → drive → confirm) is documented and proven end-to-end in the browser for at least one custom-UI game and one AutoUI game.
@@ -97,7 +97,7 @@ Which phases cover which requirements. Every v4.3 requirement maps to exactly on
 | TEST-03 | Phase 118 | Complete |
 | TEST-04 | Phase 118 | Complete |
 | TEST-05 | Phase 118 | Complete |
-| DEV-01 | Phase 119 | Pending |
+| DEV-01 | Phase 119 | Complete |
 | DEV-02 | Phase 119 | Pending |
 | DEV-03 | Phase 119 | Pending |
 | DEV-04 | Phase 119 | Pending |
