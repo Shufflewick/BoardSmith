@@ -15,7 +15,7 @@
 - [x] **Phase 119: Dev-Host Devtools Bridge** — Stable `data-element-id` selectors (custom UI + AutoUI), read-only `window.__BOARDSMITH_DEVTOOLS`, observable action-resolved signal — browser-proven. ✅ 2026-07-01 (4/4 plans, verification passed; live custom-UI proof + documented pit-of-success finding on the `success:false` demo)
 - [x] **Phase 120: Authoring Pit-of-Success Guards** — Fail-fast `maxIterations`, element-registration validation, flow-reachability validation, and lint coverage for confirmed identity/state footguns. ✅ 2026-07-01 (5/5 plans, verification 4/4, code review 5 findings resolved; full suite 1872 green)
 - [x] **Phase 121: Game & MERC Migration** — Migrate all `~/BoardSmithGames/` games onto the new APIs, keep BoardSmith green, re-vendor + verify the MERC canary. ✅ 2026-07-01 (verification 3/3; one src/ gap fixed — PIT-02 built-in exemption; 7 games + BoardSmith 1873 + MERC 738 green)
-- [ ] **Phase 122: Documentation** — Agent-control guide, updated testing + browser/dev-host docs, and authoring/common-pitfalls updates for the shipped surface.
+- [x] **Phase 122: Documentation** — Agent-control guide, updated testing + browser/dev-host docs, and authoring/common-pitfalls updates for the shipped surface. ✅ 2026-07-01 (verification 4/4; 2 new + 4 updated docs, all verified against src/)
 
 See [`milestones/v4.3-ROADMAP.md`](milestones/v4.3-ROADMAP.md) for goals, dependencies, requirement mappings, and success criteria.
 
@@ -128,7 +128,11 @@ Plans:
   2. Testing documentation is updated for the new TestGame ergonomics (observable state, `playUntilComplete`, assertion modes, multi-step builder).
   3. Browser/dev-host testing documentation covers `data-element-id`, `__BOARDSMITH_DEVTOOLS`, and the action-resolved signal.
   4. Authoring docs and `common-pitfalls.md` are updated to reflect the new pit-of-success guards and any removed footguns.
-**Plans**: TBD
+**Plans**: parallel doc-writers (4 DOC reqs), each verified against src/
+  - [x] DOC-01 docs/agent-control.md (new) + README link
+  - [x] DOC-02 docs/api/testing.md (updated; stale APIs removed)
+  - [x] DOC-03 docs/browser-testing.md (new)
+  - [x] DOC-04 common-pitfalls.md + core-concepts.md + actions-and-flow.md (updated)
 
 ### Shipped milestones
 
