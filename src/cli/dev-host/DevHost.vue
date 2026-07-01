@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/// <reference types="vite/client" />
 /**
  * DevHost — the `boardsmith dev` main-window page. It is a WebSocket CLIENT of
  * the Node-side host (the local stand-in for ShufflewickPub's game Durable
@@ -54,6 +55,10 @@ const followActive = ref(false);
 // the currently-selected one. Handled inside GameShell; no effect in production.
 const uiOptions = ref<string[]>([]);
 const selectedUi = ref('');
+
+// DEV-02: snapshot of the latest devtools state broadcast from the game iframe.
+// Read methods on window.__BOARDSMITH_DEVTOOLS close over this ref.
+const devtoolsSnapshot = ref<Record<string, unknown> | null>(null);
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
@@ -231,6 +236,11 @@ function onWindowMessage(event: MessageEvent): void {
     debugOpen.value = !!data.open;
     return;
   }
+  // DEV-02: game iframe broadcasts its current devtools state snapshot.
+  if (data.type === 'boardsmith:devtools-state-update') {
+    devtoolsSnapshot.value = data as Record<string, unknown>;
+    return;
+  }
   // The game advertises its available UIs; populate the switcher dropdown.
   if (data.type === 'dev-ui-list' && Array.isArray(data.uis)) {
     // If the iframe is running a different game than this outer page was built
@@ -355,6 +365,21 @@ onMounted(() => {
   document.addEventListener('keydown', handleChromeKeydown);
   document.addEventListener('click', handleChromeClick);
   connect();
+
+  // DEV-02: Expose synchronous read-only devtools global for agents and tooling.
+  // Gated by import.meta.env.DEV — Vite dead-code-eliminates this block in
+  // production builds so the global is never assigned outside the dev host.
+  if (import.meta.env.DEV) {
+    window.__BOARDSMITH_DEVTOOLS = {
+      getState: (_seat?: number) => (devtoolsSnapshot.value?.state as any) ?? null,
+      getAvailableActions: (_seat?: number) =>
+        (devtoolsSnapshot.value?.availableActions as string[]) ?? [],
+      getActionMetadata: (_seat?: number) =>
+        devtoolsSnapshot.value?.actionMetadata as Record<string, unknown> | undefined,
+      getBoardInteractionState: () =>
+        (devtoolsSnapshot.value?.boardInteraction as any) ?? null,
+    };
+  }
 });
 
 onUnmounted(() => {
