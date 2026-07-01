@@ -1405,4 +1405,93 @@ describe('SnapshotSessionHost', () => {
 
   });
 
+  // ── flowDebugInfo + pendingAction introspection (Plan 04 Task 4 fix) ───────
+  // The dev host (`boardsmith dev`) runs SnapshotSessionHost, NOT GameSession —
+  // it has its own broadcast injection point (mergeTransientState). This proves
+  // that path also carries the shared flowDebugInfo/pendingAction fields, closing
+  // the gap the browser verification caught (Task 1 only wired GameSession).
+
+  describe('flowDebugInfo + pendingAction (dev-host parity)', () => {
+    type FlowView = {
+      state: {
+        flowDebugInfo?: { description: string; path: number[]; awaiting: unknown };
+        pendingAction?: { actionName?: string; [key: string]: unknown };
+      };
+    };
+
+    it('broadcasts a non-empty flowDebugInfo.description on every seat after start()', async () => {
+      const { adapters, broadcastLog } = makeAdapters(twoStepGameDef, twoStepGameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      expect(broadcastLog.length).toBeGreaterThanOrEqual(1);
+      const [views] = broadcastLog[broadcastLog.length - 1] as [FlowView[], unknown];
+      expect(views).toHaveLength(2);
+      for (const view of views) {
+        expect(view.state.flowDebugInfo).toBeDefined();
+        expect(typeof view.state.flowDebugInfo!.description).toBe('string');
+        expect(view.state.flowDebugInfo!.description.length).toBeGreaterThan(0);
+        expect(Array.isArray(view.state.flowDebugInfo!.path)).toBe(true);
+      }
+    });
+
+    it("seat 1's in-progress pendingAction never appears on seat 2's broadcast view (perspective isolation)", async () => {
+      const { adapters, broadcastLog } = makeAdapters(twoStepGameDef, twoStepGameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      // Seat 1 begins (but does not complete) the two-step 'pick' action.
+      const step1 = await host.handleOp(1, {
+        type: 'selectionStep',
+        player: 1,
+        selectionName: 'color',
+        value: 'red',
+        actionName: 'pick',
+      });
+      expect(step1.success).toBe(true);
+      expect(step1.actionComplete).toBe(false);
+
+      const [views] = broadcastLog[broadcastLog.length - 1] as [FlowView[], unknown];
+      const seat1View = views[0]; // seat = i + 1, so index 0 is seat 1
+      const seat2View = views[1]; // index 1 is seat 2
+
+      // Seat 1 sees its own in-progress pending action.
+      expect(seat1View.state.pendingAction).toBeDefined();
+
+      // Seat 2 must NOT receive any part of seat 1's accumulated pending-action
+      // args (T-123-07) — the dev host's per-seat pendingStates lookup must be
+      // keyed strictly by seat.
+      expect(seat2View.state.pendingAction).toBeUndefined();
+    });
+
+    it('returns undefined pendingAction (not an error) for a seat with no in-progress selection', async () => {
+      const { adapters, broadcastLog } = makeAdapters(twoStepGameDef, twoStepGameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      const [views] = broadcastLog[broadcastLog.length - 1] as [FlowView[], unknown];
+      for (const view of views) {
+        expect(view.state.pendingAction).toBeUndefined();
+      }
+    });
+
+    it('re-broadcasts the last known flowDebugInfo via broadcastCurrent() (demo/control re-broadcast path)', async () => {
+      const { adapters, broadcastLog } = makeAdapters(twoStepGameDef, twoStepGameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      broadcastLog.length = 0;
+
+      // broadcastCurrent() re-broadcasts lastPlayerViews with mergeTransientState
+      // applied — no fresh executeOp result — proving lastFlowDebugInfo survives.
+      host.broadcastCurrent();
+
+      expect(broadcastLog.length).toBe(1);
+      const [views] = broadcastLog[0] as [FlowView[], unknown];
+      for (const view of views) {
+        expect(view.state.flowDebugInfo).toBeDefined();
+        expect(view.state.flowDebugInfo!.description.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
 });

@@ -23,6 +23,7 @@ import {
   computeUndoInfo,
   buildActionTraces,
   computeElementDiff,
+  serializeFlowDebugInfo,
 } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -219,6 +220,7 @@ function stateEnvelope(runner: GameRunner, playerCount: number): {
   isComplete: boolean;
   winners: number[];
   pendingState: null;
+  flowDebugInfo: SerializedFlowDebugInfo;
 } {
   return {
     snapshot: runner.getSnapshot(),
@@ -228,6 +230,12 @@ function stateEnvelope(runner: GameRunner, playerCount: number): {
     isComplete: runner.isComplete(),
     winners: runner.getWinners().map((p) => p.seat),
     pendingState: null,
+    // Present on every state-mutating op (top-level, computed once — mirrors
+    // GameSession.broadcast()'s "compute once, reuse across seats" pattern).
+    // SnapshotSessionHost merges this into every per-seat view's `state`
+    // alongside the host's own per-seat pendingAction lookup (see
+    // SnapshotSessionHost.mergeTransientState / lastFlowDebugInfo).
+    flowDebugInfo: serializeFlowDebugInfo(runner.game),
   };
 }
 
@@ -273,17 +281,11 @@ function handleStart(
     gameOptions: effectiveOptions,
   } as GameRunnerOptions<never>);
 
-  const flowState = runner.start();
+  runner.start();
 
   return {
     success: true,
-    snapshot: runner.getSnapshot(),
-    flowState,
-    playerViews: buildViews(runner, gameOptions.playerCount),
-    spectatorView: buildSpectatorView(runner),
-    isComplete: runner.isComplete(),
-    winners: runner.getWinners().map((p) => p.seat),
-    pendingState: null,
+    ...stateEnvelope(runner, gameOptions.playerCount),
   };
 }
 
@@ -325,13 +327,10 @@ function handleAction(
 
   return {
     success: true,
-    snapshot: runner.getSnapshot(),
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    // stateEnvelope() re-reads flowState from the runner; actionResult.flowState
+    // is the authoritative value returned by performAction — override with it.
     flowState: actionResult.flowState,
-    playerViews: buildViews(runner, gameOptions.playerCount),
-    spectatorView: buildSpectatorView(runner),
-    isComplete: runner.isComplete(),
-    winners: runner.getWinners().map((p) => p.seat),
-    pendingState: null,
     followUp,
   };
 }
@@ -518,13 +517,10 @@ async function handleAITurn(
 
   return {
     success: true,
-    snapshot: runner.getSnapshot(),
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    // stateEnvelope() re-reads flowState from the runner; actionResult.flowState
+    // is the authoritative value returned by performAction — override with it.
     flowState: actionResult.flowState,
-    playerViews: buildViews(runner, gameOptions.playerCount),
-    spectatorView: buildSpectatorView(runner),
-    isComplete: runner.isComplete(),
-    winners: runner.getWinners().map((p) => p.seat),
-    pendingState: null,
     aiMoved: true,
     aiPlayer,
   };
@@ -921,14 +917,6 @@ function handleDebugFlowState(
     return errorResult(`Invalid player seat: ${op.player}.`, 'protocol');
   }
   const runner = runnerFromSnapshot(snapshot, def);
-  const info = runner.game.getFlowDebugInfo();
-  const flowDebugInfo: SerializedFlowDebugInfo = {
-    phase: info.phase,
-    step: info.step,
-    path: info.path,
-    awaiting: info.awaiting,
-    description: info.describe(),
-  };
 
   // SECURITY (T-123-10): pendingAction is derived ONLY from the passed-in
   // pendingState — the requesting seat's own persisted pending state, threaded
@@ -937,8 +925,9 @@ function handleDebugFlowState(
 
   return {
     success: true,
+    // stateEnvelope() already computes flowDebugInfo (same shared serializer);
+    // spread it through rather than recomputing.
     ...stateEnvelope(runner, gameOptions.playerCount),
-    flowDebugInfo,
     pendingAction,
   };
 }

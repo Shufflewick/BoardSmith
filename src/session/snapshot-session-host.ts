@@ -1,8 +1,8 @@
 import type { Op, OpResult } from './stateless-ops.js';
 import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
-import type { Annotation } from '../engine/index.js';
+import type { Annotation, PendingActionState } from '../engine/index.js';
 import { describeMoveForNarration } from './move-summary.js';
-import type { HeatmapEntry } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 
@@ -56,6 +56,15 @@ export class SnapshotSessionHost {
   narrationText: string | null = null;
   private lastPlayerViews: unknown[] = [];
 
+  // Flow-debug snapshot (FLOW-01/03): computed by the pure executor's
+  // stateEnvelope() (shared serializeFlowDebugInfo — same wire shape as
+  // GameSession.broadcast() and the debug:flow-state op) and carried forward
+  // here so demo/control broadcasts (which re-broadcast lastPlayerViews via
+  // broadcastCurrent(), not a fresh executeOp result) still show the last
+  // known flow position. Public game structure (T-123-08) — safe to share
+  // across every seat/spectator, unlike pendingAction below.
+  private lastFlowDebugInfo: SerializedFlowDebugInfo | null = null;
+
   // Demo loop cancellation flag, move cap, and cancellable-delay handle.
   // demoAbort: set by demoStop to cancel the in-flight runDemoLoop.
   // MAX_DEMO_MOVES: hard cap to guard against infinite/very long games (STRIDE T-110-06).
@@ -96,14 +105,18 @@ export class SnapshotSessionHost {
   constructor(private readonly adapters: SnapshotSessionAdapters) {}
 
   /**
-   * Merge transient teaching state into player views post-buildPlayerState.
+   * Merge transient teaching state — plus the flow-debug/pending-action
+   * introspection fields (FLOW-01/03) — into player views post-buildPlayerState.
    *
-   * Short-circuits when there is no transient state AND no AI seats (identity
-   * return — the common case for non-teaching games). This mirrors the
+   * Short-circuits when there is no transient state, no AI seats, no flow-debug
+   * snapshot yet, and no pending action (identity return — the common case
+   * before the very first executeOp/start). This mirrors the
    * GameSession.broadcast() injection pattern (game-session.ts:1925-1934).
    *
-   * Per-seat: hint, heatmap (keyed strictly by seat = i+1; no cross-seat leak).
-   * Game-wide: narration, isDemoRunning, hasAIPlayers (applied to all seats).
+   * Per-seat: hint, heatmap, pendingAction (keyed strictly by seat = i+1; no
+   * cross-seat leak — T-123-07). Game-wide: narration, isDemoRunning,
+   * hasAIPlayers, flowDebugInfo (public flow structure, safe for every seat
+   * and spectator — T-123-08).
    */
   private mergeTransientState(playerViews: unknown[]): unknown[] {
     // teachingDisabled must always be injected — include it in hasTransient so a
@@ -114,7 +127,9 @@ export class SnapshotSessionHost {
       || this.demoRunning
       || this.narrationText !== null
       || (this.adapters.aiSeats?.length ?? 0) > 0
-      || (this.adapters.teachingDisabled ?? false);
+      || (this.adapters.teachingDisabled ?? false)
+      || this.lastFlowDebugInfo !== null
+      || this.pendingStates.size > 0;
     if (!hasTransient) return playerViews;
 
     return (playerViews as Array<{ flowState: unknown; state: Record<string, unknown> } | null>).map((view, i) => {
@@ -126,6 +141,14 @@ export class SnapshotSessionHost {
       if (transient?.hint) state.hint = transient.hint;
       if (transient?.heatmap) state.heatmap = transient.heatmap;
       if (this.narrationText) state.narration = { text: this.narrationText };
+      // Flow position is public game structure — shared across every seat.
+      if (this.lastFlowDebugInfo) state.flowDebugInfo = this.lastFlowDebugInfo;
+      // SECURITY (T-123-07): pendingAction MUST be looked up per-seat inside
+      // this loop keyed on THIS seat only — never hoisted outside the loop or
+      // shared across seats. A seat must never receive another seat's
+      // accumulated pending-action args.
+      const pendingAction = this.pendingStates.get(seat);
+      if (pendingAction) state.pendingAction = pendingAction as unknown as PendingActionState;
       if (this.demoRunning) {
         state.isDemoRunning = true;
         // Playback-control state so clients can render the demo control bar.
@@ -158,6 +181,12 @@ export class SnapshotSessionHost {
     this.flowState = res.flowState;
     this.isComplete = res.isComplete;
     this.winners = res.winners;
+    // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
+    // flowDebugInfo (shared serializeFlowDebugInfo — same shape as
+    // GameSession.broadcast() and the debug:flow-state op). Carry it forward
+    // so demo/control re-broadcasts (broadcastCurrent(), no fresh op result)
+    // still show the last known flow position.
+    if (res.flowDebugInfo) this.lastFlowDebugInfo = res.flowDebugInfo;
     if (seat !== undefined) {
       if (res.pendingState) this.pendingStates.set(seat, res.pendingState);
       else this.pendingStates.delete(seat);

@@ -6,7 +6,7 @@ import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game,
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import type { GameRunner } from '../runtime/index.js';
-import type { PlayerGameState, ActionMetadata, PickMetadata } from './types.js';
+import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo } from './types.js';
 
 // Re-export so existing consumers (session barrel, external callers) are unchanged
 export { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
@@ -28,6 +28,30 @@ export function generateGameId(): string {
  */
 export function isPlayersTurn(flowState: FlowState | undefined, playerPosition: number): boolean {
   return canSeatAct(flowState, playerPosition);
+}
+
+/**
+ * Serialize `game.getFlowDebugInfo()` into the shared plain-object shape
+ * (`SerializedFlowDebugInfo`) that travels over the wire. Flow position is
+ * public game structure (T-123-08) — safe to compute once and reuse across
+ * every seat/spectator. `describe()` is a METHOD on the engine's
+ * FlowDebugInfo and does NOT survive serialization, so it is captured here
+ * into a plain `description` string before anything is sent to a client.
+ *
+ * Single shared serializer reused by both session hosts (GameSession's live
+ * broadcast() and SnapshotSessionHost's stateless op path) plus the
+ * debug:flow-state op — one source of truth for the wire shape (Pit of
+ * Success: no divergent per-host copies).
+ */
+export function serializeFlowDebugInfo(game: Game): SerializedFlowDebugInfo {
+  const info = game.getFlowDebugInfo();
+  return {
+    phase: info.phase,
+    step: info.step,
+    path: info.path,
+    awaiting: info.awaiting,
+    description: info.describe(),
+  };
 }
 
 /**

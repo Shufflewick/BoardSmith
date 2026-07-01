@@ -43,7 +43,7 @@ import {
   type GameOptionDefinition,
   type PickChoicesResponse,
 } from './types.js';
-import { buildPlayerState, buildSingleActionMetadata } from './utils.js';
+import { buildPlayerState, buildSingleActionMetadata, serializeFlowDebugInfo } from './utils.js';
 import { AIController } from './ai-controller.js';
 import type { AIConfig as BotAIConfig, BotMove, BotMoveStats } from '../ai/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
@@ -1996,16 +1996,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Flow position is public game structure (T-123-08), not per-seat hidden
     // info — safe to compute once and reuse across every seat/spectator in
-    // the loop below. describe() is a method and must never be sent on the
-    // wire, so it is captured here into a plain `description` string.
-    const flowDebugInfoSource = this.#runner.game.getFlowDebugInfo();
-    const flowDebugInfo: SerializedFlowDebugInfo = {
-      phase: flowDebugInfoSource.phase,
-      step: flowDebugInfoSource.step,
-      path: flowDebugInfoSource.path,
-      awaiting: flowDebugInfoSource.awaiting,
-      description: flowDebugInfoSource.describe(),
-    };
+    // the loop below. Shared serializer (utils.ts) also used by the stateless
+    // dev-host path and the debug:flow-state op — one wire shape everywhere.
+    const flowDebugInfo: SerializedFlowDebugInfo = serializeFlowDebugInfo(this.#runner.game);
 
     for (const session of sessions) {
       const effectivePosition = session.isSpectator ? 0 : session.playerSeat;
