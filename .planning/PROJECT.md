@@ -8,19 +8,17 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools
+## Current State: v4.3 Shipped — no active milestone
 
-**Goal:** Make BoardSmith easy to test and to drive programmatically so AI-agent-based development is a first-class workflow — verify the friction findings against the codebase, design and ship a coherent introspection / test-ergonomics / dev-host devtools API, migrate every example game onto it, and bring the docs in line.
+**Shipped 2026-07-01.** The engine is now agent-drivable end-to-end. Next: run `/gsd:new-milestone` to define the next cycle (fresh REQUIREMENTS.md).
 
-**Target features:**
-- **Verification & API design** — verify each scouted friction claim against the real code (confirmed / false / partial, with evidence and "already exists vs. needs building"), then a reviewed API-design doc that locks the new surface before any implementation. The keystone insight (echoed by every scout): there is no single way to ask "what can this seat do right now, with what choices?" — that primitive sits upstream of testing, headless control, browser driving, and AI.
-- **Action-space introspection** — one entry point that returns every legal action for a seat with its selections, choices, dependencies, and ready-to-submit arg templates (serializable); plus per-action schema, validated arg-building, and full legal-move enumeration for tree search.
-- **Test ergonomics** — typed perspective-aware observable state (no snapshot-JSON parsing), a `playUntilComplete` driver with structured stuck-game diagnostics, auto-trace on failed availability assertions, and explicit permissive-vs-exact action assertions.
-- **Dev-host devtools bridge** — stable `data-element-id` selectors on every rendered element (custom UI + AutoUI), a read-only `window.__BOARDSMITH_DEVTOOLS` global to inspect game/board state, and an observable action-resolved signal so agents stop coordinate-clicking and polling.
-- **Authoring pit-of-success guards** — turn silent footguns into fail-fast errors: required `maxIterations`, element-registration validation, flow-reachability validation for registered actions, and lint coverage for element-identity / element-array-as-state mistakes.
-- **Game migration & docs** — migrate all `~/BoardSmithGames/` games (and the MERC vendored canary) onto the new APIs, and update the documentation (agent-control guide, testing, browser-testing, authoring/common-pitfalls) to match.
+Candidate next directions (from accumulated backlog, not yet committed): v2 CRIB milestone (suppress-Undo-during-tutorial, strategy tutorial track, anchorAttrs lint dev-warning); repo cleanup (3 pre-existing no-shadow errors, tsc test-file looseness, 0-indexed `performAction` docstring in `src/session/index.ts`); the deferred ShufflewickPub host skin (HOST-01..04).
 
-**Key context:** This milestone is driven by a four-front adversarial scout of BoardSmith + the example games (testing ergonomics, headless control, browser/dev-host control, authoring API). All four independently converged on the missing action-space introspection primitive. Several scout claims about what "already exists" (e.g. `getPlayerView()`, private checkpoint APIs, an existing action-resolved signal) are **unverified** — Phase 1 verifies them so we expose/document rather than rebuild. No backward-compatibility burden (library in active development). Games are symlinked (`~/BoardSmithGames/`, live HMR) except MERC, which is a vendored copy that must be re-vendored to pick up changes.
+## Previous: v4.3 Shipped
+
+Agent-Ready Engine (Introspection, Test Ergonomics & Devtools) — made BoardSmith drivable by agents/humans without vision or coordinate-clicking. Shipped the keystone action-space introspection primitive (`getActionSpace`/`getActionSchema`/`buildActionArgs`/`enumerateLegalMoves`/`getPlayerView`), self-explaining test ergonomics (`playUntilComplete`/`GameStuckError`, assertion traces, exact/contains modes, `ActionBuilder`), a dev-host devtools bridge (`data-bs-el-id` selectors + `window.__BOARDSMITH_DEVTOOLS` + `boardsmith:action-resolved`, browser-proven), fail-fast authoring guards (loop `maxIterations` throw, element-registration + action-reachability validation, 2 ESLint rules), and migrated all games + the MERC canary onto it.
+
+**v4.3 Delivered:** Phases 116–122 (27/27 requirements — DSGN, INTRO, TEST, DEV, PIT, MIG, DOC). Reuse-not-rebuild: 117 primitives feed 118 ergonomics + 119 devtools + the MCTS bot; 118 fixed 3 simultaneous-turn bugs; 119 live-browser-proven; 120 guards; 121 surfaced+fixed a real PIT-02 false-positive on framework built-ins (`DicePool.all(Die)`) via a built-in-class exemption where the instantiated class is authoritative. Verified: BoardSmith 1873 tests + all 7 example games + MERC re-vendored (738) green; cross-phase integration 9/9 wired; audit passed (`milestones/v4.3-MILESTONE-AUDIT.md`). Deferred/tech-debt: DEV-04 browser `success:false` unreachable in go-fish (documented, unit-tested); 0-indexed `performAction` docstring fix.
 
 ## Previous: v4.2 Shipped
 
@@ -378,4 +376,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-30 — started v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools milestone*
+*Last updated: 2026-07-01 — shipped v4.3 Agent-Ready Engine; no active milestone (run /gsd:new-milestone)*
