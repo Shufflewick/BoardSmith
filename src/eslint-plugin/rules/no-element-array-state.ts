@@ -183,7 +183,7 @@ const rule: Rule.RuleModule = {
           if (propDef.type !== 'PropertyDefinition') continue;
 
           // (b) GameElement[]-typed field.
-          const typeName = resolveArrayElementTypeName(propDef.key ? (propDef as { typeAnnotation?: unknown }).typeAnnotation : undefined);
+          const typeName = resolveArrayElementTypeName((propDef as { typeAnnotation?: unknown }).typeAnnotation);
           if (typeName && elementTypeNames.has(typeName)) {
             context.report({
               node: propDef as unknown as Rule.Node,
