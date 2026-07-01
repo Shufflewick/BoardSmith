@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: planning
-last_updated: "2026-07-01T21:01:36.462Z"
+last_updated: "2026-07-01T21:30:00.000Z"
 last_activity: 2026-07-01
 progress:
-  total_phases: 0
+  total_phases: 8
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-30)
+See: .planning/PROJECT.md (updated 2026-07-01)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 119 — dev-host-devtools-bridge
+**Current focus:** Phase 123 — determinism-and-flow-introspection
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-07-01 — Milestone v4.4 started
+Phase: 123 of 130 (Determinism & Flow Introspection)
+Plan: TBD — not yet broken down
+Status: Ready to plan
+Last activity: 2026-07-01 — Milestone v4.4 roadmap created (Phases 123-130, 23/23 requirements mapped)
 
 ## Milestones
 
@@ -60,10 +60,11 @@ Last activity: 2026-07-01 — Milestone v4.4 started
 - v4.0 UI Redesign (Slate) (Phases 97-103) -- shipped 2026-06-23
 - v4.1 Tutorial Primitives (Checkers) (Phases 104-111) -- shipped 2026-06-30
 - v4.2 Tutorial Primitives — Go Fish & Docs (Phases 112-115) -- shipped 2026-06-30
+- v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools (Phases 116-122) -- shipped 2026-07-01
 
 **In Progress:**
 
-- v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools (Phases 116-122) — planning; roadmap created 2026-06-30.
+- v4.4 Agent-Ergonomics Gaps (Audit Fixes) (Phases 123-130) — planning; roadmap created 2026-07-01.
 
 ## Deferred Items
 
@@ -85,6 +86,15 @@ Backlog for a future cribbage (v2 CRIB) milestone: R-05 (suppress Undo during gu
 ## Accumulated Context
 
 ### Roadmap Evolution
+
+- v4.4 roadmap defined (2026-07-01): 8 phases (123–130), 23 requirements (VIS, SIM, ERR, DRIVE, ANIM, FLOW, DOC, MIG) — corrected from an initial miscount of 20 in REQUIREMENTS.md. Continues phase numbering from v4.3 (ended at 122).
+- Phase 123 (FLOW determinism + introspection) is foundational engine/session work sequenced first — kills `Math.random` fallbacks and adds flow-state/pending-action introspection that Phase 125 (SIM, seeded headless runs) depends on.
+- Phase 124 (VIS hidden-info test utilities) is independent of 123 — both are foundational test-ergonomics work that can proceed in either order, but both precede the phases that consume them.
+- Phase 125 (SIM headless simulation) depends on Phase 123's determinism guarantee for reproducible seeded runs.
+- Phase 126 (ERR structured errors) and Phase 127 (DRIVE scriptable dev host) are sequenced adjacent — both touch the dev-host/session WS boundary; ERR lands first so new DRIVE-added ops report failures structurally from day one.
+- Phase 128 (ANIM animation/drag-drop test story) is independent of FLOW/VIS/SIM/ERR/DRIVE and can run in parallel with any of them.
+- Phase 129 (MIG cross-repo migration) is sequenced after all API-surface phases (123-128) are stable — spans `~/BoardSmithGames/` (symlinked, live HMR) + MERC (must re-vendor).
+- Phase 130 (DOC) is last so docs describe the shipped, migrated surface — same discipline as v4.3 (DOC was phase 122, last).
 
 - v4.3 roadmap defined (2026-06-30): 7 phases (116–122), 27 requirements (DSGN, INTRO, TEST, DEV, PIT, MIG, DOC). Three logical stages honored: (1) verify scout findings + lock API design [116]; (2) implement then migrate [117–121]; (3) docs [122].
 - Phase 116 (DSGN) is a hard gate for everything: it decides what already exists vs. what must be built (scout claims like `getPlayerView()`, private checkpoint APIs, an existing action-resolved signal are UNVERIFIED) and which speculative items are IN vs. DEFERRED. No implementation begins until its design doc is approved.
@@ -122,6 +132,13 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 120]: PIT-01: loop() missing maxIterations now throws at construction time; devWarn path removed; 6 test call sites patched
 - [Phase 120]: PIT-03: unregistered actionStep-referenced action throws (naming registerActions); registered-but-unreferenced action is a devWarn, not a throw; function-valued actions are a documented static-walk blind spot
 
+### Highest-Risk Items (v4.4)
+
+1. **Determinism correctness (Phase 123)** — removing `Math.random` fallbacks in `space.ts`/`element-collection.ts` touches shuffle/randomization paths used by every game; a mistake here silently breaks fairness rather than throwing, and headless simulation (125) is only trustworthy if this is airtight.
+2. **Hidden-info leak regression (Phase 124)** — VIS-01/02/03 utilities exist specifically to catch hidden-info leaks; the DOM-leak utility itself must not have blind spots (e.g. missing attributes it doesn't know to check) or it gives false confidence.
+3. **Cross-repo migration breadth (Phase 129)** — same risk pattern as v4.3 Phase 121: all `~/BoardSmithGames/` games (symlinked, live HMR) plus the MERC vendored canary (must re-vendor) — keep every suite green; gaps surfaced during migration must be fixed in `src/`, not worked around.
+4. **Dev-host WS surface growth (Phases 126-127)** — `getState`/`getLobby`/`debug:logs`/debug-toggle/UI-switcher ops all land on the same WS protocol; each must be additive and not regress the existing browser-driven dev-host flows proven in v4.3.
+
 ### Highest-Risk Items (v4.3)
 
 1. **DSGN accuracy (Phase 116)** — several scout claims about what "already exists" are unverified; getting verdicts wrong means either rebuilding existing APIs or planning to build something that's missing. Verdicts must carry file:line evidence.
@@ -135,11 +152,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-01T04:26:57.672Z
-Stopped at: roadmap complete
+Last session: 2026-07-01T21:30:00.000Z
+Stopped at: v4.4 roadmap complete (Phases 123-130 written, 23/23 requirements mapped)
 Resume file: None
-Next action: `/gsd:plan-phase 116`
+Next action: `/gsd:plan-phase 123`
 
 ## Operator Next Steps
 
-- Begin Phase 116 (Verification & API Design) with `/gsd:plan-phase 116`. This phase gates all later phases — no implementation until its API-design doc is approved.
+- Begin Phase 123 (Determinism & Flow Introspection) with `/gsd:plan-phase 123`. This phase is foundational — Phase 125 (headless simulation) depends on its determinism guarantee.

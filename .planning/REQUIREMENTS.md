@@ -85,13 +85,35 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| — | — | — |
+| FLOW-01 | Phase 123 | Pending |
+| FLOW-02 | Phase 123 | Pending |
+| FLOW-03 | Phase 123 | Pending |
+| FLOW-04 | Phase 123 | Pending |
+| VIS-01 | Phase 124 | Pending |
+| VIS-02 | Phase 124 | Pending |
+| VIS-03 | Phase 124 | Pending |
+| SIM-01 | Phase 125 | Pending |
+| SIM-02 | Phase 125 | Pending |
+| ERR-01 | Phase 126 | Pending |
+| ERR-02 | Phase 126 | Pending |
+| ERR-03 | Phase 126 | Pending |
+| ERR-04 | Phase 126 | Pending |
+| DRIVE-01 | Phase 127 | Pending |
+| DRIVE-02 | Phase 127 | Pending |
+| DRIVE-03 | Phase 127 | Pending |
+| ANIM-01 | Phase 128 | Pending |
+| ANIM-02 | Phase 128 | Pending |
+| ANIM-03 | Phase 128 | Pending |
+| MIG-03 | Phase 129 | Pending |
+| MIG-04 | Phase 129 | Pending |
+| DOC-05 | Phase 130 | Pending |
+| DOC-06 | Phase 130 | Pending |
 
 **Coverage:**
-- v1 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20 ⚠️ (roadmap pending)
+- v1 requirements: 23 total (corrected from initial miscount of 20 — see itemized list above)
+- Mapped to phases: 23
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-01*
-*Last updated: 2026-07-01 after initial definition*
+*Last updated: 2026-07-01 — roadmap created (Phases 123–130), 100% coverage confirmed*
