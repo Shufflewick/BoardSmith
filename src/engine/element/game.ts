@@ -11,8 +11,10 @@ import type { FlowDefinition, FlowState, FlowPosition } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 import { getActionLevelDisabledReasons } from '../tutorial/gate.js';
 import { availableActionsForSeat } from '../flow/index.js';
+import { walkFlowNodes } from '../flow/walk-flow-nodes.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../session/types.js';
+import { devWarn } from '../../utils/dev.js';
 
 // ---------------------------------------------------------------------------
 // INTRO-01 / INTRO-02 view types
@@ -1549,12 +1551,74 @@ export class Game<
   }
 
   /**
+   * PIT-03: Statically walk the flow-node tree and validate that every
+   * action referenced by an `action-step` / `simultaneous-action-step` is
+   * registered.
+   *
+   * Throws on any referenced-but-unregistered action (a typo'd action name
+   * would otherwise only surface at runtime, and only when that specific
+   * flow branch is reached). The reverse case — a registered action
+   * referenced by no `action-step` — is a `devWarn`, not a throw, since
+   * an action may be intentionally invoked outside the static flow tree
+   * (e.g. from another action's `.execute()`, or a follow-up action).
+   *
+   * Blind spot (documented, not fixable by static analysis): when
+   * `config.actions` is a function (e.g. `polyhedral-potions`'s dynamic
+   * per-context action lists), the referenced names cannot be enumerated
+   * without invoking the function — which may depend on runtime game
+   * state that doesn't exist yet at `startFlow()` time. Function-valued
+   * `actions` are skipped entirely by this static walk.
+   */
+  #validateActionReachability(): void {
+    if (!this._flowDefinition) return;
+
+    const referencedNames = new Set<string>();
+
+    for (const node of walkFlowNodes(this._flowDefinition.root)) {
+      if (node.type !== 'action-step' && node.type !== 'simultaneous-action-step') {
+        continue;
+      }
+      const { actions } = node.config;
+      // Function-valued `actions` cannot be statically enumerated — skip.
+      // (documented static-walk blind spot; see method doc comment above)
+      if (typeof actions === 'function') continue;
+      for (const name of actions) {
+        referencedNames.add(name);
+      }
+    }
+
+    for (const name of referencedNames) {
+      if (!this.getAction(name)) {
+        throw new Error(
+          `Flow references action '${name}' that is not registered. ` +
+          `Call this.registerActions(action('${name}')...) in your game's constructor before startFlow(), ` +
+          `or fix the typo in the actionStep(...) that references it.`
+        );
+      }
+    }
+
+    for (const name of this.getActionNames()) {
+      if (!referencedNames.has(name)) {
+        devWarn(
+          `unreachable-action:${name}`,
+          `Action '${name}' is registered but referenced by no actionStep() in the flow. ` +
+          `It will never be offered to a player unless invoked another way (e.g. as a follow-up action, ` +
+          `or from another action's .execute()). If that's unintentional, add it to an actionStep(...), ` +
+          `or remove the registration.`
+        );
+      }
+    }
+  }
+
+  /**
    * Start the game flow
    */
   startFlow(): FlowState {
     if (!this._flowDefinition) {
       throw new Error('No flow definition set');
     }
+
+    this.#validateActionReachability();
 
     this._flowEngine = new FlowEngine(this, this._flowDefinition);
     const state = this._flowEngine.start();
