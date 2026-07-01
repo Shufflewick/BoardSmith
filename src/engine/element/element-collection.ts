@@ -208,7 +208,7 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
   /**
    * Shuffle the collection in place using the provided random function
    */
-  shuffle(random: () => number = Math.random): ElementCollection<T> {
+  shuffle(random: () => number): ElementCollection<T> {
     for (let i = this.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
       [this[i], this[j]] = [this[j], this[i]];

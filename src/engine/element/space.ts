@@ -276,7 +276,16 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * Internal shuffle method called by command executor
    */
   shuffleInternal(): void {
-    const random = this._ctx.random ?? Math.random;
+    const random = this._ctx.random;
+    if (!random) {
+      throw new Error(
+        'Space.shuffleInternal(): no seeded random number generator is reachable. ' +
+        'This Space is not attached to a Game (or its context is missing `random`), so ' +
+        'there is no seeded rng to shuffle deterministically. Fix: construct this element ' +
+        'via a Game so it inherits the seeded rng from `Game._ctx.random`, or ensure the ' +
+        'element tree is connected to a Game before calling shuffle().'
+      );
+    }
 
     // Fisher-Yates shuffle
     for (let i = this._t.children.length - 1; i > 0; i--) {
