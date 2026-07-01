@@ -8,11 +8,23 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State: v4.3 Shipped — no active milestone
+## Current Milestone: v4.4 Agent-Ergonomics Gaps (Audit Fixes)
 
-**Shipped 2026-07-01.** The engine is now agent-drivable end-to-end. Next: run `/gsd:new-milestone` to define the next cycle (fresh REQUIREMENTS.md).
+**Goal:** Close every verified gap from the 2026-07-01 agent-ergonomics audit so that everything a game developer's AI agent builds — including visuals, hidden info, and dev-host flows — has an automated way to test, observe, or drive it; then update docs and migrate all example games + MERC so nothing is left broken.
 
-Candidate next directions (from accumulated backlog, not yet committed): v2 CRIB milestone (suppress-Undo-during-tutorial, strategy tutorial track, anchorAttrs lint dev-warning); repo cleanup (3 pre-existing no-shadow errors, tsc test-file looseness, 0-indexed `performAction` docstring in `src/session/index.ts`); the deferred ShufflewickPub host skin (HOST-01..04).
+**Target features:**
+- Hidden-info verification: visibility assertions on TestGame (`isElementVisible`, `getVisibleElements`, view diffing) + DOM-leak test utility for rendered per-seat UIs
+- Headless simulation surface: export `createHeadlessSession`, add `boardsmith simulate` CLI command
+- Structured error surfacing: no `console.error`-only degradation (pick-handler `boardRefs`/`display`, storage saves, runner error codes); dev-host log streaming over WS
+- Dev-host fully scriptable: implement `getState`/`getLobby` WS handlers, Node-capable client SDK, close UI-only gaps (debug toggle, UI switcher ops)
+- Animation/drag-drop test story: instant-mode + trace recording for `useFLIP`/`useFlyingElements`/`useElementAnimation`/`useActionAnimations`, direct composable tests, enforced anchor attributes (fail loud when missing)
+- Flow/debug introspection: human-readable flow-position dump, disabled-choice reasons API, `PendingActionState` inspection, seeded-RNG enforcement (kill `Math.random` fallbacks incl. `playUntilComplete` default)
+- Docs updated to describe the new surface
+- Migration: all `~/BoardSmithGames/` games + MERC (re-vendored) updated, all suites green
+
+**Key context:** No backward compatibility (pre-users, clean break). v4.3's introspection primitives are the foundation — reuse, don't rebuild. Audit findings verified against code with file:line evidence (see conversation audit, 2026-07-01). Phase numbering continues from 122.
+
+Deferred backlog (not this milestone): v2 CRIB milestone (suppress-Undo-during-tutorial, strategy tutorial track); repo cleanup (3 pre-existing no-shadow errors, tsc test-file looseness, 0-indexed `performAction` docstring in `src/session/index.ts`); the deferred ShufflewickPub host skin (HOST-01..04).
 
 ## Previous: v4.3 Shipped
 
@@ -245,7 +257,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-**v4.3 Agent-Ready Engine** — see REQUIREMENTS.md (DSGN, INTRO, TEST, DEV, PIT, MIG, DOC). Verify the friction findings, design + ship the introspection / test-ergonomics / devtools API, migrate all games, update docs.
+**v4.4 Agent-Ergonomics Gaps (Audit Fixes)** — see REQUIREMENTS.md (in definition). Fix all verified audit findings (hidden-info verification, headless simulation, structured errors, scriptable dev-host, animation test story, flow introspection), update docs, migrate all games + MERC.
 
 Carried forward (deferred from v4.0):
 - ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
@@ -376,4 +388,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-01 — shipped v4.3 Agent-Ready Engine; no active milestone (run /gsd:new-milestone)*
+*Last updated: 2026-07-01 — started milestone v4.4 Agent-Ergonomics Gaps (Audit Fixes)*

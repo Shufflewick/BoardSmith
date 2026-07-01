@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.3
-milestone_name: Agent-Ready Engine — Introspection, Test Ergonomics & Devtools
-status: shipped
-stopped_at: v4.3 milestone complete — archived + tagged
-last_updated: "2026-07-01T05:45:00.000Z"
+milestone: v4.4
+milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
+status: planning
+last_updated: "2026-07-01T21:01:36.462Z"
 last_activity: 2026-07-01
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 20
-  completed_plans: 20
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 
 ## Current Position
 
-Milestone: v4.3 SHIPPED 2026-07-01 (archived to milestones/, tagged v4.3). No active milestone.
-Next action: `/gsd:new-milestone` to start the next cycle (fresh REQUIREMENTS.md).
-Status: audit passed (27/27 reqs, 9/9 integration) → complete-milestone → cleanup.
-Last activity: 2026-07-01
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-01 — Milestone v4.4 started
 
 ## Milestones
 
