@@ -48,6 +48,7 @@ describe('Flow Builders', () => {
 
   it('should create loop node', () => {
     const node = loop({
+      maxIterations: 10,
       while: () => true,
       do: noop(),
     });
@@ -172,6 +173,7 @@ describe('FlowEngine', () => {
 
       const flow = defineFlow({
         root: loop({
+          maxIterations: 10,
           while: () => true,
           do: execute(() => {
             iterations++;
@@ -194,6 +196,7 @@ describe('FlowEngine', () => {
 
       const flow = defineFlow({
         root: loop({
+          maxIterations: 10,
           while: () => count < 3,
           do: execute(() => {
             count++;
@@ -1028,6 +1031,7 @@ describe('Complex Flow Scenarios', () => {
 
     const flow = defineFlow({
       root: loop({
+        maxIterations: 10,
         while: () => turnCount < 4,
         do: eachPlayer({
           do: sequence(
@@ -1463,6 +1467,7 @@ describe('turnLoop Helper', () => {
 
     const flow = defineFlow({
       root: loop({
+        maxIterations: 10,
         while: () => turnsTaken < 4,
         do: eachPlayer({
           do: sequence(

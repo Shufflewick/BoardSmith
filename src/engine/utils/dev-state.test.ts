@@ -74,6 +74,7 @@ class FlowGame extends Game<FlowGame, Player> {
   defineFlow() {
     this.setFlow(defineFlow({
       root: loop({
+        maxIterations: 10,
         while: () => this.turnCount < 10,
         do: eachPlayer({
           do: actionStep({ actions: ['takeTurn'] }),
