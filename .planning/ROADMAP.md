@@ -82,7 +82,7 @@ Plans:
   4. The fastest agent UI loop (change → drive → confirm) is proven end-to-end in the browser for at least one custom-UI game and one AutoUI game.
 **Plans**: 4 plans
 - [x] 119-01-PLAN.md — DEV-01 parity test: data-bs-el-id across all 4 AutoUI renderers
-- [ ] 119-02-PLAN.md — DEV-03 boardsmith:action-resolved CustomEvent (execute + selection-step paths)
+- [x] 119-02-PLAN.md — DEV-03 boardsmith:action-resolved CustomEvent (execute + selection-step paths)
 - [ ] 119-03-PLAN.md — DEV-02 postMessage bridge + window.__BOARDSMITH_DEVTOOLS global
 - [ ] 119-04-PLAN.md — DEV-04 agent-loop doc + browser proof (custom UI + AutoUI)
 **UI hint**: yes
