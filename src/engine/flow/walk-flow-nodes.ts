@@ -53,5 +53,14 @@ export function* walkFlowNodes(node: FlowNode): Generator<FlowNode> {
     case 'execute':
       // Leaves: no nested FlowNode children.
       break;
+    default: {
+      // Exhaustiveness guard: if a new FlowNode variant is added to the
+      // union without updating this walker, this becomes a compile-time
+      // error at the point the new variant is introduced, instead of a
+      // silent runtime gap (an un-walked node whose nested action-step /
+      // simultaneous-action-step would go un-validated by PIT-03).
+      const _exhaustive: never = node;
+      return _exhaustive;
+    }
   }
 }
