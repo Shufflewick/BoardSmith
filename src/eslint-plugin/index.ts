@@ -3,6 +3,7 @@ import noFilesystem from './rules/no-filesystem.js';
 import noTimers from './rules/no-timers.js';
 import noNondeterministic from './rules/no-nondeterministic.js';
 import noEval from './rules/no-eval.js';
+import noElementIdentityComparison from './rules/no-element-identity-comparison.js';
 
 const plugin = {
   meta: {
@@ -16,6 +17,7 @@ const plugin = {
     'no-timers': noTimers,
     'no-nondeterministic': noNondeterministic,
     'no-eval': noEval,
+    'no-element-identity-comparison': noElementIdentityComparison,
   },
 
   // Populated below so the config can reference `plugin` itself.
@@ -33,6 +35,7 @@ plugin.configs.recommended = {
     'boardsmith/no-timers': 'error',
     'boardsmith/no-nondeterministic': 'error',
     'boardsmith/no-eval': 'error',
+    'boardsmith/no-element-identity-comparison': 'error',
   },
 };
 
