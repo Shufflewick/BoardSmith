@@ -42,7 +42,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 - [x] **FLOW-01**: Developer can get a human-readable flow-position dump ("phase *pegging* → step *player-turn*, waiting on seat 2") via FlowState / `toDebugString()`
 - [ ] **FLOW-02**: Developer can query disabled choices with their disable reasons (currently filtered out by `getPickChoices`)
 - [ ] **FLOW-03**: Developer can inspect mid-multi-step action state (`PendingActionState`) from TestGame
-- [ ] **FLOW-04**: Seeded runs are deterministic end-to-end — no `Math.random` fallbacks in engine paths (space.ts:279, element-collection.ts:211) and `playUntilComplete` is deterministic by default
+- [x] **FLOW-04**: Seeded runs are deterministic end-to-end — no `Math.random` fallbacks in engine paths (space.ts:279, element-collection.ts:211) and `playUntilComplete` is deterministic by default
 
 ### Documentation (DOC — continues from v4.3)
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLOW-01 | Phase 123 | Complete |
 | FLOW-02 | Phase 123 | Pending |
 | FLOW-03 | Phase 123 | Pending |
-| FLOW-04 | Phase 123 | Pending |
+| FLOW-04 | Phase 123 | Complete |
 | VIS-01 | Phase 124 | Pending |
 | VIS-02 | Phase 124 | Pending |
 | VIS-03 | Phase 124 | Pending |

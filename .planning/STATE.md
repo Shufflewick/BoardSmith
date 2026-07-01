@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: v4.4 roadmap complete (Phases 123-130 written, 23/23 requirements mapped)
-last_updated: "2026-07-01T21:57:17.853Z"
+stopped_at: Completed 123-02-PLAN.md
+last_updated: "2026-07-01T22:13:14.183Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 123 (Determinism & Flow Introspection) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-01
 
@@ -133,6 +133,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 120]: PIT-01: loop() missing maxIterations now throws at construction time; devWarn path removed; 6 test call sites patched
 - [Phase 120]: PIT-03: unregistered actionStep-referenced action throws (naming registerActions); registered-but-unreferenced action is a devWarn, not a throw; function-valued actions are a documented static-walk blind spot
 - [Phase ?]: FLOW-01: phase read from FlowState.currentPhase (not re-derived from path); step falls back to node.type when unnamed — Matches engine's own phase-entry/exit bookkeeping; avoids diverging on each-player/for-each re-entry
+- [Phase ?]: ElementCollection.shuffle() requires an explicit rng argument (no Math.random default) — clean break, zero callers confirmed
+- [Phase ?]: playUntilComplete defaults to a fixed literal seed instead of Math.random, keeping no-options runs deterministic
+- [Phase ?]: GameRunner.seed reads back Game.getConstructorOptions().seed when no explicit seed was passed, so auto-generated seeds are replayable
 
 ### Highest-Risk Items (v4.4)
 
@@ -154,8 +157,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-01T21:57:10.118Z
-Stopped at: v4.4 roadmap complete (Phases 123-130 written, 23/23 requirements mapped)
+Last session: 2026-07-01T22:13:14.176Z
+Stopped at: Completed 123-02-PLAN.md
 Resume file: None
 Next action: `/gsd:plan-phase 123`
 
