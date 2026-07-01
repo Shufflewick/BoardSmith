@@ -1621,7 +1621,35 @@ export class Game<
     this.#validateActionReachability();
 
     this._flowEngine = new FlowEngine(this, this._flowDefinition);
-    const state = this._flowEngine.start();
+
+    // PIT-02: record every element class queried through the GameElement
+    // finder methods (all/first/firstN/last/lastN) during this FIRST
+    // traversal only, then diff against the class registry below. This
+    // catches a class queried via e.g. `game.all(Foo)` but never registered
+    // (typo / dead class reference) — which otherwise fails silently
+    // because an unregistered-class query just returns an empty collection.
+    // Scope boundary (documented limitation): only queries made during this
+    // first traversal are checked. Post-start / async queries are not
+    // covered. The try/finally guarantees recording never leaks into normal
+    // play, even if start() throws.
+    this._ctx._pit02RecordingActive = true;
+    this._ctx._pit02RecordedClasses = new Set();
+    let state: FlowState;
+    try {
+      state = this._flowEngine.start();
+    } finally {
+      this._ctx._pit02RecordingActive = false;
+    }
+
+    for (const queriedClass of this._ctx._pit02RecordedClasses) {
+      if (!this._ctx.classRegistry.has(queriedClass.name)) {
+        throw new Error(
+          `Element class '${queriedClass.name}' was queried (e.g. via game.all(${queriedClass.name})) ` +
+          `but was never registered. Call this.registerElements([${queriedClass.name}]) in your game's ` +
+          `constructor before startFlow(), or fix the typo if this was meant to reference a different class.`
+        );
+      }
+    }
 
     // Update game phase based on flow state
     if (this.phase === 'setup') {

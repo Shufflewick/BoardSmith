@@ -14,6 +14,9 @@ import {
   Game,
   Player,
   Action,
+  Space,
+  Card,
+  Piece,
   defineFlow,
   loop,
   eachPlayer,
@@ -115,6 +118,111 @@ function makeOptions(): GameOptions {
     seed: 'pit-03-test',
   };
 }
+
+// ============================================
+// PIT-02: unregistered-element-class query validation
+// ============================================
+
+/** Deliberately never created/registered by any PIT-02 test game. */
+class Ghost extends Piece<UnregisteredQueryGame> {}
+
+class TestDeck extends Space<UnregisteredQueryGame> {}
+
+/** Flow queries `Ghost` during the first traversal without ever registering it. */
+class UnregisteredQueryGame extends Game<UnregisteredQueryGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([TestDeck, Card]);
+    const deck = this.create(TestDeck, 'deck');
+    deck.create(Card, 'card');
+    this.setFlow(
+      defineFlow({
+        setup: (ctx) => {
+          (ctx.game as UnregisteredQueryGame).all(Ghost);
+        },
+        root: eachPlayer({
+          do: actionStep({ actions: [] }),
+        }),
+      }),
+    );
+  }
+}
+
+/** Flow queries `Card` after Card elements were created (and hence registered) normally. */
+class CorrectlyRegisteredQueryGame extends Game<CorrectlyRegisteredQueryGame, Player> {
+  queriedCards: Card[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([TestDeck2]);
+    const deck = this.create(TestDeck2, 'deck');
+    deck.create(Card, 'card');
+    this.setFlow(
+      defineFlow({
+        setup: (ctx) => {
+          this.queriedCards = (ctx.game as CorrectlyRegisteredQueryGame).all(Card);
+        },
+        root: eachPlayer({
+          do: actionStep({ actions: [] }),
+        }),
+      }),
+    );
+  }
+}
+class TestDeck2 extends Space<CorrectlyRegisteredQueryGame> {}
+
+describe('PIT-02', () => {
+  beforeEach(() => {
+    _clearShownWarnings();
+  });
+
+  it('throws naming an element class queried but never registered during first traversal', () => {
+    const game = new UnregisteredQueryGame(makeOptions());
+    expect(() => game.startFlow()).toThrowError(/Ghost/);
+    expect(() => new UnregisteredQueryGame(makeOptions()).startFlow()).toThrowError(
+      /registerElements/,
+    );
+  });
+
+  it('does not throw for a correctly-registered game whose flow queries a created class', () => {
+    const game = new CorrectlyRegisteredQueryGame(makeOptions());
+    expect(() => game.startFlow()).not.toThrow();
+    expect(game.queriedCards).toHaveLength(1);
+  });
+
+  it('stops recording after the first traversal — a later query for an unregistered class does not throw', () => {
+    const game = new CorrectlyRegisteredQueryGame(makeOptions());
+    expect(() => game.startFlow()).not.toThrow();
+    // Post-start query for a never-registered class: recording is off by now,
+    // so this returns an empty collection instead of throwing (documented
+    // post-start / async out-of-scope limitation).
+    expect(() => game.all(Ghost)).not.toThrow();
+    expect(game.all(Ghost)).toHaveLength(0);
+  });
+
+  it('does not leak recorded classes across games (per-game _ctx isolation)', () => {
+    const registered = new CorrectlyRegisteredQueryGame(makeOptions());
+    expect(() => registered.startFlow()).not.toThrow();
+
+    // A second, independent game that never queries Ghost or Card at all —
+    // if recording state leaked from `registered` (e.g. via a module-level
+    // global), classRegistry/recorded-set contamination could produce a
+    // false throw here even though this game's own flow queries nothing.
+    const untouched = new CorrectlyRegisteredQueryGame(makeOptions());
+    expect(() => untouched.startFlow()).not.toThrow();
+
+    expect((registered as any)._ctx).not.toBe((untouched as any)._ctx);
+    expect((registered as any)._ctx.classRegistry).not.toBe(
+      (untouched as any)._ctx.classRegistry,
+    );
+
+    // A third game that DOES query the unregistered Ghost class must still
+    // throw, proving the earlier clean games didn't poison a shared state
+    // that would otherwise suppress this detection.
+    const unregistered = new UnregisteredQueryGame(makeOptions());
+    expect(() => unregistered.startFlow()).toThrowError(/Ghost/);
+  });
+});
 
 describe('PIT-03', () => {
   beforeEach(() => {
