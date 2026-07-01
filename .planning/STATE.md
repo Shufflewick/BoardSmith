@@ -4,13 +4,13 @@ milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
 stopped_at: v4.4 roadmap complete (Phases 123-130 written, 23/23 requirements mapped)
-last_updated: "2026-07-01T21:51:35.015Z"
-last_activity: 2026-07-01 -- Phase 123 planning complete
+last_updated: "2026-07-01T21:57:17.853Z"
+last_activity: 2026-07-01
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-01)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 123 — determinism-and-flow-introspection
+**Current focus:** Phase 123 — Determinism & Flow Introspection
 
 ## Current Position
 
-Phase: 123 of 130 (Determinism & Flow Introspection)
-Plan: TBD — not yet broken down
+Phase: 123 (Determinism & Flow Introspection) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-01 -- Phase 123 planning complete
+Last activity: 2026-07-01
 
 ## Milestones
 
@@ -132,6 +132,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase ?]: ElementDiff reached through game-session.js barrel re-export; ActionMetadata added to types.js block; UndoResult not duplicated
 - [Phase 120]: PIT-01: loop() missing maxIterations now throws at construction time; devWarn path removed; 6 test call sites patched
 - [Phase 120]: PIT-03: unregistered actionStep-referenced action throws (naming registerActions); registered-but-unreferenced action is a devWarn, not a throw; function-valued actions are a documented static-walk blind spot
+- [Phase ?]: FLOW-01: phase read from FlowState.currentPhase (not re-derived from path); step falls back to node.type when unnamed — Matches engine's own phase-entry/exit bookkeeping; avoids diverging on each-player/for-each re-entry
 
 ### Highest-Risk Items (v4.4)
 
@@ -153,7 +154,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-01T21:30:00.000Z
+Last session: 2026-07-01T21:57:10.118Z
 Stopped at: v4.4 roadmap complete (Phases 123-130 written, 23/23 requirements mapped)
 Resume file: None
 Next action: `/gsd:plan-phase 123`
