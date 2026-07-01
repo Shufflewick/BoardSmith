@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
-status: executing
-stopped_at: Completed 123-02-PLAN.md
-last_updated: "2026-07-01T22:27:16.825Z"
+status: verifying
+stopped_at: Completed 123-04-PLAN.md
+last_updated: "2026-07-01T22:55:31.835Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 13
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 
 Phase: 123 (Determinism & Flow Introspection) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-01
 
 ## Milestones
@@ -139,6 +139,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 123]: A2 resolved: reuse ActionExecutor.createPendingActionState/processSelectionStep session-free for GameRunner pending-action tracking, confirmed by tracing action.test.ts:1684+
 - [Phase 123]: FlowDebugInfo (Plan 01) was never exported from flow/index.ts or engine/index.ts — fixed as a Rule 3 blocker before it could be imported in runner.ts/test-game.ts
 - [Phase 123]: TestGame.getActionSpaceWithChoices(seat) composes existing getActionSpace()+getSelectionChoices() rather than a new disabled-choice evaluator; pick-handler.ts left untouched
+- [Phase 123]: Gap-fix (ac1261e): boardsmith dev runs on SnapshotSessionHost, not GameSession -- extracted serializeFlowDebugInfo() as a shared helper so broadcast, debug op, and devtools never diverge in shape
 
 ### Highest-Risk Items (v4.4)
 
@@ -160,11 +161,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-01T22:26:06.375Z
-Stopped at: Completed 123-02-PLAN.md
+Last session: 2026-07-01T22:55:31.828Z
+Stopped at: Completed 123-04-PLAN.md
 Resume file: None
-Next action: `/gsd:plan-phase 123`
+Next action: `/gsd:verify-phase 123`
 
 ## Operator Next Steps
 
-- Begin Phase 123 (Determinism & Flow Introspection) with `/gsd:plan-phase 123`. This phase is foundational — Phase 125 (headless simulation) depends on its determinism guarantee.
+- Phase 123 (Determinism & Flow Introspection) is fully executed (4/4 plans complete). Run `/gsd:verify-phase 123` to confirm FLOW-01/02/03/04 acceptance criteria before moving on to Phase 124/125.

@@ -39,7 +39,7 @@
 - [x] 123-01-PLAN.md — Flow-position debug primitive: describeFlowPosition + FlowDebugInfo + Game.getFlowDebugInfo() (FLOW-01) [wave 1]
 - [x] 123-02-PLAN.md — Determinism enforcement: fix RNG fallbacks in space.ts/element-collection.ts, deterministic playUntilComplete, seed retrievability (FLOW-04) [wave 1]
 - [x] 123-03-PLAN.md — TestGame introspection surface: getPendingAction snapshot, disabled-choices helper, flow-position in error messages (FLOW-01/02/03) [wave 2]
-- [ ] 123-04-PLAN.md — Devtools bridge parity: broadcast serialized flow-debug + own-seat pending action, __BOARDSMITH_DEVTOOLS getters (FLOW-01/03) [wave 2]
+- [x] 123-04-PLAN.md — Devtools bridge parity: broadcast serialized flow-debug + own-seat pending action, __BOARDSMITH_DEVTOOLS getters (FLOW-01/03) [wave 2]
 
 #### Phase 124: Hidden-Info Test Utilities
 **Goal**: Developers can verify hidden information stays hidden — in test assertions and in the rendered DOM — without hand-parsing ElementJSON or manually inspecting markup.
@@ -125,7 +125,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
-| 123. Determinism & Flow Introspection | 3/4 | In Progress|  |
+| 123. Determinism & Flow Introspection | 4/4 | Complete   | 2026-07-01 |
 | 124. Hidden-Info Test Utilities | 0/TBD | Not started | - |
 | 125. Headless Simulation | 0/TBD | Not started | - |
 | 126. Structured Error Surfacing | 0/TBD | Not started | - |
