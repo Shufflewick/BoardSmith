@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.3
 milestone_name: Agent-Ready Engine — Introspection, Test Ergonomics & Devtools
-status: completed
-stopped_at: roadmap complete
-last_updated: "2026-07-01T04:28:10.551Z"
+status: executing
+stopped_at: phase 120 complete
+last_updated: "2026-07-01T04:50:00.000Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 20
-  completed_plans: 18
-  percent: 57
+  completed_plans: 20
+  percent: 71
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 
 ## Current Position
 
-Phase: 120 (authoring-pit-of-success-guards) — IN PROGRESS
-Plan: 02 complete (PIT-03 action reachability); 5 plans total, 3 summaries on disk (01, 02, 04)
-Status: Plan 120-02 complete; 120-03 depends on 120-02 (both touch game.ts/game.test.ts)
+Phase: 121 (game-merc-migration) — NOT STARTED
+Plan: none yet
+Status: Phase 120 complete (5/5 plans, verification 4/4, code review 5 findings resolved, full suite 1872 green); ready to plan Phase 121
 Last activity: 2026-07-01
 
 ## Milestones

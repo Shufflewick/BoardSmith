@@ -13,7 +13,7 @@
 - [x] **Phase 117: Action-Space Introspection** — Keystone: one serializable entry point for every legal action (selections, choices, `dependsOn`, arg templates) + per-action schema, validated arg-building, legal-move enumeration, perspective-aware state view. ✅ 2026-06-30 (4/4 plans, verification 6/6, code review clean)
 - [x] **Phase 118: Test Ergonomics** — Typed observable state, `playUntilComplete` with stuck-game diagnostics, auto-trace on failed availability assertions, permissive-vs-exact action assertions, multi-step selection builder. ✅ 2026-06-30 (4/4 plans, verification 6/6, code review fixed 3 critical simultaneous-turn bugs)
 - [x] **Phase 119: Dev-Host Devtools Bridge** — Stable `data-element-id` selectors (custom UI + AutoUI), read-only `window.__BOARDSMITH_DEVTOOLS`, observable action-resolved signal — browser-proven. ✅ 2026-07-01 (4/4 plans, verification passed; live custom-UI proof + documented pit-of-success finding on the `success:false` demo)
-- [ ] **Phase 120: Authoring Pit-of-Success Guards** — Fail-fast `maxIterations`, element-registration validation, flow-reachability validation, and lint coverage for confirmed identity/state footguns.
+- [x] **Phase 120: Authoring Pit-of-Success Guards** — Fail-fast `maxIterations`, element-registration validation, flow-reachability validation, and lint coverage for confirmed identity/state footguns. ✅ 2026-07-01 (5/5 plans, verification 4/4, code review 5 findings resolved; full suite 1872 green)
 - [ ] **Phase 121: Game & MERC Migration** — Migrate all `~/BoardSmithGames/` games onto the new APIs, keep BoardSmith green, re-vendor + verify the MERC canary.
 - [ ] **Phase 122: Documentation** — Agent-control guide, updated testing + browser/dev-host docs, and authoring/common-pitfalls updates for the shipped surface.
 
@@ -100,9 +100,9 @@ Plans:
 **Plans**: 5 plans
   - [x] 120-01-PLAN.md — PIT-01: loop() maxIterations construction throw + 6 callsite fixes
   - [x] 120-02-PLAN.md — PIT-03: action-reachability walk of _flowDefinition.root (throw/devWarn + function-actions blind spot)
-  - [ ] 120-03-PLAN.md — PIT-02: first-traversal element-class registration guard via _finder() hook
+  - [x] 120-03-PLAN.md — PIT-02: first-traversal element-class registration guard via GameElement finder hook (all/first/firstN/last/lastN/has)
   - [x] 120-04-PLAN.md — PIT-04 rule 1: no-element-identity-comparison (auto-fix) + RuleTester harness (Wave 0)
-  - [ ] 120-05-PLAN.md — PIT-04 rule 2: no-element-array-state
+  - [x] 120-05-PLAN.md — PIT-04 rule 2: no-element-array-state
 
 ### Phase 121: Game & MERC Migration
 **Goal**: Prove the new surface against every real game — adopt the introspection/test APIs where they replace hand-rolled patterns, keep all suites green, and re-vendor the MERC canary.
