@@ -24,6 +24,8 @@ Make board game development fast and correct — the framework handles multiplay
 
 **Key context:** No backward compatibility (pre-users, clean break). v4.3's introspection primitives are the foundation — reuse, don't rebuild. Audit findings verified against code with file:line evidence (see conversation audit, 2026-07-01). Phase numbering continues from 122.
 
+**Progress:** Phase 123 complete (2026-07-01) — FLOW-01..04 shipped: `describeFlowPosition`/`getFlowDebugInfo`, deterministic-by-default `playUntilComplete` + no `Math.random` fallbacks, `TestGame.getPendingAction`/disabled-choices introspection, devtools + `debug:flow-state` WS parity (incl. a browser-caught SnapshotSessionHost parity fix and a review-caught wire-serialization fix).
+
 Deferred backlog (not this milestone): v2 CRIB milestone (suppress-Undo-during-tutorial, strategy tutorial track); repo cleanup (3 pre-existing no-shadow errors, tsc test-file looseness, 0-indexed `performAction` docstring in `src/session/index.ts`); the deferred ShufflewickPub host skin (HOST-01..04).
 
 ## Previous: v4.3 Shipped
