@@ -42,12 +42,13 @@ created: 2026-07-01
 | 01-T2 | 123-01 | 1 | FLOW-01 | T-123-01 | Graceful no-active-flow branch, no throw | unit | `npx vitest run src/engine/flow --silent` | ✅ | ⬜ pending |
 | 02-T1 | 123-02 | 1 | FLOW-04 | T-123-02 | Shuffle fails loud (throw / required rng) instead of silent Math.random | unit | `npx vitest run src/engine/element/space.test.ts src/engine/element/element-collection.test.ts --silent` | ❌ new (Wave 0) | ⬜ pending |
 | 02-T2 | 123-02 | 1 | FLOW-04 | T-123-03 | Deterministic seeded default; seed retrievable/replayable | unit/integration | `npx vitest run src/testing/play-until-complete.test.ts --silent` | ✅ (new cases) | ⬜ pending |
-| 03-T1 | 123-03 | 2 | FLOW-03 | T-123-05 | getPendingAction returns immutable copy; out-of-range seat -> undefined | unit | `npx vitest run src/testing/test-game.test.ts -t "getPendingAction" --silent` | ✅ (new cases) | ⬜ pending |
+| 03-T1 | 123-03 | 2 | FLOW-03 | T-123-05 | getPendingAction returns immutable copy; out-of-range seat -> undefined; A2 traced before code | unit | `npx vitest run src/testing/test-game.test.ts -t "getPendingAction" --silent` | ✅ (new cases) | ⬜ pending |
 | 03-T2 | 123-03 | 2 | FLOW-02 | T-123-06 | Introspection surfaces disabled choices; gameplay path still rejects submission | unit | `npx vitest run src/testing/test-game.test.ts -t "disabled" --silent && npx vitest run src/session/pick-handler.test.ts --silent` | ✅ | ⬜ pending |
 | 03-T3 | 123-03 | 2 | FLOW-01 | — | Error messages embed readable flow position | unit | `npx vitest run src/testing/assertions.test.ts -t "assertActionAvailable" --silent` | ✅ (new cases) | ⬜ pending |
 | 04-T1 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-07 | pendingAction perspective-isolated (seat N never sees seat M) | unit | `npx vitest run src/session/game-session.test.ts -t "pendingAction" --silent` | ✅ (new cases) | ⬜ pending |
 | 04-T2 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-09 | Devtools getters stay inside DEV guard (production dead-code-eliminated) | typecheck | `npx tsc --noEmit -p tsconfig.json` | ✅ | ⬜ pending |
-| 04-T3 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-07 | Browser parity: getFlowDebugInfo()/getPendingAction() return correct values | manual (browser) | see Manual-Only Verifications | n/a | ⬜ pending |
+| 04-T3 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-10 | debug:flow-state op returns shared serialized FlowDebugInfo + own-seat pending action (never other seats); DebugPanel renders readable position | unit | `npx vitest run src/session/stateless-ops.test.ts -t "debugFlowState" --silent` | ✅ (new cases) | ⬜ pending |
+| 04-T4 | 123-04 | 2 | FLOW-01, FLOW-03 | T-123-07, T-123-10 | Browser parity: getFlowDebugInfo()/getPendingAction() AND visual DebugPanel flow position return correct values | manual (browser) | see Manual-Only Verifications | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -63,7 +64,7 @@ Existing infrastructure covers all phase requirements — vitest is installed an
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| Devtools-bridge parity for flow/pending-action introspection | FLOW-01, FLOW-03 | Browser-only surface (`__BOARDSMITH_DEVTOOLS`) | Run `boardsmith dev` in a game, evaluate `window.__BOARDSMITH_DEVTOOLS` getters in the iframe console; kill the server after |
+| Devtools-bridge + DebugPanel parity for flow/pending-action introspection | FLOW-01, FLOW-03 | Browser-only surfaces (`__BOARDSMITH_DEVTOOLS` window bridge + visual DebugPanel debug:flow-state op) | Run `boardsmith dev` in a game; evaluate `window.__BOARDSMITH_DEVTOOLS` getters in the iframe console AND open the visual Debug panel to confirm the readable flow position is displayed; kill the server after |
 
 *All other phase behaviors have automated verification.*
 
