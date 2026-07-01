@@ -14,6 +14,7 @@ This folder contains documentation for the BoardSmith game framework.
 | [AI System](./ai-system.md) | MCTS bot and AI integration |
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
 | [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, AI hints, narrated demo, heatmap, action help, and host lockout |
+| [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/replay, determinism & seeding |
 | [LLM Overview](./llm-overview.md) | Quick-reference for LLMs |
 | [Nomenclature](./nomenclature.md) | Standard terminology reference |
 

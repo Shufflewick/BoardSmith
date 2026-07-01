@@ -6,6 +6,12 @@ This guide documents common mistakes that cause hard-to-debug issues. Read this 
 
 ## 1. Object Reference Comparison (CRITICAL)
 
+> **Lint guard:** the `no-element-identity-comparison` ESLint rule (bundled in
+> `boardsmith/eslint-plugin`) flags `===`/`!==` between `GameElement`-typed
+> operands and `array.includes(element)`, and auto-fixes the simple cases to
+> `.id` comparisons. It's a syntactic heuristic (no type info), so untyped
+> operands can still slip through — the manual discipline below still matters.
+
 ### The Problem
 
 BoardSmith's `chooseElement` and element queries return **new object instances** each time. This means JavaScript's default equality checks will fail:
@@ -278,7 +284,7 @@ class MyGame extends Game {
 
 ---
 
-## 6. Flow Loop Conditions
+## 6. Flow Loop Conditions (`maxIterations` is required)
 
 ### The Problem
 
@@ -292,15 +298,37 @@ loop({
 })
 ```
 
+### `loop()` now throws at construction if `maxIterations` is missing
+
+As of v4.3, `loop()` **fails immediately when you define your flow** — not
+later, deep inside a running game — if you omit `maxIterations`:
+
+```
+Error: loop() requires maxIterations.
+  Add an explicit safety limit:
+    loop({ maxIterations: 100, while: ..., do: ... })
+  Without it, the loop silently falls back to a 10000-iteration cap and
+  fails deep inside a running game instead of at flow-definition time.
+  See: https://boardsmith.io/docs/common-pitfalls#loop-safety
+```
+
+**Removed footgun:** previously, an omitted `maxIterations` fell back to a
+silent `devWarn` and an internal 10000-iteration default — a mistake that
+only surfaced as a confusing failure mid-playtest, often after many turns.
+That silent fallback is gone. There is no way to construct a `loop()`
+without an explicit cap; you must set one every time.
+
 ### The Solution
 
-Ensure your loop conditions will eventually become false:
+Always pass `maxIterations`, and still make sure your condition can
+eventually become false — the cap is a safety net, not your primary exit
+condition:
 
 ```typescript
-// CORRECT - use maxIterations as safety net
+// CORRECT - explicit maxIterations required by the constructor
 loop({
   while: () => !game.isFinished(),
-  maxIterations: 1000,  // Prevents infinite loop
+  maxIterations: 1000,  // Safety net; loop should exit via while() first
   do: actionStep({ actions: ['play'] })
 })
 
@@ -310,9 +338,15 @@ loop({
     const player = ctx.player;
     return player.actionsRemaining > 0;  // Will decrease each iteration
   },
+  maxIterations: 100,
   do: actionStep({ actions: ['play'] })
 })
 ```
+
+`turnLoop()` and `stateAwareLoop()` build on `loop()` but default
+`maxIterations` to `100` if you don't pass one, so they don't throw — but an
+explicit value tuned to your game's actual turn structure is still
+recommended.
 
 ---
 
@@ -424,6 +458,60 @@ class MyGame extends Game {
   }
 }
 ```
+
+### `startFlow()` now catches this for you (PIT-02 guard)
+
+As of v4.3, `startFlow()` records every element class queried via a
+`GameElement` finder method (`all`, `first`, `firstN`, `last`, `lastN`,
+`has`) during the first flow traversal, then diffs it against the class
+registry. If your flow queries a class that was never registered — a typo'd
+class name or a class you forgot to add to `registerElements([...])` — it
+throws immediately instead of silently returning an empty collection:
+
+```
+Error: Element class 'MyCard' was queried (e.g. via game.all(MyCard)) but
+was never registered. Call this.registerElements([MyCard]) in your game's
+constructor before startFlow(), or fix the typo if this was meant to
+reference a different class.
+```
+
+**Built-in classes are exempt — you only register your own.** `Die`, `Card`,
+`Piece`, `Hand`, `Deck`, `DicePool`, `Grid`, `HexGrid`, and the other
+framework base classes are auto-seeded into the class registry by `Game`
+itself. This means:
+
+- A polymorphic query against a built-in base class, like `dicePool.all(Die)`
+  or `hand.all(Card)`, needs no registration — the built-in is already known.
+- A game that defines a **subclass** of a built-in (e.g. `class IngredientDie
+  extends Die`) must still register its own subclass — the built-in seed
+  covers `Die`, not `IngredientDie`.
+- An explicit `registerElements([...])` call for a custom class that happens
+  to share a built-in's name **overrides** the built-in seed — the
+  registration is authoritative, so you're never silently shadowed by the
+  framework default.
+
+**Real example — polyhedral-potions** defines dice as a subclass of the
+built-in `Die`:
+
+```typescript
+// polyhedral-potions/src/rules/elements.ts
+export class IngredientDie extends Die<PolyPotionsGame, PolyPotionsPlayer> { ... }
+
+// polyhedral-potions/src/rules/game.ts
+this.registerElements([IngredientDie, IngredientShelf, DraftArea]);
+```
+
+`IngredientDie` is registered because it's the game's own class; `Die`
+itself needs no entry because it's a built-in. Querying `shelf.all(Die)`
+polymorphically (to find any die regardless of subclass) also works without
+extra registration, since `Die` is seeded.
+
+**Scope limit (documented, not a bug):** only queries made through the
+`GameElement` finder methods during the *first* `startFlow()` traversal are
+checked. Queries made directly on an `ElementCollection` (e.g.
+`board.children.all(Foo)`) and any query made after the first traversal
+(post-start, async) are not covered by this guard — the manual discipline of
+always calling `registerElements([...])` up front still matters.
 
 ---
 
@@ -542,6 +630,12 @@ See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-te
 ---
 
 ## 9. Element Storage: Arrays vs Children (CRITICAL)
+
+> **Lint guard:** the `no-element-array-state` ESLint rule flags a
+> `GameElement[]`-typed class field on a non-element class, and flags
+> assigning `game.all(...)`/`.first(...)`/etc. results onto a `this.*`
+> property. It reports only (no auto-fix, since "store IDs" vs "query at
+> point of use" is a judgment call) — see the correct patterns below.
 
 ### The Problem
 
@@ -1069,6 +1163,69 @@ Without flow restrictions, any action could be taken at any time, breaking game 
 
 ---
 
+## 14.5. Action Reachability: Typo'd or Orphaned Actions (PIT-03 guard)
+
+### The Problem
+
+A typo in an `actionStep({ actions: [...] })` list used to fail silently —
+the action just never showed up in `availableActions`, with no error to
+point you at the cause. Conversely, an action you registered but forgot to
+wire into any flow step also went unnoticed.
+
+### `startFlow()` throws on an unregistered-but-referenced action
+
+As of v4.3, `startFlow()` statically walks the flow tree and validates every
+action name referenced by an `actionStep`/`simultaneousActionStep`. If a
+referenced action was never registered, it throws immediately:
+
+```
+Error: Flow references action 'atatck' that is not registered. Call
+this.registerActions(action('atatck')...) in your game's constructor before
+startFlow(), or fix the typo in the actionStep(...) that references it.
+```
+
+### A registered-but-unreferenced action only warns (does not throw)
+
+The reverse case — an action you registered that no `actionStep` ever
+lists — is intentionally a `devWarn`, not a throw, since an action can be
+invoked outside the static flow tree (e.g. as a `followUp`, or from another
+action's `.execute()`):
+
+```
+[BoardSmith] Action 'reinforce' is registered but referenced by no
+actionStep() in the flow. It will never be offered to a player unless
+invoked another way (e.g. as a follow-up action, or from another action's
+.execute()). If that's unintentional, add it to an actionStep(...), or
+remove the registration.
+```
+
+### Blind spot (documented, not fixable by static analysis)
+
+When `actionStep({ actions: ... })` is passed a **function** rather than an
+array (e.g. `polyhedral-potions`'s dynamic per-context action lists), the
+referenced names can't be enumerated without invoking the function — which
+may depend on runtime game state that doesn't exist yet at `startFlow()`
+time. Function-valued `actions` are skipped entirely by this check; a typo
+inside one will still only surface as a missing action at runtime, same as
+before this guard existed:
+
+```typescript
+actionStep({
+  // Function form is NOT statically validated — no throw for a typo here.
+  actions: (ctx) => {
+    const list = ['move', 'attack', 'endTurn'];
+    if (ctx.player.hasTactics) list.push('playTacitcs'); // typo not caught
+    return list;
+  },
+})
+```
+
+Prefer the static array form (`actions: ['move', 'attack', 'endTurn']`)
+where the action list doesn't actually need to vary — you get the throw-on-typo
+guard for free.
+
+---
+
 ## 15. Using followUp Args in prompt/filter
 
 ### The Problem
@@ -1563,8 +1720,9 @@ game.message(`Rolled ${rolled}!`);
 | Dead elements | `squad.all(Merc)` | `squad.getLivingMercs()` |
 | Action costs | In `onEach` callback | In `execute` block |
 | Element refs on Player | `selectedCard: Card` | `selectedCardId: number` |
-| Loop safety | No `maxIterations` | Always set `maxIterations` |
-| Class registration | Forget to register | `registerElements([...])` |
+| Loop safety | No `maxIterations` (now a construction-time throw) | `loop({ maxIterations: 100, ... })` |
+| Class registration | Forget to register a custom class | `registerElements([MyClass])` (built-ins like `Die`/`Card` are auto-registered) |
+| Action reachability | Typo in `actionStep({ actions: [...] })` | Fixed name; `startFlow()` throws on a genuine typo in the static array form |
 | Side effects in choices | N/A (no longer an issue) | Choices always evaluated on-demand |
 | **Module-level caching** | `const cache = new Map()` | `actionTempState(ctx, 'action')` |
 | **Element storage** | `stash: Equipment[] = []` | `stashZone.all(Equipment)` |
@@ -1578,6 +1736,8 @@ game.message(`Rolled ${rolled}!`);
 | **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
 | **Drag-drop not working** | No matching action for drag | Use element→element or element→choice with filterBy |
 | **Mixing dice randomization** | `die.roll()` then `die.setValue(Math.random())` | Use only `die.roll()` for normal rolling |
+| **Element identity (lint)** | `el1 === el2` / `arr.includes(el)` | `no-element-identity-comparison` ESLint rule auto-fixes simple cases to `.id` |
+| **Element array state (lint)** | `class X { items: Card[] = game.all(Card); }` | `no-element-array-state` ESLint rule flags it — query at point of use or store ids |
 
 ---
 

@@ -919,6 +919,7 @@ setVar('dealer', (ctx) => ctx.game.getPlayer(1))
 // Access in conditions
 loop({
   while: (ctx) => ctx.get('roundNumber') < 10,
+  maxIterations: 100, // required — see Common Pitfalls #6
   do: /* flow node */,
 })
 ```

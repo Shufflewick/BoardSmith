@@ -287,11 +287,21 @@ BoardSmith automatically handles serialization for:
 
 ### Registering Elements
 
-All custom element classes must be registered:
+All **custom** element classes must be registered:
 
 ```typescript
 this.registerElements([Card, Hand, Deck, Board, Piece]);
 ```
+
+Built-in framework classes (`Die`, `Card`, `Piece`, `Hand`, `Deck`, `DicePool`,
+`Grid`, `HexGrid`, ...) are auto-registered — you never need to list them
+yourself, and polymorphic queries against a built-in base class (e.g.
+`dicePool.all(Die)`) work without registration. You only register classes
+*you* define, including subclasses of a built-in (e.g. `class IngredientDie
+extends Die`). `startFlow()` validates this for you: if your flow queries an
+element class that was never registered, it throws with the exact
+`registerElements([...])` call to add. See
+[Common Pitfalls #7](./common-pitfalls.md#7-element-class-registration).
 
 ### State Snapshots
 
