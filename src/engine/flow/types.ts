@@ -269,6 +269,29 @@ export interface FlowState {
 }
 
 /**
+ * Structured, human- and machine-readable description of "where in the flow
+ * are we right now" — produced by `describeFlowPosition()` and exposed via
+ * `Game.getFlowDebugInfo()`.
+ */
+export interface FlowDebugInfo {
+  /** Current named phase, read directly from `FlowState.currentPhase`. */
+  phase?: string;
+  /** Most-specific named node reached by following the flow position's path; falls back to the node's `type` (e.g. `'action-step'`) when unnamed. */
+  step?: string;
+  /** Raw index path, for machine consumers that want the exact position. */
+  path: number[];
+  /** Seat(s) currently awaited, mirrors `FlowState.currentPlayer`/`awaitingPlayers`. */
+  awaiting: {
+    /** Current player seat if awaiting input (single-player action steps). */
+    currentPlayer?: number;
+    /** Seats awaiting input (simultaneous action steps). */
+    awaitingPlayers?: number[];
+  };
+  /** Human-readable one-liner, e.g. "phase *pegging* -> step *player-turn*, waiting on seat 2". */
+  describe(): string;
+}
+
+/**
  * Flow definition for a game
  */
 export interface FlowDefinition {
