@@ -9,6 +9,7 @@
  */
 
 import type { ValidElement } from '../composables/useBoardInteraction.js';
+import type { SerializedFlowDebugInfo, PendingActionState } from '../../session/types.js';
 
 // ---------------------------------------------------------------------------
 // Message shape
@@ -27,6 +28,10 @@ export interface DevtoolsStateMessage {
     /** IDs of currently-valid, non-disabled elements */
     validElements: number[];
   };
+  /** Serialized flow-position snapshot (FLOW-01), sourced from the received broadcast state. */
+  flowDebugInfo: SerializedFlowDebugInfo | undefined;
+  /** This seat's own pending multi-step action snapshot (FLOW-03), sourced from the received broadcast state. */
+  pendingAction: PendingActionState | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +48,10 @@ export interface DevtoolsParams {
     currentPickIndex: number;
     validElements: ValidElement[];
   };
+  /** Serialized flow-position snapshot (FLOW-01), forwarded from the received broadcast state. */
+  flowDebugInfo: SerializedFlowDebugInfo | undefined;
+  /** This seat's own pending multi-step action snapshot (FLOW-03), forwarded from the received broadcast state. */
+  pendingAction: PendingActionState | undefined;
 }
 
 /**
@@ -65,6 +74,8 @@ export function buildDevtoolsPayload(params: DevtoolsParams): DevtoolsStateMessa
         .filter(v => !v.disabled)
         .map(v => v.id),
     },
+    flowDebugInfo: params.flowDebugInfo,
+    pendingAction: params.pendingAction,
   };
 }
 

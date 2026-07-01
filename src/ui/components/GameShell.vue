@@ -723,6 +723,8 @@ if (isDevBuild) {
             currentPickIndex: boardInteraction.currentPickIndex,
             validElements: boardInteraction.validElements,
           },
+          flowDebugInfo: state.value?.state?.flowDebugInfo,
+          pendingAction: state.value?.state?.pendingAction,
         },
       );
     },

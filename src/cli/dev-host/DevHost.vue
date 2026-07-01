@@ -378,6 +378,10 @@ onMounted(() => {
         devtoolsSnapshot.value?.actionMetadata as Record<string, unknown> | undefined,
       getBoardInteractionState: () =>
         (devtoolsSnapshot.value?.boardInteraction as any) ?? null,
+      getFlowDebugInfo: (_seat?: number) =>
+        (devtoolsSnapshot.value?.flowDebugInfo as any) ?? null,
+      getPendingAction: (_seat?: number) =>
+        (devtoolsSnapshot.value?.pendingAction as any) ?? null,
     };
   }
 });

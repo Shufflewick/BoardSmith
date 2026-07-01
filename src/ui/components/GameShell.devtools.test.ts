@@ -35,6 +35,8 @@ const BASE_PARAMS = {
       { id: 20, ref: {} as any },
     ],
   },
+  flowDebugInfo: undefined,
+  pendingAction: undefined,
 };
 
 // ---------------------------------------------------------------------------
@@ -66,6 +68,36 @@ describe('maybePostDevtoolsUpdate', () => {
     expect(msg.boardInteraction.activeAction).toBe('ask');
     expect(msg.boardInteraction.currentSelectionStep).toBe(0);
     expect(Array.isArray(msg.boardInteraction.validElements)).toBe(true);
+  });
+
+  it('forwards flowDebugInfo and pendingAction (FLOW-01/03) additively', () => {
+    const mockPost = vi.fn();
+    const flowDebugInfo = {
+      phase: 'play',
+      step: 'ask-turn',
+      path: [0, 1],
+      awaiting: { currentPlayer: 1 },
+      description: 'phase play -> step ask-turn, waiting on seat 1',
+    };
+    const pendingAction = { actionName: 'ask', playerPosition: 1, collectedArgs: {} } as any;
+    maybePostDevtoolsUpdate(
+      { isDevBuild: true, platformMode: true },
+      { ...BASE_PARAMS, flowDebugInfo, pendingAction },
+      mockPost,
+    );
+
+    const msg = mockPost.mock.calls[0][0];
+    expect(msg.flowDebugInfo).toEqual(flowDebugInfo);
+    expect(msg.pendingAction).toEqual(pendingAction);
+  });
+
+  it('flowDebugInfo/pendingAction are undefined (not errors) when absent', () => {
+    const mockPost = vi.fn();
+    maybePostDevtoolsUpdate({ isDevBuild: true, platformMode: true }, BASE_PARAMS, mockPost);
+
+    const msg = mockPost.mock.calls[0][0];
+    expect(msg.flowDebugInfo).toBeUndefined();
+    expect(msg.pendingAction).toBeUndefined();
   });
 });
 

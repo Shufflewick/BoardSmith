@@ -10,6 +10,10 @@ interface BoardsmithDevtools {
   getActionMetadata(seat?: number): Record<string, unknown> | undefined;
   /** Returns current board-interaction state: active action, selection step, and valid element IDs. */
   getBoardInteractionState(): { activeAction: string | null; currentSelectionStep: number; validElements: number[] } | null;
+  /** Returns the serialized flow-position snapshot (FLOW-01), or null when none has been received yet. */
+  getFlowDebugInfo(seat?: number): unknown | null;
+  /** Returns this seat's own pending multi-step action snapshot (FLOW-03), or null when none is in progress. */
+  getPendingAction(seat?: number): unknown | null;
 }
 
 interface Window {
