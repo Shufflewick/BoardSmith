@@ -705,9 +705,9 @@ if (isDevBuild) {
       availableActions,
       actionMetadata,
       playerSeat,
-      () => boardInteraction.state.currentAction,
-      () => boardInteraction.state.currentPickIndex,
-      () => boardInteraction.state.validElements.length,
+      () => boardInteraction.currentAction,
+      () => boardInteraction.currentPickIndex,
+      () => boardInteraction.validElements.length,
       state,
     ],
     () => {
@@ -719,9 +719,9 @@ if (isDevBuild) {
           availableActions: availableActions.value,
           actionMetadata: actionMetadata.value,
           boardInteraction: {
-            currentAction: boardInteraction.state.currentAction,
-            currentPickIndex: boardInteraction.state.currentPickIndex,
-            validElements: boardInteraction.state.validElements,
+            currentAction: boardInteraction.currentAction,
+            currentPickIndex: boardInteraction.currentPickIndex,
+            validElements: boardInteraction.validElements,
           },
         },
       );
