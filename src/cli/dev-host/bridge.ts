@@ -179,7 +179,10 @@ export function translateOp(
     case 'debug:action-traces':
       return { type: 'debugActionTraces', player: (payload.player as number) ?? seat };
     case 'debug:flow-state':
-      return { type: 'debugFlowState', player: (payload.player as number) ?? seat };
+      // Always the connection's own seat — pendingAction data is seat-scoped
+      // (T-123-10) and there is no legitimate use for a client-supplied
+      // override here, unlike the other debug:* ops above (IN-01).
+      return { type: 'debugFlowState', player: seat };
     case 'debug:rewind':
       return { type: 'debugRewind', actionIndex: payload.actionIndex as number };
     case 'debug:move-to-top':
