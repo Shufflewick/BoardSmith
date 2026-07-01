@@ -125,7 +125,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
-| 123. Determinism & Flow Introspection | 4/4 | Complete   | 2026-07-01 |
+| 123. Determinism & Flow Introspection | 4/4 | Complete    | 2026-07-01 |
 | 124. Hidden-Info Test Utilities | 0/TBD | Not started | - |
 | 125. Headless Simulation | 0/TBD | Not started | - |
 | 126. Structured Error Surfacing | 0/TBD | Not started | - |
