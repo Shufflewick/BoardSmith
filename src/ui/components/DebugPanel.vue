@@ -302,6 +302,18 @@ interface FlowContext {
 }
 const flowContext = ref<FlowContext | null>(null);
 
+// Flow-position state (from the debug:flow-state op — FLOW-01 locked debug:* channel).
+// Distinct from flowContext above (sourced from debug:action-traces): this carries the
+// human-readable description string produced by Game.getFlowDebugInfo().describe().
+interface FlowStateInfo {
+  phase?: string;
+  step?: string;
+  path: number[];
+  awaiting: { currentPlayer?: number; awaitingPlayers?: number[] };
+  description: string;
+}
+const flowStateInfo = ref<FlowStateInfo | null>(null);
+
 // Element inspector state
 const selectedElementId = ref<number | null>(null);
 const elementSearchQuery = ref('');
@@ -1049,12 +1061,28 @@ function formatConditionValue(value: unknown): string {
   return String(value);
 }
 
+// Fetch the readable flow position from the debug:flow-state op (FLOW-01 locked
+// debug:* channel — distinct from fetchActionTraces' debug:action-traces).
+async function fetchFlowState() {
+  try {
+    const data = await debugRequest('debug:flow-state', { player: props.playerSeat });
+    if (!data.success) {
+      flowStateInfo.value = null;
+      return;
+    }
+    flowStateInfo.value = (data.flowDebugInfo as FlowStateInfo) ?? null;
+  } catch {
+    flowStateInfo.value = null;
+  }
+}
+
 // Refresh action traces when switching to actions tab or when state changes
 watch(activeTab, (tab) => {
   if (tab === 'actions' && props.gameId) {
     // Refresh traces when switching to actions tab
     if (Date.now() - tracesLastFetched.value > 2000) {
       fetchActionTraces();
+      fetchFlowState();
     }
   }
 });
@@ -1063,6 +1091,7 @@ watch(activeTab, (tab) => {
 watch(() => props.state, () => {
   if (activeTab.value === 'actions') {
     fetchActionTraces();
+    fetchFlowState();
   }
 }, { deep: false });
 
@@ -1716,33 +1745,39 @@ const displayedState = computed(() => {
           </div>
 
           <!-- Flow Context Info Box -->
-          <div v-if="flowContext" class="flow-context-box">
+          <div v-if="flowContext || flowStateInfo" class="flow-context-box">
             <div class="flow-context-header">
               <span class="flow-context-icon">⚡</span>
               <span class="flow-context-title">Flow Context</span>
             </div>
             <div class="flow-context-details">
-              <div v-if="flowContext.currentPhase" class="flow-context-item">
-                <span class="flow-context-label">Phase:</span>
-                <span class="flow-context-value">{{ flowContext.currentPhase }}</span>
+              <div v-if="flowStateInfo" class="flow-context-item">
+                <span class="flow-context-label">Flow position:</span>
+                <span class="flow-context-value">{{ flowStateInfo.description }}</span>
               </div>
-              <div class="flow-context-item">
-                <span class="flow-context-label">Current player:</span>
-                <span class="flow-context-value">{{ flowContext.currentPlayer ?? 'none' }}</span>
-                <span v-if="flowContext.isMyTurn" class="flow-context-badge my-turn">Your turn</span>
-                <span v-else class="flow-context-badge not-turn">Not your turn</span>
-              </div>
-              <div class="flow-context-item">
-                <span class="flow-context-label">Flow allows:</span>
-                <span class="flow-context-value flow-allowed-list">
-                  <template v-if="flowContext.flowAllowedActions.length > 0">
-                    {{ flowContext.flowAllowedActions.join(', ') }}
-                  </template>
-                  <template v-else>
-                    <em>no actions</em>
-                  </template>
-                </span>
-              </div>
+              <template v-if="flowContext">
+                <div v-if="flowContext.currentPhase" class="flow-context-item">
+                  <span class="flow-context-label">Phase:</span>
+                  <span class="flow-context-value">{{ flowContext.currentPhase }}</span>
+                </div>
+                <div class="flow-context-item">
+                  <span class="flow-context-label">Current player:</span>
+                  <span class="flow-context-value">{{ flowContext.currentPlayer ?? 'none' }}</span>
+                  <span v-if="flowContext.isMyTurn" class="flow-context-badge my-turn">Your turn</span>
+                  <span v-else class="flow-context-badge not-turn">Not your turn</span>
+                </div>
+                <div class="flow-context-item">
+                  <span class="flow-context-label">Flow allows:</span>
+                  <span class="flow-context-value flow-allowed-list">
+                    <template v-if="flowContext.flowAllowedActions.length > 0">
+                      {{ flowContext.flowAllowedActions.join(', ') }}
+                    </template>
+                    <template v-else>
+                      <em>no actions</em>
+                    </template>
+                  </span>
+                </div>
+              </template>
             </div>
           </div>
 

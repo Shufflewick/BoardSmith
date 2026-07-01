@@ -1199,4 +1199,87 @@ describe('executeOp', () => {
       expect(result.category).toBe('protocol');
     });
   });
+
+  // ── debugFlowState (Plan 123-04 Task 3: FLOW-01 locked debug:* op channel) ──
+
+  describe('debugFlowState', () => {
+    it('debug:flow-state op returns flowDebugInfo with a non-empty description and structured fields', async () => {
+      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        simpleGameDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'debugFlowState', player: 1 },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.flowDebugInfo).toBeDefined();
+      expect(typeof result.flowDebugInfo!.description).toBe('string');
+      expect(result.flowDebugInfo!.description.length).toBeGreaterThan(0);
+      expect(Array.isArray(result.flowDebugInfo!.path)).toBe(true);
+      expect(result.flowDebugInfo!.awaiting).toBeDefined();
+    });
+
+    it('returns an error result (no throw) for an out-of-range seat', async () => {
+      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const result = await executeOp(
+        simpleGameDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'debugFlowState', player: 0 },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/Invalid player seat/);
+      expect(result.category).toBe('protocol');
+    });
+
+    it('returns undefined pendingAction when no pendingState is passed', async () => {
+      const startResult = await startGame(simpleGameDef, simpleGameOptions);
+
+      const result = await executeOp(
+        simpleGameDef,
+        simpleGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'debugFlowState', player: 1 },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.pendingAction).toBeUndefined();
+    });
+
+    it("reflects the requesting seat's own pendingState (perspective-scoped, T-123-10)", async () => {
+      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+
+      // Seat 1 begins the two-step 'pick' action but does not complete it.
+      const step1 = await executeOp(
+        twoStepGameDef,
+        twoStepGameOptions,
+        startResult.snapshot,
+        null,
+        { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick' },
+      );
+      expect(step1.success).toBe(true);
+      expect(step1.pendingState).not.toBeNull();
+
+      const result = await executeOp(
+        twoStepGameDef,
+        twoStepGameOptions,
+        step1.snapshot,
+        step1.pendingState,
+        { type: 'debugFlowState', player: 1 },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.pendingAction).toBeDefined();
+      expect((result.pendingAction as unknown as { actionName: string }).actionName).toBe('pick');
+    });
+  });
 });

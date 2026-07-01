@@ -44,6 +44,7 @@ export type WireOp =
   | 'debug:state-at'
   | 'debug:state-diff'
   | 'debug:action-traces'
+  | 'debug:flow-state'
   | 'debug:rewind'
   | 'debug:move-to-top'
   | 'debug:reorder-card'
@@ -177,6 +178,8 @@ export function translateOp(
       };
     case 'debug:action-traces':
       return { type: 'debugActionTraces', player: (payload.player as number) ?? seat };
+    case 'debug:flow-state':
+      return { type: 'debugFlowState', player: (payload.player as number) ?? seat };
     case 'debug:rewind':
       return { type: 'debugRewind', actionIndex: payload.actionIndex as number };
     case 'debug:move-to-top':
@@ -251,6 +254,13 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
         error: result.error,
         traces: result.traces,
         flowContext: result.flowContext,
+      };
+    case 'debug:flow-state':
+      return {
+        success: result.success,
+        error: result.error,
+        flowDebugInfo: result.flowDebugInfo,
+        pendingAction: result.pendingAction,
       };
     case 'debug:rewind':
     case 'debug:move-to-top':

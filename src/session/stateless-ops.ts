@@ -9,9 +9,9 @@
  * no memory between calls.
  */
 
-import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
+import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState, PendingActionState } from '../engine/index.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
-import type { HeatmapEntry } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
@@ -56,6 +56,10 @@ export type Op =
   | { type: 'debugStateAt'; actionIndex: number; player: number }
   | { type: 'debugStateDiff'; fromIndex: number; toIndex: number; player: number }
   | { type: 'debugActionTraces'; player: number }
+  // debugFlowState: the FLOW-01 locked "debug:* WS op family" channel — returns the
+  // same SerializedFlowDebugInfo shape as the session broadcast, plus the requesting
+  // seat's own pending action (perspective-scoped via the threaded pendingState).
+  | { type: 'debugFlowState'; player: number }
   | { type: 'debugRewind'; actionIndex: number }
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
@@ -86,6 +90,7 @@ export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
   'debugStateAt',
   'debugStateDiff',
   'debugActionTraces',
+  'debugFlowState',
   // aiSuggest is read-only: runs MCTS to preview a move but does NOT mutate the snapshot.
   'aiSuggest',
 ]);
@@ -126,6 +131,10 @@ export interface OpResult {
   diff?: unknown;
   traces?: unknown[];
   flowContext?: unknown;
+  // debug:flow-state result fields — the SAME shared serialized shape as the
+  // session broadcast (Plan 04 Task 1), no divergent structure across channels.
+  flowDebugInfo?: SerializedFlowDebugInfo;
+  pendingAction?: PendingActionState;
 
   // State envelope — always present on success
   snapshot: unknown;
@@ -901,6 +910,39 @@ function handleDebugActionTraces(
   };
 }
 
+function handleDebugFlowState(
+  def: GameDefinitionLike,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  pendingState: Record<string, unknown> | null,
+  op: Extract<Op, { type: 'debugFlowState' }>,
+): OpResult {
+  if (op.player < 1 || op.player > gameOptions.playerCount) {
+    return errorResult(`Invalid player seat: ${op.player}.`, 'protocol');
+  }
+  const runner = runnerFromSnapshot(snapshot, def);
+  const info = runner.game.getFlowDebugInfo();
+  const flowDebugInfo: SerializedFlowDebugInfo = {
+    phase: info.phase,
+    step: info.step,
+    path: info.path,
+    awaiting: info.awaiting,
+    description: info.describe(),
+  };
+
+  // SECURITY (T-123-10): pendingAction is derived ONLY from the passed-in
+  // pendingState — the requesting seat's own persisted pending state, threaded
+  // by the host (naturally seat-scoped) — never by reading another seat's state.
+  const pendingAction = (pendingState as unknown as PendingActionState | null) ?? undefined;
+
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    flowDebugInfo,
+    pendingAction,
+  };
+}
+
 function handleDebugRewind(
   def: GameDefinitionLike,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -994,6 +1036,8 @@ export async function executeOp(
         return handleDebugStateDiff(def, gameOptions, snap, op);
       case 'debugActionTraces':
         return handleDebugActionTraces(def, gameOptions, snap, op);
+      case 'debugFlowState':
+        return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
       case 'debugReorder':
