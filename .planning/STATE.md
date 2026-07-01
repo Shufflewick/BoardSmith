@@ -4,13 +4,13 @@ milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
 stopped_at: Completed 123-02-PLAN.md
-last_updated: "2026-07-01T22:13:14.183Z"
+last_updated: "2026-07-01T22:27:16.825Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 123 (Determinism & Flow Introspection) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-01
 
@@ -136,6 +136,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase ?]: ElementCollection.shuffle() requires an explicit rng argument (no Math.random default) — clean break, zero callers confirmed
 - [Phase ?]: playUntilComplete defaults to a fixed literal seed instead of Math.random, keeping no-options runs deterministic
 - [Phase ?]: GameRunner.seed reads back Game.getConstructorOptions().seed when no explicit seed was passed, so auto-generated seeds are replayable
+- [Phase 123]: A2 resolved: reuse ActionExecutor.createPendingActionState/processSelectionStep session-free for GameRunner pending-action tracking, confirmed by tracing action.test.ts:1684+
+- [Phase 123]: FlowDebugInfo (Plan 01) was never exported from flow/index.ts or engine/index.ts — fixed as a Rule 3 blocker before it could be imported in runner.ts/test-game.ts
+- [Phase 123]: TestGame.getActionSpaceWithChoices(seat) composes existing getActionSpace()+getSelectionChoices() rather than a new disabled-choice evaluator; pick-handler.ts left untouched
 
 ### Highest-Risk Items (v4.4)
 
@@ -157,7 +160,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-01T22:13:14.176Z
+Last session: 2026-07-01T22:26:06.375Z
 Stopped at: Completed 123-02-PLAN.md
 Resume file: None
 Next action: `/gsd:plan-phase 123`
