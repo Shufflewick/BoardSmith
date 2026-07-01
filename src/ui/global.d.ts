@@ -1,6 +1,13 @@
 declare const __BOARDSMITH_DEV__: boolean | undefined;
 declare const __API_URL__: string | undefined;
 
+interface BoardsmithActionResolvedDetail {
+  action: string;
+  success: boolean;
+  seat: number;
+  error?: string;
+}
+
 // Vue single-file component declarations
 declare module '*.vue' {
   import type { DefineComponent } from 'vue';

@@ -152,6 +152,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     onBeforeAutoExecute: initialBeforeAutoExecute,
   } = options;
 
+  // Dev-only guard — mirrors GameShell.vue:174 pattern. Dead-code-eliminated by
+  // Vite's production build when import.meta.env.DEV is false.
+  const isDevBuild = import.meta.env.DEV;
+
   // Single before-auto-execute hook (REPLACED, not accumulated, via setBeforeAutoExecute)
   // Stored as ref to allow setting/replacing after creation
   const beforeAutoExecuteHook = ref<((actionName: string, args: Record<string, unknown>) => void | Promise<void>) | undefined>(
@@ -1006,6 +1010,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (!result.success) {
           lastError.value = result.error || 'Action failed';
         }
+        if (isDevBuild && typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
+              detail: {
+                action: actionName,
+                success: result.success,
+                seat: playerSeat?.value ?? 0,
+                ...(result.success ? {} : { error: result.error }),
+              },
+            }),
+          );
+        }
         // Executing resolves the action — clear in-progress state, unless a newer
         // action started during the await (see note below).
         if (actionStartSeq === seq) {
@@ -1017,6 +1033,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Action failed';
         lastError.value = error;
+        if (isDevBuild && typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
+              detail: {
+                action: actionName,
+                success: false,
+                seat: playerSeat?.value ?? 0,
+                error,
+              },
+            }),
+          );
+        }
         return { success: false, error };
       } finally {
         isExecuting.value = false;
@@ -1071,6 +1099,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         lastError.value = result.error || 'Action failed';
       }
 
+      if (isDevBuild && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
+            detail: {
+              action: actionName,
+              success: result.success,
+              seat: playerSeat?.value ?? 0,
+              ...(result.success ? {} : { error: result.error }),
+            },
+          }),
+        );
+      }
+
       // Executing an action resolves it — clear any in-progress action state, exactly
       // like executeCurrentAction(). Without this, a custom UI that calls execute()
       // while the ActionPanel auto-started the SAME action (e.g. cribbage's play card)
@@ -1091,6 +1132,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
       lastError.value = error;
+      if (isDevBuild && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
+            detail: {
+              action: actionName,
+              success: false,
+              seat: playerSeat?.value ?? 0,
+              error,
+            },
+          }),
+        );
+      }
       return { success: false, error };
     } finally {
       isExecuting.value = false;
@@ -1488,6 +1541,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       pendingOnServer.value = true;
 
       if (result.actionComplete) {
+        // Capture the action name BEFORE clearing currentAction — it is nulled below
+        // and would be unavailable for the boardsmith:action-resolved dispatch.
+        const completedActionName = currentAction.value;
+
         // Server executed the action — clear local state
         currentAction.value = null;
         clearArgs();
@@ -1503,6 +1560,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           // multi-jump capture chain (whose final hop completes here), matching a
           // single move. A followUp (mid-chain) must NOT signal — the turn continues.
           actionCompletedTick.value++;
+          if (isDevBuild && typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
+                detail: {
+                  action: completedActionName ?? '',
+                  success: true,
+                  seat: player,
+                },
+              }),
+            );
+          }
         }
 
         return { valid: true };
