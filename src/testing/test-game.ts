@@ -13,6 +13,7 @@ import {
   type FlowState,
   type FlowDebugInfo,
   type PendingActionState,
+  type AnnotatedChoice,
 } from '../engine/index.js';
 import { GameRunner, type ActionExecutionResult, type PlayerStateView } from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
@@ -42,6 +43,41 @@ export interface TestGameOptions {
    * ```
    */
   [key: string]: unknown;
+}
+
+/**
+ * One selection's choices, including disabled ones with their reasons.
+ * See {@link TestGame.getActionSpaceWithChoices}.
+ */
+export interface SelectionChoicesView {
+  /** Selection name (key in action args) */
+  name: string;
+  /** Every choice for this selection, including disabled ones with `disabled` set to the reason string */
+  choices: AnnotatedChoice<unknown>[];
+}
+
+/**
+ * One action's full choice space for a seat — every selection with every
+ * choice (enabled AND disabled, each disabled choice carrying its reason).
+ * See {@link TestGame.getActionSpaceWithChoices}.
+ */
+export interface ActionChoicesView {
+  /** Action name */
+  name: string;
+  /** Action prompt, if defined */
+  prompt?: string;
+  /** Every selection for this action, each with its full (enabled + disabled) choice list */
+  selections: SelectionChoicesView[];
+}
+
+/**
+ * The full action space for one seat, with disabled choices AND their reasons
+ * included inline — one call instead of `getSelectionChoices()` per selection.
+ * See {@link TestGame.getActionSpaceWithChoices}.
+ */
+export interface ActionSpaceWithChoicesView {
+  /** Only the actions this seat can legally execute right now */
+  actions: ActionChoicesView[];
 }
 
 /**
@@ -323,6 +359,45 @@ export class TestGame<G extends Game = Game> {
    */
   getPlayerView(playerSeat: number): PlayerStateView {
     return this.runner.getPlayerView(playerSeat);
+  }
+
+  /**
+   * Get a seat's full action space with disabled choices AND their reasons
+   * included — one call instead of `game.getSelectionChoices()` per selection.
+   *
+   * Reuses the existing engine machinery: {@link Game.getActionSpace} for the
+   * legal action/selection set and {@link Game.getSelectionChoices} (which
+   * already computes {@link AnnotatedChoice}`.disabled` — v2.8) for each
+   * selection's choices. No parallel disabled-choice evaluator is introduced,
+   * and the gameplay pick path (`pick-handler.ts`) is untouched — a disabled
+   * choice surfaced here still cannot be submitted through gameplay.
+   *
+   * Note: choices are fetched with no upstream args, so a selection whose
+   * choices depend on an earlier selection (`dependsOn`/`filterBy`) reflects
+   * the pre-selection (typically empty or unfiltered) choice set. Use
+   * {@link ActionBuilder} to inspect choices after an earlier selection is made.
+   *
+   * @param seat - The player seat to inspect (1-indexed)
+   * @returns The action space for the seat, each selection carrying its full
+   *   choice list (enabled and disabled, each disabled choice with its reason).
+   *   Returns `{ actions: [] }` for an out-of-range seat (no throw).
+   */
+  getActionSpaceWithChoices(seat: number): ActionSpaceWithChoicesView {
+    const player = this.game.getPlayer(seat);
+    if (!player) return { actions: [] };
+
+    const actionSpace = this.game.getActionSpace(seat);
+
+    return {
+      actions: actionSpace.actions.map((actionSchema): ActionChoicesView => ({
+        name: actionSchema.name,
+        prompt: actionSchema.prompt,
+        selections: actionSchema.selections.map((sel): SelectionChoicesView => ({
+          name: sel.name,
+          choices: this.game.getSelectionChoices(actionSchema.name, sel.name, player, {}),
+        })),
+      })),
+    };
   }
 }
 

@@ -381,3 +381,63 @@ describe('TestGame.getPendingAction — FLOW-03 (Phase 123 Plan 03)', () => {
     expect(testGame.game.chosenSize).toBe('M');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fixture: an action with a disabled choice, for FLOW-02 introspection
+// (Phase 123 Plan 03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal game fixture with one action whose choices include a disabled one
+ * (mirrors `pick-handler.test.ts`'s `pickFruit` fixture — 'banana' disabled).
+ */
+class DisabledChoiceGame extends Game<DisabledChoiceGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<DisabledChoiceGame>('pickFruit')
+        .chooseFrom('fruit', {
+          prompt: 'Choose a fruit',
+          choices: ['apple', 'banana', 'cherry'],
+          disabled: (choice) => (choice === 'banana' ? 'Out of stock' : false),
+        })
+        .execute(() => ({ success: true })),
+    );
+
+    this.setFlow(defineFlow({ root: actionStep({ actions: ['pickFruit'] }) }));
+  }
+}
+
+describe('TestGame.getActionSpaceWithChoices — FLOW-02 (Phase 123 Plan 03)', () => {
+  it('surfaces disabled choices with their reason alongside enabled choices', () => {
+    const testGame = TestGame.create(DisabledChoiceGame, { playerCount: 1, seed: 'flow-02-disabled' });
+
+    const view = testGame.getActionSpaceWithChoices(1);
+    const pickFruit = view.actions.find((a) => a.name === 'pickFruit');
+    expect(pickFruit).toBeDefined();
+
+    const fruitSelection = pickFruit!.selections.find((s) => s.name === 'fruit');
+    expect(fruitSelection).toBeDefined();
+    expect(fruitSelection!.choices).toHaveLength(3);
+
+    const banana = fruitSelection!.choices.find((c) => c.value === 'banana');
+    expect(banana).toBeDefined();
+    expect(banana!.disabled).toBe('Out of stock');
+
+    const apple = fruitSelection!.choices.find((c) => c.value === 'apple');
+    expect(apple).toBeDefined();
+    expect(apple!.disabled).toBe(false);
+  });
+
+  it('returns { actions: [] } for an out-of-range seat (no throw)', () => {
+    const testGame = TestGame.create(DisabledChoiceGame, { playerCount: 1, seed: 'flow-02-oob' });
+    expect(() => testGame.getActionSpaceWithChoices(99)).not.toThrow();
+    expect(testGame.getActionSpaceWithChoices(99)).toEqual({ actions: [] });
+  });
+
+  // Gameplay-path regression: the disabled choice surfaced above still cannot
+  // be SUBMITTED through the gameplay pick path — this introspection helper
+  // is display-only. That gameplay rejection is already covered end-to-end by
+  // `pick-handler.test.ts` ("PickHandler disabled threading"), not re-tested here.
+});
