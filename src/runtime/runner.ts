@@ -80,7 +80,13 @@ export class GameRunner<G extends Game = Game> {
    */
   private actionCheckpoints: ActionCheckpoint[] = [];
 
-  /** Random seed (for deterministic replay) */
+  /**
+   * Random seed (for deterministic replay). Captured from the passed
+   * `gameOptions.seed` when supplied; otherwise read back from the game's
+   * effective (auto-generated) seed after construction, so any run —
+   * including one that let the Game auto-generate its own seed — is
+   * replayable.
+   */
   readonly seed?: string;
 
   /** Serialization options */
@@ -88,10 +94,16 @@ export class GameRunner<G extends Game = Game> {
 
   constructor(options: GameRunnerOptions<G>) {
     this.gameType = options.gameType;
-    this.seed = options.gameOptions.seed;
     this.serializeOptions = options.serializeOptions ?? { useBranchPaths: true };
 
     this.game = new options.GameClass(options.gameOptions);
+
+    // Capture the effective seed: use the passed seed when supplied, or read
+    // back the auto-generated seed from the game's constructor options so an
+    // un-seeded run is still replayable.
+    this.seed =
+      options.gameOptions.seed ??
+      (this.game.getConstructorOptions().seed as string | undefined);
   }
 
   /**

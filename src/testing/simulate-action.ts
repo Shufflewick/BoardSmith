@@ -10,6 +10,7 @@ import type { Game, FlowState } from '../engine/index.js';
 import { enumerateLegalMoves } from '../engine/index.js';
 import type { TestGame } from './test-game.js';
 import type { ActionExecutionResult } from '../runtime/index.js';
+import { createSeededRandom } from '../utils/random.js';
 
 /**
  * Result of simulating an action, with additional test context.
@@ -243,7 +244,7 @@ export interface PlayUntilCompleteOptions {
   strategy?: 'random' | 'first';
   /**
    * Random number generator to use when `strategy` is `'random'`.
-   * Defaults to `Math.random`. Inject a seeded/stub rng for reproducible runs.
+   * Overrides `seed` when supplied (escape hatch for a stub/custom rng).
    *
    * @example
    * ```typescript
@@ -252,6 +253,19 @@ export interface PlayUntilCompleteOptions {
    * ```
    */
   rng?: () => number;
+  /**
+   * Seed for the default move-selection rng (used when `strategy` is
+   * `'random'` and `rng` is not supplied). Defaults to a fixed literal seed,
+   * so calling `playUntilComplete(testGame)` with no options is deterministic
+   * by default — two runs produce identical command history. Pass a
+   * different `seed` to vary the play-through.
+   *
+   * @example
+   * ```typescript
+   * playUntilComplete(testGame, { seed: 'my-scenario-seed' });
+   * ```
+   */
+  seed?: string;
 }
 
 /**
@@ -294,7 +308,11 @@ export function playUntilComplete<G extends Game>(
   // bugs, not on games with many auto-advance steps between player moves.
   const maxIterations = maxMoves * 10;
   const strategy = options?.strategy ?? 'random';
-  const rng = options?.rng ?? Math.random;
+  // Deterministic by default: a fixed literal seed (unless the caller
+  // supplies its own `seed` or an escape-hatch `rng`) so no-options runs
+  // reproduce identical command history. NEVER falls back to Math.random.
+  const rng =
+    options?.rng ?? createSeededRandom(options?.seed ?? 'playUntilComplete-default');
 
   // movesExecuted counts only successful player-move iterations (where at
   // least one seat successfully executed a doAction call). Auto-advancing flow

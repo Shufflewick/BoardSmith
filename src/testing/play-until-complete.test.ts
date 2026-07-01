@@ -387,6 +387,55 @@ describe('WR-02 regression — maxMoves bounds player moves', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FLOW-04: playUntilComplete is deterministic by default (no Math.random).
+//
+// - No-options runs use a fixed default seed, so two fresh games produce
+//   identical action history.
+// - options.seed varies the play-through; same seed twice reproduces it.
+// ---------------------------------------------------------------------------
+describe('playUntilComplete — determinism by default (FLOW-04)', () => {
+  // `timestamp` is wall-clock (Date.now()) and is not part of the
+  // deterministic move-selection contract — strip it before comparing.
+  function historyWithoutTimestamps(testGame: TestGame<PickGame>) {
+    return testGame.getActionHistory().map(({ timestamp: _timestamp, ...rest }) => rest);
+  }
+
+  it('two runs with no options produce identical command history', () => {
+    const gameA = TestGame.create(PickGame, { playerCount: 2, seed: 'det-a' });
+    playUntilComplete(gameA);
+
+    const gameB = TestGame.create(PickGame, { playerCount: 2, seed: 'det-a' });
+    playUntilComplete(gameB);
+
+    expect(gameA.isComplete()).toBe(true);
+    expect(gameB.isComplete()).toBe(true);
+    expect(historyWithoutTimestamps(gameB)).toEqual(historyWithoutTimestamps(gameA));
+  });
+
+  it('the same options.seed twice produces identical command history', () => {
+    const gameA = TestGame.create(PickGame, { playerCount: 2, seed: 'det-seed-test' });
+    playUntilComplete(gameA, { seed: 'my-scenario-seed' });
+
+    const gameB = TestGame.create(PickGame, { playerCount: 2, seed: 'det-seed-test' });
+    playUntilComplete(gameB, { seed: 'my-scenario-seed' });
+
+    expect(historyWithoutTimestamps(gameB)).toEqual(historyWithoutTimestamps(gameA));
+  });
+
+  it('different options.seed values produce diverging command history', () => {
+    // playUntilComplete-default vs an explicit different seed should (with
+    // overwhelming likelihood, given multiple random choices) diverge.
+    const gameDefault = TestGame.create(PickGame, { playerCount: 2, seed: 'det-diverge' });
+    playUntilComplete(gameDefault);
+
+    const gameOther = TestGame.create(PickGame, { playerCount: 2, seed: 'det-diverge' });
+    playUntilComplete(gameOther, { seed: 'a-completely-different-seed' });
+
+    expect(historyWithoutTimestamps(gameOther)).not.toEqual(historyWithoutTimestamps(gameDefault));
+  });
+});
+
 describe('GameStuckError — class contract', () => {
   it('is an instance of Error', () => {
     const err = new GameStuckError('test', 5, ['move'], undefined);
