@@ -2059,6 +2059,18 @@ if ((import.meta as any).hot) {
               @click="handleTeachingAction('demo-toggle')"
             >Stop</button>
           </div>
+          <!-- Game modal host: the sanctioned full-board-region overlay layer for custom
+               UIs. A game Teleports a blocking modal here (`<Teleport to="#bs-game-modal">`)
+               to cover the board area (e.g. an end-of-round summary). It is a direct child
+               of .boardregion, so — like GameOverCard/TutorialOverlay — it can cover the
+               board but NEVER the header or .actionbar chrome (those are siblings outside
+               .boardregion). `contain: layout` re-establishes the containing block, so even
+               a teleported overlay that uses `position: fixed` is confined to THIS box (the
+               board region) instead of escaping to the viewport — the board-area sandbox
+               invariant holds no matter what the game designer does. pointer-events are
+               none on the host (click-through when no modal is open) and auto on its
+               children (a teleported modal is interactive), so games need no extra wiring. -->
+          <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
             <!--
               Game Board Slot Props:
@@ -2779,6 +2791,28 @@ if ((import.meta as any).hot) {
      Any fixed-position elements inside will behave like absolute positioning
      relative to this container - they cannot cover the navbar or ActionPanel. */
   contain: layout;
+}
+
+/* Sanctioned full-board-region overlay layer for custom-UI modals (see the
+   #bs-game-modal host in the template). Fills .boardregion exactly (like the
+   GameOverCard scrim) so a game modal covers the board but not the chrome, and
+   `contain: layout` keeps a teleported position:fixed overlay confined to this
+   box — the board cannot be escaped. */
+.game-shell__game-modal-host {
+  position: absolute;
+  inset: 0;
+  /* Same stacking level as the GameOverCard scrim: above the board content and
+     the tutorial/hint/heatmap overlays, but NOT above the floating .actionbar
+     dock (also z-index 30, a later sibling that therefore stays on top). A game
+     modal covers the board area only — never the dock/header chrome. */
+  z-index: 30;
+  contain: layout;
+  /* Transparent to pointer events when no modal is open; a teleported modal
+     (a direct child) re-enables them, so it blocks the board as expected. */
+  pointer-events: none;
+}
+.game-shell__game-modal-host > * {
+  pointer-events: auto;
 }
 
 /* Time travel banner */
