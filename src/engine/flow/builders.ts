@@ -13,7 +13,6 @@ import type {
   FlowDefinition,
   PhaseConfig,
 } from './types.js';
-import { devWarn } from '../../utils/dev.js';
 
 /**
  * Create a sequence of steps executed in order
@@ -82,15 +81,17 @@ export function loop(config: {
   maxIterations?: number;
   do: FlowNode;
 }): FlowNode {
-  // Warn if no maxIterations provided (common cause of infinite loops)
+  // Fail fast at construction time if no maxIterations is provided. A missing
+  // cap silently falls back to the engine's DEFAULT_MAX_ITERATIONS (10000),
+  // which turns an authoring mistake into a surprise runtime throw deep into
+  // a game session instead of an actionable error at flow-definition time.
   if (config.maxIterations === undefined) {
-    const loopName = config.name ?? 'unnamed';
-    devWarn(
-      `loop-no-max:${loopName}`,
-      `loop(${config.name ? `'${config.name}'` : ''}) has no maxIterations set.\n` +
-      `  This can cause infinite loops if the 'while' condition never becomes false.\n` +
-      `  Add maxIterations to set a safety limit:\n` +
+    throw new Error(
+      `loop(${config.name ? `'${config.name}'` : ''}) requires maxIterations.\n` +
+      `  Add an explicit safety limit:\n` +
       `    loop({ maxIterations: 100, while: ..., do: ... })\n` +
+      `  Without it, the loop silently falls back to a 10000-iteration cap and\n` +
+      `  fails deep inside a running game instead of at flow-definition time.\n` +
       `  See: https://boardsmith.io/docs/common-pitfalls#loop-safety`
     );
   }
