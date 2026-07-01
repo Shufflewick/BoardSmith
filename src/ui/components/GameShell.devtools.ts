@@ -9,7 +9,7 @@
  */
 
 import type { ValidElement } from '../composables/useBoardInteraction.js';
-import type { SerializedFlowDebugInfo, PendingActionState } from '../../session/types.js';
+import type { SerializedFlowDebugInfo, SerializedPendingActionState } from '../../session/types.js';
 
 // ---------------------------------------------------------------------------
 // Message shape
@@ -31,7 +31,7 @@ export interface DevtoolsStateMessage {
   /** Serialized flow-position snapshot (FLOW-01), sourced from the received broadcast state. */
   flowDebugInfo: SerializedFlowDebugInfo | undefined;
   /** This seat's own pending multi-step action snapshot (FLOW-03), sourced from the received broadcast state. */
-  pendingAction: PendingActionState | undefined;
+  pendingAction: SerializedPendingActionState | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ export interface DevtoolsParams {
   /** Serialized flow-position snapshot (FLOW-01), forwarded from the received broadcast state. */
   flowDebugInfo: SerializedFlowDebugInfo | undefined;
   /** This seat's own pending multi-step action snapshot (FLOW-03), forwarded from the received broadcast state. */
-  pendingAction: PendingActionState | undefined;
+  pendingAction: SerializedPendingActionState | undefined;
 }
 
 /**

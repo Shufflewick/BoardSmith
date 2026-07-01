@@ -9,9 +9,9 @@
  * no memory between calls.
  */
 
-import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState, PendingActionState } from '../engine/index.js';
+import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
@@ -135,7 +135,7 @@ export interface OpResult {
   // debug:flow-state result fields — the SAME shared serialized shape as the
   // session broadcast (Plan 04 Task 1), no divergent structure across channels.
   flowDebugInfo?: SerializedFlowDebugInfo;
-  pendingAction?: PendingActionState;
+  pendingAction?: SerializedPendingActionState;
 
   // State envelope — always present on success
   snapshot: unknown;
@@ -921,7 +921,7 @@ function handleDebugFlowState(
   // SECURITY (T-123-10): pendingAction is derived ONLY from the passed-in
   // pendingState — the requesting seat's own persisted pending state, threaded
   // by the host (naturally seat-scoped) — never by reading another seat's state.
-  const pendingAction = (pendingState as unknown as PendingActionState | null) ?? undefined;
+  const pendingAction = (pendingState as unknown as SerializedPendingActionState | null) ?? undefined;
 
   return {
     success: true,

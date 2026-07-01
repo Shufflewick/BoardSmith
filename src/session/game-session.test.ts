@@ -136,3 +136,80 @@ describe('GameSession broadcast — pendingAction perspective isolation (T-123-0
     expect(spectatorState.pendingAction).toBeUndefined();
   });
 });
+
+// Action with an onSelect callback so `onSelectFired` (a Set<number> on the
+// live engine state) is actually populated — needed to exercise CR-01's
+// Set -> Array wire-safety bug.
+class OnSelectGame extends Game<OnSelectGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create('pick')
+        .chooseFrom('color', { choices: ['red', 'blue', 'green'], onSelect: () => {} })
+        .chooseFrom('size', { choices: ['S', 'M', 'L'] })
+        .execute(() => {})
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['pick'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+        }),
+      })
+    );
+  }
+}
+
+describe('GameSession broadcast — pendingAction is serialized, not the live state (CR-01)', () => {
+  it('broadcasts a JSON-safe copy: onSelectFired is an array, and mutating live state after broadcast does not affect the captured payload', async () => {
+    const session = GameSession.create({
+      gameType: 'onselect-test',
+      GameClass: OnSelectGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'test',
+    });
+
+    // Trigger the 'color' selection's onSelect callback, populating
+    // onSelectFired on the live PendingActionState.
+    const step = await session.processSelectionStep(1, 'color', 'red', 'pick');
+    expect(step.success).toBe(true);
+
+    // Sanity: the live manager state really does hold a Set (proves the test
+    // is exercising the bug, not a no-op).
+    const live = session.getPendingAction(1);
+    expect(live).toBeDefined();
+    expect(live!.onSelectFired).toBeInstanceOf(Set);
+
+    const captured: CapturedState[] = [];
+    const broadcaster = makeMockBroadcaster(
+      [{ playerSeat: 1, isSpectator: false }],
+      captured
+    );
+    session.setBroadcaster(broadcaster);
+    session.broadcast();
+
+    const broadcastPending = captured[0]!.state.pendingAction;
+    expect(broadcastPending).toBeDefined();
+
+    // The broadcast payload must be JSON-safe: a plain array, not a Set (a
+    // Set silently serializes to "{}" over JSON.stringify).
+    expect(Array.isArray(broadcastPending!.onSelectFired)).toBe(true);
+    expect(broadcastPending!.onSelectFired).toEqual([0]);
+
+    // The broadcast payload must be a copy, not the live mutable object: it
+    // must NOT be identity-equal to the manager's live state, nor share the
+    // same collectedArgs object.
+    const liveAfter = session.getPendingAction(1);
+    expect(broadcastPending).not.toBe(liveAfter);
+    expect(broadcastPending!.collectedArgs).not.toBe(liveAfter!.collectedArgs);
+
+    // Mutating the live manager's state after broadcast must never retroactively
+    // change the already-captured broadcast payload (proves it was a real copy,
+    // not an alias to the same object the engine keeps mutating).
+    (liveAfter as { collectedArgs: Record<string, unknown> }).collectedArgs.color = 'mutated';
+    expect(broadcastPending!.collectedArgs.color).toBe('red');
+  });
+});

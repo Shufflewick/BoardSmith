@@ -43,7 +43,7 @@ import {
   type GameOptionDefinition,
   type PickChoicesResponse,
 } from './types.js';
-import { buildPlayerState, buildSingleActionMetadata, serializeFlowDebugInfo } from './utils.js';
+import { buildPlayerState, buildSingleActionMetadata, serializeFlowDebugInfo, serializePendingActionState } from './utils.js';
 import { AIController } from './ai-controller.js';
 import type { AIConfig as BotAIConfig, BotMove, BotMoveStats } from '../ai/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
@@ -2012,7 +2012,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       // outside the loop or shared across seats. A seat must never receive
       // another seat's accumulated pending-action args.
       const pendingAction = this.getPendingAction(effectivePosition);
-      if (pendingAction) state.pendingAction = pendingAction;
+      if (pendingAction) state.pendingAction = serializePendingActionState(pendingAction);
       const hint = this.#hint.get(effectivePosition);
       if (hint) state.hint = hint;
       const heatmap = this.#heatmap.get(effectivePosition);

@@ -523,9 +523,38 @@ export interface PlayerGameState {
    * seat must never receive another seat's accumulated pending-action args
    * (T-123-07, the phase's flagged hidden-info leak threat).
    *
-   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`. Always
+   * the JSON-safe serialized form (`SerializedPendingActionState`), never the
+   * live engine `PendingActionState` (its `onSelectFired: Set<number>` does
+   * not survive `JSON.stringify` — see `serializePendingActionState()` in
+   * `session/utils.ts`, CR-01).
    */
-  pendingAction?: PendingActionState;
+  pendingAction?: SerializedPendingActionState;
+}
+
+/**
+ * Plain-object, wire-safe snapshot of `PendingActionState` (see
+ * `engine/action/types.ts`).
+ *
+ * `PendingActionState.onSelectFired` is a `Set<number>`, which does not
+ * survive `JSON.stringify` (`JSON.stringify(new Set([1,2]))` produces `"{}"`).
+ * This type replaces it with a plain `number[]`. This is the single shared
+ * serialized shape reused by `GameSession.broadcast()`, `PickHandler`'s
+ * selection-step responses, and `SnapshotSessionHost`/`stateless-ops.ts`'s
+ * `debug:flow-state` op — no divergent wire shapes across those channels
+ * (CR-01/WR-01).
+ */
+export interface SerializedPendingActionState {
+  actionName: string;
+  playerPosition: number;
+  collectedArgs: Record<string, unknown>;
+  repeating?: {
+    selectionName: string;
+    accumulated: unknown[];
+    iterationCount: number;
+  };
+  currentSelectionIndex: number;
+  onSelectFired?: number[];
 }
 
 /**

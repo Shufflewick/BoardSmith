@@ -1,8 +1,8 @@
 import type { Op, OpResult } from './stateless-ops.js';
 import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
-import type { Annotation, PendingActionState } from '../engine/index.js';
+import type { Annotation } from '../engine/index.js';
 import { describeMoveForNarration } from './move-summary.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 
@@ -148,7 +148,7 @@ export class SnapshotSessionHost {
       // shared across seats. A seat must never receive another seat's
       // accumulated pending-action args.
       const pendingAction = this.pendingStates.get(seat);
-      if (pendingAction) state.pendingAction = pendingAction as unknown as PendingActionState;
+      if (pendingAction) state.pendingAction = pendingAction as unknown as SerializedPendingActionState;
       if (this.demoRunning) {
         state.isDemoRunning = true;
         // Playback-control state so clients can render the demo control bar.

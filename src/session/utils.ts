@@ -2,11 +2,11 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import type { GameRunner } from '../runtime/index.js';
-import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo } from './types.js';
+import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 
 // Re-export so existing consumers (session barrel, external callers) are unchanged
 export { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
@@ -51,6 +51,45 @@ export function serializeFlowDebugInfo(game: Game): SerializedFlowDebugInfo {
     path: info.path,
     awaiting: info.awaiting,
     description: info.describe(),
+  };
+}
+
+/**
+ * Serialize a live `PendingActionState` into its JSON-safe wire shape
+ * (`SerializedPendingActionState`) — `onSelectFired`'s `Set<number>` becomes a
+ * plain `number[]` (`JSON.stringify(new Set(...))` produces `"{}"`, silently
+ * dropping the accumulated indices).
+ *
+ * Also copies `collectedArgs` and `repeating.accumulated` one level deep, so
+ * the returned object is never the live mutable state a caller could
+ * continue to observe mutate via subsequent selection steps (CR-01) — the
+ * same guarantee `GameRunner.getPendingAction()` (runtime/runner.ts) provides
+ * on the testing path.
+ *
+ * Single shared serializer reused by `GameSession.broadcast()`, `PickHandler`
+ * (selection-step responses), and the `debug:flow-state` stateless op — one
+ * wire shape for `PendingActionState` everywhere (Pit of Success: no
+ * divergent per-host copies, mirroring `serializeFlowDebugInfo()` above).
+ */
+export function serializePendingActionState(s: PendingActionState): SerializedPendingActionState {
+  return {
+    ...s,
+    collectedArgs: { ...s.collectedArgs },
+    repeating: s.repeating ? { ...s.repeating, accumulated: [...s.repeating.accumulated] } : undefined,
+    onSelectFired: s.onSelectFired ? Array.from(s.onSelectFired) : undefined,
+  };
+}
+
+/**
+ * Restore a `PendingActionState` from its JSON-safe wire shape (inverse of
+ * `serializePendingActionState()`) — the `number[]` form of `onSelectFired`
+ * becomes a `Set<number>` again so engine code (`processSelectionStep` etc.)
+ * can use `Set` membership checks.
+ */
+export function deserializePendingActionState(s: SerializedPendingActionState): PendingActionState {
+  return {
+    ...s,
+    onSelectFired: s.onSelectFired ? new Set(s.onSelectFired) : undefined,
   };
 }
 
