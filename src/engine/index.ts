@@ -186,6 +186,7 @@ export type {
   FlowContext,
   FlowNode,
   FlowState,
+  FlowDebugInfo,
   FlowDefinition,
   BaseFlowConfig,
   SequenceConfig,

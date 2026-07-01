@@ -11,6 +11,8 @@ import {
   Player,
   type GameOptions,
   type FlowState,
+  type FlowDebugInfo,
+  type PendingActionState,
 } from '../engine/index.js';
 import { GameRunner, type ActionExecutionResult, type PlayerStateView } from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
@@ -127,6 +129,34 @@ export class TestGame<G extends Game = Game> {
    */
   getFlowState(): FlowState | undefined {
     return this.runner.getFlowState();
+  }
+
+  /**
+   * Get a structured, human- and machine-readable description of the current
+   * flow position (phase, step, path, awaiting seat) — the same
+   * {@link FlowDebugInfo} the engine itself produces via `Game.getFlowDebugInfo()`.
+   *
+   * @returns The current flow debug info. Never throws, never returns `undefined` —
+   *   when there is no active flow, `describe()` reports that explicitly.
+   */
+  getFlowDebugInfo(): FlowDebugInfo {
+    return this.runner.getFlowDebugInfo();
+  }
+
+  /**
+   * Get a read-only snapshot of a seat's in-progress multi-step / repeating-
+   * selection action — current selection index, completed selections, and
+   * accumulated repeating-selection state.
+   *
+   * The returned object is always a copy: mutating it never affects
+   * subsequent calls or game state.
+   *
+   * @param seat - The player seat to inspect (1-indexed)
+   * @returns The pending action snapshot, or `undefined` if nothing is pending
+   *   for that seat (including for an out-of-range seat — no throw).
+   */
+  getPendingAction(seat: number): PendingActionState | undefined {
+    return this.runner.getPendingAction(seat);
   }
 
   /**

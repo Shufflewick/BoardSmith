@@ -268,3 +268,116 @@ describe('TestGame.getPlayerView — TEST-01: typed observable state', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fixture: a 2-selection action for FLOW-03 pending-action introspection
+// (Phase 123 Plan 03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal game fixture with a two-selection ('color' then 'size') action, so
+ * we can drive selections one at a time via the session-free
+ * `GameRunner.startPendingAction`/`processSelectionStep` path and inspect the
+ * in-progress `PendingActionState` via `TestGame.getPendingAction(seat)`.
+ */
+class MultiStepGame extends Game<MultiStepGame, Player> {
+  chosenColor?: string;
+  chosenSize?: string;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<MultiStepGame>('pick')
+        .chooseFrom('color', { choices: ['red', 'blue', 'green'] })
+        .chooseFrom('size', { choices: ['S', 'M', 'L'] })
+        .execute((args, ctx) => {
+          (ctx.game as MultiStepGame).chosenColor = args.color as string;
+          (ctx.game as MultiStepGame).chosenSize = args.size as string;
+          return { success: true };
+        }),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => true,
+          maxIterations: 1, // one pass over all players, then complete
+          do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+function makeMultiStepGame(): TestGame<MultiStepGame> {
+  return TestGame.create(MultiStepGame, { playerCount: 2, seed: 'flow-03-pending-action' });
+}
+
+describe('TestGame.getFlowDebugInfo — FLOW-01 passthrough (Phase 123 Plan 03)', () => {
+  it('equals game.getFlowDebugInfo()', () => {
+    const testGame = makeMultiStepGame();
+    const viaTestGame = testGame.getFlowDebugInfo();
+    const viaGame = testGame.game.getFlowDebugInfo();
+
+    // describe() is a fresh closure per call — compare structural fields
+    // directly and the formatted string separately (functions are never
+    // reference-equal, so toEqual() on the whole object would false-fail).
+    expect({ phase: viaTestGame.phase, step: viaTestGame.step, path: viaTestGame.path, awaiting: viaTestGame.awaiting })
+      .toEqual({ phase: viaGame.phase, step: viaGame.step, path: viaGame.path, awaiting: viaGame.awaiting });
+    expect(viaTestGame.describe()).toBe(viaGame.describe());
+  });
+});
+
+describe('TestGame.getPendingAction — FLOW-03 (Phase 123 Plan 03)', () => {
+  it('returns undefined when nothing is pending for the seat', () => {
+    const testGame = makeMultiStepGame();
+    expect(testGame.getPendingAction(1)).toBeUndefined();
+  });
+
+  it('returns undefined for an out-of-range seat (no throw)', () => {
+    const testGame = makeMultiStepGame();
+    expect(() => testGame.getPendingAction(99)).not.toThrow();
+    expect(testGame.getPendingAction(99)).toBeUndefined();
+  });
+
+  it('returns a mid-action snapshot with current step + completed selections', () => {
+    const testGame = makeMultiStepGame();
+    testGame.runner.startPendingAction('pick', 1);
+    const stepResult = testGame.runner.processSelectionStep(1, 'color', 'red');
+    expect(stepResult.success).toBe(true);
+
+    const snapshot = testGame.getPendingAction(1);
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.actionName).toBe('pick');
+    expect(snapshot!.currentSelectionIndex).toBe(1);
+    expect(snapshot!.collectedArgs).toEqual({ color: 'red' });
+  });
+
+  it('returned snapshot is a copy — mutation does not leak back', () => {
+    const testGame = makeMultiStepGame();
+    testGame.runner.startPendingAction('pick', 1);
+    testGame.runner.processSelectionStep(1, 'color', 'red');
+
+    const snapshot = testGame.getPendingAction(1)!;
+    snapshot.collectedArgs.color = 'MUTATED';
+    snapshot.currentSelectionIndex = 999;
+
+    const secondSnapshot = testGame.getPendingAction(1)!;
+    expect(secondSnapshot.collectedArgs.color).toBe('red');
+    expect(secondSnapshot.currentSelectionIndex).toBe(1);
+  });
+
+  it('completing the final selection clears the pending state and records history', () => {
+    const testGame = makeMultiStepGame();
+    testGame.runner.startPendingAction('pick', 1);
+    testGame.runner.processSelectionStep(1, 'color', 'red');
+    const finalResult = testGame.runner.processSelectionStep(1, 'size', 'M');
+
+    expect(finalResult.success).toBe(true);
+    expect(finalResult.actionComplete).toBe(true);
+    expect(testGame.getPendingAction(1)).toBeUndefined();
+    expect(testGame.game.chosenColor).toBe('red');
+    expect(testGame.game.chosenSize).toBe('M');
+  });
+});

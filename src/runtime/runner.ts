@@ -12,10 +12,13 @@ import {
   type SerializedAction,
   type ActionResult,
   type FlowState,
+  type FlowDebugInfo,
   type SerializeOptions,
   type GameStateSnapshot,
   type ActionCheckpoint,
   type PlayerStateView,
+  type PendingActionState,
+  type ActionDefinition,
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 
@@ -79,6 +82,17 @@ export class GameRunner<G extends Game = Game> {
    * See `GameStateSnapshot.actionCheckpoints`.
    */
   private actionCheckpoints: ActionCheckpoint[] = [];
+
+  /**
+   * Per-player in-progress pending-action state for multi-step / repeating-
+   * selection actions driven directly through the runner. This mirrors
+   * `PendingActionManager`'s session-layer state machine, but is a session-free
+   * path built directly on `ActionExecutor.createPendingActionState` /
+   * `processSelectionStep` / `processRepeatingStep` / `executePendingAction` —
+   * there is no storage/broadcast callback plumbing here since `GameRunner` has
+   * no `GameSession`. Cleared automatically when the action completes.
+   */
+  private pendingActions: Map<number, PendingActionState> = new Map();
 
   /**
    * Random seed (for deterministic replay). Captured from the passed
@@ -267,6 +281,156 @@ export class GameRunner<G extends Game = Game> {
    */
   getFlowState(): FlowState | undefined {
     return this.game.getFlowState() ?? undefined;
+  }
+
+  /**
+   * Get a structured, human- and machine-readable description of the current
+   * flow position. Thin passthrough mirroring the `getFlowState()` passthrough
+   * above — never throws, never returns `undefined` (see `Game.getFlowDebugInfo()`).
+   */
+  getFlowDebugInfo(): FlowDebugInfo {
+    return this.game.getFlowDebugInfo();
+  }
+
+  /**
+   * Start tracking a multi-step / repeating-selection action for a player,
+   * session-free (no `GameSession`/`PendingActionManager` involved). Uses
+   * `ActionExecutor.createPendingActionState` directly — the same primitive
+   * `PendingActionManager.startPendingAction` uses on the session layer.
+   *
+   * Returns `undefined` (does not throw) when the action or player is not
+   * found, matching the graceful-degradation convention of
+   * `getActionSpace`/`getActionSchema`.
+   */
+  startPendingAction(actionName: string, playerPosition: number): PendingActionState | undefined {
+    const action = this.game.getAction(actionName);
+    if (!action) return undefined;
+    if (!this.game.getPlayer(playerPosition)) return undefined;
+
+    const executor = this.game.getActionExecutor();
+    const pendingState = executor.createPendingActionState(actionName, playerPosition);
+    this.pendingActions.set(playerPosition, pendingState);
+    return pendingState;
+  }
+
+  /**
+   * Process one selection step of a player's in-progress pending action
+   * (started via `startPendingAction`). Session-free mirror of
+   * `PendingActionManager.processSelectionStep` — handles both regular and
+   * repeating selections, and auto-completes + executes the action (recording
+   * it in `actionHistory` via the same `serializeForHistory`/
+   * `recordSerializedAction` funnel `performAction` uses) once every selection
+   * has been supplied.
+   *
+   * Clears the tracked pending state once the action completes, whether it
+   * succeeds or fails to execute.
+   */
+  processSelectionStep(
+    playerPosition: number,
+    selectionName: string,
+    value: unknown
+  ): { success: boolean; error?: string; actionComplete?: boolean } {
+    const pendingState = this.pendingActions.get(playerPosition);
+    if (!pendingState) {
+      return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
+    }
+
+    const action = this.game.getAction(pendingState.actionName);
+    if (!action) {
+      return { success: false, error: `Action not found: ${pendingState.actionName}` };
+    }
+
+    const player = this.game.getPlayer(playerPosition);
+    if (!player) {
+      return { success: false, error: `Player not found: ${playerPosition}` };
+    }
+
+    const executor = this.game.getActionExecutor();
+    const selection = action.selections[pendingState.currentSelectionIndex];
+    if (!selection) {
+      return { success: false, error: 'No current selection' };
+    }
+
+    if (selection.name !== selectionName) {
+      return {
+        success: false,
+        error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName}`,
+      };
+    }
+
+    if (executor.isRepeatingSelection(selection)) {
+      const result = executor.processRepeatingStep(action, player, pendingState, value);
+      if (result.error) {
+        return { success: false, error: result.error };
+      }
+      if (result.done && executor.isPendingActionComplete(action, pendingState)) {
+        return this.completePendingAction(executor, action, player, pendingState, playerPosition);
+      }
+      return { success: true, actionComplete: false };
+    }
+
+    const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
+    if (!stepResult.success) {
+      return { success: false, error: stepResult.error };
+    }
+
+    if (executor.isPendingActionComplete(action, pendingState)) {
+      return this.completePendingAction(executor, action, player, pendingState, playerPosition);
+    }
+
+    return { success: true, actionComplete: false };
+  }
+
+  /**
+   * Execute a fully-collected pending action and record it in `actionHistory`,
+   * clearing the tracked state for the player. Shared completion path for both
+   * regular and repeating selection steps in `processSelectionStep`, mirroring
+   * `PendingActionManager.#completePendingAction` minus the storage/broadcast
+   * side effects.
+   */
+  private completePendingAction(
+    executor: ActionExecutor,
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    playerPosition: number
+  ): { success: boolean; error?: string; actionComplete: true } {
+    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
+    const actionResult = executor.executePendingAction(action, player, pendingState);
+    this.pendingActions.delete(playerPosition);
+
+    if (actionResult.success) {
+      this.recordSerializedAction(serializedAction);
+      this.game.continueFlowAfterPendingAction(actionResult);
+    }
+
+    return { success: actionResult.success, error: actionResult.error, actionComplete: true };
+  }
+
+  /**
+   * Get a read-only snapshot of a player's in-progress pending action —
+   * current selection index, completed selections, and accumulated
+   * repeating-selection state.
+   *
+   * Always returns a deep copy: mutating the returned object never affects
+   * subsequent calls or game state (RESEARCH.md Anti-Pattern — never return
+   * the live mutable `PendingActionState`).
+   *
+   * Returns `undefined` when nothing is pending for the player, including for
+   * an out-of-range seat (no throw, matching `getActionSpace`/`getActionSchema`).
+   */
+  getPendingAction(playerPosition: number): PendingActionState | undefined {
+    const state = this.pendingActions.get(playerPosition);
+    if (!state) return undefined;
+
+    return {
+      ...state,
+      collectedArgs: { ...state.collectedArgs },
+      repeating: state.repeating
+        ? { ...state.repeating, accumulated: [...state.repeating.accumulated] }
+        : undefined,
+      onSelectFired: state.onSelectFired ? new Set(state.onSelectFired) : undefined,
+    };
   }
 
   /**
