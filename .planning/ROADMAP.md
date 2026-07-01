@@ -80,7 +80,11 @@ Plans:
   2. A `boardsmith dev` page exposes a read-only `window.__BOARDSMITH_DEVTOOLS` global to synchronously inspect current game state, available actions, and board-interaction state (valid elements, current selection).
   3. The dev-host page emits an observable signal (custom event and/or devtools log) when an action resolves, distinguishing success from failure, so agents confirm outcomes without polling.
   4. The fastest agent UI loop (change → drive → confirm) is proven end-to-end in the browser for at least one custom-UI game and one AutoUI game.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 119-01-PLAN.md — DEV-01 parity test: data-bs-el-id across all 4 AutoUI renderers
+- [ ] 119-02-PLAN.md — DEV-03 boardsmith:action-resolved CustomEvent (execute + selection-step paths)
+- [ ] 119-03-PLAN.md — DEV-02 postMessage bridge + window.__BOARDSMITH_DEVTOOLS global
+- [ ] 119-04-PLAN.md — DEV-04 agent-loop doc + browser proof (custom UI + AutoUI)
 **UI hint**: yes
 
 ### Phase 120: Authoring Pit-of-Success Guards
