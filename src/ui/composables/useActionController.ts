@@ -156,6 +156,26 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Vite's production build when import.meta.env.DEV is false.
   const isDevBuild = import.meta.env.DEV;
 
+  // DEV-03: single source for the boardsmith:action-resolved signal. Called at EVERY
+  // terminal action-resolution site (execute(), executeCurrentAction(), and the
+  // pickStep completion paths) so an agent/devtools listener sees exactly one event
+  // per resolved action — including actions that chain a followUp (each resolution is
+  // its own event). This is deliberately decoupled from actionCompletedTick, which
+  // signals end-of-chain auto-advance only. Dev-gated; erased in production builds.
+  function dispatchActionResolved(
+    action: string,
+    success: boolean,
+    seat: number,
+    error?: string,
+  ): void {
+    if (!isDevBuild || typeof window === 'undefined') return;
+    window.dispatchEvent(
+      new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
+        detail: { action, success, seat, ...(success ? {} : { error }) },
+      }),
+    );
+  }
+
   // Single before-auto-execute hook (REPLACED, not accumulated, via setBeforeAutoExecute)
   // Stored as ref to allow setting/replacing after creation
   const beforeAutoExecuteHook = ref<((actionName: string, args: Record<string, unknown>) => void | Promise<void>) | undefined>(
@@ -946,6 +966,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         lastError.value = result.error || 'Action failed';
       }
 
+      // DEV-03: this is a terminal resolution path for multi-step actions submitted
+      // via the wizard/ActionPanel — fire the action-resolved signal here too.
+      dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
+
       // Clear state on success or failure — but only if no NEWER action started
       // during the await (otherwise we'd clobber a freshly auto-started action).
       if (actionStartSeq === seq) {
@@ -963,6 +987,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
       lastError.value = error;
+      dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
       return { success: false, error };
     } finally {
       isExecuting.value = false;
@@ -1010,18 +1035,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (!result.success) {
           lastError.value = result.error || 'Action failed';
         }
-        if (isDevBuild && typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
-              detail: {
-                action: actionName,
-                success: result.success,
-                seat: playerSeat?.value ?? 0,
-                ...(result.success ? {} : { error: result.error }),
-              },
-            }),
-          );
-        }
+        dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
         // Executing resolves the action — clear in-progress state, unless a newer
         // action started during the await (see note below).
         if (actionStartSeq === seq) {
@@ -1033,18 +1047,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Action failed';
         lastError.value = error;
-        if (isDevBuild && typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
-              detail: {
-                action: actionName,
-                success: false,
-                seat: playerSeat?.value ?? 0,
-                error,
-              },
-            }),
-          );
-        }
+        dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
         return { success: false, error };
       } finally {
         isExecuting.value = false;
@@ -1099,18 +1102,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         lastError.value = result.error || 'Action failed';
       }
 
-      if (isDevBuild && typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
-            detail: {
-              action: actionName,
-              success: result.success,
-              seat: playerSeat?.value ?? 0,
-              ...(result.success ? {} : { error: result.error }),
-            },
-          }),
-        );
-      }
+      dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
 
       // Executing an action resolves it — clear any in-progress action state, exactly
       // like executeCurrentAction(). Without this, a custom UI that calls execute()
@@ -1132,18 +1124,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
       lastError.value = error;
-      if (isDevBuild && typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
-            detail: {
-              action: actionName,
-              success: false,
-              seat: playerSeat?.value ?? 0,
-              error,
-            },
-          }),
-        );
-      }
+      dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
       return { success: false, error };
     } finally {
       isExecuting.value = false;
@@ -1463,11 +1444,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
+        // DEV-03: capture the action name before it is nulled below, then fire the
+        // action-resolved signal for this terminal (repeating-selection) path too.
+        const completedActionName = currentAction.value;
         // Action completed - clear everything
         repeatingState.value = null;
         currentAction.value = null;
         clearArgs();
         clearAdvancedState();
+
+        dispatchActionResolved(completedActionName ?? '', true, player);
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
@@ -1550,6 +1536,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         clearArgs();
         clearAdvancedState();
 
+        // DEV-03: the action resolved on the server — fire the action-resolved signal
+        // on EVERY completion, including mid-chain followUp completions (an agent needs
+        // to confirm each committed action). This is separate from actionCompletedTick,
+        // which only signals end-of-chain auto-advance (below).
+        dispatchActionResolved(completedActionName ?? '', true, player);
+
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
           queueFollowUp(result.followUp);
@@ -1560,17 +1552,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           // multi-jump capture chain (whose final hop completes here), matching a
           // single move. A followUp (mid-chain) must NOT signal — the turn continues.
           actionCompletedTick.value++;
-          if (isDevBuild && typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent<BoardsmithActionResolvedDetail>('boardsmith:action-resolved', {
-                detail: {
-                  action: completedActionName ?? '',
-                  success: true,
-                  seat: player,
-                },
-              }),
-            );
-          }
         }
 
         return { valid: true };

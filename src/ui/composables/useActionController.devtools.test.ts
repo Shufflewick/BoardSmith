@@ -183,6 +183,65 @@ describe('useActionController devtools CustomEvent (boardsmith:action-resolved)'
   });
 
   // -------------------------------------------------------------------------
+  // Test 3b: REGRESSION — selection-step completion that chains a followUp MUST
+  // still dispatch. This is the go-fish "ask" path (a successful ask lets you go
+  // again → followUp). Before the centralized dispatch fix, the followUp branch of
+  // handleOnSelectFill was silent, so an agent never saw the action resolve — proven
+  // in a live browser (DEV-04) and missed by the original execute()-only tests.
+  // -------------------------------------------------------------------------
+  it('dispatches on selection-step completion EVEN WHEN the action chains a followUp (go-fish ask regression)', async () => {
+    const pickStep = vi.fn().mockResolvedValue({
+      success: true,
+      actionComplete: true,
+      followUp: { action: 'ask', args: {} }, // successful ask → go again
+    });
+
+    const askMeta: Record<string, ActionMetadata> = {
+      ask: {
+        name: 'ask',
+        prompt: 'Ask for a rank',
+        selections: [
+          {
+            name: 'rank',
+            type: 'choice',
+            prompt: 'Which rank?',
+            hasOnSelect: true,
+            choices: [
+              { value: 'K', display: 'King' },
+              { value: 'Q', display: 'Queen' },
+            ],
+          },
+        ],
+      },
+    };
+
+    actionMetadata.value = { ...createTestMetadata(), ...askMeta };
+    availableActions.value = [...(availableActions.value ?? []), 'ask'];
+
+    const controller = useActionController({
+      sendAction,
+      availableActions,
+      actionMetadata,
+      isMyTurn,
+      autoExecute: false,
+      playerSeat: ref(1),
+      pickStep,
+    });
+
+    await controller.start('ask');
+
+    const { events, cleanup } = captureActionResolvedEvents();
+    await controller.fill('rank', 'K');
+    cleanup();
+
+    // The event MUST fire even though a followUp was queued.
+    expect(events).toHaveLength(1);
+    expect(events[0].detail.action).toBe('ask');
+    expect(events[0].detail.success).toBe(true);
+    expect(events[0].detail.seat).toBe(1);
+  });
+
+  // -------------------------------------------------------------------------
   // Test 4: dev-gate is active — import.meta.env.DEV is true under vitest
   // -------------------------------------------------------------------------
   it('import.meta.env.DEV is true in vitest, so events fire in tests (dev-gate is active)', async () => {

@@ -245,7 +245,9 @@ describe('useBoardActionBridge', () => {
     execute.mockClear();
 
     // Simulate the selection-step completion of the capture chain's final hop.
-    controller.actionCompletedTick.value++;
+    // actionCompletedTick is Readonly<Ref> on the public API; the test pokes it to
+    // simulate an end-of-chain pulse.
+    (controller.actionCompletedTick as { value: number }).value++;
     await nextTick(); // watcher fires → scheduleAutoStart queues its own nextTick
     await nextTick(); // coalesced auto-start evaluation runs
 
@@ -277,7 +279,9 @@ describe('useBoardActionBridge', () => {
     // Mirror the live state at completion: endTurn is the sole action, currentAction is
     // cleared, but the followUp machinery hasn't unwound yet → pendingFollowUp is true.
     controller.pendingFollowUp.value = true;
-    controller.actionCompletedTick.value++;
+    // actionCompletedTick is Readonly<Ref> on the public API; the test pokes it to
+    // simulate an end-of-chain pulse.
+    (controller.actionCompletedTick as { value: number }).value++;
     await nextTick();
     await nextTick();
     // Bails on pendingFollowUp — must NOT have auto-executed endTurn yet.

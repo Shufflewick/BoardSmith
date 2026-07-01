@@ -352,6 +352,13 @@ export interface UseActionControllerReturn {
   pendingOnServer: Readonly<Ref<boolean>>;
 
   /**
+   * Increments each time an action chain fully resolves (end-of-chain). Consumed by the
+   * board bridge to auto-advance the next action. Distinct from the DEV-03
+   * `boardsmith:action-resolved` event, which fires on every individual action resolution.
+   */
+  actionCompletedTick: Readonly<Ref<number>>;
+
+  /**
    * True when every choice for the current pick has at least one refs entry (is board-anchored).
    * Drives GameShell footer absence (D-02). Returns false when currentPick === null so the
    * player can always start an action (Pitfall 4 guard).
