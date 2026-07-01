@@ -412,9 +412,15 @@ export class GameRunner<G extends Game = Game> {
    * current selection index, completed selections, and accumulated
    * repeating-selection state.
    *
-   * Always returns a deep copy: mutating the returned object never affects
-   * subsequent calls or game state (RESEARCH.md Anti-Pattern — never return
-   * the live mutable `PendingActionState`).
+   * Never returns the live mutable `PendingActionState` (RESEARCH.md
+   * Anti-Pattern): the top-level object, `collectedArgs`, and
+   * `repeating.accumulated` are always copied, and `onSelectFired` is a fresh
+   * `Set`, so reassigning/pushing into any of those containers on the
+   * returned value never affects subsequent calls or game state. This copy is
+   * NOT recursive, though — object/array values stored *inside*
+   * `collectedArgs` (e.g. a repeating selection accumulating structured
+   * picks) are copied by reference, so mutating a nested value in place would
+   * still corrupt the live internal state.
    *
    * Returns `undefined` when nothing is pending for the player, including for
    * an out-of-range seat (no throw, matching `getActionSpace`/`getActionSchema`).
