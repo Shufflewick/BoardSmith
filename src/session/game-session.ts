@@ -20,7 +20,7 @@ import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand
 import { canSeatAct } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
-import type { HeatmapEntry } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
 import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -1994,12 +1994,32 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     const flowState = this.#runner.getFlowState();
     const sessions = this.#broadcaster.getSessions();
 
+    // Flow position is public game structure (T-123-08), not per-seat hidden
+    // info — safe to compute once and reuse across every seat/spectator in
+    // the loop below. describe() is a method and must never be sent on the
+    // wire, so it is captured here into a plain `description` string.
+    const flowDebugInfoSource = this.#runner.game.getFlowDebugInfo();
+    const flowDebugInfo: SerializedFlowDebugInfo = {
+      phase: flowDebugInfoSource.phase,
+      step: flowDebugInfoSource.step,
+      path: flowDebugInfoSource.path,
+      awaiting: flowDebugInfoSource.awaiting,
+      description: flowDebugInfoSource.describe(),
+    };
+
     for (const session of sessions) {
       const effectivePosition = session.isSpectator ? 0 : session.playerSeat;
       const state = buildPlayerState(this.#runner, this.#storedState.playerNames, effectivePosition, { includeActionMetadata: true, includeDebugData: true });
 
       // Inject transient teaching state — never derived from engine, never serialized.
       // These fields are injected after buildPlayerState() to keep that function pure.
+      state.flowDebugInfo = flowDebugInfo;
+      // SECURITY (T-123-07): pendingAction MUST be looked up per-seat inside
+      // this loop using this seat's own effectivePosition — never hoisted
+      // outside the loop or shared across seats. A seat must never receive
+      // another seat's accumulated pending-action args.
+      const pendingAction = this.getPendingAction(effectivePosition);
+      if (pendingAction) state.pendingAction = pendingAction;
       const hint = this.#hint.get(effectivePosition);
       if (hint) state.hint = hint;
       const heatmap = this.#heatmap.get(effectivePosition);

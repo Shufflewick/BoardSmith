@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { AIConfig as BotAIConfig } from '../ai/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type {
@@ -502,6 +502,57 @@ export interface PlayerGameState {
    * undefined-checks.
    */
   teachingDisabled?: boolean;
+  /**
+   * Serialized flow-position snapshot, sourced from `Game.getFlowDebugInfo()`.
+   *
+   * Public flow structure (phase/step/path/awaiting), safe to broadcast to
+   * every connected seat and spectators alike (T-123-08 — not per-seat hidden
+   * info). `description` is `FlowDebugInfo.describe()`'s output precomputed
+   * server-side — `describe()` is a method and does not survive the wire, so
+   * it is never sent; only this plain string is.
+   *
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   */
+  flowDebugInfo?: SerializedFlowDebugInfo;
+  /**
+   * This seat's OWN pending multi-step action snapshot (or `undefined` when
+   * none is in progress).
+   *
+   * SECURITY: this MUST be sourced per-seat via `GameSession.getPendingAction(effectivePosition)`
+   * inside the broadcast loop — never a single value shared across seats. A
+   * seat must never receive another seat's accumulated pending-action args
+   * (T-123-07, the phase's flagged hidden-info leak threat).
+   *
+   * Injected post-`buildPlayerState()` in `GameSession.broadcast()`.
+   */
+  pendingAction?: PendingActionState;
+}
+
+/**
+ * Plain-object, wire-safe snapshot of `FlowDebugInfo` (see `engine/flow/types.ts`).
+ *
+ * `FlowDebugInfo.describe()` is a method and does not survive serialization;
+ * this type replaces it with a precomputed `description` string. This is the
+ * single shared serialized shape reused by the session broadcast, the
+ * `debug:flow-state` dev-host op, and the `__BOARDSMITH_DEVTOOLS` bridge —
+ * no divergent structures across those three channels.
+ */
+export interface SerializedFlowDebugInfo {
+  /** Current named phase, read directly from `FlowState.currentPhase`. */
+  phase?: string;
+  /** Most-specific named node reached by following the flow position's path. */
+  step?: string;
+  /** Raw index path, for machine consumers that want the exact position. */
+  path: number[];
+  /** Seat(s) currently awaited, mirrors `FlowState.currentPlayer`/`awaitingPlayers`. */
+  awaiting: {
+    /** Current player seat if awaiting input (single-player action steps). */
+    currentPlayer?: number;
+    /** Seats awaiting input (simultaneous action steps). */
+    awaitingPlayers?: number[];
+  };
+  /** Precomputed `FlowDebugInfo.describe()` output, e.g. "phase *pegging* -> step *player-turn*, waiting on seat 2". */
+  description: string;
 }
 
 // ============================================
