@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.3
 milestone_name: Agent-Ready Engine — Introspection, Test Ergonomics & Devtools
-status: executing
-stopped_at: phase 119 complete
-last_updated: "2026-07-01T01:10:00.000Z"
+status: completed
+stopped_at: roadmap complete
+last_updated: "2026-07-01T04:26:57.679Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 20
+  completed_plans: 18
   percent: 57
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-06-30)
 
 ## Current Position
 
-Phase: 120 (authoring-pit-of-success-guards) — NOT STARTED
-Plan: none yet
-Status: Phase 119 complete (verification passed); ready to plan Phase 120
+Phase: 120 (authoring-pit-of-success-guards) — IN PROGRESS
+Plan: 02 complete (PIT-03 action reachability); 5 plans total, 3 summaries on disk (01, 02, 04)
+Status: Plan 120-02 complete; 120-03 depends on 120-02 (both touch game.ts/game.test.ts)
 Last activity: 2026-07-01
 
 ## Milestones
@@ -120,6 +120,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase ?]: PIT-01: loop() missing maxIterations is a construction-time throw; devWarn path removed
 - [Phase ?]: INTRO-F1 promoted to IN-scope (trivial expose-not-build); flagged for user sign-off at approval gate
 - [Phase ?]: ElementDiff reached through game-session.js barrel re-export; ActionMetadata added to types.js block; UndoResult not duplicated
+- [Phase 120]: PIT-01: loop() missing maxIterations now throws at construction time; devWarn path removed; 6 test call sites patched
 
 ### Highest-Risk Items (v4.3)
 
@@ -134,7 +135,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-01T00:33:50.056Z
+Last session: 2026-07-01T04:26:57.672Z
 Stopped at: roadmap complete
 Resume file: None
 Next action: `/gsd:plan-phase 116`

@@ -38,9 +38,9 @@
 
 ### Authoring Pit-of-Success Guards (PIT)
 
-- [ ] **PIT-01**: A `loop()` declared without `maxIterations` fails fast at game construction with an actionable error (not a dev-console-only warning).
+- [x] **PIT-01**: A `loop()` declared without `maxIterations` fails fast at game construction with an actionable error (not a dev-console-only warning).
 - [ ] **PIT-02**: Game start validates element registration and fails loud with an actionable message naming any custom element class that is used but unregistered.
-- [ ] **PIT-03**: Game start validates that every registered action is reachable from at least one `actionStep`, warning/erroring on actions that can never fire.
+- [x] **PIT-03**: Game start validates that every registered action is reachable from at least one `actionStep`, warning/erroring on actions that can never fire.
 - [ ] **PIT-04**: Lint rules catch the highest-value silent footguns confirmed in DSGN-01 (element identity comparison via `includes`/`===`, element arrays used as state), with actionable messages.
 
 ### Game Migration (MIG)
@@ -101,9 +101,9 @@ Which phases cover which requirements. Every v4.3 requirement maps to exactly on
 | DEV-02 | Phase 119 | Complete |
 | DEV-03 | Phase 119 | Complete |
 | DEV-04 | Phase 119 | Pending |
-| PIT-01 | Phase 120 | Pending |
+| PIT-01 | Phase 120 | Complete |
 | PIT-02 | Phase 120 | Pending |
-| PIT-03 | Phase 120 | Pending |
+| PIT-03 | Phase 120 | Complete |
 | PIT-04 | Phase 120 | Pending |
 | MIG-01 | Phase 121 | Pending |
 | MIG-02 | Phase 121 | Pending |
