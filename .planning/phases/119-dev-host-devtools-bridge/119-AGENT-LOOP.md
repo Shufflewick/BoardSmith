@@ -50,7 +50,11 @@ el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
 ### success===false (illegal attempt)
 
-A **click on a non-valid element silently no-ops** (guard in `useSelectable.ts:48`) — it fires nothing. To prove the failure signal, drive an illegal action directly from the **iframe** JS context (out-of-turn or invalid args), e.g. reach the game's action controller and call `execute()` with a bad argument, or attempt an action not in `getAvailableActions()`. Expect `boardsmith:action-resolved` with `success:false` and a populated `error`.
+The `boardsmith:action-resolved` event fires with `success:false` **only when a server round-trip rejects an action** — i.e. inside `useActionController.execute()` after `sendAction()` returns `{success:false}` or throws. Every *client-side* guard (`Not your turn`, `Action "…" is not available`, `Invalid selection for "…"`, `Missing required selection`) is an **early return that dispatches nothing** (verified live against go-fish 2026-07-01).
+
+**Finding (Phase 119 browser proof):** In a pit-of-success game like go-fish, invalid input can't reach the server — `ask`'s `target`/`rank` choices *are* the valid set, so any bad value is rejected client-side before dispatch, and a valid value is always accepted (`success:true`). There is therefore no bad-args path to an in-browser `success:false` for go-fish. The failure branch is instead covered by `src/ui/composables/useActionController.devtools.test.ts` Test 2, which mocks `sendAction` → `{success:false, error}` and asserts the event fires with `success:false` + `error` at the identical dispatch site.
+
+To observe `success:false` in the browser, drive a game with a **server-only rule** the client can't pre-check (so a client-valid submission is server-rejected), or a genuinely stale/out-of-turn submission that bypasses the client `isMyTurn` guard. The earlier "call `execute()` with invalid args" recipe does **not** work — such calls early-return client-side without dispatching.
 
 ## Repro — custom UI (go-fish)
 

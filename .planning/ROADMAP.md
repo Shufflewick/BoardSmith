@@ -12,7 +12,7 @@
 - [x] **Phase 116: Verification & API Design** — Verify scout friction claims (confirmed/false/partial + evidence) and lock an approved API-design doc; gates all later phases. ✅ 2026-06-30 (3/3 plans, verification passed)
 - [x] **Phase 117: Action-Space Introspection** — Keystone: one serializable entry point for every legal action (selections, choices, `dependsOn`, arg templates) + per-action schema, validated arg-building, legal-move enumeration, perspective-aware state view. ✅ 2026-06-30 (4/4 plans, verification 6/6, code review clean)
 - [x] **Phase 118: Test Ergonomics** — Typed observable state, `playUntilComplete` with stuck-game diagnostics, auto-trace on failed availability assertions, permissive-vs-exact action assertions, multi-step selection builder. ✅ 2026-06-30 (4/4 plans, verification 6/6, code review fixed 3 critical simultaneous-turn bugs)
-- [ ] **Phase 119: Dev-Host Devtools Bridge** — Stable `data-element-id` selectors (custom UI + AutoUI), read-only `window.__BOARDSMITH_DEVTOOLS`, observable action-resolved signal — browser-proven.
+- [x] **Phase 119: Dev-Host Devtools Bridge** — Stable `data-element-id` selectors (custom UI + AutoUI), read-only `window.__BOARDSMITH_DEVTOOLS`, observable action-resolved signal — browser-proven. ✅ 2026-07-01 (4/4 plans, verification passed; live custom-UI proof + documented pit-of-success finding on the `success:false` demo)
 - [ ] **Phase 120: Authoring Pit-of-Success Guards** — Fail-fast `maxIterations`, element-registration validation, flow-reachability validation, and lint coverage for confirmed identity/state footguns.
 - [ ] **Phase 121: Game & MERC Migration** — Migrate all `~/BoardSmithGames/` games onto the new APIs, keep BoardSmith green, re-vendor + verify the MERC canary.
 - [ ] **Phase 122: Documentation** — Agent-control guide, updated testing + browser/dev-host docs, and authoring/common-pitfalls updates for the shipped surface.
@@ -84,7 +84,7 @@ Plans:
 - [x] 119-01-PLAN.md — DEV-01 parity test: data-bs-el-id across all 4 AutoUI renderers
 - [x] 119-02-PLAN.md — DEV-03 boardsmith:action-resolved CustomEvent (execute + selection-step paths)
 - [x] 119-03-PLAN.md — DEV-02 postMessage bridge + window.__BOARDSMITH_DEVTOOLS global
-- [ ] 119-04-PLAN.md — DEV-04 agent-loop doc + browser proof (custom UI + AutoUI)
+- [x] 119-04-PLAN.md — DEV-04 agent-loop doc + browser proof (custom UI + AutoUI)
 **UI hint**: yes
 
 ### Phase 120: Authoring Pit-of-Success Guards
