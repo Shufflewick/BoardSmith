@@ -97,7 +97,12 @@ Plans:
   2. Game start validates element registration and fails loud with an actionable message naming any custom element class that is used but unregistered.
   3. Game start validates that every registered action is reachable from at least one `actionStep`, warning/erroring on actions that can never fire.
   4. Lint rules catch the highest-value silent footguns confirmed in DSGN-01 (element identity comparison via `includes`/`===`, element arrays used as state), with actionable messages.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 120-01-PLAN.md — PIT-01: loop() maxIterations construction throw + 6 callsite fixes
+  - [ ] 120-02-PLAN.md — PIT-03: action-reachability walk of _flowDefinition.root (throw/devWarn + function-actions blind spot)
+  - [ ] 120-03-PLAN.md — PIT-02: first-traversal element-class registration guard via _finder() hook
+  - [ ] 120-04-PLAN.md — PIT-04 rule 1: no-element-identity-comparison (auto-fix) + RuleTester harness (Wave 0)
+  - [ ] 120-05-PLAN.md — PIT-04 rule 2: no-element-array-state
 
 ### Phase 121: Game & MERC Migration
 **Goal**: Prove the new surface against every real game — adopt the introspection/test APIs where they replace hand-rolled patterns, keep all suites green, and re-vendor the MERC canary.
