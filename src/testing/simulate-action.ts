@@ -362,7 +362,8 @@ export function playUntilComplete<G extends Game>(
         `Game stuck at iteration ${i}: flow reports awaitingInput but no active seats ` +
         `could be determined (currentPlayer=${flowState.currentPlayer}, ` +
         `awaitingPlayers=${JSON.stringify(flowState.awaitingPlayers ?? [])}). ` +
-        `This is likely an engine-state inconsistency.`,
+        `This is likely an engine-state inconsistency.\n` +
+        `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
         i,
         availableActions,
         flowState,
@@ -407,7 +408,8 @@ export function playUntilComplete<G extends Game>(
           `Game stuck at iteration ${i}: every attempted move by ${seatDesc} failed during execution. ` +
           `Failures:\n${moveFailures.map(f => `  ${f}`).join('\n')}\n` +
           `This means enumerateLegalMoves returned moves that the action's validation rejects. ` +
-          `Verify the action's validate() / chooseFrom() conditions match its execute() preconditions.`,
+          `Verify the action's validate() / chooseFrom() conditions match its execute() preconditions.\n` +
+          `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
           i,
           availableActions,
           flowState,
@@ -418,7 +420,8 @@ export function playUntilComplete<G extends Game>(
         `Game stuck at iteration ${i}: ${seatDesc} has no enumerable legal moves. ` +
         `Available actions: [${availableActions.join(', ')}]. ` +
         `If these actions require text/number input they cannot be auto-enumerated — use doAction() directly. ` +
-        `Check that all required selections have valid choices for the current game state.`,
+        `Check that all required selections have valid choices for the current game state.\n` +
+        `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
         i,
         availableActions,
         flowState,
@@ -443,7 +446,8 @@ export function playUntilComplete<G extends Game>(
       `Game did not complete after ${maxMoves} player moves / ${maxMoves * 10} loop iterations ` +
       `(${seatDesc} still active). ` +
       `Available actions: [${availableActions.join(', ')}]. ` +
-      `Increase maxMoves or verify the game can reach a terminal state.`,
+      `Increase maxMoves or verify the game can reach a terminal state.\n` +
+      `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
       maxMoves,
       availableActions,
       flowState,

@@ -61,6 +61,11 @@ export function toDebugString(game: Game, options: DebugStringOptions = {}): str
   if (game.currentPlayer) {
     lines.push(`Current Player: ${game.currentPlayer.name} (position ${game.currentPlayer.position})`);
   }
+  // Human-readable flow position (FLOW-01 locked decision: integrated into
+  // toDebugString() as the one source of truth all layers reuse). Reuses
+  // Game.getFlowDebugInfo() — never recomputes flow position here; degrades
+  // gracefully to "no active flow" when there is none.
+  lines.push(`Flow position: ${game.getFlowDebugInfo().describe()}`);
   lines.push('');
 
   // Players summary

@@ -136,6 +136,21 @@ describe('assertActionAvailable — TEST-03: trace-on-failure', () => {
     expect(thrownError!.message).toMatch(/[✓✗]/);
   });
 
+  it('failure message embeds the readable flow position (FLOW-01, Phase 123 Plan 03)', () => {
+    const testGame = makeFixture();
+
+    let thrownError: Error | undefined;
+    try {
+      assertActionAvailable(testGame, 1, 'constrained');
+    } catch (e) {
+      thrownError = e as Error;
+    }
+
+    expect(thrownError).toBeDefined();
+    expect(thrownError!.message).toContain('Flow position:');
+    expect(thrownError!.message).toMatch(/Flow position: .+/);
+  });
+
   it('passing assertActionAvailable does NOT invoke debugActionAvailability', () => {
     // Spy on game.debugActionAvailability — it must NOT be called on the success path.
     const testGame = makeFixture();
