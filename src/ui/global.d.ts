@@ -1,6 +1,22 @@
 declare const __BOARDSMITH_DEV__: boolean | undefined;
 declare const __API_URL__: string | undefined;
 
+interface BoardsmithDevtools {
+  /** Returns the perspective-aware game state for the given seat (or the current seat if omitted). */
+  getState(seat?: number): unknown | null;
+  /** Returns the list of available action names for the given seat. */
+  getAvailableActions(seat?: number): string[];
+  /** Returns action metadata (labels, help text, selection config) for the given seat. */
+  getActionMetadata(seat?: number): Record<string, unknown> | undefined;
+  /** Returns current board-interaction state: active action, selection step, and valid element IDs. */
+  getBoardInteractionState(): { activeAction: string | null; currentSelectionStep: number; validElements: number[] } | null;
+}
+
+interface Window {
+  /** Dev-only global exposed by the `boardsmith dev` host page. Absent in production builds. */
+  __BOARDSMITH_DEVTOOLS?: BoardsmithDevtools;
+}
+
 interface BoardsmithActionResolvedDetail {
   action: string;
   success: boolean;

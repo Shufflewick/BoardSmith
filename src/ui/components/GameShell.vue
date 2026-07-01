@@ -44,6 +44,7 @@ import BoardMessage from './helpers/BoardMessage.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge';
+import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useToast } from '../composables/useToast';
@@ -692,6 +693,42 @@ useBoardActionBridge({
   actionMetadata,
   availableActions,
 });
+
+// ── DEV-02: devtools postMessage bridge ──────────────────────────────────────
+// In platform mode + dev builds only: broadcast reactive state to window.parent
+// so the `boardsmith dev` host page can expose window.__BOARDSMITH_DEVTOOLS.
+// The entire watch registration is guarded by isDevBuild so production builds
+// dead-code-eliminate this block (import.meta.env.DEV is false in production).
+if (isDevBuild) {
+  watch(
+    [
+      availableActions,
+      actionMetadata,
+      playerSeat,
+      () => boardInteraction.state.currentAction,
+      () => boardInteraction.state.currentPickIndex,
+      () => boardInteraction.state.validElements.length,
+      state,
+    ],
+    () => {
+      maybePostDevtoolsUpdate(
+        { isDevBuild, platformMode: platformMode.value },
+        {
+          seat: playerSeat.value,
+          state: state.value?.state ?? null,
+          availableActions: availableActions.value,
+          actionMetadata: actionMetadata.value,
+          boardInteraction: {
+            currentAction: boardInteraction.state.currentAction,
+            currentPickIndex: boardInteraction.state.currentPickIndex,
+            validElements: boardInteraction.state.validElements,
+          },
+        },
+      );
+    },
+    { deep: false },
+  );
+}
 
 // Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards
 const { previewState } = useZoomPreview();
