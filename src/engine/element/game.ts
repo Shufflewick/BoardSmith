@@ -1623,15 +1623,19 @@ export class Game<
     this._flowEngine = new FlowEngine(this, this._flowDefinition);
 
     // PIT-02: record every element class queried through the GameElement
-    // finder methods (all/first/firstN/last/lastN) during this FIRST
+    // finder methods (all/first/firstN/last/lastN/has) during this FIRST
     // traversal only, then diff against the class registry below. This
     // catches a class queried via e.g. `game.all(Foo)` but never registered
     // (typo / dead class reference) — which otherwise fails silently
     // because an unregistered-class query just returns an empty collection.
-    // Scope boundary (documented limitation): only queries made during this
-    // first traversal are checked. Post-start / async queries are not
-    // covered. The try/finally guarantees recording never leaks into normal
-    // play, even if start() throws.
+    // Scope boundary (documented limitation): only queries made through the
+    // GameElement finder methods during this first traversal are checked.
+    // Queries made directly on an ElementCollection (e.g.
+    // `board.children.all(Foo)`, which has no `_ctx` linkage and cannot
+    // call into the recording hook — see game-element.ts) and any
+    // post-start / async queries are NOT covered. The try/finally
+    // guarantees recording never leaks into normal play, even if start()
+    // throws.
     this._ctx._pit02RecordingActive = true;
     this._ctx._pit02RecordedClasses = new Set();
     let state: FlowState;

@@ -171,6 +171,32 @@ class CorrectlyRegisteredQueryGame extends Game<CorrectlyRegisteredQueryGame, Pl
 }
 class TestDeck2 extends Space<CorrectlyRegisteredQueryGame> {}
 
+class TestDeck3 extends Space<UnregisteredHasQueryGame> {}
+
+/**
+ * Flow queries `Ghost` via `has()` (not `all`/`first`/etc.) during the first
+ * traversal without ever registering it -- proves `has()` is recorded by
+ * PIT-02 same as the other finders (WR-01).
+ */
+class UnregisteredHasQueryGame extends Game<UnregisteredHasQueryGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([TestDeck3, Card]);
+    const deck = this.create(TestDeck3, 'deck');
+    deck.create(Card, 'card');
+    this.setFlow(
+      defineFlow({
+        setup: (ctx) => {
+          (ctx.game as UnregisteredHasQueryGame).has(Ghost);
+        },
+        root: eachPlayer({
+          do: actionStep({ actions: [] }),
+        }),
+      }),
+    );
+  }
+}
+
 describe('PIT-02', () => {
   beforeEach(() => {
     _clearShownWarnings();
@@ -180,6 +206,14 @@ describe('PIT-02', () => {
     const game = new UnregisteredQueryGame(makeOptions());
     expect(() => game.startFlow()).toThrowError(/Ghost/);
     expect(() => new UnregisteredQueryGame(makeOptions()).startFlow()).toThrowError(
+      /registerElements/,
+    );
+  });
+
+  it('throws naming an element class queried only via has() but never registered during first traversal (WR-01)', () => {
+    const game = new UnregisteredHasQueryGame(makeOptions());
+    expect(() => game.startFlow()).toThrowError(/Ghost/);
+    expect(() => new UnregisteredHasQueryGame(makeOptions()).startFlow()).toThrowError(
       /registerElements/,
     );
   });

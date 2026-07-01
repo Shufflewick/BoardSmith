@@ -114,6 +114,23 @@ npx tsc --noEmit -p .
 
 None.
 
+## Deferred / Documented Limitations (added post-review, WR-02)
+
+PIT-02 coverage is bounded to the `GameElement` finder methods
+(`all`/`first`/`firstN`/`last`/`lastN`/`has`) during the first `startFlow()`
+traversal. Two classes of queries are NOT covered and intentionally will
+not trigger the unregistered-class throw:
+1. Queries made directly on an `ElementCollection` (e.g.
+   `board.children.all(Foo)`) — `ElementCollection` has no `_ctx`/game
+   linkage, so it cannot call into the recording hook. Instrumenting
+   `ElementCollection` was considered and rejected for this reason.
+2. Post-`startFlow()` / async queries — recording is switched off once the
+   first traversal completes.
+
+This is now documented in code comments on `recordQueriedClassIfActive`
+(game-element.ts) and the `startFlow()` PIT-02 block (game.ts). No runtime
+behavior changed.
+
 ## Threat Flags
 
 None — this plan's `<threat_model>` already covers the surface introduced (DoS via recording overhead, cross-game state leak, throw-message information disclosure), and no additional network/auth/schema surface was introduced.

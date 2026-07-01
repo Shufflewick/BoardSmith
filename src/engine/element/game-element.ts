@@ -32,6 +32,20 @@ function isElementClass<F extends GameElement>(value: unknown): value is Element
  * set, but only while recording is active (first `startFlow()` traversal).
  * No-op (single boolean check, no allocation) when recording is inactive —
  * this keeps the finder hot path free of overhead during normal play.
+ *
+ * Coverage bound (documented limitation, not a bug): this hook is called
+ * from the `GameElement` finder methods (`all`/`first`/`firstN`/`last`/
+ * `lastN`/`has`) only, during the first `startFlow()` traversal. Two
+ * classes of queries are NOT covered and will not trigger the PIT-02
+ * unregistered-class throw:
+ *   1. Queries made directly on an `ElementCollection` instance, e.g.
+ *      `board.children.all(Foo)` — `ElementCollection` has its own finder
+ *      implementations with no `_ctx` linkage (see the comment on
+ *      `isElementClass` above), so it cannot call into this hook.
+ *      Instrumenting `ElementCollection` itself was considered and
+ *      rejected for this reason.
+ *   2. Any query made after `startFlow()`'s first traversal completes
+ *      (post-start / async queries) — recording is switched off by then.
  */
 function recordQueriedClassIfActive(ctx: ElementContext, classNameOrFinder: unknown): void {
   if (!ctx._pit02RecordingActive) return;
@@ -606,6 +620,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
     ...finders: ElementFinder<F>[]
   ): boolean {
+    recordQueriedClassIfActive(this._ctx, classNameOrFinder);
     const collection = new ElementCollection(...this._t.children);
     return collection.has(classNameOrFinder as ElementClass<F>, ...finders);
   }
