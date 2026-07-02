@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
-status: ready_to_plan
-stopped_at: Phase 127 complete (3/3) — ready to discuss Phase 128
-last_updated: 2026-07-02T15:47:37.446Z
-last_activity: 2026-07-02 -- Phase 127 Plan 03 complete (createDevHostClient + browserless integration test, DRIVE-01/02/03; Phase 127 fully done)
+status: executing
+stopped_at: Completed 127-03-PLAN.md
+last_updated: "2026-07-02T16:30:10.790Z"
+last_activity: 2026-07-02 -- Phase 128 planning complete
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 16
+  total_plans: 22
   completed_plans: 16
   percent: 63
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 
 Phase: 128
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-02
+Status: Ready to execute
+Last activity: 2026-07-02 -- Phase 128 planning complete
 
 ## Milestones
 
