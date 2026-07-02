@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 129-03-PLAN.md
-last_updated: "2026-07-02T20:03:53.695Z"
-last_activity: 2026-07-02 -- Phase 130 planning complete
+stopped_at: Completed 130-02-PLAN.md
+last_updated: "2026-07-02T21:00:00.000Z"
+last_activity: 2026-07-02 -- Completed 130-02-PLAN.md (doc-verifier sweep PASS, DOC-05/DOC-06 finalized)
 progress:
   total_phases: 8
-  completed_phases: 7
-  total_plans: 27
-  completed_plans: 26
-  percent: 88
+  completed_phases: 8
+  total_plans: 28
+  completed_plans: 28
+  percent: 100
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 130
-Plan: 01 complete (02 remaining)
-Status: Executing
-Last activity: 2026-07-02 -- Completed 130-01-PLAN.md (DOC-05/DOC-06 documented)
+Plan: 02 complete (phase complete)
+Status: Phase 130 complete -- v4.4 milestone (Phases 123-130) fully executed
+Last activity: 2026-07-02 -- Completed 130-02-PLAN.md (doc-verifier sweep PASS, DOC-05/DOC-06 finalized)
 
 ## Milestones
 
@@ -165,6 +165,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 129]: 129-03: Used 'boardsmith pack --target' for atomic MERC re-vendor (pack+copy+ref-update+install in one command), superseding the manual multi-step RESEARCH procedure
 - [Phase 129]: 129-03: dom-leak.ts's static @vue/test-utils import made lazy via dynamic import() -- fixed a genuine v4.4 regression that broke MERC's suite (Rule 1 bug, fixed in BoardSmith src/, mirrors existing loadAutoUI() pattern)
 - [Phase 130]: 130-01: documented v4.4 agent-ergonomics surface (VIS/ANIM/SIM/FLOW/DRIVE/ERR) + determinism guarantee + 6 breaking changes in migration-guide.md's new ## v4.4 section; every symbol grep-verified against src/ before writing, catching 3 draft invented-symbol mistakes before commit
+- [Phase ?]: Phase 130-02: doc-verifier sweep found zero unverifiable claims across all seven v4.4 docs — every symbol/signature/CLI-flag matched src/ exactly; PASS verdict recorded in 130-VALIDATION.md
 
 ### Highest-Risk Items (v4.4)
 
@@ -186,10 +187,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T20:03:41.409Z
-Stopped at: Completed 129-03-PLAN.md
+Last session: 2026-07-02T21:00:00.000Z
+Stopped at: Completed 130-02-PLAN.md
 Resume file: None
-Next action: Phase 129 (Migration — Games + MERC) Plan 02 complete (MIG-03 done): go-fish (DOM-leak flagship + visibility, tsc debt closed), cribbage (visibility), demo-animation (animation-trace) all green, tsc clean. Proceed to 129-03 (MERC re-vendor, MIG-04).
+Next action: Phase 130 (Documentation) complete -- both plans done (130-01 wrote the v4.4 agent-ergonomics docs, 130-02 doc-verifier swept every claim with zero errors, PASS verdict in 130-VALIDATION.md). All 8 phases (123-130) of the v4.4 milestone are now fully executed. Run `/gsd:verify-phase 130` (or a milestone-level verification) before closing out v4.4.
 
 ## Operator Next Steps
 

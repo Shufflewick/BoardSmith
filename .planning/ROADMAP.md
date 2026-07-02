@@ -176,7 +176,7 @@ Plans:
 
 **Plans**: 2 plans
 - [x] 130-01-PLAN.md — Write/update v4.4 docs in place (testing guide: VIS/ANIM/SIM/FLOW; agent-control: DRIVE ops + createDevHostClient + ERR; custom-ui: anchorAttrs/fail-loud; migration-guide v4.4 breaking section; llm-overview determinism + discoverability; README index)
-- [ ] 130-02-PLAN.md — Doc-verifier pass: extract every claimed symbol/command, grep-verify against src/, run cheap doc commands, fix errors, write 130-VALIDATION.md
+- [x] 130-02-PLAN.md — Doc-verifier pass: extract every claimed symbol/command, grep-verify against src/, run cheap doc commands, fix errors, write 130-VALIDATION.md
 
 ### Progress
 
@@ -189,7 +189,7 @@ Plans:
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
 | 128. Animation & Drag-Drop Test Story | 6/6 | Complete    | 2026-07-02 |
 | 129. Migration (Games + MERC) | 3/3 | Complete    | 2026-07-02 |
-| 130. Documentation | 1/2 | In Progress|  |
+| 130. Documentation | 2/2 | Complete   | 2026-07-02 |
 
 ### Shipped milestones
 
