@@ -9,6 +9,8 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  sequence,
+  execute,
   type FlowContext,
 } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/index.js';
@@ -110,6 +112,35 @@ class Card extends Piece<TestGame> {
 class Hand extends Space<TestGame> {}
 class Deck extends Space<TestGame> {}
 
+// Minimal game whose flow throws from an unguarded `execute()` node
+// immediately after the triggering action completes, so the exception
+// propagates uncaught through FlowEngine.run() -> continueFlow() and lands in
+// GameRunner.performAction's try/catch (ENGINE_ERROR gap branch coverage).
+// Unlike an exception thrown inside Action.execute() (which ActionExecutor
+// wraps and converts into a normal action-failure result), this path is
+// genuinely unguarded further up the flow-processing stack.
+class ThrowingFlowGame extends Game<ThrowingFlowGame, Player> {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+
+    const triggerAction = Action.create('trigger')
+      .prompt('Trigger')
+      .execute(() => ({ success: true }));
+
+    this.registerActions(triggerAction);
+
+    const flow = defineFlow({
+      root: sequence(
+        actionStep({ actions: ['trigger'] }),
+        execute(() => {
+          throw new Error('Kaboom');
+        })
+      ),
+    });
+    this.setFlow(flow);
+  }
+}
+
 describe('GameRunner', () => {
   describe('creation', () => {
     it('should create a game runner', () => {
@@ -186,6 +217,36 @@ describe('GameRunner', () => {
 
       expect(result.playerViews).toBeDefined();
       expect(result.playerViews).toHaveLength(2);
+    });
+
+    it('should report ENGINE_ERROR when continueFlow throws', () => {
+      const throwingRunner = new GameRunner({
+        GameClass: ThrowingFlowGame,
+        gameType: 'throwing-flow-game',
+        gameOptions: { playerCount: 1, seed: 'test' },
+      });
+      throwingRunner.start();
+
+      const result = throwingRunner.performAction('trigger', 1, {});
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.ENGINE_ERROR);
+      expect(result.error).toContain('Kaboom');
+      // Pit of success guard: never leak stack-frame text or file paths.
+      expect(result.error).not.toContain(' at ');
+      expect(result.error).not.toMatch(/\.ts:\d+/);
+    });
+
+    it('should report ACTION_EXECUTION_ERROR when flowState.actionError is set', () => {
+      runner.start();
+
+      // Not in the actionStep's allow-list -> engine sets flowState.actionError
+      // without throwing.
+      const result = runner.performAction('nonexistent-action', 1, {});
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.ACTION_EXECUTION_ERROR);
+      expect(result.error).toContain('nonexistent-action');
     });
   });
 

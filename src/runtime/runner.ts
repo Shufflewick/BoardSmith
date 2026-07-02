@@ -199,6 +199,7 @@ export class GameRunner<G extends Game = Game> {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
+        errorCode: ErrorCode.ENGINE_ERROR,
       };
     }
 
@@ -207,6 +208,7 @@ export class GameRunner<G extends Game = Game> {
       return {
         success: false,
         error: flowState.actionError,
+        errorCode: ErrorCode.ACTION_EXECUTION_ERROR,
         flowState,
       };
     }
