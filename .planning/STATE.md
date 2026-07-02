@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 125-01-PLAN.md
-last_updated: "2026-07-02T22:50:19.000Z"
-last_activity: 2026-07-02 -- Executed 125-01 (createHeadlessSession promoted to public session surface)
+stopped_at: Completed 125-02-PLAN.md
+last_updated: "2026-07-02T03:57:46.679Z"
+last_activity: 2026-07-02
 progress:
   total_phases: 8
-  completed_phases: 2
-  total_plans: 10
+  completed_phases: 3
+  total_plans: 9
   completed_plans: 9
-  percent: 28
+  percent: 38
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 125
-Plan: 01 of 02 complete
-Status: Executing
-Last activity: 2026-07-02 -- Executed 125-01 (createHeadlessSession promoted to public session surface)
+Plan: 2 of 02 complete
+Status: Ready to execute
+Last activity: 2026-07-02
 
 ## Milestones
 
@@ -145,6 +145,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 124]: VIS-02: diffPlayerViews classifies purely by each node's __hidden flag (never by id) to sidestep the engine's zone-hidden-vs-individually-hidden id-anonymization asymmetry
 - [Phase 124]: VIS-03: assertNoHiddenInfoLeak derives forbidden markers by diffing each element's unfiltered toJSON() against its node in the final toJSONForPlayer(seat) tree (honors static playerView); renderAsSeat mounts the REAL AutoUI/AutoRenderer/CardRenderer stack via a runtime dynamic import() so a jsdom window.matchMedia polyfill can be installed before AutoRenderer's transitive module-load-time matchMedia() call; $images.back and boolean attribute values are excluded from identity candidates (both are near-universal DOM substrings, not per-element secrets)
 - [Phase 125, Plan 01]: SIM-01: createHeadlessSession moved from src/session/testing/headless-harness.ts to src/session/headless-session.ts with a clean break (old path deleted, zero re-export shim); exported from the boardsmith/session barrel. Determinism tests must compare seeded-RNG-derived state values, not raw broadcast/result objects — those also carry Date.now() action-history timestamps that are legitimately wall-clock and outside the seeded-RNG contract.
+- [Phase 125]: 125-02: loadGameDefinition re-exports only gameDefinition (no executeOp); simulate drives games via simulateRandomGames/createTestGame, not dev.ts's stateless executeOp path — Keeps the shared rules loader honest about what each caller needs; avoids pulling dev's WS-executor machinery into the CLI simulate path
 
 ### Highest-Risk Items (v4.4)
 
@@ -166,8 +167,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T22:50:19.000Z
-Stopped at: Completed 125-01-PLAN.md
+Last session: 2026-07-02T03:57:46.670Z
+Stopped at: Completed 125-02-PLAN.md
 Resume file: None
 Next action: Execute 125-02-PLAN.md (headless simulation, remaining plan). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending).
 

@@ -66,7 +66,7 @@
   3. Running `boardsmith simulate` twice with the same seed produces identical pass/stuck/error results.
 **Plans**: 2 plans
   - [x] 125-01-PLAN.md — SIM-01: move createHeadlessSession to public boardsmith/session (clean break) + JSDoc + tests
-  - [ ] 125-02-PLAN.md — SIM-02: boardsmith simulate CLI (seeded batch, table/--json, non-zero exit, replay) + shared rules loader
+  - [x] 125-02-PLAN.md — SIM-02: boardsmith simulate CLI (seeded batch, table/--json, non-zero exit, replay) + shared rules loader
 
 #### Phase 126: Structured Error Surfacing
 **Goal**: Failures at the pick-handler, action-runner, storage, and dev-host layers surface as structured, inspectable signals instead of console-only silent fallbacks.
@@ -132,7 +132,7 @@
 |-------|-----------------|--------|-----------|
 | 123. Determinism & Flow Introspection | 4/4 | Complete    | 2026-07-01 |
 | 124. Hidden-Info Test Utilities | 3/3 | Complete    | 2026-07-02 |
-| 125. Headless Simulation | 1/2 | In Progress|  |
+| 125. Headless Simulation | 2/2 | Complete   | 2026-07-02 |
 | 126. Structured Error Surfacing | 0/TBD | Not started | - |
 | 127. Scriptable Dev Host | 0/TBD | Not started | - |
 | 128. Animation & Drag-Drop Test Story | 0/TBD | Not started | - |
