@@ -35,6 +35,12 @@ export interface PendingActionCallbacks {
 export interface PickStepResult {
   success: boolean;
   error?: string;
+  /**
+   * Structured error code, forwarded from the underlying failure when one
+   * exists (e.g. ACTION_NOT_FOUND from an auto-create). Undefined when no
+   * upstream errorCode was produced — never fabricated.
+   */
+  errorCode?: ErrorCode;
   done?: boolean;
   nextChoices?: unknown[];
   actionComplete?: boolean;
@@ -127,7 +133,7 @@ export class PendingActionManager<G extends Game = Game> {
     if (!pendingState && actionName) {
       const startResult = this.startPendingAction(actionName, playerPosition);
       if (!startResult.success) {
-        return { success: false, error: startResult.error };
+        return { success: false, error: startResult.error, errorCode: startResult.errorCode };
       }
       pendingState = startResult.pendingState;
       this.#pendingActions.set(playerPosition, pendingState!);

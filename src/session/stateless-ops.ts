@@ -10,6 +10,7 @@
  */
 
 import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
+import type { ErrorCode } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -103,6 +104,13 @@ export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set([
 export interface OpResult {
   success: boolean;
   error?: string;
+  /**
+   * Structured error code, threaded through from the underlying runner/
+   * pick-handler result when one exists (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
+   * CHOICES_EVALUATION_ERROR). Undefined for protocol-level failures that have
+   * no upstream errorCode to forward — never fabricated.
+   */
+  errorCode?: ErrorCode;
   category?: 'bundle' | 'executor' | 'protocol';
 
   // Op-specific fields
@@ -239,11 +247,16 @@ function stateEnvelope(runner: GameRunner, playerCount: number): {
   };
 }
 
-function errorResult(error: unknown, category: OpResult['category'] = 'bundle'): OpResult {
+function errorResult(
+  error: unknown,
+  category: OpResult['category'] = 'bundle',
+  errorCode?: ErrorCode,
+): OpResult {
   const message = error instanceof Error ? error.message : String(error);
   return {
     success: false,
     error: message,
+    errorCode,
     category,
     snapshot: null,
     pendingState: null,
@@ -300,7 +313,7 @@ function handleAction(
   const actionResult = runner.performAction(op.actionName, op.player, op.args);
 
   if (!actionResult.success) {
-    return errorResult(actionResult.error ?? 'Action failed');
+    return errorResult(actionResult.error ?? 'Action failed', 'bundle', actionResult.errorCode);
   }
 
   // Mirror game-session.ts: advance tutorial for all seats with a running tutorial.
@@ -355,7 +368,7 @@ async function handleSelectionStep(
   );
 
   if (!step.success) {
-    return errorResult(step.error ?? 'Selection step failed');
+    return errorResult(step.error ?? 'Selection step failed', 'bundle', step.errorCode);
   }
 
   // Mirror game-session.ts: advance tutorial for all seats with a running tutorial.
@@ -391,7 +404,7 @@ function handleResolveChoices(
   const result = handler.getPickChoices(op.actionName, op.selectionName, op.player, op.args);
 
   if (!result.success) {
-    return errorResult(result.error ?? 'Failed to resolve choices');
+    return errorResult(result.error ?? 'Failed to resolve choices', 'bundle', result.errorCode);
   }
 
   return {
@@ -512,7 +525,7 @@ async function handleAITurn(
   const actionResult = runner.performAction(move.action, aiPlayer, move.args);
 
   if (!actionResult.success) {
-    return errorResult(actionResult.error ?? 'AI action failed');
+    return errorResult(actionResult.error ?? 'AI action failed', 'bundle', actionResult.errorCode);
   }
 
   return {
