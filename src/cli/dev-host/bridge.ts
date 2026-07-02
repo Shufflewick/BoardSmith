@@ -247,11 +247,17 @@ export function shapeResult(
 ): Record<string, unknown> {
   switch (wireOp) {
     case 'action':
-      return { success: result.success, error: result.error, followUp: result.followUp, warnings: result.warnings };
+      return {
+        success: result.success,
+        error: result.error,
+        errorCode: result.errorCode,
+        followUp: result.followUp,
+        warnings: result.warnings,
+      };
     case 'resolve_choices':
       return result as unknown as Record<string, unknown>;
     case 'selection_step':
-      if (!result.success) return { success: false, error: result.error };
+      if (!result.success) return { success: false, error: result.error, errorCode: result.errorCode };
       return {
         success: true,
         done: result.done,

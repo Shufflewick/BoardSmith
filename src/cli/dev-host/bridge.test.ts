@@ -177,6 +177,42 @@ describe('dev host bridge', () => {
       ]);
     });
 
+    // ── errorCode threading (ERR-02 / CR-01 regression) ─────────────────────
+    //
+    // shapeResult is a manual allowlist (RESEARCH Pitfall 4) — errorCode added
+    // to OpResult is invisible on the wire unless explicitly forwarded, just
+    // like warnings above.
+
+    it("forwards result.errorCode on a failing 'action' case", () => {
+      const r = shapeResult('action', {
+        success: false,
+        error: 'It is not your turn.',
+        errorCode: 'NOT_YOUR_TURN' as unknown as OpResult['errorCode'],
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+      });
+      expect((r as Record<string, unknown>).errorCode).toBe('NOT_YOUR_TURN');
+    });
+
+    it("forwards result.errorCode on a failing 'selection_step' case", () => {
+      const r = shapeResult('selection_step', {
+        success: false,
+        error: 'Engine failed to process selection.',
+        errorCode: 'ENGINE_ERROR' as unknown as OpResult['errorCode'],
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+      });
+      expect(r).toEqual({ success: false, error: 'Engine failed to process selection.', errorCode: 'ENGINE_ERROR' });
+    });
+
     it('returns only {success,error} for hint and heatmap-toggle (no playerViews leak)', () => {
       const base = {
         success: true,
