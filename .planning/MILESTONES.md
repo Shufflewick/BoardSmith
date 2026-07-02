@@ -1,5 +1,27 @@
 # Project Milestones: BoardSmith
 
+## v4.4 Agent-Ergonomics Gaps (Audit Fixes) (Shipped: 2026-07-02)
+
+**Delivered:** Closed every verified gap from the 2026-07-01 agent-ergonomics audit — hidden-info verification, headless simulation, structured errors, a fully scriptable dev host, an animation/drag-drop test story, and flow/debug introspection with enforced determinism — then updated docs and migrated all example games + MERC onto the new surface.
+
+**Phases completed:** 8 phases (123-130), 28 plans
+
+**Key accomplishments:**
+
+- **Determinism & flow introspection (123):** killed every `Math.random` fallback in `space.ts`/`element-collection.ts`, deterministic-by-default `playUntilComplete`, `describeFlowPosition`/`getFlowDebugInfo`, `TestGame.getPendingAction`/disabled-choices introspection, and devtools + `debug:flow-state` WS parity.
+- **Hidden-info test utilities (124):** `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible` derived from the final post-`playerView` wire tree, `diffPlayerViews` (structured + `describe()`), and an async DOM-leak matcher (`renderAsSeat`/`assertNoHiddenInfoLeak`) with auto-derived markers + proven positive controls.
+- **Headless simulation (125):** `createHeadlessSession` promoted to the public `boardsmith/session` export (clean break), plus a seeded `boardsmith simulate` CLI (`--json`, non-zero exit on failure, replay hints).
+- **Structured error surfacing (126):** structured `warnings[{code,message,source}]` on pick/op results, runner `ENGINE_ERROR`/`ACTION_EXECUTION_ERROR` codes threaded through the bridge wire, `onPersistenceError`/`persistenceHealthy` on both hosts, and a dev-host `debug:logs` ring-buffer op + DebugPanel Logs tab.
+- **Scriptable dev host (127):** `getState`/`getLobby`/`debugToggle`/`uiSwitch` WS ops, a Node-capable `GameConnection` (injectable `globalThis.WebSocket`), and `createDevHostClient` proven by a browserless real-WS integration test.
+- **Animation & drag-drop test story (128):** a Vue-free animation test mode + trace recorder, direct unit tests for all five animation/drag composables (previously zero), and fail-loud missing-anchor throws via `isDevThrowEnabled()`.
+- **Migration + docs (129/130):** all 8 games + MERC re-vendored green (fixed a real eager `@vue/test-utils` import regression), and seven docs updated in place with every claim grep-verified against `src/`.
+
+**Stats:** `src/` 99 files changed, +9,737/-303 lines · 8 phases, 28 plans · git range 9b01726..v4.4 (185 commits) · started 2026-07-01, shipped 2026-07-02.
+
+**Verification:** 23/23 requirements · 8/8 phases `passed` · cross-phase integration 7/7 wired · 3/3 E2E agent flows proven · BoardSmith 159 files / 2081 tests + all 8 games (go-fish 84, cribbage 22, checkers 38, hex 19, polyhedral 24, demo-animation 9, demo-complex-ui 4) + MERC re-vendored 738/7 green. Audit passed (`milestones/v4.4-MILESTONE-AUDIT.md`).
+
+**Tech debt carried:** 2 pre-existing eslint no-shadow errors in `useFlyingElements.ts`; pre-existing tsc test-file looseness in some `src/ui` test files; pending dev-host Debug-toggle panel todo. All predate v4.4, non-blocking.
+
 ## v4.1 Tutorial Primitives (Shipped: 2026-06-30)
 
 **Phases completed:** 8 phases, 35 plans, 61 tasks

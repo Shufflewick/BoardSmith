@@ -1,33 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.4
-milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
-status: milestone_complete
-stopped_at: Milestone complete (Phase 130 was final phase)
-last_updated: 2026-07-02T20:11:22.933Z
-last_activity: 2026-07-02 -- Completed 130-02-PLAN.md (doc-verifier sweep PASS, DOC-05/DOC-06 finalized)
+milestone: none
+milestone_name: none
+status: shipped
+stopped_at: v4.4 milestone complete -- archived + tagged
+last_updated: 2026-07-02T21:30:00.000Z
+last_activity: 2026-07-02 -- v4.4 milestone archived and tagged (Phases 123-130)
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 28
-  completed_plans: 27
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-01)
+See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Milestone complete
+**Current focus:** Shipped -- no active milestone
 
 ## Current Position
 
-Phase: 130
-Plan: Not started
-Status: Milestone complete
+Phase: none
+Plan: none
+Status: shipped / no active milestone
 Last activity: 2026-07-02
 
 ## Milestones
@@ -62,10 +62,11 @@ Last activity: 2026-07-02
 - v4.1 Tutorial Primitives (Checkers) (Phases 104-111) -- shipped 2026-06-30
 - v4.2 Tutorial Primitives — Go Fish & Docs (Phases 112-115) -- shipped 2026-06-30
 - v4.3 Agent-Ready Engine — Introspection, Test Ergonomics & Devtools (Phases 116-122) -- shipped 2026-07-01
+- v4.4 Agent-Ergonomics Gaps (Audit Fixes) (Phases 123-130) -- shipped 2026-07-02
 
 **In Progress:**
 
-- v4.4 Agent-Ergonomics Gaps (Audit Fixes) (Phases 123-130) — planning; roadmap created 2026-07-01.
+None -- no active milestone.
 
 ## Deferred Items
 
@@ -187,14 +188,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T21:00:00.000Z
-Stopped at: Completed 130-02-PLAN.md
+Last session: 2026-07-02T21:30:00.000Z
+Stopped at: v4.4 milestone archived and tagged
 Resume file: None
-Next action: Phase 130 (Documentation) complete -- both plans done (130-01 wrote the v4.4 agent-ergonomics docs, 130-02 doc-verifier swept every claim with zero errors, PASS verdict in 130-VALIDATION.md). All 8 phases (123-130) of the v4.4 milestone are now fully executed. Run `/gsd:verify-phase 130` (or a milestone-level verification) before closing out v4.4.
+Next action: No active milestone. Start a new milestone with `/gsd:new-milestone` (or equivalent) when ready -- candidate next directions are listed in PROJECT.md's Current State section.
 
 ## Operator Next Steps
 
-- Phase 123 (Determinism & Flow Introspection) is fully executed (4/4 plans complete). Run `/gsd:verify-phase 123` to confirm FLOW-01/02/03/04 acceptance criteria before moving on to Phase 124/125.
-- Phase 124 (Hidden-Info Test Utilities) is fully executed (3/3 plans complete) -- `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible`/`diffPlayerViews`/`renderAsSeat`/`assertNoHiddenInfoLeak` all shipped and exported from `boardsmith/testing`. Run `/gsd:verify-phase 124` to confirm VIS-01/02/03 acceptance criteria before starting Phase 125.
-- Phase 125 (Headless Simulation) Plan 01 complete: `createHeadlessSession` is now exported from `boardsmith/session` (SIM-01). Plan 02 remains (per ROADMAP.md) before the phase is done.
-- Phase 127 (Scriptable Dev Host) is fully executed (3/3 plans complete): `getState`/`getLobby`/`debugToggle`/`uiSwitch` host ops (127-01), Node-capable `GameConnection` via injectable `wsCtor` (127-02), and `createDevHostClient` + a browserless real-WS integration test proving the whole DRIVE-01/02/03 flow end-to-end (127-03). Run `/gsd:verify-phase 127` before starting Phase 128 (Animation/Drag-Drop Test Story).
+No active milestone. v4.4 (Phases 123-130) shipped 2026-07-02 -- see `.planning/milestones/v4.4-ROADMAP.md` and `.planning/milestones/v4.4-MILESTONE-AUDIT.md` for full detail.

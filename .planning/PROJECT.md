@@ -8,25 +8,17 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current Milestone: v4.4 Agent-Ergonomics Gaps (Audit Fixes)
+## Current State: v4.4 Shipped — no active milestone
 
-**Goal:** Close every verified gap from the 2026-07-01 agent-ergonomics audit so that everything a game developer's AI agent builds — including visuals, hidden info, and dev-host flows — has an automated way to test, observe, or drive it; then update docs and migrate all example games + MERC so nothing is left broken.
+**Shipped:** 2026-07-02. v4.4 closed every verified gap from the 2026-07-01 agent-ergonomics audit — hidden-info verification, headless simulation, structured errors, a fully scriptable dev host, an animation/drag-drop test story, and flow/debug introspection with enforced determinism — then updated docs and migrated all example games + MERC onto the new surface. 23/23 requirements, 8/8 phases verified passed, audit passed (`milestones/v4.4-MILESTONE-AUDIT.md`).
 
-**Target features:**
-- Hidden-info verification: visibility assertions on TestGame (`isElementVisible`, `getVisibleElements`, view diffing) + DOM-leak test utility for rendered per-seat UIs
-- Headless simulation surface: export `createHeadlessSession`, add `boardsmith simulate` CLI command
-- Structured error surfacing: no `console.error`-only degradation (pick-handler `boardRefs`/`display`, storage saves, runner error codes); dev-host log streaming over WS
-- Dev-host fully scriptable: implement `getState`/`getLobby` WS handlers, Node-capable client SDK, close UI-only gaps (debug toggle, UI switcher ops)
-- Animation/drag-drop test story: instant-mode + trace recording for `useFLIP`/`useFlyingElements`/`useElementAnimation`/`useActionAnimations`, direct composable tests, enforced anchor attributes (fail loud when missing)
-- Flow/debug introspection: human-readable flow-position dump, disabled-choice reasons API, `PendingActionState` inspection, seeded-RNG enforcement (kill `Math.random` fallbacks incl. `playUntilComplete` default)
-- Docs updated to describe the new surface
-- Migration: all `~/BoardSmithGames/` games + MERC (re-vendored) updated, all suites green
+Candidate next directions (from the deferred backlog): v2 CRIB milestone (suppress-Undo-during-tutorial, strategy tutorial track); higher-level game helpers (HELP-02..04: multi-select helper, grid-game move-validation, sprite-sheet rendering); dev tooling (`boardsmith screenshot`, HTTP REST endpoints); the deferred ShufflewickPub host skin (HOST-01..04); repo cleanup (pre-existing no-shadow errors, tsc test-file looseness).
 
-**Key context:** No backward compatibility (pre-users, clean break). v4.3's introspection primitives are the foundation — reuse, don't rebuild. Audit findings verified against code with file:line evidence (see conversation audit, 2026-07-01). Phase numbering continues from 122.
+## Previous: v4.4 Shipped
 
-**Progress:** Phase 123 complete (2026-07-01) — FLOW-01..04 shipped: `describeFlowPosition`/`getFlowDebugInfo`, deterministic-by-default `playUntilComplete` + no `Math.random` fallbacks, `TestGame.getPendingAction`/disabled-choices introspection, devtools + `debug:flow-state` WS parity (incl. a browser-caught SnapshotSessionHost parity fix and a review-caught wire-serialization fix). Phase 124 complete (2026-07-01) — VIS-01..03 shipped: `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible` derived from the final post-`playerView` wire tree, `diffPlayerViews` (structured + describe(), no synthetic-ID correlation), and the async DOM-leak matcher `renderAsSeat`/`assertNoHiddenInfoLeak` with auto-derived markers + positive controls (checker caught a playerView-bypass blocker; review caught an aria-label/alt/title scan gap — both fixed). Phase 125 complete (2026-07-01) — SIM-01..02 shipped: `createHeadlessSession` public on `boardsmith/session` (harness moved, clean break), `boardsmith simulate` CLI (seeded, `--json`, non-zero exit on failure, replay hints) reusing a single extracted `game-runtime.ts` rules loader shared with `boardsmith dev` (live-smoked both). Phase 126 complete (2026-07-02) — ERR-01..04 shipped: structured `warnings[{code,message,source}]` on pick/op results (sanitized, soft-fail visible), runner `ENGINE_ERROR`/`ACTION_EXECUTION_ERROR` codes threaded through OpResult AND the bridge wire (review caught the bridge drop), `onPersistenceError`/`persistenceHealthy` on both hosts (+ fixed a persistence-failure-counted-as-AI-failure bug), and the dev-host `debug:logs` ring-buffer op + DebugPanel Logs tab. Phase 127 complete (2026-07-02) — DRIVE-01..03 shipped: `getState`/`getLobby`/`debugToggle`/`uiSwitch` host ops, Node-capable `GameConnection` (injectable `globalThis.WebSocket`, fail-loud guard, zero new deps), and `createDevHostClient` from `boardsmith/client` proven by a browserless real-WS integration test (review caught 3 SDK promise-lifecycle criticals — fixed with regression tests). Phase 128 complete (2026-07-02) — ANIM-01..03 shipped: Vue-free animation test mode + trace recorder (`{kind,element,from,to}` assertions, flagship autoWatch fly-trace), direct unit tests for all five animation/drag composables, fail-loud missing-anchor throws via new positive-signal `isDevThrowEnabled()` (unlabeled envs never crash), once-per-type anchorAttrs dev-warning threaded through all 8 renderers (review caught 4 criticals incl. two more merged reduced-motion gates and the unlabeled-env crash risk — all fixed). Phase 129 complete (2026-07-02) — MIG-03/04 shipped: all 8 games green + tsc clean (hex anchor fix, tsc-debt closed), flagship adoption (go-fish DOM-leak with dual positive controls + visibility, cribbage visibility, demo-animation trace), MERC re-vendored at exact baseline 738/7; migration caught + fixed a real regression (eager @vue/test-utils import in boardsmith/testing). Phase 130 complete (2026-07-02) — DOC-05/06 shipped: seven docs updated in place (testing/browser-testing/agent-control/custom-ui/migration-guide ## v4.4/llm-overview/README), every claim grep-verified (zero doc errors on independent sweep). ALL 8 PHASES COMPLETE — milestone ready for audit.
+Agent-Ergonomics Gaps (Audit Fixes) — closed every verified gap from the 2026-07-01 agent-ergonomics audit so everything a game developer's AI agent builds has an automated way to test, observe, or drive it. Shipped hidden-info visibility assertions + DOM-leak test utility (VIS), a public `createHeadlessSession` export + `boardsmith simulate` CLI (SIM), structured error surfacing across pick-handler/runner/storage/dev-host (ERR), a fully scriptable dev host with Node-capable client SDK (DRIVE), an animation/drag-drop test story with fail-loud anchor enforcement (ANIM), and flow/debug introspection with seeded-RNG determinism enforcement (FLOW).
 
-Deferred backlog (not this milestone): v2 CRIB milestone (suppress-Undo-during-tutorial, strategy tutorial track); repo cleanup (3 pre-existing no-shadow errors, tsc test-file looseness, 0-indexed `performAction` docstring in `src/session/index.ts`); the deferred ShufflewickPub host skin (HOST-01..04).
+**v4.4 Delivered:** Phases 123–130 (23/23 requirements — FLOW, VIS, SIM, ERR, DRIVE, ANIM, MIG, DOC). Reuse-not-rebuild on v4.3's introspection primitives throughout. Verified: BoardSmith 159 files / 2081 tests + all 8 example games + MERC re-vendored (738) green; cross-phase integration 7/7 wired (1 gap found+closed during audit); audit passed (`milestones/v4.4-MILESTONE-AUDIT.md`). Adversarial catches: SnapshotSessionHost dev-host parity gap, live mutable PendingActionState on the wire, a `playerView`-bypass blocker in visibility derivation, an aria-label/alt/title leak-scan gap, a dropped bridge `errorCode`, 3 SDK promise-lifecycle criticals, an unlabeled-env crash risk in fail-loud throws, and an eager `@vue/test-utils` import regression caught during MERC re-vendor. Tech debt carried: 2 pre-existing no-shadow errors in `useFlyingElements.ts`, tsc test-file looseness, a pending dev-host Debug-toggle panel todo (all predate v4.4).
 
 ## Previous: v4.3 Shipped
 
@@ -256,10 +248,17 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 - ✓ WCAG 2.2 AA — shared `useSelectable()` keyboard board, live regions, focus-trap dialogs, non-color cues, contrast/target sweep — v4.0
 - ✓ Dev/debug parity — Slate DebugPanel, collapse-to-tab, seat switcher, Table-setup, two-click New-Game confirm, material layer — v4.0
 - ✓ Cross-repo verified — all 8 games + MERC build/test/play on the new Slate chrome — v4.0
+- ✓ Determinism + flow introspection — no `Math.random` fallbacks, deterministic `playUntilComplete`, `describeFlowPosition`/`getFlowDebugInfo`, disabled-choice reasons, `PendingActionState` introspection — v4.4
+- ✓ Hidden-info test utilities — `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible`, `diffPlayerViews`, DOM-leak matcher — v4.4
+- ✓ Headless simulation — public `createHeadlessSession` export, seeded `boardsmith simulate` CLI — v4.4
+- ✓ Structured error surfacing — pick/op result warnings, runner `errorCode`, observable storage-save failures, dev-host `debug:logs` — v4.4
+- ✓ Scriptable dev host — `getState`/`getLobby`/`debugToggle`/`uiSwitch` WS ops, Node-capable `GameConnection`, `createDevHostClient` — v4.4
+- ✓ Animation/drag-drop test story — Vue-free test-mode trace recorder, direct composable unit tests, fail-loud missing-anchor throws — v4.4
+- ✓ Migration + docs — all 8 games + MERC re-vendored green, seven docs updated + grep-verified — v4.4
 
 ### Active
 
-**v4.4 Agent-Ergonomics Gaps (Audit Fixes)** — see REQUIREMENTS.md (in definition). Fix all verified audit findings (hidden-info verification, headless simulation, structured errors, scriptable dev-host, animation test story, flow introspection), update docs, migrate all games + MERC.
+None — no active milestone. See Current State above for candidate next directions.
 
 Carried forward (deferred from v4.0):
 - ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
@@ -390,4 +389,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-01 — started milestone v4.4 Agent-Ergonomics Gaps (Audit Fixes)*
+*Last updated: 2026-07-02 — shipped milestone v4.4 Agent-Ergonomics Gaps (Audit Fixes)*
