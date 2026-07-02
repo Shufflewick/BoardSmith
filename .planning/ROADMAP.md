@@ -93,7 +93,11 @@
   1. An agent can send `getState` / `getLobby` WS ops and receive current game state and lobby info from the dev host.
   2. The `GameConnection` client SDK connects and drives a game session from a Node script — no browser-only `new WebSocket()` global required.
   3. The debug-panel toggle and UI switcher are triggerable via WS ops, closing the remaining UI-only dev-host controls.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 127-01-PLAN.md — dev-host WS ops: getState/getLobby queries + debugToggle/uiSwitch relay (host + DevHost.vue page side)
+- [ ] 127-02-PLAN.md — GameConnection Node-capability (injectable globalThis.WebSocket + fail-loud guard)
+- [ ] 127-03-PLAN.md — createDevHostClient + browserless Node integration test (phase acceptance proof)
 
 #### Phase 128: Animation & Drag-Drop Test Story
 **Goal**: Animation and drag-drop behavior is testable headlessly via an instant/traced test mode and direct composable tests, and fails loud instead of silently no-op'ing on misconfiguration.
