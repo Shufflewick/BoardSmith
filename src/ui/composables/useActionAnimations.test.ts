@@ -48,6 +48,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
   return {
     ...actual,
     isDevMode: () => (devModeState.override !== null ? devModeState.override : actual.isDevMode()),
+    isDevThrowEnabled: () => (devModeState.override !== null ? devModeState.override : actual.isDevThrowEnabled()),
   };
 });
 
@@ -191,6 +192,49 @@ describe('useActionAnimations', () => {
         expect(destEl.hasAttribute('data-action-animating')).toBe(false);
       } finally {
         vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('test mode + missing destination (CR-03)', () => {
+    it('surfaces an error in dev mode for a typo\'d destination selector even when test mode is enabled', async () => {
+      devModeState.override = true;
+
+      // The throw happens inside Vue's async watch callback (same mechanism
+      // as the non-test-mode "surfaces an error in dev mode" test below) —
+      // capture it via unhandledRejection rather than an awaitable promise.
+      const rejections: unknown[] = [];
+      const onUnhandled = (reason: unknown) => rejections.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        makeElement('data-card-id', '42');
+        // No element matching the destination selector — a typo'd/misconfigured
+        // destinationSelector, the canonical authoring bug ANIM-03 exists to
+        // catch. Without CR-03's fix, enabling test mode would record a
+        // "successful" {kind:'action'} trace instead of ever reaching this
+        // fail-loud check.
+
+        const gameViewRef = ref<GameElement | null>(null);
+        const { onBeforeAutoExecute } = useActionAnimations({
+          gameView: gameViewRef,
+          animations: [moveConfig],
+        });
+
+        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+
+        enableAnimationTestMode();
+        gameViewRef.value = fakeGameView();
+        await nextTick();
+        await waitFor(() => rejections.length > 0);
+
+        expect(rejections).toHaveLength(1);
+        expect(String((rejections[0] as Error).message)).toMatch(/Could not find destination element/i);
+        // No trace should have been recorded — the fail-loud throw fired
+        // before the test-mode trace branch was ever reached.
+        expect(getAnimationTrace()).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
       }
     });
   });

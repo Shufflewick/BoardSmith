@@ -107,7 +107,7 @@
 import { watch, type Ref, type ComputedRef } from 'vue';
 import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
-import { isDevMode } from '../../utils/dev.js';
+import { isDevThrowEnabled } from '../../utils/dev.js';
 import type { GameElement } from '../types.js';
 
 /**
@@ -392,7 +392,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       const msg =
         `[useActionAnimations] Could not find element for selector "${selector}". ` +
         `Action: ${actionName}, Args: ${JSON.stringify(args)}`;
-      if (isDevMode()) {
+      if (isDevThrowEnabled()) {
         throw new Error(msg);
       } else {
         console.error(msg);
@@ -487,6 +487,30 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
         destinationElement = document.querySelector(destSelectorStr);
       }
 
+      // Fail-loud destination check MUST run before the test-mode branch
+      // below: a typo'd/misconfigured destinationSelector is the canonical
+      // authoring bug ANIM-03 exists to catch, and a game's animation test
+      // suite (precisely where enableAnimationTestMode() is used) must not
+      // let it pass silently as a "successful" trace. Checking test mode
+      // first would record {kind:'action', to: <bad selector>} and return
+      // before this check ever ran — defeating the fail-loud guarantee for
+      // the exact scenario it targets.
+      if (!destinationElement) {
+        const selectorDesc =
+          typeof config.destinationSelector === 'function'
+            ? '(custom function)'
+            : config.destinationSelector;
+        const msg =
+          `[useActionAnimations] Could not find destination element. ` +
+          `Selector: ${selectorDesc}, Args: ${JSON.stringify(args)}`;
+        if (isDevThrowEnabled()) {
+          throw new Error(msg);
+        } else {
+          console.error(msg);
+        }
+        return;
+      }
+
       // Test mode: record one {kind:'action'} trace using our OWN
       // interpolated from/to selector strings and return WITHOUT delegating
       // to fly() - useFlyingElements has its own independent 'fly' trace
@@ -502,22 +526,6 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
           to: destSelectorStr,
           meta: { action: config.action, args },
         });
-        return;
-      }
-
-      if (!destinationElement) {
-        const selectorDesc =
-          typeof config.destinationSelector === 'function'
-            ? '(custom function)'
-            : config.destinationSelector;
-        const msg =
-          `[useActionAnimations] Could not find destination element. ` +
-          `Selector: ${selectorDesc}, Args: ${JSON.stringify(args)}`;
-        if (isDevMode()) {
-          throw new Error(msg);
-        } else {
-          console.error(msg);
-        }
         return;
       }
 
