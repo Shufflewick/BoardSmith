@@ -189,7 +189,7 @@ Plans:
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
 | 128. Animation & Drag-Drop Test Story | 6/6 | Complete    | 2026-07-02 |
 | 129. Migration (Games + MERC) | 3/3 | Complete    | 2026-07-02 |
-| 130. Documentation | 2/2 | Complete   | 2026-07-02 |
+| 130. Documentation | 2/2 | Complete    | 2026-07-02 |
 
 ### Shipped milestones
 
