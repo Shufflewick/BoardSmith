@@ -395,3 +395,21 @@ describe('renderAsSeat / assertNoHiddenInfoLeak — WR-03: actionable error outs
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// IN-01: an allowlist predicate broad enough to suppress EVERY forbidden
+// marker makes the assertion a silent no-op -- fail loud instead.
+// ---------------------------------------------------------------------------
+
+describe('assertNoHiddenInfoLeak — IN-01: over-broad allowlist that masks every marker fails loud', () => {
+  it('throws an actionable error when the allow predicate filters out all forbidden markers', async () => {
+    const tg = makeCardLeakGame();
+
+    await expect(
+      assertNoHiddenInfoLeak(tg, 2, {
+        // Deliberately over-broad: matches everything, masking every marker.
+        allow: () => true,
+      }),
+    ).rejects.toThrow(/allowlist masked every marker/i);
+  });
+});

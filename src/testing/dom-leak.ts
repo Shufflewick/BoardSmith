@@ -420,6 +420,19 @@ export async function assertNoHiddenInfoLeak<G extends Game>(
       )
     : markers;
 
+  // IN-01: a matcher that can't fail is worse than none. If there WERE
+  // forbidden markers to check but the caller's allowlist predicate
+  // suppressed every single one, the predicate is over-broad -- fail loud
+  // rather than silently passing with zero real coverage.
+  if (markers.length > 0 && activeMarkers.length === 0) {
+    throw new Error(
+      `assertNoHiddenInfoLeak: the \`allow\` predicate filtered out all ${markers.length} ` +
+        `forbidden marker(s) for seat ${seat} -- the allowlist masked every marker, making ` +
+        'this assertion a no-op. Scope the predicate to the exact elementId/attribute pair ' +
+        'you intend to allowlist, not a condition broad enough to match every marker.',
+    );
+  }
+
   if (activeMarkers.length === 0) return;
 
   const wrapper = await renderAsSeat(testGame, seat, options.gameViewOverride);
