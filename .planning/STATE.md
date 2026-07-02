@@ -4,13 +4,13 @@ milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
 stopped_at: Completed 126-02-PLAN.md
-last_updated: "2026-07-02T05:15:50.953Z"
+last_updated: "2026-07-02T05:26:38.754Z"
 last_activity: 2026-07-02
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 38
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 126
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-02
 
@@ -148,6 +148,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 125]: 125-02: loadGameDefinition re-exports only gameDefinition (no executeOp); simulate drives games via simulateRandomGames/createTestGame, not dev.ts's stateless executeOp path — Keeps the shared rules loader honest about what each caller needs; avoids pulling dev's WS-executor machinery into the CLI simulate path
 - [Phase 126]: 126-01: errorCode set at source only (runner.ts, pick-handler.ts/pending-action-manager.ts); OpResult threads it through, never fabricated for protocol-only failures
 - [Phase 126]: 126-02: #persistSafely wraps #save()/apply() as the single funnel (not each caller individually), automatically protecting PendingActionManager's save callback without touching that file
+- [Phase ?]: 126-03: boardRef()'s warning code is CHOICES_ERROR per the plan's reserved taxonomy; PickStepResult.warnings? added in pending-action-manager.ts as necessary plumbing for handleSelectionStep forwarding
 
 ### Highest-Risk Items (v4.4)
 
@@ -169,7 +170,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T05:15:50.945Z
+Last session: 2026-07-02T05:26:34.839Z
 Stopped at: Completed 126-02-PLAN.md
 Resume file: None
 Next action: Execute 125-02-PLAN.md (headless simulation, remaining plan). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending).
