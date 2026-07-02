@@ -112,7 +112,32 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       },
       { once: true },
     );
+    socket.addEventListener(
+      'close',
+      () => {
+        reject(new Error(`createDevHostClient: connection to '${url}' closed before opening.`));
+      },
+      { once: true },
+    );
   });
+  // Prevent an unhandled-rejection crash for callers who rely on send()'s
+  // synchronous not-open guard instead of awaiting/catching `opened` directly
+  // (Node marks a promise "handled" once ANY handler is attached, regardless
+  // of how many — external callers can still await/catch the same promise).
+  opened.catch(() => {});
+
+  socket.addEventListener(
+    'close',
+    () => {
+      const closeErr = new Error(`createDevHostClient: connection to '${url}' closed.`);
+      for (const entry of pending.values()) {
+        clearTimeout(entry.timeout);
+        entry.reject(closeErr);
+      }
+      pending.clear();
+    },
+    { once: true },
+  );
 
   socket.addEventListener('message', (event: MessageEvent) => {
     let msg: DevHostInboundMessage;
