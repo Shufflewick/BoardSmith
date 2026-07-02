@@ -4,14 +4,14 @@ milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
 stopped_at: Completed 128-05-PLAN.md
-last_updated: "2026-07-02T17:10:18.768Z"
+last_updated: "2026-07-02T17:20:53.555Z"
 last_activity: 2026-07-02
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 22
-  completed_plans: 21
-  percent: 63
+  completed_plans: 22
+  percent: 75
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 128
-Plan: 5 of 06 complete
+Plan: 6 of 06 complete
 Status: Ready to execute
 Last activity: 2026-07-02
 
@@ -158,6 +158,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 128]: 128-03: reportMissingAnchor() shared by capture() and animate()'s first-resolution missing-anchor throw sites; test-mode trace from/to falls back to the handler's selector string when the container has no anchor attribute
 - [Phase 128]: 128-04: container's own data-element-id (or undefined) used for trace from/to per discretion note — no containerName param added to public API
 - [Phase 128]: 128-05: FlyConfig gained from/to/element fields so autoWatch threads container names + engine element id into the trace, distinct from FlyConfig.id (internal animation-bookkeeping key, generated as auto-fly-{id}-{timestamp} for autoWatch)
+- [Phase 128]: 128-06: Test-mode trace recorded at useActionAnimations' own level (own interpolated selector strings), returns early without delegating to fly() - avoids double-recording with useFlyingElements' independent 'fly' trace branch
+- [Phase 128]: 128-06: Fake-timer real path requires toFake including requestAnimationFrame/cancelAnimationFrame/performance/Date since the composable's real path chains through useFlyingElements.fly()'s RAF+performance.now() timing
 
 ### Highest-Risk Items (v4.4)
 
@@ -179,7 +181,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T17:10:18.759Z
+Last session: 2026-07-02T17:19:19.150Z
 Stopped at: Completed 128-05-PLAN.md
 Resume file: None
 Next action: Phase 127 (Scriptable Dev Host) is fully complete (Plans 01-03, DRIVE-01/02/03). Run `/gsd:verify-phase 127`, then begin Phase 128 (Animation/Drag-Drop Test Story) per ROADMAP.md. Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) and `/gsd:verify-phase 125`/`126` as applicable.

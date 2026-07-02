@@ -141,7 +141,7 @@ Plans:
 - [x] 128-03-PLAN.md — useFLIP test-mode trace branch + fail-loud anchor throw + unit tests (ANIM-01/02/03)
 - [x] 128-04-PLAN.md — useElementAnimation test-mode trace branch + throw + unit tests (ANIM-01/02/03)
 - [x] 128-05-PLAN.md — useFlyingElements test-mode trace (autoWatch from/to) + first-resolution throw + unit tests (ANIM-01/02/03)
-- [ ] 128-06-PLAN.md — useActionAnimations trace (own selectors) + warn→dev-throw upgrade + unit tests (ANIM-01/02/03)
+- [x] 128-06-PLAN.md — useActionAnimations trace (own selectors) + warn→dev-throw upgrade + unit tests (ANIM-01/02/03)
 **UI hint**: yes
 
 #### Phase 129: Migration (Games + MERC)
@@ -182,7 +182,7 @@ Plans:
 | 125. Headless Simulation | 2/2 | Complete    | 2026-07-02 |
 | 126. Structured Error Surfacing | 4/4 | Complete    | 2026-07-02 |
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
-| 128. Animation & Drag-Drop Test Story | 5/6 | In Progress|  |
+| 128. Animation & Drag-Drop Test Story | 6/6 | Complete   | 2026-07-02 |
 | 129. Migration (Games + MERC) | 0/TBD | Not started | - |
 | 130. Documentation | 0/TBD | Not started | - |
 
