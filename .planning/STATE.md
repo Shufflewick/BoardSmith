@@ -4,13 +4,13 @@ milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
 stopped_at: Completed 127-03-PLAN.md
-last_updated: "2026-07-02T16:42:00.967Z"
+last_updated: "2026-07-02T16:51:18.115Z"
 last_activity: 2026-07-02
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 22
-  completed_plans: 18
+  completed_plans: 19
   percent: 63
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 128
-Plan: 2 of 06 complete
+Plan: 3 of 06 complete
 Status: Ready to execute
 Last activity: 2026-07-02
 
@@ -155,6 +155,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 127]: 127-03: createDevHostClient kept as a plain closure (not a class extending/wrapping GameConnection), reusing only resolveWsCtor; the integration test's own WS wiring assigns clientId at connection (not gated behind a first 'hello' frame like dev.ts) so it can prove genuine getLobby-in-lobby-phase behavior — MultiplayerHost auto-starts unconditionally on the very first hello system-wide, making the transient lobby phase otherwise unobservable over a real socket; MultiplayerHost.handleMessage itself is still exercised identically to production. Phase 127 (Scriptable Dev Host) is now fully complete — DRIVE-01/02/03 all shipped.
 - [Phase 128]: 128-01: recordTrace early-returns when disabled (pit-of-success no-op guard); AnimationTrace.from/to hold container/anchor identities only, never hidden-info payloads
 - [Phase ?]: 128-02: anchorAttrs dev-warning keys by ref.name (ElementRef has no className field); useDragDrop tests use Parent/Child provide+inject pairing
+- [Phase 128]: 128-03: reportMissingAnchor() shared by capture() and animate()'s first-resolution missing-anchor throw sites; test-mode trace from/to falls back to the handler's selector string when the container has no anchor attribute
 
 ### Highest-Risk Items (v4.4)
 
@@ -176,7 +177,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T16:40:41.071Z
+Last session: 2026-07-02T16:50:03.178Z
 Stopped at: Completed 127-03-PLAN.md
 Resume file: None
 Next action: Phase 127 (Scriptable Dev Host) is fully complete (Plans 01-03, DRIVE-01/02/03). Run `/gsd:verify-phase 127`, then begin Phase 128 (Animation/Drag-Drop Test Story) per ROADMAP.md. Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) and `/gsd:verify-phase 125`/`126` as applicable.
