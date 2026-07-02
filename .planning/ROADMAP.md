@@ -174,7 +174,9 @@ Plans:
   3. Documentation states the determinism guarantee (seeded runs are reproducible, no `Math.random` fallbacks remain).
   4. `BREAKING.md` lists every removed/changed API introduced in v4.4 with migration guidance.
 
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 130-01-PLAN.md — Write/update v4.4 docs in place (testing guide: VIS/ANIM/SIM/FLOW; agent-control: DRIVE ops + createDevHostClient + ERR; custom-ui: anchorAttrs/fail-loud; migration-guide v4.4 breaking section; llm-overview determinism + discoverability; README index)
+- [ ] 130-02-PLAN.md — Doc-verifier pass: extract every claimed symbol/command, grep-verify against src/, run cheap doc commands, fix errors, write 130-VALIDATION.md
 
 ### Progress
 
