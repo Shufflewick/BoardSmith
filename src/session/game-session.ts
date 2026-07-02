@@ -2008,6 +2008,16 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * failed; recovers to `true` on the very next successful save. Mirrors the
    * `#aiConsecutiveFailures >= 3` circuit-breaker shape so both subsystems
    * escalate at the same threshold.
+   *
+   * Best-effort under concurrent callers (WR-01): `#persistenceConsecutiveFailures`
+   * is incremented/reset around an unguarded `await op()` with no serialization
+   * queue, so if two `#persistSafely` calls are ever in flight concurrently for
+   * the same session, a failing save's increment can be raced by an overlapping
+   * successful save's reset (or vice versa). Every known call site (create()'s
+   * initial save, #save()'s direct-action/tutorial/AI-turn paths) awaits
+   * `#persistSafely` sequentially, so this is a documented limitation rather
+   * than an observed bug — not exact under a hypothetical host that overlaps
+   * saves for the same session.
    */
   get persistenceHealthy(): boolean {
     return this.#persistenceConsecutiveFailures < PERSISTENCE_UNHEALTHY_THRESHOLD;
@@ -2026,6 +2036,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * through, so a storage outage is always observable and never misclassified
    * as an unrelated failure (e.g. the AI circuit breaker — Pitfall 2 / T-126-04).
    */
+  // NOTE (WR-01): no serialization guard around the counter increment/reset —
+  // see the `persistenceHealthy` doc comment for the concurrency caveat.
   async #persistSafely(op: () => Promise<void>): Promise<void> {
     try {
       await op();

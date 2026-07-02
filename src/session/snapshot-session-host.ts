@@ -148,6 +148,15 @@ export class SnapshotSessionHost {
    * calls have failed; recovers to `true` on the very next success. Stays
    * `true` forever when no `persist` adapter is configured (the dev host's
    * default — apply()'s guard makes persistSafely a no-op in that case).
+   *
+   * Best-effort under concurrent callers (WR-01): `persistenceConsecutiveFailures`
+   * is incremented/reset around an unguarded `await op()` with no serialization
+   * queue, so if two `persistSafely` calls are ever in flight concurrently for the
+   * same host, a failing save's increment can be raced by an overlapping
+   * successful save's reset (or vice versa). In practice every known call site
+   * awaits `persistSafely` sequentially within a single op, so this is a
+   * documented limitation rather than an observed bug — not exact under a
+   * hypothetical caller that overlaps saves for the same session.
    */
   get persistenceHealthy(): boolean {
     return this.persistenceConsecutiveFailures < PERSISTENCE_UNHEALTHY_THRESHOLD;
@@ -162,6 +171,8 @@ export class SnapshotSessionHost {
    * throwing hook can never crash gameplay — T-126-06). No-ops entirely
    * when no persist adapter is configured.
    */
+  // NOTE (WR-01): no serialization guard around the counter increment/reset —
+  // see the `persistenceHealthy` doc comment for the concurrency caveat.
   private async persistSafely(op: () => void | Promise<void>): Promise<void> {
     try {
       await op();
