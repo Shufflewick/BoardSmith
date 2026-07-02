@@ -8,6 +8,21 @@ export type { Op, OpResult } from './stateless-ops.js';
 
 const MAX_AI_MOVES = 500;
 
+/**
+ * Consecutive persist() failures before `persistenceHealthy` flips false
+ * (ERR-03). Mirrors GameSession's `PERSISTENCE_UNHEALTHY_THRESHOLD` so both
+ * hosts escalate at the same count — this class duplicates the shape rather
+ * than sharing a base class (this codebase has no shared host base class;
+ * see serializeFlowDebugInfo-as-function for the same established pattern).
+ */
+const PERSISTENCE_UNHEALTHY_THRESHOLD = 3;
+
+/** A single captured persistence failure. Never carries a stack trace or file paths (T-126-05). */
+export interface PersistenceErrorEntry {
+  message: string;
+  timestamp: number;
+}
+
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
@@ -19,6 +34,18 @@ export interface SnapshotSessionAdapters {
    */
   teachingDisabled?: boolean;
   persist?: (state: { snapshot: unknown; pendingStates: Record<string, Record<string, unknown>> }) => void | Promise<void>;
+  /**
+   * Injectable hook invoked whenever `persist()` fails (ERR-03). Never
+   * rethrown — a throwing hook is swallowed and echoed via `console.error`
+   * so it can never crash gameplay (T-126-06). Symmetric with
+   * `GameSessionOptions.onPersistenceError`.
+   *
+   * @param error Sanitized `{message, timestamp}` — never a stack trace (T-126-05).
+   * @param consecutiveFailures Running count of consecutive persist failures.
+   * @param healthy Current `persistenceHealthy` value, so consumers can
+   *   escalate severity without recomputing it themselves.
+   */
+  onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
   /**
    * Optional narrator hook for game authors.
    *
@@ -45,6 +72,10 @@ export class SnapshotSessionHost {
   winners: number[] = [];
   private pendingStates = new Map<number, Record<string, unknown>>();
   private aiPumpRunning = false;
+
+  // Persistence health (ERR-03) — symmetric with GameSession's persistence surface.
+  private lastPersistenceErrorEntry: PersistenceErrorEntry | null = null;
+  private persistenceConsecutiveFailures = 0;
 
   // Transient teaching state — persists between ops, merged into every broadcast
   // post-buildPlayerState (mirrors GameSession.broadcast() injection pattern).
@@ -103,6 +134,57 @@ export class SnapshotSessionHost {
   }
 
   constructor(private readonly adapters: SnapshotSessionAdapters) {}
+
+  /**
+   * Most recent sanitized persist() failure (ERR-03), or `null` if no persist
+   * has ever failed. Never contains a stack trace or file paths (T-126-05).
+   */
+  get lastPersistenceError(): PersistenceErrorEntry | null {
+    return this.lastPersistenceErrorEntry;
+  }
+
+  /**
+   * `false` once `PERSISTENCE_UNHEALTHY_THRESHOLD` consecutive persist()
+   * calls have failed; recovers to `true` on the very next success. Stays
+   * `true` forever when no `persist` adapter is configured (the dev host's
+   * default — apply()'s guard makes persistSafely a no-op in that case).
+   */
+  get persistenceHealthy(): boolean {
+    return this.persistenceConsecutiveFailures < PERSISTENCE_UNHEALTHY_THRESHOLD;
+  }
+
+  /**
+   * Runs `adapters.persist()` without ever letting it crash the caller
+   * (ERR-03 / T-126-03) — the counterpart to GameSession's #persistSafely.
+   * On success, resets the consecutive-failure counter. On failure,
+   * increments it, records a sanitized lastPersistenceError, echoes via
+   * console.error, and invokes onPersistenceError (itself guarded so a
+   * throwing hook can never crash gameplay — T-126-06). No-ops entirely
+   * when no persist adapter is configured.
+   */
+  private async persistSafely(op: () => void | Promise<void>): Promise<void> {
+    try {
+      await op();
+      this.persistenceConsecutiveFailures = 0;
+    } catch (error) {
+      this.persistenceConsecutiveFailures++;
+      const entry: PersistenceErrorEntry = {
+        message: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+      };
+      this.lastPersistenceErrorEntry = entry;
+      console.error(
+        `[SnapshotSessionHost] persist failed (${this.persistenceConsecutiveFailures} consecutive): ${entry.message}`
+      );
+      try {
+        this.adapters.onPersistenceError?.(entry, this.persistenceConsecutiveFailures, this.persistenceHealthy);
+      } catch (hookError) {
+        console.error(
+          `[SnapshotSessionHost] onPersistenceError hook threw: ${hookError instanceof Error ? hookError.message : String(hookError)}`
+        );
+      }
+    }
+  }
 
   /**
    * Merge transient teaching state — plus the flow-debug/pending-action
@@ -194,7 +276,14 @@ export class SnapshotSessionHost {
     this.lastPlayerViews = res.playerViews;
     const mergedViews = this.mergeTransientState(res.playerViews);
     this.adapters.broadcast(mergedViews, { isComplete: res.isComplete, winners: res.winners });
-    await this.adapters.persist?.({ snapshot: this.snapshot, pendingStates: Object.fromEntries(this.pendingStates) });
+    // Routed through persistSafely (ERR-03) — a persist() failure must never
+    // throw out of apply() and must be observable via onPersistenceError /
+    // lastPersistenceError / persistenceHealthy. No-op when no persist
+    // adapter is configured (the dev host's default today).
+    if (this.adapters.persist) {
+      const persist = this.adapters.persist;
+      await this.persistSafely(() => persist({ snapshot: this.snapshot, pendingStates: Object.fromEntries(this.pendingStates) }));
+    }
   }
 
   async start(): Promise<void> {
