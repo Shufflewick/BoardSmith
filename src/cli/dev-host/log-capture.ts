@@ -42,9 +42,14 @@ export function record(severity: LogEntry['severity'], message: string, source: 
   }
 }
 
-/** Snapshot of all currently captured entries, oldest first. */
+/**
+ * Snapshot of all currently captured entries, oldest first. Returns a shallow
+ * copy — the module-level array itself keeps mutating (FIFO eviction, new
+ * `record()` calls) as long as the dev host runs, so a caller holding this
+ * reference across an `await` must not observe that churn (WR-02).
+ */
 export function getEntries(): readonly LogEntry[] {
-  return entries;
+  return [...entries];
 }
 
 /** Test-only helper to reset the module-level buffer between test cases. */
