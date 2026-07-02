@@ -4,13 +4,13 @@ milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
 stopped_at: Completed 123-04-PLAN.md
-last_updated: "2026-07-02T02:29:33.937Z"
+last_updated: "2026-07-02T02:34:50.610Z"
 last_activity: 2026-07-02 -- Phase 124 planning complete
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
   percent: 13
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 124
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-02 -- Phase 124 planning complete
+Plan: 01 complete, 02-03 remaining
+Status: Executing
+Last activity: 2026-07-01 -- 124-01-PLAN.md executed (VIS-01 shipped)
 
 ## Milestones
 
@@ -140,6 +140,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 123]: FlowDebugInfo (Plan 01) was never exported from flow/index.ts or engine/index.ts — fixed as a Rule 3 blocker before it could be imported in runner.ts/test-game.ts
 - [Phase 123]: TestGame.getActionSpaceWithChoices(seat) composes existing getActionSpace()+getSelectionChoices() rather than a new disabled-choice evaluator; pick-handler.ts left untouched
 - [Phase 123]: Gap-fix (ac1261e): boardsmith dev runs on SnapshotSessionHost, not GameSession -- extracted serializeFlowDebugInfo() as a shared helper so broadcast, debug op, and devtools never diverge in shape
+- [Phase 124]: VIS-01: visibility judged on the FINAL post-playerView tree (game.toJSONForPlayer(seat)), not element.isVisibleTo alone; isVisibleTo retained only as a fast path when GameClass.playerView is undefined (provably safe -- no post-transform runs in that case)
+- [Phase 124]: assertHidden/assertVisible call isElementVisible (not element.isVisibleTo directly) so assertion failures are judged on the same final-tree derivation as VIS-01; surviving-attribute-keys in assertHidden's message come from the final tree's node, not raw unfiltered element JSON
 
 ### Highest-Risk Items (v4.4)
 
@@ -161,11 +163,12 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-01T22:55:31.828Z
-Stopped at: Completed 123-04-PLAN.md
+Last session: 2026-07-01T21:34:12.000Z
+Stopped at: Completed 124-01-PLAN.md
 Resume file: None
-Next action: `/gsd:verify-phase 123`
+Next action: Execute 124-02-PLAN.md (or `/gsd:verify-phase 123` still pending)
 
 ## Operator Next Steps
 
 - Phase 123 (Determinism & Flow Introspection) is fully executed (4/4 plans complete). Run `/gsd:verify-phase 123` to confirm FLOW-01/02/03/04 acceptance criteria before moving on to Phase 124/125.
+- Phase 124 (Hidden-Info Test Utilities): Plan 01 (VIS-01) complete -- `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible` shipped and exported from `boardsmith/testing`. Plans 02-03 (VIS-02 view diffing, VIS-03 DOM-leak utility) remain.

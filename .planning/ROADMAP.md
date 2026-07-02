@@ -51,7 +51,7 @@
   2. A developer can diff what two seats see via a `diffPlayerViews`-style utility and get exactly which elements/fields differ.
   3. A developer can run a DOM-leak test utility that renders the game UI as seat N and fails when hidden-element identity attributes (rank/suit/face) appear in the rendered markup.
 **Plans**: 3 plans
-- [ ] 124-01-PLAN.md — VIS-01: isElementVisible/getVisibleElements on TestGame + assertHidden/assertVisible, wrapping the engine isVisibleTo primitive [wave 1]
+- [x] 124-01-PLAN.md — VIS-01: isElementVisible/getVisibleElements on TestGame + assertHidden/assertVisible, wrapping the engine isVisibleTo primitive [wave 1]
 - [ ] 124-02-PLAN.md — VIS-02: diffPlayerViews structured+describe() view diff, visibility-scoped to sidestep anonymized-id noise [wave 2]
 - [ ] 124-03-PLAN.md — VIS-03: headless DOM-leak matcher (mount AutoUI as seat N), auto-derived forbidden markers + proven positive control [wave 3]
 
@@ -129,7 +129,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
 | 123. Determinism & Flow Introspection | 4/4 | Complete    | 2026-07-01 |
-| 124. Hidden-Info Test Utilities | 0/TBD | Not started | - |
+| 124. Hidden-Info Test Utilities | 1/3 | In Progress|  |
 | 125. Headless Simulation | 0/TBD | Not started | - |
 | 126. Structured Error Surfacing | 0/TBD | Not started | - |
 | 127. Scriptable Dev Host | 0/TBD | Not started | - |

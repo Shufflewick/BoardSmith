@@ -9,7 +9,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 ### Hidden-Info Verification (VIS)
 
-- [ ] **VIS-01**: Developer can assert per-seat element visibility in tests via `isElementVisible(element, seat)` / `getVisibleElements(seat)` on TestGame (no hand-parsing ElementJSON)
+- [x] **VIS-01**: Developer can assert per-seat element visibility in tests via `isElementVisible(element, seat)` / `getVisibleElements(seat)` on TestGame (no hand-parsing ElementJSON)
 - [ ] **VIS-02**: Developer can diff what two seats see (`diffPlayerViews`-style utility) to verify hidden information stays hidden
 - [ ] **VIS-03**: Developer can run a DOM-leak test utility that renders the game UI as seat N and fails when hidden-element identity (rank/suit/face attributes) appears in the rendered DOM
 
@@ -89,7 +89,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLOW-02 | Phase 123 | Complete |
 | FLOW-03 | Phase 123 | Complete |
 | FLOW-04 | Phase 123 | Complete |
-| VIS-01 | Phase 124 | Pending |
+| VIS-01 | Phase 124 | Complete |
 | VIS-02 | Phase 124 | Pending |
 | VIS-03 | Phase 124 | Pending |
 | SIM-01 | Phase 125 | Pending |
