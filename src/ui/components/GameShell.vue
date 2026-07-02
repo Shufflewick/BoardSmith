@@ -47,6 +47,7 @@ import { useBoardActionBridge } from '../composables/useBoardActionBridge';
 import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
 import { useZoomPreview } from '../composables/useZoomPreview';
+import { useAutoZoom } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
 import type { ActionMetadata } from '../composables/useActionControllerTypes';
@@ -250,7 +251,6 @@ const debugExpanded = ref(false);
 // Ref to the mounted GameHistory (lives in the players panel). GameShell mediates
 // Copy/Clear from DebugPanel without duplicating message state.
 const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
-const zoomLevel = ref(1.0);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 
 // IA-06: Sidebar rail state. Default expanded; collapses to --bsg-rail on compact phones.
@@ -278,6 +278,19 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
 const dockHeight = ref<number>(68);
 let dockResizeObserver: ResizeObserver | null = null;
 const actionbarEl = ref<HTMLElement | null>(null);
+
+// Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
+// the board region (clamped to the 0.5–2.0 slider range) and then left alone —
+// mid-game content growth and window resizes never move the zoom. The user
+// adjusts with the slider, or re-fits on demand via the header percent button
+// / menu "Fit".
+const boardregionEl = ref<HTMLElement | null>(null);
+const zoomContainerEl = ref<HTMLElement | null>(null);
+const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
+  boardEl: zoomContainerEl,
+  regionEl: boardregionEl,
+  dockHeight,
+});
 
 // Connection health (IA-01): driven by postMessage heartbeat in platform mode.
 // Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a
@@ -1884,8 +1897,10 @@ if ((import.meta as any).hot) {
         :game-title="displayName || gameType"
         :game-id="gameId"
         :connection-status="connectionStatus"
-        v-model:zoom="zoomLevel"
+        :zoom="zoomLevel"
         v-model:auto-end-turn="autoEndTurn"
+        @update:zoom="setZoom"
+        @fit-zoom="fitZoom"
         @menu-item-click="handleMenuItemClick"
       />
 
@@ -1978,7 +1993,7 @@ if ((import.meta as any).hot) {
         <!-- Board region: hero; ~zero chrome padding; container-query-sized.
              --dock-h carries the floating dock's measured height so the board has
              matching scroll room at the bottom (covered content stays reachable). -->
-        <main class="boardregion" id="main" role="main" :style="{ '--dock-h': dockHeight + 'px' }">
+        <main class="boardregion" id="main" role="main" ref="boardregionEl" :style="{ '--dock-h': dockHeight + 'px' }">
           <!-- Connection health dot: platform mode only, and only surfaced when there's
                something to say (stale/connecting). A healthy connection shows nothing —
                a persistent green dot over the board just reads as a mystery speck (IA-01).
@@ -2092,7 +2107,7 @@ if ((import.meta as any).hot) {
                `shellMounted` gate), so a plain `<Teleport to="#bs-game-modal">` in a
                game component always resolves — no `defer` required. -->
           <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
-          <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
+          <div class="game-shell__zoom-container" ref="zoomContainerEl" :style="{ '--zoom-level': zoomLevel }">
             <!--
               Game Board Slot Props:
               - actionController: USE THIS for all action handling (start, fill, execute, cancel)
@@ -2178,7 +2193,9 @@ if ((import.meta as any).hot) {
           open-up
           align="left"
           v-model:auto-end-turn="autoEndTurn"
-          v-model:zoom="zoomLevel"
+          :zoom="zoomLevel"
+          @update:zoom="setZoom"
+          @fit-zoom="fitZoom"
           :can-undo="canUndo && !isViewingHistory"
           :show-hint="showHintProp"
           :hint-disabled="hintDisabledProp"
@@ -2514,10 +2531,12 @@ if ((import.meta as any).hot) {
 .conn-dot.connecting { background: var(--bsg-away); }
 
 /* Board region: hero; container-query-sized; ~zero chrome padding (IA-05).
-   The board is NOT force-fit or centered: it renders at its NATURAL size, pinned
-   top-left, and this region scrolls (both axes) whenever the board — at its natural
-   size or zoomed — is larger than the viewport. Many games have more content than
-   ever fits a viewport, so scroll is the contract, not shrink-to-fit. */
+   The board renders at its NATURAL size, pinned top-left; at startup a
+   one-shot fit (useAutoZoom) zooms it to fill this region without scrolling,
+   clamped to the 0.5–2.0 slider range, then leaves it alone. Whenever the
+   board — grown mid-game, clamped, or manually zoomed — is larger than the
+   region, this region scrolls (both axes): scroll is the contract after
+   startup, never clipping and never auto-rescaling. */
 .boardregion {
   flex: 1;
   min-width: 0;

@@ -90,6 +90,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:autoEndTurn': [value: boolean];
   'update:zoom': [value: number];
+  /** One-shot re-fit of the board to the available space. */
+  'fit-zoom': [];
   'undo': [];
   'menu-item-click': [id: string];
   /**
@@ -256,10 +258,11 @@ function handleLeave() {
         Undo last action
       </button>
 
-      <!-- Zoom (accessibility magnifier — not the fit strategy) -->
+      <!-- Zoom: fitted once at game startup; the slider adjusts manually and
+           "Fit" re-fits the board to the available space on demand. -->
       <div class="mi zoom-mi" role="menuitem">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4-4" stroke-linecap="round"/></svg>
-        Fit board
+        Zoom
         <span class="r">
           <input
             type="range"
@@ -272,6 +275,14 @@ function handleLeave() {
             :aria-valuetext="Math.round(zoom * 100) + '%'"
             @input="handleZoomInput"
           />
+          <button
+            type="button"
+            class="zoom-fit"
+            title="Fit board to available space"
+            @click="emit('fit-zoom')"
+          >
+            Fit
+          </button>
         </span>
       </div>
 
@@ -477,6 +488,21 @@ function handleLeave() {
 .zoom-range {
   accent-color: var(--bsg-accent);
   width: 84px;
+}
+.zoom-fit {
+  border: 1px solid var(--bsg-line-2);
+  border-radius: var(--bsg-r-pill);
+  background: none;
+  color: var(--bsg-ink-2);
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  cursor: pointer;
+  flex: none;
+}
+.zoom-fit:hover {
+  border-color: var(--bsg-accent);
+  color: var(--bsg-accent);
 }
 
 /* Section separator */

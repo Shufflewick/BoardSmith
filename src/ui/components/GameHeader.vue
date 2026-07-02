@@ -23,16 +23,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'menu-item-click', id: string): void;
   (e: 'update:zoom', zoom: number): void;
+  /** One-shot re-fit of the board to the available space. */
+  (e: 'fit-zoom'): void;
   (e: 'update:autoEndTurn', value: boolean): void;
 }>();
 
 function handleZoomChange(event: Event) {
   const value = parseFloat((event.target as HTMLInputElement).value);
   emit('update:zoom', value);
-}
-
-function resetZoom() {
-  emit('update:zoom', 1.0);
 }
 
 const zoomPercent = computed(() => Math.round((props.zoom ?? 1.0) * 100));
@@ -51,7 +49,7 @@ const zoomPercent = computed(() => Math.round((props.zoom ?? 1.0) * 100));
     </div>
     <div class="header-center">
       <div class="zoom-control">
-        <button class="zoom-reset" @click="resetZoom" title="Reset zoom to 100%">
+        <button class="zoom-reset" @click="emit('fit-zoom')" title="Fit board to available space">
           {{ zoomPercent }}%
         </button>
         <input
