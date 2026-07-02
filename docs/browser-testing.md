@@ -206,6 +206,37 @@ el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 3. Repeat DISCOVER/SELECT/DRIVE/CONFIRM.
 4. Kill the dev server (`Ctrl+C`) when done.
 
+## Headless alternatives (no browser needed)
+
+Most of what this bridge is for — asserting hidden-info stays hidden,
+proving an animation fired, or driving a game to completion — can be done
+without a browser at all. See
+[boardsmith/testing](./api/testing.md#asserting-hidden-information-vis) for:
+
+- **VIS** — `isElementVisible`/`assertHidden`/`assertVisible`/`diffPlayerViews`,
+  and the DOM-leak-proving `assertNoHiddenInfoLeak` (which mounts the real UI
+  in `jsdom`, no browser).
+- **ANIM** — `enableAnimationTestMode`/`getAnimationTrace` for headless
+  animation assertions (`{kind,element,from,to}` traces).
+- **SIM** — `createHeadlessSession` / `boardsmith simulate` for seeded batch
+  playthroughs.
+- **FLOW** — `getFlowDebugInfo()`/`describeFlowPosition()` for structured
+  flow-position introspection instead of manually reading `FlowState`.
+
+Reach for the browser bridge on this page specifically when you need to prove
+something about the **real rendered UI/interaction pipeline** (a click
+actually resolves through `useBoardInteraction`, an element is genuinely
+clickable in both custom UI and AutoUI) — the headless utilities above don't
+mount a live page or dispatch DOM events.
+
+If you're driving the dev host itself (not just a single game instance) —
+scripting `getState`/`getLobby`/`debugToggle`/`uiSwitch` or the `debug:logs`
+ring buffer over WebSocket, including from Node with no browser at all — see
+[Agent Control: Scriptable Dev Host (WS)](./agent-control.md#scriptable-dev-host-ws).
+The dev-only `debug:flow-state` WS op (alongside `debug:logs`) surfaces the
+same `FlowDebugInfo` shape described above, over the wire, for a connected
+dev-host client.
+
 ---
 
 **Always kill the dev server before you finish.** Never leave `boardsmith dev`
