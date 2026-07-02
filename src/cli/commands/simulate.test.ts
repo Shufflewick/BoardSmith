@@ -76,4 +76,21 @@ describe('runSimulation', () => {
     expect(report.games.every(g => g.status === 'complete')).toBe(true);
     expect(report.anyFailed).toBe(false);
   });
+
+  it('WR-03: synthesizes an actionable error message when a game exceeds maxActions', async () => {
+    // PickGame needs several actions to reach its completion threshold (total >= 6);
+    // capping maxActions at 1 guarantees the game is cut off mid-flight, exercising
+    // the `exceededMaxActions` branch (not `stuck`, not `crashed`).
+    const report = await runSimulation(PickGame, {
+      count: 1,
+      players: 2,
+      seed: 'max-actions-cutoff',
+      maxActions: 1,
+    });
+
+    expect(report.games).toHaveLength(1);
+    const [g] = report.games;
+    expect(g.status).toBe('error');
+    expect(g.error).toBe('Game exceeded the maximum action count.');
+  });
 });

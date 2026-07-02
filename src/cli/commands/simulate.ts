@@ -65,13 +65,17 @@ export async function runSimulation<G extends Game>(
 
   const games: PerGameReport[] = results.games.map((g, index) => {
     const status: GameStatus = g.completed ? 'complete' : g.stuck ? 'stuck' : 'error';
+    const error = g.error
+      ?? (g.timedOut ? 'Game exceeded the simulation timeout.'
+        : g.exceededMaxActions ? 'Game exceeded the maximum action count.'
+        : undefined);
     return {
       index,
       seed: g.seed,
       status,
       turns: g.actionCount,
       winner: g.winners ?? null,
-      ...(g.error !== undefined ? { error: g.error } : {}),
+      ...(error !== undefined ? { error } : {}),
     };
   });
 
