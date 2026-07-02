@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from './headless-harness.js';
+import { createHeadlessSession } from '../headless-session.js';
 import { eachPlayerFixtureDefinition } from './fixtures/each-player-fixture.js';
 
 /**

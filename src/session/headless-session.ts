@@ -1,5 +1,5 @@
-import { SnapshotSessionHost } from '../snapshot-session-host.js';
-import { executeOp, type GameDefinitionLike, type Op } from '../stateless-ops.js';
+import { SnapshotSessionHost } from './snapshot-session-host.js';
+import { executeOp, type GameDefinitionLike, type Op } from './stateless-ops.js';
 
 /** Drives a SnapshotSessionHost with an IN-PROCESS executeOp, forcing every op
  *  payload and every broadcast through structuredClone so non-cloneable data

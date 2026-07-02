@@ -14,7 +14,7 @@ import {
 import type { GameStateSnapshot } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 import { ErrorCode } from '../types/protocol.js';
-import { createHeadlessSession } from '../session/testing/headless-harness.js';
+import { createHeadlessSession } from '../session/headless-session.js';
 import {
   collectFixtureDefinition,
   CollectGame,

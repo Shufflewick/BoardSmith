@@ -143,3 +143,9 @@ export * from './stateless-ops.js';
 // ordering, and drives the AI pump. Accepts an injected executeOp adapter so the same
 // host class works in-process (dev) and via remote RPC (production executor worker).
 export * from './snapshot-session-host.js';
+
+// ============================================
+// Headless Simulation
+// ============================================
+
+export { createHeadlessSession } from './headless-session.js';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createHeadlessSession } from './headless-harness.js';
+import { createHeadlessSession } from '../headless-session.js';
 import { collectTurnsFixtureDefinition } from './fixtures/collect-turns-fixture.js';
 import type { Op } from '../stateless-ops.js';
 
