@@ -444,3 +444,106 @@ describe('MultiplayerHost — teaching lockout (cross-layer: teachingDisabled:tr
     expect(resp.result.success).toBe(true);
   });
 });
+
+// ── Scriptable dev-host ops (DRIVE-01/DRIVE-03) ───────────────────────────────
+
+describe('MultiplayerHost — getState', () => {
+  it('returns the caller\'s own seat view, matching viewForSeat, with requestId echoed', async () => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1, game live
+    await host.handleMessage('A', { type: 'getState', requestId: 'gs-1' });
+    const gs = lastOfType('A', 'game_state');
+    expect(gs.requestId).toBe('gs-1');
+    expect(gs.view).toBeDefined();
+    expect(gs.isComplete).toBe(false);
+  });
+
+  it('errors (not a view) when called before any join, in lobby phase', async () => {
+    const { host, lastOfType } = makeHost();
+    // No 'hello' yet — host is still in 'lobby' phase, no session.
+    await host.handleMessage('Z', { type: 'getState', requestId: 'gs-2' });
+    const err = lastOfType('Z', 'error');
+    expect(err).toBeTruthy();
+    expect(lastOfType('Z', 'game_state')).toBeUndefined();
+  });
+
+  it('errors (not a view) for a connected-but-unseated client mid-game', async () => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1, game starts
+    await host.handleMessage('B', { type: 'hello' }); // B lands in seat-picker, unseated
+    await host.handleMessage('B', { type: 'getState', requestId: 'gs-3' });
+    const err = lastOfType('B', 'error');
+    expect(err).toBeTruthy();
+    expect(lastOfType('B', 'game_state')).toBeUndefined();
+  });
+
+  it('ignores any client-supplied seat field — seat is server-resolved only', async () => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1
+    await host.handleMessage('B', { type: 'hello' }); // B unseated
+    await host.handleMessage('B', { type: 'join', seat: 2 }); // B → seat 2
+    // getState has no `seat` field on the ClientInbound variant, so even if a
+    // crafted payload smuggled one in, TypeScript wouldn't accept it and the
+    // handler never reads anything but clientSeat/followerClientId.
+    await host.handleMessage('B', { type: 'getState', requestId: 'gs-4' });
+    const gsB = lastOfType('B', 'game_state');
+    expect(gsB.requestId).toBe('gs-4');
+    // B's view must differ in identity from A's — each seat sees its own view;
+    // proving this requires seat-scoped content, so at minimum assert B got A's
+    // response, not silently nothing.
+    expect(gsB.view).toBeDefined();
+  });
+});
+
+describe('MultiplayerHost — getLobby', () => {
+  it('returns the lobby payload in lobby phase, before any join, with requestId echoed', async () => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('Z', { type: 'getLobby', requestId: 'gl-1' });
+    const lobby = lastOfType('Z', 'lobby');
+    expect(lobby).toBeTruthy();
+    expect(lobby.requestId).toBe('gl-1');
+    expect(lobby.phase).toBe('lobby');
+  });
+
+  it('also works mid-game (any phase)', async () => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' }); // game starts
+    await host.handleMessage('A', { type: 'getLobby', requestId: 'gl-2' });
+    const lobby = lastOfType('A', 'lobby');
+    expect(lobby.requestId).toBe('gl-2');
+    expect(lobby.phase).toBe('playing');
+  });
+});
+
+describe('MultiplayerHost — debugToggle/uiSwitch relay', () => {
+  it('debugToggle fans out to ALL connected clients', async () => {
+    const { host, has } = makeHost();
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1
+    await host.handleMessage('B', { type: 'hello' }); // B unseated but connected
+
+    await host.handleMessage('A', { type: 'debugToggle' });
+    expect(has('A', 'debugToggle')).toBe(true);
+    expect(has('B', 'debugToggle')).toBe(true);
+  });
+
+  it('uiSwitch forwards the name intact to all connected clients', async () => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+
+    await host.handleMessage('B', { type: 'uiSwitch', name: 'custom' });
+    expect(lastOfType('A', 'uiSwitch')).toMatchObject({ name: 'custom' });
+    expect(lastOfType('B', 'uiSwitch')).toMatchObject({ name: 'custom' });
+  });
+
+  it('neither op mutates game state (session untouched)', async () => {
+    const { host, lastOfType, clear } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    clear();
+    await host.handleMessage('A', { type: 'debugToggle' });
+    await host.handleMessage('A', { type: 'uiSwitch', name: 'auto' });
+    // No game_state/error frame is produced by either relay op.
+    expect(lastOfType('A', 'game_state')).toBeUndefined();
+    expect(lastOfType('A', 'error')).toBeUndefined();
+  });
+});

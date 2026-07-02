@@ -37,13 +37,28 @@ export type LobbyPhase = 'lobby' | 'playing';
 
 /** Messages the host sends to a client. */
 export type HostOutbound =
-  | { type: 'lobby'; phase: LobbyPhase; seats: SeatInfo[]; minPlayers: number; playerCount: number }
+  | {
+      type: 'lobby';
+      phase: LobbyPhase;
+      seats: SeatInfo[];
+      minPlayers: number;
+      playerCount: number;
+      requestId?: string | null;
+    }
   | { type: 'joined'; seat: number }
   | { type: 'error'; message: string }
   | { type: 'init'; seat: number }
-  | { type: 'game_state'; view: unknown; isComplete: boolean; winners: number[] }
+  | {
+      type: 'game_state';
+      view: unknown;
+      isComplete: boolean;
+      winners: number[];
+      requestId?: string | null;
+    }
   | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> }
-  | { type: 'follow'; enabled: boolean; seat: number };
+  | { type: 'follow'; enabled: boolean; seat: number }
+  | { type: 'debugToggle' }
+  | { type: 'uiSwitch'; name: string };
 
 /** Messages a client sends to the host. */
 export type ClientInbound =
@@ -52,7 +67,11 @@ export type ClientInbound =
   | { type: 'leave' }
   | { type: 'restart' }
   | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> }
-  | { type: 'follow'; enabled: boolean };
+  | { type: 'follow'; enabled: boolean }
+  | { type: 'getState'; requestId?: string }
+  | { type: 'getLobby'; requestId?: string }
+  | { type: 'debugToggle' }
+  | { type: 'uiSwitch'; name: string };
 
 export interface MultiplayerHostOptions {
   playerCount: number;
@@ -217,6 +236,14 @@ export class MultiplayerHost {
         return this.handleServerRequest(clientId, msg);
       case 'follow':
         return this.handleFollow(clientId, msg);
+      case 'getState':
+        return this.handleGetState(clientId, msg);
+      case 'getLobby':
+        return this.handleGetLobby(clientId, msg);
+      case 'debugToggle':
+        return this.handleDebugToggle();
+      case 'uiSwitch':
+        return this.handleUiSwitch(msg);
     }
   }
 
@@ -330,6 +357,73 @@ export class MultiplayerHost {
     // follower is acting as a seat it does not occupy.
     if (msg.requestId) this.requestOrigin.set(msg.requestId, clientId);
     await this.session.handleServerRequest(seat, msg.requestId, msg.op, msg.payload);
+  }
+
+  /**
+   * Scriptable query (DRIVE-01): returns the CALLING client's own seat view —
+   * same shape as the `game_state` broadcast — correlated by requestId. Copies
+   * `handleServerRequest`'s full guard chain verbatim (phase-not-playing →
+   * seat-not-found) so a scripted client gets the same actionable errors a
+   * browser client would, and NEVER a client-supplied seat's view: the seat is
+   * resolved only from server-tracked `followerClientId`/`clientSeat` (there is
+   * no `seat` field on the `getState` variant to begin with).
+   */
+  private handleGetState(
+    clientId: string,
+    msg: Extract<ClientInbound, { type: 'getState' }>,
+  ): void {
+    if (this.phase !== 'playing' || !this.session) {
+      this.send(clientId, { type: 'error', message: 'Game has not started.' });
+      return;
+    }
+    const seat =
+      clientId === this.followerClientId ? this.effectiveActiveSeat() : this.clientSeat.get(clientId);
+    if (seat === undefined) {
+      this.send(clientId, { type: 'error', message: 'You are not seated in this game.' });
+      return;
+    }
+    const view = this.session.viewForSeat(seat);
+    const meta = this.session.meta();
+    this.send(clientId, {
+      type: 'game_state',
+      view,
+      isComplete: meta.isComplete,
+      winners: meta.winners,
+      requestId: msg.requestId ?? null,
+    });
+  }
+
+  /**
+   * Scriptable query (DRIVE-01): returns the dev host's lobby payload. Works in
+   * EVERY phase (including lobby, before any client has joined) — unlike
+   * `getState`, this is intentionally NOT gated on `phase === 'playing'`.
+   */
+  private handleGetLobby(
+    clientId: string,
+    msg: Extract<ClientInbound, { type: 'getLobby' }>,
+  ): void {
+    this.send(clientId, { ...this.lobbyMessage(), requestId: msg.requestId ?? null });
+  }
+
+  /**
+   * Relay-only (DRIVE-03): fans a debug-panel toggle out to every connected
+   * browser tab; `DevHost.vue` reacts by calling its existing `toggleDebug()`.
+   * No game-state mutation, no bridge.ts routing. A scripted-only client with
+   * no browser tab connected will see no visible effect from this op — that is
+   * expected, not a bug (there is no game-state acknowledgment to observe).
+   */
+  private handleDebugToggle(): void {
+    for (const cid of this.connected) this.send(cid, { type: 'debugToggle' });
+  }
+
+  /**
+   * Relay-only (DRIVE-03): fans a UI-switch request out to every connected
+   * browser tab, carrying the requested UI name intact; `DevHost.vue` reacts by
+   * driving its existing `onUiSelect()` code path. Same caveat as
+   * `handleDebugToggle`: a headless script with no iframe sees no visible effect.
+   */
+  private handleUiSwitch(msg: Extract<ClientInbound, { type: 'uiSwitch' }>): void {
+    for (const cid of this.connected) this.send(cid, { type: 'uiSwitch', name: msg.name });
   }
 
   // ── Seat helpers ──────────────────────────────────────────────────────────
