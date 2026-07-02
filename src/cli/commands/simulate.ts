@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import chalk from 'chalk';
 
@@ -163,15 +163,29 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
   } catch (error) {
     console.error(chalk.red('Failed to load game rules:'), error);
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup; do not mask the original error
+    }
     process.exit(1);
     return;
   }
 
-  const report = await runSimulation(gameDefinition.gameClass as new (options: GameOptions) => Game, {
-    count: gamesCount,
-    players: playersCount,
-    seed: options.seed,
-  });
+  let report: RunSimulationResult;
+  try {
+    report = await runSimulation(gameDefinition.gameClass as new (options: GameOptions) => Game, {
+      count: gamesCount,
+      players: playersCount,
+      seed: options.seed,
+    });
+  } finally {
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup; do not fail the command over it
+    }
+  }
 
   if (options.json) {
     console.log(JSON.stringify(report.games, null, 2));
