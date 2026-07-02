@@ -22,7 +22,7 @@
  * @module
  */
 
-import { mount, type VueWrapper } from '@vue/test-utils';
+import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameElement as UIGameElement } from '../ui/components/auto-ui/index.js';
 import { GameElement, type ElementJSON, type Game } from '../engine/index.js';
@@ -82,6 +82,29 @@ function loadAutoUI(): Promise<typeof AutoUIComponent> {
   return autoUIComponentPromise;
 }
 
+// ---------------------------------------------------------------------------
+// `@vue/test-utils` is a devDependency of BoardSmith itself — consuming
+// projects (games, MERC) have no reason to install it unless they actually
+// call `renderAsSeat`/`assertNoHiddenInfoLeak`. A static top-level
+// `import { mount } from '@vue/test-utils'` would make Vite eagerly resolve
+// that module for EVERY consumer of `boardsmith/testing`'s barrel — even one
+// that only wants `createTestGame` — turning an opt-in DOM-leak utility into
+// a hard, always-on dependency (Rule 1: auto-fixed bug, MERC re-vendor sweep
+// caught this: MERC has no `@vue/test-utils` installed and its entire suite
+// failed to even load). Deferred via runtime dynamic `import()`, mirroring
+// `loadAutoUI`'s existing pattern, so the dependency is only resolved the
+// first time this file's own mount-requiring functions actually run.
+// ---------------------------------------------------------------------------
+let mountFnPromise: Promise<typeof import('@vue/test-utils').mount> | undefined;
+
+/** Dynamically import `@vue/test-utils`'s `mount` (cached) — see note above. */
+function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
+  if (!mountFnPromise) {
+    mountFnPromise = import('@vue/test-utils').then((mod) => mod.mount);
+  }
+  return mountFnPromise;
+}
+
 /**
  * Mount AutoUI headlessly as `seat`, using the real per-seat wire view
  * (`testGame.getPlayerView(seat).state`) unless `gameViewOverride` is given.
@@ -110,7 +133,7 @@ export async function renderAsSeat<G extends Game>(
     );
   }
 
-  const AutoUI = await loadAutoUI();
+  const [AutoUI, mount] = await Promise.all([loadAutoUI(), loadMount()]);
 
   const gameView =
     gameViewOverride !== undefined
