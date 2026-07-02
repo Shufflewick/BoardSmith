@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
-status: executing
-stopped_at: Completed 126-02-PLAN.md
-last_updated: "2026-07-02T05:26:38.754Z"
+status: verifying
+stopped_at: Completed 126-04-PLAN.md
+last_updated: "2026-07-02T05:37:40.854Z"
 last_activity: 2026-07-02
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 12
-  percent: 38
+  completed_plans: 13
+  percent: 50
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 
 Phase: 126
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-02
 
 ## Milestones
@@ -149,6 +149,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 126]: 126-01: errorCode set at source only (runner.ts, pick-handler.ts/pending-action-manager.ts); OpResult threads it through, never fabricated for protocol-only failures
 - [Phase 126]: 126-02: #persistSafely wraps #save()/apply() as the single funnel (not each caller individually), automatically protecting PendingActionManager's save callback without touching that file
 - [Phase ?]: 126-03: boardRef()'s warning code is CHOICES_ERROR per the plan's reserved taxonomy; PickStepResult.warnings? added in pending-action-manager.ts as necessary plumbing for handleSelectionStep forwarding
+- [Phase 126]: 126-04: debugLogs kept as a bridge-local marker type (never joins stateless-ops.ts's Op union) so the executeOp purity contract holds by construction
 
 ### Highest-Risk Items (v4.4)
 
@@ -170,8 +171,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T05:26:34.839Z
-Stopped at: Completed 126-02-PLAN.md
+Last session: 2026-07-02T05:37:40.846Z
+Stopped at: Completed 126-04-PLAN.md
 Resume file: None
 Next action: Execute 125-02-PLAN.md (headless simulation, remaining plan). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending).
 
