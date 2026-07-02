@@ -186,7 +186,7 @@ Plans:
 | 126. Structured Error Surfacing | 4/4 | Complete    | 2026-07-02 |
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
 | 128. Animation & Drag-Drop Test Story | 6/6 | Complete    | 2026-07-02 |
-| 129. Migration (Games + MERC) | 3/3 | Complete   | 2026-07-02 |
+| 129. Migration (Games + MERC) | 3/3 | Complete    | 2026-07-02 |
 | 130. Documentation | 0/TBD | Not started | - |
 
 ### Shipped milestones
