@@ -364,7 +364,9 @@ it('autoFlyUpUp: moving a card from zone-a to zone-b records a fly trace with no
 | A2 | The exact `assertNoHiddenInfoLeak(testGame, seat, component)` call signature shown in the go-fish code example matches the real Phase 124 API | Code Examples | Medium — the exact parameter shape/order was inferred from `src/testing/dom-leak.ts`'s doc comments (VIS-03 renderAsSeat mounts the real AutoUI stack) rather than reading the full function signature line-by-line; planner/executor should re-check the actual exported signature in `src/testing/index.ts` before writing the real test |
 | A3 | demo-animation's `autoFlyUpUp` action is the best (simplest, most deterministic) candidate for the one required animation-trace test | Code Examples | Low — CONTEXT.md leaves "exact new-test content" to Claude's Discretion; `autoFlyUpUp` is the only auto-fly variant with NO flip (fewer variables to assert), but `flipReorder` (useFLIP) or `flyToStat` are equally valid choices |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> **RESOLVED:** Q1 (hex prior silent throws) — moot; hex fixed unconditionally in Plan 129-01 Task 1. Q2 (tsc-debt wave split) — resolved in Plans 129-01 T2/T3: type-only fixes scoped narrowly with an explicit STOP-and-file-bug escape hatch if a real defect surfaces.
 
 1. **Does hex's `useFLIP` call ever actually reach the anchor-missing code path in a real game session, or only in a hypothetical DOM test?**
    - What we know: The stone's `<circle data-stone-id="...">` will be matched by `useFLIP`'s configured `selector: '[data-stone-id]'`, and `getElementId()` will return `null` for it since none of its 4 recognized attributes are present — this WILL trigger `reportMissingAnchor()` the first time `useFLIP.capture()`/`animate()` runs against a real stone in dev mode.
