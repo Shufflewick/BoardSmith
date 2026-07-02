@@ -19,6 +19,8 @@
  */
 import { ref } from 'vue';
 import { easeOutCubic } from '../../utils/easing.js';
+import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
+import { isDevMode } from '../../utils/dev.js';
 
 export interface AnimationOptions {
   /** Duration in milliseconds (default: 300) */
@@ -43,6 +45,26 @@ if (typeof window !== 'undefined') {
     .addEventListener('change', (e) => {
       prefersReducedMotion.value = e.matches;
     });
+}
+
+/**
+ * Fail-loud report for an element useElementAnimation was asked to animate
+ * but that carries no `data-element-id` on FIRST resolution (the per-element
+ * pass inside `animateToCurrentPositions()`). Throws in dev (actionable,
+ * names the composable + the exact attribute searched + the fix); logs +
+ * skips in production so a cosmetic anchor gap never crashes a live game.
+ */
+function reportMissingAnchor(el: Element): void {
+  const message =
+    `useElementAnimation: an element could not be animated because it has no ` +
+    `anchor attribute. useElementAnimation identifies elements via ` +
+    `data-element-id — none was found on <${el.tagName.toLowerCase()}>. ` +
+    `Add data-element-id to the element (e.g. spread anchorAttrs(ref) onto it, ` +
+    `or bind useSelectable()'s attrs) so useElementAnimation can track it.`;
+  if (isDevMode()) {
+    throw new Error(message);
+  }
+  console.error(`[BoardSmith] ${message}`);
 }
 
 export function useElementAnimation() {
@@ -82,6 +104,47 @@ export function useElementAnimation() {
    * Call this AFTER state changes.
    */
   function animateToCurrentPositions(container: HTMLElement | null, options: AnimationOptions = {}) {
+    // Test mode: record instant, assertable element traces instead of
+    // running the RAF loop. This branch sits ABOVE prefersReducedMotion and
+    // is never merged with it — test-mode and reduced-motion are
+    // independent, unrelated flags.
+    if (isAnimationTestModeEnabled()) {
+      if (!container) {
+        positions.clear();
+        return;
+      }
+
+      const selector = options.selector ?? DEFAULT_SELECTOR;
+      const containerLabel = container.getAttribute('data-element-id') ?? undefined;
+      const elements = container.querySelectorAll(selector);
+
+      elements.forEach((el) => {
+        const id = el.getAttribute('data-element-id');
+        if (!id) {
+          reportMissingAnchor(el);
+          return;
+        }
+
+        const startPos = positions.get(id);
+        if (!startPos) return; // not previously captured => not a moved element
+
+        const currentRect = (el as HTMLElement).getBoundingClientRect();
+        recordTrace({
+          kind: 'element',
+          element: id,
+          from: containerLabel,
+          to: containerLabel,
+          meta: {
+            deltaX: startPos.left - currentRect.left,
+            deltaY: startPos.top - currentRect.top,
+          },
+        });
+      });
+
+      positions.clear();
+      return;
+    }
+
     if (prefersReducedMotion.value) {
       positions.clear();
       return;
@@ -97,7 +160,10 @@ export function useElementAnimation() {
 
     elements.forEach((el) => {
       const id = el.getAttribute('data-element-id');
-      if (!id) return;
+      if (!id) {
+        reportMissingAnchor(el);
+        return;
+      }
 
       const startPos = positions.get(id);
       if (!startPos) return;
