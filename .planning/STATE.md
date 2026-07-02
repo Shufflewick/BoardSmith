@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 124-02-PLAN.md
-last_updated: "2026-07-02T02:46:31.062Z"
-last_activity: 2026-07-02 -- 124-02-PLAN.md executed (VIS-02 shipped)
+stopped_at: Completed 124-03-PLAN.md
+last_updated: "2026-07-02T03:02:31.037Z"
+last_activity: 2026-07-02 -- 124-03-PLAN.md executed (VIS-03 shipped, phase 124 complete)
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 7
-  completed_plans: 6
-  percent: 13
+  completed_plans: 7
+  percent: 25
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 124
-Plan: 01-02 complete, 03 remaining
+Plan: 01-03 complete (phase 124 fully executed)
 Status: Executing
-Last activity: 2026-07-02 -- 124-02-PLAN.md executed (VIS-02 shipped)
+Last activity: 2026-07-02 -- 124-03-PLAN.md executed (VIS-03 shipped, phase 124 complete)
 
 ## Milestones
 
@@ -143,6 +143,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 124]: VIS-01: visibility judged on the FINAL post-playerView tree (game.toJSONForPlayer(seat)), not element.isVisibleTo alone; isVisibleTo retained only as a fast path when GameClass.playerView is undefined (provably safe -- no post-transform runs in that case)
 - [Phase 124]: assertHidden/assertVisible call isElementVisible (not element.isVisibleTo directly) so assertion failures are judged on the same final-tree derivation as VIS-01; surviving-attribute-keys in assertHidden's message come from the final tree's node, not raw unfiltered element JSON
 - [Phase 124]: VIS-02: diffPlayerViews classifies purely by each node's __hidden flag (never by id) to sidestep the engine's zone-hidden-vs-individually-hidden id-anonymization asymmetry
+- [Phase 124]: VIS-03: assertNoHiddenInfoLeak derives forbidden markers by diffing each element's unfiltered toJSON() against its node in the final toJSONForPlayer(seat) tree (honors static playerView); renderAsSeat mounts the REAL AutoUI/AutoRenderer/CardRenderer stack via a runtime dynamic import() so a jsdom window.matchMedia polyfill can be installed before AutoRenderer's transitive module-load-time matchMedia() call; $images.back and boolean attribute values are excluded from identity candidates (both are near-universal DOM substrings, not per-element secrets)
 
 ### Highest-Risk Items (v4.4)
 
@@ -164,12 +165,12 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T02:46:31.052Z
-Stopped at: Completed 124-02-PLAN.md
+Last session: 2026-07-02T03:02:31.037Z
+Stopped at: Completed 124-03-PLAN.md
 Resume file: None
-Next action: Execute 124-03-PLAN.md (or `/gsd:verify-phase 123` still pending)
+Next action: Run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) before starting Phase 125
 
 ## Operator Next Steps
 
 - Phase 123 (Determinism & Flow Introspection) is fully executed (4/4 plans complete). Run `/gsd:verify-phase 123` to confirm FLOW-01/02/03/04 acceptance criteria before moving on to Phase 124/125.
-- Phase 124 (Hidden-Info Test Utilities): Plans 01-02 (VIS-01, VIS-02) complete -- `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible`/`diffPlayerViews` shipped and exported from `boardsmith/testing`. Plan 03 (VIS-03 DOM-leak utility) remains.
+- Phase 124 (Hidden-Info Test Utilities) is fully executed (3/3 plans complete) -- `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible`/`diffPlayerViews`/`renderAsSeat`/`assertNoHiddenInfoLeak` all shipped and exported from `boardsmith/testing`. Run `/gsd:verify-phase 124` to confirm VIS-01/02/03 acceptance criteria before starting Phase 125.

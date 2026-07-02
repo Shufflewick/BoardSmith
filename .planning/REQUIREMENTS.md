@@ -11,7 +11,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 - [x] **VIS-01**: Developer can assert per-seat element visibility in tests via `isElementVisible(element, seat)` / `getVisibleElements(seat)` on TestGame (no hand-parsing ElementJSON)
 - [x] **VIS-02**: Developer can diff what two seats see (`diffPlayerViews`-style utility) to verify hidden information stays hidden
-- [ ] **VIS-03**: Developer can run a DOM-leak test utility that renders the game UI as seat N and fails when hidden-element identity (rank/suit/face attributes) appears in the rendered DOM
+- [x] **VIS-03**: Developer can run a DOM-leak test utility that renders the game UI as seat N and fails when hidden-element identity (rank/suit/face attributes) appears in the rendered DOM
 
 ### Headless Simulation (SIM)
 
@@ -91,7 +91,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLOW-04 | Phase 123 | Complete |
 | VIS-01 | Phase 124 | Complete |
 | VIS-02 | Phase 124 | Complete |
-| VIS-03 | Phase 124 | Pending |
+| VIS-03 | Phase 124 | Complete |
 | SIM-01 | Phase 125 | Pending |
 | SIM-02 | Phase 125 | Pending |
 | ERR-01 | Phase 126 | Pending |
