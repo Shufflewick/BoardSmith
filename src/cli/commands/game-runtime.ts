@@ -39,6 +39,23 @@ const __dirname = dirname(__filename);
 export const cliMonorepoRoot = resolve(__dirname, '..', '..', '..');
 
 /**
+ * Single source of truth for the `boardsmith` package → monorepo `src/` subdirectory
+ * map. Consumed by `boardsmithResolvePlugin` (esbuild, used here and by `simulate.ts`)
+ * AND by `dev.ts`'s Vite plugin, so both loaders stay in sync when a new subpath
+ * export is added.
+ */
+export const BOARDSMITH_PACKAGE_DIRS: Record<string, string> = {
+  'boardsmith': 'engine',
+  'boardsmith/ai': 'ai',
+  'boardsmith/ai-trainer': 'ai-trainer',
+  'boardsmith/client': 'client',
+  'boardsmith/runtime': 'runtime',
+  'boardsmith/session': 'session',
+  'boardsmith/testing': 'testing',
+  'boardsmith/ui': 'ui',
+};
+
+/**
  * esbuild plugin to resolve boardsmith/* imports to the monorepo source.
  * Only used in monorepo context - standalone games resolve from node_modules.
  * Returns a no-op plugin for standalone context.
@@ -56,20 +73,9 @@ export function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): Esb
   return {
     name: 'boardsmith-resolve',
     setup(esbuildBuild) {
-      const packageDirs: Record<string, string> = {
-        'boardsmith': 'engine',
-        'boardsmith/ai': 'ai',
-        'boardsmith/ai-trainer': 'ai-trainer',
-        'boardsmith/client': 'client',
-        'boardsmith/runtime': 'runtime',
-        'boardsmith/session': 'session',
-        'boardsmith/testing': 'testing',
-        'boardsmith/ui': 'ui',
-      };
-
       esbuildBuild.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
         const importPath = args.path;
-        const dirName = packageDirs[importPath];
+        const dirName = BOARDSMITH_PACKAGE_DIRS[importPath];
         if (dirName) {
           return { path: join(cliMonorepoRoot, 'src', dirName, 'index.ts') };
         }

@@ -10,7 +10,7 @@ import open from 'open';
 
 import type { GameDefinition, Op, OpResult } from '../../session/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
-import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix } from './game-runtime.js';
+import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
 type RuntimeExecuteOp = (
@@ -427,16 +427,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       resolveId(source: string) {
         if (!source.startsWith('boardsmith')) return null;
 
-        const srcDirs: Record<string, string> = {
-          'boardsmith': 'engine',
-          'boardsmith/ai': 'ai',
-          'boardsmith/ai-trainer': 'ai-trainer',
-          'boardsmith/client': 'client',
-          'boardsmith/runtime': 'runtime',
-          'boardsmith/session': 'session',
-          'boardsmith/testing': 'testing',
-          'boardsmith/ui': 'ui',
-        };
+        const srcDirs = BOARDSMITH_PACKAGE_DIRS;
 
         const srcDir = srcDirs[source];
         if (srcDir) {
