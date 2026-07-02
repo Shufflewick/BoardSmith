@@ -1,11 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: none
-status: shipped
-stopped_at: v4.4 milestone complete -- archived + tagged
-last_updated: 2026-07-02T21:30:00.000Z
-last_activity: 2026-07-02 -- v4.4 milestone archived and tagged (Phases 123-130)
+milestone: v4.5
+milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
+status: planning
+last_updated: "2026-07-02T23:15:28.034Z"
+last_activity: 2026-07-02
 progress:
   total_phases: 0
   completed_phases: 0
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: none
-Plan: none
-Status: shipped / no active milestone
-Last activity: 2026-07-02
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-02 — Milestone v4.5 started
 
 ## Milestones
 

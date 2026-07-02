@@ -8,13 +8,23 @@ A library for designing digital board games. Provides a rules engine, UI compone
 
 Make board game development fast and correct — the framework handles multiplayer, AI, and UI so designers focus on game rules.
 
-## Current State: v4.4 Shipped — no active milestone
+## Current Milestone: v4.5 Pit of Success Hardening (Audit #3 Fixes)
 
-**Shipped:** 2026-07-02. v4.4 closed every verified gap from the 2026-07-01 agent-ergonomics audit — hidden-info verification, headless simulation, structured errors, a fully scriptable dev host, an animation/drag-drop test story, and flow/debug introspection with enforced determinism — then updated docs and migrated all example games + MERC onto the new surface. 23/23 requirements, 8/8 phases verified passed, audit passed (`milestones/v4.4-MILESTONE-AUDIT.md`).
+**Goal:** Resolve all 38 confirmed Pit of Success violations from `boardsmith-audit-report-3.html` — each finding re-verified before fixing, fixed at the source (not spot-patched), documented, and rolled out to all example games and MERC.
 
-Candidate next directions (from the deferred backlog): v2 CRIB milestone (suppress-Undo-during-tutorial, strategy tutorial track); higher-level game helpers (HELP-02..04: multi-select helper, grid-game move-validation, sprite-sheet rendering); dev tooling (`boardsmith screenshot`, HTTP REST endpoints); the deferred ShufflewickPub host skin (HOST-01..04); repo cleanup (pre-existing no-shadow errors, tsc test-file looseness).
+**Target features:**
+- Verify-first discipline: every finding independently re-proven (repro or code trace) before any fix; illegitimate findings get a documented rejection instead of a fix
+- Visibility/restore cluster fixed at the serialization layer: zone visibility survives snapshot restore, `state.players` routed through visibility filtering, dead `static visibleAttributes` implemented-or-deleted, restore amnesia for `onEnter`/`onExit` and `teachingDisabled` closed
+- Flow/action correctness: `eachPlayer` startingPlayer wrap-around, simultaneous-action failures surface `actionError`, server-side multiSelect count validation, `putInto` descendant-cycle detection
+- Silent-failure and dead-config findings fixed across UI, CLI, client SDK, testing, and types
+- Docs corrected for every fix, including findings that are purely docs-teaching-nonexistent-APIs
+- All 8 example games + MERC (re-vendored) migrated to comply with any changed API surface, all suites green
+
+**Key context:** Findings are severity-ranked (1 critical, 8 high, 17 medium, 12 low) in `boardsmith-audit-report-3.html` with per-finding trap/fix suggestions and verifier reasoning. No Backward Compatibility rule applies — breaking API changes are fine when they're the clean fix. The 4 refuted findings are out of scope.
 
 ## Previous: v4.4 Shipped
+
+**Shipped:** 2026-07-02. 23/23 requirements, 8/8 phases verified passed, audit passed (`milestones/v4.4-MILESTONE-AUDIT.md`).
 
 Agent-Ergonomics Gaps (Audit Fixes) — closed every verified gap from the 2026-07-01 agent-ergonomics audit so everything a game developer's AI agent builds has an automated way to test, observe, or drive it. Shipped hidden-info visibility assertions + DOM-leak test utility (VIS), a public `createHeadlessSession` export + `boardsmith simulate` CLI (SIM), structured error surfacing across pick-handler/runner/storage/dev-host (ERR), a fully scriptable dev host with Node-capable client SDK (DRIVE), an animation/drag-drop test story with fail-loud anchor enforcement (ANIM), and flow/debug introspection with seeded-RNG determinism enforcement (FLOW).
 
@@ -258,7 +268,7 @@ BoardSmith is now a single `boardsmith` npm package with 11 subpath exports. Gam
 
 ### Active
 
-None — no active milestone. See Current State above for candidate next directions.
+v4.5 Pit of Success Hardening — resolve all 38 confirmed findings in `boardsmith-audit-report-3.html` (verify → fix → docs → games/MERC migration). Requirements defined in `.planning/REQUIREMENTS.md`.
 
 Carried forward (deferred from v4.0):
 - ShufflewickPub host skin (separate repo) — HOST-01..04: PrimeVue tavern preset, host-side theme handshake, connection "Reconnecting" banner, host Game Over exit / pull-tab. The BoardSmith-side token/`applyTheme`/postMessage infra is host-overridable and ready.
@@ -389,4 +399,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-02 — shipped milestone v4.4 Agent-Ergonomics Gaps (Audit Fixes)*
+*Last updated: 2026-07-02 — started milestone v4.5 Pit of Success Hardening (Audit #3 Fixes)*
