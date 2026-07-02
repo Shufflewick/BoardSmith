@@ -159,7 +159,7 @@ Plans:
 **Plans**: 3 plans
 - [x] 129-01-PLAN.md — Non-flagship game sweep: hex anchor fix + tsc debt (hex/checkers/polyhedral-potions/demo-complex-ui/demo-action-panel), per-repo green + scoped grep sweep
 - [x] 129-02-PLAN.md — Flagship adoption: go-fish DOM-leak (positive control) + visibility, cribbage visibility, demo-animation trace (+ approved devDeps)
-- [ ] 129-03-PLAN.md — MERC re-vendor + green, phase-wide grep sweep (9 repos) + simulate smoke (hex/checkers)
+- [x] 129-03-PLAN.md — MERC re-vendor + green, phase-wide grep sweep (9 repos) + simulate smoke (hex/checkers)
 
 #### Phase 130: Documentation
 
@@ -186,7 +186,7 @@ Plans:
 | 126. Structured Error Surfacing | 4/4 | Complete    | 2026-07-02 |
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
 | 128. Animation & Drag-Drop Test Story | 6/6 | Complete    | 2026-07-02 |
-| 129. Migration (Games + MERC) | 2/3 | In Progress|  |
+| 129. Migration (Games + MERC) | 3/3 | Complete   | 2026-07-02 |
 | 130. Documentation | 0/TBD | Not started | - |
 
 ### Shipped milestones
