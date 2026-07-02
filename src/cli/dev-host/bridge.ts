@@ -215,7 +215,7 @@ export function translateOp(
 export function shapeResult(wireOp: string, result: OpResult): Record<string, unknown> {
   switch (wireOp) {
     case 'action':
-      return { success: result.success, error: result.error, followUp: result.followUp };
+      return { success: result.success, error: result.error, followUp: result.followUp, warnings: result.warnings };
     case 'resolve_choices':
       return result as unknown as Record<string, unknown>;
     case 'selection_step':
@@ -226,6 +226,7 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
         nextChoices: result.nextChoices,
         actionComplete: result.actionComplete,
         followUp: result.followUp,
+        warnings: result.warnings,
       };
     case 'cancel_action':
     case 'undo':

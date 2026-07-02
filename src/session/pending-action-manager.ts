@@ -12,6 +12,7 @@ import {
   type StorageAdapter,
   type StoredGameState,
   type PlayerGameState,
+  type WarningEntry,
 } from './types.js';
 import { buildPlayerState } from './utils.js';
 
@@ -52,6 +53,13 @@ export interface PickStepResult {
   };
   state?: PlayerGameState;
   followUp?: FollowUpAction;
+  /**
+   * Structured warnings forwarded from an underlying pick response (e.g. a
+   * throwing boardRefs()/display()/boardRef() encountered while formatting
+   * choices for the next step). Never flips success:false. Undefined when
+   * there are none — never fabricated.
+   */
+  warnings?: WarningEntry[];
 }
 
 /**

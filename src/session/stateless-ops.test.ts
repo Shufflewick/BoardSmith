@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { AIConfig } from '../ai/types.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { ErrorCode } from '../types/protocol.js';
+import { PickHandler } from './pick-handler.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: player 1 repeatedly takes a "pass" action in a loop.
@@ -173,6 +174,54 @@ const badChoicesGameDef: GameDefinitionLike = {
 };
 
 const badChoicesGameOptions = { playerCount: 2, seed: 'bad-choices-seed' };
+
+// ---------------------------------------------------------------------------
+// Inline game: a chooseFrom whose boardRefs() throws (soft-fail, ERR-01), so
+// resolveChoices's pick response carries a structured warning while still
+// succeeding — proves OpResult.warnings threading from pick-handler.ts.
+// ---------------------------------------------------------------------------
+
+interface WarnChoice {
+  from: string;
+  to: string;
+}
+
+class WarningGame extends Game<WarningGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create('move')
+        .chooseFrom('dest', {
+          choices: [{ from: 'a1', to: 'a2' } as WarnChoice],
+          display: (c: WarnChoice) => `${c.from} -> ${c.to}`,
+          boardRefs: () => {
+            throw new Error('boardRefs boom');
+          },
+        })
+        .execute(() => ({ success: true }))
+    );
+
+    this.setFlow(defineFlow({
+      root: loop({
+        maxIterations: 1000,
+        do: actionStep({
+          actions: ['move'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+        }),
+      }),
+    }));
+  }
+}
+
+const warningGameDef: GameDefinitionLike = {
+  gameClass: WarningGame as new (...args: unknown[]) => unknown,
+  gameType: 'warning-game',
+  minPlayers: 1,
+  maxPlayers: 2,
+};
+
+const warningGameOptions = { playerCount: 2, seed: 'warning-seed' };
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -384,6 +433,77 @@ describe('executeOp', () => {
 
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe(ErrorCode.CHOICES_EVALUATION_ERROR);
+    });
+
+    it('carries structured warnings from a throwing boardRefs() while still succeeding (ERR-01)', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const startResult = await startGame(warningGameDef, warningGameOptions);
+        expect(startResult.success).toBe(true);
+
+        const result = await executeOp(
+          warningGameDef,
+          warningGameOptions,
+          startResult.snapshot,
+          null,
+          {
+            type: 'resolveChoices',
+            actionName: 'move',
+            player: 1,
+            selectionName: 'dest',
+            args: {},
+          },
+        );
+
+        expect(result.success).toBe(true);
+        expect(Array.isArray(result.choices)).toBe(true);
+        expect((result.choices as unknown[]).length).toBe(1);
+        expect(result.warnings).toBeDefined();
+        expect(result.warnings!.some(w => w.code === 'BOARD_REFS_ERROR')).toBe(true);
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+  });
+
+  // ── selectionStep warnings threading (ERR-01) ────────────────────────────
+  //
+  // PendingActionManager's own step-processing path never invokes
+  // boardRefs()/display()/boardRef() today (only PickHandler.getPickChoices
+  // does, via resolveChoices), so there's no live gameplay path that produces
+  // a non-empty warnings array through selectionStep yet. This test proves
+  // the WIRING is correct — that handleSelectionStep forwards
+  // step.warnings onto OpResult.warnings whenever the underlying pick
+  // response happens to carry one — by spying on PickHandler.processSelectionStep.
+
+  describe('selectionStep warnings threading', () => {
+    it('forwards warnings from the pick response onto OpResult', async () => {
+      const startResult = await startGame(twoStepGameDef, twoStepGameOptions);
+      expect(startResult.success).toBe(true);
+
+      const spy = vi.spyOn(PickHandler.prototype, 'processSelectionStep').mockResolvedValueOnce({
+        success: true,
+        done: false,
+        actionComplete: false,
+        pendingState: { actionName: 'pick', playerPosition: 1, collectedArgs: { color: 'red' }, currentSelectionIndex: 1 },
+        warnings: [{ code: 'DISPLAY_ERROR', message: 'display boom', source: 'display(...)' }],
+      });
+
+      try {
+        const step1 = await executeOp(
+          twoStepGameDef,
+          twoStepGameOptions,
+          startResult.snapshot,
+          null,
+          { type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick' },
+        );
+
+        expect(step1.success).toBe(true);
+        expect(step1.warnings).toBeDefined();
+        expect(step1.warnings![0].code).toBe('DISPLAY_ERROR');
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 

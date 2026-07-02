@@ -119,6 +119,63 @@ describe('dev host bridge', () => {
       expect(r.choices).toEqual(['red', 'blue']);
     });
 
+    // ── warnings threading (ERR-01 T-126-09) ────────────────────────────────
+    //
+    // shapeResult is a manual allowlist (RESEARCH Pitfall 4) — warnings added
+    // to OpResult are invisible on the wire unless explicitly forwarded.
+
+    it("forwards result.warnings on the 'action' case", () => {
+      const r = shapeResult('action', {
+        success: true,
+        followUp: undefined,
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+        warnings: [{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }],
+      });
+      expect((r as Record<string, unknown>).warnings).toEqual([
+        { code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' },
+      ]);
+    });
+
+    it("forwards result.warnings on the 'selection_step' case", () => {
+      const r = shapeResult('selection_step', {
+        success: true,
+        done: true,
+        actionComplete: true,
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+        warnings: [{ code: 'DISPLAY_ERROR', message: 'display boom', source: 'display(...)' }],
+      });
+      expect((r as Record<string, unknown>).warnings).toEqual([
+        { code: 'DISPLAY_ERROR', message: 'display boom', source: 'display(...)' },
+      ]);
+    });
+
+    it("resolve_choices full-passthrough still carries warnings (regression guard)", () => {
+      const r = shapeResult('resolve_choices', {
+        success: true,
+        choices: ['red', 'blue'],
+        snapshot: {},
+        pendingState: null,
+        flowState: {},
+        playerViews: [],
+        isComplete: false,
+        winners: [],
+        warnings: [{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }],
+      });
+      expect((r as Record<string, unknown>).warnings).toEqual([
+        { code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' },
+      ]);
+    });
+
     it('returns only {success,error} for hint and heatmap-toggle (no playerViews leak)', () => {
       const base = {
         success: true,

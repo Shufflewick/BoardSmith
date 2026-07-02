@@ -12,7 +12,7 @@
 import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
 import type { ErrorCode } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat } from '../engine/index.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import { GameRunner, type GameStateSnapshot, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, parseAILevel } from '../ai/index.js';
@@ -112,6 +112,12 @@ export interface OpResult {
    */
   errorCode?: ErrorCode;
   category?: 'bundle' | 'executor' | 'protocol';
+  /**
+   * Structured, inspectable warnings carried up from a pick response (e.g.
+   * boardRefs()/display()/boardRef() throwing but recovering via a graceful
+   * fallback). Never flips success:false — see WarningEntry.
+   */
+  warnings?: WarningEntry[];
 
   // Op-specific fields
   followUp?: unknown;
@@ -389,6 +395,7 @@ async function handleSelectionStep(
     nextChoices: step.nextChoices,
     actionComplete: step.actionComplete,
     followUp: step.followUp,
+    warnings: step.warnings,
   };
 }
 
@@ -413,6 +420,7 @@ function handleResolveChoices(
     choices: result.choices,
     validElements: result.validElements,
     multiSelect: result.multiSelect,
+    warnings: result.warnings,
   };
 }
 
