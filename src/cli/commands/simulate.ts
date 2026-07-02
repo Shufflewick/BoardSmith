@@ -138,6 +138,19 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     process.exit(1);
   }
 
+  const gamesCount = Number(options.games);
+  const playersCount = Number(options.players);
+  if (!Number.isInteger(gamesCount) || gamesCount < 1) {
+    console.error(chalk.red(`Error: --games must be a positive integer, got "${options.games}"`));
+    process.exitCode = 1;
+    return;
+  }
+  if (!Number.isInteger(playersCount) || playersCount < 1) {
+    console.error(chalk.red(`Error: --players must be a positive integer, got "${options.players}"`));
+    process.exitCode = 1;
+    return;
+  }
+
   const context = getProjectContext(cwd);
 
   const tempDir = join(cwd, '.boardsmith');
@@ -154,10 +167,9 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     return;
   }
 
-  const players = Number(options.players);
   const report = await runSimulation(gameDefinition.gameClass as new (options: GameOptions) => Game, {
-    count: Number(options.games),
-    players,
+    count: gamesCount,
+    players: playersCount,
     seed: options.seed,
   });
 
