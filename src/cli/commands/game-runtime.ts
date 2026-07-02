@@ -30,8 +30,13 @@ export function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
 // as dev.ts (src/cli/commands/) so the relative path math below stays correct.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// After monorepo collapse, CLI is at dist/cli/, monorepo root is 2 levels up
-export const cliMonorepoRoot = resolve(__dirname, '..', '..');
+// __dirname is <repo>/src/cli/commands (tsx-src) or <repo>/dist/cli/commands
+// (built-dist); three levels up reaches <repo> in both layouts. NOTE: the
+// monorepo-context branch below is currently unreachable in practice (there is
+// no boardsmith.json at the BoardSmith monorepo root, so getProjectContext
+// never returns 'monorepo' today) — this depth math only matters if a future
+// monorepo-context consumer is added.
+export const cliMonorepoRoot = resolve(__dirname, '..', '..', '..');
 
 /**
  * esbuild plugin to resolve boardsmith/* imports to the monorepo source.
