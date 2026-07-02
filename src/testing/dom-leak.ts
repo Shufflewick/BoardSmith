@@ -371,6 +371,16 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): string[] {
  * honors a game's `static playerView` hook (content the hook strips is
  * forbidden too) and never relies on a hardcoded identity-field list.
  *
+ * KNOWN LIMITATION (WR-01): boolean-valued attributes are NEVER treated as
+ * identity candidates (see {@link stringifyScalar}) — `true`/`false` collide
+ * with near-universal DOM substrings (`data-animatable="true"`,
+ * `aria-pressed="true"`, etc.), so including them would false-positive on
+ * almost any rendered page. This is safe for boolean *state* flags like
+ * `Card.faceUp`, but if your game's HIDDEN information is itself a boolean
+ * (e.g. a secret "isSpy" role flag, a hidden coin-flip result), this
+ * assertion will NEVER catch it leaking. Supplement with `assertHidden`/
+ * `isElementVisible` checks (see `visibility.ts`) for boolean secrets.
+ *
  * @param testGame - The TestGame wrapper
  * @param seat - The seat to check for leaks
  * @param options - Allowlist predicate + (test-only) render override
