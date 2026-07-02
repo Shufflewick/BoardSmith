@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 127-01-PLAN.md
-last_updated: "2026-07-02T10:20:00.000Z"
-last_activity: 2026-07-02 -- Phase 127 Plan 01 complete (getState/getLobby/debugToggle/uiSwitch)
+stopped_at: Completed 127-02-PLAN.md
+last_updated: "2026-07-02T15:35:00.000Z"
+last_activity: 2026-07-02 -- Phase 127 Plan 02 complete (Node-capable GameConnection via injectable wsCtor, DRIVE-02)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 16
-  completed_plans: 14
-  percent: 56
+  completed_plans: 15
+  percent: 50
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 127
-Plan: 01 complete
-Status: Executing — Plan 01 done, remaining plans per ROADMAP.md
-Last activity: 2026-07-02 -- Phase 127 Plan 01 complete (getState/getLobby/debugToggle/uiSwitch)
+Plan: 02 complete
+Status: Executing — Plans 01-02 done, remaining plans per ROADMAP.md
+Last activity: 2026-07-02 -- Phase 127 Plan 02 complete (Node-capable GameConnection via injectable wsCtor, DRIVE-02)
 
 ## Milestones
 
@@ -151,6 +151,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase ?]: 126-03: boardRef()'s warning code is CHOICES_ERROR per the plan's reserved taxonomy; PickStepResult.warnings? added in pending-action-manager.ts as necessary plumbing for handleSelectionStep forwarding
 - [Phase 126]: 126-04: debugLogs kept as a bridge-local marker type (never joins stateless-ops.ts's Op union) so the executeOp purity contract holds by construction
 - [Phase 127]: 127-01: getState/getLobby reuse the existing game_state/lobby HostOutbound shapes plus requestId (no new response type names); getState resolves seat only from server-tracked followerClientId/clientSeat (no client-supplied seat field exists on the variant); debugToggle/uiSwitch are host-level relay-only ops (fan-out to all connected clients), never routed through bridge.ts's WireOp machinery
+- [Phase 127]: 127-02: GameConnection's WebSocket construction/OPEN/CONNECTING reads routed through a private #wsCtor resolved once via config.wsImplementation ?? globalThis.WebSocket, extracted into shared src/client/ws-ctor.ts (resolveWsCtor) for 127-03 dev-host-client reuse; package.json engines.node deliberately NOT bumped to >=22.4 (fail-loud guard is the enforcement, not a blanket engines constraint)
 
 ### Highest-Risk Items (v4.4)
 
@@ -172,13 +173,14 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T10:20:00.000Z
-Stopped at: Completed 127-01-PLAN.md
+Last session: 2026-07-02T15:35:00.000Z
+Stopped at: Completed 127-02-PLAN.md
 Resume file: None
-Next action: Execute remaining Phase 127 plans per ROADMAP.md (Node-capable client SDK / dev-host protocol client, per 127-PATTERNS.md). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) and `/gsd:verify-phase 125`/`126` as applicable.
+Next action: Execute Phase 127 Plan 03 (Node-capable dev-host client, per 127-PATTERNS.md) — can reuse src/client/ws-ctor.ts's resolveWsCtor(). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) and `/gsd:verify-phase 125`/`126` as applicable.
 
 ## Operator Next Steps
 
 - Phase 123 (Determinism & Flow Introspection) is fully executed (4/4 plans complete). Run `/gsd:verify-phase 123` to confirm FLOW-01/02/03/04 acceptance criteria before moving on to Phase 124/125.
 - Phase 124 (Hidden-Info Test Utilities) is fully executed (3/3 plans complete) -- `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible`/`diffPlayerViews`/`renderAsSeat`/`assertNoHiddenInfoLeak` all shipped and exported from `boardsmith/testing`. Run `/gsd:verify-phase 124` to confirm VIS-01/02/03 acceptance criteria before starting Phase 125.
 - Phase 125 (Headless Simulation) Plan 01 complete: `createHeadlessSession` is now exported from `boardsmith/session` (SIM-01). Plan 02 remains (per ROADMAP.md) before the phase is done.
+- Phase 127 (Scriptable Dev Host) Plan 02 complete: GameConnection is now Node-capable (DRIVE-02) via an injectable `wsCtor` (`src/client/game-connection.ts` + shared `src/client/ws-ctor.ts`). Plan 03 (Node-capable dev-host protocol client) remains.
