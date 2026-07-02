@@ -9,6 +9,8 @@
 import {
   Game,
   Player,
+  GameElement,
+  ElementCollection,
   type GameOptions,
   type FlowState,
   type FlowDebugInfo,
@@ -17,6 +19,7 @@ import {
 } from '../engine/index.js';
 import { GameRunner, type ActionExecutionResult, type PlayerStateView } from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
+import { isElementVisible, getVisibleElements } from './visibility.js';
 
 /**
  * Options for creating a test game.
@@ -398,6 +401,30 @@ export class TestGame<G extends Game = Game> {
         })),
       })),
     };
+  }
+
+  /**
+   * Is `element` visible to `seat` — judged on the EXACT final per-seat wire
+   * output (`game.toJSONForPlayer(seat)`), including any `static playerView`
+   * post-transform the game class defines. See {@link isElementVisible}.
+   *
+   * @param element - The live element to check
+   * @param seat - The seat to check visibility for (use 0 for spectator)
+   * @returns Whether `element`'s identity is visible to `seat`
+   */
+  isElementVisible(element: GameElement, seat: number): boolean {
+    return isElementVisible(element, seat);
+  }
+
+  /**
+   * Get the live elements visible to `seat` — derived from the final
+   * per-seat serialized tree. See {@link getVisibleElements}.
+   *
+   * @param seat - The seat to compute visibility for (use 0 for spectator)
+   * @returns An ElementCollection of the live elements visible to `seat`
+   */
+  getVisibleElements(seat: number): ElementCollection<GameElement> {
+    return getVisibleElements(this.game, seat);
   }
 }
 
