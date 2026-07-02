@@ -93,4 +93,50 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 
 ## Traceability
 
-(Filled by roadmap.)
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PROC-01 | Phase 131 | Pending |
+| PROC-02 | Phase 131 | Pending |
+| SEC-01 | Phase 131 | Pending |
+| SEC-02 | Phase 131 | Pending |
+| SEC-03 | Phase 131 | Pending |
+| SEC-04 | Phase 131 | Pending |
+| RST-01 | Phase 131 | Pending |
+| RST-02 | Phase 131 | Pending |
+| ENG-01 | Phase 132 | Pending |
+| ENG-05 | Phase 132 | Pending |
+| ENG-06 | Phase 132 | Pending |
+| ENG-08 | Phase 132 | Pending |
+| ENG-02 | Phase 133 | Pending |
+| ENG-03 | Phase 133 | Pending |
+| ENG-04 | Phase 133 | Pending |
+| ENG-07 | Phase 133 | Pending |
+| SESS-01 | Phase 134 | Pending |
+| UIX-01 | Phase 134 | Pending |
+| UIX-02 | Phase 134 | Pending |
+| UIX-03 | Phase 134 | Pending |
+| UIX-04 | Phase 134 | Pending |
+| UIX-05 | Phase 134 | Pending |
+| CLIX-01 | Phase 135 | Pending |
+| CLIX-02 | Phase 135 | Pending |
+| CLIX-03 | Phase 135 | Pending |
+| CLIX-04 | Phase 135 | Pending |
+| CLIX-05 | Phase 135 | Pending |
+| CLIX-06 | Phase 135 | Pending |
+| SDK-01 | Phase 136 | Pending |
+| SDK-02 | Phase 136 | Pending |
+| SDK-03 | Phase 136 | Pending |
+| SDK-04 | Phase 136 | Pending |
+| SDK-05 | Phase 136 | Pending |
+| SDK-06 | Phase 136 | Pending |
+| TST-01 | Phase 137 | Pending |
+| TST-02 | Phase 137 | Pending |
+| GAMES-01 | Phase 138 | Pending |
+| GAMES-02 | Phase 138 | Pending |
+| DOCX-01 | Phase 139 | Pending |
+| DOCX-02 | Phase 139 | Pending |
+| DOCX-03 | Phase 139 | Pending |
+| DOCX-04 | Phase 139 | Pending |
+
+**Coverage:** 42/42 requirements mapped. 100% — no orphans, no duplicates.
+</content>
