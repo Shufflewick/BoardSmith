@@ -177,6 +177,13 @@ function onHostMessage(msg: Record<string, unknown>): void {
     case 'follow':
       followActive.value = msg.enabled as boolean;
       break;
+    case 'debugToggle':
+      toggleDebug();
+      break;
+    case 'uiSwitch':
+      selectedUi.value = msg.name as string;
+      onUiSelect();
+      break;
   }
 }
 
