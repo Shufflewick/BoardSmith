@@ -120,3 +120,14 @@ export {
 
 // ActionBuilder — multi-step / dependent-selection builder (TEST-05)
 export { ActionBuilder } from './action-builder.js';
+
+// Animation test-mode + trace (ANIM-01)
+export {
+  enableAnimationTestMode,
+  disableAnimationTestMode,
+  isAnimationTestModeEnabled,
+  recordTrace,
+  getAnimationTrace,
+  clearAnimationTrace,
+  type AnimationTrace,
+} from '../ui/composables/useAnimationTestMode.js';
