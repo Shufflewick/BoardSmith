@@ -185,6 +185,14 @@ export interface GameConnectionConfig {
 
   /** Initial reconnection delay in ms */
   reconnectDelay?: number;
+
+  /**
+   * Override the WebSocket constructor GameConnection uses to connect.
+   *
+   * Only needed on runtimes without a global `WebSocket` (e.g. Node <22.4).
+   * Node >=22.4 exposes `globalThis.WebSocket` natively and needs no override.
+   */
+  wsImplementation?: typeof WebSocket;
 }
 
 export interface ActionResult {

@@ -17,9 +17,11 @@ import type {
 } from './types.js';
 
 export class GameConnection {
-  private config: Required<GameConnectionConfig>;
+  private config: Required<Omit<GameConnectionConfig, 'wsImplementation'>>;
   private baseUrl: string;
   private ws: WebSocket | null = null;
+  /** Resolved WebSocket constructor: injected override or the runtime global. */
+  #wsCtor: typeof WebSocket;
   private status: ConnectionStatus = 'disconnected';
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,6 +52,12 @@ export class GameConnection {
   // Request ID counter
   private requestIdCounter = 0;
 
+  /**
+   * @remarks
+   * Constructs and connects natively on Node >=22.4 via `globalThis.WebSocket`.
+   * On older Node or other runtimes without a global `WebSocket`, pass
+   * `config.wsImplementation` — otherwise the constructor throws.
+   */
   constructor(baseUrl: string, config: GameConnectionConfig) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
     this.config = {
@@ -61,6 +69,15 @@ export class GameConnection {
       maxReconnectAttempts: config.maxReconnectAttempts ?? 5,
       reconnectDelay: config.reconnectDelay ?? 1000,
     };
+
+    const wsCtor = config.wsImplementation ?? (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
+    if (!wsCtor) {
+      throw new Error(
+        'GameConnection requires a WebSocket implementation. Node <22.4 has no global WebSocket — ' +
+          'upgrade to Node >=22.4 or pass `wsImplementation` in GameConnectionConfig.'
+      );
+    }
+    this.#wsCtor = wsCtor;
   }
 
   // ============================================
@@ -68,7 +85,7 @@ export class GameConnection {
   // ============================================
 
   connect(): void {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    if (this.ws && (this.ws.readyState === this.#wsCtor.OPEN || this.ws.readyState === this.#wsCtor.CONNECTING)) {
       return; // Already connected or connecting
     }
 
@@ -77,7 +94,7 @@ export class GameConnection {
 
     try {
       const wsUrl = this.buildWebSocketUrl();
-      this.ws = new WebSocket(wsUrl);
+      this.ws = new this.#wsCtor(wsUrl);
       this.setupWebSocketHandlers();
     } catch (error) {
       this.handleError(error instanceof Error ? error : new Error(String(error)));
@@ -115,7 +132,7 @@ export class GameConnection {
   }
 
   async action(actionName: string, args: Record<string, unknown> = {}): Promise<ActionResult> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== this.#wsCtor.OPEN) {
       return { success: false, error: 'Not connected' };
     }
 
@@ -154,7 +171,7 @@ export class GameConnection {
   }
 
   requestState(): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    if (this.ws && this.ws.readyState === this.#wsCtor.OPEN) {
       const message: WebSocketOutgoingMessage = { type: 'getState' };
       this.ws.send(JSON.stringify(message));
     }
@@ -358,7 +375,7 @@ export class GameConnection {
   private startPingInterval(): void {
     this.stopPingInterval();
     this.pingTimer = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (this.ws && this.ws.readyState === this.#wsCtor.OPEN) {
         // If we're still waiting for a pong from the last ping, connection is dead
         if (this.awaitingPong) {
           console.warn('Pong timeout - connection appears dead, reconnecting...');
@@ -419,7 +436,7 @@ export class GameConnection {
       this.ws.onerror = null;
       this.ws.onmessage = null;
 
-      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+      if (this.ws.readyState === this.#wsCtor.OPEN || this.ws.readyState === this.#wsCtor.CONNECTING) {
         this.ws.close();
       }
       this.ws = null;
