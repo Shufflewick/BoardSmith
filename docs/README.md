@@ -14,8 +14,9 @@ This folder contains documentation for the BoardSmith game framework.
 | [AI System](./ai-system.md) | MCTS bot and AI integration |
 | [Game Examples](./game-examples.md) | Analysis of example games with patterns |
 | [Teaching & Tutorials](./teaching-and-tutorials.md) | Tutorial authoring, AI hints, narrated demo, heatmap, action help, and host lockout |
-| [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/replay, determinism & seeding |
-| [LLM Overview](./llm-overview.md) | Quick-reference for LLMs |
+| [Agent Control](./agent-control.md) | Driving a game headlessly: action-space introspection, move enumeration, undo/checkpoint/replay, determinism & seeding, scriptable dev host (WS), structured errors |
+| [LLM Overview](./llm-overview.md) | Quick-reference for LLMs, including the v4.4 agent-ergonomics surface and determinism guarantee |
+| [Migration Guide](./migration-guide.md) | Breaking changes by version, with before→after upgrade steps |
 | [Nomenclature](./nomenclature.md) | Standard terminology reference |
 
 ## For LLMs
@@ -28,6 +29,6 @@ If you're an AI assistant reading this codebase:
 
 ## Quick Links
 
-- **CLI**: `boardsmith init`, `boardsmith dev`, `boardsmith test`
-- **Key packages**: `boardsmith`, `boardsmith/ui`, `boardsmith/ai`
+- **CLI**: `boardsmith init`, `boardsmith dev`, `boardsmith test`, `boardsmith simulate`
+- **Key packages**: `boardsmith`, `boardsmith/ui`, `boardsmith/ai`, `boardsmith/client`
 - **Example games**: Hex, Go Fish, Checkers, Cribbage

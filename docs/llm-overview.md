@@ -352,10 +352,45 @@ boardsmith init <name>    # Create new game
 boardsmith dev            # Start dev server
 boardsmith dev --ai 1     # Player 1 is AI
 boardsmith test           # Run tests
+boardsmith simulate       # Seeded headless batch playthroughs (pass/stuck/error, --json for CI)
 boardsmith validate       # Validate before publish
 boardsmith build          # Production build
 boardsmith publish        # Publish to boardsmith.io
 ```
+
+## Determinism Guarantee
+
+Every `Game` owns a seeded RNG (`game.random`, a mulberry32 generator). Games
+never call `Math.random()` directly, and `boardsmith/testing`'s helpers
+(`playUntilComplete`, `simulateRandomGames`) don't either — a seeded run
+reproduces **end-to-end**, from `Game` construction through every shuffle,
+dice roll, and `playUntilComplete()` auto-play, given the same seed and the
+same action history. There is no `Math.random` fallback anywhere in the
+engine or test harness. See [Determinism & Seeding](./agent-control.md#determinism--seeding)
+for the full replay recipe, and the [migration guide](./migration-guide.md#v44-agent-ergonomics)
+if you're updating code that relied on the old non-deterministic defaults.
+
+## Agent Ergonomics (v4.4)
+
+If you're an agent driving BoardSmith rather than a human developer, these
+capabilities are built specifically for you:
+
+- **Testing (VIS/ANIM/SIM/FLOW)** — assert hidden info never leaks
+  (`assertNoHiddenInfoLeak`, `assertHidden`/`assertVisible`), assert what
+  animated (`enableAnimationTestMode`/`getAnimationTrace`), run seeded
+  headless batch playthroughs (`createHeadlessSession`, `boardsmith
+  simulate`), and introspect exactly where a game's flow is
+  (`getFlowDebugInfo`/`describeFlowPosition`). See
+  [boardsmith/testing](./api/testing.md).
+- **Scriptable dev host (DRIVE)** — drive a running `boardsmith dev` host
+  over WebSocket from Node, with no browser: `getState`/`getLobby`, the
+  `debugToggle`/`uiSwitch` relay ops, and `createDevHostClient` for a typed
+  connection. See [Agent Control: Scriptable Dev Host (WS)](./agent-control.md#scriptable-dev-host-ws).
+- **Structured errors (ERR)** — branch on `errorCode` instead of matching
+  error-message strings, and observe persistence health directly
+  (`onPersistenceError`/`lastPersistenceError`/`persistenceHealthy`) rather
+  than only seeing failures in a terminal log. See
+  [Agent Control: Structured Errors (ERR)](./agent-control.md#structured-errors-err).
 
 ## Example Games Reference
 

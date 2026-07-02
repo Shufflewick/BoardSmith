@@ -1,5 +1,138 @@
 # Migration Guide
 
+## v4.4: Agent-Ergonomics
+
+v4.4 closes the determinism guarantee (no `Math.random` fallback anywhere in
+the engine) and adds the FLOW/VIS/SIM/ERR/DRIVE/ANIM agent-ergonomics
+surface documented in [Agent Control](./agent-control.md),
+[boardsmith/testing](./api/testing.md), and
+[Custom UI Guide](./custom-ui-guide.md). This section lists every
+removed/changed API.
+
+### What Changed
+
+- The headless test-harness module moved and lost its old import path.
+- `ElementCollection.shuffle()` now requires an explicit RNG argument — no
+  silent `Math.random()` fallback.
+- `playUntilComplete()` is deterministic by default (a fixed literal seed)
+  instead of defaulting to `Math.random()`-derived randomness.
+- Animation helpers (`useElementAnimation`, `useFLIP`, `useFlyingElements`)
+  now fail loud in development when a target element has no anchor
+  attribute, instead of silently no-oping.
+- `onPersistenceError` gained two additional arguments.
+- `anchorAttrs()` gained a second parameter.
+
+### Step 1: Update the headless test-harness import
+
+```typescript
+// Before — internal, test-only module path (never a public package export)
+import { createHeadlessSession } from './session/testing/headless-harness.js';
+
+// After — public export from the boardsmith/session barrel
+import { createHeadlessSession } from 'boardsmith/session';
+```
+
+The old module (`src/session/testing/headless-harness.ts`) is deleted — there
+is no re-export shim at the old path. This only affects code that imported
+the internal module directly by relative path; it was never part of a public
+subpath export.
+
+### Step 2: Pass an explicit RNG to `ElementCollection.shuffle()`
+
+```typescript
+// Before (implicit Math.random() fallback)
+someCollection.shuffle();
+
+// After — pass the game's seeded RNG explicitly (same as Space/Deck's own
+// shuffle() wrapper already does internally)
+someCollection.shuffle(game.random);
+```
+
+If you were shuffling a `Deck`/`Space` via its own `.shuffle()` method
+(no arguments), nothing changes — that wrapper already threads `game.random`
+through internally and was never affected by this break. This change only
+affects direct callers of the lower-level `ElementCollection.shuffle(random)`.
+
+### Step 3: `playUntilComplete()` is now deterministic by default
+
+```typescript
+// Before — no-options calls used Math.random()-derived randomness,
+// producing a different playthrough on every run.
+playUntilComplete(testGame);
+
+// After — no-options calls use a fixed literal seed
+// ('playUntilComplete-default'), so re-running the same test reproduces the
+// identical command history. Pass your own `seed` or `rng` to vary it.
+playUntilComplete(testGame);                          // now reproducible by default
+playUntilComplete(testGame, { seed: 'my-run-seed' });  // explicit seed
+playUntilComplete(testGame, { rng: () => 0 });         // escape-hatch: fully custom rng
+```
+
+No call-site changes are required — this is a behavior change, not a
+signature change. If a test was relying on non-determinism across repeated
+`playUntilComplete()` calls in the same process (rare), pass a different
+`seed` per call.
+
+### Step 4: Animation helpers fail loud on missing anchors
+
+```typescript
+// Before — a custom board element missing data-bs-el-id silently failed to
+// animate, with no visible signal during development.
+
+// After — the same gap throws an actionable dev-only error naming the
+// composable, the attribute searched for, and the fix. Production builds
+// still degrade gracefully (console.error + skip), matching prior behavior.
+```
+
+Fix by spreading `anchorAttrs(ref, type)` (or `useSelectable()`'s `attrs`)
+onto every animated/draggable board element — see
+[Custom UI Guide: Anchor Requirements & Fail-Loud](./custom-ui-guide.md#anchor-requirements--fail-loud-animation).
+
+### Step 5: `onPersistenceError` signature change
+
+```typescript
+// Before
+onPersistenceError?: (error: PersistenceErrorEntry) => void;
+
+// After — two additional arguments: a running consecutive-failure count and
+// a `healthy` flag (flips false after 3 consecutive failures, recovers on
+// the next successful save)
+onPersistenceError?: (
+  error: PersistenceErrorEntry,
+  consecutiveFailures: number,
+  healthy: boolean,
+) => void;
+```
+
+See [Agent Control: Structured Errors (ERR)](./agent-control.md#structured-errors-err)
+for the full `persistenceHealthy`/`lastPersistenceError` observable-state
+story this enables.
+
+### Step 6: `anchorAttrs()` signature change
+
+```typescript
+// Before
+anchorAttrs(ref: ElementRef): Record<string, string>;
+
+// After — optional `type` label for the missing-anchor dev warning's
+// dedup key (defaults to 'unknown' when omitted, preserving prior behavior)
+anchorAttrs(ref: ElementRef, type: string = 'unknown'): Record<string, string>;
+```
+
+Existing single-argument call sites keep working unchanged. Pass a `type`
+(e.g. `'card'`, `'piece'`, `'grid-cell'`) from renderer components so a
+missing-anchor bug in your board names the actual component, not a generic
+`'unknown'` bucket shared by every board element.
+
+### Checklist
+
+- [ ] Update `createHeadlessSession` imports from `boardsmith/session/testing/headless-harness` to `boardsmith/session`
+- [ ] Pass an explicit RNG to any direct `ElementCollection.shuffle()` calls (not `Deck`/`Space.shuffle()` — that wrapper is unaffected)
+- [ ] Review any test relying on `playUntilComplete()` non-determinism across repeated calls; pass an explicit `seed` if so
+- [ ] Spread `anchorAttrs(ref, type)` (or `useSelectable()`'s `attrs`) onto every custom board element that animates or drag-drops
+- [ ] Update any `onPersistenceError` callback to accept `(error, consecutiveFailures, healthy)`
+- [ ] Pass a `type` label to `anchorAttrs()` calls in custom renderer components (optional but recommended)
+
 ## v3.0: Animation Timeline
 
 v3.0 replaces the server-side theatre view system with a client-side animation timeline. Animation events are now pure data signals -- the server broadcasts truth immediately and never waits on animation playback.
