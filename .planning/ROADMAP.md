@@ -156,7 +156,10 @@ Plans:
   2. MERC is re-vendored with the updated BoardSmith and its test suite passes.
   3. No game or MERC code references a removed/changed API path (clean break, no deprecation aliases).
 
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 129-01-PLAN.md — Non-flagship game sweep: hex anchor fix + tsc debt (hex/checkers/polyhedral-potions/demo-complex-ui/demo-action-panel), per-repo green + scoped grep sweep
+- [ ] 129-02-PLAN.md — Flagship adoption: go-fish DOM-leak (positive control) + visibility, cribbage visibility, demo-animation trace (+ approved devDeps)
+- [ ] 129-03-PLAN.md — MERC re-vendor + green, phase-wide grep sweep (9 repos) + simulate smoke (hex/checkers)
 
 #### Phase 130: Documentation
 
