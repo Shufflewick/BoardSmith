@@ -121,7 +121,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 127-03-PLAN.md — createDevHostClient + browserless Node integration test (phase acceptance proof)
+- [x] 127-03-PLAN.md — createDevHostClient + browserless Node integration test (phase acceptance proof)
 
 #### Phase 128: Animation & Drag-Drop Test Story
 
@@ -175,7 +175,7 @@ Plans:
 | 124. Hidden-Info Test Utilities | 3/3 | Complete    | 2026-07-02 |
 | 125. Headless Simulation | 2/2 | Complete    | 2026-07-02 |
 | 126. Structured Error Surfacing | 4/4 | Complete    | 2026-07-02 |
-| 127. Scriptable Dev Host | 2/3 | In Progress|  |
+| 127. Scriptable Dev Host | 3/3 | Complete   | 2026-07-02 |
 | 128. Animation & Drag-Drop Test Story | 0/TBD | Not started | - |
 | 129. Migration (Games + MERC) | 0/TBD | Not started | - |
 | 130. Documentation | 0/TBD | Not started | - |
