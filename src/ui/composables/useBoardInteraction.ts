@@ -410,6 +410,16 @@ export function anchorAttrs(ref: ElementRef): Record<string, string> {
   if (ref.id !== undefined) attrs['data-bs-el-id'] = String(ref.id);
   if (ref.notation !== undefined) attrs['data-bs-el-notation'] = String(ref.notation);
   if (ref.name !== undefined) attrs['data-bs-el-name'] = String(ref.name);
+  if (Object.keys(attrs).length === 0) {
+    const typeKey = ref.name ?? 'unknown';
+    devWarn(
+      `anchorattrs-missing-${typeKey}`,
+      `anchorAttrs() produced no data-bs-el-* attributes for a selectable/renderable element (type: '${typeKey}'). ` +
+        `Custom boards must spread anchorAttrs(ref) (or v-bind="attrs" from useSelectable) onto each element's root ` +
+        `so FLIP/flying-element animations and drag-drop can find it. Without an anchor, animations silently no-op ` +
+        `and traces cannot identify the element. Pass at least one of { id, notation, name } on the ElementRef.`,
+    );
+  }
   return attrs;
 }
 

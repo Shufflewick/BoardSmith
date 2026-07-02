@@ -8,12 +8,13 @@
  *   - useSelectableGrid returns cellAttrs that returns data-bs-el-* keys
  *   - Negative guard: attribute names exist only in anchorAttrs (single source)
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { computed } from 'vue';
 import { anchorAttrs } from './useBoardInteraction.js';
 import { useSelectable, useSelectableGrid } from './useSelectable.js';
+import { _clearShownWarnings } from '../../utils/dev.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
 
 function makeMockInteraction(): Pick<BoardInteraction, 'triggerElementSelect'> {
@@ -66,6 +67,51 @@ describe('anchorAttrs', () => {
     const attrs = anchorAttrs({ id: 42 });
     expect(typeof attrs['data-bs-el-id']).toBe('string');
     expect(attrs['data-bs-el-id']).toBe('42');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anchorAttrs dev-warning — empty anchor result (ANIM-03)
+// ---------------------------------------------------------------------------
+
+describe('anchorAttrs dev-warning', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    _clearShownWarnings();
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('empty ref triggers exactly one console.warn mentioning anchorAttrs', () => {
+    anchorAttrs({});
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain('anchorAttrs');
+  });
+
+  it('a second empty ref of the same type does NOT warn again (dedup)', () => {
+    anchorAttrs({});
+    anchorAttrs({});
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedup key is derived from ref.name, not per-id (never spams per instance)', () => {
+    // The warning only fires when id/notation/name are ALL undefined, so the
+    // dedup key resolves to a fixed 'unknown' bucket rather than an id-derived
+    // key — a 50-element board missing anchors warns once, not 50 times.
+    anchorAttrs({});
+    anchorAttrs({});
+    anchorAttrs({});
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a non-empty ref (id: 5) produces data-bs-el-id and emits NO warning', () => {
+    const attrs = anchorAttrs({ id: 5 });
+    expect(attrs).toEqual({ 'data-bs-el-id': '5' });
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
 
