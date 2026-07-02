@@ -106,6 +106,8 @@
 
 import { watch, type Ref, type ComputedRef } from 'vue';
 import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
+import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
+import { isDevMode } from '../../utils/dev.js';
 import type { GameElement } from '../types.js';
 
 /**
@@ -387,10 +389,14 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
     // Find the source element
     const sourceElement = document.querySelector(selector);
     if (!sourceElement) {
-      console.warn(
+      const msg =
         `[useActionAnimations] Could not find element for selector "${selector}". ` +
-          `Action: ${actionName}, Args: ${JSON.stringify(args)}`
-      );
+        `Action: ${actionName}, Args: ${JSON.stringify(args)}`;
+      if (isDevMode()) {
+        throw new Error(msg);
+      } else {
+        console.error(msg);
+      }
       return;
     }
 
@@ -472,12 +478,31 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
 
       // Find the destination element
       let destinationElement: Element | null = null;
+      let destSelectorStr: string | undefined;
 
       if (typeof config.destinationSelector === 'function') {
         destinationElement = config.destinationSelector(args);
       } else {
-        const destSelector = interpolateSelector(config.destinationSelector, args);
-        destinationElement = document.querySelector(destSelector);
+        destSelectorStr = interpolateSelector(config.destinationSelector, args);
+        destinationElement = document.querySelector(destSelectorStr);
+      }
+
+      // Test mode: record one {kind:'action'} trace using our OWN
+      // interpolated from/to selector strings and return WITHOUT delegating
+      // to fly() - useFlyingElements has its own independent 'fly' trace
+      // branch (used only for direct manual/autoWatch fly() calls), so
+      // delegating here would double-record the same animation.
+      if (isAnimationTestModeEnabled()) {
+        const elementSelectorStr = interpolateSelector(config.elementSelector, args);
+        const elementValue = args[config.elementSelection];
+        recordTrace({
+          kind: 'action',
+          element: elementValue !== undefined ? String(elementValue) : null,
+          from: elementSelectorStr,
+          to: destSelectorStr,
+          meta: { action: config.action, args },
+        });
+        return;
       }
 
       if (!destinationElement) {
@@ -485,10 +510,14 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
           typeof config.destinationSelector === 'function'
             ? '(custom function)'
             : config.destinationSelector;
-        console.warn(
+        const msg =
           `[useActionAnimations] Could not find destination element. ` +
-            `Selector: ${selectorDesc}, Args: ${JSON.stringify(args)}`
-        );
+          `Selector: ${selectorDesc}, Args: ${JSON.stringify(args)}`;
+        if (isDevMode()) {
+          throw new Error(msg);
+        } else {
+          console.error(msg);
+        }
         return;
       }
 
