@@ -58,6 +58,22 @@ import { describeMoveDestination, describeMoveForHint } from './move-summary.js'
 import { TutorialController } from './tutorial-controller.js';
 import { autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 
+/**
+ * Consecutive persistence-save failures before `persistenceHealthy` flips
+ * false (ERR-03). Mirrors `#aiConsecutiveFailures >= 3`'s give-up threshold
+ * so both circuit breakers escalate at the same count.
+ */
+const PERSISTENCE_UNHEALTHY_THRESHOLD = 3;
+
+/**
+ * A single captured persistence failure. Never carries a stack trace or
+ * file paths — sanitized message only (T-126-05).
+ */
+export interface PersistenceErrorEntry {
+  message: string;
+  timestamp: number;
+}
+
 // ============================================
 // Types
 // ============================================
@@ -114,6 +130,18 @@ export interface GameSessionOptions<G extends Game = Game> {
    * `teachingDisabled` (D-01).
    */
   teachingDisabled?: boolean;
+  /**
+   * Injectable hook invoked whenever a storage save fails (ERR-03). Never
+   * rethrown by the caller — a throwing hook is swallowed and echoed via
+   * `console.error` so it can never crash gameplay (T-126-06).
+   *
+   * @param error Sanitized `{message, timestamp}` — never a stack trace (T-126-05).
+   * @param consecutiveFailures Running count of consecutive save failures.
+   * @param healthy Current `persistenceHealthy` value (false once
+   *   `consecutiveFailures >= PERSISTENCE_UNHEALTHY_THRESHOLD`), so consumers
+   *   can escalate severity (e.g. warning -> error) without recomputing it.
+   */
+  onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
 }
 
 /**
@@ -224,6 +252,12 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   #checkpointManager?: DevCheckpointManager<G>;
   /** Circuit breaker: consecutive AI failures before giving up */
   #aiConsecutiveFailures = 0;
+  /** Injectable persistence-failure hook (ERR-03). Never rethrown — see #persistSafely. */
+  #onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
+  /** Most recent sanitized persistence failure, or null if none has occurred yet. */
+  #lastPersistenceError: PersistenceErrorEntry | null = null;
+  /** Circuit breaker: consecutive persistence-save failures before persistenceHealthy flips false. */
+  #persistenceConsecutiveFailures = 0;
   /**
    * Bot AI config (objectives, hintTargetFromMove) kept on the session so
    * ephemeral bots for requestHint() and setHeatmapVisible() can use the
@@ -281,7 +315,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     pickHandler?: PickHandler<G>,
     pendingActionManager?: PendingActionManager<G>,
     botAIConfig?: BotAIConfig,
-    teachingDisabled?: boolean
+    teachingDisabled?: boolean,
+    onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void
   ) {
     this.#runner = runner;
     this.#storedState = storedState;
@@ -292,6 +327,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     this.#lobbyManager = lobbyManager;
     this.#botAIConfig = botAIConfig;
     this.#teachingDisabled = teachingDisabled ?? false;
+    this.#onPersistenceError = onPersistenceError;
     // Capture the tutorial definition from the initial runner so replaceRunner
     // can re-supply it (tutorial is excluded from snapshot.gameOptions and is
     // therefore absent on runners created by fromCheckpoint / fromSnapshot).
@@ -515,6 +551,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       maxPlayers,
       tutorial,
       teachingDisabled,
+      onPersistenceError,
     } = options;
 
     const gameSeed = seed ?? Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -697,13 +734,14 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Explicit annotation breaks the type-inference cycle: the lobby callbacks
     // capture `getSession: () => session` above, so `session` must have a known
     // type independent of its own initializer.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig, teachingDisabled);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig, teachingDisabled, onPersistenceError);
 
-    // Persist initial state (fire-and-forget to keep create synchronous)
+    // Persist initial state (fire-and-forget to keep create synchronous).
+    // Routed through #persistSafely (same funnel as every other save site) so
+    // a failure here is observable via onPersistenceError/lastPersistenceError
+    // instead of a bare console.error with no caller-visible signal.
     if (storage) {
-      storage.save(storedState).catch(err => {
-        console.error('Failed to save initial game state:', err);
-      });
+      void session.#persistSafely(() => storage.save(storedState));
     }
 
     // Only trigger AI if game is playing (not waiting for players)
@@ -723,6 +761,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     storage?: StorageAdapter,
     botAIConfig?: BotAIConfig,
     tutorial?: TutorialDefinition,
+    onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void,
   ): GameSession<G> {
     // Snapshot-authoritative restore (audit F42). Reconstruct game state directly
     // from the persisted snapshot via GameRunner.fromSnapshot — NOT by replaying
@@ -771,7 +810,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Explicit annotation breaks the type-inference cycle with the lobby
     // callbacks' `getSession: () => session` capture above.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, undefined, lobbyManager, undefined, undefined, botAIConfig);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, undefined, lobbyManager, undefined, undefined, botAIConfig, undefined, onPersistenceError);
     return session;
   }
 
@@ -1953,8 +1992,63 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   // ============================================
-  // Broadcasting
+  // Persistence
   // ============================================
+
+  /**
+   * Most recent sanitized persistence failure (ERR-03), or `null` if no save
+   * has ever failed. Never contains a stack trace or file paths (T-126-05).
+   */
+  get lastPersistenceError(): PersistenceErrorEntry | null {
+    return this.#lastPersistenceError;
+  }
+
+  /**
+   * `false` once `PERSISTENCE_UNHEALTHY_THRESHOLD` consecutive saves have
+   * failed; recovers to `true` on the very next successful save. Mirrors the
+   * `#aiConsecutiveFailures >= 3` circuit-breaker shape so both subsystems
+   * escalate at the same threshold.
+   */
+  get persistenceHealthy(): boolean {
+    return this.#persistenceConsecutiveFailures < PERSISTENCE_UNHEALTHY_THRESHOLD;
+  }
+
+  /**
+   * Runs a storage-save operation without ever letting it crash the caller
+   * (ERR-03 / T-126-03). On success, resets the consecutive-failure counter
+   * (restoring `persistenceHealthy`). On failure, increments the counter,
+   * records a sanitized `lastPersistenceError` (never a stack trace —
+   * T-126-05), echoes via `console.error`, and invokes `onPersistenceError`
+   * — itself guarded so a throwing hook can never crash gameplay (T-126-06).
+   *
+   * This is the single funnel every GameSession save path (create()'s
+   * initial save, #save()'s direct-action/tutorial/AI-turn paths) is routed
+   * through, so a storage outage is always observable and never misclassified
+   * as an unrelated failure (e.g. the AI circuit breaker — Pitfall 2 / T-126-04).
+   */
+  async #persistSafely(op: () => Promise<void>): Promise<void> {
+    try {
+      await op();
+      this.#persistenceConsecutiveFailures = 0;
+    } catch (error) {
+      this.#persistenceConsecutiveFailures++;
+      const entry: PersistenceErrorEntry = {
+        message: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+      };
+      this.#lastPersistenceError = entry;
+      console.error(
+        `[Persistence] save failed (${this.#persistenceConsecutiveFailures} consecutive): ${entry.message}`
+      );
+      try {
+        this.#onPersistenceError?.(entry, this.#persistenceConsecutiveFailures, this.persistenceHealthy);
+      } catch (hookError) {
+        console.error(
+          `[Persistence] onPersistenceError hook threw: ${hookError instanceof Error ? hookError.message : String(hookError)}`
+        );
+      }
+    }
+  }
 
   /**
    * Persist the stored state, refreshing the authoritative snapshot first.
@@ -1970,12 +2064,21 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * moves, pending/selection steps, undo, rewind), so no caller can persist a
    * stale or snapshot-less stored state. No-ops without a storage adapter (there
    * is nothing to restore from when state is never persisted).
+   *
+   * Never throws (ERR-03) — routed through #persistSafely so a save failure on
+   * ANY caller (including the AI-turn path inside #checkAITurn's try/catch)
+   * cannot propagate and be misclassified as an unrelated failure.
    */
   async #save(): Promise<void> {
     if (!this.#storage) return;
     this.#storedState.snapshot = this.#runner.getSnapshot();
-    await this.#storage.save(this.#storedState);
+    const storage = this.#storage;
+    await this.#persistSafely(() => storage.save(this.#storedState));
   }
+
+  // ============================================
+  // Broadcasting
+  // ============================================
 
   /**
    * Broadcast current state to all connected sessions
@@ -2089,6 +2192,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
                 if (advanced) anyAdvanced = true;
               }
             }
+            // Persistence failures here are routed through #persistSafely (via
+            // #save) and NEVER thrown, so a storage outage during an AI turn
+            // counts against #persistenceConsecutiveFailures — never against
+            // #aiConsecutiveFailures below (Pitfall 2 / T-126-04 regression fix).
             await this.#save();
             // Clear narration after the move executes so the announcement is
             // transient (shown during the delay, gone after the move lands).
