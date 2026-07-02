@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node
 import { join, resolve, dirname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
-import { build, type Plugin as EsbuildPlugin } from 'esbuild';
+import { build } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import chalk from 'chalk';
@@ -10,6 +10,7 @@ import open from 'open';
 
 import type { GameDefinition, Op, OpResult } from '../../session/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
+import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix } from './game-runtime.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
 type RuntimeExecuteOp = (
@@ -20,25 +21,6 @@ type RuntimeExecuteOp = (
   op: Op,
 ) => Promise<OpResult>;
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
-
-/**
- * Detect if we're running in the BoardSmith monorepo or a standalone game project.
- * - Monorepo: Has src/engine/ directory (collapsed structure)
- * - Standalone: Has boardsmith.json but no src/engine/
- */
-function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
-  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
-  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
-
-  // If we're in the monorepo root, it has src/engine
-  if (hasSrcEngine) return 'monorepo';
-
-  // Standalone game project
-  if (hasBoardsmithJson) return 'standalone';
-
-  // Fallback - treat as standalone (will fail with proper error if neither)
-  return 'standalone';
-}
 
 interface DevOptions {
   port: string;
@@ -116,11 +98,11 @@ function optionRecordToList(record: Record<string, unknown> | undefined): DevOpt
   return Object.entries(record).map(([id, def]) => ({ id, ...(def as object) } as DevOptionDef));
 }
 
-// Get the CLI's directory to find the monorepo root and the dev-host source.
+// Get the CLI's directory to find the dev-host source (cliMonorepoRoot is
+// imported from game-runtime.ts, computed there so `__dirname` path-depth
+// math for both files stays identical).
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// After monorepo collapse, CLI is at dist/cli/, monorepo root is 2 levels up
-const cliMonorepoRoot = resolve(__dirname, '..', '..');
 
 /**
  * Locate the dev-host source directory. It ships in the package `src/` (the
@@ -137,47 +119,6 @@ function resolveDevHostDir(): string {
     if (existsSync(join(c, 'host-main.ts'))) return c;
   }
   return candidates[0];
-}
-
-/**
- * esbuild plugin to resolve boardsmith/* imports to the monorepo source.
- * Only used in monorepo context - standalone games resolve from node_modules.
- * Returns a no-op plugin for standalone context.
- */
-function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlugin {
-  if (context === 'standalone') {
-    return {
-      name: 'boardsmith-resolve-noop',
-      setup() {
-        // No-op: let normal resolution handle boardsmith imports
-      },
-    };
-  }
-
-  return {
-    name: 'boardsmith-resolve',
-    setup(esbuildBuild) {
-      const packageDirs: Record<string, string> = {
-        'boardsmith': 'engine',
-        'boardsmith/ai': 'ai',
-        'boardsmith/ai-trainer': 'ai-trainer',
-        'boardsmith/client': 'client',
-        'boardsmith/runtime': 'runtime',
-        'boardsmith/session': 'session',
-        'boardsmith/testing': 'testing',
-        'boardsmith/ui': 'ui',
-      };
-
-      esbuildBuild.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
-        const importPath = args.path;
-        const dirName = packageDirs[importPath];
-        if (dirName) {
-          return { path: join(cliMonorepoRoot, 'src', dirName, 'index.ts') };
-        }
-        return undefined;
-      });
-    },
-  };
 }
 
 /**
@@ -237,11 +178,6 @@ const UNSAFE_PORTS = new Set([
   2049, 3659, 4045, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697,
   10080,
 ]);
-
-/** Forward-slash an absolute path for use in a Vite module specifier / `/@fs/` URL. */
-function toPosix(p: string): string {
-  return p.replace(/\\/g, '/');
-}
 
 /** The URL the host iframe loads to render the game UI (GameShell, platform mode). */
 const GAME_IFRAME_PATH = '/__boardsmith/play';
