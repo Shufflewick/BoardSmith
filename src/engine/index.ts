@@ -1,6 +1,10 @@
 /// <reference path="../types/node-globals.d.ts" />
 /// <reference path="../ui/global.d.ts" />
 
+// Bundle protocol (game↔engine ABI) version — stamped into manifests at build,
+// enforced by the executor. See protocol-version.ts.
+export { BUNDLE_PROTOCOL_VERSION } from './protocol-version.js';
+
 // Element system
 export {
   GameElement,

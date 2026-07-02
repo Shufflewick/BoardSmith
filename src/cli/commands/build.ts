@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
+import { BUNDLE_PROTOCOL_VERSION } from '../../engine/protocol-version.js';
 
 interface BuildOptions {
   outDir?: string;
@@ -108,6 +109,10 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
       ...config,
       buildTime: new Date().toISOString(),
       version: config.version || '1.0.0',
+      // Stamp the engine ABI version so the executor can reject a bundle built
+      // against an incompatible BoardSmith (INFRA-04). Automatic — authors never
+      // set this; it comes from the BoardSmith building the bundle.
+      engineProtocol: BUNDLE_PROTOCOL_VERSION,
     };
 
     mkdirSync(join(cwd, outDir), { recursive: true });
