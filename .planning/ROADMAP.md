@@ -64,7 +64,9 @@
   1. A developer can `import { createHeadlessSession } from 'boardsmith/session'` — no reaching into the internal `src/session/testing/headless-harness.ts` path.
   2. A developer can run `boardsmith simulate` with games-count and seed flags and get pass/stuck/error reporting per simulated game.
   3. Running `boardsmith simulate` twice with the same seed produces identical pass/stuck/error results.
-**Plans**: TBD
+**Plans**: 2 plans
+  - [ ] 125-01-PLAN.md — SIM-01: move createHeadlessSession to public boardsmith/session (clean break) + JSDoc + tests
+  - [ ] 125-02-PLAN.md — SIM-02: boardsmith simulate CLI (seeded batch, table/--json, non-zero exit, replay) + shared rules loader
 
 #### Phase 126: Structured Error Surfacing
 **Goal**: Failures at the pick-handler, action-runner, storage, and dev-host layers surface as structured, inspectable signals instead of console-only silent fallbacks.

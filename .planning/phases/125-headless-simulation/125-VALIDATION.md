@@ -2,8 +2,8 @@
 phase: 125
 slug: headless-simulation
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-01
 ---
 
@@ -38,7 +38,11 @@ created: 2026-07-01
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | SIM-01..02 | determinism | Same seed twice → identical simulate results; harness has no vitest imports post-move | unit + CLI smoke | `npm test` + `npx boardsmith simulate` against a real game repo | ✅ | ⬜ pending |
+| 125-01-T1 | 01 | 1 | SIM-01 | T-125-01 | No stale internal path re-exposes the harness (grep headless-harness == 0); clean break, no shim | regression | `grep -rl headless-harness src/` empty + `npx vitest run src/runtime/runner.test.ts src/session/testing/{eachplayer-clone,parity-contract,undo-authoritative}.test.ts` | ✅ | ⬜ pending |
+| 125-01-T2 | 01 | 1 | SIM-01 | T-125-02 | structuredClone op/broadcast boundary preserved; seeded run deterministic; no testing/ harness import | unit | `npx vitest run src/session/headless-session.test.ts` | ✅ new | ⬜ pending |
+| 125-02-T1 | 02 | 1 | SIM-02 | T-125-03 | Single shared rules loader (loadGameDefinition, rules-only); dynamic-import trust model documented | type-check | `npx tsc --noEmit` clean for game-runtime.ts/dev.ts | ✅ new | ⬜ pending |
+| 125-02-T2 | 02 | 1 | SIM-02 | T-125-04 | gameClass (not definition) passed; process.exitCode=1 on failure; --json stable shape | type-check + wiring | `npx tsc --noEmit` clean + `grep simulateCommand src/cli/cli.ts` | ✅ new | ⬜ pending |
+| 125-02-T3 | 02 | 1 | SIM-02 | T-125-04, T-125-05 | Same seed twice → byte-identical --json; exit 0 all-complete; no server left running | unit + real-game smoke | `npx vitest run src/cli/commands/simulate.test.ts` + two `boardsmith simulate --games 3 --seed smoke --json` in ~/BoardSmithGames/go-fish diff-clean, exit 0 | ✅ new | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
