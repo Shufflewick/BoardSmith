@@ -22,7 +22,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 - [ ] **ERR-01**: `boardRefs()` / `display()` / `getChoices()` failures surface as structured warnings in the pick/op result — no console-only silent fallbacks (pick-handler.ts:235 et al.)
 - [x] **ERR-02**: Action execution failures from the runner carry structured `errorCode` values agents can branch on (runner.ts:172-176 currently flattens to message strings)
-- [ ] **ERR-03**: Storage save failures are observable by the caller (awaitable or surfaced event), not fire-and-forget `.catch(console.error)`
+- [x] **ERR-03**: Storage save failures are observable by the caller (awaitable or surfaced event), not fire-and-forget `.catch(console.error)`
 - [ ] **ERR-04**: Dev-host server-side errors/logs are available to connected clients via a WS op (e.g. `debug:logs`), not buried in the Node terminal
 
 ### Scriptable Dev Host (DRIVE)
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SIM-02 | Phase 125 | Complete |
 | ERR-01 | Phase 126 | Pending |
 | ERR-02 | Phase 126 | Complete |
-| ERR-03 | Phase 126 | Pending |
+| ERR-03 | Phase 126 | Complete |
 | ERR-04 | Phase 126 | Pending |
 | DRIVE-01 | Phase 127 | Pending |
 | DRIVE-02 | Phase 127 | Pending |

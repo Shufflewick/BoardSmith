@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 125-02-PLAN.md
-last_updated: "2026-07-02T04:58:57.729Z"
+stopped_at: Completed 126-02-PLAN.md
+last_updated: "2026-07-02T05:15:50.953Z"
 last_activity: 2026-07-02
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 38
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 126
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-02
 
@@ -147,6 +147,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 125, Plan 01]: SIM-01: createHeadlessSession moved from src/session/testing/headless-harness.ts to src/session/headless-session.ts with a clean break (old path deleted, zero re-export shim); exported from the boardsmith/session barrel. Determinism tests must compare seeded-RNG-derived state values, not raw broadcast/result objects — those also carry Date.now() action-history timestamps that are legitimately wall-clock and outside the seeded-RNG contract.
 - [Phase 125]: 125-02: loadGameDefinition re-exports only gameDefinition (no executeOp); simulate drives games via simulateRandomGames/createTestGame, not dev.ts's stateless executeOp path — Keeps the shared rules loader honest about what each caller needs; avoids pulling dev's WS-executor machinery into the CLI simulate path
 - [Phase 126]: 126-01: errorCode set at source only (runner.ts, pick-handler.ts/pending-action-manager.ts); OpResult threads it through, never fabricated for protocol-only failures
+- [Phase 126]: 126-02: #persistSafely wraps #save()/apply() as the single funnel (not each caller individually), automatically protecting PendingActionManager's save callback without touching that file
 
 ### Highest-Risk Items (v4.4)
 
@@ -168,8 +169,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T04:57:18.438Z
-Stopped at: Completed 125-02-PLAN.md
+Last session: 2026-07-02T05:15:50.945Z
+Stopped at: Completed 126-02-PLAN.md
 Resume file: None
 Next action: Execute 125-02-PLAN.md (headless simulation, remaining plan). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending).
 
