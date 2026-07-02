@@ -85,6 +85,15 @@ export {
   type ViewDiffResult,
 } from './view-diff.js';
 
+// DOM-leak test utility (VIS-03)
+export {
+  renderAsSeat,
+  assertNoHiddenInfoLeak,
+  type HiddenInfoGameView,
+  type HiddenInfoLeakAllowPredicate,
+  type AssertNoHiddenInfoLeakOptions,
+} from './dom-leak.js';
+
 // Debug utilities
 export {
   toDebugString,
