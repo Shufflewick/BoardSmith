@@ -610,6 +610,78 @@ describe('SnapshotSessionHost', () => {
     });
   });
 
+  // ── persist error handling + persistenceHealthy (Phase 126 Plan 02, ERR-03) ─
+
+  describe('persistence error hook + persistenceHealthy', () => {
+    it('a rejecting persist adapter does not throw, calls onPersistenceError, and sets lastPersistenceError', async () => {
+      const captured: Array<{ error: { message: string; timestamp: number }; count: number; healthy: boolean }> = [];
+      const { adapters } = makeAdapters(simpleGameDef, gameOptions, {
+        persist: async () => { throw new Error('disk full: /var/lib/boardsmith/state.json'); },
+        onPersistenceError: (error, count, healthy) => { captured.push({ error, count, healthy }); },
+      });
+
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+      captured.length = 0; // reset after start's own failing persist
+
+      await expect(
+        host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} })
+      ).resolves.not.toThrow();
+
+      expect(captured.length).toBeGreaterThan(0);
+      expect(captured[0]!.error.message).toContain('disk full');
+      expect(host.lastPersistenceError?.message).toContain('disk full');
+      expect(host.lastPersistenceError?.message).not.toMatch(/at\s+.*\(.*:\d+:\d+\)/);
+    });
+
+    it('an absent persist adapter behaves exactly as before: no-op, no error, persistenceHealthy stays true', async () => {
+      const { adapters } = makeAdapters(simpleGameDef, gameOptions);
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+
+      expect(host.persistenceHealthy).toBe(true);
+      expect(host.lastPersistenceError).toBeNull();
+    });
+
+    it('a successful persist resets the consecutive-failure counter and keeps/restores persistenceHealthy true', async () => {
+      const { adapters } = makeAdapters(simpleGameDef, gameOptions, {
+        persist: async () => {},
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start();
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+
+      expect(host.persistenceHealthy).toBe(true);
+      expect(host.lastPersistenceError).toBeNull();
+    });
+
+    it('persistenceHealthy flips false after 3 consecutive persist failures and recovers on the next success', async () => {
+      let fail = false;
+      const { adapters } = makeAdapters(simpleGameDef, gameOptions, {
+        persist: async () => { if (fail) throw new Error('disk full'); },
+      });
+      const host = new SnapshotSessionHost(adapters);
+      await host.start(); // succeeds — does not count toward the 3 failures below
+
+      fail = true;
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      expect(host.persistenceHealthy).toBe(true);
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      expect(host.persistenceHealthy).toBe(true);
+
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      expect(host.persistenceHealthy).toBe(false);
+
+      fail = false;
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {} });
+      expect(host.persistenceHealthy).toBe(true);
+    });
+  });
+
   // ── 6. Transient teaching state foundation (Plan 110-01) ───────────────────
   //
   // These tests verify the mergeTransientState / broadcastCurrent / hasAIPlayers
