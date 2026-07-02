@@ -56,7 +56,7 @@
 import { ref, watch, computed, type Ref, onUnmounted, getCurrentInstance } from 'vue';
 import { prefersReducedMotion } from './useElementAnimation.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
-import { isDevMode } from '../../utils/dev.js';
+import { isDevThrowEnabled } from '../../utils/dev.js';
 
 // Re-export for convenience
 export { prefersReducedMotion };
@@ -169,7 +169,7 @@ function reportMissingAnchor(el: Element): void {
     `(checked in that order) — none were found on <${el.tagName.toLowerCase()}>. ` +
     `Add one of these attributes (e.g. spread anchorAttrs(ref) onto the element, or bind ` +
     `useSelectable()'s attrs) so useFLIP can track it across DOM updates.`;
-  if (isDevMode()) {
+  if (isDevThrowEnabled()) {
     throw new Error(message);
   }
   console.error(`[BoardSmith] ${message}`);
@@ -386,24 +386,29 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
 
   // Auto mode: set up watchers for automatic capture/animate
   if (auto && gameView) {
-    // Sync watcher: capture positions before update
+    // Sync watcher: capture positions before update.
+    // NOTE: no outer prefersReducedMotion guard here — capture() has no
+    // reduced-motion dependency (it only populates the positions map used
+    // later), and animate() (below) is what needs to run unconditionally so
+    // its own internal test-mode-then-reduced-motion ordering is reachable
+    // (never merged, per useAnimationTestMode.ts).
     watch(
       gameView,
       () => {
-        if (!prefersReducedMotion.value) {
-          capture();
-        }
+        capture();
       },
       { deep: true, flush: 'sync' }
     );
 
-    // Post watcher: animate after DOM update
+    // Post watcher: animate after DOM update.
+    // NOTE: no outer prefersReducedMotion guard here — animate()'s own
+    // test-mode branch sits ABOVE its internal prefersReducedMotion check;
+    // gating the call itself would make that internal ordering unreachable
+    // whenever reduced motion is preferred, silently defeating test mode.
     watch(
       gameView,
       async () => {
-        if (!prefersReducedMotion.value) {
-          await animate();
-        }
+        await animate();
       },
       { deep: true, flush: 'post' }
     );

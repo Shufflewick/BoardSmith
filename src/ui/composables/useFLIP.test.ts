@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 
 // jsdom lacks matchMedia; modules that read it at import time would throw.
 vi.stubGlobal(
@@ -48,6 +48,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
   return {
     ...actual,
     isDevMode: () => (devModeState.override !== null ? devModeState.override : actual.isDevMode()),
+    isDevThrowEnabled: () => (devModeState.override !== null ? devModeState.override : actual.isDevThrowEnabled()),
   };
 });
 
@@ -136,6 +137,45 @@ describe('useFLIP', () => {
       await animate();
 
       expect(animateSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('auto mode (auto: true)', () => {
+    it('records a flip trace in test mode even when reduced motion is preferred (CR-02)', async () => {
+      const { prefersReducedMotion } = await import('./useElementAnimation.js');
+      prefersReducedMotion.value = true;
+
+      const container = makeContainer();
+      const child = document.createElement('div');
+      child.setAttribute('data-element-id', 'card-auto-1');
+      container.appendChild(child);
+
+      const containerRef = ref<HTMLElement | null>(container);
+      const gameViewRef = ref<{ n: number }>({ n: 0 });
+
+      useFLIP({
+        containerRef,
+        auto: true,
+        gameView: () => gameViewRef.value,
+      });
+
+      // First change: sync watcher captures positions.
+      gameViewRef.value = { n: 1 };
+      await nextTick();
+
+      enableAnimationTestMode();
+      // Second change: sync watcher re-captures, post watcher animates —
+      // without CR-02's fix, the outer prefersReducedMotion guard on both
+      // watchers would prevent capture()/animate() from ever running, so no
+      // trace could be recorded regardless of test mode.
+      gameViewRef.value = { n: 2 };
+      await nextTick();
+
+      expect(getAnimationTrace()).toContainEqual(
+        expect.objectContaining({ kind: 'flip', element: 'card-auto-1' })
+      );
+
+      prefersReducedMotion.value = false;
     });
   });
 
