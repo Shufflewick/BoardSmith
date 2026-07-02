@@ -46,8 +46,8 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 ### Documentation (DOC — continues from v4.3)
 
-- [ ] **DOC-05**: All new/changed APIs documented — testing guide (visibility, animation traces, headless sim), dev-host protocol, determinism guarantees
-- [ ] **DOC-06**: Breaking changes documented for all removed/changed APIs (clean break, no deprecation aliases) — delivered as `docs/migration-guide.md` `## v4.4` section per repo convention (BREAKING.md deprecated after v3.0)
+- [x] **DOC-05**: All new/changed APIs documented — testing guide (visibility, animation traces, headless sim), dev-host protocol, determinism guarantees
+- [x] **DOC-06**: Breaking changes documented for all removed/changed APIs (clean break, no deprecation aliases) — delivered as `docs/migration-guide.md` `## v4.4` section per repo convention (BREAKING.md deprecated after v3.0)
 
 ### Migration (MIG — continues from v4.3)
 
@@ -106,8 +106,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANIM-03 | Phase 128 | Complete |
 | MIG-03 | Phase 129 | Complete |
 | MIG-04 | Phase 129 | Complete |
-| DOC-05 | Phase 130 | Pending |
-| DOC-06 | Phase 130 | Pending |
+| DOC-05 | Phase 130 | Complete |
+| DOC-06 | Phase 130 | Complete |
 
 **Coverage:**
 - v1 requirements: 23 total (corrected from initial miscount of 20 — see itemized list above)
