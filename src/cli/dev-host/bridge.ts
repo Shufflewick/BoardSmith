@@ -16,6 +16,7 @@
  */
 
 import { SnapshotSessionHost, type Op, type OpResult } from '../../session/index.js';
+import { record, getEntries, type LogEntry } from './log-capture.js';
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
 export type WireOp =
@@ -49,7 +50,12 @@ export type WireOp =
   | 'debug:move-to-top'
   | 'debug:reorder-card'
   | 'debug:transfer-card'
-  | 'debug:shuffle-deck';
+  | 'debug:shuffle-deck'
+  // debug:logs (ERR-04): pulls the dev-host's captured server-side
+  // errors/warnings ring buffer (log-capture.ts). Host-lifecycle op — like
+  // demoStart/demoStop, it is resolved directly by the bridge and MUST NEVER
+  // be routed through the pure executeOp (RESEARCH Pitfall 3).
+  | 'debug:logs';
 
 export interface DevSessionOptions {
   playerCount: number;
@@ -70,6 +76,14 @@ export interface DevSessionOptions {
     pendingState: Record<string, unknown> | null,
     op: Op,
   ) => Promise<OpResult>;
+  /**
+   * Optional persistence adapter (ERR-03/ERR-04). When configured, a failure
+   * is captured into the dev-host log-capture ring buffer via an
+   * `onPersistenceError` adapter built in `createDevSession` — severity
+   * escalates to 'error' once `persistenceHealthy` flips false. Unconfigured
+   * by default (the dev host today has no persistence store).
+   */
+  persist?: (state: { snapshot: unknown; pendingStates: Record<string, Record<string, unknown>> }) => void | Promise<void>;
   /**
    * Post a `game_state` frame for one seat's iframe. Called for every seat on
    * each broadcast; the caller decides which seat's iframe actually exists.
@@ -109,11 +123,21 @@ export interface DevSession {
 }
 
 /** Translate a wire op + payload into the host's `Op` union (mirrors the DO). */
+/**
+ * Host-lifecycle marker for `debug:logs` (ERR-04) — deliberately NOT a member
+ * of the session layer's `Op` union (session-layer types stay clean; T-126-10).
+ * `handleServerRequest` intercepts this marker before it would ever reach
+ * `host.handleOp`/`executeOp`.
+ */
+export interface DebugLogsMarker {
+  type: 'debugLogs';
+}
+
 export function translateOp(
   wireOp: string,
   seat: number,
   payload: Record<string, unknown>,
-): Op | undefined {
+): Op | DebugLogsMarker | undefined {
   switch (wireOp) {
     case 'action':
       return {
@@ -202,6 +226,11 @@ export function translateOp(
       };
     case 'debug:shuffle-deck':
       return { type: 'debugShuffle', deckId: payload.deckId as number };
+    case 'debug:logs':
+      // Host-lifecycle marker (ERR-04) — resolved directly in
+      // handleServerRequest by reading the ring buffer; never delegated to
+      // host.handleOp/executeOp (RESEARCH Pitfall 3).
+      return { type: 'debugLogs' };
     default:
       return undefined;
   }
@@ -212,7 +241,10 @@ export function translateOp(
  * for a given wire op (mirrors the DO's per-op `serverX` handlers). Read-only
  * `resolve_choices` returns the full result (choices/validElements/multiSelect).
  */
-export function shapeResult(wireOp: string, result: OpResult): Record<string, unknown> {
+export function shapeResult(
+  wireOp: string,
+  result: OpResult & { entries?: readonly LogEntry[] },
+): Record<string, unknown> {
   switch (wireOp) {
     case 'action':
       return { success: result.success, error: result.error, followUp: result.followUp, warnings: result.warnings };
@@ -272,6 +304,8 @@ export function shapeResult(wireOp: string, result: OpResult): Record<string, un
     case 'debug:transfer-card':
     case 'debug:shuffle-deck':
       return { success: result.success, error: result.error };
+    case 'debug:logs':
+      return { success: result.success, error: result.error, entries: result.entries };
     default:
       return { success: false, error: `Unknown server op: '${wireOp}'` };
   }
@@ -294,6 +328,14 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     aiSeats: opts.aiSeats,
     teachingDisabled: opts.teachingDisabled,
     executeOp: opts.executeOp,
+    persist: opts.persist,
+    // ERR-04: persistence failures feed the dev-host log-capture ring buffer.
+    // Severity escalates to 'error' once persistenceHealthy flips false;
+    // otherwise 'warning'. The session layer only ever calls this injected
+    // callback — it never imports log-capture.ts itself (T-126-10).
+    onPersistenceError: (entry, _consecutiveFailures, healthy) => {
+      record(healthy ? 'warning' : 'error', entry.message, 'persistence');
+    },
     broadcast: (playerViews, meta) => {
       lastPlayerViews = playerViews;
       isComplete = meta.isComplete;
@@ -318,12 +360,28 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       });
       return;
     }
+    // debug:logs (ERR-04): host-lifecycle op resolved directly here, reading
+    // the ring buffer — never delegated to host.handleOp/executeOp.
+    if (op.type === 'debugLogs') {
+      const logsResult = { success: true, entries: getEntries() } as unknown as OpResult & {
+        entries: readonly LogEntry[];
+      };
+      opts.postServerResponse(seat, requestId, shapeResult(wireOp, logsResult));
+      return;
+    }
     try {
       const result = await host.handleOp(seat, op);
+      // Dual-channel warnings capture (ERR-04): structured OpResult.warnings
+      // (Plan 126-03) also feed the debug:logs ring buffer, sourced by wireOp,
+      // in addition to riding the op result itself (shapeResult passthrough).
+      if (result.warnings?.length) {
+        for (const w of result.warnings) record('warning', w.message, wireOp);
+      }
       opts.postServerResponse(seat, requestId, shapeResult(wireOp, result));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[boardsmith dev] server_request '${wireOp}' failed:`, err);
+      record('error', message, wireOp);
       opts.postServerResponse(seat, requestId, { success: false, error: message });
     }
   }
