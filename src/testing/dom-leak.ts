@@ -308,9 +308,24 @@ function deriveForbiddenMarkers(game: Game, seat: number): ForbiddenMarker[] {
 }
 
 /**
+ * Text-bearing accessibility/metadata attributes scanned in addition to
+ * `data-*`. BoardSmith's own `AutoUI` renderers actively write
+ * element-derived identity (e.g. a card's `name`/notation) into exactly
+ * these attributes — `CardRenderer.vue`'s `ariaLabel`/`displayLabel`
+ * (aria-label/alt), `GridBoardRenderer.vue`'s cell `title`, and similar
+ * `aria-label` bindings across `PieceRenderer.vue`/`DieRenderer.vue`/
+ * `SpaceRenderer.vue`/`DeckRenderer.vue`/`HexBoardRenderer.vue`. A hidden
+ * element's identity leaking through any of these would otherwise go
+ * completely undetected (CR-01).
+ */
+const IDENTITY_BEARING_ATTRS = ['aria-label', 'alt', 'title', 'aria-description', 'aria-roledescription'];
+
+/**
  * Scan ONLY the surfaces a hidden identity value could realistically leak
- * through: `data-*` attribute values, `img[src]`, and inline
- * `style="background-image: url(...)"` fragments (sprite-sheet rendering).
+ * through: `data-*` attribute values, `img[src]`, inline
+ * `style="background-image: url(...)"` fragments (sprite-sheet rendering),
+ * and the text-bearing accessibility/metadata attributes in
+ * {@link IDENTITY_BEARING_ATTRS} (aria-label/alt/title/etc. — CR-01).
  *
  * Deliberately NOT a blind `wrapper.text()` substring search — a bare text
  * scan false-positives on short numeric ranks/suits colliding with visible
@@ -325,6 +340,10 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): string[] {
       if (attr.name.startsWith('data-')) {
         surfaces.push(attr.value);
       }
+    }
+    for (const attrName of IDENTITY_BEARING_ATTRS) {
+      const value = el.getAttribute(attrName);
+      if (value) surfaces.push(value);
     }
     if (el.tagName === 'IMG') {
       const src = el.getAttribute('src');
@@ -356,8 +375,10 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): string[] {
  * @param seat - The seat to check for leaks
  * @param options - Allowlist predicate + (test-only) render override
  * @throws If a forbidden marker appears in a scoped DOM surface (data-*
- *   attribute value, img[src], or inline background-image style), naming the
- *   leaked marker, the owning element, the seat, and the DOM surface.
+ *   attribute value, img[src], inline background-image style, or a
+ *   text-bearing accessibility/metadata attribute — aria-label, alt, title,
+ *   aria-description, aria-roledescription), naming the leaked marker, the
+ *   owning element, the seat, and the DOM surface.
  */
 export async function assertNoHiddenInfoLeak<G extends Game>(
   testGame: TestGame<G>,

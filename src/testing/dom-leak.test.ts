@@ -284,3 +284,77 @@ describe('assertNoHiddenInfoLeak — allowlist suppresses a known false positive
     ).rejects.toThrow(/hidden-info leak/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// CR-01: a leak through a text-bearing accessibility/metadata attribute
+// (aria-label/alt/title) — NOT through data-*/img[src]/inline style — MUST
+// still be caught. `CardRenderer.vue`'s `ariaLabel`/`displayLabel` computeds
+// read `element.name` unconditionally (regardless of `__hidden`), so a
+// redaction bug that fails to strip `name` from an individually-hidden
+// element's placeholder (stable id, per game.ts's FLIP-animation branch)
+// would render the real name straight into aria-label/alt/title while every
+// other scanned surface (data-*, img[src], style) stays clean.
+// ---------------------------------------------------------------------------
+
+class HiddenCard extends Card<AriaLeakGame> {
+  rank!: string;
+}
+
+class AriaLeakGame extends Game<AriaLeakGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([HiddenCard]);
+
+    // All-visible zone; the card itself is individually hidden from seat 2
+    // via showOnlyTo(1) -- keeps its stable id (game.ts's FLIP-animation
+    // branch), which is what makes the injection below possible.
+    const table = this.create(Space, 'aria-table');
+    table.contentsVisible();
+    const card = table.create(HiddenCard, 'aria-secret-card', { rank: 'A' });
+    card.showOnlyTo(1);
+
+    this.registerAction(
+      Action.create<AriaLeakGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => false,
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+function makeAriaLeakGame(): TestGame<AriaLeakGame> {
+  return TestGame.create(AriaLeakGame, { playerCount: 2, seed: 'dom-leak-aria-01' });
+}
+
+describe('assertNoHiddenInfoLeak — CR-01 regression: aria-label/alt/title surfaces are scanned', () => {
+  it('does NOT throw on the correctly-redacted view (name absent from the hidden placeholder)', async () => {
+    const tg = makeAriaLeakGame();
+    await expect(assertNoHiddenInfoLeak(tg, 2)).resolves.not.toThrow();
+  });
+
+  it('THROWS when a hidden element leaks its identity ONLY via aria-label/alt/title (not data-*/img-src/style)', async () => {
+    const tg = makeAriaLeakGame();
+    const card = tg.game.first(HiddenCard, { name: 'aria-secret-card' })!;
+
+    // Simulate a redaction bug: the correctly-redacted per-seat view
+    // (attributes/$images already stripped, __hidden: true) but `name` is
+    // re-injected onto the hidden placeholder -- e.g. a renderer computing
+    // aria-label from a source that bypasses the engine's redaction.
+    const leaky = cloneJson(tg.getPlayerView(2).state) as unknown as ElementJSON;
+    const node = findNodeById(leaky, card.id);
+    expect(node).toBeDefined();
+    expect(node!.attributes?.__hidden).toBe(true);
+    node!.name = card.name;
+
+    await expect(
+      assertNoHiddenInfoLeak(tg, 2, { gameViewOverride: leaky as unknown as HiddenInfoGameView }),
+    ).rejects.toThrow(/hidden-info leak/i);
+  });
+});
