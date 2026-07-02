@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   Game,
   Player,
@@ -10,7 +13,7 @@ import {
   type GameOptions,
   type FlowContext,
 } from '../../engine/index.js';
-import { runSimulation } from './simulate.js';
+import { runSimulation, simulateCommand } from './simulate.js';
 
 /**
  * Minimal always-completing game (mirrors the fixture used by
@@ -92,5 +95,42 @@ describe('runSimulation', () => {
     const [g] = report.games;
     expect(g.status).toBe('error');
     expect(g.error).toBe('Game exceeded the maximum action count.');
+  });
+});
+
+describe('simulateCommand', () => {
+  let projectDir: string;
+  let originalCwd: string;
+  let originalExitCode: number | string | null | undefined;
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    originalExitCode = process.exitCode;
+    // A minimal fixture project: valid boardsmith.json + a stub rules/index.ts.
+    // simulateCommand's --games/--players validation runs (and returns) before
+    // it ever bundles rulesIndexPath, so the stub file's contents don't matter.
+    projectDir = mkdtempSync(join(tmpdir(), 'boardsmith-simulate-cli-'));
+    writeFileSync(join(projectDir, 'boardsmith.json'), JSON.stringify({ name: 'fixture' }));
+    mkdirSync(join(projectDir, 'src', 'rules'), { recursive: true });
+    writeFileSync(join(projectDir, 'src', 'rules', 'index.ts'), 'export const gameDefinition = {};\n');
+    process.chdir(projectDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    process.exitCode = originalExitCode;
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it('IN-01: exits non-zero with an actionable message on a non-numeric --games flag', async () => {
+    process.exitCode = 0;
+    await simulateCommand({ games: 'abc', players: '2', seed: undefined });
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('IN-01: exits non-zero with an actionable message on a non-positive --players flag', async () => {
+    process.exitCode = 0;
+    await simulateCommand({ games: '1', players: '0', seed: undefined });
+    expect(process.exitCode).toBe(1);
   });
 });
