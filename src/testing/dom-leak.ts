@@ -94,12 +94,22 @@ function loadAutoUI(): Promise<typeof AutoUIComponent> {
  * @param testGame - The TestGame wrapper
  * @param seat - The seat to render as
  * @param gameViewOverride - TESTING-ONLY: render this view instead of the real per-seat view
+ * @throws If called outside a jsdom test environment (WR-03) — this file's
+ *   own `// @vitest-environment jsdom` pragma only applies to tests IN THIS
+ *   FILE, not to a caller's test file.
  */
 export async function renderAsSeat<G extends Game>(
   testGame: TestGame<G>,
   seat: number,
   gameViewOverride?: UIGameElement | null,
 ): Promise<VueWrapper<InstanceType<typeof AutoUIComponent>>> {
+  if (typeof document === 'undefined') {
+    throw new Error(
+      'renderAsSeat/assertNoHiddenInfoLeak require a DOM environment. ' +
+        'Add `// @vitest-environment jsdom` as the first line of this test file.',
+    );
+  }
+
   const AutoUI = await loadAutoUI();
 
   const gameView =
@@ -389,6 +399,8 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): string[] {
  *   text-bearing accessibility/metadata attribute — aria-label, alt, title,
  *   aria-description, aria-roledescription), naming the leaked marker, the
  *   owning element, the seat, and the DOM surface.
+ * @throws If called outside a jsdom test environment (WR-03) — add
+ *   `// @vitest-environment jsdom` as the first line of your test file.
  */
 export async function assertNoHiddenInfoLeak<G extends Game>(
   testGame: TestGame<G>,

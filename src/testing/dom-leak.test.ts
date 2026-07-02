@@ -31,7 +31,7 @@ import {
   type ElementJSON,
 } from '../engine/index.js';
 import { TestGame } from './test-game.js';
-import { assertNoHiddenInfoLeak, type HiddenInfoGameView } from './dom-leak.js';
+import { assertNoHiddenInfoLeak, renderAsSeat, type HiddenInfoGameView } from './dom-leak.js';
 
 // ---------------------------------------------------------------------------
 // Fixture: two players, each with an owner-only Hand holding one secret card.
@@ -356,5 +356,42 @@ describe('assertNoHiddenInfoLeak — CR-01 regression: aria-label/alt/title surf
     await expect(
       assertNoHiddenInfoLeak(tg, 2, { gameViewOverride: leaky as unknown as HiddenInfoGameView }),
     ).rejects.toThrow(/hidden-info leak/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-03: an actionable error, not a generic "document is not defined", when
+// renderAsSeat/assertNoHiddenInfoLeak are called outside a jsdom environment.
+// This file itself runs under jsdom (`// @vitest-environment jsdom`, line 1)
+// so `document` is temporarily removed to simulate a caller's non-jsdom test
+// file (Node's default vitest environment).
+// ---------------------------------------------------------------------------
+
+describe('renderAsSeat / assertNoHiddenInfoLeak — WR-03: actionable error outside jsdom', () => {
+  it('renderAsSeat throws an actionable error (not "document is not defined") when document is undefined', async () => {
+    const tg = makeCardLeakGame();
+    const originalDocument = globalThis.document;
+    // @ts-expect-error -- deliberately simulating a non-DOM environment
+    delete globalThis.document;
+    try {
+      await expect(renderAsSeat(tg, 1)).rejects.toThrow(/@vitest-environment jsdom/);
+    } finally {
+      globalThis.document = originalDocument;
+    }
+  });
+
+  it('assertNoHiddenInfoLeak throws the same actionable error when document is undefined', async () => {
+    const tg = makeCardLeakGame();
+    const unfilteredView = tg.game.toJSON() as unknown as HiddenInfoGameView;
+    const originalDocument = globalThis.document;
+    // @ts-expect-error -- deliberately simulating a non-DOM environment
+    delete globalThis.document;
+    try {
+      await expect(
+        assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: unfilteredView }),
+      ).rejects.toThrow(/@vitest-environment jsdom/);
+    } finally {
+      globalThis.document = originalDocument;
+    }
   });
 });
