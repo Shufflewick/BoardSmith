@@ -1,5 +1,7 @@
 # Phase 124: Hidden-Info Test Utilities - Research
 
+> **⚠ SUPERSEDED GUIDANCE NOTE (post-plan-check revision, 2026-07-01):** Code excerpts in this document that derive visibility from a bare `element.isVisibleTo(seat)` or read unfiltered `element.toJSON().attributes` are the PRE-REVISION approach and MUST NOT be reused verbatim. The authoritative implementation contract is the PLAN.md task `<action>` text: derive from the final `game.toJSONForPlayer(seat)` tree (post-`GameClass.playerView` transform, game.ts:2813-2816), with `isVisibleTo` only as a fast path when `playerView` is undefined. DOM-leak markers come from a `toJSON()`-vs-final-tree diff. See threat T-124-08.
+
 **Researched:** 2026-07-01
 **Domain:** BoardSmith engine visibility model + Vue component test infrastructure (internal codebase, no external packages)
 **Confidence:** HIGH — every claim below is grounded in direct file:line reads of this repo, cross-checked against the CONTEXT.md audit evidence.
