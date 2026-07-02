@@ -8,8 +8,9 @@
  */
 
 import type { TestGame } from './test-game.js';
-import { canSeatAct, availableActionsForSeat } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, type GameElement } from '../engine/index.js';
 import { _collectAvailableActions } from './simulate-action.js';
+import { isElementVisible } from './visibility.js';
 
 /**
  * Expected flow state for assertions.
@@ -273,6 +274,85 @@ export function assertActionNotAvailable(
   if (availableActions.includes(actionName)) {
     throw new Error(
       `Action "${actionName}" should NOT be available for player ${playerSeat}, but it is`
+    );
+  }
+}
+
+/**
+ * Find the node for a given real element id in a serialized ElementJSON tree
+ * (depth-first). Returns `undefined` if absent from the final tree.
+ */
+function findNodeInFinalTree(
+  node: { id: number; attributes?: Record<string, unknown>; children?: unknown[] },
+  id: number
+): { id: number; attributes?: Record<string, unknown>; children?: unknown[] } | undefined {
+  if (node.id === id) return node;
+  if (!node.children) return undefined;
+  for (const child of node.children as typeof node[]) {
+    const found = findNodeInFinalTree(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * The attribute keys that SURVIVE into seat N's FINAL serialized view for
+ * `element` — i.e. the keys visible on the wire, not the raw unfiltered
+ * `element.toJSON().attributes` (which would misreport keys a `playerView`
+ * hook stripped). Returns an empty array if the element is absent from the
+ * final tree entirely.
+ */
+function survivingAttributeKeys(element: GameElement, seat: number): string[] {
+  const finalTree = element.game.toJSONForPlayer(seat);
+  const node = findNodeInFinalTree(finalTree, element.id);
+  if (!node) return [];
+  return Object.keys(node.attributes ?? {}).filter((k) => k !== '__hidden');
+}
+
+/**
+ * Assert that `element` is hidden from `seat` — judged on the exact final
+ * per-seat wire output (see {@link isElementVisible}), so this honors any
+ * `static playerView` post-transform the game defines, not just the
+ * per-element visibility rule.
+ *
+ * @param element - The live element expected to be hidden
+ * @param seat - The seat expected NOT to see `element`
+ * @throws Error naming the element, the seat, and the attribute keys that
+ *   survive into seat N's final view, if `element` is actually visible
+ *
+ * @example
+ * ```typescript
+ * assertHidden(opponentCard, 1); // player 1 must not see this card
+ * ```
+ */
+export function assertHidden(element: GameElement, seat: number): void {
+  if (isElementVisible(element, seat)) {
+    const keys = survivingAttributeKeys(element, seat);
+    throw new Error(
+      `Element ${element.constructor.name}#${element.id} is visible to seat ${seat} ` +
+      `(expected hidden): serialized attributes [${keys.join(', ')}] present in seat ${seat}'s view`
+    );
+  }
+}
+
+/**
+ * Assert that `element` is visible to `seat` — judged on the exact final
+ * per-seat wire output (see {@link isElementVisible}).
+ *
+ * @param element - The live element expected to be visible
+ * @param seat - The seat expected to see `element`
+ * @throws Error naming the element and the seat, if `element` is actually hidden
+ *
+ * @example
+ * ```typescript
+ * assertVisible(myCard, 1); // player 1 must see their own card
+ * ```
+ */
+export function assertVisible(element: GameElement, seat: number): void {
+  if (!isElementVisible(element, seat)) {
+    throw new Error(
+      `Element ${element.constructor.name}#${element.id} is NOT visible to seat ${seat} ` +
+      `(expected visible)`
     );
   }
 }

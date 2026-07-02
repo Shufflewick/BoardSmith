@@ -67,9 +67,17 @@ export {
   assertGameFinished,
   assertActionAvailable,
   assertActionNotAvailable,
+  assertHidden,
+  assertVisible,
   type ExpectedFlowState,
   type FlowStateAssertionResult,
 } from './assertions.js';
+
+// Hidden-info visibility utilities (VIS-01)
+export {
+  isElementVisible,
+  getVisibleElements,
+} from './visibility.js';
 
 // Debug utilities
 export {

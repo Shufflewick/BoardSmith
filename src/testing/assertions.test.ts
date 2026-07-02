@@ -9,6 +9,8 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   Game,
   Player,
+  Space,
+  Card,
   Action,
   defineFlow,
   loop,
@@ -17,9 +19,16 @@ import {
   simultaneousActionStep,
   type GameOptions,
   type FlowContext,
+  type ElementJSON,
 } from '../engine/index.js';
 import { TestGame } from './test-game.js';
-import { assertActionAvailable, assertActionNotAvailable, assertFlowState } from './assertions.js';
+import {
+  assertActionAvailable,
+  assertActionNotAvailable,
+  assertFlowState,
+  assertHidden,
+  assertVisible,
+} from './assertions.js';
 
 // ---------------------------------------------------------------------------
 // Fixture: game for TEST-03 (trace) and TEST-04 (actionsMode)
@@ -339,5 +348,143 @@ describe('assertFlowState — CR-03: simultaneous turns', () => {
         actionsMode: 'contains',
       }),
     ).toThrow(/Missing expected actions/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VIS-01: assertHidden / assertVisible
+// ---------------------------------------------------------------------------
+
+class VisAssertCard extends Card<VisAssertGame> {
+  rank!: string;
+}
+
+/** Minimal fixture: an owner-only hand per player, no static playerView. */
+class VisAssertGame extends Game<VisAssertGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([VisAssertCard]);
+
+    for (const player of this.all(Player)) {
+      const hand = this.create(Space, `hand-${player.seat}`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      hand.create(VisAssertCard, `card-${player.seat}`, { rank: String(player.seat) });
+    }
+
+    this.registerAction(
+      Action.create<VisAssertGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => false,
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        }),
+      }),
+    );
+  }
+}
+
+function makeVisAssertGame(): TestGame<VisAssertGame> {
+  return TestGame.create(VisAssertGame, { playerCount: 2, seed: 'vis-assert-seed' });
+}
+
+describe('assertHidden / assertVisible', () => {
+  it('assertHidden passes (no throw) for a card genuinely hidden from the seat', () => {
+    const tg = makeVisAssertGame();
+    const opponentCard = tg.game.first(VisAssertCard, { name: 'card-2' })!;
+    expect(() => assertHidden(opponentCard, 1)).not.toThrow();
+  });
+
+  it('assertHidden throws with the seat and surviving attribute keys when the element is actually visible', () => {
+    const tg = makeVisAssertGame();
+    const ownCard = tg.game.first(VisAssertCard, { name: 'card-1' })!;
+    expect(() => assertHidden(ownCard, 1)).toThrow(/seat 1/);
+    expect(() => assertHidden(ownCard, 1)).toThrow(/rank/);
+  });
+
+  it('assertVisible passes (no throw) for a card genuinely visible to the seat', () => {
+    const tg = makeVisAssertGame();
+    const ownCard = tg.game.first(VisAssertCard, { name: 'card-1' })!;
+    expect(() => assertVisible(ownCard, 1)).not.toThrow();
+  });
+
+  it('assertVisible throws naming the element and seat when the element is actually hidden', () => {
+    const tg = makeVisAssertGame();
+    const opponentCard = tg.game.first(VisAssertCard, { name: 'card-2' })!;
+    expect(() => assertVisible(opponentCard, 1)).toThrow(/VisAssertCard/);
+    expect(() => assertVisible(opponentCard, 1)).toThrow(/seat 1/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assertHidden honors a static playerView post-transform
+// ---------------------------------------------------------------------------
+
+class VisAssertStrippedCard extends Card<VisAssertPlayerViewGame> {
+  rank!: string;
+}
+
+function stripNodeById(node: ElementJSON, id: number): ElementJSON {
+  if (!node.children) return node;
+  return {
+    ...node,
+    children: node.children
+      .filter((child) => child.id !== id)
+      .map((child) => stripNodeById(child, id)),
+  };
+}
+
+/**
+ * A game whose `static playerView` strips an otherwise-visible card from the
+ * final tree — proves assertHidden fires based on the FINAL tree, not the
+ * per-element `isVisibleTo` rule (which would say this card is visible).
+ */
+class VisAssertPlayerViewGame extends Game<VisAssertPlayerViewGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([VisAssertStrippedCard]);
+
+    const display = this.create(Space, 'display');
+    display.contentsVisible();
+    display.create(VisAssertStrippedCard, 'stripped-card', { rank: 'X' });
+
+    this.registerAction(
+      Action.create<VisAssertPlayerViewGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          while: () => false,
+          maxIterations: 10,
+          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+        }),
+      }),
+    );
+  }
+
+  static override playerView = (
+    state: ElementJSON,
+    _playerSeat: number | null,
+    game: VisAssertPlayerViewGame,
+  ): ElementJSON => {
+    const strippedCard = game.first(VisAssertStrippedCard, { name: 'stripped-card' });
+    if (!strippedCard) return state;
+    return stripNodeById(state, strippedCard.id);
+  };
+}
+
+describe('assertHidden — honors static playerView post-transform', () => {
+  it('assertHidden passes for a card that is isVisibleTo()=true but stripped by playerView', () => {
+    const tg = TestGame.create(VisAssertPlayerViewGame, { playerCount: 2, seed: 'vis-assert-pv-seed' });
+    const card = tg.game.first(VisAssertStrippedCard, { name: 'stripped-card' })!;
+
+    // Pre-transform rule says visible; the final tree says otherwise.
+    expect(card.isVisibleTo(1)).toBe(true);
+    expect(() => assertHidden(card, 1)).not.toThrow();
   });
 });
