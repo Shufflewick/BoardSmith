@@ -445,14 +445,18 @@ async handleOp(seat: number, op: Op): Promise<OpResult> {
 
 **If this table is empty:** N/A — see above.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `warnings` be attached per-choice (nested in each `ChoiceWithRefs`/`ValidElement`) or as a single flat array on the response?**
+> Both open questions were resolved during planning:
+> - Q1 (warnings shape): flat top-level `warnings` array on the response / OpResult, with `WarningEntry.source` disambiguating which choice/element (NOT nested per-choice) → implemented in Plan 126-03.
+> - Q2 (ring buffer size): `MAX_LOG_ENTRIES = 300` with FIFO push/shift eviction → implemented in Plan 126-04.
+
+1. **Should `warnings` be attached per-choice (nested in each `ChoiceWithRefs`/`ValidElement`) or as a single flat array on the response?** **[RESOLVED → 126-03: flat top-level array with `source` disambiguation]**
    - What we know: CONTEXT.md's locked decision says "warnings attached where they occur (per-choice/selection where relevant)" — implying per-choice attachment for `boardRefs`/`display`, but a flat top-level array is simpler for `getChoices()`-level and persistence-level warnings.
    - What's unclear: Whether ActionPanel/agent consumers need per-choice granularity or just "something is degraded, check the top-level array."
    - Recommendation: Use BOTH — a top-level `warnings: WarningEntry[]` array on `PickChoicesResponse`/`OpResult` (aggregated) for the simple "is anything degraded" check, with each `WarningEntry.source` identifying which choice/element it came from (e.g. `source: "boardRefs(choice #3)"`) rather than nesting warnings inside each choice object — this avoids widening `ChoiceWithRefs`/`ValidElement` (which are also consumed by the UI's choice-rendering code, unrelated to warnings) and keeps one place to look.
 
-2. **What is the ring buffer's eviction/size policy?**
+2. **What is the ring buffer's eviction/size policy?** **[RESOLVED → 126-04: MAX_LOG_ENTRIES = 300, FIFO]**
    - What we know: CONTEXT.md defers "ring buffer size" to Claude's discretion.
    - What's unclear: No existing precedent in this codebase for a capped in-memory log (checked: no `MAX_LOG_ENTRIES`-style constant exists anywhere in `src/`).
    - Recommendation: A fixed cap of 200-500 entries (dev-only, single session, human-scrollable) with FIFO eviction (`push` + `shift` when over cap) — small enough to never matter for memory, large enough to survive a normal debugging session. Plan should pick one number and document it as a named constant (mirroring `MAX_AI_MOVES = 500` and `MAX_DEMO_MOVES = 200` conventions already in `snapshot-session-host.ts`).
