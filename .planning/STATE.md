@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 129-01-PLAN.md
-last_updated: "2026-07-02T18:49:10.260Z"
-last_activity: 2026-07-02 -- Completed 129-01-PLAN.md
+stopped_at: Completed 129-02-PLAN.md
+last_updated: "2026-07-02T19:04:16.997Z"
+last_activity: 2026-07-02
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 25
-  completed_plans: 23
-  percent: 92
+  completed_plans: 24
+  percent: 75
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 129
-Plan: 1 of 3
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-02 -- Completed 129-01-PLAN.md
+Last activity: 2026-07-02
 
 ## Milestones
 
@@ -161,6 +161,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 128]: 128-06: Test-mode trace recorded at useActionAnimations' own level (own interpolated selector strings), returns early without delegating to fly() - avoids double-recording with useFlyingElements' independent 'fly' trace branch
 - [Phase 128]: 128-06: Fake-timer real path requires toFake including requestAnimationFrame/cancelAnimationFrame/performance/Date since the composable's real path chains through useFlyingElements.fly()'s RAF+performance.now() timing
 - [Phase 129]: 129-01: hex data-element-id added additively alongside data-stone-id; checkers CheckersPlayer re-exported from game.ts; polyhedral-potions/demo-complex-ui boardRefs() converted to current { refs: RefWithRole[] } shape — All type-only/markup-only fixes; zero BoardSmith src/ gaps found
+- [Phase ?]: Phase 129-02: package-legitimacy gate pre-approved; DOM-leak allow-predicate excludes redundant rank/suit fields; animation-trace test uses direct composable, not full mount
 
 ### Highest-Risk Items (v4.4)
 
@@ -182,10 +183,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T18:45:54Z
-Stopped at: Completed 129-01-PLAN.md
+Last session: 2026-07-02T19:02:09.400Z
+Stopped at: Completed 129-02-PLAN.md
 Resume file: None
-Next action: Phase 129 (Migration — Games + MERC) Plan 01 complete (MIG-03 partial): hex/checkers/polyhedral-potions/demo-complex-ui/demo-action-panel all green, tsc clean, breakage-surface-free. Proceed to 129-02 (flagship new-test adoption: go-fish, cribbage, demo-animation) and 129-03 (MERC re-vendor).
+Next action: Phase 129 (Migration — Games + MERC) Plan 02 complete (MIG-03 done): go-fish (DOM-leak flagship + visibility, tsc debt closed), cribbage (visibility), demo-animation (animation-trace) all green, tsc clean. Proceed to 129-03 (MERC re-vendor, MIG-04).
 
 ## Operator Next Steps
 

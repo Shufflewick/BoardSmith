@@ -51,7 +51,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 ### Migration (MIG — continues from v4.3)
 
-- [ ] **MIG-03**: All `~/BoardSmithGames/` example games updated to the new/changed APIs, all suites green
+- [x] **MIG-03**: All `~/BoardSmithGames/` example games updated to the new/changed APIs, all suites green
 - [ ] **MIG-04**: MERC re-vendored and updated, suite green
 
 ## v2 Requirements
@@ -104,7 +104,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANIM-01 | Phase 128 | Complete |
 | ANIM-02 | Phase 128 | Complete |
 | ANIM-03 | Phase 128 | Complete |
-| MIG-03 | Phase 129 | Pending |
+| MIG-03 | Phase 129 | Complete |
 | MIG-04 | Phase 129 | Pending |
 | DOC-05 | Phase 130 | Pending |
 | DOC-06 | Phase 130 | Pending |
