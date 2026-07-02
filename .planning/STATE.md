@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 126-04-PLAN.md
-last_updated: "2026-07-02T15:13:55.055Z"
-last_activity: 2026-07-02 -- Phase 127 planning complete
+stopped_at: Completed 127-01-PLAN.md
+last_updated: "2026-07-02T10:20:00.000Z"
+last_activity: 2026-07-02 -- Phase 127 Plan 01 complete (getState/getLobby/debugToggle/uiSwitch)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 16
-  completed_plans: 13
-  percent: 50
+  completed_plans: 14
+  percent: 56
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 127
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-02 -- Phase 127 planning complete
+Plan: 01 complete
+Status: Executing — Plan 01 done, remaining plans per ROADMAP.md
+Last activity: 2026-07-02 -- Phase 127 Plan 01 complete (getState/getLobby/debugToggle/uiSwitch)
 
 ## Milestones
 
@@ -150,6 +150,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 126]: 126-02: #persistSafely wraps #save()/apply() as the single funnel (not each caller individually), automatically protecting PendingActionManager's save callback without touching that file
 - [Phase ?]: 126-03: boardRef()'s warning code is CHOICES_ERROR per the plan's reserved taxonomy; PickStepResult.warnings? added in pending-action-manager.ts as necessary plumbing for handleSelectionStep forwarding
 - [Phase 126]: 126-04: debugLogs kept as a bridge-local marker type (never joins stateless-ops.ts's Op union) so the executeOp purity contract holds by construction
+- [Phase 127]: 127-01: getState/getLobby reuse the existing game_state/lobby HostOutbound shapes plus requestId (no new response type names); getState resolves seat only from server-tracked followerClientId/clientSeat (no client-supplied seat field exists on the variant); debugToggle/uiSwitch are host-level relay-only ops (fan-out to all connected clients), never routed through bridge.ts's WireOp machinery
 
 ### Highest-Risk Items (v4.4)
 
@@ -171,10 +172,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T05:37:40.846Z
-Stopped at: Completed 126-04-PLAN.md
+Last session: 2026-07-02T10:20:00.000Z
+Stopped at: Completed 127-01-PLAN.md
 Resume file: None
-Next action: Execute 125-02-PLAN.md (headless simulation, remaining plan). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending).
+Next action: Execute remaining Phase 127 plans per ROADMAP.md (Node-capable client SDK / dev-host protocol client, per 127-PATTERNS.md). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) and `/gsd:verify-phase 125`/`126` as applicable.
 
 ## Operator Next Steps
 

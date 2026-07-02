@@ -27,9 +27,9 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 ### Scriptable Dev Host (DRIVE)
 
-- [ ] **DRIVE-01**: Agent can query current game state and lobby over WS — `getState`/`getLobby` ops (already in protocol.ts:316,321) implemented in the dev host
+- [x] **DRIVE-01**: Agent can query current game state and lobby over WS — `getState`/`getLobby` ops (already in protocol.ts:316,321) implemented in the dev host
 - [ ] **DRIVE-02**: Client SDK (`GameConnection`) works in Node — WebSocket abstraction replaces the browser-only `new WebSocket()` (game-connection.ts:80)
-- [ ] **DRIVE-03**: Remaining UI-only dev-host controls (debug-panel toggle, UI switcher) are drivable via WS ops
+- [x] **DRIVE-03**: Remaining UI-only dev-host controls (debug-panel toggle, UI switcher) are drivable via WS ops
 
 ### Animation & Drag-Drop Test Story (ANIM)
 
@@ -98,9 +98,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ERR-02 | Phase 126 | Complete |
 | ERR-03 | Phase 126 | Complete |
 | ERR-04 | Phase 126 | Complete |
-| DRIVE-01 | Phase 127 | Pending |
+| DRIVE-01 | Phase 127 | Complete |
 | DRIVE-02 | Phase 127 | Pending |
-| DRIVE-03 | Phase 127 | Pending |
+| DRIVE-03 | Phase 127 | Complete |
 | ANIM-01 | Phase 128 | Pending |
 | ANIM-02 | Phase 128 | Pending |
 | ANIM-03 | Phase 128 | Pending |
