@@ -182,7 +182,7 @@ Plans:
 | 125. Headless Simulation | 2/2 | Complete    | 2026-07-02 |
 | 126. Structured Error Surfacing | 4/4 | Complete    | 2026-07-02 |
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
-| 128. Animation & Drag-Drop Test Story | 6/6 | Complete   | 2026-07-02 |
+| 128. Animation & Drag-Drop Test Story | 6/6 | Complete    | 2026-07-02 |
 | 129. Migration (Games + MERC) | 0/TBD | Not started | - |
 | 130. Documentation | 0/TBD | Not started | - |
 
