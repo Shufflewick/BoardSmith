@@ -8,6 +8,7 @@ import { validateCommand } from './commands/validate.js';
 import { publishCommand } from './commands/publish.js';
 import { lintCommand } from './commands/lint.js';
 import { analyzeCommand } from './commands/analyze.js';
+import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
 import { evolveAIWeightsCommand } from './commands/evolve-ai-weights.js';
 import { packCommand } from './commands/pack.js';
@@ -80,6 +81,16 @@ program
   .option('--json', 'Output results as JSON')
   .option('-v, --verbose', 'Show detailed information')
   .action(analyzeCommand);
+
+// Headless simulation
+program
+  .command('simulate')
+  .description('Run seeded headless batch simulation and report pass/stuck/error per game')
+  .option('--games <count>', 'Number of games to simulate', '10')
+  .option('--seed <seed>', 'Base seed (per-game seeds derived and recorded in output)')
+  .option('--players <count>', 'Player count for each simulated game', '2')
+  .option('--json', 'Output results as JSON')
+  .action(simulateCommand);
 
 // AI Weight Evolution (new focused command)
 program
