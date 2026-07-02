@@ -47,7 +47,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 ### Documentation (DOC — continues from v4.3)
 
 - [ ] **DOC-05**: All new/changed APIs documented — testing guide (visibility, animation traces, headless sim), dev-host protocol, determinism guarantees
-- [ ] **DOC-06**: BREAKING.md updated for all removed/changed APIs (clean break, no deprecation aliases)
+- [ ] **DOC-06**: Breaking changes documented for all removed/changed APIs (clean break, no deprecation aliases) — delivered as `docs/migration-guide.md` `## v4.4` section per repo convention (BREAKING.md deprecated after v3.0)
 
 ### Migration (MIG — continues from v4.3)
 
