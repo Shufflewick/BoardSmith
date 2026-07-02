@@ -676,6 +676,40 @@ watch(
 );
 ```
 
+## Full-Board Modals: the `#bs-game-modal` Host
+
+GameShell renders a sanctioned overlay layer, `#bs-game-modal`, that exactly
+fills the board region. Teleport a blocking modal there (an end-of-round
+summary, a scoring recap) and it covers the board but never GameShell's
+header or action dock:
+
+```vue
+<template>
+  <Teleport to="#bs-game-modal">
+    <Transition name="overlay">
+      <div v-if="showSummary" class="round-summary-overlay">
+        <!-- ... -->
+      </div>
+    </Transition>
+  </Teleport>
+</template>
+```
+
+Notes:
+
+- **A plain `<Teleport>` just works** — GameShell guarantees the host element
+  is in the document before your game UI mounts (the game board is mounted one
+  tick after the shell itself), so the target always resolves. No `defer`
+  needed.
+- The host is `pointer-events: none` when empty and `auto` for its children,
+  so an open modal blocks the board and a closed one is click-through — no
+  extra wiring.
+- Even a `position: fixed` overlay stays confined to the board region
+  (`contain: layout` on the host), so your modal can never cover the shell
+  chrome.
+- Do **not** teleport to `body`/outside GameShell for board modals — you lose
+  the board-region confinement and the chrome guarantees.
+
 ## Debugging
 
 ### Why Isn't My Action Available?

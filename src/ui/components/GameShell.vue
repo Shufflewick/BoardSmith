@@ -957,6 +957,22 @@ provide('platformRequest', platformRequest);
 // Presentation overlay — provided reactively for AutoRenderer → renderers chain (D-04)
 provide('presentation', toRef(props, 'presentation'));
 
+// Gate for the game UI (the #game-board slot / dev UI switcher component): it must
+// not mount until GameShell's own DOM — including the `#bs-game-modal` teleport
+// host — is IN THE DOCUMENT. On a fresh page load the whole app tree is built
+// detached and inserted at the end of the root mount, so a game component that
+// mounts in the same pass as GameShell resolves `<Teleport to="#bs-game-modal">`
+// against the document and finds nothing. Vue then mounts the Teleport with a
+// null target, and the component's FIRST re-render throws mid-patch ("Cannot read
+// properties of null"), aborting the flush queue and wedging the entire UI (dead
+// action dock, stale board). Deferring the game UI by one tick (mounted hooks run
+// after the tree is inserted) guarantees the host exists in the document first,
+// so the documented plain-Teleport pattern always works.
+const shellMounted = ref(false);
+onMounted(() => {
+  shellMounted.value = true;
+});
+
 // Mount: in platform mode the host (ShufflewickPub in prod, the boardsmith dev
 // host locally) manages the session and drives everything via postMessage.
 onMounted(async () => {
@@ -2071,7 +2087,10 @@ if ((import.meta as any).hot) {
                board region) instead of escaping to the viewport — the board-area sandbox
                invariant holds no matter what the game designer does. pointer-events are
                none on the host (click-through when no modal is open) and auto on its
-               children (a teleported modal is interactive), so games need no extra wiring. -->
+               children (a teleported modal is interactive), so games need no extra wiring.
+               The game UI is mounted one tick after this host is in the document (the
+               `shellMounted` gate), so a plain `<Teleport to="#bs-game-modal">` in a
+               game component always resolves — no `defer` required. -->
           <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
           <div class="game-shell__zoom-container" :style="{ '--zoom-level': zoomLevel }">
             <!--
@@ -2084,6 +2103,10 @@ if ((import.meta as any).hot) {
                  extra `uis` entry or the built-in auto-UI) with the same slot
                  props. Falls through to the #game-board slot for the primary UI
                  and always in production (selectedUiComponent is null there). -->
+            <!-- `shellMounted` gate: the game UI mounts one tick after GameShell's
+                 DOM is in the document, so a game's `<Teleport to="#bs-game-modal">`
+                 always resolves its target (see the shellMounted declaration). -->
+            <template v-if="shellMounted">
             <component
               v-if="selectedUiComponent"
               :is="selectedUiComponent"
@@ -2126,6 +2149,7 @@ if ((import.meta as any).hot) {
                 <p>Add your game board in the #game-board slot</p>
               </div>
             </slot>
+            </template>
           </div>
         </main>
         <!-- No floating log button: the log lives in the players panel. Collapse the
