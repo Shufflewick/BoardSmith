@@ -15,6 +15,7 @@ import type {
   ActionResult,
   LobbyInfo,
 } from './types.js';
+import { resolveWsCtor } from './ws-ctor.js';
 
 export class GameConnection {
   private config: Required<Omit<GameConnectionConfig, 'wsImplementation'>>;
@@ -70,14 +71,7 @@ export class GameConnection {
       reconnectDelay: config.reconnectDelay ?? 1000,
     };
 
-    const wsCtor = config.wsImplementation ?? (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
-    if (!wsCtor) {
-      throw new Error(
-        'GameConnection requires a WebSocket implementation. Node <22.4 has no global WebSocket — ' +
-          'upgrade to Node >=22.4 or pass `wsImplementation` in GameConnectionConfig.'
-      );
-    }
-    this.#wsCtor = wsCtor;
+    this.#wsCtor = resolveWsCtor(config.wsImplementation, 'GameConnection');
   }
 
   // ============================================
