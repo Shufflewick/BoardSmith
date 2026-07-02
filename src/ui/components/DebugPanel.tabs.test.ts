@@ -25,7 +25,7 @@ const MIN_PROPS = {
   expanded: true, // open so panels are rendered
 };
 
-const TAB_IDS = ['state', 'elements', 'decks', 'actions', 'history', 'controls'] as const;
+const TAB_IDS = ['state', 'elements', 'decks', 'actions', 'history', 'logs', 'controls'] as const;
 
 describe('DebugPanel ARIA tablist', () => {
   let wrapper: ReturnType<typeof mount>;
@@ -43,9 +43,9 @@ describe('DebugPanel ARIA tablist', () => {
     expect(tablist).not.toBeNull();
   });
 
-  it('renders exactly 6 tab buttons with role="tab"', () => {
+  it('renders exactly 7 tab buttons with role="tab"', () => {
     const tabs = wrapper.element.querySelectorAll('[role="tab"]');
-    expect(tabs.length).toBe(6);
+    expect(tabs.length).toBe(7);
   });
 
   it.each(TAB_IDS)('tab "%s" has correct id and aria-controls', (id) => {
@@ -64,7 +64,7 @@ describe('DebugPanel ARIA tablist', () => {
 
   it('inactive tabs have aria-selected="false" and tabindex="-1"', () => {
     const inactiveTabs = wrapper.element.querySelectorAll('[role="tab"][aria-selected="false"]');
-    expect(inactiveTabs.length).toBe(5);
+    expect(inactiveTabs.length).toBe(6);
     inactiveTabs.forEach((tab) => {
       expect(tab.getAttribute('tabindex')).toBe('-1');
     });

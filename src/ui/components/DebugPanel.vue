@@ -261,7 +261,7 @@ async function debugRequest(op: string, payload: Record<string, unknown> = {}): 
 
 // Local state
 const panelExpanded = ref(props.expanded);
-const activeTab = ref<'state' | 'elements' | 'decks' | 'actions' | 'history' | 'controls'>('state');
+const activeTab = ref<'state' | 'elements' | 'decks' | 'actions' | 'history' | 'logs' | 'controls'>('state');
 
 // Tab descriptor for ARIA pattern — order matters for arrow-key navigation
 const DEBUG_TABS = [
@@ -270,6 +270,7 @@ const DEBUG_TABS = [
   { id: 'decks' as const, label: 'Decks' },
   { id: 'actions' as const, label: 'Actions' },
   { id: 'history' as const, label: 'History' },
+  { id: 'logs' as const, label: 'Logs' },
   { id: 'controls' as const, label: 'Controls' },
 ] as const;
 type TabId = typeof DEBUG_TABS[number]['id'];
@@ -331,6 +332,19 @@ const actionHistory = ref<SerializedAction[]>([]);
 const historyLoading = ref(false);
 const historyError = ref<string | null>(null);
 const historyLastFetched = ref<number>(0);
+
+// Logs state (ERR-04) — captured server-side errors/warnings from the
+// dev-host's log-capture ring buffer, pulled via the debug:logs op.
+interface LogEntry {
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  source: string;
+  timestamp: number;
+}
+const logEntries = ref<LogEntry[]>([]);
+const logsLoading = ref(false);
+const logsError = ref<string | null>(null);
+const logsLastFetched = ref<number>(0);
 
 // Time travel state
 const selectedActionIndex = ref<number | null>(null);
@@ -1132,6 +1146,45 @@ watch(activeTab, (tab) => {
 watch(() => props.state, () => {
   if (activeTab.value === 'history') {
     fetchHistory();
+  }
+}, { deep: false });
+
+// Fetch captured server-side logs (ERR-04) from the debug:logs op.
+async function fetchLogs() {
+  if (logsLoading.value) return;
+
+  logsLoading.value = true;
+  logsError.value = null;
+
+  try {
+    const data = await debugRequest('debug:logs', {});
+
+    if (!data.success) {
+      throw new Error((data.error as string) || 'Failed to fetch logs');
+    }
+
+    logEntries.value = (data.entries as LogEntry[]) || [];
+    logsLastFetched.value = Date.now();
+  } catch (e) {
+    logsError.value = e instanceof Error ? e.message : 'Unknown error';
+  } finally {
+    logsLoading.value = false;
+  }
+}
+
+// Refresh logs when switching to the logs tab
+watch(activeTab, (tab) => {
+  if (tab === 'logs' && props.gameId) {
+    if (Date.now() - logsLastFetched.value > 2000) {
+      fetchLogs();
+    }
+  }
+});
+
+// Refresh logs when state changes (new op may have recorded new entries)
+watch(() => props.state, () => {
+  if (activeTab.value === 'logs') {
+    fetchLogs();
   }
 }, { deep: false });
 
@@ -1999,6 +2052,52 @@ const displayedState = computed(() => {
           </div>
         </div>
 
+        <!-- Logs Tab (ERR-04) -->
+        <div
+          v-show="activeTab === 'logs'"
+          id="debug-panel-logs"
+          role="tabpanel"
+          aria-labelledby="debug-tab-logs"
+          class="tab-content logs-tab"
+        >
+          <div class="history-header">
+            <span class="history-count">{{ logEntries.length }} entries</span>
+            <button @click="fetchLogs" class="debug-btn small" :disabled="logsLoading">
+              {{ logsLoading ? 'Loading...' : 'Refresh' }}
+            </button>
+          </div>
+
+          <div v-if="logsError" class="history-error">
+            {{ logsError }}
+          </div>
+
+          <div v-else-if="logsLoading && logEntries.length === 0" class="history-loading">
+            Loading logs...
+          </div>
+
+          <div v-else-if="logEntries.length === 0" class="history-empty">
+            No captured server-side errors or warnings
+          </div>
+
+          <div v-else class="history-list log-list">
+            <div
+              v-for="(entry, index) in logEntries"
+              :key="index"
+              class="history-item log-entry"
+              :class="`log-severity-${entry.severity}`"
+            >
+              <div class="history-item-header">
+                <span class="log-severity-badge" :class="`log-severity-${entry.severity}`">
+                  {{ entry.severity }}
+                </span>
+                <span class="history-action-name">{{ entry.source }}</span>
+                <span class="history-time">{{ formatTimestamp(entry.timestamp) }}</span>
+              </div>
+              <div class="history-item-args">{{ entry.message }}</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Controls Tab -->
         <div
           v-show="activeTab === 'controls'"
@@ -2748,6 +2847,44 @@ const displayedState = computed(() => {
   font-size: 11px;
   color: var(--bsg-ink-2);
   font-family: var(--bsg-mono);
+}
+
+/* Logs Tab (ERR-04) */
+.logs-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.log-entry.log-severity-error {
+  border-left-color: var(--bsg-danger);
+}
+
+.log-entry.log-severity-warning {
+  border-left-color: var(--bsg-warn);
+}
+
+.log-severity-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.log-severity-badge.log-severity-error {
+  background: color-mix(in srgb, var(--bsg-danger) 20%, transparent);
+  color: var(--bsg-danger);
+}
+
+.log-severity-badge.log-severity-warning {
+  background: color-mix(in srgb, var(--bsg-warn) 20%, transparent);
+  color: var(--bsg-warn);
+}
+
+.log-severity-badge.log-severity-info {
+  background: var(--bsg-surface-3);
+  color: var(--bsg-ink-2);
 }
 
 /* Timeline Controls */
