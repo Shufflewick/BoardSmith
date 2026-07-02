@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 128-05-PLAN.md
-last_updated: "2026-07-02T18:41:49.233Z"
-last_activity: 2026-07-02 -- Phase 129 planning complete
+stopped_at: Completed 129-01-PLAN.md
+last_updated: "2026-07-02T18:49:10.260Z"
+last_activity: 2026-07-02 -- Completed 129-01-PLAN.md
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 25
-  completed_plans: 22
-  percent: 75
+  completed_plans: 23
+  percent: 92
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 129
-Plan: Not started
+Plan: 1 of 3
 Status: Ready to execute
-Last activity: 2026-07-02 -- Phase 129 planning complete
+Last activity: 2026-07-02 -- Completed 129-01-PLAN.md
 
 ## Milestones
 
@@ -160,6 +160,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 128]: 128-05: FlyConfig gained from/to/element fields so autoWatch threads container names + engine element id into the trace, distinct from FlyConfig.id (internal animation-bookkeeping key, generated as auto-fly-{id}-{timestamp} for autoWatch)
 - [Phase 128]: 128-06: Test-mode trace recorded at useActionAnimations' own level (own interpolated selector strings), returns early without delegating to fly() - avoids double-recording with useFlyingElements' independent 'fly' trace branch
 - [Phase 128]: 128-06: Fake-timer real path requires toFake including requestAnimationFrame/cancelAnimationFrame/performance/Date since the composable's real path chains through useFlyingElements.fly()'s RAF+performance.now() timing
+- [Phase 129]: 129-01: hex data-element-id added additively alongside data-stone-id; checkers CheckersPlayer re-exported from game.ts; polyhedral-potions/demo-complex-ui boardRefs() converted to current { refs: RefWithRole[] } shape — All type-only/markup-only fixes; zero BoardSmith src/ gaps found
 
 ### Highest-Risk Items (v4.4)
 
@@ -181,10 +182,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T17:19:19.150Z
-Stopped at: Completed 128-05-PLAN.md
+Last session: 2026-07-02T18:45:54Z
+Stopped at: Completed 129-01-PLAN.md
 Resume file: None
-Next action: Phase 127 (Scriptable Dev Host) is fully complete (Plans 01-03, DRIVE-01/02/03). Run `/gsd:verify-phase 127`, then begin Phase 128 (Animation/Drag-Drop Test Story) per ROADMAP.md. Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) and `/gsd:verify-phase 125`/`126` as applicable.
+Next action: Phase 129 (Migration — Games + MERC) Plan 01 complete (MIG-03 partial): hex/checkers/polyhedral-potions/demo-complex-ui/demo-action-panel all green, tsc clean, breakage-surface-free. Proceed to 129-02 (flagship new-test adoption: go-fish, cribbage, demo-animation) and 129-03 (MERC re-vendor).
 
 ## Operator Next Steps
 
