@@ -359,6 +359,125 @@ for (const action of actions) {
 // `replay` now reaches the identical state as `testGame`.
 ```
 
+## Scriptable Dev Host (WS)
+
+Everything above drives a single in-process `Game`/`TestGame`. To drive a
+**running `boardsmith dev` host** over WebSocket — from Node, with no
+browser — use the dev-only ops below plus `createDevHostClient`.
+
+### Dev-host WS ops
+
+| Op | Purpose |
+|----|---------|
+| `getState` | Perspective-aware state for the caller's own connected seat (resolved server-side from the tracked connection — there is no client-supplied seat field, so a client can never request another seat's view). |
+| `getLobby` | Lobby-phase info (connected/open seats) — works even before any seat has said `hello`. |
+| `debugToggle` | Relay-only: toggles the debug panel on every connected client. |
+| `uiSwitch` | Relay-only: switches every connected client's UI mode (`{ name }`). |
+| `debug:logs` | Returns the dev-host's captured server-side log ring buffer (see [Structured Errors](#structured-errors-err) below). |
+| `debug:flow-state` | Returns the current `FlowDebugInfo` (same shape as `Game.getFlowDebugInfo()`) for a connected dev-host client. |
+
+`debugToggle`/`uiSwitch` are host-level relay-only fan-out ops — like
+`hello`/`join`/`leave`/`restart`/`follow`, they have no per-caller reply to
+correlate. `getState`/`getLobby`/`debug:logs`/`debug:flow-state` echo a
+`requestId` and resolve to a direct reply.
+
+### `createDevHostClient` — drive the dev host from Node
+
+```typescript
+import { createDevHostClient } from 'boardsmith/client';
+
+const client = createDevHostClient('ws://localhost:5173/ws');
+await client.opened; // resolves once the socket is open; sending before this throws (fail-loud)
+
+client.hello({ /* ... */ });
+const lobby = await client.getLobby();       // works even in lobby phase, before any hello
+await client.join(/* seat info */);
+const state = await client.getState();       // own-seat-only — no seat field to spoof
+await client.serverRequest({ type: 'action', /* ... */ }); // submit an action
+client.debugToggle();
+client.uiSwitch('auto');
+```
+
+`getState`/`getLobby`/`serverRequest` are promise-correlated by `requestId`
+with a fail-loud not-open guard and a timeout-reject fallback — there is no
+silent hang. `createDevHostClient` is a separate sibling export from
+`GameConnection` (different wire protocol, no shared class hierarchy) —
+don't mix the two.
+
+`GameConnection` (and `createDevHostClient`) resolve their WebSocket
+constructor via `wsImplementation ?? globalThis.WebSocket`. Node **>=22.4**
+exposes `globalThis.WebSocket` natively and needs no override; on older Node
+versions, pass an explicit `wsImplementation` (e.g. the `ws` package) or
+you'll get an actionable error naming Node 22.4 and `wsImplementation`
+rather than a cryptic "WebSocket is not defined."
+
+```typescript
+import WebSocket from 'ws';
+const client = createDevHostClient(url, { wsImplementation: WebSocket as unknown as typeof globalThis.WebSocket });
+```
+
+## Structured Errors (ERR)
+
+### `OpResult.warnings` / `errorCode`
+
+Session-layer ops (`performAction`, selection steps, etc.) can carry
+**structured, non-fatal warnings** alongside a successful result, and a
+machine-checkable **`errorCode`** alongside a failure — instead of forcing a
+caller to string-match `error` messages.
+
+```typescript
+interface WarningEntry {
+  code: string;      // stable, branchable identifier (e.g. 'CHOICES_ERROR')
+  message: string;    // human-readable detail
+  source: string;     // which op/step produced it
+}
+```
+
+```typescript
+import { ErrorCode } from 'boardsmith/session';
+
+const result = await session.performAction(seat, actionName, args);
+if (!result.success) {
+  // Branch on errorCode, not on result.error's exact wording.
+  if (result.errorCode === ErrorCode.ACTION_NOT_AVAILABLE) {
+    // handle a known, stable failure category
+  }
+}
+result.warnings?.forEach(w => console.log(`[${w.source}] ${w.code}: ${w.message}`));
+```
+
+### Persistence health: `onPersistenceError` / `lastPersistenceError` / `persistenceHealthy`
+
+Both `GameSession` and the dev host's `SnapshotSessionHost` surface storage
+failures as **observable state**, not just a console log an agent can't see:
+
+```typescript
+const session = GameSession.create(GameClass, storage, {
+  onPersistenceError: (error, consecutiveFailures, healthy) => {
+    // error: { message, timestamp } — message never contains a stack trace
+    // consecutiveFailures: running count since the last successful save
+    // healthy: flips false after 3 consecutive failures
+  },
+});
+
+session.lastPersistenceError; // most recent error, or null
+session.persistenceHealthy;   // false once 3 consecutive saves have failed
+```
+
+`persistenceHealthy` recovers to `true` on the very next successful save.
+An agent driving a long-running session should poll (or subscribe to)
+`persistenceHealthy` rather than assume every action silently persisted.
+
+### `debug:logs` ring buffer
+
+The dev host's `debug:logs` WS op returns the captured server-side error/warning
+ring buffer (capped at the most recent 300 entries) — persistence errors
+(health-escalated), `OpResult.warnings`, and uncaught request-boundary errors
+all feed it, sourced by originating op name. The `DebugPanel`'s "Logs" tab
+polls this same op for a human-visible view; an agent can poll it directly
+via `createDevHostClient`'s `serverRequest`/dev-host WS surface for the same
+data without opening a browser.
+
 ## See Also
 
 - [boardsmith/testing](./api/testing.md) — `TestGame`, `playUntilComplete`,

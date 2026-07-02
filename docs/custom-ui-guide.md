@@ -436,6 +436,56 @@ function onPieceClick(piece: any) {
 </script>
 ```
 
+### Anchor Requirements & Fail-Loud Animation
+
+Any custom board element that participates in FLIP/flying-element animation
+or drag-drop **must** carry an anchor attribute so BoardSmith can find it in
+the DOM. Use `anchorAttrs(ref, type)` (from `boardsmith/ui`) rather than
+hand-writing `data-bs-el-id` yourself — it's the single source for every
+`data-bs-el-*` attribute name:
+
+```vue
+<template>
+  <div v-for="piece in pieces" :key="piece.id" v-bind="anchorAttrs({ id: piece.id }, 'piece')">
+    {{ piece.name }}
+  </div>
+</template>
+
+<script setup lang="ts">
+import { anchorAttrs } from 'boardsmith/ui';
+</script>
+```
+
+`useSelectable()`/`useSelectableGrid()` already spread these attributes for
+you when you bind their returned `attrs` — pass a `type` label (e.g.
+`'card'`, `'piece'`, `'grid-cell'`) so a missing anchor on your custom
+renderer names *your* component, not a generic `'unknown'` bucket.
+
+**Once-per-type dev warning:** if `anchorAttrs(ref, type)` is called with a
+`ref` that has no `id`/`notation`/`name` at all, it emits a dev-only warning
+(deduplicated per `type` — you'll see it once per distinct bug, not once per
+render). This means an animation/drag-drop gap on a custom board surfaces
+immediately in the console during development instead of silently no-oping.
+
+**Fail-loud in dev, safe in production:** if an animation composable
+(`useElementAnimation`, `useFLIP`, `useFlyingElements`) is asked to animate
+an element it can't find an anchor attribute for at all, it throws an
+actionable error **in development** (naming the composable, the attribute it
+searched for, and the fix — spread `anchorAttrs(ref)` or bind
+`useSelectable()`'s `attrs`). In a production build, the same situation logs
+via `console.error` and skips the animation instead of crashing a live game
+— an anchor gap should be caught during development, never take down a
+player's session. This dev/production split is controlled internally by
+each composable's `isDevThrowEnabled()` check — a positive signal (dev mode
+and not explicitly suppressed), never a default-throw.
+
+`data-bs-el-id` is the canonical anchor attribute for both selection and
+animation targeting; AutoUI additionally emits `data-element-id` as a FLIP
+alias for backward compatibility — treat `data-bs-el-id` as the one you
+target from custom code (see
+[Browser Testing](./browser-testing.md#1-stable-selectors-data-bs-el-id) for
+the full selector-parity story across custom UI and AutoUI).
+
 ## Step 6: Handling Dependent Selections
 
 When selection B depends on selection A (e.g., "select merc, then select their equipment"):
