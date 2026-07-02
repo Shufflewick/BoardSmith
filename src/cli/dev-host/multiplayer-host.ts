@@ -46,7 +46,7 @@ export type HostOutbound =
       requestId?: string | null;
     }
   | { type: 'joined'; seat: number }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; requestId?: string | null }
   | { type: 'init'; seat: number }
   | {
       type: 'game_state';
@@ -343,14 +343,18 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'server_request' }>,
   ): Promise<void> {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Game has not started.' });
+      this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
       return;
     }
     // A follower acts as whichever seat is currently due, not its own seat.
     const seat =
       clientId === this.followerClientId ? this.effectiveActiveSeat() : this.clientSeat.get(clientId);
     if (seat === undefined) {
-      this.send(clientId, { type: 'error', message: 'You are not seated in this game.' });
+      this.send(clientId, {
+        type: 'error',
+        message: 'You are not seated in this game.',
+        requestId: msg.requestId ?? null,
+      });
       return;
     }
     // Remember who asked so the response routes back to THIS client, even when a
@@ -373,13 +377,17 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'getState' }>,
   ): void {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Game has not started.' });
+      this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
       return;
     }
     const seat =
       clientId === this.followerClientId ? this.effectiveActiveSeat() : this.clientSeat.get(clientId);
     if (seat === undefined) {
-      this.send(clientId, { type: 'error', message: 'You are not seated in this game.' });
+      this.send(clientId, {
+        type: 'error',
+        message: 'You are not seated in this game.',
+        requestId: msg.requestId ?? null,
+      });
       return;
     }
     const view = this.session.viewForSeat(seat);
