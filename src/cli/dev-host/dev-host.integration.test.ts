@@ -12,20 +12,42 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike } from '../../session/index.js';
+import { executeOp, ErrorCode, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type ClientInbound } from './multiplayer-host.js';
 import { createDevHostClient, type DevHostInboundMessage } from '../../client/dev-host-client.js';
 
-/** Minimal always-live game: seat 1 alone may act, mirroring multiplayer-host.test.ts's PassGame. */
+/**
+ * Minimal always-live game: seat 1 alone may act, mirroring multiplayer-host.test.ts's PassGame.
+ *
+ * Also registers `twoStep` — a deliberately minimal 2-selection action (also
+ * restricted to seat 1) so this suite can exercise a genuinely in-progress
+ * `pendingAction` (submit selection 1 of 2, never selection 2) and a
+ * `resolveChoices`-sourced warning (its first selection's `boardRefs()`
+ * deliberately throws) without inventing a whole new game/fixture.
+ */
 class PassGame extends Game<PassGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.registerAction(
+      Action.create('twoStep')
+        .chooseFrom('first', {
+          choices: ['a', 'b'],
+          // Deliberately throws so `resolve_choices` surfaces a real
+          // BOARD_REFS_ERROR warning through the actual wire path (v4.4
+          // milestone-audit gap #4: debug:logs / ERR-04).
+          boardRefs: () => {
+            throw new Error('dev-host-integration test: boardRefs() deliberately throws');
+          },
+        })
+        .chooseFrom('second', { choices: ['x', 'y'] })
+        .execute(() => ({ success: true })),
+    );
     this.setFlow(
       defineFlow({
         root: loop({
           maxIterations: 1000,
-          do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
+          do: actionStep({ actions: ['pass', 'twoStep'], player: (ctx) => ctx.game.getPlayer(1)! }),
         }),
       }),
     );
@@ -162,6 +184,80 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     // ── Perform an action via serverRequest (seat 1, held by A). ──
     const actionResult = await clientA.serverRequest('action', { actionName: 'pass', args: {} });
     expect(actionResult.success).toBe(true);
+
+    // ── v4.4 milestone-audit gap #1 (Phase 123 payload): debug:flow-state's
+    //    flowDebugInfo carries a non-empty, precomputed `description` string.
+    //    `getState`/`game_state` never carries flowDebugInfo (T-123-10) — it is
+    //    scoped to the debug:flow-state wire op, which this asserts directly. ──
+    const flowStateA = await clientA.serverRequest('debug:flow-state', {});
+    expect(flowStateA.success).toBe(true);
+    const flowDebugInfoA = flowStateA.flowDebugInfo as { description: string };
+    expect(flowDebugInfoA).toBeTruthy();
+    expect(typeof flowDebugInfoA.description).toBe('string');
+    expect(flowDebugInfoA.description.length).toBeGreaterThan(0);
+    // No action in progress yet — pendingAction is absent for seat 1 too.
+    expect(flowStateA.pendingAction).toBeUndefined();
+
+    // ── v4.4 milestone-audit gap #2: a seat-scoped, in-progress pendingAction.
+    //    Submit ONLY the first of `twoStep`'s two selections (never the
+    //    second) via `selection_step`, so the action stays pending. ──
+    const stepResult = await clientA.serverRequest('selection_step', {
+      actionName: 'twoStep',
+      selectionName: 'first',
+      value: 'a',
+    });
+    expect(stepResult.success).toBe(true);
+    expect(stepResult.actionComplete).toBe(false);
+
+    // `debug:flow-state` is always scoped to the CALLER's own seat (IN-01) —
+    // A (seat 1, the acting seat) sees its own pendingAction; B (seat 2) does not.
+    const flowStateAPending = await clientA.serverRequest('debug:flow-state', {});
+    const pendingActionA = flowStateAPending.pendingAction as { actionName: string } | undefined;
+    expect(pendingActionA).toBeTruthy();
+    expect(pendingActionA?.actionName).toBe('twoStep');
+
+    const flowStateB = await clientB.serverRequest('debug:flow-state', {});
+    expect(flowStateB.pendingAction).toBeUndefined();
+
+    // ── v4.4 milestone-audit gap #3 (Phase 126 payload): a failing action
+    //    (B acting out of turn — only seat 1 may act in PassGame) round-trips
+    //    a real, host-sourced `errorCode` to the Node client, not just a message. ──
+    const wrongTurnResult = await clientB.serverRequest('action', { actionName: 'pass', args: {} });
+    expect(wrongTurnResult.success).toBe(false);
+    expect(wrongTurnResult.errorCode).toBe(ErrorCode.NOT_YOUR_TURN);
+
+    // ── v4.4 milestone-audit gap #4 (Phase 126 ERR-04 leg): a genuine warning
+    //    recorded through the real wire path (twoStep's first selection's
+    //    boardRefs() throws during resolve_choices — see PassGame above) is
+    //    retrievable afterward via the `debug:logs` op. ──
+    const resolveChoicesResult = await clientA.serverRequest('resolve_choices', {
+      actionName: 'twoStep',
+      selectionName: 'first',
+      args: {},
+    });
+    expect(resolveChoicesResult.success).toBe(true);
+    expect(
+      (resolveChoicesResult.warnings as Array<{ code: string }> | undefined)?.some(
+        (w) => w.code === 'BOARD_REFS_ERROR',
+      ),
+    ).toBe(true);
+
+    const logsResult = await clientA.serverRequest('debug:logs', {});
+    expect(logsResult.success).toBe(true);
+    const logEntries = logsResult.entries as Array<{ severity: string; message: string; source: string }>;
+    expect(
+      logEntries.some(
+        (e) => e.severity === 'warning' && e.message.includes('boardRefs() deliberately throws'),
+      ),
+    ).toBe(true);
+
+    // Leave `twoStep` mid-flight without completing it — cancel so the flow
+    // isn't left awaiting the never-to-arrive second selection for the rest
+    // of this suite (the subsequent tests only rely on getState/getLobby
+    // guard clauses, not on the action step being resolved, but cancelling
+    // keeps this test's own side effects self-contained).
+    const cancelResult = await clientA.serverRequest('cancel_action', {});
+    expect(cancelResult.success).toBe(true);
 
     // ── DRIVE-03: debugToggle/uiSwitch are relay-only fan-out to every connected client. ──
     const bMessages: DevHostInboundMessage[] = [];
