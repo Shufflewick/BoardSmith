@@ -3,7 +3,7 @@ import { Game, Player, Piece, Space, Action, defineFlow, actionStep, deserialize
 import { GameRunner } from '../runtime/index.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { computeUndoInfo } from './utils.js';
-import type { StoredGameState } from './types.js';
+import { ErrorCode, type StoredGameState } from './types.js';
 
 class Equipment extends Piece<EquipGame> {
   slot!: string;
@@ -247,6 +247,54 @@ describe('PendingActionManager', () => {
 
     expect(result.success).toBe(true);
     expect(result.actionComplete).toBe(true);
+  });
+
+  // ── errorCode threading (WR-03) ──────────────────────────────────────────
+  //
+  // Every failure branch of processSelectionStep must forward a structured
+  // ErrorCode, not just a free-text `error` string — mirroring the
+  // auto-create branch's existing errorCode forwarding.
+
+  describe('errorCode threading', () => {
+    it('returns PICK_NOT_FOUND when there is no pending action and no actionName to auto-create', async () => {
+      const { manager } = createManager();
+
+      const result = await manager.processSelectionStep(1, 'color', 'red');
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.PICK_NOT_FOUND);
+    });
+
+    it('returns ACTION_NOT_FOUND when auto-create is attempted with an unknown actionName', async () => {
+      const { manager } = createManager();
+
+      const result = await manager.processSelectionStep(1, 'color', 'red', 'bogus-action');
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.ACTION_NOT_FOUND);
+    });
+
+    it('returns PICK_NOT_FOUND when the selectionName does not match the expected current selection', async () => {
+      const { manager } = createManager();
+
+      // Auto-creates the 'pick' pending action (currentSelectionIndex 0 → 'color'),
+      // but the step targets 'size' — a mismatch.
+      const result = await manager.processSelectionStep(1, 'size', 'M', 'pick');
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.PICK_NOT_FOUND);
+    });
+
+    it('returns INVALID_PICK when a regular (non-repeating) selection step fails validation', async () => {
+      const { manager } = createManager();
+
+      // 'color' is a required (non-optional) selection — null triggers the
+      // "Missing required selection" failure branch.
+      const result = await manager.processSelectionStep(1, 'color', null, 'pick');
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.INVALID_PICK);
+    });
   });
 
   it('returns followUp when action execute returns one through processSelectionStep', async () => {

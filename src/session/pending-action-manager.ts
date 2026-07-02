@@ -167,12 +167,16 @@ export class PendingActionManager<G extends Game = Game> {
     }
 
     if (!pendingState) {
-      return { success: false, error: 'No pending action for this player. Provide actionName to auto-create.' };
+      return {
+        success: false,
+        error: 'No pending action for this player. Provide actionName to auto-create.',
+        errorCode: ErrorCode.PICK_NOT_FOUND,
+      };
     }
 
     const action = this.#runner.game.getAction(pendingState.actionName);
     if (!action) {
-      return { success: false, error: `Action not found: ${pendingState.actionName}` };
+      return { success: false, error: `Action not found: ${pendingState.actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
 
     const executor = this.#runner.game.getActionExecutor();
@@ -180,12 +184,16 @@ export class PendingActionManager<G extends Game = Game> {
     const selection = action.selections[pendingState.currentSelectionIndex];
 
     if (!selection) {
-      return { success: false, error: 'No current selection' };
+      return { success: false, error: 'No current selection', errorCode: ErrorCode.PICK_NOT_FOUND };
     }
 
     // Verify we're processing the expected selection
     if (selection.name !== selectionName) {
-      return { success: false, error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${action.selections.findIndex(s => s.name === selectionName)}` };
+      return {
+        success: false,
+        error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${action.selections.findIndex(s => s.name === selectionName)}`,
+        errorCode: ErrorCode.PICK_NOT_FOUND,
+      };
     }
 
     // Check if it's a repeating selection
@@ -193,7 +201,7 @@ export class PendingActionManager<G extends Game = Game> {
       const result = executor.processRepeatingStep(action, player, pendingState, value);
 
       if (result.error) {
-        return { success: false, error: result.error, nextChoices: result.nextChoices };
+        return { success: false, error: result.error, nextChoices: result.nextChoices, errorCode: ErrorCode.INVALID_PICK };
       }
 
       // Persist if storage adapter is provided (onEach may have modified game state)
@@ -223,7 +231,7 @@ export class PendingActionManager<G extends Game = Game> {
     const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
 
     if (!stepResult.success) {
-      return { success: false, error: stepResult.error };
+      return { success: false, error: stepResult.error, errorCode: ErrorCode.INVALID_PICK };
     }
 
     // Check if action is now complete
