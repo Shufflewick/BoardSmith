@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
-status: executing
-stopped_at: Completed 124-03-PLAN.md
-last_updated: "2026-07-02T03:02:31.037Z"
+status: ready_to_plan
+stopped_at: Phase 124 complete (3/3) — ready to discuss Phase 125
+last_updated: 2026-07-02T03:26:28.350Z
 last_activity: 2026-07-02 -- 124-03-PLAN.md executed (VIS-03 shipped, phase 124 complete)
 progress:
   total_phases: 8
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-01)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 124 — hidden info test utilities
+**Current focus:** Phase 125 — headless simulation
 
 ## Current Position
 
-Phase: 124
-Plan: 01-03 complete (phase 124 fully executed)
-Status: Executing
-Last activity: 2026-07-02 -- 124-03-PLAN.md executed (VIS-03 shipped, phase 124 complete)
+Phase: 125
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-02
 
 ## Milestones
 
