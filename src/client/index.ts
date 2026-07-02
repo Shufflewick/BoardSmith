@@ -37,6 +37,18 @@ export { MeepleClient } from './client.js';
 // Game connection
 export { GameConnection } from './game-connection.js';
 
+// Dev-host protocol client (DRIVE-02) — a separate sibling of GameConnection;
+// speaks `boardsmith dev`'s own WS protocol, not the production game protocol.
+export { createDevHostClient } from './dev-host-client.js';
+export type {
+  DevHostClient,
+  DevHostClientOptions,
+  DevHostSeatInfo,
+  DevHostLobbyReply,
+  DevHostStateReply,
+  DevHostInboundMessage,
+} from './dev-host-client.js';
+
 // Audio service
 export { audioService, type AudioServiceOptions } from './audio.js';
 
