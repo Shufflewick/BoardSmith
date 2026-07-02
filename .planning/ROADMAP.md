@@ -137,7 +137,7 @@ Plans:
 
 **Plans**: 6 plans
 - [x] 128-01-PLAN.md — Vue-free animation test-mode + trace recorder module (ANIM-01 foundation), re-exported from ui + testing
-- [ ] 128-02-PLAN.md — anchorAttrs custom-board dev-warning (ANIM-03) + useDragDrop direct unit tests (ANIM-02)
+- [x] 128-02-PLAN.md — anchorAttrs custom-board dev-warning (ANIM-03) + useDragDrop direct unit tests (ANIM-02)
 - [ ] 128-03-PLAN.md — useFLIP test-mode trace branch + fail-loud anchor throw + unit tests (ANIM-01/02/03)
 - [ ] 128-04-PLAN.md — useElementAnimation test-mode trace branch + throw + unit tests (ANIM-01/02/03)
 - [ ] 128-05-PLAN.md — useFlyingElements test-mode trace (autoWatch from/to) + first-resolution throw + unit tests (ANIM-01/02/03)
@@ -182,7 +182,7 @@ Plans:
 | 125. Headless Simulation | 2/2 | Complete    | 2026-07-02 |
 | 126. Structured Error Surfacing | 4/4 | Complete    | 2026-07-02 |
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
-| 128. Animation & Drag-Drop Test Story | 1/6 | In Progress|  |
+| 128. Animation & Drag-Drop Test Story | 2/6 | In Progress|  |
 | 129. Migration (Games + MERC) | 0/TBD | Not started | - |
 | 130. Documentation | 0/TBD | Not started | - |
 
