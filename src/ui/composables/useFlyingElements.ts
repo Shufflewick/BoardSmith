@@ -95,6 +95,8 @@ import { ref, computed, watch, onUnmounted, isRef, type Ref, type ComputedRef } 
 import { prefersReducedMotion } from './useElementAnimation.js';
 import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
+import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
+import { isDevMode } from '../../utils/dev.js';
 
 /**
  * Game element type for auto-watch mode
@@ -194,6 +196,22 @@ export interface FlyConfig {
 
   /** Skip fade-out during hold (for 3D flip compatibility) */
   skipFadeOut?: boolean;
+
+  /**
+   * Container/anchor identity this element flies FROM, for animation-trace
+   * assertions in test mode (ANIM-01..03). Optional — `autoWatch` supplies
+   * this automatically from its container names; manual `fly()`/`flyMultiple()`
+   * calls may omit it (falls back to the `startRect` element's anchor
+   * attribute when it's an `HTMLElement`, else stays `undefined` for a raw
+   * `DOMRect`/function target).
+   */
+  from?: string;
+
+  /**
+   * Container/anchor identity this element flies TO, for animation-trace
+   * assertions in test mode (ANIM-01..03). Same fallback rules as `from`.
+   */
+  to?: string;
 }
 
 /**
@@ -400,6 +418,54 @@ function normalizeRect(
   return input;
 }
 
+/** Recognized anchor attributes, checked in priority order (mirrors useFLIP's getElementId). */
+const FLY_ANCHOR_ATTRS = ['data-bs-el-id', 'data-card-id', 'data-piece-id', 'data-element-id'];
+
+/**
+ * Read an element's anchor identity, if it carries one. Used to derive a
+ * manual fly()/flyMultiple() trace's `from`/`to` when the caller passed an
+ * `HTMLElement` (not a raw `DOMRect` or moving-target function — see
+ * RESEARCH A3: geometry alone carries no identity).
+ */
+function getAnchorId(el: HTMLElement): string | undefined {
+  for (const attr of FLY_ANCHOR_ATTRS) {
+    const value = el.getAttribute(attr);
+    if (value) return value;
+  }
+  return el.id || undefined;
+}
+
+/**
+ * Derive a trace from/to identity from a start/end target. Only an
+ * `HTMLElement` carries identity; a raw `DOMRect` or a moving-target function
+ * has none to offer (A3 discretion — accept `undefined`, geometry lives in
+ * `meta` instead).
+ */
+function deriveAnchorId(
+  target: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null)
+): string | undefined {
+  return target instanceof HTMLElement ? getAnchorId(target) : undefined;
+}
+
+/**
+ * Fail-loud report for a start/end target that resolved null on FIRST
+ * resolution (before the flying element is created / the RAF chain starts).
+ * Extends `normalizeRect`'s existing fail-loud precedent (above) to the
+ * non-function resolution cases: an `HTMLElement`/`DOMRect` target, or a
+ * moving-target function, that is missing/detached when fly() is first
+ * called. Gated by `isDevMode()` — throws in dev, `console.error`s and skips
+ * in production. Distinct from the per-frame mid-flight re-check inside
+ * `animate()` below, which deliberately stays a silent complete (a target
+ * legitimately disappearing DURING flight is not an authoring error).
+ */
+function reportMissingFlyTarget(which: 'start' | 'end', id: string): void {
+  const message = `Flying element ${which} position resolved to null for fly() config "${id}". Ensure the ${which}Rect target (element, ref, or function) resolves to a real element or DOMRect before calling fly()/flyMultiple().`;
+  if (isDevMode()) {
+    throw new Error(message);
+  }
+  console.error(`[BoardSmith] ${message}`);
+}
+
 /**
  * Unified flying elements composable.
  *
@@ -437,17 +503,14 @@ export function useFlyingElements(
     holdDuration?: number;
     onPositionComplete?: () => void;
     skipFadeOut?: boolean;
+    from?: string;
+    to?: string;
   }
 
   /**
    * Core flying animation implementation
    */
   async function flyCardInternal(flyOptions: InternalFlyOptions): Promise<void> {
-    // Skip animation if reduced motion preferred
-    if (prefersReducedMotion.value) {
-      return;
-    }
-
     const {
       id,
       startRect: startTarget,
@@ -460,10 +523,45 @@ export function useFlyingElements(
       holdDuration = defaultHoldDuration,
       onPositionComplete,
       skipFadeOut = false,
+      from: fromOverride,
+      to: toOverride,
     } = flyOptions;
 
+    // First-resolution fail-loud (dev-gated): the caller's start/end target
+    // must exist when fly() is invoked. This is a distinct, one-time check
+    // from the per-frame mid-flight re-check inside animate() below, which
+    // stays a silent complete for a target that legitimately disappears
+    // DURING flight (RESEARCH Pitfall 3).
     const startRect = getRect(startTarget);
-    if (!startRect) return;
+    if (!startRect) {
+      reportMissingFlyTarget('start', id);
+      return;
+    }
+    const initialEndRect = getRect(endTarget);
+    if (!initialEndRect) {
+      reportMissingFlyTarget('end', id);
+      return;
+    }
+
+    // Test mode: record one assertable {kind:'fly'} trace per flown element
+    // and resolve immediately, without running the RAF chain. Checked BEFORE
+    // prefersReducedMotion — test mode is an explicit, independent concern
+    // from the a11y reduced-motion preference (never merged).
+    if (isAnimationTestModeEnabled()) {
+      recordTrace({
+        kind: 'fly',
+        element: id,
+        from: fromOverride ?? deriveAnchorId(startTarget),
+        to: toOverride ?? deriveAnchorId(endTarget),
+        meta: { startRect, endRect: initialEndRect },
+      });
+      return;
+    }
+
+    // Skip animation if reduced motion preferred
+    if (prefersReducedMotion.value) {
+      return;
+    }
 
     // Use explicit card size if provided, otherwise use default
     const cardWidth = cardSize?.width ?? defaultElementSize.width;
@@ -636,10 +734,10 @@ export function useFlyingElements(
    * Fly a single element (new API)
    */
   async function fly(config: FlyConfig): Promise<void> {
-    if (prefersReducedMotion.value) {
-      return;
-    }
-
+    // NOTE: the reduced-motion / test-mode gating happens inside
+    // flyCardInternal (test mode is checked BEFORE reduced motion there) —
+    // no early-return here, so test mode can still record a trace even when
+    // the user prefers reduced motion.
     await flyCardInternal({
       id: config.id,
       startRect: normalizeRect(config.startRect),
@@ -652,6 +750,8 @@ export function useFlyingElements(
       holdDuration: config.holdDuration ?? defaultHoldDuration,
       onPositionComplete: config.onPositionComplete,
       skipFadeOut: config.skipFadeOut,
+      from: config.from,
+      to: config.to,
     });
   }
 
@@ -659,9 +759,12 @@ export function useFlyingElements(
    * Fly multiple elements with optional stagger (new API)
    */
   async function flyMultiple(configs: FlyConfig[], staggerMs: number = 50): Promise<void> {
-    if (prefersReducedMotion.value || configs.length === 0) {
+    if (configs.length === 0) {
       return;
     }
+    // NOTE: reduced-motion / test-mode gating happens per-element inside
+    // flyCardInternal (via fly()) — no blanket early-return here, so test
+    // mode can still record traces even when reduced motion is preferred.
 
     const promises: Promise<void>[] = [];
 
@@ -880,7 +983,11 @@ export function useFlyingElements(
       gameView,
       async (newView, oldView) => {
         if (!newView) return;
-        if (prefersReducedMotion.value) return;
+        // NOTE: no blanket prefersReducedMotion early-return here — test mode
+        // must still be able to record traces regardless of the user's a11y
+        // preference (never merged, per useAnimationTestMode.ts). Each
+        // individual fly() call still honors reduced motion internally
+        // (inside flyCardInternal, after the test-mode check).
 
         // Build container element map
         const containerElements = new Map<string, AutoWatchGameElement | null>();
@@ -948,6 +1055,8 @@ export function useFlyingElements(
                   elementData,
                   flip,
                   duration: autoWatchDuration,
+                  from: oldContainer,
+                  to: newContainer,
                 });
               }
             }
@@ -991,6 +1100,8 @@ export function useFlyingElements(
                     elementData,
                     flip: route.flip ?? true,
                     duration: autoWatchDuration,
+                    from: route.from,
+                    to: route.to,
                   });
                 }
               }
@@ -1027,6 +1138,8 @@ export function useFlyingElements(
                     elementData: { ...elementData, faceUp: false },
                     flip: route.flip ?? true,
                     duration: autoWatchDuration,
+                    from: route.from,
+                    to: container,
                   });
                 }
               }
