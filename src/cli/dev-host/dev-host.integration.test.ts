@@ -180,10 +180,34 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
   it('rejects requestId-correlated requests with an actionable message when the socket never opens', async () => {
     // Fail-loud when the request is issued before the connection is ready —
     // no requestId correlation is possible on a socket that isn't open yet.
+    // No `.opened.catch(() => {})` workaround needed (CR-03): the SDK attaches
+    // its own internal no-op handler so a caller who never touches `.opened`
+    // at all doesn't crash the process with an unhandled rejection.
     const deadClient = createDevHostClient('ws://localhost:1', { requestTimeoutMs: 50 });
-    deadClient.opened.catch(() => {}); // connection failure is expected; avoid an unhandled rejection
     await expect(deadClient.getLobby()).rejects.toThrow(/socket is not open/);
     deadClient.close();
+  });
+
+  it('rejects a correlated getState request promptly with the host error, not a timeout (CR-01)', async () => {
+    // By this point in the suite the game is already 'playing' with both
+    // seats claimed by clientA/clientB — a fresh client that never joins a
+    // seat is unseated. getState's guard clause ("You are not seated in this
+    // game.") must reject the promise immediately via requestId correlation —
+    // NOT fall through to the (much longer) generic timeout.
+    const unseatedClient = createDevHostClient(`ws://localhost:${port}`, { requestTimeoutMs: 5000 });
+    await unseatedClient.opened;
+    const start = Date.now();
+    await expect(unseatedClient.getState()).rejects.toThrow(/not seated in this game/);
+    expect(Date.now() - start).toBeLessThan(1000); // rejected fast, not via the 5s timeout
+    unseatedClient.close();
+  });
+
+  it('rejects a pending request immediately when the socket closes mid-request (CR-02)', async () => {
+    const client = createDevHostClient(`ws://localhost:${port}`, { requestTimeoutMs: 5000 });
+    await client.opened;
+    const pendingRequest = client.getState(); // no reply will ever arrive before close()
+    client.close();
+    await expect(pendingRequest).rejects.toThrow(/connection to .* closed/);
   });
 
   it('rejects requestId-correlated requests with a timeout when the socket is open but nothing replies', async () => {
