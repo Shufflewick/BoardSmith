@@ -135,7 +135,13 @@ Plans:
   2. `useFLIP`, `useFlyingElements`, `useElementAnimation`, `useActionAnimations`, and `useDragDrop` each have passing direct unit tests (currently zero).
   3. Triggering an animation on a target element missing its anchor attribute throws an actionable error instead of silently no-op'ing, and custom boards missing `anchorAttrs` get a dev-time warning.
 
-**Plans**: TBD
+**Plans**: 6 plans
+- [ ] 128-01-PLAN.md — Vue-free animation test-mode + trace recorder module (ANIM-01 foundation), re-exported from ui + testing
+- [ ] 128-02-PLAN.md — anchorAttrs custom-board dev-warning (ANIM-03) + useDragDrop direct unit tests (ANIM-02)
+- [ ] 128-03-PLAN.md — useFLIP test-mode trace branch + fail-loud anchor throw + unit tests (ANIM-01/02/03)
+- [ ] 128-04-PLAN.md — useElementAnimation test-mode trace branch + throw + unit tests (ANIM-01/02/03)
+- [ ] 128-05-PLAN.md — useFlyingElements test-mode trace (autoWatch from/to) + first-resolution throw + unit tests (ANIM-01/02/03)
+- [ ] 128-06-PLAN.md — useActionAnimations trace (own selectors) + warn→dev-throw upgrade + unit tests (ANIM-01/02/03)
 **UI hint**: yes
 
 #### Phase 129: Migration (Games + MERC)
