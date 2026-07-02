@@ -402,7 +402,8 @@ export class MultiplayerHost {
     clientId: string,
     msg: Extract<ClientInbound, { type: 'getLobby' }>,
   ): void {
-    this.send(clientId, { ...this.lobbyMessage(), requestId: msg.requestId ?? null });
+    const lobby = this.lobbyMessage() as Extract<HostOutbound, { type: 'lobby' }>;
+    this.send(clientId, { ...lobby, requestId: msg.requestId ?? null });
   }
 
   /**
