@@ -157,6 +157,36 @@ export async function renderAsSeat<G extends Game>(
  * silently mask a real leak the way a broad allowlist could — the allowlist
  * test in dom-leak.test.ts proves a real leak still fails when a legitimate
  * overlapping value is exempted.
+ *
+ * **Scope allowances to `elementId`, not just `attribute`.** An attribute-wide
+ * exemption (e.g. `ctx.attribute === 'rank'`) allows that attribute for EVERY
+ * element, including ones the predicate's author never reasoned about — a
+ * future element with a same-named attribute would be silently exempted too.
+ * Prefer proving redundancy per-element, using `ctx.elementId` to look up
+ * something you already know is safe about THAT specific element:
+ *
+ * ```ts
+ * // Build elementId -> compound-name map from the actual game state.
+ * const cardNamesById = new Map<number, string>();
+ * for (const card of testGame.game.all(Card)) {
+ *   if (card.name) cardNamesById.set(card.id, card.name);
+ * }
+ *
+ * const allow: HiddenInfoLeakAllowPredicate = (marker, ctx) => {
+ *   if (ctx.attribute !== 'rank' && ctx.attribute !== 'suit') return false;
+ *   // Only exempt THIS element's rank/suit, and only because its own
+ *   // compound `name` (a superset) is proven to already cover it.
+ *   const name = cardNamesById.get(ctx.elementId);
+ *   return typeof name === 'string' && name.includes(marker);
+ * };
+ * ```
+ *
+ * This still cannot detect a leak of the bare rank/suit *without* the
+ * compound name also leaking (structurally redundant fields are redundant by
+ * definition) — pair a scoped allowlist like this with a dedicated
+ * regression test that injects a bare-field-only leak (no `allow` predicate)
+ * to prove that gap is covered too. See go-fish's
+ * `tests/no-hidden-info-dom-leak.test.ts` for a worked example of both.
  */
 export type HiddenInfoLeakAllowPredicate = (
   marker: string,
