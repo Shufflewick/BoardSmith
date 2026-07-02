@@ -65,7 +65,7 @@
   2. A developer can run `boardsmith simulate` with games-count and seed flags and get pass/stuck/error reporting per simulated game.
   3. Running `boardsmith simulate` twice with the same seed produces identical pass/stuck/error results.
 **Plans**: 2 plans
-  - [ ] 125-01-PLAN.md — SIM-01: move createHeadlessSession to public boardsmith/session (clean break) + JSDoc + tests
+  - [x] 125-01-PLAN.md — SIM-01: move createHeadlessSession to public boardsmith/session (clean break) + JSDoc + tests
   - [ ] 125-02-PLAN.md — SIM-02: boardsmith simulate CLI (seeded batch, table/--json, non-zero exit, replay) + shared rules loader
 
 #### Phase 126: Structured Error Surfacing
@@ -132,7 +132,7 @@
 |-------|-----------------|--------|-----------|
 | 123. Determinism & Flow Introspection | 4/4 | Complete    | 2026-07-01 |
 | 124. Hidden-Info Test Utilities | 3/3 | Complete    | 2026-07-02 |
-| 125. Headless Simulation | 0/TBD | Not started | - |
+| 125. Headless Simulation | 1/2 | In Progress|  |
 | 126. Structured Error Surfacing | 0/TBD | Not started | - |
 | 127. Scriptable Dev Host | 0/TBD | Not started | - |
 | 128. Animation & Drag-Drop Test Story | 0/TBD | Not started | - |

@@ -15,7 +15,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 ### Headless Simulation (SIM)
 
-- [ ] **SIM-01**: Developer can import the headless session harness (`createHeadlessSession`) from the public `boardsmith/session` API (currently internal at `src/session/testing/headless-harness.ts`)
+- [x] **SIM-01**: Developer can import the headless session harness (`createHeadlessSession`) from the public `boardsmith/session` API (currently internal at `src/session/testing/headless-harness.ts`)
 - [ ] **SIM-02**: Developer can run `boardsmith simulate` (games count + seed flags) to play seeded games headless with pass/stuck/error reporting
 
 ### Structured Error Surfacing (ERR)
@@ -92,7 +92,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIS-01 | Phase 124 | Complete |
 | VIS-02 | Phase 124 | Complete |
 | VIS-03 | Phase 124 | Complete |
-| SIM-01 | Phase 125 | Pending |
+| SIM-01 | Phase 125 | Complete |
 | SIM-02 | Phase 125 | Pending |
 | ERR-01 | Phase 126 | Pending |
 | ERR-02 | Phase 126 | Pending |

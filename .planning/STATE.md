@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
-stopped_at: Completed 124-03-PLAN.md
-last_updated: "2026-07-02T03:44:22.919Z"
-last_activity: 2026-07-02 -- Phase 125 planning complete
+stopped_at: Completed 125-01-PLAN.md
+last_updated: "2026-07-02T22:50:19.000Z"
+last_activity: 2026-07-02 -- Executed 125-01 (createHeadlessSession promoted to public session surface)
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 9
-  completed_plans: 7
-  percent: 25
+  total_plans: 10
+  completed_plans: 9
+  percent: 28
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 125
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-02 -- Phase 125 planning complete
+Plan: 01 of 02 complete
+Status: Executing
+Last activity: 2026-07-02 -- Executed 125-01 (createHeadlessSession promoted to public session surface)
 
 ## Milestones
 
@@ -144,6 +144,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 124]: assertHidden/assertVisible call isElementVisible (not element.isVisibleTo directly) so assertion failures are judged on the same final-tree derivation as VIS-01; surviving-attribute-keys in assertHidden's message come from the final tree's node, not raw unfiltered element JSON
 - [Phase 124]: VIS-02: diffPlayerViews classifies purely by each node's __hidden flag (never by id) to sidestep the engine's zone-hidden-vs-individually-hidden id-anonymization asymmetry
 - [Phase 124]: VIS-03: assertNoHiddenInfoLeak derives forbidden markers by diffing each element's unfiltered toJSON() against its node in the final toJSONForPlayer(seat) tree (honors static playerView); renderAsSeat mounts the REAL AutoUI/AutoRenderer/CardRenderer stack via a runtime dynamic import() so a jsdom window.matchMedia polyfill can be installed before AutoRenderer's transitive module-load-time matchMedia() call; $images.back and boolean attribute values are excluded from identity candidates (both are near-universal DOM substrings, not per-element secrets)
+- [Phase 125, Plan 01]: SIM-01: createHeadlessSession moved from src/session/testing/headless-harness.ts to src/session/headless-session.ts with a clean break (old path deleted, zero re-export shim); exported from the boardsmith/session barrel. Determinism tests must compare seeded-RNG-derived state values, not raw broadcast/result objects — those also carry Date.now() action-history timestamps that are legitimately wall-clock and outside the seeded-RNG contract.
 
 ### Highest-Risk Items (v4.4)
 
@@ -165,12 +166,13 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T03:02:31.037Z
-Stopped at: Completed 124-03-PLAN.md
+Last session: 2026-07-02T22:50:19.000Z
+Stopped at: Completed 125-01-PLAN.md
 Resume file: None
-Next action: Run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) before starting Phase 125
+Next action: Execute 125-02-PLAN.md (headless simulation, remaining plan). Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending).
 
 ## Operator Next Steps
 
 - Phase 123 (Determinism & Flow Introspection) is fully executed (4/4 plans complete). Run `/gsd:verify-phase 123` to confirm FLOW-01/02/03/04 acceptance criteria before moving on to Phase 124/125.
 - Phase 124 (Hidden-Info Test Utilities) is fully executed (3/3 plans complete) -- `isElementVisible`/`getVisibleElements`/`assertHidden`/`assertVisible`/`diffPlayerViews`/`renderAsSeat`/`assertNoHiddenInfoLeak` all shipped and exported from `boardsmith/testing`. Run `/gsd:verify-phase 124` to confirm VIS-01/02/03 acceptance criteria before starting Phase 125.
+- Phase 125 (Headless Simulation) Plan 01 complete: `createHeadlessSession` is now exported from `boardsmith/session` (SIM-01). Plan 02 remains (per ROADMAP.md) before the phase is done.
