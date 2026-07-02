@@ -45,6 +45,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
   return {
     ...actual,
     isDevMode: () => (devModeState.override !== null ? devModeState.override : actual.isDevMode()),
+    isDevThrowEnabled: () => (devModeState.override !== null ? devModeState.override : actual.isDevThrowEnabled()),
   };
 });
 

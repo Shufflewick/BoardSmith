@@ -20,7 +20,7 @@
 import { ref } from 'vue';
 import { easeOutCubic } from '../../utils/easing.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
-import { isDevMode } from '../../utils/dev.js';
+import { isDevThrowEnabled } from '../../utils/dev.js';
 
 export interface AnimationOptions {
   /** Duration in milliseconds (default: 300) */
@@ -61,7 +61,7 @@ function reportMissingAnchor(el: Element): void {
     `data-element-id — none was found on <${el.tagName.toLowerCase()}>. ` +
     `Add data-element-id to the element (e.g. spread anchorAttrs(ref) onto it, ` +
     `or bind useSelectable()'s attrs) so useElementAnimation can track it.`;
-  if (isDevMode()) {
+  if (isDevThrowEnabled()) {
     throw new Error(message);
   }
   console.error(`[BoardSmith] ${message}`);
