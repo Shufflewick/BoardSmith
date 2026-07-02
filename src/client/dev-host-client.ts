@@ -14,6 +14,14 @@
 
 import { resolveWsCtor } from './ws-ctor.js';
 
+/**
+ * Default timeout for requestId-correlated requests. A named constant (rather
+ * than a bare `10000` literal) so this file's intent reads independently from
+ * `game-connection.ts`'s unrelated 10s action/pong timeouts — three separate
+ * design choices that happen to share a number, not one shared value.
+ */
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+
 /** One seat's lobby info, mirroring `multiplayer-host.ts`'s `SeatInfo`. */
 export interface DevHostSeatInfo {
   seat: number;
@@ -94,7 +102,7 @@ interface PendingRequest {
  */
 export function createDevHostClient(url: string, opts: DevHostClientOptions = {}): DevHostClient {
   const wsCtor = resolveWsCtor(opts.wsImplementation, 'createDevHostClient');
-  const requestTimeoutMs = opts.requestTimeoutMs ?? 10000;
+  const requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const socket = new wsCtor(url);
 
   let requestIdCounter = 0;
@@ -196,6 +204,21 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     return `${prefix}-${++requestIdCounter}-${Date.now()}`;
   }
 
+  /**
+   * Minimal runtime shape guard (WR-01): a correlated reply that isn't
+   * `'error'` (already rejected before this is reached, see the message
+   * listener) must still be the EXPECTED reply type before its fields are
+   * trusted — a malformed or version-skewed host response should fail loud
+   * with an actionable message, not silently produce garbage typed as valid.
+   */
+  function expectType(msg: DevHostInboundMessage, expected: string): void {
+    if (msg.type !== expected) {
+      throw new Error(
+        `createDevHostClient: expected a '${expected}' reply but received '${String(msg.type)}'.`,
+      );
+    }
+  }
+
   return {
     opened,
     hello() {
@@ -216,11 +239,13 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     async getState() {
       const requestId = nextRequestId('getState');
       const msg = await requestWithId({ type: 'getState', requestId }, requestId);
+      expectType(msg, 'game_state');
       return { view: msg.view, isComplete: msg.isComplete as boolean, winners: msg.winners as number[] };
     },
     async getLobby() {
       const requestId = nextRequestId('getLobby');
       const msg = await requestWithId({ type: 'getLobby', requestId }, requestId);
+      expectType(msg, 'lobby');
       return {
         phase: msg.phase as 'lobby' | 'playing',
         seats: msg.seats as DevHostSeatInfo[],
@@ -231,6 +256,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     async serverRequest(op, payload) {
       const requestId = nextRequestId('req');
       const msg = await requestWithId({ type: 'server_request', requestId, op, payload }, requestId);
+      expectType(msg, 'server_response');
       return msg.result as Record<string, unknown>;
     },
     debugToggle() {
