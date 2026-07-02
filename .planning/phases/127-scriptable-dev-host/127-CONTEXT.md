@@ -28,8 +28,15 @@ Scope: `src/cli/dev-host/` (WS op handlers), `src/client/` (GameConnection WebSo
 - UI switcher: host-level WS message driving the exact same code path as the dropdown (no parallel logic)
 - Both ops added to the dev-host wire protocol types (typed + greppable)
 
+### Protocol-mismatch resolution (post-research amendment)
+Research confirmed `GameConnection` speaks the production wire protocol (`/games/:gameId`, state/actionResult messages), NOT the dev host's (`/__boardsmith/ws`, hello/join/server_request). Resolution:
+- DRIVE-02 stays literal: `GameConnection` becomes Node-capable for its own (production) protocol — `globalThis.WebSocket` with injectable override, fail-loud guard when no WebSocket implementation is available (covers Node <22.4; `engines` note updated as appropriate)
+- The dev-host Node integration test uses a NEW small typed dev-host protocol client (`createDevHostClient` or similar) exported from `boardsmith/client` — this is the utility agents actually need to script `boardsmith dev`, and it exercises DRIVE-01/03 end-to-end
+- No protocol unification this phase (scope fence)
+- Integration test hosts the WS server the same way dev.ts does: `ws` (already a direct dependency) `WebSocketServer({port:0})` wired to `MultiplayerHost` in-process — zero new deps
+
 ### Claude's Discretion
-- Exact message type names (follow the existing host-op naming: 'join'/'leave'/'follow'/'restart' style); how the integration test hosts the WS server (real dev host vs in-process SnapshotSessionHost+ws bridge)
+- Exact message type names (follow the existing host-op naming: 'join'/'leave'/'follow'/'restart' style); dev-host client API surface details; getLobby response shape (dev host's lightweight lobby vs fully-mapped LobbyInfo — pick the one that matches what the DevHost page consumes today, document it)
 
 </decisions>
 
