@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike } from '../../session/index.js';
+import { executeOp, type GameDefinitionLike, type OpResult } from '../../session/index.js';
 import { createDevSession, translateOp, shapeResult } from './bridge.js';
+import { getEntries, clearEntries } from './log-capture.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: seat 1 repeatedly takes a "pass" action in a loop.
@@ -386,4 +387,182 @@ describe('dev host bridge', () => {
       expect(responses[responses.length - 1].result.actionHistory).toHaveLength(1);
     });
   });
+
+  // ── log-capture wiring (ERR-04) ──────────────────────────────────────────
+  //
+  // The dev-host ring buffer (log-capture.ts) is fed by three real sites:
+  // (1) the onPersistenceError adapter supplied by createDevSession,
+  // (2) OpResult.warnings on a resolved op (dual-channel — Plan 126-03),
+  // (3) the bridge.ts:325 catch when a server_request throws.
+
+  describe('log-capture wiring', () => {
+    beforeEach(() => {
+      clearEntries();
+    });
+
+    it('a persist() failure is captured via onPersistenceError, severity escalates with health', async () => {
+      const session = createDevSession({
+        playerCount: 1,
+        persist: () => {
+          throw new Error('disk full');
+        },
+        executeOp: (snap, pend, op) =>
+          executeOp(simpleGameDef, op.type === 'start' ? { ...gameOptions, playerCount: 1 } : { playerCount: 1 }, snap, pend, op),
+        postGameState: () => {},
+        postServerResponse: () => {},
+      });
+
+      await session.start(); // failure 1 (healthy)
+      await session.handleServerRequest(1, 'a1', 'action', { actionName: 'pass', args: {} }); // failure 2 (healthy)
+      await session.handleServerRequest(1, 'a2', 'action', { actionName: 'pass', args: {} }); // failure 3 (unhealthy)
+
+      const persistenceEntries = getEntries().filter((e) => e.source === 'persistence');
+      expect(persistenceEntries).toHaveLength(3);
+      expect(persistenceEntries[0]).toMatchObject({ severity: 'warning', message: 'disk full' });
+      expect(persistenceEntries[1]).toMatchObject({ severity: 'warning' });
+      expect(persistenceEntries[2]).toMatchObject({ severity: 'error' });
+    });
+
+    it("a resolved op's OpResult.warnings are captured as 'warning' entries sourced by the wireOp", async () => {
+      const warningExecuteOp = (
+        _snap: unknown,
+        _pend: Record<string, unknown> | null,
+        op: { type: string },
+      ): Promise<OpResult> => {
+        if (op.type === 'start') {
+          return Promise.resolve({
+            success: true,
+            snapshot: {},
+            pendingState: null,
+            flowState: {},
+            playerViews: [],
+            isComplete: false,
+            winners: [],
+          });
+        }
+        return Promise.resolve({
+          success: true,
+          snapshot: {},
+          pendingState: null,
+          flowState: {},
+          playerViews: [],
+          isComplete: false,
+          winners: [],
+          warnings: [{ code: 'BOARD_REFS_ERROR', message: 'boardRefs boom', source: 'boardRefs(...)' }],
+        });
+      };
+      const session = createDevSession({
+        playerCount: 1,
+        executeOp: warningExecuteOp,
+        postGameState: () => {},
+        postServerResponse: () => {},
+      });
+
+      await session.start();
+      await session.handleServerRequest(1, 'r1', 'action', { actionName: 'pass', args: {} });
+
+      const warningEntries = getEntries().filter((e) => e.source === 'action');
+      expect(warningEntries).toHaveLength(1);
+      expect(warningEntries[0]).toMatchObject({ severity: 'warning', message: 'boardRefs boom' });
+    });
+
+    it('a server_request that throws is captured as an error entry sourced by the wireOp (bridge.ts:325)', async () => {
+      const responses: Array<Record<string, unknown>> = [];
+      const throwingExecuteOp = (
+        _snap: unknown,
+        _pend: Record<string, unknown> | null,
+        op: { type: string },
+      ): Promise<OpResult> => {
+        if (op.type === 'start') {
+          return Promise.resolve({
+            success: true,
+            snapshot: {},
+            pendingState: null,
+            flowState: {},
+            playerViews: [],
+            isComplete: false,
+            winners: [],
+          });
+        }
+        throw new Error('executor boom');
+      };
+      const session = createDevSession({
+        playerCount: 1,
+        executeOp: throwingExecuteOp,
+        postGameState: () => {},
+        postServerResponse: (_seat, _reqId, result) => responses.push(result),
+      });
+
+      await session.start();
+      await session.handleServerRequest(1, 'r', 'action', { actionName: 'pass', args: {} });
+
+      expect(responses).toHaveLength(1);
+      expect(responses[0].success).toBe(false);
+
+      const errorEntries = getEntries().filter((e) => e.source === 'action' && e.severity === 'error');
+      expect(errorEntries).toHaveLength(1);
+      expect(errorEntries[0].message).toBe('executor boom');
+    });
+  });
+
+  // ── debug:logs host-lifecycle op (ERR-04) ────────────────────────────────
+
+  describe('debug:logs host-lifecycle op', () => {
+    beforeEach(() => {
+      clearEntries();
+    });
+
+    it("translateOp('debug:logs', ...) yields a host-lifecycle marker, not a member routed through executeOp", () => {
+      expect(translateOp('debug:logs', 1, {})).toEqual({ type: 'debugLogs' });
+    });
+
+    it('debug:logs resolves with success:true and the captured entries (no snapshot round-trip)', async () => {
+      const { session, responses } = makeResultSessionWithResponses();
+      await session.start();
+      const stateBefore = session.viewForSeat(1);
+
+      // Seed the ring buffer directly (bypassing gameplay).
+      const { record } = await import('./log-capture.js');
+      record('warning', 'a captured warning', 'test');
+
+      await session.handleServerRequest(1, 'l1', 'debug:logs', {});
+
+      const last = responses[responses.length - 1];
+      expect(last.result.success).toBe(true);
+      expect(last.result.entries).toEqual(
+        expect.arrayContaining([expect.objectContaining({ severity: 'warning', message: 'a captured warning', source: 'test' })]),
+      );
+      // No snapshot mutation: the (unused) view reference is unchanged.
+      expect(session.viewForSeat(1)).toBe(stateBefore);
+    });
+
+    it("shapeResult('debug:logs', result) returns { success, error, entries }", () => {
+      const r = shapeResult('debug:logs', {
+        success: true,
+        entries: [{ severity: 'warning', message: 'x', source: 'y', timestamp: 1 }],
+      } as unknown as OpResult);
+      expect(r).toEqual({
+        success: true,
+        error: undefined,
+        entries: [{ severity: 'warning', message: 'x', source: 'y', timestamp: 1 }],
+      });
+    });
+
+    it('regression: debugLogs is never added to the executeOp Op union / READ_ONLY_OP_TYPES (purity contract)', async () => {
+      const stateless = await import('../../session/stateless-ops.js');
+      expect(stateless.READ_ONLY_OP_TYPES.has('debugLogs' as never)).toBe(false);
+    });
+  });
+
+  function makeResultSessionWithResponses() {
+    const responses: Array<{ seat: number; result: Record<string, unknown> }> = [];
+    const session = createDevSession({
+      playerCount: 2,
+      executeOp: (snap, pend, op) =>
+        executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
+      postGameState: () => {},
+      postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
+    });
+    return { session, responses };
+  }
 });
