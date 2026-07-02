@@ -96,7 +96,7 @@ import { prefersReducedMotion } from './useElementAnimation.js';
 import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
-import { isDevMode } from '../../utils/dev.js';
+import { isDevThrowEnabled } from '../../utils/dev.js';
 
 /**
  * Game element type for auto-watch mode
@@ -167,10 +167,24 @@ export interface FlyConfig {
   /** Unique identifier for this flight */
   id: string;
 
-  /** Starting position (DOMRect, element, or function returning either) */
+  /**
+   * Starting position (DOMRect, element, or function returning either).
+   *
+   * Fail-loud: if this resolves to `null`/`undefined` on first resolution
+   * (before the flying element is created), it is NOT a silent no-op —
+   * throws in dev, `console.error`s and skips in production (ANIM-03).
+   */
   startRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
 
-  /** Ending position (use function to track moving targets) */
+  /**
+   * Ending position (use function to track moving targets).
+   *
+   * Fail-loud: same first-resolution behavior as `startRect` above — a
+   * `null`/`undefined` first resolution throws in dev / logs+skips in
+   * production, rather than silently no-op'ing (ANIM-03). A target that
+   * later disappears DURING flight is unaffected by this and stays a
+   * silent complete (see `animate()`'s per-frame re-check).
+   */
   endRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
 
   /** Data about the element being animated (for rendering) */
@@ -445,7 +459,7 @@ function deriveAnchorId(
  * resolution (before the flying element is created / the RAF chain starts).
  * Matches the wording style of this composable's original (pre-128-05)
  * unconditional "Flying element start position returned null" throw, but
- * gated by `isDevMode()` — throws in dev, `console.error`s and skips in
+ * gated by `isDevThrowEnabled()` — throws in dev, `console.error`s and skips in
  * production — and covers BOTH start and end targets uniformly. Distinct
  * from the per-frame mid-flight re-check inside `animate()` below, which
  * deliberately stays a silent complete (a target legitimately disappearing
@@ -453,7 +467,7 @@ function deriveAnchorId(
  */
 function reportMissingFlyTarget(which: 'start' | 'end', id: string): void {
   const message = `Flying element ${which} position resolved to null for fly() config "${id}". Ensure the ${which}Rect target (element, ref, or function) resolves to a real element or DOMRect before calling fly()/flyMultiple().`;
-  if (isDevMode()) {
+  if (isDevThrowEnabled()) {
     throw new Error(message);
   }
   console.error(`[BoardSmith] ${message}`);
@@ -765,7 +779,12 @@ export function useFlyingElements(
     const promises: Promise<void>[] = [];
 
     for (let i = 0; i < configs.length; i++) {
-      if (staggerMs > 0 && i > 0) {
+      // Skip the real wall-clock stagger delay in animation test mode: fly()
+      // itself already resolves instantly there, so a real setTimeout between
+      // elements would needlessly slow test suites (and defeat the
+      // instant/traced determinism useAnimationTestMode.ts promises) without
+      // any animation actually running.
+      if (staggerMs > 0 && i > 0 && !isAnimationTestModeEnabled()) {
         await new Promise((r) => setTimeout(r, staggerMs));
       }
       promises.push(fly(configs[i]));
@@ -799,8 +818,11 @@ export function useFlyingElements(
         // Only trigger when element becomes truthy (appears)
         if (!newElement || oldElement) return;
 
-        // Skip if reduced motion preferred
-        if (prefersReducedMotion.value) return;
+        // NOTE: no prefersReducedMotion check here — test mode must still be
+        // able to record a trace regardless of the user's a11y preference
+        // (never merged, per useAnimationTestMode.ts). fly() → flyCardInternal
+        // checks test mode BEFORE reduced motion, and honors reduced motion
+        // internally for the real (non-test-mode) path.
 
         // Get source and target rects
         const sourceRect = sourceRef.value?.getBoundingClientRect();

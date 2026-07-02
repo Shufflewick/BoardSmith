@@ -48,6 +48,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
   return {
     ...actual,
     isDevMode: () => (devModeState.override !== null ? devModeState.override : actual.isDevMode()),
+    isDevThrowEnabled: () => (devModeState.override !== null ? devModeState.override : actual.isDevThrowEnabled()),
   };
 });
 
@@ -240,6 +241,99 @@ describe('useFlyingElements', () => {
       expect(getAnimationTrace()).toContainEqual(
         expect.objectContaining({ kind: 'fly', from: undefined, to: undefined })
       );
+    });
+
+    it('skips the real stagger delay between elements in test mode (WR-02)', async () => {
+      const { flyMultiple } = useFlyingElements();
+
+      enableAnimationTestMode();
+      const start = Date.now();
+      await flyMultiple(
+        [
+          { id: 'stagger-1', startRect: makeRect(), endRect: makeRect(), elementData: {} },
+          { id: 'stagger-2', startRect: makeRect(), endRect: makeRect(), elementData: {} },
+          { id: 'stagger-3', startRect: makeRect(), endRect: makeRect(), elementData: {} },
+        ],
+        1000, // large stagger: if not skipped, this alone would exceed the test timeout
+      );
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(500);
+      expect(getAnimationTrace()).toHaveLength(3);
+    });
+  });
+
+  describe('flyOnAppear', () => {
+    it('records a {kind:"fly"} trace in test mode even when reduced motion is preferred (CR-01)', async () => {
+      const sourceEl = makeContainer();
+      const targetEl = makeContainer();
+      vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(
+        makeRect({ left: 0, top: 0, width: 60, height: 84 })
+      );
+      vi.spyOn(targetEl, 'getBoundingClientRect').mockReturnValue(
+        makeRect({ left: 200, top: 0, width: 60, height: 84 })
+      );
+
+      // Reduced motion preferred: without CR-01's fix, flyOnAppear's own
+      // early-return would bypass fly()/flyCardInternal entirely and no
+      // trace would ever be recorded, regardless of test mode.
+      const { prefersReducedMotion } = await import('./useElementAnimation.js');
+      prefersReducedMotion.value = true;
+
+      const { flyOnAppear } = useFlyingElements();
+      const elementRef = ref<{ rank: string } | null>(null);
+
+      flyOnAppear({
+        element: elementRef,
+        sourceRef: ref(sourceEl),
+        targetRef: ref(targetEl),
+        getElementData: (el) => ({ rank: el.rank }),
+      });
+
+      enableAnimationTestMode();
+      elementRef.value = { rank: 'A' };
+      await waitFor(() => getAnimationTrace().length > 0);
+
+      expect(getAnimationTrace()).toContainEqual(
+        expect.objectContaining({ kind: 'fly' })
+      );
+
+      prefersReducedMotion.value = false;
+    });
+
+    it('skips the real animation (does not throw, resolves) when reduced motion is preferred and test mode is off', async () => {
+      const sourceEl = makeContainer();
+      const targetEl = makeContainer();
+      vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(
+        makeRect({ left: 0, top: 0, width: 60, height: 84 })
+      );
+      vi.spyOn(targetEl, 'getBoundingClientRect').mockReturnValue(
+        makeRect({ left: 200, top: 0, width: 60, height: 84 })
+      );
+
+      const { prefersReducedMotion } = await import('./useElementAnimation.js');
+      prefersReducedMotion.value = true;
+
+      const { flyOnAppear, isAnimating } = useFlyingElements();
+      const elementRef = ref<{ rank: string } | null>(null);
+
+      flyOnAppear({
+        element: elementRef,
+        sourceRef: ref(sourceEl),
+        targetRef: ref(targetEl),
+        getElementData: (el) => ({ rank: el.rank }),
+      });
+
+      elementRef.value = { rank: 'A' };
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 10));
+
+      // flyCardInternal's internal prefersReducedMotion check (after the
+      // test-mode check) still short-circuits the real RAF-driven path.
+      expect(isAnimating.value).toBe(false);
+      expect(getAnimationTrace()).toHaveLength(0);
+
+      prefersReducedMotion.value = false;
     });
   });
 
