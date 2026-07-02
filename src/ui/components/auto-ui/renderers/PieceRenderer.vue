@@ -101,7 +101,7 @@ const ariaLabel = computed(() => {
 
 // ── Keyboard + click wiring — single composable is the ONLY activation point ──
 const { attrs: selectableAttrs, onActivate, onKeydown } =
-  useSelectable(elementIdentity, boardInteraction, isActionSelectable, isDisabled);
+  useSelectable(elementIdentity, boardInteraction, isActionSelectable, isDisabled, 'piece');
 
 // ── Drag-and-drop handlers ────────────────────────────────────────────────────
 function handleDragStart(event: DragEvent) {

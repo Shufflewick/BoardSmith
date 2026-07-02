@@ -161,6 +161,7 @@ const { currentIdx, focusCell, handleGridKeydown: _composableKeydown, cellAttrs 
   colsRef,
   cellIdentity,
   boardInteraction,
+  'grid-cell',
 );
 
 // DOM refs for each cell — needed to call .focus() after arrow-key navigation

@@ -70,6 +70,7 @@ const { onActivate: onClick, onKeydown, attrs: selectableAttrs } = useSelectable
   boardInteraction ?? null,
   isActionSelectable,
   isDisabled,
+  'die',
 );
 
 // Map element attributes to Die3D props

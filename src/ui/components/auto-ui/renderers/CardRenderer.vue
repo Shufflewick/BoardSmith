@@ -179,7 +179,7 @@ const ariaLabel = computed(() => {
 // Keyboard + click wiring — single composable is the ONLY activation point
 // ---------------------------------------------------------------------------
 const { attrs: selectableAttrs, onActivate, onKeydown: onSelectKey } =
-  useSelectable(elementIdentity, boardInteraction, isInteractiveForTabindex, isDisabled);
+  useSelectable(elementIdentity, boardInteraction, isInteractiveForTabindex, isDisabled, 'card');
 
 // ---------------------------------------------------------------------------
 // Sprite-sheet scaling constants (standard card face dimensions)

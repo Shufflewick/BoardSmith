@@ -244,6 +244,7 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   boardInteraction ?? null,
   isActionSelectable,
   isDisabled,
+  'hand',
 );
 
 // Drop handler — hand zones are valid drop targets (Go Fish "ask" target, etc.)
@@ -274,7 +275,7 @@ void isBoardSelected;
     :aria-label="`Your hand, ${childCountDisplay} cards`"
     :tabindex="selectableAttrs.tabindex"
     :aria-disabled="selectableAttrs['aria-disabled']"
-    v-bind="anchorAttrs(elementIdentity())"
+    v-bind="anchorAttrs(elementIdentity(), 'hand')"
     :class="[
       'hand-container',
       {

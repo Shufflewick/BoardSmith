@@ -404,17 +404,30 @@ export function createBoardInteraction(): BoardInteraction {
  * string literals. Overlay targeting queries only these attributes; emitting all
  * present keys means a notation- or name-keyed custom UI can still be matched by
  * the overlay without duplicating the matchesRef precedence logic here.
+ *
+ * @param ref - Element identity (id/notation/name)
+ * @param type - Optional caller-supplied label for the missing-anchor dev
+ *   warning's dedup key (e.g. `'card'`, `'piece'`, `'grid-cell'`). The
+ *   warning only fires when `ref.id`/`ref.notation`/`ref.name` are ALL
+ *   `undefined` — none of those fields can supply a "type" at that point, so
+ *   without this parameter every missing-anchor bug across the whole board
+ *   collapses into one `'unknown'` bucket, permanently hiding all but the
+ *   first distinct bug. Callers that know their own element kind (renderer
+ *   components via `useSelectable`/`useSelectableGrid`) should pass it so
+ *   distinct bugs (e.g. `CardRenderer` AND `PieceRenderer` both missing
+ *   anchors) each warn once instead of only the first ever surfacing.
+ *   Defaults to `'unknown'` when omitted (preserves prior behavior for
+ *   direct callers that don't supply one).
  */
-export function anchorAttrs(ref: ElementRef): Record<string, string> {
+export function anchorAttrs(ref: ElementRef, type: string = 'unknown'): Record<string, string> {
   const attrs: Record<string, string> = {};
   if (ref.id !== undefined) attrs['data-bs-el-id'] = String(ref.id);
   if (ref.notation !== undefined) attrs['data-bs-el-notation'] = String(ref.notation);
   if (ref.name !== undefined) attrs['data-bs-el-name'] = String(ref.name);
   if (Object.keys(attrs).length === 0) {
-    const typeKey = ref.name ?? 'unknown';
     devWarn(
-      `anchorattrs-missing-${typeKey}`,
-      `anchorAttrs() produced no data-bs-el-* attributes for a selectable/renderable element (type: '${typeKey}'). ` +
+      `anchorattrs-missing-${type}`,
+      `anchorAttrs() produced no data-bs-el-* attributes for a selectable/renderable element (type: '${type}'). ` +
         `Custom boards must spread anchorAttrs(ref) (or v-bind="attrs" from useSelectable) onto each element's root ` +
         `so FLIP/flying-element animations and drag-drop can find it. Without an anchor, animations silently no-op ` +
         `and traces cannot identify the element. Pass at least one of { id, notation, name } on the ElementRef.`,

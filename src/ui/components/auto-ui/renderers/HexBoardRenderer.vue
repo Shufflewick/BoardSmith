@@ -258,6 +258,7 @@ const { currentIdx, focusCell, handleGridKeydown: _composableKeydown, cellAttrs 
   hexCols,
   cellIdentity,
   boardInteraction,
+  'hex-cell',
 );
 
 // DOM refs for each hex <g> cell — needed to call .focus() after arrow navigation

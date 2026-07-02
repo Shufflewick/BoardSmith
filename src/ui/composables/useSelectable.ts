@@ -32,6 +32,10 @@ import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
  * @param boardInteraction  BoardInteraction from tryUseBoardInteraction() — may be null/undefined
  * @param isActionSelectable  Computed: true when this element is a valid pick target
  * @param isDisabled          Computed: true when this element is disabled for selection
+ * @param elementType         Optional label identifying the caller's element kind (e.g.
+ *   `'card'`, `'piece'`, `'die'`), forwarded to `anchorAttrs()`'s missing-anchor
+ *   dev-warning dedup key so distinct renderers each warn once instead of
+ *   collapsing into one shared `'unknown'` bucket.
  *
  * @returns { onActivate, onKeydown, attrs }
  *   - onActivate  — bind to @click on the element root (handles mouse activation)
@@ -43,6 +47,7 @@ export function useSelectable(
   boardInteraction: BoardInteraction | null | undefined,
   isActionSelectable: ComputedRef<boolean>,
   isDisabled: ComputedRef<boolean>,
+  elementType?: string,
 ) {
   function handleActivate() {
     if (!boardInteraction || !isActionSelectable.value) return;
@@ -54,7 +59,7 @@ export function useSelectable(
     role: 'button' as const,
     tabindex: isActionSelectable.value ? '0' : '-1',
     'aria-disabled': isDisabled.value || undefined,
-    ...anchorAttrs(identity()),
+    ...anchorAttrs(identity(), elementType),
   }));
 
   return {
@@ -87,6 +92,10 @@ export function useSelectable(
  * @param cols            ComputedRef of the column count
  * @param getIdentity     Maps a cell to its ElementRef (id/name/notation)
  * @param boardInteraction  BoardInteraction from tryUseBoardInteraction() — may be null/undefined
+ * @param elementType     Optional label identifying the caller's grid-cell kind (e.g.
+ *   `'grid-cell'`, `'hex-cell'`), forwarded to `anchorAttrs()`'s missing-anchor
+ *   dev-warning dedup key so distinct grid renderers each warn once instead of
+ *   collapsing into one shared `'unknown'` bucket.
  *
  * @returns { currentIdx, focusCell, handleGridKeydown }
  *   - currentIdx        — reactive index of the cell that owns tabindex="0"
@@ -98,6 +107,7 @@ export function useSelectableGrid<T>(
   cols: ComputedRef<number>,
   getIdentity: (cell: T) => ElementRef,
   boardInteraction: BoardInteraction | null | undefined,
+  elementType?: string,
 ) {
   const currentIdx = ref(0);
 
@@ -149,7 +159,7 @@ export function useSelectableGrid<T>(
    * Bind via `v-bind="cellAttrs(cell)"` on each cell root element.
    */
   function cellAttrs(cell: T): Record<string, string> {
-    return anchorAttrs(getIdentity(cell));
+    return anchorAttrs(getIdentity(cell), elementType);
   }
 
   return { currentIdx, focusCell, handleGridKeydown, cellAttrs };

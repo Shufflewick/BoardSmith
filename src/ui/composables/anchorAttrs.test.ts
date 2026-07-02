@@ -98,14 +98,32 @@ describe('anchorAttrs dev-warning', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('dedup key is derived from ref.name, not per-id (never spams per instance)', () => {
-    // The warning only fires when id/notation/name are ALL undefined, so the
-    // dedup key resolves to a fixed 'unknown' bucket rather than an id-derived
-    // key — a 50-element board missing anchors warns once, not 50 times.
-    anchorAttrs({});
+  it('dedup key collapses same-type instances (never spams per instance)', () => {
+    // The warning only fires when id/notation/name are ALL undefined, so
+    // those fields can never supply a distinguishing "type" themselves — the
+    // optional `type` param is what gives the dedup key real granularity.
+    // A 50-element board missing anchors of the SAME type warns once, not 50
+    // times.
+    anchorAttrs({}, 'card');
+    anchorAttrs({}, 'card');
+    anchorAttrs({}, 'card');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinct types each warn once (two different missing-anchor bugs both surface)', () => {
+    // Two genuinely distinct bugs (e.g. CardRenderer AND, separately,
+    // PieceRenderer forgetting anchorAttrs) must both surface, not collapse
+    // into a single 'unknown' bucket that permanently hides the second.
+    anchorAttrs({}, 'card');
+    anchorAttrs({}, 'piece');
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('omitting the type param falls back to a shared "unknown" bucket', () => {
     anchorAttrs({});
     anchorAttrs({});
     expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain("type: 'unknown'");
   });
 
   it('a non-empty ref (id: 5) produces data-bs-el-id and emits NO warning', () => {

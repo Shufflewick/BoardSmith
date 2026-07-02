@@ -93,6 +93,7 @@ const { onActivate: onClick, onKeydown, attrs: selectableAttrs } = useSelectable
   boardInteraction ?? null,
   isActionSelectable,
   isDisabled,
+  'space',
 );
 
 // ARIA label: space name + occupant count + state
