@@ -13,6 +13,7 @@ import {
   type PickChoicesResponse,
   type ValidElement,
   type StoredGameState,
+  type WarningEntry,
 } from './types.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { buildSingleActionMetadata } from './utils.js';
@@ -29,6 +30,16 @@ function deserializePendingState(s: Record<string, unknown>): PendingActionState
     ...(s as unknown as PendingActionState),
     onSelectFired: Array.isArray(onSelectFired) ? new Set(onSelectFired as number[]) : undefined,
   };
+}
+
+/**
+ * Extract a sanitized, wire-safe message from a caught error. Never includes
+ * the stack trace or other implementation details — callers of game-authored
+ * boardRefs()/display()/boardRef() callbacks must not leak internals onto the
+ * wire (T-126-07).
+ */
+function sanitizeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -183,6 +194,11 @@ export class PickHandler<G extends Game = Game> {
 
     const ctx = { game: this.#runner.game, player, args: resolvedArgs };
 
+    // Aggregated structured warnings for this call's soft-fail sites
+    // (boardRefs()/display()/boardRef() throwing) — attached to the response
+    // as a top-level array. Never flips success:false (T-126-08).
+    const warnings: WarningEntry[] = [];
+
     // Helper function to generate default display
     const defaultDisplay = (value: unknown): string => {
       if (value === null || value === undefined) return String(value);
@@ -233,6 +249,11 @@ export class PickHandler<G extends Game = Game> {
               choice.refs = result.refs;
             } catch (e) {
               console.error('boardRefs() error (ignored):', e);
+              warnings.push({
+                code: 'BOARD_REFS_ERROR',
+                message: sanitizeErrorMessage(e),
+                source: 'boardRefs(...)',
+              });
             }
           }
 
@@ -262,7 +283,7 @@ export class PickHandler<G extends Game = Game> {
           }
         }
 
-        return { success: true, choices: formattedChoices, multiSelect };
+        return { success: true, choices: formattedChoices, multiSelect, warnings: warnings.length > 0 ? warnings : undefined };
       }
 
       case 'element': {
@@ -276,9 +297,9 @@ export class PickHandler<G extends Game = Game> {
         }
 
         // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(annotatedElements, elemSel, ctx);
+        const validElements = this.#buildValidElementsList(annotatedElements, elemSel, ctx, warnings);
 
-        return { success: true, validElements };
+        return { success: true, validElements, warnings: warnings.length > 0 ? warnings : undefined };
       }
 
       case 'elements': {
@@ -292,7 +313,7 @@ export class PickHandler<G extends Game = Game> {
         }
 
         // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(annotatedElements, elementsSel, ctx);
+        const validElements = this.#buildValidElementsList(annotatedElements, elementsSel, ctx, warnings);
 
         // Evaluate multiSelect config if present
         let multiSelect: { min: number; max?: number } | undefined;
@@ -313,7 +334,7 @@ export class PickHandler<G extends Game = Game> {
           }
         }
 
-        return { success: true, validElements, multiSelect };
+        return { success: true, validElements, multiSelect, warnings: warnings.length > 0 ? warnings : undefined };
       }
 
       case 'number':
@@ -336,7 +357,8 @@ export class PickHandler<G extends Game = Game> {
   #buildValidElementsList(
     annotatedElements: Array<{ value: unknown; disabled: string | false }>,
     elemSel: any,
-    ctx: { game: Game; player: Player; args: Record<string, unknown> }
+    ctx: { game: Game; player: Player; args: Record<string, unknown> },
+    warnings: WarningEntry[]
   ): ValidElement[] {
     const elements = annotatedElements.map(({ value }) => value) as Array<{ id: number; name?: string; notation?: string }>;
 
@@ -357,7 +379,13 @@ export class PickHandler<G extends Game = Game> {
         try {
           // Support both display signatures: (element, ctx) and (element, ctx, allElements)
           validElem.display = elemSel.display(element, ctx, elements);
-        } catch {
+        } catch (e) {
+          console.error('display() error (ignored):', e);
+          warnings.push({
+            code: 'DISPLAY_ERROR',
+            message: sanitizeErrorMessage(e),
+            source: 'display(...)',
+          });
           validElem.display = element.name || String(element.id);
         }
       } else {
@@ -376,7 +404,20 @@ export class PickHandler<G extends Game = Game> {
 
       // Add board refs — always emit refs: [{ ref, role: 'highlight' }]
       const rawRef = elemSel.boardRef
-        ? (() => { try { return elemSel.boardRef!(element, ctx); } catch { return { id: element.id }; } })()
+        ? (() => {
+            try {
+              return elemSel.boardRef!(element, ctx);
+            } catch (e) {
+              // CHOICES_ERROR is the reserved stable code for boardRef() failures
+              // (see the taxonomy in the plan's <interfaces> CONTEXT note).
+              warnings.push({
+                code: 'CHOICES_ERROR',
+                message: sanitizeErrorMessage(e),
+                source: 'boardRef(...)',
+              });
+              return { id: element.id };
+            }
+          })()
         : { id: element.id, ...(element.notation ? { notation: element.notation } : {}) };
       validElem.refs = [{ ref: rawRef, role: 'highlight' }];
 

@@ -1,6 +1,7 @@
-import { describe, test, expect, beforeEach } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { Game, Player, Space, Piece, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
 import { GameSession } from './game-session.js';
+import { ErrorCode } from '../types/protocol.js';
 
 // Custom element class for test game
 class Item extends Piece<TestPickGame> {
@@ -263,8 +264,80 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
         .execute(() => ({ success: true }))
     );
 
+    // Choice pick whose boardRefs() throws — soft-fail site (ERR-01 T-1).
+    this.registerAction(
+      Action.create('moveThrowBoardRefs')
+        .chooseFrom('dest', {
+          prompt: 'Choose destination',
+          choices: [{ from: 'a1', to: 'a2' } as MoveChoice],
+          display: (c: MoveChoice) => `${c.from} → ${c.to}`,
+          boardRefs: () => {
+            throw new Error('boardRefs boom');
+          },
+        })
+        .execute(() => ({ success: true }))
+    );
+
+    // Element pick whose display() throws — soft-fail site (ERR-01 T-1), the
+    // worst offender pre-fix since it logged nothing at all.
+    this.registerAction(
+      Action.create('selectSquareThrowDisplay')
+        .chooseElement('sq', {
+          prompt: 'Choose a square',
+          elements: (ctx) => [...ctx.game.all(Square)].filter(s => s.name !== 'board'),
+          display: () => {
+            throw new Error('display boom');
+          },
+        })
+        .execute(() => ({ success: true }))
+    );
+
+    // Element pick whose boardRef() throws — soft-fail site (ERR-01 T-1).
+    this.registerAction(
+      Action.create('selectSquareThrowBoardRef')
+        .chooseElement('sq', {
+          prompt: 'Choose a square',
+          elements: (ctx) => [...ctx.game.all(Square)].filter(s => s.name !== 'board'),
+          boardRef: () => {
+            throw new Error('boardRef boom');
+          },
+        })
+        .execute(() => ({ success: true }))
+    );
+
+    // Choice pick whose choices() throws — getChoices hard-fail regression
+    // guard: must stay success:false with CHOICES_EVALUATION_ERROR, unaffected
+    // by the soft-fail warnings work. The throw is conditional on an explicit
+    // args.trigger flag (mirrors stateless-ops.test.ts's BadChoicesGame) so the
+    // unconditional reachability sweep (game.getAvailableActions -> ... ->
+    // choices() called with args:{}) never throws and only the deliberate
+    // getPickChoices({trigger:true}) call reaches the throwing branch.
+    this.registerAction(
+      Action.create('pickThrowChoices')
+        .chooseFrom('option', {
+          prompt: 'Choose an option',
+          choices: (ctx) => {
+            if (ctx.args.trigger) {
+              throw new Error('choices boom');
+            }
+            return ['a', 'b'];
+          },
+        })
+        .execute(() => ({ success: true }))
+    );
+
     this.setFlow(defineFlow({
-      root: actionStep({ actions: ['move', 'selectSquare', 'selectSquareDefault'] }),
+      root: actionStep({
+        actions: [
+          'move',
+          'selectSquare',
+          'selectSquareDefault',
+          'moveThrowBoardRefs',
+          'selectSquareThrowDisplay',
+          'selectSquareThrowBoardRef',
+          'pickThrowChoices',
+        ],
+      }),
     }));
   }
 }
@@ -331,5 +404,120 @@ describe('PickHandler refs construction (D-01)', () => {
         expect((elem as any).ref).toBeUndefined();
       }
     });
+  });
+});
+
+// ============================================================
+// Structured warnings for the three soft-fail sites (ERR-01)
+// ============================================================
+
+describe('PickHandler structured warnings (ERR-01)', () => {
+  let session: GameSession<BoardRefsGame>;
+
+  beforeEach(() => {
+    session = GameSession.create({
+      gameType: 'test-board-refs',
+      GameClass: BoardRefsGame,
+      playerCount: 1,
+      playerNames: ['Alice'],
+    });
+  });
+
+  test('a throwing boardRefs() produces a structured warning and the choice is still returned/selectable', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = session.getPickChoices('moveThrowBoardRefs', 'dest', 1);
+
+      expect(result.success).toBe(true);
+      expect(result.choices).toHaveLength(1);
+      // The choice is still present and selectable despite boardRefs() throwing.
+      expect(result.choices![0].value).toEqual({ from: 'a1', to: 'a2' });
+      expect(result.choices![0].display).toBe('a1 → a2');
+
+      expect(result.warnings).toBeDefined();
+      const warning = result.warnings!.find(w => w.code === 'BOARD_REFS_ERROR');
+      expect(warning).toBeDefined();
+      expect(warning!.source).toMatch(/boardRefs/);
+      expect(consoleSpy).toHaveBeenCalled();
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('a throwing display() produces a structured warning, falls back to a default label, and echoes to console', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = session.getPickChoices('selectSquareThrowDisplay', 'sq', 1);
+
+      expect(result.success).toBe(true);
+      expect(result.validElements).toBeDefined();
+      expect(result.validElements!.length).toBeGreaterThan(0);
+      for (const elem of result.validElements!) {
+        // Fallback display: element.name || String(element.id)
+        expect(typeof elem.display).toBe('string');
+        expect(elem.display!.length).toBeGreaterThan(0);
+      }
+
+      expect(result.warnings).toBeDefined();
+      const warning = result.warnings!.find(w => w.code === 'DISPLAY_ERROR');
+      expect(warning).toBeDefined();
+      // console.error echo was previously MISSING for display() — must now fire.
+      expect(consoleSpy).toHaveBeenCalled();
+      const echoedDisplayError = consoleSpy.mock.calls.some(call =>
+        call.some(arg => typeof arg === 'string' && arg.toLowerCase().includes('display'))
+      );
+      expect(echoedDisplayError).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('a throwing boardRef() produces a stable-coded warning and the {id} fallback is still returned', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = session.getPickChoices('selectSquareThrowBoardRef', 'sq', 1);
+
+      expect(result.success).toBe(true);
+      expect(result.validElements).toBeDefined();
+      for (const elem of result.validElements!) {
+        expect(elem.refs).toBeDefined();
+        expect(elem.refs).toHaveLength(1);
+        expect(elem.refs![0].role).toBe('highlight');
+        // Fallback: { id: element.id } (no notation, since boardRef() threw)
+        expect(elem.refs![0].ref).toEqual({ id: elem.id });
+      }
+
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.some(w => w.code.length > 0)).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  test('regression: a throwing getChoices() still returns success:false with the existing CHOICES_EVALUATION_ERROR errorCode', () => {
+    const result = session.getPickChoices('pickThrowChoices', 'option', 1, { trigger: true });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe(ErrorCode.CHOICES_EVALUATION_ERROR);
+    expect(result.warnings).toBeUndefined();
+  });
+
+  test('warning messages contain no stack trace or file path', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const boardRefsResult = session.getPickChoices('moveThrowBoardRefs', 'dest', 1);
+      const displayResult = session.getPickChoices('selectSquareThrowDisplay', 'sq', 1);
+      const boardRefResult = session.getPickChoices('selectSquareThrowBoardRef', 'sq', 1);
+
+      for (const result of [boardRefsResult, displayResult, boardRefResult]) {
+        for (const warning of result.warnings ?? []) {
+          expect(warning.message).not.toMatch(/at .*\.(ts|js):\d+/);
+          expect(warning.message).not.toMatch(/\/Users\//);
+          expect(warning.message).not.toMatch(/node_modules/);
+        }
+      }
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 });

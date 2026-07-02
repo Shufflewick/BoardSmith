@@ -242,6 +242,22 @@ export interface StoredGameState {
 }
 
 /**
+ * A structured, inspectable warning surfaced when a game-authored callback
+ * (e.g. `boardRefs()`, `display()`, `boardRef()`) throws but the pick/op
+ * result still succeeds via a graceful fallback. Never carries `error.stack`
+ * or other implementation details — `message` is a sanitized, human-readable
+ * summary only.
+ */
+export interface WarningEntry {
+  /** Stable machine-readable code (e.g. 'BOARD_REFS_ERROR', 'DISPLAY_ERROR'). */
+  code: string;
+  /** Sanitized, human-readable summary. Never error.stack or a file path. */
+  message: string;
+  /** Where the warning originated (e.g. 'boardRefs(...)', 'display(...)'). */
+  source: string;
+}
+
+/**
  * Reference to a board element for highlighting
  */
 export interface ElementRef {
@@ -377,6 +393,12 @@ export interface PickChoicesResponse {
   validElements?: ValidElement[];
   /** Multi-select configuration (evaluated at request time for function-based configs) */
   multiSelect?: { min: number; max?: number };
+  /**
+   * Structured warnings from soft-fail sites (boardRefs()/display()/boardRef()
+   * throwing) — the choice/element is still returned with a graceful fallback,
+   * success stays true. Absent (not an empty array) when there are none.
+   */
+  warnings?: WarningEntry[];
 }
 
 /**
