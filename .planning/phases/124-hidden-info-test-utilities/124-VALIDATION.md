@@ -1,9 +1,9 @@
 ---
 phase: 124
 slug: hidden-info-test-utilities
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: planned
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-01
 ---
 
@@ -38,7 +38,12 @@ created: 2026-07-01
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | VIS-01..03 | hidden-info leakage | Visibility APIs never widen what a seat can see; DOM-leak matcher derives forbidden markers from unfiltered attrs | unit/component | `npm test` | ✅ | ⬜ pending |
+| 124-01-T1 | 01 | 1 | VIS-01 | T-124-01 | Visibility wrapper delegates to isVisibleTo only; cannot widen a seat's view | unit | `npx vitest run src/testing/visibility.test.ts` | ✅ | ⬜ pending |
+| 124-01-T2 | 01 | 1 | VIS-01 | T-124-01 | assertHidden/assertVisible fail with the leaked attribute keys embedded | unit | `npx vitest run src/testing/assertions.test.ts` | ✅ | ⬜ pending |
+| 124-02-T1 | 02 | 2 | VIS-02 | T-124-03/04 | diff surfaces only presence + shared-attr disagreement; no anonymized-id noise, no redacted attrs | unit | `npx vitest run src/testing/view-diff.test.ts` | ✅ | ⬜ pending |
+| 124-02-T2 | 02 | 2 | VIS-02 | T-124-03 | barrel export, no suite regression | unit | `npm test` | ✅ | ⬜ pending |
+| 124-03-T1 | 03 | 3 | VIS-03 | T-124-05/06/07 | markers auto-derived from unfiltered toJSON; scoped scan; predicate allowlist | component (jsdom) | `npx tsc --noEmit` | ✅ | ⬜ pending |
+| 124-03-T2 | 03 | 3 | VIS-03 | T-124-05/06 | positive control (injected leak fails) + negative (redacted passes) + allowlist case | component (jsdom) | `npx vitest run src/testing/dom-leak.test.ts` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

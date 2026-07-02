@@ -50,7 +50,10 @@
   1. A developer can call `isElementVisible(element, seat)` / `getVisibleElements(seat)` on TestGame and get correct per-seat results without parsing raw ElementJSON.
   2. A developer can diff what two seats see via a `diffPlayerViews`-style utility and get exactly which elements/fields differ.
   3. A developer can run a DOM-leak test utility that renders the game UI as seat N and fails when hidden-element identity attributes (rank/suit/face) appear in the rendered markup.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 124-01-PLAN.md — VIS-01: isElementVisible/getVisibleElements on TestGame + assertHidden/assertVisible, wrapping the engine isVisibleTo primitive [wave 1]
+- [ ] 124-02-PLAN.md — VIS-02: diffPlayerViews structured+describe() view diff, visibility-scoped to sidestep anonymized-id noise [wave 2]
+- [ ] 124-03-PLAN.md — VIS-03: headless DOM-leak matcher (mount AutoUI as seat N), auto-derived forbidden markers + proven positive control [wave 3]
 
 #### Phase 125: Headless Simulation
 **Goal**: Developers can play and audit games headlessly — via a public API and a CLI command — using the deterministic seeding established in Phase 123.
