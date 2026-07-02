@@ -167,4 +167,20 @@ describe('diffPlayerViews', () => {
     expect(text).toContain('Attribute differences');
     expect(text.split('\n').length).toBeGreaterThan(1);
   });
+
+  // -------------------------------------------------------------------------
+  // WR-02: the atomic (testGame, seatA, seatB) overload produces the same
+  // result as the two-view form when the underlying game state is unchanged,
+  // and is the pit-of-success way to avoid the non-simultaneous-snapshot
+  // footgun (comparing views captured at different points in game state).
+  // -------------------------------------------------------------------------
+  it('the atomic (testGame, seatA, seatB) overload matches the two-view form', () => {
+    const tg = makeDiffGame();
+    const atomicResult = diffPlayerViews(tg, 1, 2);
+    const manualResult = diffPlayerViews(tg.getPlayerView(1), tg.getPlayerView(2));
+
+    expect(atomicResult.onlyInA).toEqual(manualResult.onlyInA);
+    expect(atomicResult.onlyInB).toEqual(manualResult.onlyInB);
+    expect(atomicResult.attributeDiffs).toEqual(manualResult.attributeDiffs);
+  });
 });

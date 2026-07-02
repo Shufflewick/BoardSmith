@@ -26,8 +26,9 @@
  * @module
  */
 
-import type { ElementJSON } from '../engine/index.js';
+import type { ElementJSON, Game } from '../engine/index.js';
 import type { PlayerStateView } from '../runtime/index.js';
+import type { TestGame } from './test-game.js';
 
 /**
  * Result of {@link diffPlayerViews}.
@@ -154,14 +155,59 @@ function walk(
  * entries for content that is supposed to be shared, and identical-count
  * hidden zones should never appear as spurious noise.
  *
+ * WARNING (WR-02): the positional (index-aligned) walk is only meaningful
+ * for two views of the SAME game-state instant. If `viewA`/`viewB` are
+ * captured at different points (e.g. one before and one after a card draw,
+ * with other mutating code running in between), positional misalignment
+ * after the divergence point will misreport ordinary state progression as a
+ * cascade of spurious `onlyInA`/`onlyInB` entries. Prefer the
+ * `(testGame, seatA, seatB)` overload below, which captures both views
+ * back-to-back with no gap for intervening mutation.
+ *
  * @example
  * ```typescript
- * const result = diffPlayerViews(testGame.getPlayerView(1), testGame.getPlayerView(2));
+ * // Preferred — atomic capture, immune to the WR-02 footgun:
+ * const result = diffPlayerViews(testGame, 1, 2);
  * console.log(result.describe());
  * expect(result.onlyInA).not.toContain('opponent-hand-card'); // opponent's card never leaks
  * ```
  */
-export function diffPlayerViews(viewA: PlayerStateView, viewB: PlayerStateView): ViewDiffResult {
+export function diffPlayerViews(viewA: PlayerStateView, viewB: PlayerStateView): ViewDiffResult;
+/**
+ * Atomic overload (WR-02): captures both seats' views back-to-back from
+ * `testGame` in the SAME call, eliminating the caller footgun of diffing
+ * views taken at different points in game state.
+ *
+ * @example
+ * ```typescript
+ * const result = diffPlayerViews(testGame, 1, 2);
+ * console.log(result.describe());
+ * ```
+ */
+export function diffPlayerViews<G extends Game>(
+  testGame: TestGame<G>,
+  seatA: number,
+  seatB: number,
+): ViewDiffResult;
+export function diffPlayerViews<G extends Game>(
+  viewAOrTestGame: PlayerStateView | TestGame<G>,
+  viewBOrSeatA: PlayerStateView | number,
+  seatB?: number,
+): ViewDiffResult {
+  let viewA: PlayerStateView;
+  let viewB: PlayerStateView;
+
+  if (typeof viewBOrSeatA === 'number') {
+    // Atomic overload: fetch both views back-to-back, right here, with no
+    // gap for caller code to mutate game state between captures.
+    const testGame = viewAOrTestGame as TestGame<G>;
+    viewA = testGame.getPlayerView(viewBOrSeatA);
+    viewB = testGame.getPlayerView(seatB as number);
+  } else {
+    viewA = viewAOrTestGame as PlayerStateView;
+    viewB = viewBOrSeatA;
+  }
+
   const onlyInA: string[] = [];
   const onlyInB: string[] = [];
   const attributeDiffs: Array<{ path: string; a: unknown; b: unknown }> = [];
