@@ -4,13 +4,13 @@ milestone: v4.4
 milestone_name: Agent-Ergonomics Gaps (Audit Fixes)
 status: executing
 stopped_at: Completed 127-03-PLAN.md
-last_updated: "2026-07-02T16:30:10.790Z"
+last_updated: "2026-07-02T16:34:06.634Z"
 last_activity: 2026-07-02 -- Phase 128 planning complete
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 22
-  completed_plans: 16
+  completed_plans: 17
   percent: 63
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-07-01)
 ## Current Position
 
 Phase: 128
-Plan: Not started
+Plan: 01 of 06 complete
 Status: Ready to execute
-Last activity: 2026-07-02 -- Phase 128 planning complete
+Last activity: 2026-07-02 -- 128-01 complete (ANIM-01: animation test-mode + trace recorder)
 
 ## Milestones
 
@@ -153,6 +153,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 127]: 127-01: getState/getLobby reuse the existing game_state/lobby HostOutbound shapes plus requestId (no new response type names); getState resolves seat only from server-tracked followerClientId/clientSeat (no client-supplied seat field exists on the variant); debugToggle/uiSwitch are host-level relay-only ops (fan-out to all connected clients), never routed through bridge.ts's WireOp machinery
 - [Phase 127]: 127-02: GameConnection's WebSocket construction/OPEN/CONNECTING reads routed through a private #wsCtor resolved once via config.wsImplementation ?? globalThis.WebSocket, extracted into shared src/client/ws-ctor.ts (resolveWsCtor) for 127-03 dev-host-client reuse; package.json engines.node deliberately NOT bumped to >=22.4 (fail-loud guard is the enforcement, not a blanket engines constraint)
 - [Phase 127]: 127-03: createDevHostClient kept as a plain closure (not a class extending/wrapping GameConnection), reusing only resolveWsCtor; the integration test's own WS wiring assigns clientId at connection (not gated behind a first 'hello' frame like dev.ts) so it can prove genuine getLobby-in-lobby-phase behavior — MultiplayerHost auto-starts unconditionally on the very first hello system-wide, making the transient lobby phase otherwise unobservable over a real socket; MultiplayerHost.handleMessage itself is still exercised identically to production. Phase 127 (Scriptable Dev Host) is now fully complete — DRIVE-01/02/03 all shipped.
+- [Phase 128]: 128-01: recordTrace early-returns when disabled (pit-of-success no-op guard); AnimationTrace.from/to hold container/anchor identities only, never hidden-info payloads
 
 ### Highest-Risk Items (v4.4)
 
@@ -174,7 +175,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-02T16:20:00.000Z
+Last session: 2026-07-02T16:32:41.264Z
 Stopped at: Completed 127-03-PLAN.md
 Resume file: None
 Next action: Phase 127 (Scriptable Dev Host) is fully complete (Plans 01-03, DRIVE-01/02/03). Run `/gsd:verify-phase 127`, then begin Phase 128 (Animation/Drag-Drop Test Story) per ROADMAP.md. Also run `/gsd:verify-phase 124` (and `/gsd:verify-phase 123` still pending) and `/gsd:verify-phase 125`/`126` as applicable.

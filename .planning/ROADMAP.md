@@ -136,7 +136,7 @@ Plans:
   3. Triggering an animation on a target element missing its anchor attribute throws an actionable error instead of silently no-op'ing, and custom boards missing `anchorAttrs` get a dev-time warning.
 
 **Plans**: 6 plans
-- [ ] 128-01-PLAN.md — Vue-free animation test-mode + trace recorder module (ANIM-01 foundation), re-exported from ui + testing
+- [x] 128-01-PLAN.md — Vue-free animation test-mode + trace recorder module (ANIM-01 foundation), re-exported from ui + testing
 - [ ] 128-02-PLAN.md — anchorAttrs custom-board dev-warning (ANIM-03) + useDragDrop direct unit tests (ANIM-02)
 - [ ] 128-03-PLAN.md — useFLIP test-mode trace branch + fail-loud anchor throw + unit tests (ANIM-01/02/03)
 - [ ] 128-04-PLAN.md — useElementAnimation test-mode trace branch + throw + unit tests (ANIM-01/02/03)
@@ -182,7 +182,7 @@ Plans:
 | 125. Headless Simulation | 2/2 | Complete    | 2026-07-02 |
 | 126. Structured Error Surfacing | 4/4 | Complete    | 2026-07-02 |
 | 127. Scriptable Dev Host | 3/3 | Complete    | 2026-07-02 |
-| 128. Animation & Drag-Drop Test Story | 0/TBD | Not started | - |
+| 128. Animation & Drag-Drop Test Story | 1/6 | In Progress|  |
 | 129. Migration (Games + MERC) | 0/TBD | Not started | - |
 | 130. Documentation | 0/TBD | Not started | - |
 

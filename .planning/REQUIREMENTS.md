@@ -33,7 +33,7 @@ Source: 2026-07-01 agent-ergonomics audit — all findings verified against code
 
 ### Animation & Drag-Drop Test Story (ANIM)
 
-- [ ] **ANIM-01**: Animation composables support a test mode with instant resolution + a recorded, assertable trace (`{element, from, to, kind}`) so "card X flew from A to B" is a headless assertion
+- [x] **ANIM-01**: Animation composables support a test mode with instant resolution + a recorded, assertable trace (`{element, from, to, kind}`) so "card X flew from A to B" is a headless assertion
 - [ ] **ANIM-02**: `useFLIP`, `useFlyingElements`, `useElementAnimation`, `useActionAnimations`, and `useDragDrop` each have direct unit tests (currently zero)
 - [ ] **ANIM-03**: Animation helpers fail loud with an actionable error when a target element lacks its anchor attribute (silent no-op today), plus the deferred anchorAttrs dev-warning for custom boards
 
@@ -101,7 +101,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DRIVE-01 | Phase 127 | Complete |
 | DRIVE-02 | Phase 127 | Complete |
 | DRIVE-03 | Phase 127 | Complete |
-| ANIM-01 | Phase 128 | Pending |
+| ANIM-01 | Phase 128 | Complete |
 | ANIM-02 | Phase 128 | Pending |
 | ANIM-03 | Phase 128 | Pending |
 | MIG-03 | Phase 129 | Pending |
