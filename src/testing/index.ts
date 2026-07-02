@@ -79,6 +79,12 @@ export {
   getVisibleElements,
 } from './visibility.js';
 
+// Per-seat view diffing (VIS-02)
+export {
+  diffPlayerViews,
+  type ViewDiffResult,
+} from './view-diff.js';
+
 // Debug utilities
 export {
   toDebugString,
