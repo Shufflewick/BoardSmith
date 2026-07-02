@@ -72,3 +72,11 @@ Cross-repo: 8 game repos at `~/BoardSmithGames/` (checkers, cribbage, demo-actio
 - MERC test adoption — canary role only
 
 </deferred>
+
+<amendment>
+## Post-research amendments (2026-07-02)
+
+- **devDependency approval:** go-fish gains `jsdom` + `@vue/test-utils` as devDependencies (required for the flagship DOM-leak test; dev-only; matches BoardSmith's own test stack; within the milestone's explicit game-adoption scope). Versions aligned with BoardSmith's package.json.
+- **Real breakage found:** hex `HexBoard.vue` stones carry only `data-stone-id` (not a recognized FLIP anchor) — will trip the ANIM-03 dev throw; fix in the game (add `data-element-id`), it's the feature working as designed.
+- **tsc debt:** 5/8 games have pre-existing `tsc --noEmit` failures (missing vite-env.d.ts, v3.x ChoiceBoardRefs.refs, missing @types/node, in-game type errors) — in scope per the locked "tsc/build clean" criterion; fix minimally.
+</amendment>
