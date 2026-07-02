@@ -55,6 +55,8 @@
 
 import { ref, watch, computed, type Ref, onUnmounted, getCurrentInstance } from 'vue';
 import { prefersReducedMotion } from './useElementAnimation.js';
+import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
+import { isDevMode } from '../../utils/dev.js';
 
 // Re-export for convenience
 export { prefersReducedMotion };
@@ -154,6 +156,26 @@ function getElementId(el: Element): string | null {
 }
 
 /**
+ * Fail-loud report for an element useFLIP was asked to track but that carries
+ * none of the recognized anchor attributes on FIRST resolution (capture, or
+ * animate's first per-element pass). Throws in dev (actionable, names the
+ * composable + the exact attribute set searched + the fix); logs + skips in
+ * production so a cosmetic anchor gap never crashes a live game.
+ */
+function reportMissingAnchor(el: Element): void {
+  const message =
+    `useFLIP: an element could not be tracked because it has no anchor attribute. ` +
+    `useFLIP identifies elements via data-card-id, data-piece-id, data-element-id, or id ` +
+    `(checked in that order) — none were found on <${el.tagName.toLowerCase()}>. ` +
+    `Add one of these attributes (e.g. spread anchorAttrs(ref) onto the element, or bind ` +
+    `useSelectable()'s attrs) so useFLIP can track it across DOM updates.`;
+  if (isDevMode()) {
+    throw new Error(message);
+  }
+  console.error(`[BoardSmith] ${message}`);
+}
+
+/**
  * Internal handler for a single container's FLIP animations
  */
 interface ContainerHandler {
@@ -230,6 +252,8 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         const id = getElementId(el);
         if (id) {
           handler.positions.set(id, el.getBoundingClientRect());
+        } else {
+          reportMissingAnchor(el);
         }
       });
     }
@@ -240,6 +264,43 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
    * Call this AFTER the DOM has updated (after nextTick).
    */
   async function animate(): Promise<void> {
+    // Test mode: record instant, assertable flip traces instead of running WAAPI.
+    // This branch sits ABOVE prefersReducedMotion and is never merged with it —
+    // test-mode and reduced-motion are independent, unrelated flags.
+    if (isAnimationTestModeEnabled()) {
+      for (const handler of handlers) {
+        const container = handler.containerRef?.value;
+        if (container && handler.positions.size > 0) {
+          const containerLabel = getElementId(container) ?? handler.selector;
+          const elements = container.querySelectorAll(handler.selector);
+          elements.forEach((el) => {
+            const id = getElementId(el);
+            if (!id) {
+              reportMissingAnchor(el);
+              return;
+            }
+
+            const oldRect = handler.positions.get(id);
+            if (!oldRect) return; // not previously captured => not a moved element
+
+            const newRect = el.getBoundingClientRect();
+            recordTrace({
+              kind: 'flip',
+              element: id,
+              from: containerLabel,
+              to: containerLabel,
+              meta: {
+                deltaX: oldRect.left - newRect.left,
+                deltaY: oldRect.top - newRect.top,
+              },
+            });
+          });
+        }
+        handler.positions.clear();
+      }
+      return;
+    }
+
     // Skip if reduced motion is preferred
     if (prefersReducedMotion.value) {
       for (const handler of handlers) {
@@ -262,8 +323,13 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
 
       elements.forEach((el) => {
         const id = getElementId(el);
-        if (!id) return;
+        if (!id) {
+          reportMissingAnchor(el);
+          return;
+        }
 
+        // Per-frame re-check: an element captured but not re-found here is a
+        // transient render state, not a missing-anchor error — stays a silent skip.
         const oldRect = handler.positions.get(id);
         if (!oldRect) return;
 
