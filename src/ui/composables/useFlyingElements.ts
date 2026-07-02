@@ -212,6 +212,16 @@ export interface FlyConfig {
    * assertions in test mode (ANIM-01..03). Same fallback rules as `from`.
    */
   to?: string;
+
+  /**
+   * Element identity recorded as the trace's `element` field, for animation-
+   * trace assertions in test mode (ANIM-01..03). Distinct from `id` (which is
+   * this flight's internal animation-bookkeeping key and, for `autoWatch`, is
+   * a generated composite string like `auto-fly-{elementId}-{timestamp}` —
+   * not assertable). `autoWatch` supplies the engine element id here
+   * automatically; manual `fly()`/`flyMultiple()` calls default to `id`.
+   */
+  element?: string;
 }
 
 /**
@@ -401,23 +411,6 @@ function getRect(
   return target instanceof DOMRect ? target : target.getBoundingClientRect();
 }
 
-/**
- * Normalize a rect input to a DOMRect or HTMLElement.
- * Throws if function returns null.
- */
-function normalizeRect(
-  input: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null)
-): DOMRect | HTMLElement {
-  if (typeof input === 'function') {
-    const result = input();
-    if (!result) {
-      throw new Error('Flying element start position returned null');
-    }
-    return result;
-  }
-  return input;
-}
-
 /** Recognized anchor attributes, checked in priority order (mirrors useFLIP's getElementId). */
 const FLY_ANCHOR_ATTRS = ['data-bs-el-id', 'data-card-id', 'data-piece-id', 'data-element-id'];
 
@@ -450,13 +443,13 @@ function deriveAnchorId(
 /**
  * Fail-loud report for a start/end target that resolved null on FIRST
  * resolution (before the flying element is created / the RAF chain starts).
- * Extends `normalizeRect`'s existing fail-loud precedent (above) to the
- * non-function resolution cases: an `HTMLElement`/`DOMRect` target, or a
- * moving-target function, that is missing/detached when fly() is first
- * called. Gated by `isDevMode()` — throws in dev, `console.error`s and skips
- * in production. Distinct from the per-frame mid-flight re-check inside
- * `animate()` below, which deliberately stays a silent complete (a target
- * legitimately disappearing DURING flight is not an authoring error).
+ * Matches the wording style of this composable's original (pre-128-05)
+ * unconditional "Flying element start position returned null" throw, but
+ * gated by `isDevMode()` — throws in dev, `console.error`s and skips in
+ * production — and covers BOTH start and end targets uniformly. Distinct
+ * from the per-frame mid-flight re-check inside `animate()` below, which
+ * deliberately stays a silent complete (a target legitimately disappearing
+ * DURING flight is not an authoring error).
  */
 function reportMissingFlyTarget(which: 'start' | 'end', id: string): void {
   const message = `Flying element ${which} position resolved to null for fly() config "${id}". Ensure the ${which}Rect target (element, ref, or function) resolves to a real element or DOMRect before calling fly()/flyMultiple().`;
@@ -493,7 +486,7 @@ export function useFlyingElements(
    */
   interface InternalFlyOptions {
     id: string;
-    startRect: DOMRect | HTMLElement;
+    startRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
     endRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
     cardData: FlyingCardData;
     flip?: boolean;
@@ -505,6 +498,7 @@ export function useFlyingElements(
     skipFadeOut?: boolean;
     from?: string;
     to?: string;
+    element?: string;
   }
 
   /**
@@ -525,6 +519,7 @@ export function useFlyingElements(
       skipFadeOut = false,
       from: fromOverride,
       to: toOverride,
+      element: elementOverride,
     } = flyOptions;
 
     // First-resolution fail-loud (dev-gated): the caller's start/end target
@@ -550,7 +545,7 @@ export function useFlyingElements(
     if (isAnimationTestModeEnabled()) {
       recordTrace({
         kind: 'fly',
-        element: id,
+        element: elementOverride ?? id,
         from: fromOverride ?? deriveAnchorId(startTarget),
         to: toOverride ?? deriveAnchorId(endTarget),
         meta: { startRect, endRect: initialEndRect },
@@ -740,7 +735,7 @@ export function useFlyingElements(
     // the user prefers reduced motion.
     await flyCardInternal({
       id: config.id,
-      startRect: normalizeRect(config.startRect),
+      startRect: config.startRect,
       endRect: config.endRect,
       cardData: config.elementData,
       flip: config.flip,
@@ -752,6 +747,7 @@ export function useFlyingElements(
       skipFadeOut: config.skipFadeOut,
       from: config.from,
       to: config.to,
+      element: config.element,
     });
   }
 
@@ -1057,6 +1053,7 @@ export function useFlyingElements(
                   duration: autoWatchDuration,
                   from: oldContainer,
                   to: newContainer,
+                  element: String(id),
                 });
               }
             }
@@ -1102,6 +1099,7 @@ export function useFlyingElements(
                     duration: autoWatchDuration,
                     from: route.from,
                     to: route.to,
+                    element: String(id),
                   });
                 }
               }
@@ -1140,6 +1138,7 @@ export function useFlyingElements(
                     duration: autoWatchDuration,
                     from: route.from,
                     to: container,
+                    element: String(id),
                   });
                 }
               }
