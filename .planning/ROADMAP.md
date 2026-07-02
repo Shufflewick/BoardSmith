@@ -79,7 +79,7 @@
   3. Storage save failures are observable by the caller — awaitable or surfaced as an event — instead of a fire-and-forget `.catch(console.error)`.
   4. A connected dev-host client can request server-side errors/logs via a WS op (e.g. `debug:logs`) instead of reading the Node terminal.
 **Plans**: 4 plans
-  - [ ] 126-01-PLAN.md — ERR-02: runner errorCode (ENGINE_ERROR/ACTION_EXECUTION_ERROR) + OpResult.errorCode threaded through op handlers [wave 1]
+  - [x] 126-01-PLAN.md — ERR-02: runner errorCode (ENGINE_ERROR/ACTION_EXECUTION_ERROR) + OpResult.errorCode threaded through op handlers [wave 1]
   - [ ] 126-02-PLAN.md — ERR-03: shared onPersistenceError hook + lastPersistenceError across both hosts; fix AI/persistence misclassification [wave 1]
   - [ ] 126-03-PLAN.md — ERR-01: structured WarningEntry for boardRefs/display/boardRef soft-fails, threaded onto OpResult + bridge shapeResult [wave 2]
   - [ ] 126-04-PLAN.md — ERR-04: dev-host log-capture ring buffer + debug:logs host-lifecycle WS op + DebugPanel Logs tab [wave 3]
@@ -137,7 +137,7 @@
 | 123. Determinism & Flow Introspection | 4/4 | Complete    | 2026-07-01 |
 | 124. Hidden-Info Test Utilities | 3/3 | Complete    | 2026-07-02 |
 | 125. Headless Simulation | 2/2 | Complete    | 2026-07-02 |
-| 126. Structured Error Surfacing | 0/TBD | Not started | - |
+| 126. Structured Error Surfacing | 1/4 | In Progress|  |
 | 127. Scriptable Dev Host | 0/TBD | Not started | - |
 | 128. Animation & Drag-Drop Test Story | 0/TBD | Not started | - |
 | 129. Migration (Games + MERC) | 0/TBD | Not started | - |
