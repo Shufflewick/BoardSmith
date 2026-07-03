@@ -26,7 +26,7 @@
 - [x] **ENG-04**: `chooseFrom` multiSelect min/max is enforced server-side in `validateSelection` (count + array-type checks), matching the elements branch (F6)
 - [x] **ENG-05**: `resolveArgs` no longer coerces arbitrary numeric non-selection args into GameElements (F12)
 - [x] **ENG-06**: `forEach` over a mutated collection no longer silently skips items (snapshot the collection or document + guard the live-mutation case loudly) (F13)
-- [ ] **ENG-07**: `switchOn` with no matching case and no default fails loudly (throw or dev-warn) instead of silently no-oping (F27)
+- [x] **ENG-07**: `switchOn` with no matching case and no default fails loudly (throw or dev-warn) instead of silently no-oping (F27)
 - [x] **ENG-08**: An action built without `.execute()` (default no-op) is rejected at build/registration time or requires an explicit opt-in (F28)
 
 ### High/Medium — Restore Fidelity (RST)
@@ -110,7 +110,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | ENG-02 | Phase 133 | Complete |
 | ENG-03 | Phase 133 | Complete |
 | ENG-04 | Phase 133 | Complete |
-| ENG-07 | Phase 133 | Pending |
+| ENG-07 | Phase 133 | Complete |
 | SESS-01 | Phase 134 | Pending |
 | UIX-01 | Phase 134 | Pending |
 | UIX-02 | Phase 134 | Pending |

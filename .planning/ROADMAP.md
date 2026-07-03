@@ -92,7 +92,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 
 - [x] **Phase 131: Serialization & Restore Fidelity** - Hidden zone visibility, player-state filtering, debug-data gating, and handler/lockout state all survive every snapshot restore path (completed 2026-07-03)
 - [x] **Phase 132: Engine Element & Builder Safety** - putInto, resolveArgs, forEach, and action .build() fail loudly instead of silently corrupting or no-oping (completed 2026-07-03)
-- [ ] **Phase 133: Engine Flow & Action Validation** - eachPlayer wrap-around, simultaneous-action error surfacing, server-side multiSelect validation, and switchOn fail loudly
+- [x] **Phase 133: Engine Flow & Action Validation** - eachPlayer wrap-around, simultaneous-action error surfacing, server-side multiSelect validation, and switchOn fail loudly (completed 2026-07-03)
 - [ ] **Phase 134: UI & Session Interaction Guardrails** - Custom-UI action failures, multiSelect fill() misuse, responsive board collapse, dragProps/setBeforeAutoExecute, and the runner-bypass footgun are all fixed or surfaced loudly
 - [ ] **Phase 135: CLI & Dev Experience** - boardsmith.json/gameDefinition source-of-truth, config validation, bundle-size limits, host binding, init templates, and --players/--ai flags are all correct or fail loudly
 - [ ] **Phase 136: Client SDK & Protocol** - GameConnection is awaitable, reconnect is predictable, MeepleClient has one error contract, and protocol types are canonical
@@ -152,7 +152,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] 133-02-PLAN.md — ENG-02: eachPlayer startingPlayer wrap-around + TurnOrder/dealer doc fixes
 - [x] 133-03-PLAN.md — ENG-03: resumeSimultaneousAction surfaces actionError (engine + runner)
 - [x] 133-04-PLAN.md — ENG-04: choice-branch multiSelect count + array-type enforcement
-- [ ] 133-05-PLAN.md — ENG-07: switchOn unmatched-case + no-default throws loudly
+- [x] 133-05-PLAN.md — ENG-07: switchOn unmatched-case + no-default throws loudly
 
 ### Phase 134: UI & Session Interaction Guardrails
 **Goal**: Developers building custom UIs or scripting sessions get loud, actionable feedback the moment they take a wrong-but-plausible path, instead of a silent no-op.
@@ -239,7 +239,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 |-------|-----------------|--------|-----------|
 | 131. Serialization & Restore Fidelity | 5/5 | Complete    | 2026-07-03 |
 | 132. Engine Element & Builder Safety | 5/5 | Complete    | 2026-07-03 |
-| 133. Engine Flow & Action Validation | 4/5 | In Progress|  |
+| 133. Engine Flow & Action Validation | 5/5 | Complete   | 2026-07-03 |
 | 134. UI & Session Interaction Guardrails | 0/TBD | Not started | - |
 | 135. CLI & Dev Experience | 0/TBD | Not started | - |
 | 136. Client SDK & Protocol | 0/TBD | Not started | - |
