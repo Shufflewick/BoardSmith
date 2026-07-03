@@ -21,7 +21,7 @@
 ### High — Engine Correctness (ENG)
 
 - [x] **ENG-01**: `putInto()` onto the element's own descendant (or itself) throws an actionable error instead of silently detaching the subtree (F3)
-- [ ] **ENG-02**: `eachPlayer` with `startingPlayer` wraps around so every player gets a turn; docs/common-patterns.md dealer pattern and TurnOrder presets corrected to match (F4)
+- [x] **ENG-02**: `eachPlayer` with `startingPlayer` wraps around so every player gets a turn; docs/common-patterns.md dealer pattern and TurnOrder presets corrected to match (F4)
 - [ ] **ENG-03**: A failed action inside `simultaneousActionStep` surfaces `actionError`, returns failure to the client, and is NOT recorded in `actionHistory` (F5)
 - [ ] **ENG-04**: `chooseFrom` multiSelect min/max is enforced server-side in `validateSelection` (count + array-type checks), matching the elements branch (F6)
 - [x] **ENG-05**: `resolveArgs` no longer coerces arbitrary numeric non-selection args into GameElements (F12)
@@ -107,7 +107,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | ENG-05 | Phase 132 | Complete |
 | ENG-06 | Phase 132 | Complete |
 | ENG-08 | Phase 132 | Complete |
-| ENG-02 | Phase 133 | Pending |
+| ENG-02 | Phase 133 | Complete |
 | ENG-03 | Phase 133 | Pending |
 | ENG-04 | Phase 133 | Pending |
 | ENG-07 | Phase 133 | Pending |

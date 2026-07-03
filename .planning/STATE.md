@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
-stopped_at: Completed 132-04-PLAN.md
-last_updated: "2026-07-03T14:14:33.076Z"
+stopped_at: Completed 133-02-PLAN.md
+last_updated: "2026-07-03T14:19:56.951Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 15
-  completed_plans: 11
+  completed_plans: 12
   percent: 22
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 133 (Engine Flow & Action Validation) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 80%
 
 ## Milestones
 
@@ -125,6 +125,8 @@ Recent decisions affecting current work:
 - [Phase 132-04]: GameElement forEach snapshot items tagged with { elementId } wrapper (not bare number) to avoid the ENG-05/resolveArgs ambiguity between element ids and JSON-primitive numbers in the same collection
 - [Phase 132]: handlerless flag set true in Action constructor, cleared inside .execute(fn); registerAction() throw kept separate from startFlow validators (new registration-time gate per Pitfall 4)
 - [Phase 133-01]: PROC-01 gate satisfied — all four findings (F4/ENG-02, F5/ENG-03, F6/ENG-04, F27/ENG-07) independently re-verified LEGITIMATE against current post-Phase-132 source with current file:line evidence before any fix; verification document delivered across two atomic commits matching the plan's two-task structure
+- [Phase 133-02]: Wrap is unconditional, no wrap:false opt-out — truncation was never a sane board-game semantic
+- [Phase 133-02]: No startIndex === 0 special case added; slice(0)+slice(0,0) degenerates naturally to the full list
 
 ### Pending Todos
 
@@ -136,8 +138,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T14:14:30.430Z
-Stopped at: Completed 132-04-PLAN.md
+Last session: 2026-07-03T14:19:56.944Z
+Stopped at: Completed 133-02-PLAN.md
 Resume file: None
 Next action: Break Phase 131 (Serialization & Restore Fidelity) down into plans via `/gsd:plan-phase 131`
 
