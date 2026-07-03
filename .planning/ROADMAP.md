@@ -186,7 +186,13 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   4. `boardsmith dev`'s host binding matches its documented default, or the help text is corrected to state the real default with rationale.
   5. `boardsmith init -t/--template` either works or is removed from the CLI surface and docs.
   6. `--players` out-of-range/NaN values error loudly instead of silently clamping, and `--ai` validates against the final (post-clamp) player count.
-**Plans**: TBD
+**Plans**: 6 plans (3 waves)
+- [ ] 135-01-PLAN.md — PROC-01 verify-first gate: per-finding verdicts (F9/F21/F22/F32/F33/F34) in 135-FINDINGS-VERIFICATION.md before any fix
+- [ ] 135-02-PLAN.md — CLI option surface: remove -t/--template (CLIX-05); correct --host help + register --lan (CLIX-04)
+- [ ] 135-03-PLAN.md — scaffold: drop playerCount + dead $schema from boardsmith.json (CLIX-01/CLIX-02)
+- [ ] 135-04-PLAN.md — build.ts: derive manifest playerCount from gameDefinition (CLIX-01)
+- [ ] 135-05-PLAN.md — validate.ts: unknown-key rejection + did-you-mean + playerCount migration (CLIX-02/CLIX-01); 50MB bundle constant (CLIX-03)
+- [ ] 135-06-PLAN.md — dev.ts: default 127.0.0.1 + non-localhost banner (CLIX-04); fail-fast numeric flags + --ai post-move (CLIX-06); single gameDefinition read (CLIX-01); unknown-key startup warn (CLIX-02)
 
 ### Phase 136: Client SDK & Protocol
 **Goal**: The public client SDK gives callers an awaitable connection lifecycle, one consistent error contract, and types that match the canonical protocol — no silent drops, no forked type drift.
