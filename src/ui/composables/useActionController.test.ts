@@ -605,6 +605,45 @@ describe('useActionController', () => {
       expect(calls).toEqual(['first', 'second']);
     });
 
+    it('a throwing beforeAutoExecute hook does not block later hooks or execution (WR-02)', async () => {
+      const calls: string[] = [];
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoFill: true,
+          autoExecute: true,
+        });
+
+        controller.setBeforeAutoExecute(() => {
+          throw new Error('buggy animation hook');
+        });
+        controller.setBeforeAutoExecute(() => { calls.push('second'); });
+        sendAction.mockImplementation(async (name: string) => {
+          calls.push(`send:${name}`);
+          return { success: true };
+        });
+
+        await controller.start('forcedPlay');
+        await nextTick();
+        await nextTick();
+
+        // One consumer's buggy hook must not take down the other consumers,
+        // and executeCurrentAction() must still run — otherwise the action is
+        // permanently wedged (isReady stays true, watcher never re-fires).
+        expect(calls).toEqual(['second', 'send:forcedPlay']);
+        // The hook failure is loud (console.error), not silent.
+        expect(
+          consoleErrorSpy.mock.calls.some((c) => String(c[0]).includes('beforeAutoExecute hook failed')),
+        ).toBe(true);
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+
     it('setBeforeAutoExecute returns an unregister function that removes only that hook', async () => {
       const calls: string[] = [];
       const controller = useActionController({

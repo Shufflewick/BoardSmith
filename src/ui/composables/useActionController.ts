@@ -869,8 +869,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value) {
       // Call hooks before executing - allows capturing element positions for animations.
       // Sequential await (not Promise.all) so ordering is deterministic across hooks.
+      // WR-02: each hook is isolated — with accumulation semantics, one consumer's
+      // buggy hook must not take down every other consumer, and execution must
+      // ALWAYS proceed (a throw here would leave isReady true with the watcher
+      // never re-firing: the action would be permanently wedged, with no toast).
       for (const hook of beforeAutoExecuteHooks.value) {
-        await hook(currentAction.value, buildServerArgs());
+        try {
+          await hook(currentAction.value, buildServerArgs());
+        } catch (err) {
+          console.error('[ActionController] beforeAutoExecute hook failed:', err);
+        }
       }
       executeCurrentAction();
     }
