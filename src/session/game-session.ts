@@ -16,7 +16,7 @@
  * - AI scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
 import { canSeatAct } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
@@ -232,8 +232,59 @@ function buildColorLabelMap(
   return Object.keys(map).length > 0 ? map : undefined;
 }
 
+/**
+ * Read-only view of a {@link GameRunner}, exposed via {@link GameSession.runner}.
+ *
+ * Deliberately omits `performAction` (and every other mutating member) so that
+ * `session.runner.performAction(...)` — a lookalike wrong path beside
+ * `session.performAction(...)` that silently skips persistence/broadcast/
+ * checkpoints/tutorials/AI scheduling (SESS-01/F29) — is unreachable both at
+ * the type level (no such member in this interface) and at runtime (the
+ * object built by {@link buildRunnerFacade} genuinely has no `performAction`
+ * key, so untyped/JS callers get a `TypeError: ... is not a function` instead
+ * of silently bypassing session bookkeeping).
+ */
+export interface ReadOnlyRunnerFacade<G extends Game = Game> {
+  readonly game: G;
+  readonly actionHistory: readonly SerializedAction[];
+  getSnapshot(): GameStateSnapshot;
+  getPlayerView(playerPosition: number): PlayerStateView;
+  getAllPlayerViews(): PlayerStateView[];
+  getFlowState(): FlowState | undefined;
+  getFlowDebugInfo(): FlowDebugInfo;
+  getPendingAction(playerPosition: number): PendingActionState | undefined;
+  isComplete(): boolean;
+  getWinners(): Player[];
+}
+
+/**
+ * Build a {@link ReadOnlyRunnerFacade} that delegates every read to the live
+ * `runner`. This is a genuinely narrower object literal — NOT a type-cast of
+ * `runner` — so `.performAction` is `undefined` at runtime, not merely hidden
+ * by TypeScript's type system.
+ */
+function buildRunnerFacade<G extends Game>(runner: GameRunner<G>): ReadOnlyRunnerFacade<G> {
+  return {
+    get game() {
+      return runner.game;
+    },
+    get actionHistory() {
+      return runner.actionHistory;
+    },
+    getSnapshot: () => runner.getSnapshot(),
+    getPlayerView: (playerPosition: number) => runner.getPlayerView(playerPosition),
+    getAllPlayerViews: () => runner.getAllPlayerViews(),
+    getFlowState: () => runner.getFlowState(),
+    getFlowDebugInfo: () => runner.getFlowDebugInfo(),
+    getPendingAction: (playerPosition: number) => runner.getPendingAction(playerPosition),
+    isComplete: () => runner.isComplete(),
+    getWinners: () => runner.getWinners(),
+  };
+}
+
 export class GameSession<G extends Game = Game, TSession extends SessionInfo = SessionInfo> {
   #runner: GameRunner<G>;
+  #runnerFacade: ReadOnlyRunnerFacade<G>;
   readonly #storedState: StoredGameState;
   #GameClass: GameClass<G>;
   readonly #storage?: StorageAdapter;
@@ -339,6 +390,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     debugEnabled?: boolean
   ) {
     this.#runner = runner;
+    this.#runnerFacade = buildRunnerFacade(this.#runner);
     this.#storedState = storedState;
     this.#GameClass = GameClass;
     this.#storage = storage;
@@ -377,6 +429,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       {
         replaceRunner: (newRunner) => {
           this.#runner = newRunner;
+          this.#runnerFacade = buildRunnerFacade(this.#runner);
           // Re-supply tutorial definition: fromCheckpoint creates a runner
           // without it (tutorial is excluded from snapshot.gameOptions so it
           // is not persisted — it must be re-threaded by the session layer).
@@ -482,6 +535,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
           // Replace the session's runner
           session.#runner = newRunner;
+          session.#runnerFacade = buildRunnerFacade(session.#runner);
           session.#pickHandler = new PickHandler(newRunner, currentSlotCount);
           session.#pendingActionManager.updateRunner(newRunner);
 
@@ -853,10 +907,17 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Get the current game runner (for advanced use cases)
+   * Get the current game runner as a read-only facade (for advanced use cases).
+   *
+   * This is NOT the raw `GameRunner` — it exposes only read members (game,
+   * actionHistory, getSnapshot, getPlayerView, ...). `performAction` is not
+   * present, at the type level or at runtime, so it cannot be used as a
+   * lookalike wrong path for `session.performAction()` (SESS-01/F29). All
+   * writes must go through `session.performAction()`, which additionally
+   * handles persistence/broadcast/checkpoints/tutorials/AI scheduling.
    */
-  get runner(): GameRunner<G> {
-    return this.#runner;
+  get runner(): ReadOnlyRunnerFacade<G> {
+    return this.#runnerFacade;
   }
 
   /**
@@ -1460,6 +1521,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         const newRunner = this.#reloadWithDevTransfer(definition);
         if (newRunner) {
           this.#runner = newRunner;
+          this.#runnerFacade = buildRunnerFacade(this.#runner);
           this.#GameClass = definition.gameClass as GameClass<G>;
           this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
           this.#pendingActionManager.updateRunner(newRunner);
@@ -1480,6 +1542,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Replace the current runner and game class
     this.#runner = newRunner;
+    this.#runnerFacade = buildRunnerFacade(this.#runner);
     this.#GameClass = definition.gameClass as GameClass<G>;
 
     // Update handlers with new runner reference
