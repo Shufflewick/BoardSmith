@@ -458,6 +458,101 @@ describe('FlowEngine', () => {
       expect(visitedIds).toHaveLength(originalIds.length);
       expect(new Set(visitedIds)).toEqual(new Set(originalIds));
     });
+
+    it('should resume a mid-loop checkpoint with the original snapshot, not a recomputed collection', () => {
+      // ENG-06: frame.data.forEachItems is the load-bearing serialization contract.
+      // A restore mid-loop must visit the original snapshot's tail even if the
+      // source collection has changed between checkpoint and restore.
+      const deck = game.create(Deck, 'deck');
+      const cards = deck.createMany(3, Card, 'card', (i) => ({
+        suit: 'H',
+        rank: String(i + 1),
+        value: i + 1,
+      }));
+      const originalIds = cards.map((c) => c.id);
+
+      game.registerAction(Action.create('step').execute(() => ({ success: true })));
+
+      const visitedIds: number[] = [];
+      const flow = defineFlow({
+        root: forEach({
+          collection: (ctx) => [...ctx.game.all(Card)],
+          as: 'card',
+          do: sequence(
+            execute((ctx) => {
+              visitedIds.push((ctx.get('card') as Card).id);
+            }),
+            actionStep({ actions: ['step'] })
+          ),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      engine.start(); // iteration 1 begins, awaiting 'step'
+      const state = engine.resume('step', {}); // iteration 2 begins, awaiting 'step'
+      expect(visitedIds).toEqual(originalIds.slice(0, 2));
+      expect(state.complete).toBe(false);
+
+      // Mutate the collection source AFTER the checkpoint: a recomputed
+      // collection would now contain a 4th card.
+      const lateCard = deck.create(Card, 'late-card', { suit: 'S', rank: '9', value: 9 });
+
+      const restored = new FlowEngine(game, flow);
+      const restoreResult = restored.restoreFullState(state);
+      expect(restoreResult.success).toBe(true);
+
+      let resumed = restored.resume('step', {}); // completes iteration 2, iteration 3 begins
+      expect(resumed.complete).toBe(false);
+      resumed = restored.resume('step', {}); // completes iteration 3 -- snapshot exhausted
+
+      // The restored loop visited exactly the original snapshot's tail: the late
+      // card was never visited and the loop ended after the original 3 items.
+      expect(resumed.complete).toBe(true);
+      expect(visitedIds).toEqual(originalIds);
+      expect(visitedIds).not.toContain(lateCard.id);
+    });
+
+    it('should throw when a snapshotted element has been permanently deleted mid-loop', () => {
+      const deck = game.create(Deck, 'deck');
+      const [, card2] = deck.createMany(2, Card, 'card', (i) => ({
+        suit: 'H',
+        rank: String(i + 1),
+        value: i + 1,
+      }));
+
+      const flow = defineFlow({
+        root: forEach({
+          collection: (ctx) => [...ctx.game.all(Card)],
+          as: 'card',
+          do: execute(() => {
+            // Surgically detach card2 from the tree entirely (not moved to the
+            // pile, so getElementById cannot find it anywhere).
+            const index = deck._t.children.indexOf(card2);
+            if (index !== -1) {
+              deck._t.children.splice(index, 1);
+              card2._t.parent = undefined;
+            }
+          }),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      expect(() => engine.start()).toThrow(/no longer exists in the game tree/);
+    });
+
+    it('should throw on collection items that are neither GameElements nor JSON primitives', () => {
+      const flow = defineFlow({
+        root: forEach({
+          // Cast past the compile-time constraint to exercise the runtime guard.
+          collection: [{ round: 1 }, { round: 2 }] as unknown as number[],
+          as: 'r',
+          do: noop(),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      expect(() => engine.start()).toThrow(/not a GameElement or JSON primitive/);
+    });
   });
 
   describe('Variables', () => {
