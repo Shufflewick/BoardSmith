@@ -115,7 +115,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   5. `registerDebug()` payloads are not broadcast to players/spectators by default (dev-only or explicit opt-in), and `onEnter`/`onExit` handlers plus `teachingDisabled` survive `GameSession.restore()`.
 **Plans**: 5 plans
 - [x] 131-01-PLAN.md — PROC-01 verification gate: verdict per finding (F1/F2/F7/F8/F10/F15/F16) before any fix
-- [ ] 131-02-PLAN.md — SEC-01: serialize `_zoneVisibility` so zone visibility survives every restore path
+- [x] 131-02-PLAN.md — SEC-01: serialize `_zoneVisibility` so zone visibility survives every restore path
 - [ ] 131-03-PLAN.md — RST-02 + SEC-04: persist teachingDisabled/displayName; gate registerDebug data off by default
 - [ ] 131-04-PLAN.md — SEC-02 + SEC-03: implement `visibleAttributes` filtering; route `state.players` through per-viewer filter
 - [ ] 131-05-PLAN.md — RST-01: re-bind onEnter/onExit across restore; correct registerDebug docs (DOCX-04)
@@ -227,7 +227,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
-| 131. Serialization & Restore Fidelity | 1/5 | In Progress|  |
+| 131. Serialization & Restore Fidelity | 2/5 | In Progress|  |
 | 132. Engine Element & Builder Safety | 0/TBD | Not started | - |
 | 133. Engine Flow & Action Validation | 0/TBD | Not started | - |
 | 134. UI & Session Interaction Guardrails | 0/TBD | Not started | - |

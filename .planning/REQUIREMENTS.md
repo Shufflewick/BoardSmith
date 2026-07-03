@@ -9,11 +9,11 @@
 ### Process (PROC)
 
 - [x] **PROC-01**: Every finding F1–F38 has a recorded verification verdict (LEGITIMATE with repro/trace evidence, or REJECTED with reasoning) before its fix is planned or written
-- [ ] **PROC-02**: Every legitimate finding's fix includes a regression test that fails on the pre-fix code
+- [x] **PROC-02**: Every legitimate finding's fix includes a regression test that fails on the pre-fix code
 
 ### Critical — Hidden-Information Integrity (SEC)
 
-- [ ] **SEC-01**: Zone visibility (`contentsHidden`/`contentsVisibleToOwner`/`contentsCountOnly`) survives every snapshot restore path (undo, rewind, `GameSession.restore`, `GameRunner.fromSnapshot`, stateless ops) — `toJSONForPlayer(opponent)` is identical before/after restore, including visibility changed at runtime (F1, F7)
+- [x] **SEC-01**: Zone visibility (`contentsHidden`/`contentsVisibleToOwner`/`contentsCountOnly`) survives every snapshot restore path (undo, rewind, `GameSession.restore`, `GameRunner.fromSnapshot`, stateless ops) — `toJSONForPlayer(opponent)` is identical before/after restore, including visibility changed at runtime (F1, F7)
 - [ ] **SEC-02**: `static visibleAttributes` is either implemented (non-listed attributes filtered from non-owners in `toJSONForPlayer`) or deleted entirely, with docs corrected either way — no documented no-op security control remains (F2)
 - [ ] **SEC-03**: `state.players` is routed through the same per-viewer visibility filtering as the board view — custom Player attributes and Player-child elements no longer broadcast unfiltered to all seats and spectators (F8)
 - [ ] **SEC-04**: `registerDebug()` data is not broadcast to players/spectators by default — debug payloads are gated (dev-only or explicit opt-in) and the docs no longer model dumping hidden state into it (F15)
@@ -96,8 +96,8 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROC-01 | Phase 131 | Complete |
-| PROC-02 | Phase 131 | Pending |
-| SEC-01 | Phase 131 | Pending |
+| PROC-02 | Phase 131 | Complete |
+| SEC-01 | Phase 131 | Complete |
 | SEC-02 | Phase 131 | Pending |
 | SEC-03 | Phase 131 | Pending |
 | SEC-04 | Phase 131 | Pending |

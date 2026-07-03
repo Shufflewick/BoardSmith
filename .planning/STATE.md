@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: v4.5 ROADMAP.md + REQUIREMENTS.md traceability written; STATE.md initialized for the new milestone
-last_updated: "2026-07-03T03:00:35.435Z"
+last_updated: "2026-07-03T03:12:19.682Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 131 (Serialization & Restore Fidelity) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Milestones
 
@@ -113,6 +113,7 @@ Recent decisions affecting current work:
 - [v4.5 roadmap]: ENG findings split across two phases by subsystem (element/builder vs. flow/action) rather than one large engine phase — keeps fine-granularity phases independently reviewable.
 - [v4.5 roadmap]: GAMES migration sequenced after ALL API-changing phases (131-137), not just some — every prior phase can introduce breaking changes per the No Backward Compatibility rule.
 - [Phase 131]: PROC-01 verification gate: all 7 findings (F1,F2,F7,F8,F10,F15,F16) confirmed LEGITIMATE — Independent file:line re-trace before any fix; stateless-ops.ts explicitly confirmed to need no fix for F15
+- [Phase 131-02]: Zone-visibility restore tests must use a plain Space (not Deck/Hand): those classes reapply their own constructor default on restore, masking the F1/F7 bug for the common case
 
 ### Pending Todos
 
@@ -124,7 +125,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T03:00:27.171Z
+Last session: 2026-07-03T03:11:07.419Z
 Stopped at: v4.5 ROADMAP.md + REQUIREMENTS.md traceability written; STATE.md initialized for the new milestone
 Resume file: None
 Next action: Break Phase 131 (Serialization & Restore Fidelity) down into plans via `/gsd:plan-phase 131`
