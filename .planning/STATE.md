@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: "Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)"
-last_updated: "2026-07-03T21:43:03.003Z"
+last_updated: "2026-07-03T21:51:07.665Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 31
-  completed_plans: 27
+  completed_plans: 28
   percent: 56
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 136 (Client SDK & Protocol) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 90%
 
 ## Milestones
 
@@ -155,6 +155,9 @@ Recent decisions affecting current work:
 - [Phase 136]: [Phase 136-01]: All six findings (F23,F24,F25,F26,F35,F38) independently re-verified LEGITIMATE against current post-Phase-135 HEAD; zero REJECTED
 - [Phase 136]: [Phase 136-01]: F25 errorCode scope boundary locked - client error type carries errorCode as optional; lobby-manager.ts changes out of phase scope (zero errorCode fields today)
 - [Phase 136]: [Phase 136-01]: F26 scope boundary locked - barrel re-export chain (client/index.ts re-exports from client/types.ts) requires matching re-export lines on deletion; outgoing WS union narrows to exactly action|ping|getState
+- [Phase ?]: [Phase 136-02]: protocol.ts gained 7 new HTTP-shape interfaces (LobbyResponse, SetReadyRequest, AddSlotRequest, RemoveSlotRequest, SetSlotAIRequest, UpdateGameOptionsRequest, UpdatePlayerOptionsRequest) since client/types.ts owned these shapes with no protocol.ts twin
+- [Phase ?]: [Phase 136-02]: WebSocketIncomingMessage discriminated union kept client-local (not re-exported from protocol.ts) since protocol.ts's WebSocketMessage union is scoped to client-to-server traffic only
+- [Phase ?]: [Phase 136-02]: Rule 3 auto-fix threaded real defaults (config.playerId ?? generatePlayerId(), connectImmediately ?? true, connectionTimeout ?? 10000) into client.ts/game-connection.ts Required<> literals to keep tsc green; simultaneously closed F38/SDK-06 and corrected Node 16+ to Node 19+ error text
 
 ### Pending Todos
 
@@ -166,7 +169,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T21:43:02.996Z
+Last session: 2026-07-03T21:49:48.577Z
 Stopped at: Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
