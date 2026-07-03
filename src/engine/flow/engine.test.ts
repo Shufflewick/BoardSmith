@@ -2189,6 +2189,72 @@ describe('ENG-03 simultaneous action failure signaling', () => {
     const successState = engine.resume('test', { choice: 'a' }, 2);
     expect(successState.actionError).toBeUndefined();
   });
+
+  // WR-03: the simultaneous pre-flight checks must mirror resume()'s graceful
+  // actionError contract. A double-submit after completing, an action outside
+  // the allow-list, or a non-awaiting player are ordinary player-input races
+  // in concurrent play — not developer errors — so they must record
+  // actionError and return state instead of throwing ENGINE_ERROR.
+  it('records actionError instead of throwing when a player resubmits after completing (WR-03)', () => {
+    const acted = new Set<number>();
+    game.registerAction(
+      Action.create('done').execute((args, ctx) => {
+        acted.add(ctx.player.seat);
+        return { success: true };
+      })
+    );
+
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['done'],
+        playerDone: (ctx, p) => acted.has(p.seat),
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    // Player 1 completes their simultaneous step.
+    const first = engine.resume('done', {}, 1);
+    expect(first.awaitingInput).toBe(true);
+
+    // Ordinary race in concurrent play: player 1 double-submits.
+    const state = engine.resume('done', {}, 1);
+    expect(state.actionError).toContain('already completed');
+    expect(state.awaitingInput).toBe(true);
+    expect(state.awaitingPlayers).toHaveLength(3);
+  });
+
+  it('records actionError instead of throwing when the action is not in the player allow-list (WR-03)', () => {
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['test'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    const state = engine.resume('not-allowed', { choice: 'a' }, 1);
+    expect(state.actionError).toContain('not-allowed');
+    expect(state.actionError).toContain('not available');
+    expect(state.awaitingInput).toBe(true);
+  });
+
+  it('records actionError instead of throwing when the acting player is not awaiting (WR-03)', () => {
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['test'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    const state = engine.resume('test', { choice: 'a' }, 99);
+    expect(state.actionError).toContain('not awaiting');
+    expect(state.awaitingInput).toBe(true);
+  });
 });
 
 describe('Flow variable get() unset-key warning (F24)', () => {

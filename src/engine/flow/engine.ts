@@ -475,16 +475,23 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error('No player specified and no awaiting players found');
     }
 
-    // Validate player can act
+    // Validate player can act. These are ordinary player-input races in
+    // concurrent play (double-submits, stale clients) — not developer errors —
+    // so they mirror resume()'s graceful actionError contract instead of
+    // throwing (WR-03): the runner surfaces them as an actionable rejection
+    // rather than ENGINE_ERROR.
     const playerState = this.awaitingPlayers.find(p => p.playerIndex === actingPlayerIndex);
     if (!playerState) {
-      throw new Error(`Player ${actingPlayerIndex} is not awaiting action`);
+      this.actionError = `Player ${actingPlayerIndex} is not awaiting action`;
+      return this.getState();
     }
     if (playerState.completed) {
-      throw new Error(`Player ${actingPlayerIndex} has already completed their action`);
+      this.actionError = `Player ${actingPlayerIndex} has already completed their action`;
+      return this.getState();
     }
     if (!playerState.availableActions.includes(actionName)) {
-      throw new Error(`Action ${actionName} is not available for player ${actingPlayerIndex}`);
+      this.actionError = `Action ${actionName} is not available for player ${actingPlayerIndex}`;
+      return this.getState();
     }
 
     // Execute the action (actingPlayerIndex is 1-indexed position)
