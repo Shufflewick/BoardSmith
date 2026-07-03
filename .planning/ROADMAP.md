@@ -147,7 +147,12 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   2. A failed action inside `simultaneousActionStep` surfaces `actionError`, returns failure to the client, and is not recorded in `actionHistory`.
   3. `chooseFrom` multiSelect min/max is enforced server-side in `validateSelection` (count + array-type checks), matching the elements branch.
   4. `switchOn` with no matching case and no default fails loudly (throw or dev-warn) instead of silently no-oping.
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 133-01-PLAN.md — PROC-01 verification gate: verdicts for F4/F5/F6/F27 before any fix
+- [ ] 133-02-PLAN.md — ENG-02: eachPlayer startingPlayer wrap-around + TurnOrder/dealer doc fixes
+- [ ] 133-03-PLAN.md — ENG-03: resumeSimultaneousAction surfaces actionError (engine + runner)
+- [ ] 133-04-PLAN.md — ENG-04: choice-branch multiSelect count + array-type enforcement
+- [ ] 133-05-PLAN.md — ENG-07: switchOn unmatched-case + no-default throws loudly
 
 ### Phase 134: UI & Session Interaction Guardrails
 **Goal**: Developers building custom UIs or scripting sessions get loud, actionable feedback the moment they take a wrong-but-plausible path, instead of a silent no-op.
