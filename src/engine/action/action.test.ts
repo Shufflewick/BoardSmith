@@ -385,6 +385,134 @@ describe('Action Executor', () => {
       expect(forbidden.errors[0]).toBe('That name is forbidden');
       expect(allowed.valid).toBe(true);
     });
+
+    // ENG-04/F6: chooseFrom (choice-type) multiSelect bounds must be enforced
+    // server-side, mirroring the already-enforced chooseElements/elements-branch
+    // logic (F31), plus a stricter non-array rejection with no elements-branch
+    // analog (multiSelect choice selections must not silently degrade a scalar
+    // submission to count=1).
+    it('rejects a chooseFrom multiSelect submission with too few items', () => {
+      const action = Action.create('test')
+        .chooseFrom('colors', { choices: ['red', 'blue', 'green'], multiSelect: { min: 2 } })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        ['red'],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('at least 2 choice');
+    });
+
+    it('rejects a chooseFrom multiSelect submission with too many items', () => {
+      const action = Action.create('test')
+        .chooseFrom('colors', { choices: ['red', 'blue', 'green'], multiSelect: { max: 2 } })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        ['red', 'blue', 'green'],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('at most 2 choice');
+    });
+
+    it('enforces bounds for the number multiSelect form on chooseFrom (implicit min 1)', () => {
+      const action = Action.create('test')
+        .chooseFrom('colors', { choices: ['red', 'blue', 'green'], multiSelect: 2 })
+        .execute(() => {});
+
+      const tooMany = executor.validateSelection(
+        action.selections[0],
+        ['red', 'blue', 'green'],
+        game.getPlayer(1)!,
+        {}
+      );
+      expect(tooMany.valid).toBe(false);
+      expect(tooMany.errors.join(' ')).toContain('at most 2 choice');
+
+      const tooFew = executor.validateSelection(
+        action.selections[0],
+        [],
+        game.getPlayer(1)!,
+        {}
+      );
+      expect(tooFew.valid).toBe(false);
+      expect(tooFew.errors.join(' ')).toContain('at least 1 choice');
+    });
+
+    it('enforces bounds for the function multiSelect form on chooseFrom', () => {
+      const action = Action.create('test')
+        .chooseFrom('colors', {
+          choices: ['red', 'blue', 'green'],
+          multiSelect: () => ({ min: 1, max: 1 }),
+        })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        ['red', 'blue'],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('at most 1 choice');
+    });
+
+    it('rejects a non-array value submitted to a multiSelect-configured chooseFrom', () => {
+      const action = Action.create('test')
+        .chooseFrom('colors', { choices: ['red', 'blue', 'green'], multiSelect: { min: 1, max: 2 } })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        'red',
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('expected an array');
+    });
+
+    it('accepts an in-bounds array submission to a multiSelect chooseFrom', () => {
+      const action = Action.create('test')
+        .chooseFrom('colors', { choices: ['red', 'blue', 'green'], multiSelect: { min: 1, max: 2 } })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        ['red', 'blue'],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('is unaffected for a non-multiSelect chooseFrom selection', () => {
+      const action = Action.create('test')
+        .chooseFrom('color', { choices: ['red', 'blue'] })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        'red',
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
   });
 
   describe('validateAction', () => {
