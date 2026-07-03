@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
-last_updated: "2026-07-03T18:24:02.941Z"
+last_updated: "2026-07-03T18:27:43.696Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 26
-  completed_plans: 22
+  completed_plans: 23
   percent: 44
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 135 (CLI & Dev Experience) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 88%
 
 ## Milestones
 
@@ -145,6 +145,7 @@ Recent decisions affecting current work:
 - [Phase 135]: F34/CLIX-06: --ai validation fix requires relocating the check block to after effectivePlayerCount is computed (dev.ts:393), not an in-place operand swap at dev.ts:302
 - [Phase 135]: InitOptions interface removed entirely rather than emptied -- template was its only field
 - [Phase 135]: dev --host help text corrected to describe the Plan 06 target of a 127.0.0.1 default even though dev.ts runtime binding is unchanged until Plan 06 lands
+- [Phase 135]: [Phase 135-03]: Removed the dead $schema line from docs/getting-started.md's boardsmith.json example in addition to playerCount, keeping the doc in sync with generateBoardsmithJson's actual output
 
 ### Pending Todos
 
@@ -156,7 +157,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T18:23:43.491Z
+Last session: 2026-07-03T18:26:30.409Z
 Stopped at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`

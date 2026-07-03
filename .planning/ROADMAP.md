@@ -189,7 +189,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 **Plans**: 6 plans (3 waves)
 - [x] 135-01-PLAN.md — PROC-01 verify-first gate: per-finding verdicts (F9/F21/F22/F32/F33/F34) in 135-FINDINGS-VERIFICATION.md before any fix
 - [x] 135-02-PLAN.md — CLI option surface: remove -t/--template (CLIX-05); correct --host help + register --lan (CLIX-04)
-- [ ] 135-03-PLAN.md — scaffold: drop playerCount + dead $schema from boardsmith.json (CLIX-01/CLIX-02)
+- [x] 135-03-PLAN.md — scaffold: drop playerCount + dead $schema from boardsmith.json (CLIX-01/CLIX-02)
 - [ ] 135-04-PLAN.md — build.ts: derive manifest playerCount from gameDefinition (CLIX-01)
 - [ ] 135-05-PLAN.md — validate.ts: unknown-key rejection + did-you-mean + playerCount migration (CLIX-02/CLIX-01); 50MB bundle constant (CLIX-03)
 - [ ] 135-06-PLAN.md — dev.ts: default 127.0.0.1 + non-localhost banner (CLIX-04); fail-fast numeric flags + --ai post-move (CLIX-06); single gameDefinition read (CLIX-01); unknown-key startup warn (CLIX-02)
@@ -252,7 +252,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 132. Engine Element & Builder Safety | 5/5 | Complete    | 2026-07-03 |
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
 | 134. UI & Session Interaction Guardrails | 5/5 | Complete    | 2026-07-03 |
-| 135. CLI & Dev Experience | 2/6 | In Progress|  |
+| 135. CLI & Dev Experience | 3/6 | In Progress|  |
 | 136. Client SDK & Protocol | 0/TBD | Not started | - |
 | 137. Testing Utilities | 0/TBD | Not started | - |
 | 138. Cross-Repo Migration | 0/TBD | Not started | - |

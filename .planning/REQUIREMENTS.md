@@ -48,8 +48,8 @@
 
 ### CLI & Dev Experience (CLIX)
 
-- [ ] **CLIX-01**: Player-count has ONE source of truth — boardsmith.json `playerCount` vs `gameDefinition` disagreement is impossible or errors loudly; scaffold no longer hardcodes both (F9)
-- [ ] **CLIX-02**: `boardsmith validate` rejects unknown boardsmith.json keys (catches misspelled `gameOptions`/`playerOptions`/`colorPalette`) (F22)
+- [x] **CLIX-01**: Player-count has ONE source of truth — boardsmith.json `playerCount` vs `gameDefinition` disagreement is impossible or errors loudly; scaffold no longer hardcodes both (F9)
+- [x] **CLIX-02**: `boardsmith validate` rejects unknown boardsmith.json keys (catches misspelled `gameOptions`/`playerOptions`/`colorPalette`) (F22)
 - [ ] **CLIX-03**: Bundle-size validation enforces the actual server limit its comment states (F21)
 - [x] **CLIX-04**: `boardsmith dev` host binding matches its documented default (localhost unless `--host` given), or help text corrected to state 0.0.0.0 with rationale (F32)
 - [x] **CLIX-05**: `boardsmith init -t/--template` either works or is removed from the CLI surface and docs (F33)
@@ -117,8 +117,8 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | UIX-03 | Phase 134 | Complete |
 | UIX-04 | Phase 134 | Complete |
 | UIX-05 | Phase 134 | Complete |
-| CLIX-01 | Phase 135 | Pending |
-| CLIX-02 | Phase 135 | Pending |
+| CLIX-01 | Phase 135 | Complete |
+| CLIX-02 | Phase 135 | Complete |
 | CLIX-03 | Phase 135 | Pending |
 | CLIX-04 | Phase 135 | Complete |
 | CLIX-05 | Phase 135 | Complete |
