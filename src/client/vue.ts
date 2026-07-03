@@ -123,11 +123,17 @@ export function useGame(
     // promise settles, rather than guessing with a fixed delay. When
     // autoConnect is false, `opened` is the connection's still-resolved
     // default (no socket was dialed), so this clears immediately.
-    connection.opened
+    // Identity guard: if setupConnection ran again before this settled
+    // (gameId switch mid-handshake), the superseded connection must not
+    // clear isSettingUp or write a stale error over the new connection.
+    const thisConnection = connection;
+    thisConnection.opened
       .then(() => {
+        if (connection !== thisConnection) return;
         isSettingUp = false;
       })
       .catch((err) => {
+        if (connection !== thisConnection) return;
         isSettingUp = false;
         error.value = err instanceof Error ? err : new Error(String(err));
       });

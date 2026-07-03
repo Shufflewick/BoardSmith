@@ -131,3 +131,54 @@ describe('useGame connection setup (SDK-01/SDK-02)', () => {
     scope.stop();
   });
 });
+
+describe('useGame stale connection handlers (WR-03)', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a superseded connection settling opened does not clobber the new connection setup', async () => {
+    const client = makeClient();
+    const originalConnect = client.connect.bind(client);
+    vi.spyOn(client, 'connect').mockImplementation((gameId, options) =>
+      originalConnect(gameId, {
+        ...options,
+        wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+      })
+    );
+
+    const gameId = ref<string | null>('game-1');
+    const playerSeat = ref<number | undefined>(1);
+    const scope = effectScope();
+    let game!: ReturnType<typeof useGame>;
+
+    scope.run(() => {
+      game = useGame(client, gameId, { autoConnect: true, playerSeat });
+    });
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    // Switch games while socket 1 is still mid-handshake. disconnect() on
+    // the old connection rejects its pending `opened`; without an identity
+    // guard, the old .catch writes a stale error and clears isSettingUp
+    // while the NEW connection is still setting up.
+    gameId.value = 'game-2';
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(game.error.value).toBeNull();
+
+    // isSettingUp must still be true (game-2's socket never opened), so the
+    // playerSeat debounce watcher must not re-dial a third socket.
+    playerSeat.value = 2;
+    await vi.advanceTimersByTimeAsync(60);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    scope.stop();
+  });
+});
