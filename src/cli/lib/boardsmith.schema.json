@@ -7,6 +7,10 @@
   "additionalProperties": false,
   "required": ["name", "displayName", "description"],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional editor schema reference (point it at this file's $id for IDE autocomplete/validation). Ignored by the CLI — this is the one key exempt from the read-site rule above, because the schema itself can only be consumed through it."
+    },
     "name": {
       "type": "string",
       "description": "Machine-readable game identifier (kebab-case). Scaffold-emitted."

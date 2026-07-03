@@ -50,6 +50,19 @@ describe('config-schema', () => {
     const result = findUnknownKeys({ name: 'x', completelyUnrelatedXyz: true });
     expect(result).toEqual([{ key: 'completelyUnrelatedXyz' }]);
   });
+
+  it('accepts the editor $schema key — the shipped boardsmith.schema.json is consumed via exactly this key (CR-02 regression)', () => {
+    // Every game in ~/BoardSmithGames carries $schema; rejecting it would make
+    // validate hard-fail all of them while this repo simultaneously ships a
+    // schema with a public $id that editors can only reference through $schema.
+    const result = findUnknownKeys({
+      $schema: 'https://boardsmith.io/schemas/boardsmith.schema.json',
+      name: 'x',
+      displayName: 'X',
+      description: 'desc',
+    });
+    expect(result).toEqual([]);
+  });
 });
 
 describe('validate.ts checkMetadataIssues', () => {
@@ -102,6 +115,16 @@ describe('validate.ts checkMetadataIssues', () => {
       description: 'desc',
       ui: 'auto',
       gameOptions: [],
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('passes a config carrying the editor $schema key (CR-02 regression)', () => {
+    const issues = checkMetadataIssues({
+      $schema: 'https://boardsmith.io/schemas/boardsmith.schema.json',
+      name: 'x',
+      displayName: 'X',
+      description: 'desc',
     });
     expect(issues).toEqual([]);
   });
