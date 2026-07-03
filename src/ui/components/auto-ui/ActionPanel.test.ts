@@ -236,17 +236,18 @@ function makeTestController(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('ActionPanel QUICK-01 — toast.error on rejected actions', () => {
+describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell is the sole chokepoint)', () => {
   beforeEach(() => {
     mockToast.error.mockReset();
   });
 
-  it('toast.error is called with fill() rejection error string', async () => {
+  it('does NOT call toast.error on fill() rejection — the controller is invoked and the failure is left to lastError/GameShell', async () => {
+    const fillMock = vi.fn().mockResolvedValue({ valid: false, error: 'Selection is invalid.' });
     const controller = makeTestController({
       currentAction: ref('testAction'),
       currentPick: ref({ name: 'color', type: 'choice', prompt: 'Pick a color' }),
       currentChoices: ref([{ value: 'red', display: 'Red' }]),
-      fill: vi.fn().mockResolvedValue({ valid: false, error: 'Selection is invalid.' }),
+      fill: fillMock,
     });
 
     const wrapper = mount(ActionPanel, {
@@ -260,12 +261,18 @@ describe('ActionPanel QUICK-01 — toast.error on rejected actions', () => {
     await choiceBtn.trigger('click');
     await Promise.resolve(); // flush async fill()
 
-    expect(mockToast.error).toHaveBeenCalledWith('Selection is invalid.');
+    // The controller was invoked (this is what sets actionController.lastError,
+    // which GameShell's central watch surfaces as the single failure toast).
+    expect(fillMock).toHaveBeenCalledWith('color', 'red');
+    // ActionPanel itself must NOT call toast.error — that would double-toast
+    // alongside the GameShell watch.
+    expect(mockToast.error).not.toHaveBeenCalled();
   });
 
-  it('toast.error is called with execute() rejection error string', async () => {
+  it('does NOT call toast.error on execute() rejection — the controller is invoked and the failure is left to lastError/GameShell', async () => {
+    const executeMock = vi.fn().mockResolvedValue({ success: false, error: 'Not your turn.' });
     const controller = makeTestController({
-      execute: vi.fn().mockResolvedValue({ success: false, error: 'Not your turn.' }),
+      execute: executeMock,
     });
 
     const wrapper = mount(ActionPanel, {
@@ -283,7 +290,33 @@ describe('ActionPanel QUICK-01 — toast.error on rejected actions', () => {
     await actionBtn.trigger('click');
     await Promise.resolve(); // flush async execute()
 
-    expect(mockToast.error).toHaveBeenCalledWith('Not your turn.');
+    expect(executeMock).toHaveBeenCalledWith('testAction', {});
+    expect(mockToast.error).not.toHaveBeenCalled();
+  });
+
+  it('executeAction finally still emits cancelSelection on a rejected action (behavior preserved, no boardInteraction provider needed)', async () => {
+    const controller = makeTestController({
+      execute: vi.fn().mockResolvedValue({ success: false, error: 'Not your turn.' }),
+    });
+
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { actionController: controller } },
+      props: {
+        availableActions: ['testAction'],
+        playerSeat: 1,
+        isMyTurn: true,
+      },
+    });
+
+    const actionBtn = wrapper.find('.action-btn');
+    await actionBtn.trigger('click');
+    await Promise.resolve();
+
+    // finally's boardInteraction?.clear() is a no-op with no provider (optional
+    // chaining), but emit('cancelSelection') must still fire — proving the
+    // finally block runs even though the empty catch swallows nothing here
+    // (execute() resolves, it doesn't throw).
+    expect(wrapper.emitted('cancelSelection')).toBeTruthy();
   });
 });
 

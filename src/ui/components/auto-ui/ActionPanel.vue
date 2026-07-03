@@ -14,7 +14,6 @@
  * action controller is provided via inject('actionController').
  */
 import { ref, computed, watch, inject } from 'vue';
-import { useToast } from '../../composables/useToast';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import type {
@@ -36,7 +35,6 @@ if (!_actionController) {
   throw new Error('ActionPanel requires actionController to be provided via inject. Use inside GameShell.');
 }
 const actionController = _actionController;
-const toast = useToast();
 
 // Re-export types
 export type { ChoiceWithRefs, ValidElement, ElementRef };
@@ -685,8 +683,9 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
   // Controller handles: validation, repeating selections, auto-execute
   const result = await actionController.fill(name, value);
   if (!result.valid) {
-    console.error('Selection failed:', result.error);
-    toast.error(result.error || 'Selection failed.');
+    // UIX-01: no direct toast here — fill() sets actionController.lastError
+    // on every failure path, which GameShell's central watch surfaces as the
+    // single failure toast (parity with custom UIs, no double-toast).
     return;
   }
 
@@ -738,15 +737,13 @@ async function executeAction(actionName: string, args: Record<string, unknown>) 
   }
 
   try {
-    // Delegate to controller for execution
-    const result = await actionController.execute(actionName, filteredArgs);
-    if (!result.success) {
-      console.error('Action failed:', result.error);
-      toast.error(result.error || 'Action failed.');
-    }
-  } catch (err) {
-    console.error('Execute action error:', err);
-    toast.error(err instanceof Error ? err.message : 'Failed to execute action.');
+    // Delegate to controller for execution. execute() never re-throws — on
+    // failure it sets actionController.lastError internally, which GameShell's
+    // central watch surfaces as the single failure toast (UIX-01 chokepoint).
+    // The catch below is defensive only (kept so `finally` always runs).
+    await actionController.execute(actionName, filteredArgs);
+  } catch {
+    // Defensive only — execute() does not throw; lastError already covers it.
   } finally {
     boardInteraction?.clear();
     emit('cancelSelection');

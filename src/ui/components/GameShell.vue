@@ -1795,6 +1795,23 @@ watch(awaitingPlayerNames, (newVal) => {
   }
 }, { immediate: false });
 
+// UIX-01: single chokepoint for action-failure feedback. actionController is
+// shared by ActionPanel AND every custom UI (via useBoardInteraction/inject),
+// so watching lastError here covers both parity paths with exactly one toast
+// per failure — ActionPanel's own direct toast.error calls are removed (see
+// ActionPanel.vue) so this watch is the ONLY place a failed action surfaces.
+// Never render undefined/[object Object]/.stack — lastError is always either
+// an engine/server error string or the UIX-01 fallback copy below.
+watch(actionController.lastError, (err) => {
+  if (!err) return;
+  const text = typeof err === 'string' && err.length > 0
+    ? err
+    : `${actionController.currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
+  toast.error(text);
+  assertiveMessage.value = text;
+  emitAnnounce('assertive', text);
+}, { immediate: false });
+
 // Expose to parent/slots
 defineExpose({
   state,

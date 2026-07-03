@@ -28,7 +28,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 // ── Minimal LobbyInfo-like shape ─────────────────────────────────────────────
 // Only the fields that showHintProp reads are required.
@@ -119,5 +119,141 @@ describe('GameShell — showHintProp computed', () => {
       { state: { hasAIPlayers: true } },
     );
     expect(showHintProp.value).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// GameShell — actionController.lastError -> toast chokepoint (Plan 134-03,
+// Task 1, UIX-01 part 1)
+//
+// Production wiring under test (GameShell.vue, after actionController and
+// toast are both constructed):
+//
+//   watch(actionController.lastError, (err) => {
+//     if (!err) return;
+//     const text = typeof err === 'string' && err.length > 0
+//       ? err
+//       : `${actionController.currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
+//     toast.error(text);
+//     assertiveMessage.value = text;
+//     emitAnnounce('assertive', text);
+//   }, { immediate: false });
+//
+// This is the SOLE toast-owning chokepoint for action failures — ActionPanel's
+// three direct toast.error call sites are removed (see ActionPanel.test.ts),
+// so a failed action (from ActionPanel OR a custom UI, both sharing the same
+// actionController instance) produces exactly ONE toast via this watch.
+//
+// Uses a minimal harness (same pattern as showHintProp above) that mirrors the
+// exact production watch body, rather than mounting the full WebSocket-
+// dependent GameShell component.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)', () => {
+  function buildToastHarness() {
+    const lastError = ref<string | null>(null);
+    const currentAction = ref<string | null>(null);
+    const assertiveMessage = ref('');
+    const toastErrorCalls: string[] = [];
+    const announceCalls: Array<{ level: string; text: string }> = [];
+
+    const toast = { error: (msg: string) => toastErrorCalls.push(msg) };
+    const emitAnnounce = (level: 'polite' | 'assertive', text: string) => {
+      announceCalls.push({ level, text });
+    };
+
+    // ── Production watch wiring (mirrors GameShell.vue exactly) ──────────
+    watch(lastError, (err) => {
+      if (!err) return;
+      const text = typeof err === 'string' && err.length > 0
+        ? err
+        : `${currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
+      toast.error(text);
+      assertiveMessage.value = text;
+      emitAnnounce('assertive', text);
+    }, { immediate: false });
+
+    return { lastError, currentAction, assertiveMessage, toastErrorCalls, announceCalls };
+  }
+
+  it('fires exactly one toast.error and updates assertiveMessage when lastError transitions null -> a string', async () => {
+    const { lastError, assertiveMessage, toastErrorCalls, announceCalls } = buildToastHarness();
+
+    lastError.value = 'boom';
+    await Promise.resolve(); // flush watcher (default flush: 'pre', batched to next tick)
+    await Promise.resolve();
+
+    expect(toastErrorCalls).toEqual(['boom']);
+    expect(assertiveMessage.value).toBe('boom');
+    expect(announceCalls).toEqual([{ level: 'assertive', text: 'boom' }]);
+  });
+
+  it('does NOT fire on mount (immediate: false) even if lastError starts non-null', async () => {
+    const lastError = ref<string | null>('pre-existing');
+    const assertiveMessage = ref('');
+    const toastErrorCalls: string[] = [];
+    const toast = { error: (msg: string) => toastErrorCalls.push(msg) };
+
+    watch(lastError, (err) => {
+      if (!err) return;
+      toast.error(err);
+      assertiveMessage.value = err;
+    }, { immediate: false });
+
+    await Promise.resolve();
+    expect(toastErrorCalls).toEqual([]);
+  });
+
+  it('a single failed action that sets lastError multiple times within one tick produces exactly one toast (Vue batches; no flush:sync)', async () => {
+    const { lastError, toastErrorCalls } = buildToastHarness();
+
+    // Simulate a failure path that clears then re-sets lastError synchronously
+    // within the same tick (mirrors execute()'s `lastError.value = null` at
+    // the start of a call, followed by a synchronous failure branch).
+    lastError.value = null;
+    lastError.value = 'first';
+    lastError.value = 'second';
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Vue's default watch flush batches synchronous mutations within a tick;
+    // only the settled final value produces one toast.
+    expect(toastErrorCalls).toEqual(['second']);
+  });
+
+  it('never renders undefined/[object Object] — a falsy lastError (null or empty string) never toasts', async () => {
+    const { lastError, toastErrorCalls } = buildToastHarness();
+
+    // fill()/execute() internally coalesce to a non-empty string via
+    // `result.error || 'Action failed'`, so lastError is always either null
+    // (no error) or a real message once set. The watch's `if (!err) return;`
+    // guard is the belt-and-suspenders proof that an empty/falsy value can
+    // never reach toast.error and render as undefined/[object Object].
+    lastError.value = '';
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(toastErrorCalls).toEqual([]);
+
+    lastError.value = null;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(toastErrorCalls).toEqual([]);
+  });
+
+  it('a failed action originating from ActionPanel produces exactly ONE toast via this watch, not from ActionPanel itself', async () => {
+    // ActionPanel.vue no longer calls toast.error directly (see
+    // ActionPanel.test.ts) — its fill()/execute() failure paths only set
+    // actionController.lastError on the SHARED controller instance. This test
+    // proves that shared-instance failure is fully covered by this one watch.
+    const { lastError, toastErrorCalls } = buildToastHarness();
+
+    // ActionPanel's executeAction() calling actionController.execute() and
+    // getting {success:false} results in exactly this: lastError transitions
+    // to the error string, nothing else.
+    lastError.value = 'Not your turn.';
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(toastErrorCalls).toEqual(['Not your turn.']);
   });
 });
