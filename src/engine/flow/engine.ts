@@ -1124,7 +1124,7 @@ export class FlowEngine<G extends Game = Game> {
 
       frame.data = {
         ...frame.data,
-        eligibleSeats: players.slice(startIndex).map(p => p.seat),
+        eligibleSeats: [...players.slice(startIndex), ...players.slice(0, startIndex)].map(p => p.seat),
         nextIndex: 0,
       };
     }

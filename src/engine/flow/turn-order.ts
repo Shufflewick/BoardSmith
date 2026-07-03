@@ -22,9 +22,8 @@ export interface TurnOrderConfig {
  * })
  * ```
  *
- * Note: eachPlayer iterates from startingPlayer to the end of the list,
- * it does NOT wrap around. For full round-robin from a specific player,
- * use CONTINUE or manually structure your flow.
+ * Note: eachPlayer wraps around the full player list starting from
+ * startingPlayer, so every player gets a turn in the round.
  */
 export const TurnOrder = {
   /**
@@ -42,10 +41,8 @@ export const TurnOrder = {
   } satisfies TurnOrderConfig,
 
   /**
-   * Continue from the current player to the end of the player list.
-   * Note: This goes from current player to end, it doesn't wrap around.
-   * For a full round starting from a specific player, structure your
-   * flow to handle wrap-around explicitly.
+   * Continue from the current player, wrapping around the full player
+   * list so every player gets a turn this round.
    */
   CONTINUE: {
     direction: 'forward' as const,
@@ -61,12 +58,12 @@ export const TurnOrder = {
   } satisfies TurnOrderConfig,
 
   /**
-   * Start from a specific player position and go forward to the end.
-   * Note: Does NOT wrap around - goes from startPlayer to last player only.
+   * Start from a specific player position and wrap around the full
+   * player list, so every player gets a turn this round.
    *
    * @example
    * ```typescript
-   * // Start from player 1, will visit players 1, 2, ... (not 0)
+   * // Start from player 1, wraps around to visit every player
    * eachPlayer({
    *   ...TurnOrder.START_FROM(1),
    *   do: actionStep({ actions: ['bet'] })

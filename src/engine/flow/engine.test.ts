@@ -1728,7 +1728,7 @@ describe('Turn Order Presets', () => {
     expect(visitedPlayers).toEqual([1, 3]);
   });
 
-  it('should use START_FROM with position (no wrap-around)', () => {
+  it('should use START_FROM with position (wraps around)', () => {
     const visitedPlayers: number[] = [];
 
     const flow = defineFlow({
@@ -1743,11 +1743,11 @@ describe('Turn Order Presets', () => {
     const engine = new FlowEngine(game, flow);
     engine.start();
 
-    // Starts from player at position 2, goes to end (no wrap-around)
-    expect(visitedPlayers).toEqual([2, 3]);
+    // Starts from player at position 2, wraps back around to player 1
+    expect(visitedPlayers).toEqual([2, 3, 1]);
   });
 
-  it('should use CONTINUE from current player', () => {
+  it('should use CONTINUE from current player (wraps around)', () => {
     // Set current player to position 2
     game.setCurrentPlayer(game.getPlayer(3)!);
 
@@ -1765,8 +1765,8 @@ describe('Turn Order Presets', () => {
     const engine = new FlowEngine(game, flow);
     engine.start();
 
-    // Should start from player 2, goes to end
-    expect(visitedPlayers).toEqual([3]);
+    // Should start from player 3, wrap back around to players 1 and 2
+    expect(visitedPlayers).toEqual([3, 1, 2]);
   });
 
   it('should use ACTIVE_ONLY to skip eliminated players', () => {
