@@ -11,6 +11,7 @@ import open from 'open';
 import type { GameDefinition, Op, OpResult } from '../../session/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
+import { findUnknownKeys } from '../lib/config-schema.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
 type RuntimeExecuteOp = (
@@ -26,10 +27,107 @@ import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 interface DevOptions {
   port: string;
   host?: string;
+  lan?: boolean;
   players: string;
   ai?: string[];
   aiLevel?: string;
   lockTeaching?: boolean;
+}
+
+/** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
+ * it, prints an actionable `chalk.red` error, and exits non-zero. Kept as a
+ * distinct class (not a bare Error) so devCommand's catch can distinguish an
+ * intentional validation failure from an unexpected bug. */
+export class DevFlagError extends Error {}
+
+/**
+ * Fail-fast positive-integer parser for `--port`/`--players` (CLIX-06),
+ * copying the `simulate.ts:145-153` idiom. Pure (no process.exit) so it is
+ * directly unit-testable without a real dev server (PROC-02).
+ */
+export function parsePositiveInt(flagName: string, raw: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new DevFlagError(`Error: --${flagName} must be a positive integer, got "${raw}"`);
+  }
+  return value;
+}
+
+/**
+ * Fail-fast `--ai` seat parser (CLIX-06). Player positions are 1-indexed and
+ * comma-separated per flag occurrence (`--ai 1,2` or repeated `--ai 1 --ai 2`).
+ * Unlike the old `.filter(n => !isNaN(n))` behavior, a non-numeric entry now
+ * throws instead of being silently dropped.
+ */
+export function parseAiSeats(raw: string[] | undefined): number[] {
+  if (!raw) return [];
+  const seats: number[] = [];
+  for (const group of raw) {
+    for (const part of group.split(',')) {
+      const trimmed = part.trim();
+      const value = Number(trimmed);
+      if (!Number.isInteger(value)) {
+        throw new DevFlagError(`Error: --ai must be a comma-separated list of positive integers, got "${trimmed}"`);
+      }
+      seats.push(value);
+    }
+  }
+  return seats;
+}
+
+/**
+ * CLIX-06 / F34: `--players` outside the game's [minPlayers, maxPlayers]
+ * range now ERRORS (naming the bound) instead of silently clamping.
+ */
+export function resolveEffectivePlayerCount(playerCount: number, minPlayers: number, maxPlayers: number): number {
+  if (playerCount < minPlayers || playerCount > maxPlayers) {
+    throw new DevFlagError(
+      `Error: --players ${playerCount} is out of range for this game (must be between ${minPlayers} and ${maxPlayers}).`,
+    );
+  }
+  return playerCount;
+}
+
+/**
+ * CLIX-06 / F34 (Pitfall 3): `--ai` seats must be validated against the
+ * EFFECTIVE (post-resolution) player count, not the raw pre-clamp CLI value —
+ * call this only after `resolveEffectivePlayerCount` has run.
+ */
+export function validateAiSeats(aiPlayers: number[], effectivePlayerCount: number): void {
+  const invalidAiPlayers = aiPlayers.filter(p => p < 1 || p > effectivePlayerCount);
+  if (invalidAiPlayers.length > 0) {
+    throw new DevFlagError(
+      `Error: Invalid AI player position(s): ${invalidAiPlayers.join(', ')}\n` +
+        `Player positions are 1-indexed (1 to ${effectivePlayerCount}).\n` +
+        `Example: --ai 2 for a 2-player game means player 2 is AI.`,
+    );
+  }
+}
+
+/**
+ * CLIX-04 / F32: `boardsmith dev` defaults to 127.0.0.1 (local-only).
+ * `--lan` is shorthand for `--host 0.0.0.0`; an explicit `--host` always wins.
+ * This REVERSES the previous LAN-by-default (0.0.0.0) — 135-RESEARCH.md's
+ * State-of-the-Art table incorrectly stated the default stayed 0.0.0.0; the
+ * F32 verdict in 135-FINDINGS-VERIFICATION.md corrects that and governs here.
+ */
+export function resolveHost(options: { host?: string; lan?: boolean }): { host: string; isNonLocal: boolean } {
+  const host = options.host ?? (options.lan ? '0.0.0.0' : '127.0.0.1');
+  const isNonLocal = host !== '127.0.0.1' && host !== 'localhost';
+  return { host, isNonLocal };
+}
+
+/**
+ * CLIX-02 / F22: loud (non-exiting) startup warning for unknown top-level
+ * `boardsmith.json` keys, reusing the Plan 05 `config-schema` module. `dev`
+ * WARNS (does not exit) — `boardsmith validate` is the hard gate.
+ */
+export function formatUnknownKeyWarnings(config: Record<string, unknown>): string[] {
+  return findUnknownKeys(config).map(({ key, suggestion }) =>
+    suggestion
+      ? `Warning: Unknown boardsmith.json key "${key}" (did you mean "${suggestion}"?) — this key is ignored.`
+      : `Warning: Unknown boardsmith.json key "${key}" — this key is ignored.`,
+  );
 }
 
 /** Option definition in boardsmith.json array format (id/name is a field, not a key) */
@@ -46,9 +144,8 @@ interface ConfigOptionDefinition {
 interface BoardSmithConfig {
   name: string;
   displayName?: string;
-  minPlayers?: number;
-  maxPlayers?: number;
-  playerCount?: { min: number; max: number };
+  // CLIX-01: no minPlayers/maxPlayers/playerCount fields — gameDefinition
+  // (compiled rules) is the sole source of truth for player count.
   rulesPackage?: string;
   paths?: {
     rules?: string;
@@ -276,11 +373,35 @@ function buildDevConfig(args: {
   };
 }
 
+/**
+ * Runs a `DevFlagError`-throwing validator; on failure prints the actionable
+ * `chalk.red` message and exits non-zero (`devCommand`'s `process.exit(1)`
+ * convention). Any other error rethrows — this only intercepts intentional
+ * flag/host validation failures, not unexpected bugs.
+ */
+function exitOnDevFlagError<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    if (error instanceof DevFlagError) {
+      console.error(chalk.red(error.message));
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
 export async function devCommand(options: DevOptions): Promise<void> {
-  const port = parseInt(options.port, 10);
-  const playerCount = parseInt(options.players, 10);
-  // Default to all interfaces so other computers on the LAN can join the game.
-  const host = options.host ?? '0.0.0.0';
+  // Fail-fast on non-numeric --port/--players/--ai (CLIX-06) — actionable
+  // errors before any server work, matching simulate.ts's Number.isInteger idiom.
+  const port = exitOnDevFlagError(() => parsePositiveInt('port', options.port));
+  const playerCount = exitOnDevFlagError(() => parsePositiveInt('players', options.players));
+  const aiPlayers = exitOnDevFlagError(() => parseAiSeats(options.ai));
+
+  // CLIX-04: default 127.0.0.1 (local-only); --lan / --host 0.0.0.0 opts into
+  // LAN exposure. This REVERSES the previous LAN-by-default (0.0.0.0) per the
+  // F32 verdict in 135-FINDINGS-VERIFICATION.md.
+  const { host, isNonLocal } = resolveHost({ host: options.host, lan: options.lan });
   const cwd = process.cwd();
 
   if (UNSAFE_PORTS.has(port)) {
@@ -289,23 +410,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Parse AI options (player positions are 1-indexed)
-  const aiPlayers = options.ai
-    ? options.ai.flatMap(s => s.split(',').map(n => parseInt(n.trim(), 10))).filter(n => !isNaN(n))
-    : [];
   const aiLevel = options.aiLevel ?? 'medium';
   // Single source of truth for the teaching lockout — passed into both the server
   // (MultiplayerHost → createDevSession adapters) and the client (buildDevConfig →
   // DevHost.vue init postMessage → GameShell).
   const teachingDisabled = options.lockTeaching === true;
 
-  const invalidAiPlayers = aiPlayers.filter(p => p < 1 || p > playerCount);
-  if (invalidAiPlayers.length > 0) {
-    console.error(chalk.red(`Error: Invalid AI player position(s): ${invalidAiPlayers.join(', ')}`));
-    console.error(chalk.dim(`Player positions are 1-indexed (1 to ${playerCount}).`));
-    console.error(chalk.dim(`Example: --ai 2 for a 2-player game means player 2 is AI.`));
-    process.exit(1);
-  }
+  // NOTE: --ai seat validation is intentionally NOT done here (Pitfall 3 /
+  // F34) — it must run against the EFFECTIVE post-resolution player count,
+  // which is only known once gameDefinition's minPlayers/maxPlayers are
+  // loaded below. See the `validateAiSeats` call after `resolveEffectivePlayerCount`.
 
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) {
@@ -316,6 +430,19 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   console.log(chalk.cyan(`\nStarting development server for ${config.displayName || config.name}...`));
+
+  // CLIX-02: loud (non-exiting) warning on unknown top-level boardsmith.json
+  // keys — dev warns, `boardsmith validate` is the hard gate.
+  for (const warning of formatUnknownKeyWarnings(config as unknown as Record<string, unknown>)) {
+    console.warn(chalk.yellow(`  ${warning}`));
+  }
+
+  // CLIX-04 (T-135-12): loud, unmissable banner whenever the effective bind
+  // host is non-localhost — exposure to the LAN must never be silent.
+  if (isNonLocal) {
+    console.log(chalk.yellow(`  ⚠ Serving to your whole network (binding ${host}) — anyone on your LAN can join and browse project source.`));
+    console.log(chalk.yellow(`    Pass --host 127.0.0.1 for local-only.`));
+  }
 
   const context = getProjectContext(cwd);
   if (context === 'monorepo') {
@@ -356,8 +483,12 @@ export async function devCommand(options: DevOptions): Promise<void> {
     gameDefinition = runtime.gameDefinition;
     runExecuteOp = runtime.executeOp;
 
-    minPlayers = gameDefinition.minPlayers ?? config.playerCount?.min ?? config.minPlayers ?? 2;
-    maxPlayers = gameDefinition.maxPlayers ?? config.playerCount?.max ?? config.maxPlayers ?? 4;
+    // CLIX-01: gameDefinition (code) is the SOLE source of truth for player
+    // count — the boardsmith.json config.playerCount/minPlayers fallbacks are
+    // removed (they are provably dead: the scaffold always writes
+    // gameDefinition.minPlayers/maxPlayers, per the F9 verdict).
+    minPlayers = gameDefinition.minPlayers;
+    maxPlayers = gameDefinition.maxPlayers;
 
     // boardsmith.json is the single source of truth for option definitions.
     const gameOptions = config.gameOptions
@@ -390,7 +521,13 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
-  const effectivePlayerCount = Math.min(Math.max(playerCount, minPlayers), maxPlayers);
+  // CLIX-06 / F34 (Pitfall 3): out-of-range --players now ERRORS (naming the
+  // bound) instead of silently clamping, and --ai seats are validated against
+  // this EFFECTIVE count, not the raw pre-clamp CLI value — both checks must
+  // run here, after minPlayers/maxPlayers are known.
+  const effectivePlayerCount = exitOnDevFlagError(() => resolveEffectivePlayerCount(playerCount, minPlayers, maxPlayers));
+  exitOnDevFlagError(() => validateAiSeats(aiPlayers, effectivePlayerCount));
+
   const devConfig = buildDevConfig({
     gameDefinition,
     minPlayers,
