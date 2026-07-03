@@ -93,7 +93,7 @@
  * ```
  */
 
-import { ref, readonly, computed, watch, inject, nextTick } from 'vue';
+import { ref, readonly, computed, watch, inject, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { useBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
@@ -962,15 +962,26 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    *
    * Registers an additional hook; hooks run in registration order. Call the
    * returned function to unregister this hook.
+   *
+   * Pit of Success (WR-04): when called inside a component/effect scope (the
+   * normal case — a board component registering in setup()), the hook is
+   * automatically unregistered when that scope disposes. Without this, every
+   * remount (dev UI switcher, seat switch, HMR) would accumulate a stale hook
+   * closing over the unmounted component's dead DOM. Registrations made
+   * outside any scope persist until the returned unregister fn is called.
    */
   function setBeforeAutoExecute(hook: BeforeAutoExecuteHook): () => void {
     beforeAutoExecuteHooks.value.push(hook);
-    return () => {
+    const unregister = (): void => {
       const idx = beforeAutoExecuteHooks.value.indexOf(hook);
       if (idx !== -1) {
         beforeAutoExecuteHooks.value.splice(idx, 1);
       }
     };
+    if (getCurrentScope()) {
+      onScopeDispose(unregister);
+    }
+    return unregister;
   }
 
   // === Methods ===

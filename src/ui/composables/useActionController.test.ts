@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, effectScope } from 'vue';
 import {
   useActionController,
   injectActionController,
@@ -669,6 +669,37 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(calls).toEqual(['one-shot', 'after']);
+    });
+
+    it('auto-unregisters a hook registered inside a component/effect scope when that scope disposes (WR-04)', async () => {
+      const calls: string[] = [];
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      // A board component registering in setup() runs inside a component scope.
+      // When that component unmounts (dev UI switcher, seat switch, HMR), its
+      // hook must not leak into the still-living controller — under replace
+      // semantics this self-healed; under accumulation it must auto-unregister.
+      const scope = effectScope();
+      scope.run(() => {
+        controller.setBeforeAutoExecute(() => { calls.push('scoped'); });
+      });
+      controller.setBeforeAutoExecute(() => { calls.push('outside-scope'); });
+
+      scope.stop(); // the component unmounted
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      // Only the scope-less registration survives; the stale hook is gone.
+      expect(calls).toEqual(['outside-scope']);
     });
 
     it('setBeforeAutoExecute returns an unregister function that removes only that hook', async () => {

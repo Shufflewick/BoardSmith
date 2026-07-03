@@ -486,6 +486,12 @@ export interface UseActionControllerReturn {
    *
    * Registers an additional hook; hooks run in registration order. Call the
    * returned function to unregister this hook.
+   *
+   * When called inside a component/effect scope (the normal case — a board
+   * component registering in setup()), the hook is automatically unregistered
+   * when that scope disposes, so remounts (dev UI switcher, HMR) never
+   * accumulate stale hooks. Registrations made outside any scope persist
+   * until the returned unregister fn is called.
    */
   setBeforeAutoExecute: (
     hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
