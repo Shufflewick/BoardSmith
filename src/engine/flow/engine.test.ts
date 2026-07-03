@@ -2051,6 +2051,64 @@ describe('Unknown action warning (F20)', () => {
   });
 });
 
+describe('ENG-03 simultaneous action failure signaling', () => {
+  let game: TestGame;
+
+  beforeEach(() => {
+    game = new TestGame({ playerCount: 3 });
+
+    // A validated action: rejects any choice outside ['a', 'b', 'c'].
+    const testAction = Action.create('test')
+      .chooseFrom('choice', { choices: ['a', 'b', 'c'] })
+      .execute((args) => {
+        return { success: true, data: { choice: args.choice } };
+      });
+
+    game.registerAction(testAction);
+  });
+
+  it('sets actionError when a simultaneous action fails validation, without disturbing awaitingPlayers/awaitingInput', () => {
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['test'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    const startState = engine.start();
+
+    expect(startState.awaitingInput).toBe(true);
+    expect(startState.awaitingPlayers).toHaveLength(3);
+
+    // Player 1 submits an invalid choice ('z' is not in ['a', 'b', 'c']).
+    const state = engine.resume('test', { choice: 'z' }, 1);
+
+    expect(state.actionError).toBeDefined();
+    expect(state.awaitingInput).toBe(true);
+    expect(state.awaitingPlayers).toHaveLength(3);
+    expect(state.awaitingPlayers?.every((p) => !p.completed)).toBe(true);
+  });
+
+  it('clears actionError once a later action in the same step succeeds (fail-then-succeed)', () => {
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['test'],
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    // Player 1 fails first.
+    const failState = engine.resume('test', { choice: 'z' }, 1);
+    expect(failState.actionError).toBeDefined();
+
+    // Player 2 then succeeds in the same step.
+    const successState = engine.resume('test', { choice: 'a' }, 2);
+    expect(successState.actionError).toBeUndefined();
+  });
+});
+
 describe('Flow variable get() unset-key warning (F24)', () => {
   let game: TestGame;
   let warnSpy: ReturnType<typeof vi.spyOn>;

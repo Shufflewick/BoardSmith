@@ -9,6 +9,7 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  simultaneousActionStep,
   sequence,
   execute,
   type FlowContext,
@@ -111,6 +112,28 @@ class Card extends Piece<TestGame> {
 
 class Hand extends Space<TestGame> {}
 class Deck extends Space<TestGame> {}
+
+// Minimal game whose entire flow is a single simultaneous-action-step with a
+// validated action, for ENG-03 (failed simultaneous action must not be
+// recorded in actionHistory).
+class SimultaneousTestGame extends Game<SimultaneousTestGame, Player> {
+  constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
+    super(options);
+
+    const testAction = Action.create('test')
+      .chooseFrom('choice', { choices: ['a', 'b', 'c'] })
+      .execute((args) => ({ success: true, data: { choice: args.choice } }));
+
+    this.registerAction(testAction);
+
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['test'],
+      }),
+    });
+    this.setFlow(flow);
+  }
+}
 
 // Minimal game whose flow throws from an unguarded `execute()` node
 // immediately after the triggering action completes, so the exception
@@ -247,6 +270,24 @@ describe('GameRunner', () => {
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe(ErrorCode.ACTION_EXECUTION_ERROR);
       expect(result.error).toContain('nonexistent-action');
+    });
+
+    it('ENG-03: a failing simultaneous action returns {success:false} and is NOT recorded in actionHistory', () => {
+      const simRunner = new GameRunner({
+        GameClass: SimultaneousTestGame,
+        gameType: 'simultaneous-test-game',
+        gameOptions: { playerCount: 3, seed: 'test' },
+      });
+      simRunner.start();
+
+      expect(simRunner.actionHistory).toHaveLength(0);
+
+      // 'z' is not among the registered choices -> validation failure.
+      const result = simRunner.performAction('test', 1, { choice: 'z' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(simRunner.actionHistory).toHaveLength(0);
     });
   });
 
