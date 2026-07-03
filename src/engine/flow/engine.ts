@@ -1109,16 +1109,17 @@ export class FlowEngine<G extends Game = Game> {
     // Build eligible seat list once so turn order is deterministic, then re-check
     // filter dynamically each iteration so mid-round state changes are respected.
     if (frame.data?.eligibleSeats === undefined) {
-      let players = [...this.game.all(Player as any)] as Player[];
-
-      if (config.filter) {
-        players = players.filter((p) => config.filter!(p, context));
-      }
+      const players = [...this.game.all(Player as any)] as Player[];
 
       if (config.direction === 'backward') {
         players.reverse();
       }
 
+      // Rotate to the starting player BEFORE filtering (WR-01): when the
+      // starting player is itself filtered out (e.g. LEFT_OF_DEALER combined
+      // with SKIP_IF and the player left of dealer has folded), the round
+      // must start from the next eligible seat AFTER the starting player —
+      // not silently fall back to the first seat of the filtered list.
       let startIndex = 0;
       if (config.startingPlayer) {
         const startPlayer = config.startingPlayer(context);
@@ -1126,9 +1127,15 @@ export class FlowEngine<G extends Game = Game> {
         startIndex = foundIndex >= 0 ? foundIndex : 0;
       }
 
+      let rotated = [...players.slice(startIndex), ...players.slice(0, startIndex)];
+
+      if (config.filter) {
+        rotated = rotated.filter((p) => config.filter!(p, context));
+      }
+
       frame.data = {
         ...frame.data,
-        eligibleSeats: [...players.slice(startIndex), ...players.slice(0, startIndex)].map(p => p.seat),
+        eligibleSeats: rotated.map(p => p.seat),
         nextIndex: 0,
       };
     }

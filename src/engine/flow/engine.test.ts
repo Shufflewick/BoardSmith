@@ -403,6 +403,30 @@ describe('FlowEngine', () => {
         expect(visitedPlayers).toEqual([3, 4, 1, 2]);
       });
 
+      it('starts from the next eligible seat when startingPlayer is filtered out (WR-01)', () => {
+        // LEFT_OF_DEALER + SKIP_IF composition: the player left of the dealer
+        // has folded. The round must start from the next eligible seat AFTER
+        // the filtered-out starting player (wrap semantics), not silently
+        // fall back to the first seat in the filtered list.
+        const fourPlayerGame = new TestGame({ playerCount: 4 });
+        const visitedPlayers: number[] = [];
+
+        const flow = defineFlow({
+          root: eachPlayer({
+            startingPlayer: (ctx) => ctx.game.getPlayerOrThrow(2),
+            filter: (p) => p.seat !== 2,
+            do: execute((ctx) => {
+              visitedPlayers.push(ctx.player!.seat);
+            }),
+          }),
+        });
+
+        const engine = new FlowEngine(fourPlayerGame, flow);
+        engine.start();
+
+        expect(visitedPlayers).toEqual([3, 4, 1]);
+      });
+
       it('visits all players in natural order when no startingPlayer is given (control)', () => {
         const fourPlayerGame = new TestGame({ playerCount: 4 });
         const visitedPlayers: number[] = [];
