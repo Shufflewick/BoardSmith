@@ -1444,8 +1444,11 @@ export class FlowEngine<G extends Game = Game> {
     const hasCase = Object.prototype.hasOwnProperty.call(config.cases, stringValue);
     const branch = hasCase ? config.cases[stringValue] : config.default;
     if (!branch) {
-      frame.completed = true;
-      return { continue: true, awaitingInput: false };
+      const availableCases = Object.keys(config.cases).join(', ');
+      const namePrefix = config.name ? `switchOn "${config.name}"` : 'switchOn';
+      throw new Error(
+        `${namePrefix} got ${JSON.stringify(stringValue)} — no matching case (${availableCases}) and no default`
+      );
     }
 
     this.stack.push({ node: branch, index: 0, completed: false });
