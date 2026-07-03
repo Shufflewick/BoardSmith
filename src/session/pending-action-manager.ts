@@ -74,17 +74,26 @@ export class PendingActionManager<G extends Game = Game> {
   readonly #storage?: StorageAdapter;
   readonly #callbacks: PendingActionCallbacks;
   readonly #pendingActions: Map<number, PendingActionState> = new Map();
+  /**
+   * Whether `registerDebug()` payloads (`customDebug`) are attached to the
+   * player state returned from selection-step processing (SEC-04/F15).
+   * Mirrors `GameSession`'s `#debugEnabled` — threaded in at construction,
+   * never toggled. Defaults to `false`.
+   */
+  readonly #debugEnabled: boolean;
 
   constructor(
     runner: GameRunner<G>,
     storedState: StoredGameState,
     storage: StorageAdapter | undefined,
-    callbacks: PendingActionCallbacks
+    callbacks: PendingActionCallbacks,
+    debugEnabled = false
   ) {
     this.#runner = runner;
     this.#storedState = storedState;
     this.#storage = storage;
     this.#callbacks = callbacks;
+    this.#debugEnabled = debugEnabled;
   }
 
   /**
@@ -223,7 +232,7 @@ export class PendingActionManager<G extends Game = Game> {
         done: result.done,
         nextChoices: result.nextChoices,
         actionComplete: false,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       };
     }
 
@@ -247,7 +256,7 @@ export class PendingActionManager<G extends Game = Game> {
       success: true,
       done: true,
       actionComplete: false,
-      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
     };
   }
 
@@ -352,9 +361,9 @@ export class PendingActionManager<G extends Game = Game> {
         success: actionResult.success,
         error: actionResult.error,
         flowState,
-        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+        state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       },
-      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+      state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       followUp: flowState?.followUp,
     };
   }

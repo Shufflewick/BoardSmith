@@ -77,17 +77,26 @@ export class StateHistory<G extends Game = Game> {
   #storedState: StoredGameState;
   #getRunner: () => GameRunner<G>;
   #callbacks: StateHistoryCallbacks<G>;
+  /**
+   * Whether `registerDebug()` payloads (`customDebug`) are attached to the
+   * player state returned from undo/rewind (SEC-04/F15). Mirrors
+   * `GameSession`'s `#debugEnabled` — threaded in at construction, never
+   * toggled. Defaults to `false`.
+   */
+  readonly #debugEnabled: boolean;
 
   constructor(
     GameClass: GameClass<G>,
     storedState: StoredGameState,
     getRunner: () => GameRunner<G>,
-    callbacks: StateHistoryCallbacks<G>
+    callbacks: StateHistoryCallbacks<G>,
+    debugEnabled = false
   ) {
     this.#GameClass = GameClass;
     this.#storedState = storedState;
     this.#getRunner = getRunner;
     this.#callbacks = callbacks;
+    this.#debugEnabled = debugEnabled;
   }
 
   // ============================================
@@ -318,7 +327,7 @@ export class StateHistory<G extends Game = Game> {
       return {
         success: true,
         flowState: newFlowState,
-        state: buildPlayerState(newRunner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: true }),
+        state: buildPlayerState(newRunner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
         actionsUndone: actionsThisTurn,
       };
     } catch (error) {
@@ -390,7 +399,7 @@ export class StateHistory<G extends Game = Game> {
       return {
         success: true,
         actionsDiscarded,
-        state: buildPlayerState(newRunner, this.#storedState.playerNames, 1, { includeActionMetadata: true, includeDebugData: true }),
+        state: buildPlayerState(newRunner, this.#storedState.playerNames, 1, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
         newRunner, // Return the new runner so GameSession can update handlers
       };
     } catch (error) {

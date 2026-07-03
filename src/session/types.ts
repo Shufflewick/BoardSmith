@@ -220,6 +220,18 @@ export interface StoredGameState {
   snapshot?: GameStateSnapshot;
   createdAt: number;
   aiConfig?: AIConfig;
+  /**
+   * Host anti-cheat lockout (LOCK-01), mirrored from `GameSessionOptions.teachingDisabled`
+   * at `create()` time. Persisted (RST-02/F16) so it survives `GameSession.restore()` —
+   * without this field, a cold restart silently re-enabled hint/heatmap/demo access.
+   */
+  teachingDisabled?: boolean;
+  /**
+   * Session display name, mirrored from `GameSessionOptions.displayName` at `create()`
+   * time. Persisted (RST-02/F16) so it survives `GameSession.restore()`, mirroring
+   * `aiConfig`'s round-trip.
+   */
+  displayName?: string;
   /** Game-specific options (for restart) */
   gameOptions?: Record<string, unknown>;
   /** Lobby state - 'waiting' until all players join, then 'playing' */

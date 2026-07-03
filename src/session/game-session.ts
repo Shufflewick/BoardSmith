@@ -131,6 +131,16 @@ export interface GameSessionOptions<G extends Game = Game> {
    */
   teachingDisabled?: boolean;
   /**
+   * When `true`, `registerDebug()` payloads (`customDebug`) are attached to
+   * broadcast/player-state payloads for this session (SEC-04/F15).
+   *
+   * Defaults to `false` — debug dumps of hidden game state must never be
+   * broadcast to players/spectators unless a trusted `GameSession` consumer
+   * (e.g. a local dev harness) explicitly opts in. This is a `GameSession`
+   * constructor-time-only option, not a `boardsmith dev`/CLI-wired setting.
+   */
+  debugEnabled?: boolean;
+  /**
    * Injectable hook invoked whenever a storage save fails (ERR-03). Never
    * rethrown by the caller — a throwing hook is swallowed and echoed via
    * `console.error` so it can never crash gameplay (T-126-06).
@@ -303,6 +313,15 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Set once at construction from `GameSessionOptions.teachingDisabled`; never toggled.
    */
   #teachingDisabled = false;
+  /**
+   * When true, `registerDebug()` payloads (`customDebug`) are attached to
+   * broadcast/player-state payloads (SEC-04, D-SEC-04). Set once at
+   * construction from `GameSessionOptions.debugEnabled`; never toggled.
+   * Mirrors `#teachingDisabled`'s constructor-time-only shape. Defaults to
+   * `false` — a `GameSession`-consumer-only opt-in, not persisted and not
+   * wired to any CLI/dev-host setting.
+   */
+  #debugEnabled = false;
 
   private constructor(
     runner: GameRunner<G>,
@@ -316,13 +335,15 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     pendingActionManager?: PendingActionManager<G>,
     botAIConfig?: BotAIConfig,
     teachingDisabled?: boolean,
-    onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void
+    onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void,
+    debugEnabled?: boolean
   ) {
     this.#runner = runner;
     this.#storedState = storedState;
     this.#GameClass = GameClass;
     this.#storage = storage;
     this.#aiController = aiController;
+    this.#debugEnabled = debugEnabled ?? false;
     this.#displayName = displayName;
     this.#lobbyManager = lobbyManager;
     this.#botAIConfig = botAIConfig;
@@ -344,7 +365,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         save: () => this.#save(),
         broadcast: () => this.broadcast(),
         scheduleAICheck: () => this.#scheduleAICheck(),
-      }
+      },
+      this.#debugEnabled
     );
 
     // Initialize state history and debug controller
@@ -373,7 +395,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         },
         save: () => this.#save(),
         broadcast: () => this.broadcast(),
-      }
+      },
+      this.#debugEnabled
     );
     this.#debugController = new DebugController(
       () => this.#runner,
@@ -551,6 +574,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       maxPlayers,
       tutorial,
       teachingDisabled,
+      debugEnabled,
       onPersistenceError,
     } = options;
 
@@ -702,6 +726,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       snapshot: runner.getSnapshot(),
       createdAt: Date.now(),
       aiConfig,
+      teachingDisabled,
+      displayName,
       gameOptions: customGameOptions,
       lobbyState,
       lobbySlots,
@@ -734,7 +760,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Explicit annotation breaks the type-inference cycle: the lobby callbacks
     // capture `getSession: () => session` above, so `session` must have a known
     // type independent of its own initializer.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig, teachingDisabled, onPersistenceError);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, displayName, lobbyManager, undefined, undefined, botAIConfig, teachingDisabled, onPersistenceError, debugEnabled);
 
     // Persist initial state (fire-and-forget to keep create synchronous).
     // Routed through #persistSafely (same funnel as every other save site) so
@@ -810,7 +836,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Explicit annotation breaks the type-inference cycle with the lobby
     // callbacks' `getSession: () => session` capture above.
-    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, undefined, lobbyManager, undefined, undefined, botAIConfig, undefined, onPersistenceError);
+    const session: GameSession<G> = new GameSession(runner, storedState, GameClass, storage, aiController, storedState.displayName, lobbyManager, undefined, undefined, botAIConfig, storedState.teachingDisabled, onPersistenceError);
     return session;
   }
 
@@ -848,6 +874,21 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
+   * Get the session display name (RST-02: persisted, survives restore()).
+   */
+  get displayName(): string | undefined {
+    return this.#displayName;
+  }
+
+  /**
+   * Whether teaching/assist features are disabled for this session (LOCK-01).
+   * RST-02: persisted, survives restore().
+   */
+  get teachingDisabled(): boolean {
+    return this.#teachingDisabled;
+  }
+
+  /**
    * Get the player count
    */
   get playerCount(): number {
@@ -876,7 +917,8 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Get the game state for a specific player
    * @param playerPosition Player's position
    * @param options.includeActionMetadata Include action metadata for auto-UI (default: true)
-   * @param options.includeDebugData Include debug data from game.registerDebug() (default: true)
+   * @param options.includeDebugData Include debug data from game.registerDebug() (default:
+   *   the session's `debugEnabled` option, itself defaulting to `false` — SEC-04/F15)
    */
   getState(
     playerPosition: number,
@@ -887,7 +929,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       this.#runner,
       this.#storedState.playerNames,
       playerPosition,
-      { includeActionMetadata: options?.includeActionMetadata ?? true, includeDebugData: options?.includeDebugData ?? true }
+      { includeActionMetadata: options?.includeActionMetadata ?? true, includeDebugData: options?.includeDebugData ?? this.#debugEnabled }
     );
     return { success: true, flowState, state };
   }
@@ -900,7 +942,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
       this.#runner,
       this.#storedState.playerNames,
       playerPosition,
-      { includeActionMetadata: options?.includeActionMetadata ?? true, includeDebugData: options?.includeDebugData ?? true }
+      { includeActionMetadata: options?.includeActionMetadata ?? true, includeDebugData: options?.includeDebugData ?? this.#debugEnabled }
     );
   }
 
@@ -1383,7 +1425,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     return {
       success: true,
       flowState: result.flowState,
-      state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: true }),
+      state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       serializedAction: result.serializedAction,
       // Pass through action chaining info from flowState, including metadata for the followUp action
       followUp: followUpWithMetadata,
@@ -2117,7 +2159,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     for (const session of sessions) {
       const effectivePosition = session.isSpectator ? 0 : session.playerSeat;
-      const state = buildPlayerState(this.#runner, this.#storedState.playerNames, effectivePosition, { includeActionMetadata: true, includeDebugData: true });
+      const state = buildPlayerState(this.#runner, this.#storedState.playerNames, effectivePosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled });
 
       // Inject transient teaching state — never derived from engine, never serialized.
       // These fields are injected after buildPlayerState() to keep that function pure.
