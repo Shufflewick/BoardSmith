@@ -25,16 +25,19 @@ export class MeepleClient {
   private playerId: string;
 
   constructor(config: MeepleClientConfig) {
+    // Use the explicit playerId if provided; otherwise mint one. Minting
+    // first (before building `this.config`) so `Required<MeepleClientConfig>`
+    // always has a concrete value to store.
+    this.playerId = config.playerId ?? this.generatePlayerId();
+
     this.config = {
       baseUrl: config.baseUrl.replace(/\/$/, ''), // Remove trailing slash
       autoReconnect: config.autoReconnect ?? true,
       maxReconnectAttempts: config.maxReconnectAttempts ?? 5,
       reconnectDelay: config.reconnectDelay ?? 1000,
       requestTimeout: config.requestTimeout ?? 10000,
+      playerId: this.playerId,
     };
-
-    // Generate a unique player ID for this client
-    this.playerId = this.generatePlayerId();
   }
 
   // ============================================
@@ -585,7 +588,7 @@ export class MeepleClient {
     throw new Error(
       'No cryptographically secure RNG available to mint a playerId. ' +
         'Provide an explicit playerId in MeepleClientConfig, or run in an environment ' +
-        'with the Web Crypto API (modern browser or Node 16+).'
+        'with the Web Crypto API (modern browser or Node 19+).'
     );
   }
 

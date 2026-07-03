@@ -41,6 +41,12 @@ export interface MeepleClientConfig {
 
   /** Timeout for HTTP requests in ms (default: 10000) */
   requestTimeout?: number;
+
+  /**
+   * Explicit seat-identity capability token. When omitted, the client mints
+   * one via a cryptographically secure RNG (see `generatePlayerId()`).
+   */
+  playerId?: string;
 }
 
 // ============================================
@@ -210,6 +216,24 @@ export interface GameConnectionConfig {
    * Node >=22.4 exposes `globalThis.WebSocket` natively and needs no override.
    */
   wsImplementation?: typeof WebSocket;
+
+  /**
+   * Whether to open the WebSocket connection immediately on construction.
+   *
+   * Defaults to `true`. Set `false` to construct a `GameConnection` without
+   * dialing — the caller is then responsible for calling `connect()` when
+   * ready. Prevents the open-then-immediately-disconnect pattern that
+   * occurs when a caller (e.g. `useGame({ autoConnect: false })`) wants a
+   * connection object without a live socket.
+   */
+  connectImmediately?: boolean;
+
+  /**
+   * Milliseconds bound for action()-awaits-open and the connection
+   * handshake. Defaults to 10000 (10s). Replaces the bare 10s timeout
+   * literals previously hardcoded in game-connection.ts.
+   */
+  connectionTimeout?: number;
 }
 
 export interface ActionResult {

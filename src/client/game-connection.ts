@@ -69,6 +69,8 @@ export class GameConnection {
       autoReconnect: config.autoReconnect ?? true,
       maxReconnectAttempts: config.maxReconnectAttempts ?? 5,
       reconnectDelay: config.reconnectDelay ?? 1000,
+      connectImmediately: config.connectImmediately ?? true,
+      connectionTimeout: config.connectionTimeout ?? 10000,
     };
 
     this.#wsCtor = resolveWsCtor(config.wsImplementation, 'GameConnection');
