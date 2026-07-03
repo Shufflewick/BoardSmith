@@ -222,7 +222,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   1. `TestGame.doAction` failures are loud by default (throws, or an equivalent that can't be silently ignored), and the flagship class-level doc example no longer models ignoring the result.
   2. `TestGame`'s default seed is a fixed literal, not `Date.now()` — no-seed test runs are deterministic and reproducible in CI.
 **Plans**: 3 plans
-  - [ ] 137-01-PLAN.md — PROC-01 verification gate (F36, F37) → 137-FINDINGS-VERIFICATION.md
+  - [x] 137-01-PLAN.md — PROC-01 verification gate (F36, F37) → 137-FINDINGS-VERIFICATION.md
   - [ ] 137-02-PLAN.md — TST-01: doAction throws + tryAction escape hatch, harness call-site migrations, example fixes
   - [ ] 137-03-PLAN.md — TST-02: fixed default seed, testGame.seed accessor, seed in failure messages
 
@@ -262,7 +262,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 134. UI & Session Interaction Guardrails | 5/5 | Complete    | 2026-07-03 |
 | 135. CLI & Dev Experience | 6/6 | Complete    | 2026-07-03 |
 | 136. Client SDK & Protocol | 5/5 | Complete    | 2026-07-03 |
-| 137. Testing Utilities | 0/TBD | Not started | - |
+| 137. Testing Utilities | 1/3 | In Progress|  |
 | 138. Cross-Repo Migration | 0/TBD | Not started | - |
 | 139. Documentation Audit & Corrections | 0/TBD | Not started | - |
 </content>

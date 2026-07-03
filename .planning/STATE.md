@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: executing
+status: verifying
 stopped_at: "Completed 136-05-PLAN.md (Client SDK consumer migration: useGame opened-driven setup, GameShell.vue try/catch-only lobby handlers, docs corrected) — Phase 136 complete"
-last_updated: "2026-07-03T23:34:58.072Z"
-last_activity: 2026-07-03 -- Phase 137 planning complete
+last_updated: "2026-07-03T23:41:06.996Z"
+last_activity: 2026-07-03 -- Completed 137-01-PLAN.md
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 34
-  completed_plans: 31
+  completed_plans: 32
   percent: 67
 ---
 
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Phase: 137
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-03 -- Phase 137 planning complete
+Phase: 137 (Testing Utilities) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
+Last activity: 2026-07-03 -- Completed 137-01-PLAN.md
 
-Progress: [██████████] 100%
+Progress: [█████████░] 94%
 
 ## Milestones
 
@@ -165,6 +165,7 @@ Recent decisions affecting current work:
 - [Phase 136]: [Phase 136-04]: Rule 1 fix - wsImplementation was silently dropped by connect(), now threaded alongside connectImmediately/connectionTimeout
 - [Phase 136-05]: isSettingUp cleared via connection.opened.then()/.catch() internal to setupConnection() (no UseGameReturn API change); connectImmediately:autoConnect threaded into client.connect(), open-then-disconnect fallback deleted
 - [Phase 136-05]: GameShell.vue joinGame() auto-join fallback UX (show lobby anyway on join failure) preserved via a nested try/catch around client.joinLobby() rather than letting it bubble to the outer catch
+- [Phase 137]: PROC-01 gate: F36/F37 both independently re-verified LEGITIMATE against post-Phase-136 source with zero drift; all six doAction call sites confirmed at original line numbers, locking the classification table for Plans 02-03
 
 ### Pending Todos
 
@@ -176,7 +177,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T22:19:01.655Z
+Last session: 2026-07-03T23:39:43.462Z
 Stopped at: Completed 136-05-PLAN.md (Client SDK consumer migration: useGame opened-driven setup, GameShell.vue try/catch-only lobby handlers, docs corrected) — Phase 136 complete
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
