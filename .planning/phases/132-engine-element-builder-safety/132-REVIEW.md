@@ -19,10 +19,10 @@ files_reviewed_list:
   - src/session/testing/fixtures/collect-turns-fixture.ts
 findings:
   critical: 0
-  warning: 5
-  info: 3
-  total: 8
-status: issues_found
+  warning: 0 # 5 found; all 5 fixed 2026-07-03 (see Resolution notes)
+  info: 3 # out of fix scope, left open
+  total: 3
+status: issues_resolved
 ---
 
 # Phase 132: Code Review Report
@@ -30,7 +30,7 @@ status: issues_found
 **Reviewed:** 2026-07-03T07:46:00Z
 **Depth:** standard
 **Files Reviewed:** 13
-**Status:** issues_found
+**Status:** issues_resolved (all 5 warnings fixed 2026-07-03; 3 info findings left open)
 
 ## Summary
 
@@ -61,11 +61,15 @@ explicit serialized-element shape is an unambiguous signal that an element
 reference was intended, so only that shape is coerced (ENG-05).
 ```
 
+**Resolution:** Fixed in `c428ed93` — replaced the stale "Why This Happens" paragraph with a "Why Only the `{id, className}` Shape Resolves" rationale (ambiguity of bare numbers, ENG-05, and the WR-03 className-match rule).
+
 ### WR-02: Pitfall #15 still teaches the removed auto-resolution behavior
 
 **File:** `docs/common-pitfalls.md:1264-1272, 1303-1313, 1773`
 **Issue:** Section 15 ("Using followUp Args in prompt/filter") was not updated for ENG-05. It still states: *"**Elements are automatically resolved everywhere**: Whether you pass an element or an ID, the server resolves it to the actual Element"* and *"Pass element or ID"* (line ~1256), and the "Why This Works" list repeats "Server resolves everywhere ... Resolves ALL args (selection args AND followUp args)". For a bare numeric ID in a non-selection followUp arg this is now false — a developer following section 15 will write `element.container === ctx.args.sectorId` against a plain number and get a silent always-false comparison, the exact trap this phase fixed. The Quick Reference row at line 1773 ("Args are resolved - use ctx.args.sectorId") has the same problem. The fact that both collect fixtures had to be patched for this exact assumption proves real code follows this doc.
 **Fix:** Rewrite section 15 to match section 10: elements passed directly still work (they serialize to `{id, className, ...}` via `GameElement.toJSON` and resolve on the way back); bare numeric IDs stay numbers and must be resolved with `getElementById`. Prefer recommending the explicit `{ id, className }` shape, which is also structured-clone-safe over the postMessage/RPC boundary (a live element in `followUp.args` is not).
+
+**Resolution:** Fixed in `ad487c80` — rewrote section 15's Solution/Best Practices/Why This Works to the ENG-05 contract: `{id, className}` (or a live element, which serializes to that shape) resolves everywhere; bare numeric IDs stay numbers and must be resolved via `getElementById`; the explicit shape is recommended as structured-clone-safe. Quick Reference row at line ~1773 updated to match.
 
 ### WR-03: resolveArgs second pass resolves `{id, className}` by id alone — className is never validated
 
@@ -86,6 +90,8 @@ if (this.isSerializedElement(value)) {
 ```
 If subclass-name flexibility is a concern (dev writes base-class name for a subclass instance), use an instanceof check against the class registry instead of strict name equality.
 
+**Resolution:** Fixed in `98680790` (red-first: Test D in action.test.ts confirmed the wrong-class delivery pre-fix) — the second pass now resolves only when `element.constructor.name === value.className`; on mismatch the arg is left unresolved and a `devWarn('followup-arg-class-mismatch:{key}', ...)` fires, mirroring `relinkFlowVariables`. Strict name equality is correct here because `GameElement.toJSON` serializes `className` as `constructor.name`, so round-trips always match exactly.
+
 ### WR-04: forEach() type signature still admits collection items the runtime now rejects
 
 **File:** `src/engine/flow/builders.ts:169-184`, `src/engine/flow/types.ts:124-131`
@@ -98,11 +104,15 @@ export function forEach<T extends GameElement | string | number | boolean | null
 ```
 Apply the same constraint to `ForEachConfig<T>` and document the restriction (and the "move, don't delete" rule) in the `forEach` JSDoc, which currently says nothing about either.
 
+**Resolution:** Fixed in `7bd366f2` — `forEach<T>` and `ForEachConfig<T>` are now constrained to `GameElement | string | number | boolean | null` (object collections fail to compile, verified with a scratch tsc run); the `collection` cast in `forEach()` was removed so the constraint flows through to `FlowNode`; JSDoc now documents both the item-type restriction and the "move, don't delete" rule. No new tsc errors vs baseline.
+
 ### WR-05: New forEach checkpoint surface (`frame.data.forEachItems`) has no restore-path test
 
 **File:** `src/engine/flow/engine.test.ts:426-460` (only coverage of ENG-06)
 **Issue:** The stated purpose of the tagged-wrapper design is checkpoint/restore safety ("keeps frame.data checkpoint-safe", "round-trip through checkpoint/restore"), and the behavioral win is that a mid-loop restore reuses the original snapshot instead of recomputing a possibly-changed collection. None of that is tested: the only new test covers in-process mutation. Untested paths: (a) `getPosition()` → `restore()` mid-loop resumes at the correct item with the original snapshot; (b) the deleted-element throw (engine.ts:1207-1213) — currently unreachable in any test; (c) the non-primitive item throw (engine.ts:1186-1190). Project rules treat in-scope test gaps as blockers, and (a) is the load-bearing new serialization contract — a future refactor of `frameData` handling would regress it silently.
 **Fix:** Add a test that starts a forEach over 3+ elements with an `actionStep` body, captures `getState()` after the first iteration, mutates the collection source, restores into a fresh engine via `restoreFullState`, and asserts the remaining visited ids equal the original snapshot's tail. Add throw-path tests for (b) (e.g. surgically detach an element from tree+pile) and (c) (object item).
+
+**Resolution:** Fixed in `82f8a0c8` — three new tests in engine.test.ts ForEach Execution: (a) mid-loop `getState()` → `restoreFullState()` into a fresh engine resumes with the original snapshot's tail (a card added post-checkpoint is never visited and the loop ends at the original length); (b) surgically detaching a snapshotted element (tree + no pile) throws "no longer exists in the game tree" at its iteration; (c) an object collection item throws "not a GameElement or JSON primitive" at loop entry. Test (a) is load-bearing: if `frameData.forEachItems` were dropped on restore, the loop would re-snapshot the mutated collection and the assertions fail.
 
 ## Info
 
