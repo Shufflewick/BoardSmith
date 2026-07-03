@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
-stopped_at: Completed 134-01-PLAN.md
-last_updated: "2026-07-03T16:36:44.037Z"
+stopped_at: Completed 134-04-PLAN.md
+last_updated: "2026-07-03T16:42:49.607Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
   percent: 33
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 134 (UI & Session Interaction Guardrails) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [█████████░] 90%
+Progress: [██████████] 95%
 
 ## Milestones
 
@@ -136,6 +136,8 @@ Recent decisions affecting current work:
 - [Phase 134-02]: beforeAutoExecuteHooks uses a plain array + identity-based unregister closure (Ref<Hook[]>), matching 134-PATTERNS.md Pattern 2 rather than a new registry abstraction
 - [Phase 134-03]: GameShell lastError watch keeps a defensive UIX-01 fallback branch even though useActionController already coalesces lastError to a non-empty string on every failure; unreachable in practice but documents the contract and is test-covered
 - [Phase 134-03]: drag()'s combined helper calls a new internal dragPropsInner() directly rather than the now when-gated public dragProps(), avoiding a DragResult.props type break
+- [Phase 134-04]: buildRunnerFacade delegates via closures over the captured runner parameter (not this.#runner) at each of the 5 rebuild sites, keeping the facade referentially in sync with the freshly assigned runner
+- [Phase 134-04]: ts-expect-error test line assigns session.runner.performAction to a local (does not invoke it) since an actual call throws at runtime, already proven by the adjacent runtime-undefined assertion
 
 ### Pending Todos
 
@@ -147,8 +149,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T16:35:39.365Z
-Stopped at: Completed 134-01-PLAN.md
+Last session: 2026-07-03T16:42:49.599Z
+Stopped at: Completed 134-04-PLAN.md
 Resume file: None
 Next action: Break Phase 131 (Serialization & Restore Fidelity) down into plans via `/gsd:plan-phase 131`
 

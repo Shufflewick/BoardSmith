@@ -36,7 +36,7 @@
 
 ### Session API (SESS)
 
-- [ ] **SESS-01**: `session.runner.performAction()` is not reachable as an easy wrong path next to `session.performAction()` — runner access is restricted, renamed, or guarded so persistence/broadcast/checkpoints can't be silently skipped (F29)
+- [x] **SESS-01**: `session.runner.performAction()` is not reachable as an easy wrong path next to `session.performAction()` — runner access is restricted, renamed, or guarded so persistence/broadcast/checkpoints can't be silently skipped (F29)
 
 ### UI Interaction (UIX)
 
@@ -111,7 +111,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | ENG-03 | Phase 133 | Complete |
 | ENG-04 | Phase 133 | Complete |
 | ENG-07 | Phase 133 | Complete |
-| SESS-01 | Phase 134 | Pending |
+| SESS-01 | Phase 134 | Complete |
 | UIX-01 | Phase 134 | Complete |
 | UIX-02 | Phase 134 | Complete |
 | UIX-03 | Phase 134 | Complete |
