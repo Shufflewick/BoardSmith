@@ -108,7 +108,6 @@ boardsmith publish
 
 ```json
 {
-  "$schema": "https://boardsmith.io/schemas/game.json",
   "name": "my-game",
   "displayName": "My Game",
   "description": "A fun game for 2-4 players",
