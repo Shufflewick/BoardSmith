@@ -206,7 +206,12 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   4. The client SDK imports canonical protocol types from `src/types/` instead of redefining them, and the existing `CreateGameRequest`/WS-message-union drift is resolved.
   5. The `WebSocketMessage` union includes every message type actually sent (including `UpdateSlotPlayerOptionsMessage`).
   6. The playerId configuration error message points at a field that actually exists on the config type.
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 136-01-PLAN.md — PROC-01 verification gate: verdicts for F23/F24/F25/F26/F35/F38 before any fix
+- [ ] 136-02-PLAN.md — canonical protocol/type foundation: WebSocketMessage union member (SDK-05), delete-and-re-export client types + discriminated WS unions (SDK-04), config-field scaffolding (connectImmediately/connectionTimeout/playerId)
+- [ ] 136-03-PLAN.md — GameConnection lifecycle: opened promise + await-then-send action() (SDK-01), #userDisconnected flag + connectImmediately honoring (SDK-02)
+- [ ] 136-04-PLAN.md — MeepleClient: one throwing error contract via shared helper (SDK-03), awaitable connect() (SDK-01), playerId config + actionable error (SDK-06)
+- [ ] 136-05-PLAN.md — consumer migration: useGame hack removal (SDK-01/02), GameShell.vue try/catch-only (SDK-03), docs/api/client.md corrections (DOCX-04)
 
 ### Phase 137: Testing Utilities
 **Goal**: `TestGame`'s default behavior matches the library's own deterministic, fail-loud doctrine.
