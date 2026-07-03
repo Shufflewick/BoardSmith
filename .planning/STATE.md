@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
-stopped_at: "Completed 136-05-PLAN.md (Client SDK consumer migration: useGame opened-driven setup, GameShell.vue try/catch-only lobby handlers, docs corrected) — Phase 136 complete"
-last_updated: "2026-07-03T23:50:24.179Z"
+stopped_at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
+last_updated: "2026-07-03T23:56:51.588Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 34
-  completed_plans: 33
-  percent: 67
+  completed_plans: 34
+  percent: 78
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 137 (Testing Utilities) — EXECUTING
-Plan: 2 of 3 (137-03-PLAN.md remains)
-Status: Executing
+Plan: 3 of 3 (137-03-PLAN.md remains)
+Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -167,6 +167,7 @@ Recent decisions affecting current work:
 - [Phase 136-05]: GameShell.vue joinGame() auto-join fallback UX (show lobby anyway on join failure) preserved via a nested try/catch around client.joinLobby() rather than letting it bubble to the outer catch
 - [Phase 137]: PROC-01 gate: F36/F37 both independently re-verified LEGITIMATE against post-Phase-136 source with zero drift; all six doAction call sites confirmed at original line numbers, locking the classification table for Plans 02-03
 - [Phase 137-02]: doAction now throws ActionExecutionError by default; tryAction is the never-throw escape hatch used by the four category-(b) harness call sites
+- [Phase 137-03]: Fixed literal 'test-seed' default (matching playUntilComplete-default house style); seed threaded via TestGame's private constructor and surfaced in doAction/assertActionAvailable/GameStuckError failure messages
 
 ### Pending Todos
 
@@ -178,8 +179,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T23:48:48.410Z
-Stopped at: Completed 136-05-PLAN.md (Client SDK consumer migration: useGame opened-driven setup, GameShell.vue try/catch-only lobby handlers, docs corrected) — Phase 136 complete
+Last session: 2026-07-03T23:56:51.579Z
+Stopped at: Completed 137-03-PLAN.md (fixed default seed + testGame.seed accessor + seed in failure messages) — Phase 137 (Testing Utilities) complete
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
 
