@@ -1258,7 +1258,8 @@ Action.create('collectEquipment')
       return {
         followUp: {
           action: 'collectEquipment',
-          args: { sectorId: ctx.args.sectorId }  // Pass element or ID
+          // Pass the {id, className} shape (or the element itself) -- NOT a bare id
+          args: { sectorId: { id: sector.id, className: sector.constructor.name } }
         }
       };
     }
@@ -1267,25 +1268,37 @@ Action.create('collectEquipment')
 
 ### The Solution
 
-This pattern works correctly in BoardSmith. When you return `followUp.args`:
+Only the explicit serialized-element shape resolves. When you return `followUp.args`:
 
-1. **Elements are automatically resolved everywhere**: Whether you pass an element or an ID, the server resolves it to the actual Element when:
-   - Evaluating `prompt` and `filter` functions
-   - Calling the `execute` function (in both `args` and `ctx.args`)
-2. **Consistent args**: The same resolved `ctx.args` is available in prompt, filter, and execute
+1. **`{id, className}`-shaped args are resolved everywhere**: the server resolves
+   them to the live Element when evaluating `prompt` and `filter` and when calling
+   `execute` (in both `args` and `ctx.args`). Passing a live element directly also
+   works — `GameElement.toJSON` serializes it to `{id, className, ...}` and it
+   resolves on the way back.
+2. **Bare numeric IDs are NEVER resolved** (ENG-05): a plain number stays a plain
+   number in every callback. `element.container === ctx.args.sectorId` against a
+   number is silently always-false. Resolve it yourself with
+   `ctx.game.getElementById(ctx.args.sectorId as number)`, or better, pass the
+   `{id, className}` shape so the server resolves it for you.
+3. **Consistent args**: the same resolved `ctx.args` is available in prompt, filter, and execute.
 
 ### Best Practices for followUp Args
 
-1. **Pass elements directly** - the framework handles serialization automatically:
+1. **Prefer the explicit `{ id, className }` shape** — unambiguous, and
+   structured-clone-safe across the postMessage/RPC boundary (a live element in
+   `followUp.args` is not):
 
 ```typescript
 return {
   followUp: {
     action: 'collectEquipment',
-    args: { sectorId: sector }  // Element gets serialized/deserialized automatically
+    args: { sectorId: { id: sector.id, className: sector.constructor.name } }
   }
 };
 ```
+
+The `className` must match the element's actual class — a mismatch leaves the arg
+unresolved (with a dev warning) rather than delivering a wrong-class element.
 
 2. **Access directly via ctx.args** - already resolved to Elements:
 
@@ -1305,16 +1318,29 @@ execute: (args, ctx) => {
 }
 ```
 
+3. **If you pass a bare numeric ID, resolve it explicitly in every callback**:
+
+```typescript
+filter: (element, ctx) => {
+  const sector = ctx.game.getElementById(ctx.args.sectorId as number);
+  return sector ? element.container === sector : false;
+}
+```
+
 ### Why This Works
 
-BoardSmith automatically resolves element references throughout the action lifecycle:
+BoardSmith resolves only unambiguous element references through the action lifecycle:
 
-1. **Action returns followUp**: Elements in `followUp.args` get JSON-serialized (keeping their `id`)
-2. **Client stores and sends back**: Args are sent to server for choices and execution
-3. **Server resolves everywhere**:
-   - In `getPickChoices`: Resolves args before evaluating `prompt`, `filter`, `elements()`
-   - In `executeAction`: Resolves ALL args (selection args AND followUp args) before calling `execute`
-4. **Consistent element access**: `ctx.args.sectorId` is the same Element in prompt, filter, and execute
+1. **Action returns followUp**: a live Element in `followUp.args` gets
+   JSON-serialized to `{id, className, ...}` (keeping its `id`)
+2. **Client stores and sends back**: args are sent to server for choices and execution
+3. **Server resolves the `{id, className}` shape everywhere**:
+   - In `getPickChoices`: before evaluating `prompt`, `filter`, `elements()`
+   - In `executeAction`: before calling `execute`
+   - Bare numbers pass through untouched — declared `chooseElement`/`chooseElements`
+     selection args are the only place a bare numeric ID resolves, because those
+     args are explicitly element-typed by the developer
+4. **Consistent element access**: `ctx.args.sectorId` is the same value in prompt, filter, and execute
 
 ---
 
@@ -1775,7 +1801,7 @@ Handlers that only touch game-level state (`this.enterCount++`) or query via `el
 | **Action debugging** | Guessing why action unavailable | `game.debugActionAvailability(name, player)` |
 | **Client-side elements** | `element.attributes.slot` | `element.children?.find(...)` |
 | **Flow restrictions** | Action passes conditions but not in UI | Check flow's `actionStep({ actions: [...] })` |
-| **followUp args in filter** | `ctx.args.sectorId` undefined in filter/prompt | Args are resolved - use `ctx.args.sectorId` |
+| **followUp args in filter** | Bare numeric id in followUp args stays a number | Pass `{ id, className }` (auto-resolved) or call `getElementById()` yourself |
 | **Element count explosion** | Elements mysteriously multiply | `game.debugElementTree()` to diagnose |
 | **Loop exit with pending state** | Loop checks only actions remaining | Use `stateAwareLoop()` with `pendingStates` |
 | **execute() vs start()** | `execute('retreat', {})` without params | `start('retreat')` for wizard mode |
