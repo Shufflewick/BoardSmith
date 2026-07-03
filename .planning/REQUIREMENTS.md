@@ -23,7 +23,7 @@
 - [x] **ENG-01**: `putInto()` onto the element's own descendant (or itself) throws an actionable error instead of silently detaching the subtree (F3)
 - [x] **ENG-02**: `eachPlayer` with `startingPlayer` wraps around so every player gets a turn; docs/common-patterns.md dealer pattern and TurnOrder presets corrected to match (F4)
 - [ ] **ENG-03**: A failed action inside `simultaneousActionStep` surfaces `actionError`, returns failure to the client, and is NOT recorded in `actionHistory` (F5)
-- [ ] **ENG-04**: `chooseFrom` multiSelect min/max is enforced server-side in `validateSelection` (count + array-type checks), matching the elements branch (F6)
+- [x] **ENG-04**: `chooseFrom` multiSelect min/max is enforced server-side in `validateSelection` (count + array-type checks), matching the elements branch (F6)
 - [x] **ENG-05**: `resolveArgs` no longer coerces arbitrary numeric non-selection args into GameElements (F12)
 - [x] **ENG-06**: `forEach` over a mutated collection no longer silently skips items (snapshot the collection or document + guard the live-mutation case loudly) (F13)
 - [ ] **ENG-07**: `switchOn` with no matching case and no default fails loudly (throw or dev-warn) instead of silently no-oping (F27)
@@ -109,7 +109,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | ENG-08 | Phase 132 | Complete |
 | ENG-02 | Phase 133 | Complete |
 | ENG-03 | Phase 133 | Pending |
-| ENG-04 | Phase 133 | Pending |
+| ENG-04 | Phase 133 | Complete |
 | ENG-07 | Phase 133 | Pending |
 | SESS-01 | Phase 134 | Pending |
 | UIX-01 | Phase 134 | Pending |
