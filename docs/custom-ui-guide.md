@@ -137,20 +137,27 @@ if (!result.success) {
 Use when the user needs to make selections through the ActionPanel:
 
 ```typescript
-// Start wizard mode - ActionPanel shows selection UI
-actionController.start('attack');
+// Start wizard mode - ActionPanel shows selection UI, and check the result
+const result = await actionController.start('attack');
+if (!result.success) {
+  console.error(result.error);
+}
 
 // Pre-fill the first selection
-actionController.start('move', {
+await actionController.start('move', {
   args: { piece: pieceId }
 });
 
 // Pre-fill a later selection (auto-applied when that step activates)
-actionController.start('dropEquipment', {
+await actionController.start('dropEquipment', {
   args: { merc: mercId },
   prefill: { equipment: equipmentId },
 });
 ```
+
+**Important: `start()`'s result only covers its two synchronous pre-checks.** `start()` returns a `Promise<ActionResult>` (the same shape `execute()` returns), but `{ success: true }` only means "the action is in `availableActions` and its metadata resolved — wizard mode has begun." It is **not** the eventual server outcome of the action the user goes on to complete. If you ignore the return value entirely, you still get feedback: GameShell centrally watches for failures and surfaces a toast (see below), so callers that fire-and-forget `start()` are not silently swallowing pre-check failures. But `{ success: true }` from `start()` never tells you the wizard-mode action ultimately succeeded — only `execute()`'s (or the wizard's terminal `fill()`/auto-execute) result reflects that. If you need to react to the final server-confirmed outcome, use `execute()` directly instead of `start()`.
+
+**Every action failure surfaces automatically — you don't have to wire your own toast.** GameShell watches `actionController.lastError` centrally and shows a `--bsg-danger` toast (plus an assertive live-region announcement) for any failed action, whether it was initiated from the shipped ActionPanel or from a custom UI through `useBoardInteraction` — both paths share the same `useActionController` instance, so this is automatic parity, not something you opt into. Do not add a second toast call in your custom UI for the same failure; it would duplicate the one GameShell already shows.
 
 **When to use which:**
 
@@ -361,6 +368,36 @@ for (const choice of choices) {
 ```
 
 **Note:** If you do accidentally pass a choice object to `fill()`, BoardSmith will auto-unwrap it in development mode and show a warning. However, passing `choice.value` directly is clearer and recommended.
+
+### multiSelect Selections: `fill()` Requires an Array
+
+A `multiSelect` pick (one with `min`/`max` letting the player choose several elements at once) rejects a scalar value passed to `fill()` — it always expects an array, even for a single item:
+
+```typescript
+// WRONG - a multiSelect pick given a bare id
+await actionController.fill('cards', card.id); // ❌ rejected
+
+// The rejection error (dev-mode, actionable):
+// "fill('cards', ...) rejected: 'cards' is a multiSelect selection
+//  (min 1, max 3) and requires an array. Use toggleMultiSelect()/
+//  confirmMultiSelect(), or pass an array directly to fill()."
+```
+
+There are two correct ways to satisfy a `multiSelect` pick:
+
+```typescript
+// CORRECT - pass an array directly to fill()
+await actionController.fill('cards', [card.id]);
+await actionController.fill('cards', [card1.id, card2.id]);
+
+// CORRECT - or use the toggle/confirm pattern for incremental selection
+// (toggle each card as the user clicks it, confirm when they're done)
+actionController.toggleMultiSelect('cards', card.id);
+actionController.toggleMultiSelect('cards', anotherCard.id);
+await actionController.confirmMultiSelect();
+```
+
+Prefer `toggleMultiSelect()`/`confirmMultiSelect()` when the user builds up a selection by clicking multiple board elements one at a time (the common custom-UI case); use `fill()` with an array when you already have the full set of chosen values (e.g. from a checkbox list).
 
 ## Step 5: Using boardInteraction
 
@@ -709,6 +746,53 @@ Notes:
   chrome.
 - Do **not** teleport to `body`/outside GameShell for board modals — you lose
   the board-region confinement and the chrome guarantees.
+
+## Board Sizing
+
+GameShell fits the board to the available screen space at startup by
+measuring the board's **intrinsic** (natural) size and then zooming it to
+fit. To measure an intrinsic size at all, the element that wraps your
+`#game-board` slot — `.game-shell__zoom-container` — is styled
+`width: max-content`. This is deliberate and load-bearing: it's what lets
+`useAutoZoom` ask "how big does this board *want* to be?" for boards of any
+shape (square grids, wide card rows, tall hex boards) without you declaring a
+fixed size anywhere. **Do not override this CSS from a custom board** — a
+definite-width ancestor breaks the fit formula for every board, not just
+yours.
+
+### The failure mode: a 0×0 board
+
+`width: max-content` means the zoom container's size is *derived from its
+children's natural size* — it does not hand children a size to fill. If your
+board's root element sizes itself as a **percentage of its parent**
+(`width: 100%`) or uses CSS `container-type` (which also depends on the
+parent for its containment context), there is nothing for it to resolve
+against inside a `max-content` ancestor, and it collapses to `0×0`. Because
+this can happen silently (no visible error, no crash — the board region is
+simply empty), a dev-mode `console.error` fires once a real game state has
+arrived and the `#game-board` slot still measures `0×0` after mounting.
+That's the error that points here.
+
+### The fix
+
+Give your board's root element a **definite width**, not a percentage:
+
+```vue
+<template>
+  <!-- WRONG - collapses to 0×0 inside width:max-content -->
+  <div class="board" style="width: 100%;">...</div>
+
+  <!-- CORRECT - a definite size the zoom container can measure -->
+  <div class="board" style="width: 640px;">...</div>
+</template>
+```
+
+If your board's size genuinely depends on content (e.g. a variable number of
+columns), compute a definite pixel width from that content instead of
+reaching for a percentage — or measure `.boardregion` (the ancestor GameShell
+sizes to the visible viewport) directly and set your board's width from that
+measurement rather than relying on percentage/`container-type` CSS to do it
+implicitly.
 
 ## Debugging
 
