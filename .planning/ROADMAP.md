@@ -130,7 +130,12 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   2. `resolveArgs` no longer coerces an arbitrary numeric non-selection arg into a GameElement — plain numeric followUp args survive as numbers.
   3. `forEach` over a collection that's mutated by its own body processes every original item (snapshot semantics), or the live-mutation case is guarded with a loud warning.
   4. An action chain ending in `.build()` without `.execute()` is rejected at build/registration time (or requires an explicit opt-in) instead of silently registering a no-op action.
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 132-01-PLAN.md — PROC-01 verification gate: verdicts for F3/F12/F13/F28 before any fix
+- [ ] 132-02-PLAN.md — ENG-01: putInto self/descendant throw in moveToInternal
+- [ ] 132-03-PLAN.md — ENG-05: resolveArgs second pass stops coercing bare numbers
+- [ ] 132-04-PLAN.md — ENG-06: executeForEach snapshot-on-entry
+- [ ] 132-05-PLAN.md — ENG-08: registerAction throws on handler-less definitions
 
 ### Phase 133: Engine Flow & Action Validation
 **Goal**: Multi-player flow control and multi-step action validation behave correctly and surface failures instead of silently skipping players or accepting invalid input.
