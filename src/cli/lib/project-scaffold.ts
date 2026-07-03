@@ -102,11 +102,9 @@ export function toDisplayName(str: string): string {
  */
 export function generateBoardsmithJson(config: ProjectConfig): string {
   const json = {
-    $schema: 'https://boardsmith.io/schemas/game.json',
     name: config.name,
     displayName: config.displayName,
     description: config.description,
-    playerCount: config.playerCount,
     estimatedDuration: '15-30 minutes',
     complexity: 2,
     categories: config.categories || ['card-game'],
