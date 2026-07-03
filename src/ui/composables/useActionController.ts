@@ -1242,23 +1242,38 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /**
+   * Begin wizard mode for an action (fetches the first selection's choices).
+   *
+   * The returned ActionResult reflects ONLY start()'s two synchronous pre-checks
+   * (action availability, action metadata presence) — a `{ success: true }` result
+   * means wizard mode began, NOT that the action has been (or ever will be)
+   * executed on the server. The eventual server outcome arrives later via the
+   * auto-execute watcher / executeCurrentAction(), which callers can observe via
+   * `lastError` or the `beforeAutoExecuteHooks` mechanism, not via this return value.
+   */
   async function start(
     actionName: string,
     startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
-  ): Promise<void> {
+  ): Promise<ActionResult> {
     const initialArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
 
     if (!availableActions.value?.includes(actionName)) {
       lastError.value = `Action "${actionName}" is not available`;
-      return;
+      devWarn(
+        `start-unavailable-action:${actionName}`,
+        `start('${actionName}') was ignored: '${actionName}' is not in the current player's available actions. ` +
+          `Check availableActions before calling start(), or wait for the action to become available.`
+      );
+      return { success: false, error: lastError.value };
     }
 
     // Get metadata (only needed at start time)
     const meta = getActionMetadata(actionName);
     if (!meta) {
       lastError.value = `No metadata for action "${actionName}"`;
-      return;
+      return { success: false, error: lastError.value };
     }
 
     currentAction.value = actionName;
@@ -1306,6 +1321,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         await fetchAndAutoFill(selectionToFetch);
       }
     }
+
+    return { success: true };
   }
 
   async function fill(selectionName: string, rawValue: unknown): Promise<ValidationResult> {

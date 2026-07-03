@@ -392,10 +392,17 @@ export interface UseActionControllerReturn {
    * // User selects squad, then destination auto-fills with sectorId
    * ```
    */
+  /**
+   * Begin wizard mode for an action. The resolved ActionResult reflects ONLY
+   * start()'s synchronous pre-checks (action availability, metadata presence) —
+   * `{ success: true }` means wizard mode began, NOT that the action has been
+   * executed. The eventual server outcome arrives later via the auto-execute
+   * watcher, observable through `lastError`, not through this return value.
+   */
   start: (actionName: string, options?: {
     args?: Record<string, unknown>;
     prefill?: Record<string, unknown>;
-  }) => Promise<void>;
+  }) => Promise<ActionResult>;
   /** Fill a selection with a value (async for repeating selections) */
   fill: (selectionName: string, value: unknown) => Promise<ValidationResult>;
   /** Skip an optional selection */

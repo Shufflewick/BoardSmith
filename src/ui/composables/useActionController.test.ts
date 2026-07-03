@@ -12,7 +12,7 @@
  * element, multiSelect) are in useActionController.selections.test.ts
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import {
   useActionController,
@@ -24,6 +24,7 @@ import {
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
+import { _clearShownWarnings } from '../../utils/dev.js';
 
 describe('useActionController', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
@@ -371,6 +372,70 @@ describe('useActionController', () => {
       // All filled
       expect(controller.currentPick.value).toBe(null);
       expect(controller.isReady.value).toBe(true);
+    });
+  });
+
+  describe('start() return value (UIX-01)', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      _clearShownWarnings();
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it('start() resolves to a failure ActionResult and devWarns for an unavailable action', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      const result = await controller.start('invalidAction');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not available');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain("start('invalidAction')");
+    });
+
+    it('start() resolves to a failure ActionResult for an action with no metadata', async () => {
+      availableActions.value = [...(availableActions.value ?? []), 'actionWithNoMetadata'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      const result = await controller.start('actionWithNoMetadata');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('No metadata');
+    });
+
+    it('start() resolves to a success acknowledgment that wizard mode began (not the eventual server outcome)', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      const result = await controller.start('playCard');
+
+      expect(result).toEqual({ success: true });
+      // Wizard mode began — the action has NOT executed yet.
+      expect(sendAction).not.toHaveBeenCalled();
+      expect(controller.currentAction.value).toBe('playCard');
     });
   });
 
