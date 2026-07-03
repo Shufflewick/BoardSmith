@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: Completed 134-01-PLAN.md
-last_updated: "2026-07-03T16:26:24.365Z"
+last_updated: "2026-07-03T16:36:44.037Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
   percent: 33
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 134 (UI & Session Interaction Guardrails) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 90%
 
 ## Milestones
 
@@ -134,6 +134,8 @@ Recent decisions affecting current work:
 - [Phase 134-02]: start() success path returns bare {success:true} with JSDoc explicitly noting it reflects only synchronous pre-checks, not the eventual server result (RESEARCH.md Pitfall 1)
 - [Phase 134-02]: fill()'s UIX-02 multiSelect guard placed after choice-object unwrap and before repeat/onSelect routing, reusing resolveMultiSelectConfig verbatim (no re-derivation)
 - [Phase 134-02]: beforeAutoExecuteHooks uses a plain array + identity-based unregister closure (Ref<Hook[]>), matching 134-PATTERNS.md Pattern 2 rather than a new registry abstraction
+- [Phase 134-03]: GameShell lastError watch keeps a defensive UIX-01 fallback branch even though useActionController already coalesces lastError to a non-empty string on every failure; unreachable in practice but documents the contract and is test-covered
+- [Phase 134-03]: drag()'s combined helper calls a new internal dragPropsInner() directly rather than the now when-gated public dragProps(), avoiding a DragResult.props type break
 
 ### Pending Todos
 
@@ -145,7 +147,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T16:25:19.436Z
+Last session: 2026-07-03T16:35:39.365Z
 Stopped at: Completed 134-01-PLAN.md
 Resume file: None
 Next action: Break Phase 131 (Serialization & Restore Fidelity) down into plans via `/gsd:plan-phase 131`

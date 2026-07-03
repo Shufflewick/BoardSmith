@@ -42,8 +42,8 @@
 
 - [x] **UIX-01**: Custom-UI action failures are surfaced — `lastError` is consumed by shipped UI (or an equivalent loud channel) and `start()`/submission APIs return a result the caller can act on (F17)
 - [x] **UIX-02**: `fill()` rejects a scalar for a multiSelect pick with an actionable error (F18)
-- [ ] **UIX-03**: Responsive custom boards (percentage widths / container-type) no longer collapse to zero inside the zoom container's `width:max-content` (F19)
-- [ ] **UIX-04**: `dragProps()` honors its documented `when` option (or the option is removed from API + docs) (F30)
+- [x] **UIX-03**: Responsive custom boards (percentage widths / container-type) no longer collapse to zero inside the zoom container's `width:max-content` (F19)
+- [x] **UIX-04**: `dragProps()` honors its documented `when` option (or the option is removed from API + docs) (F30)
 - [x] **UIX-05**: `setBeforeAutoExecute()` either supports multiple hooks or fails loudly when silently replacing a previously registered hook (F31)
 
 ### CLI & Dev Experience (CLIX)
@@ -114,8 +114,8 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | SESS-01 | Phase 134 | Pending |
 | UIX-01 | Phase 134 | Complete |
 | UIX-02 | Phase 134 | Complete |
-| UIX-03 | Phase 134 | Pending |
-| UIX-04 | Phase 134 | Pending |
+| UIX-03 | Phase 134 | Complete |
+| UIX-04 | Phase 134 | Complete |
 | UIX-05 | Phase 134 | Complete |
 | CLIX-01 | Phase 135 | Pending |
 | CLIX-02 | Phase 135 | Pending |
