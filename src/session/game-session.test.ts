@@ -358,3 +358,42 @@ describe('GameSession persistence hook (ERR-03)', () => {
     expect(session.lastPersistenceError).not.toBeNull();
   });
 });
+
+describe('GameSession runner facade (SESS-01/F29)', () => {
+  it('read surface (getSnapshot/.game/.actionHistory/getFlowState/isComplete) works through the facade', () => {
+    const session = makeSession();
+
+    // The facade delegates to the live runner, so these reads must match what
+    // a direct GameRunner consumer would see.
+    const snapshot = session.runner.getSnapshot();
+    expect(snapshot).toBeDefined();
+    expect(session.runner.game).toBeDefined();
+    expect(Array.isArray(session.runner.actionHistory)).toBe(true);
+    expect(session.runner.getFlowState()).toBeDefined();
+    expect(session.runner.isComplete()).toBe(false);
+
+    // Reads stay live across an action (facade rebuilt at the replaceRunner /
+    // reload sites — this covers the constructor-assigned facade staying in
+    // sync with the underlying runner's own mutable state, e.g. actionHistory).
+    session.performAction('pick', 1, { color: 'red', size: 'S' });
+    expect(session.runner.actionHistory.length).toBe(1);
+  });
+
+  it('performAction is unreachable through session.runner at runtime (RED before the facade existed)', () => {
+    const session = makeSession();
+
+    // Pre-facade, `session.runner` returned the raw GameRunner, so
+    // `.performAction` was a real, callable function here — the RED state
+    // this assertion locks in (per PROC-02, recorded in the plan SUMMARY).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((session.runner as any).performAction).toBeUndefined();
+
+    // @ts-expect-error — performAction is not a member of ReadOnlyRunnerFacade;
+    // this line failing to produce a type error would itself fail `tsc`,
+    // locking in the type-level guard alongside the runtime one above. (Not
+    // invoked — a real call would throw at runtime, which the assertion
+    // above already proves.)
+    const inaccessible = session.runner.performAction;
+    expect(inaccessible).toBeUndefined();
+  });
+});
