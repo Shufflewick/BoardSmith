@@ -1797,12 +1797,17 @@ watch(awaitingPlayerNames, (newVal) => {
 
 // UIX-01: single chokepoint for action-failure feedback. actionController is
 // shared by ActionPanel AND every custom UI (via useBoardInteraction/inject),
-// so watching lastError here covers both parity paths with exactly one toast
-// per failure — ActionPanel's own direct toast.error calls are removed (see
+// so watching here covers both parity paths with exactly one toast per
+// failure — ActionPanel's own direct toast.error calls are removed (see
 // ActionPanel.vue) so this watch is the ONLY place a failed action surfaces.
+// Watch source is errorTick, NOT lastError (CR-01): fill()-path failures never
+// null-clear lastError between attempts, so a retried IDENTICAL failure leaves
+// the string unchanged and a watch on lastError would silently drop the retry's
+// toast. errorTick bumps on every failure; the message is read from lastError.
 // Never render undefined/[object Object]/.stack — lastError is always either
 // an engine/server error string or the UIX-01 fallback copy below.
-watch(actionController.lastError, (err) => {
+watch(actionController.errorTick, () => {
+  const err = actionController.lastError.value;
   if (!err) return;
   const text = typeof err === 'string' && err.length > 0
     ? err

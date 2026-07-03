@@ -630,6 +630,32 @@ describe('useActionController', () => {
     });
   });
 
+  describe('errorTick (UIX-01, CR-01)', () => {
+    it('bumps errorTick on EVERY failure — including a repeat of the identical error', async () => {
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+      });
+
+      expect(controller.errorTick.value).toBe(0);
+
+      await controller.start('playCard');
+      const r1 = await controller.fill('card', 999); // not in choices
+      const r2 = await controller.fill('card', 999); // SAME invalid value again
+
+      expect(r1.valid).toBe(false);
+      expect(r2.valid).toBe(false);
+      // lastError holds the same string both times — a watch on lastError alone
+      // would not re-fire. errorTick is the monotonic per-failure signal.
+      expect(controller.lastError.value).toBe('Invalid selection for "card"');
+      expect(controller.errorTick.value).toBe(2);
+    });
+  });
+
   describe('getChoices utility', () => {
     it('should return choices from choice selection', () => {
       const controller = useActionController({

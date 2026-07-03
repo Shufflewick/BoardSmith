@@ -129,7 +129,8 @@ describe('GameShell — showHintProp computed', () => {
 // Production wiring under test (GameShell.vue, after actionController and
 // toast are both constructed):
 //
-//   watch(actionController.lastError, (err) => {
+//   watch(actionController.errorTick, () => {
+//     const err = actionController.lastError.value;
 //     if (!err) return;
 //     const text = typeof err === 'string' && err.length > 0
 //       ? err
@@ -138,6 +139,11 @@ describe('GameShell — showHintProp computed', () => {
 //     assertiveMessage.value = text;
 //     emitAnnounce('assertive', text);
 //   }, { immediate: false });
+//
+// The watch source is errorTick, NOT lastError (CR-01): fill()-path failures
+// never null-clear lastError between attempts, so a retried IDENTICAL failure
+// leaves the string unchanged — a watch on lastError would drop that toast.
+// errorTick is bumped by the controller's setError() on EVERY failure.
 //
 // This is the SOLE toast-owning chokepoint for action failures — ActionPanel's
 // three direct toast.error call sites are removed (see ActionPanel.test.ts),
@@ -152,6 +158,14 @@ describe('GameShell — showHintProp computed', () => {
 describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)', () => {
   function buildToastHarness() {
     const lastError = ref<string | null>(null);
+    // Mirrors useActionController's setError()/errorTick pair: every failure
+    // path calls setError(msg), which bumps the monotonic errorTick. Clears
+    // (lastError.value = null) do NOT tick.
+    const errorTick = ref(0);
+    const setError = (msg: string) => {
+      lastError.value = msg;
+      errorTick.value++;
+    };
     const currentAction = ref<string | null>(null);
     const assertiveMessage = ref('');
     const toastErrorCalls: string[] = [];
@@ -163,7 +177,8 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
     };
 
     // ── Production watch wiring (mirrors GameShell.vue exactly) ──────────
-    watch(lastError, (err) => {
+    watch(errorTick, () => {
+      const err = lastError.value;
       if (!err) return;
       const text = typeof err === 'string' && err.length > 0
         ? err
@@ -173,13 +188,13 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
       emitAnnounce('assertive', text);
     }, { immediate: false });
 
-    return { lastError, currentAction, assertiveMessage, toastErrorCalls, announceCalls };
+    return { lastError, errorTick, setError, currentAction, assertiveMessage, toastErrorCalls, announceCalls };
   }
 
   it('fires exactly one toast.error and updates assertiveMessage when lastError transitions null -> a string', async () => {
-    const { lastError, assertiveMessage, toastErrorCalls, announceCalls } = buildToastHarness();
+    const { setError, assertiveMessage, toastErrorCalls, announceCalls } = buildToastHarness();
 
-    lastError.value = 'boom';
+    setError('boom');
     await Promise.resolve(); // flush watcher (default flush: 'pre', batched to next tick)
     await Promise.resolve();
 
@@ -190,11 +205,13 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
 
   it('does NOT fire on mount (immediate: false) even if lastError starts non-null', async () => {
     const lastError = ref<string | null>('pre-existing');
+    const errorTick = ref(0);
     const assertiveMessage = ref('');
     const toastErrorCalls: string[] = [];
     const toast = { error: (msg: string) => toastErrorCalls.push(msg) };
 
-    watch(lastError, (err) => {
+    watch(errorTick, () => {
+      const err = lastError.value;
       if (!err) return;
       toast.error(err);
       assertiveMessage.value = err;
@@ -205,14 +222,14 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
   });
 
   it('a single failed action that sets lastError multiple times within one tick produces exactly one toast (Vue batches; no flush:sync)', async () => {
-    const { lastError, toastErrorCalls } = buildToastHarness();
+    const { lastError, setError, toastErrorCalls } = buildToastHarness();
 
     // Simulate a failure path that clears then re-sets lastError synchronously
     // within the same tick (mirrors execute()'s `lastError.value = null` at
     // the start of a call, followed by a synchronous failure branch).
     lastError.value = null;
-    lastError.value = 'first';
-    lastError.value = 'second';
+    setError('first');
+    setError('second');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -222,22 +239,46 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
   });
 
   it('never renders undefined/[object Object] — a falsy lastError (null or empty string) never toasts', async () => {
-    const { lastError, toastErrorCalls } = buildToastHarness();
+    const { lastError, setError, toastErrorCalls } = buildToastHarness();
 
     // fill()/execute() internally coalesce to a non-empty string via
     // `result.error || 'Action failed'`, so lastError is always either null
     // (no error) or a real message once set. The watch's `if (!err) return;`
     // guard is the belt-and-suspenders proof that an empty/falsy value can
-    // never reach toast.error and render as undefined/[object Object].
-    lastError.value = '';
+    // never reach toast.error and render as undefined/[object Object] — even
+    // if a (hypothetical) failure path ticked with an empty message.
+    setError('');
     await Promise.resolve();
     await Promise.resolve();
     expect(toastErrorCalls).toEqual([]);
 
+    // A clear (direct null assignment, no tick) never fires the watch at all.
     lastError.value = null;
     await Promise.resolve();
     await Promise.resolve();
     expect(toastErrorCalls).toEqual([]);
+  });
+
+  it('re-toasts when the SAME failure repeats across ticks (retry-identical-failure, CR-01)', async () => {
+    // A player clicks an invalid destination, gets the toast, then clicks the
+    // SAME invalid destination again. fill()-path failures never null-clear
+    // lastError between attempts, so the error STRING is identical both times —
+    // the retry must still produce a second toast (exactly one per failure).
+    // errorTick (bumped by setError on every failure) is what makes this fire.
+    const { setError, toastErrorCalls } = buildToastHarness();
+
+    setError('Invalid selection for "to"');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    setError('Invalid selection for "to"');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(toastErrorCalls).toEqual([
+      'Invalid selection for "to"',
+      'Invalid selection for "to"',
+    ]);
   });
 
   it('a failed action originating from ActionPanel produces exactly ONE toast via this watch, not from ActionPanel itself', async () => {
@@ -245,12 +286,12 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
     // ActionPanel.test.ts) — its fill()/execute() failure paths only set
     // actionController.lastError on the SHARED controller instance. This test
     // proves that shared-instance failure is fully covered by this one watch.
-    const { lastError, toastErrorCalls } = buildToastHarness();
+    const { setError, toastErrorCalls } = buildToastHarness();
 
     // ActionPanel's executeAction() calling actionController.execute() and
-    // getting {success:false} results in exactly this: lastError transitions
-    // to the error string, nothing else.
-    lastError.value = 'Not your turn.';
+    // getting {success:false} results in exactly this: setError() records the
+    // error string and bumps errorTick, nothing else.
+    setError('Not your turn.');
     await Promise.resolve();
     await Promise.resolve();
 

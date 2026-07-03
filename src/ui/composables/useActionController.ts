@@ -226,6 +226,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const isExecuting = ref(false);
   const lastError = ref<string | null>(null);
 
+  // UIX-01 (CR-01): monotonic failure signal. Vue refs only trigger watchers on
+  // VALUE change, so two identical consecutive failures (e.g. clicking the same
+  // invalid destination twice — fill()-path failures never null-clear lastError
+  // between attempts) would never re-fire a watch on lastError alone. Every
+  // failure path routes through setError(), which bumps errorTick; GameShell's
+  // toast chokepoint watches errorTick so EVERY failure toasts exactly once.
+  const errorTick = ref(0);
+  function setError(msg: string): void {
+    lastError.value = msg;
+    errorTick.value++;
+  }
+
   // Track pending followUp to prevent race condition with auto-start
   // During follow-up transition, external code might see currentAction === null and
   // try to start a new action, causing parallel actions.
@@ -972,7 +984,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       const result = await sendAction(actionName, args);
 
       if (!result.success) {
-        lastError.value = result.error || 'Action failed';
+        setError(result.error || 'Action failed');
       }
 
       // DEV-03: this is a terminal resolution path for multi-step actions submitted
@@ -995,7 +1007,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return result;
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
-      lastError.value = error;
+      setError(error);
       dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
       return { success: false, error };
     } finally {
@@ -1042,7 +1054,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       try {
         const result = await sendAction(actionName, args);
         if (!result.success) {
-          lastError.value = result.error || 'Action failed';
+          setError(result.error || 'Action failed');
         }
         dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
         // Executing resolves the action — clear in-progress state, unless a newer
@@ -1055,7 +1067,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return result;
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Action failed';
-        lastError.value = error;
+        setError(error);
         dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
         return { success: false, error };
       } finally {
@@ -1081,7 +1093,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Check if required
         if (!selection.optional) {
           const error = `Missing required selection: "${selection.name}"`;
-          lastError.value = error;
+          setError(error);
           return { success: false, error };
         }
       } else {
@@ -1095,7 +1107,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Validate provided value
         const validation = validateSelection(selection, finalArgs[selection.name]);
         if (!validation.valid) {
-          lastError.value = validation.error || 'Validation failed';
+          setError(validation.error || 'Validation failed');
           return { success: false, error: validation.error };
         }
       }
@@ -1108,7 +1120,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     try {
       const result = await sendAction(actionName, finalArgs);
       if (!result.success) {
-        lastError.value = result.error || 'Action failed';
+        setError(result.error || 'Action failed');
       }
 
       dispatchActionResolved(actionName, result.success, playerSeat?.value ?? 0, result.error);
@@ -1132,7 +1144,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return result;
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
-      lastError.value = error;
+      setError(error);
       dispatchActionResolved(actionName, false, playerSeat?.value ?? 0, error);
       return { success: false, error };
     } finally {
@@ -1269,20 +1281,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const prefillArgs = startOptions?.prefill ?? {};
 
     if (!availableActions.value?.includes(actionName)) {
-      lastError.value = `Action "${actionName}" is not available`;
+      const error = `Action "${actionName}" is not available`;
+      setError(error);
       devWarn(
         `start-unavailable-action:${actionName}`,
         `start('${actionName}') was ignored: '${actionName}' is not in the current player's available actions. ` +
           `Check availableActions before calling start(), or wait for the action to become available.`
       );
-      return { success: false, error: lastError.value };
+      return { success: false, error };
     }
 
     // Get metadata (only needed at start time)
     const meta = getActionMetadata(actionName);
     if (!meta) {
-      lastError.value = `No metadata for action "${actionName}"`;
-      return { success: false, error: lastError.value };
+      const error = `No metadata for action "${actionName}"`;
+      setError(error);
+      return { success: false, error };
     }
 
     currentAction.value = actionName;
@@ -1367,7 +1381,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
         `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max}) and requires an array. ` +
         `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`;
-      lastError.value = error;
+      setError(error);
       return { valid: false, error };
     }
 
@@ -1425,7 +1439,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         }
       }
     } else {
-      lastError.value = validation.error || 'Validation failed';
+      setError(validation.error || 'Validation failed');
     }
 
     return validation;
@@ -1478,7 +1492,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // Remove from accumulated on error
         repeatingState.value.accumulated.pop();
         const error = result.error || 'Selection step failed';
-        lastError.value = error;
+        setError(error);
         return { valid: false, error };
       }
 
@@ -1559,7 +1573,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
       if (!result.success) {
         const error = result.error || 'Selection step failed';
-        lastError.value = error;
+        setError(error);
         return { valid: false, error };
       }
 
@@ -1628,7 +1642,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: true };
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Selection step failed';
-      lastError.value = error;
+      setError(error);
       return { valid: false, error };
     }
   }
@@ -1899,6 +1913,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // what auto-ends the turn after a multi-jump capture chain.
     actionCompletedTick: readonly(actionCompletedTick),
     lastError,
+    // Bumped on EVERY failure that sets lastError — including a repeat of the
+    // identical error message, which a plain watch on lastError would miss.
+    // GameShell's UIX-01 toast chokepoint watches this, not lastError.
+    errorTick: readonly(errorTick),
     isLoadingChoices,
     repeatingState,
     pendingFollowUp,         // Use to prevent starting new actions during followUp transition

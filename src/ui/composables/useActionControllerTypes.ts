@@ -331,6 +331,14 @@ export interface UseActionControllerReturn {
   isExecuting: Ref<boolean>;
   /** Last validation error */
   lastError: Ref<string | null>;
+  /**
+   * Monotonic counter bumped on EVERY failure that sets lastError — including a
+   * repeat of the identical error message (fill()-path failures never null-clear
+   * lastError between attempts, so a plain watch on lastError would not re-fire
+   * for a retried identical failure). Watch this to surface each failure exactly
+   * once; read the message from lastError inside the watcher.
+   */
+  errorTick: Readonly<Ref<number>>;
   /** Whether choices are being fetched from server */
   isLoadingChoices: Ref<boolean>;
   /** Repeating selection state (for repeating selections) */
