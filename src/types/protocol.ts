@@ -286,6 +286,79 @@ export interface JoinLobbyResponse {
   seat?: number;
 }
 
+/**
+ * Generic lobby response (setReady, addSlot, removeSlot, setSlotAI, leavePosition,
+ * kickPlayer, updatePlayerOptions, updateSlotPlayerOptions, updateGameOptions).
+ */
+export interface LobbyResponse {
+  success: boolean;
+  error?: string;
+  /** Updated lobby info */
+  lobby?: LobbyInfo;
+}
+
+/**
+ * Request to set ready state.
+ */
+export interface SetReadyRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** Ready state */
+  ready: boolean;
+}
+
+/**
+ * Request to add a player slot (host only).
+ */
+export interface AddSlotRequest {
+  /** Player's unique ID */
+  playerId: string;
+}
+
+/**
+ * Request to remove a player slot (host only).
+ */
+export interface RemoveSlotRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** Seat to remove (1-indexed) */
+  seat: number;
+}
+
+/**
+ * Request to set a slot to AI or open (host only).
+ */
+export interface SetSlotAIRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** Seat to target (1-indexed) */
+  seat: number;
+  /** Whether the slot should be AI */
+  isAI: boolean;
+  /** AI difficulty level (when isAI is true) */
+  aiLevel?: string;
+}
+
+/**
+ * Request to update game options (host only).
+ */
+export interface UpdateGameOptionsRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** The game options to set */
+  gameOptions: Record<string, unknown>;
+}
+
+/**
+ * Request to update player options.
+ */
+export interface UpdatePlayerOptionsRequest {
+  /** Player's unique ID */
+  playerId: string;
+  /** The options to set */
+  playerOptions: Record<string, unknown>;
+}
+
 // ============================================
 // WebSocket Message Types
 // ============================================

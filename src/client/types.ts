@@ -2,7 +2,24 @@
  * BoardSmith Client SDK Types
  */
 
-import type { LobbyState, SlotStatus, LobbySlot, LobbyInfo } from '../types/protocol.js';
+import type {
+  LobbyState,
+  SlotStatus,
+  LobbySlot,
+  LobbyInfo,
+  CreateGameRequest,
+  ClaimSeatRequest,
+  ClaimSeatResponse,
+  JoinLobbyResponse,
+  LobbyResponse,
+  SetReadyRequest,
+  AddSlotRequest,
+  RemoveSlotRequest,
+  SetSlotAIRequest,
+  UpdateGameOptionsRequest,
+  UpdatePlayerOptionsRequest,
+  WebSocketMessage,
+} from '../types/protocol.js';
 import type { AnimationEvent } from '../engine/index.js';
 
 // ============================================
@@ -234,46 +251,96 @@ export type ConnectionCallback = (status: ConnectionStatus) => void;
 // WebSocket Messages
 // ============================================
 
-export interface WebSocketOutgoingMessage {
-  type: 'action' | 'ping' | 'getState';
-  action?: string;
-  args?: Record<string, unknown>;
-  /** Request ID for action request/response correlation */
-  requestId?: string;
-}
+/**
+ * WebSocket messages the client sends over the wire.
+ *
+ * Narrowed from the canonical `WebSocketMessage` union to exactly the three
+ * variants `GameConnection` constructs: `action`, `ping`, and `getState`.
+ * Lobby-mutation operations (claimSeat, joinLobby, setReady, etc.) go over
+ * HTTP via `MeepleClient`'s fetch methods, never over this WebSocket.
+ */
+export type WebSocketOutgoingMessage = Extract<
+  WebSocketMessage,
+  { type: 'action' | 'ping' | 'getState' }
+>;
 
-export interface WebSocketIncomingMessage {
-  type: 'state' | 'restart' | 'error' | 'pong' | 'lobby' | 'actionResult';
-  flowState?: FlowState;
-  state?: PlayerState;
-  playerSeat?: number;
-  isSpectator?: boolean;
-  error?: string;
-  timestamp?: number;
-  lobby?: LobbyInfo;
-  /** For actionResult messages */
-  requestId?: string;
-  success?: boolean;
-  data?: Record<string, unknown>;
-  message?: string;
-  /** Follow-up action to chain to (for action chaining) */
-  followUp?: {
-    action: string;
-    args?: Record<string, unknown>;
-    /** Metadata for the followUp action (so client can execute without it being in availableActions) */
-    metadata?: {
+/** Follow-up action metadata shared by the actionResult incoming message. */
+export interface FollowUpAction {
+  action: string;
+  args?: Record<string, unknown>;
+  /** Metadata for the followUp action (so client can execute without it being in availableActions) */
+  metadata?: {
+    name: string;
+    prompt?: string;
+    selections: Array<{
       name: string;
+      type: string;
       prompt?: string;
-      selections: Array<{
-        name: string;
-        type: string;
-        prompt?: string;
-        optional?: boolean;
-        [key: string]: unknown;
-      }>;
-    };
+      optional?: boolean;
+      [key: string]: unknown;
+    }>;
   };
 }
+
+/** Server pushed a fresh game state (initial state or a mid-game update). */
+export interface StateIncomingMessage {
+  type: 'state';
+  flowState: FlowState;
+  state: PlayerState;
+  playerSeat?: number;
+  isSpectator?: boolean;
+}
+
+/** Server signals the game restarted; carries a fresh state, same shape as `state`. */
+export interface RestartIncomingMessage {
+  type: 'restart';
+  flowState: FlowState;
+  state: PlayerState;
+  playerSeat?: number;
+  isSpectator?: boolean;
+}
+
+/** Server pushed an updated lobby snapshot. */
+export interface LobbyIncomingMessage {
+  type: 'lobby';
+  lobby: LobbyInfo;
+}
+
+/** Server reported an out-of-band error (not tied to a specific action request). */
+export interface ErrorIncomingMessage {
+  type: 'error';
+  error: string;
+}
+
+/** Server's response to a client `action` message, correlated by `requestId`. */
+export interface ActionResultIncomingMessage {
+  type: 'actionResult';
+  requestId?: string;
+  success?: boolean;
+  error?: string;
+  data?: Record<string, unknown>;
+  message?: string;
+  followUp?: FollowUpAction;
+}
+
+/** Server's reply to a client `ping` heartbeat. */
+export interface PongIncomingMessage {
+  type: 'pong';
+}
+
+/**
+ * WebSocket messages the client receives over the wire.
+ *
+ * Discriminated union keyed on `type`, built from the exact variants
+ * `GameConnection`'s `onmessage` handler dispatches on.
+ */
+export type WebSocketIncomingMessage =
+  | StateIncomingMessage
+  | RestartIncomingMessage
+  | LobbyIncomingMessage
+  | ErrorIncomingMessage
+  | ActionResultIncomingMessage
+  | PongIncomingMessage;
 
 // ============================================
 // HTTP Response Types
@@ -285,29 +352,8 @@ export interface ApiResponse<T = unknown> {
   data?: T;
 }
 
-export interface CreateGameRequest {
-  gameType: string;
-  playerCount: number;
-  playerNames?: string[];
-  seed?: string;
-  /** AI player positions */
-  aiPlayers?: number[];
-  /** AI difficulty level */
-  aiLevel?: string;
-  /** Game-specific options (boardSize, targetScore, etc.) */
-  gameOptions?: Record<string, unknown>;
-  /** Per-player configuration (name, color, role, etc.) */
-  playerConfigs?: Array<{
-    name?: string;
-    isAI?: boolean;
-    aiLevel?: string;
-    [key: string]: unknown;
-  }>;
-  /** Whether to use lobby flow (game waits for players to join) */
-  useLobby?: boolean;
-  /** Creator's player ID (for lobby) */
-  creatorId?: string;
-}
+// Re-export canonical request type from protocol.ts (carries playerIds; see SDK-04/F26)
+export type { CreateGameRequest };
 
 export interface CreateGameResponse {
   success: boolean;
@@ -326,69 +372,17 @@ export interface CreateGameResponse {
 // Re-export lobby types from canonical source
 export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 
-/** Request to claim a seat in the lobby */
-export interface ClaimSeatRequest {
-  seat: number;
-  name: string;
-  playerId: string;
-}
-
-/** Response to claim seat */
-export interface ClaimSeatResponse {
-  success: boolean;
-  error?: string;
-  lobby?: LobbyInfo;
-  seat?: number;
-}
-
-/** Response to join lobby (server assigns seat) */
-export interface JoinLobbyResponse {
-  success: boolean;
-  error?: string;
-  lobby?: LobbyInfo;
-  seat?: number;
-}
-
-/** Generic lobby response */
-export interface LobbyResponse {
-  success: boolean;
-  error?: string;
-  lobby?: LobbyInfo;
-}
-
-/** Request to set ready state */
-export interface SetReadyRequest {
-  playerId: string;
-  ready: boolean;
-}
-
-/** Request to add a player slot (host only) */
-export interface AddSlotRequest {
-  playerId: string;
-}
-
-/** Request to remove a player slot (host only) */
-export interface RemoveSlotRequest {
-  playerId: string;
-  seat: number;
-}
-
-/** Request to set a slot to AI or open (host only) */
-export interface SetSlotAIRequest {
-  playerId: string;
-  seat: number;
-  isAI: boolean;
-  aiLevel?: string;
-}
-
-/** Request to update game options (host only) */
-export interface UpdateGameOptionsRequest {
-  playerId: string;
-  gameOptions: Record<string, unknown>;
-}
-
-/** Request to update player options */
-export interface UpdatePlayerOptionsRequest {
-  playerId: string;
-  playerOptions: Record<string, unknown>;
-}
+// Re-export request/response types from canonical source (SDK-04/F26 — client SDK no
+// longer redefines these; protocol.ts is the single source of truth).
+export type {
+  ClaimSeatRequest,
+  ClaimSeatResponse,
+  JoinLobbyResponse,
+  LobbyResponse,
+  SetReadyRequest,
+  AddSlotRequest,
+  RemoveSlotRequest,
+  SetSlotAIRequest,
+  UpdateGameOptionsRequest,
+  UpdatePlayerOptionsRequest,
+};
