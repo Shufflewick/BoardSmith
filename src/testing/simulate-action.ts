@@ -365,7 +365,8 @@ export function playUntilComplete<G extends Game>(
         `could be determined (currentPlayer=${flowState.currentPlayer}, ` +
         `awaitingPlayers=${JSON.stringify(flowState.awaitingPlayers ?? [])}). ` +
         `This is likely an engine-state inconsistency.\n` +
-        `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
+        `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
+        `Seed: ${testGame.seed}`,
         i,
         availableActions,
         flowState,
@@ -414,7 +415,8 @@ export function playUntilComplete<G extends Game>(
           `Failures:\n${moveFailures.map(f => `  ${f}`).join('\n')}\n` +
           `This means enumerateLegalMoves returned moves that the action's validation rejects. ` +
           `Verify the action's validate() / chooseFrom() conditions match its execute() preconditions.\n` +
-          `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
+          `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
+          `Seed: ${testGame.seed}`,
           i,
           availableActions,
           flowState,
@@ -426,7 +428,8 @@ export function playUntilComplete<G extends Game>(
         `Available actions: [${availableActions.join(', ')}]. ` +
         `If these actions require text/number input they cannot be auto-enumerated — use doAction() directly. ` +
         `Check that all required selections have valid choices for the current game state.\n` +
-        `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
+        `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
+        `Seed: ${testGame.seed}`,
         i,
         availableActions,
         flowState,
@@ -452,7 +455,8 @@ export function playUntilComplete<G extends Game>(
       `(${seatDesc} still active). ` +
       `Available actions: [${availableActions.join(', ')}]. ` +
       `Increase maxMoves or verify the game can reach a terminal state.\n` +
-      `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`,
+      `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
+      `Seed: ${testGame.seed}`,
       maxMoves,
       availableActions,
       flowState,

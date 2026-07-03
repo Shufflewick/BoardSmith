@@ -147,10 +147,20 @@ export class TestGame<G extends Game = Game> {
   readonly runner: GameRunner<G>;
   /** The game instance */
   readonly game: G;
+  /**
+   * The resolved seed this game was constructed with — the fixed literal
+   * default (`'test-seed'`) when no `seed` option was supplied, or the
+   * caller-supplied `seed` otherwise. Deterministic by default: two
+   * `TestGame.create()` calls with no `seed` option produce identical
+   * shuffles/command history. Include this in bug reports and flaky-test
+   * repros for a one-copy-paste deterministic reproduction.
+   */
+  readonly seed: string;
 
-  private constructor(runner: GameRunner<G>) {
+  private constructor(runner: GameRunner<G>, seed: string) {
     this.runner = runner;
     this.game = runner.game;
+    this.seed = seed;
   }
 
   /**
@@ -164,7 +174,11 @@ export class TestGame<G extends Game = Game> {
     GameClass: new (options: GameOptions) => G,
     options: TestGameOptions
   ): TestGame<G> {
-    const seed = options.seed ?? `test-${Date.now()}`;
+    // Deterministic by default: a fixed literal seed (matching the
+    // 'playUntilComplete-default' house style), NEVER Date.now()/Math.random,
+    // so two seedless TestGame.create() calls produce identical shuffles /
+    // command history. Pass an explicit `seed` option to vary the run.
+    const seed = options.seed ?? 'test-seed';
     const playerNames = options.playerNames ??
       Array.from({ length: options.playerCount }, (_, i) => `Player ${i + 1}`);
 
@@ -183,7 +197,7 @@ export class TestGame<G extends Game = Game> {
       },
     });
 
-    const testGame = new TestGame(runner);
+    const testGame = new TestGame(runner, seed);
 
     if (options.autoStart !== false) {
       testGame.start();
@@ -333,8 +347,8 @@ export class TestGame<G extends Game = Game> {
    * the default for that reason. For tests that deliberately exercise the
    * failure path, use {@link TestGame.tryAction} instead.
    *
-   * Note: a future plan (TST-02) appends `testGame.seed` to this message so
-   * a failure can be reproduced deterministically.
+   * The thrown message includes `testGame.seed` so a failing run is one
+   * copy-paste from a deterministic repro.
    *
    * @param playerSeat - The player seat performing the action (1-indexed)
    * @param actionName - The name of the action to perform
@@ -355,7 +369,8 @@ export class TestGame<G extends Game = Game> {
     if (result.success) return;
 
     let message =
-      `Action '${actionName}' failed for seat ${playerSeat}: ${result.error ?? 'unknown error'}`;
+      `Action '${actionName}' failed for seat ${playerSeat}: ${result.error ?? 'unknown error'}\n` +
+      `Seed: ${this.seed}`;
 
     // Build the richer debugActionAvailability trace on the failure path only
     // (no cost on success). Falls back to the plain message above if the seat
@@ -373,7 +388,8 @@ export class TestGame<G extends Game = Game> {
         `Error: ${result.error ?? 'unknown error'}${result.errorCode ? ` (${result.errorCode})` : ''}\n` +
         `Why: ${debugInfo.reason}` +
         (selLines ? `\nSelections:\n${selLines}` : '') +
-        `\nFlow position: ${this.game.getFlowDebugInfo().describe()}`;
+        `\nFlow position: ${this.game.getFlowDebugInfo().describe()}\n` +
+        `Seed: ${this.seed}`;
     } catch {
       // Fall back to the plain message built above.
     }

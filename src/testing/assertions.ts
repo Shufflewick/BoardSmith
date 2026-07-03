@@ -216,7 +216,8 @@ export function assertActionAvailable(
       `Cannot check action availability for player ${playerSeat} — seat is not active. ` +
       `currentPlayer=${flowState?.currentPlayer}, ` +
       `awaitingPlayers=${JSON.stringify(flowState?.awaitingPlayers ?? [])}\n` +
-      `Flow position: ${testGame.game.getFlowDebugInfo().describe()}`
+      `Flow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
+      `Seed: ${testGame.seed}`
     );
   }
 
@@ -236,7 +237,8 @@ export function assertActionAvailable(
       `Available actions: [${availableActions.join(', ')}]\n` +
       `Why: ${debugInfo.reason}` +
       (selLines ? `\nSelections:\n${selLines}` : '') +
-      `\nFlow position: ${testGame.game.getFlowDebugInfo().describe()}`
+      `\nFlow position: ${testGame.game.getFlowDebugInfo().describe()}\n` +
+      `Seed: ${testGame.seed}`
     );
   }
 }
