@@ -873,7 +873,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // buggy hook must not take down every other consumer, and execution must
       // ALWAYS proceed (a throw here would leave isReady true with the watcher
       // never re-firing: the action would be permanently wedged, with no toast).
-      for (const hook of beforeAutoExecuteHooks.value) {
+      // WR-03: iterate a SNAPSHOT — a one-shot hook that unregisters itself (or
+      // another hook) splices the live array mid-for...of and would silently
+      // skip the hook registered after it.
+      for (const hook of [...beforeAutoExecuteHooks.value]) {
         try {
           await hook(currentAction.value, buildServerArgs());
         } catch (err) {

@@ -644,6 +644,33 @@ describe('useActionController', () => {
       }
     });
 
+    it('a one-shot hook that unregisters itself mid-iteration does not skip the next hook (WR-03)', async () => {
+      const calls: string[] = [];
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      // Natural one-shot pattern: "capture positions for this action only,
+      // then remove". Splicing the live array during for...of shifted the
+      // iterator, silently skipping the hook registered right after it.
+      const unregisterOneShot = controller.setBeforeAutoExecute(() => {
+        calls.push('one-shot');
+        unregisterOneShot();
+      });
+      controller.setBeforeAutoExecute(() => { calls.push('after'); });
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      expect(calls).toEqual(['one-shot', 'after']);
+    });
+
     it('setBeforeAutoExecute returns an unregister function that removes only that hook', async () => {
       const calls: string[] = [];
       const controller = useActionController({
