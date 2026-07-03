@@ -619,6 +619,49 @@ describe('Action Executor', () => {
       expect(result.errors).toEqual([]);
     });
 
+    // WR-08: a single `element` selection is never multiSelect, so an array
+    // is never a valid submission shape for it. Previously the array loop
+    // only pushed errors for type === 'choice', letting `{ card: [999] }`
+    // flow through validation untouched and reach execute() raw -- the same
+    // untrusted-input surface ENG-04 defends.
+    it('rejects an array submitted for a single element selection (WR-08)', () => {
+      const deck = game.create(Deck, 'deck');
+      const c1 = deck.create(Card, 'c1', { suit: 'H', rank: '1', value: 1 });
+
+      const action = Action.create('play')
+        .chooseElement('card', { elementClass: Card })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        [c1.id],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('single element');
+    });
+
+    it('rejects an array of unknown IDs submitted for a single element selection (WR-08)', () => {
+      const deck = game.create(Deck, 'deck');
+      deck.create(Card, 'c1', { suit: 'H', rank: '1', value: 1 });
+
+      const action = Action.create('play')
+        .chooseElement('card', { elementClass: Card })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        [999, 1000],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('single element');
+    });
+
     it('still rejects an element choice duplicated as element object plus raw ID (WR-07 regression guard)', () => {
       const deck = game.create(Deck, 'deck');
       const c1 = deck.create(Card, 'c1', { suit: 'H', rank: '1', value: 1 });

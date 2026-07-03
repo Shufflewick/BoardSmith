@@ -802,6 +802,19 @@ export class ActionExecutor {
 
       // Handle multiSelect arrays - validate each value in the array
       if (Array.isArray(value)) {
+        // A single `element` selection is never multiSelect, so an array is
+        // never a valid submission shape for it (WR-08). Without this the
+        // loop below records no error for element selections (its checks are
+        // choice-only) and the raw array reaches execute() untouched.
+        if (selection.type === 'element') {
+          return {
+            valid: false,
+            errors: [
+              `Selection "${selection.name}" expects a single element, got an array of ${value.length}. ` +
+              `Submit one element or element ID; use chooseElements for multi-element selections.`,
+            ],
+          };
+        }
         for (const v of value) {
           // Check if this specific array item is disabled
           const disabledItem = choices.find(c => this.valuesEqual(c.value, v) && c.disabled !== false);
