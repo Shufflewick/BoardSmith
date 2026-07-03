@@ -27,8 +27,8 @@
  *   SH-4: Both lobbyInfo AI slot AND state.hasAIPlayers → true (belt-and-suspenders)
  */
 
-import { describe, it, expect } from 'vitest';
-import { ref, computed, watch } from 'vue';
+import { describe, it, expect, vi } from 'vitest';
+import { ref, computed, watch, nextTick } from 'vue';
 
 // ── Minimal LobbyInfo-like shape ─────────────────────────────────────────────
 // Only the fields that showHintProp reads are required.
@@ -255,5 +255,136 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
     await Promise.resolve();
 
     expect(toastErrorCalls).toEqual(['Not your turn.']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// GameShell — dev-mode 0×0 board console.error (Plan 134-03, Task 2, UIX-03)
+//
+// Production wiring under test (GameShell.vue, isDevBuild-gated):
+//
+//   watch(gameView, async (view) => {
+//     if (!view) return;
+//     await nextTick();
+//     setTimeout(() => {
+//       const el = zoomContainerEl.value;
+//       if (!el || el.children.length === 0) return;
+//       const rect = el.getBoundingClientRect();
+//       if (rect.width < 1 || rect.height < 1) {
+//         console.error(<UIX-03 copy>);
+//       }
+//     }, SETTLE_MS);
+//   }, { immediate: false });
+//
+// Gated on BOTH state-arrived (non-null gameView) AND slot-has-children, per
+// 134-RESEARCH.md Pitfall 2, so the normal startup transient 0×0 (before state
+// arrives / before children mount) never false-positives. Uses SETTLE_MS
+// imported from useAutoZoom.ts (no new timing constant).
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('GameShell — dev-mode board sizing 0×0 console.error (UIX-03)', () => {
+  const SETTLE_MS = 300; // mirrors useAutoZoom.ts's exported constant
+
+  /** Minimal fake element exposing only what the production watch reads. */
+  function makeFakeZoomContainer(rect: { width: number; height: number }, childCount: number) {
+    return {
+      getBoundingClientRect: () => rect,
+      children: { length: childCount },
+    } as unknown as HTMLElement;
+  }
+
+  function buildBoardSizingHarness(zoomContainerEl: { value: HTMLElement | null }) {
+    const gameView = ref<unknown>(null);
+    const errorCalls: string[] = [];
+    const consoleError = (msg: string) => errorCalls.push(msg);
+
+    // ── Production watch wiring (mirrors GameShell.vue exactly) ──────────
+    watch(gameView, async (view) => {
+      if (!view) return;
+      await nextTick();
+      setTimeout(() => {
+        const el = zoomContainerEl.value;
+        if (!el || el.children.length === 0) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 1 || rect.height < 1) {
+          consoleError(
+            "Custom board failed to render: the #game-board slot measured 0×0 after game state arrived. " +
+            "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
+            "zoom container ('.game-shell__zoom-container { width: max-content }'). Give your board's root " +
+            'element a definite width (not 100%) or see the "Board Sizing" section of docs/custom-ui-guide.md.'
+          );
+        }
+      }, SETTLE_MS);
+    }, { immediate: false });
+
+    return { gameView, errorCalls };
+  }
+
+  it('fires once when the board measures 0x0 AFTER game state has arrived and the slot has children', async () => {
+    vi.useFakeTimers();
+    try {
+      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 1) };
+      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
+
+      gameView.value = { children: [] }; // state arrived
+      await nextTick();
+      await nextTick(); // flush the async watch callback's own nextTick()
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+      expect(errorCalls).toHaveLength(1);
+      expect(errorCalls[0]).toContain('measured 0×0 after game state arrived');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT fire on the normal startup transient (gameView still null)', async () => {
+    vi.useFakeTimers();
+    try {
+      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 1) };
+      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
+
+      // gameView never set (stays null) — watch callback never even fires.
+      void gameView;
+      await vi.advanceTimersByTimeAsync(SETTLE_MS + 50);
+
+      expect(errorCalls).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT fire when state has arrived but the slot has no children yet (pre-mount transient)', async () => {
+    vi.useFakeTimers();
+    try {
+      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 0) };
+      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
+
+      gameView.value = { children: [] };
+      await nextTick();
+      await nextTick();
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+      expect(errorCalls).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT fire when the board measures a genuine non-zero size', async () => {
+    vi.useFakeTimers();
+    try {
+      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 400, height: 300 }, 2) };
+      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
+
+      gameView.value = { children: [] };
+      await nextTick();
+      await nextTick();
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+      expect(errorCalls).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

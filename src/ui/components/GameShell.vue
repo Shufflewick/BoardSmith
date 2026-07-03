@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, provide, toRef } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, provide, toRef, nextTick } from 'vue';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 // Dev-only auto-UI peek (see DevAutoUI below). Referenced ONLY under the
@@ -47,7 +47,7 @@ import { useBoardActionBridge } from '../composables/useBoardActionBridge';
 import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
 import { useZoomPreview } from '../composables/useZoomPreview';
-import { useAutoZoom } from '../composables/useAutoZoom';
+import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
 import type { ActionMetadata } from '../composables/useActionControllerTypes';
@@ -1811,6 +1811,34 @@ watch(actionController.lastError, (err) => {
   assertiveMessage.value = text;
   emitAnnounce('assertive', text);
 }, { immediate: false });
+
+// UIX-03: dev-mode diagnostic when a responsive custom board silently collapses
+// to 0×0 inside the zoom container (`.game-shell__zoom-container { width:
+// max-content }` — DO NOT modify that CSS, the structural fix is rejected per
+// 134-RESEARCH.md: a definite-width ancestor breaks useAutoZoom's fit formula
+// for every board, not just percentage-width ones). Fires once per genuine
+// post-state collapse; gated on BOTH game state having arrived (non-null
+// gameView) AND the slot having mounted children, so the normal pre-layout
+// startup transient (RESEARCH Pitfall 2) never false-positives.
+if (isDevBuild) {
+  watch(gameView, async (view) => {
+    if (!view) return;
+    await nextTick();
+    setTimeout(() => {
+      const el = zoomContainerEl.value;
+      if (!el || el.children.length === 0) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) {
+        console.error(
+          "Custom board failed to render: the #game-board slot measured 0×0 after game state arrived. " +
+          "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
+          "zoom container ('.game-shell__zoom-container { width: max-content }'). Give your board's root " +
+          'element a definite width (not 100%) or see the "Board Sizing" section of docs/custom-ui-guide.md.'
+        );
+      }
+    }, SETTLE_MS);
+  }, { immediate: false });
+}
 
 // Expose to parent/slots
 defineExpose({
