@@ -514,6 +514,52 @@ describe('Action Executor', () => {
       expect(result.errors).toEqual([]);
     });
 
+    // WR-04: duplicate items must not satisfy multiSelect count enforcement.
+    // A client can otherwise satisfy "choose N" by repeating one choice, and
+    // execute() receives duplicates game code will not expect.
+    it('rejects duplicate items in a multiSelect chooseFrom submission (WR-04)', () => {
+      const action = Action.create('test')
+        .chooseFrom('colors', { choices: ['red', 'blue', 'green'], multiSelect: { min: 2 } })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        ['red', 'red'],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('duplicate');
+    });
+
+    it('rejects duplicate elements in a chooseElements submission (WR-04)', () => {
+      const deck = game.create(Deck, 'deck');
+      const c1 = deck.create(Card, 'c1', { suit: 'H', rank: '1', value: 1 });
+      const c2 = deck.create(Card, 'c2', { suit: 'H', rank: '2', value: 2 });
+
+      const action = Action.create('test')
+        .chooseElements('cards', { elements: () => [c1, c2], multiSelect: { min: 2, max: 2 } })
+        .execute(() => {});
+
+      const rejected = executor.validateSelection(
+        action.selections[0],
+        [c1, c1],
+        game.getPlayer(1)!,
+        {}
+      );
+      expect(rejected.valid).toBe(false);
+      expect(rejected.errors.join(' ')).toContain('duplicate');
+
+      const accepted = executor.validateSelection(
+        action.selections[0],
+        [c1, c2],
+        game.getPlayer(1)!,
+        {}
+      );
+      expect(accepted.valid).toBe(true);
+    });
+
     // CR-01: multiSelect chooseFrom array items must go through the same
     // smart-resolution + disabled enforcement as scalar submissions. A custom
     // UI submitting element IDs (or display strings) in an array must not be

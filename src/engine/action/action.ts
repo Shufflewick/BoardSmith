@@ -503,6 +503,32 @@ export class ActionExecutor {
   }
 
   /**
+   * Detect duplicate items in a multiSelect submission (WR-04). A client
+   * must not be able to satisfy "choose N" by repeating one choice/element.
+   *
+   * Items that are (or reference) game elements are keyed by element id —
+   * so a raw ID and its resolved element count as the same item — and all
+   * other values are keyed by JSON serialization, matching valuesEqual's
+   * object-equality semantics.
+   */
+  private hasDuplicateItems(items: unknown[]): boolean {
+    const seen = new Set<string>();
+    for (const item of items) {
+      let key: string;
+      if (typeof item === 'number') {
+        key = `id:${item}`;
+      } else if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'number') {
+        key = `id:${(item as { id: number }).id}`;
+      } else {
+        key = `v:${JSON.stringify(item)}`;
+      }
+      if (seen.has(key)) return true;
+      seen.add(key);
+    }
+    return false;
+  }
+
+  /**
    * Check if two values are equal (handles objects by comparing JSON)
    */
   private valuesEqual(a: unknown, b: unknown): boolean {
@@ -789,6 +815,11 @@ export class ActionExecutor {
           if (!Array.isArray(value)) {
             errors.push(`Selection "${selection.name}" is multi-select and expected an array, got ${typeof value}: ${JSON.stringify(value)}`);
           } else {
+            // Reject duplicates before the count check (WR-04): repeated
+            // items must not satisfy the min bound.
+            if (this.hasDuplicateItems(value)) {
+              errors.push(`Selection "${selection.name}" contains duplicate choices`);
+            }
             const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
             const max = typeof multiSelectConfig === 'number' ? multiSelectConfig : multiSelectConfig.max;
             const count = value.length;
@@ -868,6 +899,12 @@ export class ActionExecutor {
       const multiSelect = (selection as ElementsSelection).multiSelect;
       const multiSelectConfig = typeof multiSelect === 'function' ? multiSelect(context) : multiSelect;
       if (multiSelectConfig !== undefined) {
+        // Reject duplicates before the count check (WR-04): repeated
+        // elements (or repeated IDs of the same element) must not satisfy
+        // the min bound.
+        if (Array.isArray(value) && this.hasDuplicateItems(value)) {
+          errors.push(`Selection "${selection.name}" contains duplicate elements`);
+        }
         const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
         const max = typeof multiSelectConfig === 'number' ? multiSelectConfig : multiSelectConfig.max;
         const count = Array.isArray(value) ? value.length : 1;
