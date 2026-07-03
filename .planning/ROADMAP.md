@@ -93,7 +93,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] **Phase 131: Serialization & Restore Fidelity** - Hidden zone visibility, player-state filtering, debug-data gating, and handler/lockout state all survive every snapshot restore path (completed 2026-07-03)
 - [x] **Phase 132: Engine Element & Builder Safety** - putInto, resolveArgs, forEach, and action .build() fail loudly instead of silently corrupting or no-oping (completed 2026-07-03)
 - [x] **Phase 133: Engine Flow & Action Validation** - eachPlayer wrap-around, simultaneous-action error surfacing, server-side multiSelect validation, and switchOn fail loudly (completed 2026-07-03)
-- [ ] **Phase 134: UI & Session Interaction Guardrails** - Custom-UI action failures, multiSelect fill() misuse, responsive board collapse, dragProps/setBeforeAutoExecute, and the runner-bypass footgun are all fixed or surfaced loudly
+- [x] **Phase 134: UI & Session Interaction Guardrails** - Custom-UI action failures, multiSelect fill() misuse, responsive board collapse, dragProps/setBeforeAutoExecute, and the runner-bypass footgun are all fixed or surfaced loudly (completed 2026-07-03)
 - [ ] **Phase 135: CLI & Dev Experience** - boardsmith.json/gameDefinition source-of-truth, config validation, bundle-size limits, host binding, init templates, and --players/--ai flags are all correct or fail loudly
 - [ ] **Phase 136: Client SDK & Protocol** - GameConnection is awaitable, reconnect is predictable, MeepleClient has one error contract, and protocol types are canonical
 - [ ] **Phase 137: Testing Utilities** - TestGame.doAction fails loud by default and its default seed is deterministic
@@ -171,7 +171,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] 134-02-PLAN.md — UIX-01/UIX-02/UIX-05: useActionController start() result+devWarn, fill() multiSelect guard, hook accumulation
 - [x] 134-03-PLAN.md — UIX-01/UIX-03/UIX-04: GameShell lastError->toast, 0x0 board dev-check, dragProps when-gating
 - [x] 134-04-PLAN.md — SESS-01: session.runner read-only facade (performAction unreachable)
-- [ ] 134-05-PLAN.md — DOCX-04 doc updates + live browser verification of toast + drag gating
+- [x] 134-05-PLAN.md — DOCX-04 doc updates + live browser verification of toast + drag gating
 **UI hint**: yes
 
 ### Phase 135: CLI & Dev Experience
@@ -245,7 +245,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 131. Serialization & Restore Fidelity | 5/5 | Complete    | 2026-07-03 |
 | 132. Engine Element & Builder Safety | 5/5 | Complete    | 2026-07-03 |
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
-| 134. UI & Session Interaction Guardrails | 4/5 | In Progress|  |
+| 134. UI & Session Interaction Guardrails | 5/5 | Complete   | 2026-07-03 |
 | 135. CLI & Dev Experience | 0/TBD | Not started | - |
 | 136. Client SDK & Protocol | 0/TBD | Not started | - |
 | 137. Testing Utilities | 0/TBD | Not started | - |

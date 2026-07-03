@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: executing
-stopped_at: Completed 134-04-PLAN.md
-last_updated: "2026-07-03T16:42:49.607Z"
+status: verifying
+stopped_at: Completed 134-05-PLAN.md
+last_updated: "2026-07-03T17:07:16.580Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 20
-  completed_plans: 19
-  percent: 33
+  completed_plans: 20
+  percent: 44
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 134 (UI & Session Interaction Guardrails) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-03
 
-Progress: [██████████] 95%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -138,6 +138,7 @@ Recent decisions affecting current work:
 - [Phase 134-03]: drag()'s combined helper calls a new internal dragPropsInner() directly rather than the now when-gated public dragProps(), avoiding a DragResult.props type break
 - [Phase 134-04]: buildRunnerFacade delegates via closures over the captured runner parameter (not this.#runner) at each of the 5 rebuild sites, keeping the facade referentially in sync with the freshly assigned runner
 - [Phase 134-04]: ts-expect-error test line assigns session.runner.performAction to a local (does not invoke it) since an actual call throws at runtime, already proven by the adjacent runtime-undefined assertion
+- [Phase 134-05]: Browser verification for 134-05's checkpoint performed headlessly via Playwright against go-fish dev host, confirming the Plan 03 ActionPanel-to-GameShell toast chokepoint produces exactly one toast live (no duplicate)
 
 ### Pending Todos
 
@@ -149,10 +150,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T16:42:49.599Z
-Stopped at: Completed 134-04-PLAN.md
+Last session: 2026-07-03T17:06:02.561Z
+Stopped at: Completed 134-05-PLAN.md (Phase 134 complete, all 5 plans shipped)
 Resume file: None
-Next action: Break Phase 131 (Serialization & Restore Fidelity) down into plans via `/gsd:plan-phase 131`
+Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
 
 ## Operator Next Steps
 
