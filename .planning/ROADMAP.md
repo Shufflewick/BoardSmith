@@ -113,7 +113,12 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   3. `static visibleAttributes` either filters non-listed attributes from non-owners in `toJSONForPlayer`, or has been deleted entirely with docs corrected to match — no documented no-op security control remains.
   4. `state.players` is filtered per-viewer the same way the board `view` is — a custom Player attribute or Player-child element hidden from an opponent no longer appears in that opponent's `state.players`.
   5. `registerDebug()` payloads are not broadcast to players/spectators by default (dev-only or explicit opt-in), and `onEnter`/`onExit` handlers plus `teachingDisabled` survive `GameSession.restore()`.
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 131-01-PLAN.md — PROC-01 verification gate: verdict per finding (F1/F2/F7/F8/F10/F15/F16) before any fix
+- [ ] 131-02-PLAN.md — SEC-01: serialize `_zoneVisibility` so zone visibility survives every restore path
+- [ ] 131-03-PLAN.md — RST-02 + SEC-04: persist teachingDisabled/displayName; gate registerDebug data off by default
+- [ ] 131-04-PLAN.md — SEC-02 + SEC-03: implement `visibleAttributes` filtering; route `state.players` through per-viewer filter
+- [ ] 131-05-PLAN.md — RST-01: re-bind onEnter/onExit across restore; correct registerDebug docs (DOCX-04)
 
 ### Phase 132: Engine Element & Builder Safety
 **Goal**: Element-tree mutation and action-builder APIs fail loudly on misuse instead of silently corrupting state or shipping a no-op.
