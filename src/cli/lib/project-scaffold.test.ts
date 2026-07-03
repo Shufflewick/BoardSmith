@@ -3,6 +3,7 @@ import {
   generateAppVue,
   generateBoardsmithJson,
   generateGameTableVue,
+  generateRulesIndexTs,
   generateUiIndexTs,
   type ProjectConfig,
 } from './project-scaffold.js';
@@ -64,6 +65,24 @@ describe('generateBoardsmithJson', () => {
   it('contains the "ui" field set to "auto"', () => {
     const parsed = JSON.parse(generateBoardsmithJson(config));
     expect(parsed.ui).toBe('auto');
+  });
+
+  it('does not emit a playerCount key (PROC-02 regression: gameDefinition is the sole source of player count)', () => {
+    const parsed = JSON.parse(generateBoardsmithJson(config));
+    expect(parsed).not.toHaveProperty('playerCount');
+  });
+
+  it('does not emit a dead $schema URL', () => {
+    const parsed = JSON.parse(generateBoardsmithJson(config));
+    expect(parsed).not.toHaveProperty('$schema');
+  });
+});
+
+describe('generateRulesIndexTs', () => {
+  it('still authors minPlayers/maxPlayers from config.playerCount (the sole legitimate write site)', () => {
+    const out = generateRulesIndexTs(config);
+    expect(out).toContain(`minPlayers: ${config.playerCount.min}`);
+    expect(out).toContain(`maxPlayers: ${config.playerCount.max}`);
   });
 });
 
