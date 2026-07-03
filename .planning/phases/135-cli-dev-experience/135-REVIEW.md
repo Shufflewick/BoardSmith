@@ -24,7 +24,13 @@ findings:
   warning: 5
   info: 6
   total: 13
-status: issues_found
+status: resolved
+fixed_at: 2026-07-03T21:20:00Z
+fixed:
+  critical: 2
+  warning: 5
+  info: 0
+fix_scope: critical_warning
 ---
 
 # Phase 135: Code Review Report
@@ -67,11 +73,15 @@ export { ${pascal}Game, ${pascal}Player } from './game.js';
 ```
 and add a scaffold regression test that type-checks (or at least esbuild-bundles with `logLevel: 'error'`) the full generated rules module set.
 
+**Resolution (d01965fd):** Fixed — and the new type-check regression test surfaced two ADDITIONAL scaffold compile errors beyond TS2305: `generateGameTs` overrode a `createPlayer(seat, name)` hook that does not exist on the engine `Game` class (TS4113) and constructed `Player` with `(seat, name, game)` against a `constructor(ctx)` signature (TS2554). The scaffold now uses the real engine pattern (a `static PlayerClass` field naming the custom Player class, matching hex and engine game.ts:652), with the Player class declared before the Game class (static initializers don't hoist). Re-export repointed to `./game.js`. Note: esbuild-bundling per the suggested fix CANNOT catch this — esbuild silently tolerates missing named re-exports on .ts files (it can't know they aren't type-only), which is exactly how `boardsmith dev` masked the bug — so the regression test runs the actual tsc checker (ts.createProgram) against the full generated rules module set, mirroring the scaffold's tsconfig, and asserts zero diagnostics. Runtime-smoked: a generated game constructs, players are the custom Player class, hands deal 5 cards each.
+
 ### CR-02: `validate` hard-fails every existing game on the `$schema` key with a generic "not recognized" error
 
 **File:** `src/cli/lib/boardsmith.schema.json:9-76` / `src/cli/lib/config-schema.ts:18-22` / `src/cli/commands/validate.ts:112-121`
 **Issue:** `ALLOWED_TOP_LEVEL_KEYS` (derived from the schema's `properties`) does not include `$schema`. All 8 games in `~/BoardSmithGames` (`checkers`, `cribbage`, `go-fish`, `hex`, `polyhedral-potions`, all demo-*) carry `$schema` in `boardsmith.json`, so `boardsmith validate` now FAILS all of them with `Unknown key '$schema' — not a recognized boardsmith.json field.` (verified: `findUnknownKeys({'$schema': ...})` returns no suggestion). Unlike `playerCount`, which gets a pointed migration message and is deliberate migration pressure, the `$schema` rejection is self-contradictory: this same phase ships `boardsmith.schema.json` with a public `$id` (`https://boardsmith.io/schemas/boardsmith.schema.json`) — the only way an editor consumes that schema is via a top-level `$schema` key, which `validate` then rejects. The intended pit of success (IDE autocomplete + did-you-mean from one schema) is broken by its own gate. `boardsmith dev` likewise prints a bogus warning for it on every existing game.
 **Fix:** Either add `$schema` to the schema's `properties` (a string, documented as "optional editor schema reference; ignored by the CLI"), or special-case it in `findUnknownKeys` the way `checkMetadataIssues` special-cases `playerCount`. If rejection is truly intended, emit a pointed message ("remove the editor `$schema` line; it is no longer used") and migrate the sibling game repos in the same change.
+
+**Resolution (b4f0c8ca):** Fixed via the first option — `$schema` added to `boardsmith.schema.json` `properties` (typed string, documented as the one key exempt from the read-site rule since the schema can only be consumed through it), so `ALLOWED_TOP_LEVEL_KEYS` picks it up from the single source. Regression tests added for both `findUnknownKeys` and `checkMetadataIssues` (proven RED pre-fix). Scaffold intentionally still does not emit `$schema` (the shipped `$id` URL does not resolve yet — the existing "does not emit a dead $schema URL" test stands).
 
 ## Warnings
 
@@ -80,6 +90,8 @@ and add a scaffold regression test that type-checks (or at least esbuild-bundles
 **File:** `src/cli/commands/dev.ts:737`
 **Issue:** With the new `127.0.0.1` default, no other computer can connect, yet this line prints unconditionally: `Multiplayer: each browser is a player; open the page on another computer to join.` The network-URL loop above it correctly prints nothing on a loopback bind, but this message actively tells the user to do something that will fail, with no pointer to `--lan`.
 **Fix:** Branch on `isNonLocal`: when local-only, print e.g. `Multiplayer: each browser tab is a player. To let other computers join, restart with --lan.`
+
+**Resolution (d00e5e4d):** Fixed as suggested via a pure `multiplayerBannerLine(isNonLocal)` helper (unit-tested in dev.test.ts): local-only binds get the `--lan` pointer; non-local binds keep the join-from-another-computer instruction.
 
 ### WR-02: `boardsmith build` deletes the entire shared `.boardsmith` directory, including files it didn't create
 
@@ -93,6 +105,8 @@ mkdirSync(tempDir, { recursive: true });
 ```
 (Apply the same to simulate.ts as a follow-up.)
 
+**Resolution (1a8dc469):** Fixed as suggested — build's temp dir is now `.boardsmith/build-tmp` and only that subdirectory is removed in `finally`. Source-pin regression tests in build.test.ts assert the scoped path and that `tempDir` is the only `rmSync` target in build.ts. simulate.ts's pre-existing instance of the same pattern (simulate.ts:171,188) remains a follow-up, per the finding.
+
 ### WR-03: getting-started.md dev-server section documents commands that now error
 
 **File:** `docs/getting-started.md:53-73, 88-92`
@@ -104,11 +118,15 @@ mkdirSync(tempDir, { recursive: true });
 - Lines 88-92: claims `validate` runs "Random game simulation to detect infinite loops" — validate.ts runs no simulation (that is `boardsmith simulate`).
 **Fix:** Rewrite the Dev Server Options block against the current cli.ts option set (`--port`, `--host`, `--lan`, `--players`, `--ai` 1-indexed, `--ai-level`, `--lock-teaching`) and correct the validate description.
 
+**Resolution (544bac49):** Fixed — dev section rewritten against the real cli.ts option surface (`--ai` examples now 1-indexed, `--worker-port` removed, single-port WS-on-Vite architecture described, local-only default + `--lan` documented, `--lock-teaching` added); validate section now lists the six real checks and points at `boardsmith simulate` for loop detection. Also aligned the doc's Game class example with the CR-01 scaffold change (`static PlayerClass`).
+
 ### WR-04: `--lan` is silently ignored when `--host` is also passed
 
 **File:** `src/cli/commands/dev.ts:114-118`, `src/cli/cli.ts:34-35`
 **Issue:** `resolveHost` gives an explicit `--host` unconditional precedence: `boardsmith dev --lan --host 127.0.0.1` binds local-only and drops `--lan` without any notice. The precedence is documented only in a code comment, not in the CLI help. This phase's own theme is fail-fast on contradictory/ignored input (`--ai` no longer silently drops bad entries); silently ignoring a security-relevant flag is the same class of defect.
 **Fix:** Error (or at minimum warn) when both `--lan` and `--host` are supplied and they disagree, e.g. throw `DevFlagError('--lan and --host <h> conflict; pass one or the other')`, or use commander's `conflicts('host')` on the `--lan` option.
+
+**Resolution (24a50eff):** Fixed fail-loud — `resolveHost` now throws `DevFlagError` whenever BOTH `--lan` and `--host` are supplied (even when they agree; "pass one or the other" is the simplest contract), wrapped in `exitOnDevFlagError` at the call site like the other flag validators. CLI help text for both options now states they cannot be combined. Proven RED pre-fix in dev.test.ts.
 
 ### WR-05: Bundle-size check compares uncompressed dist size against a limit the server enforces on the compressed zip; publish still has no pre-upload gate
 
@@ -118,7 +136,11 @@ mkdirSync(tempDir, { recursive: true });
 2. `bundle-limits.ts`'s header says the constant is single-sourced "for `boardsmith validate`/`publish`", but publish.ts never imports it — it builds the zip (`zip.length` at publish.ts:120-121) and uploads without a local size check, so an oversized bundle still round-trips to the server to fail. The comparison the constant was created for exists at exactly the point where `zip.length` is known.
 **Fix:** In publish.ts, gate on `zip.length > MAX_BUNDLE_SIZE` before upload with an actionable error; in validate.ts, either label the dist-size check as an approximation in its message or (better) build the same zip in-memory via `createZip` and measure that.
 
+**Resolution (9fc6b718):** Fixed via the better option on both sides, sharing a new `describeZipSizeViolation(zipLength)` helper in bundle-limits.ts. validate.ts builds the exact publish zip in-memory (`createZip(readDistDir(distDir))`) and compares its byte length to `MAX_BUNDLE_SIZE` (falling back to a clearly-labeled "not measurable — checked again during publish" note when dist/ is incomplete); publish.ts gates `zip.length` before any upload (including before the dry-run report) with an actionable error. Proven RED pre-fix: a 55MB-raw / tiny-zip dist was falsely rejected, now passes.
+
 ## Info
+
+_Not in fix scope (fix_scope: critical_warning) — the six Info findings below remain open._
 
 ### IN-01: Absolute did-you-mean threshold produces absurd suggestions for short keys
 
@@ -161,3 +183,7 @@ mkdirSync(tempDir, { recursive: true });
 _Reviewed: 2026-07-03T19:05:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+_Fixed: 2026-07-03T21:20:00Z — 2 Critical + 5 Warning resolved (commits d01965fd, b4f0c8ca, d00e5e4d, 1a8dc469, 24a50eff, 9fc6b718, 544bac49); 6 Info findings left open (out of fix scope)._
+_Fixer: Claude (gsd-code-fixer)_
+_Post-fix gates: full suite 172 files / 2285 tests green (baseline 2271 + 14 new regression tests); `tsc --noEmit` unchanged (36 pre-existing errors, none in src/cli, before and after)._
