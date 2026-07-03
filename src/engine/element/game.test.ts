@@ -334,3 +334,30 @@ describe('PIT-03', () => {
     expect(() => game.startFlow()).not.toThrow();
   });
 });
+
+// ============================================
+// ENG-08: handler-less registration validation
+// ============================================
+
+class HandlerlessRegistrationGame extends Game<HandlerlessRegistrationGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+  }
+}
+
+describe('ENG-08 handler-less registration', () => {
+  it('throws naming the action and pointing to .execute( when registering a .build()-terminated (handler-less) action, without ever calling startFlow()', () => {
+    const game = new HandlerlessRegistrationGame(makeOptions());
+    const handlerlessDef = Action.create<HandlerlessRegistrationGame>('noop-action').build();
+
+    expect(() => game.registerAction(handlerlessDef)).toThrowError(/\.execute\(/);
+    expect(() => game.registerAction(handlerlessDef)).toThrowError(/noop-action/);
+  });
+
+  it('does not throw and registers normally when the action chain ends in .execute(fn)', () => {
+    const game = new HandlerlessRegistrationGame(makeOptions());
+    const handlerfulDef = Action.create<HandlerlessRegistrationGame>('real-action').execute(() => {});
+
+    expect(() => game.registerAction(handlerfulDef)).not.toThrow();
+  });
+});
