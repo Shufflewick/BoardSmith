@@ -20,7 +20,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture', displayName: 'Fixture Game' };
     const gameDefinition = makeGameDefinition(2, 4);
 
-    const manifest = deriveManifest(config, gameDefinition, 'v1');
+    const manifest = deriveManifest(config, gameDefinition, 1);
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
   });
@@ -33,7 +33,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture', playerCount: { min: 9, max: 9 } };
     const gameDefinition = makeGameDefinition(2, 4);
 
-    const manifest = deriveManifest(config, gameDefinition, 'v1');
+    const manifest = deriveManifest(config, gameDefinition, 1);
 
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
     expect(manifest.playerCount).not.toEqual({ min: 9, max: 9 });
@@ -48,13 +48,13 @@ describe('deriveManifest', () => {
     };
     const gameDefinition = makeGameDefinition(1, 8);
 
-    const manifest = deriveManifest(config, gameDefinition, 'protocol-v3');
+    const manifest = deriveManifest(config, gameDefinition, 3);
 
     expect(manifest.name).toBe('fixture');
     expect(manifest.displayName).toBe('Fixture Game');
     expect(manifest.description).toBe('A test game');
     expect(manifest.version).toBe('2.0.0');
-    expect(manifest.engineProtocol).toBe('protocol-v3');
+    expect(manifest.engineProtocol).toBe(3);
     expect(typeof manifest.buildTime).toBe('string');
     expect(() => new Date(manifest.buildTime as string).toISOString()).not.toThrow();
   });
@@ -63,7 +63,7 @@ describe('deriveManifest', () => {
     const config = { name: 'fixture' };
     const gameDefinition = makeGameDefinition(2, 2);
 
-    const manifest = deriveManifest(config, gameDefinition, 'v1');
+    const manifest = deriveManifest(config, gameDefinition, 1);
 
     expect(manifest.version).toBe('1.0.0');
   });

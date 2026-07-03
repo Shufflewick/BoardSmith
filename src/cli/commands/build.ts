@@ -1,31 +1,48 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
 import { BUNDLE_PROTOCOL_VERSION } from '../../engine/protocol-version.js';
+import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import type { GameDefinition } from '../../session/index.js';
 
 interface BuildOptions {
   outDir?: string;
 }
 
 /**
- * Detect if we're running in the BoardSmith monorepo or a standalone game project.
- * - Monorepo: Has src/engine/ directory (collapsed structure)
- * - Standalone: Has boardsmith.json but no src/engine/
+ * Pure manifest-derivation function (T-135-07). Takes the raw parsed
+ * `boardsmith.json` config and the COMPILED `gameDefinition`, and returns the
+ * publish manifest with `playerCount` explicitly computed from
+ * `gameDefinition.minPlayers`/`maxPlayers` — set AFTER the `...config`
+ * spread so the derived value always overwrites any stale/hand-edited
+ * `playerCount` key that might be present in `config` (CLIX-01 / F9).
+ *
+ * Keeps the existing `playerCount: { min, max }` key name and shape to
+ * preserve the external publish-platform contract (135-RESEARCH.md Open
+ * Question A1).
  */
-function getProjectContext(cwd: string): 'monorepo' | 'standalone' {
-  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
-  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
-
-  // If we're in the monorepo root, it has src/engine
-  if (hasSrcEngine) return 'monorepo';
-
-  // Standalone game project
-  if (hasBoardsmithJson) return 'standalone';
-
-  // Fallback - treat as standalone (will fail with proper error if neither)
-  return 'standalone';
+export function deriveManifest(
+  config: Record<string, unknown>,
+  gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>,
+  protocolVersion: number,
+): Record<string, unknown> {
+  return {
+    ...config,
+    buildTime: new Date().toISOString(),
+    version: (config.version as string | undefined) || '1.0.0',
+    // Stamp the engine ABI version so the executor can reject a bundle built
+    // against an incompatible BoardSmith (INFRA-04). Automatic — authors never
+    // set this; it comes from the BoardSmith building the bundle.
+    engineProtocol: protocolVersion,
+    // Derived — never copied from the raw config spread. Overwrites any
+    // stale playerCount that may still be present in boardsmith.json.
+    playerCount: {
+      min: gameDefinition.minPlayers,
+      max: gameDefinition.maxPlayers,
+    },
+  };
 }
 
 export async function buildCommand(options: BuildOptions): Promise<void> {
@@ -105,15 +122,28 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
 
     // Copy and update config
     spinner.start('Generating manifest...');
-    const manifest = {
-      ...config,
-      buildTime: new Date().toISOString(),
-      version: config.version || '1.0.0',
-      // Stamp the engine ABI version so the executor can reject a bundle built
-      // against an incompatible BoardSmith (INFRA-04). Automatic — authors never
-      // set this; it comes from the BoardSmith building the bundle.
-      engineProtocol: BUNDLE_PROTOCOL_VERSION,
-    };
+
+    // Load the COMPILED gameDefinition (Node-side) so playerCount can be
+    // derived from code, never copied from the raw boardsmith.json spread
+    // (CLIX-01 / T-135-07 — mirrors simulate.ts:158-167).
+    const rulesPath = join(cwd, 'src', 'rules');
+    const tempDir = join(cwd, '.boardsmith');
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true });
+    }
+
+    let gameDefinition: GameDefinition;
+    try {
+      ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
+    } finally {
+      try {
+        rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // best-effort cleanup; do not mask the original error
+      }
+    }
+
+    const manifest = deriveManifest(config, gameDefinition, BUNDLE_PROTOCOL_VERSION);
 
     mkdirSync(join(cwd, outDir), { recursive: true });
     writeFileSync(
