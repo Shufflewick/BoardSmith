@@ -656,6 +656,98 @@ describe('useActionController', () => {
     });
   });
 
+  describe('fill() failure paths set lastError (UIX-01, CR-02)', () => {
+    function buildController() {
+      return useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: false,
+        autoExecute: false,
+        // NOTE: no pickStep — the repeating/onSelect paths below must fail loudly
+      });
+    }
+
+    it("fill() with no action in progress sets lastError (reachable in normal play via a broadcast race)", async () => {
+      const controller = buildController();
+
+      const result = await controller.fill('card', 1);
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('No action in progress');
+      expect(controller.lastError.value).toBe('No action in progress');
+      expect(controller.errorTick.value).toBe(1);
+    });
+
+    it('fill() with an unknown selection name sets lastError', async () => {
+      const controller = buildController();
+      await controller.start('playCard');
+
+      const result = await controller.fill('nonexistent', 1);
+
+      expect(result.valid).toBe(false);
+      expect(controller.lastError.value).toBe('Unknown selection: "nonexistent"');
+      expect(controller.errorTick.value).toBe(1);
+    });
+
+    it('fill() on a repeating selection without a pickStep fn sets lastError', async () => {
+      actionMetadata.value = {
+        ...createTestMetadata(),
+        collectItems: {
+          name: 'collectItems',
+          prompt: 'Collect items',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Pick items',
+              repeat: {},
+              choices: [{ value: 1, display: 'One' }],
+            } as unknown as ActionMetadata['selections'][number],
+          ],
+        },
+      };
+      availableActions.value = [...(availableActions.value ?? []), 'collectItems'];
+      const controller = buildController();
+      await controller.start('collectItems');
+
+      const result = await controller.fill('items', 1);
+
+      expect(result.valid).toBe(false);
+      expect(controller.lastError.value).toBe('pickStep function not provided for repeating pick');
+      expect(controller.errorTick.value).toBe(1);
+    });
+
+    it('fill() on an onSelect-routed selection without a pickStep fn sets lastError', async () => {
+      actionMetadata.value = {
+        ...createTestMetadata(),
+        placeToken: {
+          name: 'placeToken',
+          prompt: 'Place a token',
+          selections: [
+            {
+              name: 'target',
+              type: 'choice',
+              prompt: 'Pick a target',
+              hasOnSelect: true,
+              choices: [{ value: 'a', display: 'A' }],
+            } as unknown as ActionMetadata['selections'][number],
+          ],
+        },
+      };
+      availableActions.value = [...(availableActions.value ?? []), 'placeToken'];
+      const controller = buildController();
+      await controller.start('placeToken');
+
+      const result = await controller.fill('target', 'a');
+
+      expect(result.valid).toBe(false);
+      expect(controller.lastError.value).toBe('pickStep function not provided for onSelect routing');
+      expect(controller.errorTick.value).toBe(1);
+    });
+  });
+
   describe('getChoices utility', () => {
     it('should return choices from choice selection', () => {
       const controller = useActionController({

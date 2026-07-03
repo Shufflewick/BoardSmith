@@ -1349,13 +1349,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   async function fill(selectionName: string, rawValue: unknown): Promise<ValidationResult> {
+    // CR-02: EVERY fill() failure path must setError() — GameShell's UIX-01
+    // watch is the only place a failed action surfaces (ActionPanel's direct
+    // toasts were removed), so a silent return here means the user's click
+    // does literally nothing visible. "No action in progress" is reachable in
+    // normal play: a state broadcast can clear currentAction between render
+    // and the user's click.
     if (!currentActionMeta.value) {
-      return { valid: false, error: 'No action in progress' };
+      const error = 'No action in progress';
+      setError(error);
+      return { valid: false, error };
     }
 
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (!selection) {
-      return { valid: false, error: `Unknown selection: "${selectionName}"` };
+      const error = `Unknown selection: "${selectionName}"`;
+      setError(error);
+      return { valid: false, error };
     }
 
     // PIT OF SUCCESS: Auto-unwrap choice objects from getChoices()
@@ -1449,7 +1459,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   async function handleRepeatingFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
     const stepFn = options.pickStep;
     if (!stepFn || !currentAction.value) {
-      return { valid: false, error: 'pickStep function not provided for repeating pick' };
+      const error = 'pickStep function not provided for repeating pick';
+      setError(error);
+      return { valid: false, error };
     }
 
     const player = playerSeat?.value ?? 0;
@@ -1555,7 +1567,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   async function handleOnSelectFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
     const stepFn = options.pickStep;
     if (!stepFn || !currentAction.value) {
-      return { valid: false, error: 'pickStep function not provided for onSelect routing' };
+      const error = 'pickStep function not provided for onSelect routing';
+      setError(error);
+      return { valid: false, error };
     }
 
     const player = playerSeat?.value ?? 0;
