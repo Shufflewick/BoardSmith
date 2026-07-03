@@ -185,9 +185,15 @@ export class MeepleClient {
       autoReconnect: options?.autoReconnect ?? this.config.autoReconnect,
       maxReconnectAttempts: options?.maxReconnectAttempts ?? this.config.maxReconnectAttempts,
       reconnectDelay: options?.reconnectDelay ?? this.config.reconnectDelay,
+      connectImmediately: options?.connectImmediately,
+      connectionTimeout: options?.connectionTimeout,
+      wsImplementation: options?.wsImplementation,
     };
 
     const connection = new GameConnection(this.config.baseUrl, connectionConfig);
+    // GameConnection.connect() itself honors connectImmediately (skips dialing
+    // when false), so this call is safe to make unconditionally. The returned
+    // connection's `.opened` promise is the awaitable open callers can await.
     connection.connect();
 
     return connection;

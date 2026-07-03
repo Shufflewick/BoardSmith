@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MeepleClient, MeepleClientError } from './client.js';
+import { GameConnection } from './game-connection.js';
 import { ErrorCode } from '../types/protocol.js';
 
 /**
@@ -135,5 +136,111 @@ describe('MeepleClient error contract (SDK-03/F25)', () => {
     const result = await client.health();
 
     expect(result).toEqual({ status: 'ok', environment: 'test' });
+  });
+});
+
+describe('MeepleClient identity & connection surface (SDK-01/SDK-06)', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('new MeepleClient({baseUrl, playerId}) uses the provided id and never calls generatePlayerId()', () => {
+    const generateSpy = vi.spyOn(
+      MeepleClient.prototype as unknown as { generatePlayerId: () => string },
+      'generatePlayerId'
+    );
+
+    const client = new MeepleClient({ baseUrl: 'http://localhost:3000', playerId: 'fixed-id' });
+
+    expect(client.getPlayerId()).toBe('fixed-id');
+    expect(generateSpy).not.toHaveBeenCalled();
+
+    generateSpy.mockRestore();
+  });
+
+  it('the no-Web-Crypto error names the real playerId field on MeepleClientConfig and states Node 19+', () => {
+    const originalCrypto = globalThis.crypto;
+    // @ts-expect-error - deliberately removing crypto to exercise the fallback throw
+    delete globalThis.crypto;
+
+    try {
+      expect(() => new MeepleClient({ baseUrl: 'http://localhost:3000' })).toThrow(
+        /playerId in MeepleClientConfig.*Node 19\+/s
+      );
+    } finally {
+      globalThis.crypto = originalCrypto;
+    }
+  });
+
+  it('client.connect(gameId) exposes an awaitable open via the returned GameConnection.opened', async () => {
+    class FakeWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+
+      readyState = FakeWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onclose: ((event: { wasClean: boolean; code: number }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+
+      constructor(public url: string) {
+        // Simulate the socket opening on the next microtask, like a real
+        // WebSocket handshake would (asynchronously).
+        queueMicrotask(() => {
+          this.readyState = FakeWebSocket.OPEN;
+          this.onopen?.();
+        });
+      }
+
+      send(): void {}
+      close(): void {
+        this.readyState = FakeWebSocket.CLOSED;
+      }
+    }
+
+    const client = new MeepleClient({ baseUrl: 'http://localhost:3000', playerId: 'player-1' });
+    const connection = client.connect('game-1', {
+      wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+    });
+
+    expect(connection).toBeInstanceOf(GameConnection);
+    await expect(connection.opened).resolves.toBeUndefined();
+
+    connection.disconnect();
+  });
+
+  it('connectImmediately:false is threaded through so client.connect() never dials a socket', () => {
+    let constructed = false;
+    class TrackingWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      readyState = TrackingWebSocket.CONNECTING;
+      constructor() {
+        constructed = true;
+      }
+      send(): void {}
+      close(): void {}
+    }
+
+    const client = new MeepleClient({ baseUrl: 'http://localhost:3000', playerId: 'player-1' });
+    const connection = client.connect('game-1', {
+      connectImmediately: false,
+      wsImplementation: TrackingWebSocket as unknown as typeof WebSocket,
+    });
+
+    expect(connection).toBeInstanceOf(GameConnection);
+    expect(constructed).toBe(false);
+    expect(connection.getStatus()).toBe('disconnected');
   });
 });
