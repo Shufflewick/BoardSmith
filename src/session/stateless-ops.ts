@@ -561,9 +561,11 @@ async function handleHint(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'hint' }>,
+  teachingDisabled: boolean,
 ): Promise<OpResult> {
-  // Fail-loud: teaching features locked out by the host.
-  if (gameOptions.teachingDisabled) {
+  // Fail-loud: teaching features locked out by the host (via hostOptions —
+  // deliberately NOT gameOptions, see WR-04/D-01 on executeOp).
+  if (teachingDisabled) {
     return errorResult('Teaching features are disabled for this session.', 'protocol');
   }
   // Fail-loud: no AI config means hint is impossible.
@@ -628,9 +630,11 @@ async function handleHeatmapToggle(
   gameOptions: { playerCount: number; [key: string]: unknown },
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'heatmapToggle' }>,
+  teachingDisabled: boolean,
 ): Promise<OpResult> {
-  // Fail-loud: teaching features locked out by the host.
-  if (gameOptions.teachingDisabled) {
+  // Fail-loud: teaching features locked out by the host (via hostOptions —
+  // deliberately NOT gameOptions, see WR-04/D-01 on executeOp).
+  if (teachingDisabled) {
     return errorResult('Teaching features are disabled for this session.', 'protocol');
   }
 
@@ -1003,6 +1007,14 @@ function handleDebugCommand(
  * @param snapshot     - The current game state snapshot (null for `start`)
  * @param pendingState - The acting seat's persisted pending state (for multi-step selections)
  * @param op           - The operation to execute
+ * @param hostOptions  - Host-level session policy, threaded SEPARATELY from
+ *                       `gameOptions` (WR-04, phase 131). `teachingDisabled`
+ *                       must never live in `gameOptions`: a game may name its
+ *                       own option `teachingDisabled` (the D-01 collision),
+ *                       and `gameOptions` flows into the Game constructor →
+ *                       `_constructorOptions` → `snapshot.gameOptions`, which
+ *                       would persist a transient host flag inside game state.
+ *                       Mirrors how `pendingState` is threaded positionally.
  */
 export async function executeOp(
   def: GameDefinitionLike,
@@ -1010,8 +1022,10 @@ export async function executeOp(
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
   op: Op,
+  hostOptions?: { teachingDisabled?: boolean } | null,
 ): Promise<OpResult> {
   try {
+    const teachingDisabled = hostOptions?.teachingDisabled ?? false;
     const { playerCount } = gameOptions;
     if (playerCount < def.minPlayers || playerCount > def.maxPlayers) {
       return errorResult(
@@ -1071,14 +1085,15 @@ export async function executeOp(
           spaceId: op.deckId,
         });
       case 'hint':
-        return handleHint(def, gameOptions, snap, op);
+        return handleHint(def, gameOptions, snap, op, teachingDisabled);
       case 'heatmapToggle':
-        return handleHeatmapToggle(def, gameOptions, snap, op);
+        return handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
       case 'aiSuggest':
         return handleAISuggest(def, gameOptions, snap, op);
       case 'startTutorial': {
-        // Fail-loud: teaching features locked out by the host.
-        if (gameOptions.teachingDisabled) {
+        // Fail-loud: teaching features locked out by the host (via
+        // hostOptions — deliberately NOT gameOptions, see WR-04/D-01 above).
+        if (teachingDisabled) {
           return errorResult('Teaching features are disabled for this session.', 'protocol');
         }
         if (!def.tutorial) {

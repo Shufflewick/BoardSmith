@@ -90,21 +90,27 @@ export interface MultiplayerHostOptions {
   /**
    * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
    * fail-loud for this session. Set by `boardsmith dev --lock-teaching`.
-   * Threaded into the executeOp gameOptions bag and the SnapshotSessionHost adapters
-   * so all enforcement guards in Plans 111-01 and 111-02 fire on the real running host.
+   * Threaded as executeOp's dedicated `hostOptions` parameter (NOT the
+   * gameOptions bag — WR-04/D-01: a game may define its own `teachingDisabled`
+   * game option, and gameOptions persists into snapshots via the Game
+   * constructor) and into the SnapshotSessionHost adapters so all enforcement
+   * guards in Plans 111-01 and 111-02 fire on the real running host.
    */
   teachingDisabled?: boolean;
   /**
    * Run one op against a snapshot for the given gameOptions, bound to the
-   * author's gameDefinition: `(gameOptions, snapshot, pendingState, op) =>
-   * executeOp(def, gameOptions, …)`. The host computes the start gameOptions
-   * (seed, per-seat colors, playerIsAI) from lobby state, so it must own them.
+   * author's gameDefinition: `(gameOptions, snapshot, pendingState, op, hostOptions) =>
+   * executeOp(def, gameOptions, …, hostOptions)`. The host computes the start
+   * gameOptions (seed, per-seat colors, playerIsAI) from lobby state, so it
+   * must own them. `hostOptions` carries host-level session policy
+   * (`teachingDisabled`) separately from the game's own options.
    */
   executeOp: (
     gameOptions: { playerCount: number; [key: string]: unknown },
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
     op: Op,
+    hostOptions?: { teachingDisabled?: boolean },
   ) => Promise<OpResult>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
@@ -507,7 +513,6 @@ export class MultiplayerHost {
       playerCount,
       seed: (this.opts.makeSeed ?? defaultSeed)(),
       ...this.opts.baseGameOptions,
-      teachingDisabled: this.opts.teachingDisabled,
       playerOptions: perSeatOptions,
       playerIsAI: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
       // Mirror the production lobby's playerConfigs (game-session.ts builds the
@@ -523,9 +528,14 @@ export class MultiplayerHost {
         ...perSeatOptions[i],
       })),
     };
-    const baseOptions = { playerCount, teachingDisabled: this.opts.teachingDisabled };
+    const baseOptions = { playerCount };
+    // teachingDisabled travels in hostOptions, NOT gameOptions (WR-04/D-01):
+    // gameOptions is handed to the Game constructor on `start` and persists
+    // into snapshot.gameOptions, and a game may legitimately define its own
+    // `teachingDisabled` game option that must not collide with this flag.
+    const hostOptions = { teachingDisabled: this.opts.teachingDisabled };
     const executeOp = (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) =>
-      this.opts.executeOp(op.type === 'start' ? startGameOptions : baseOptions, snapshot, pendingState, op);
+      this.opts.executeOp(op.type === 'start' ? startGameOptions : baseOptions, snapshot, pendingState, op, hostOptions);
 
     const session = createDevSession({
       playerCount,

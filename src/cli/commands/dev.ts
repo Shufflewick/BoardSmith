@@ -19,6 +19,7 @@ type RuntimeExecuteOp = (
   snapshot: unknown,
   pendingState: Record<string, unknown> | null,
   op: Op,
+  hostOptions?: { teachingDisabled?: boolean },
 ) => Promise<OpResult>;
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 
@@ -522,8 +523,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
       colorPalette,
       baseGameOptions,
       teachingDisabled,
-      executeOp: (gameOptions, snapshot, pendingState, op) =>
-        runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op),
+      executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
+        runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
       send: (clientId, message) => {
         const sock = clients.get(clientId);
         if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(message));

@@ -53,7 +53,7 @@ function makeAltHost() {
     playerCount: 2,
     minPlayers: 2,
     makeSeed: () => 'alt',
-    executeOp: (gameOptions, snap, pend, op) => executeOp(altDef, gameOptions, snap, pend, op),
+    executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => sent.push({ clientId, msg }),
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
@@ -77,7 +77,7 @@ function makeHost(opts: { designatedAiSeats?: number[] } = {}) {
     minPlayers: 1,
     makeSeed: () => 'mp',
     designatedAiSeats: opts.designatedAiSeats,
-    executeOp: (gameOptions, snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
+    executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => sent.push({ clientId, msg }),
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
@@ -189,9 +189,9 @@ describe('MultiplayerHost — player configs', () => {
       minPlayers: 2,
       makeSeed: () => 'mp',
       aiLevel: 'hard',
-      executeOp: (gameOptions, snap, pend, op) => {
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start') startOptions = gameOptions;
-        return executeOp(altDef, gameOptions, snap, pend, op);
+        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
       },
       send: (clientId, msg) => sent.push({ clientId, msg }),
     });
@@ -218,12 +218,12 @@ describe('MultiplayerHost — seat stability on reconnect', () => {
       playerCount: 2,
       minPlayers: 2,
       makeSeed: () => 'mp',
-      executeOp: (gameOptions, snap, pend, op) => {
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start' && failNextStart) {
           failNextStart = false;
           throw new Error('simulated transient start failure');
         }
-        return executeOp(altDef, gameOptions, snap, pend, op);
+        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
       },
       send: (clientId, msg) => sent.push({ clientId, msg }),
     });
@@ -372,7 +372,7 @@ function makeLockedHost() {
     minPlayers: 1,
     makeSeed: () => 'locked',
     teachingDisabled: true,
-    executeOp: (gameOptions, snap, pend, op) => executeOp(def, gameOptions, snap, pend, op),
+    executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => sent.push({ clientId, msg }),
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);

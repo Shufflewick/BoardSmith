@@ -82,8 +82,8 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       playerCount: 2,
       minPlayers: 1,
       makeSeed: () => 'dev-host-integration',
-      executeOp: (gameOptions, snapshot, pendingState, op) =>
-        executeOp(gameDef, gameOptions, snapshot, pendingState, op),
+      executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
+        executeOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
       send: (clientId, message) => {
         const sock = sockets.get(clientId);
         if (sock && sock.readyState === sock.OPEN) sock.send(JSON.stringify(message));

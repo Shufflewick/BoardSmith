@@ -972,11 +972,17 @@ describe('executeOp', () => {
 
   });
 
-  // ── teachingDisabled lockout (Plan 111-02) ────────────────────────────────
+  // ── teachingDisabled lockout (Plan 111-02, WR-04 iteration 2) ─────────────
   //
-  // When gameOptions.teachingDisabled is true, hint / heatmapToggle / startTutorial
+  // When hostOptions.teachingDisabled is true, hint / heatmapToggle / startTutorial
   // must each return a protocol error with the canonical lockout message. exitTutorial
   // must remain functional (D-06). Default (absent/false) leaves all ops working.
+  //
+  // WR-04: the flag is threaded as executeOp's dedicated hostOptions parameter,
+  // NOT via gameOptions — a game may define its OWN `teachingDisabled` game
+  // option (the D-01 collision), and gameOptions persists into snapshots via
+  // the Game constructor. A `teachingDisabled` key inside gameOptions must
+  // therefore have NO effect on assist ops.
 
   describe('teachingDisabled lockout guards', () => {
 
@@ -1015,8 +1021,8 @@ describe('executeOp', () => {
       },
     };
 
-    const lockedOpts = { playerCount: 2, seed: 'lock-seed', teachingDisabled: true };
     const openOpts = { playerCount: 2, seed: 'lock-seed' };
+    const lockedHost = { teachingDisabled: true };
 
     async function startLockGame() {
       const res = await executeOp(lockBotDef, openOpts, null, null, { type: 'start' });
@@ -1026,7 +1032,7 @@ describe('executeOp', () => {
 
     it('hint returns a protocol lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, { type: 'hint', seat: 1 });
+      const res = await executeOp(lockBotDef, openOpts, snapshot, null, { type: 'hint', seat: 1 }, lockedHost);
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1043,9 +1049,9 @@ describe('executeOp', () => {
 
     it('heatmapToggle returns a protocol lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, {
+      const res = await executeOp(lockBotDef, openOpts, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: true,
-      });
+      }, lockedHost);
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1054,9 +1060,9 @@ describe('executeOp', () => {
 
     it('heatmapToggle visible=false also returns a lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, {
+      const res = await executeOp(lockBotDef, openOpts, snapshot, null, {
         type: 'heatmapToggle', seat: 1, visible: false,
-      });
+      }, lockedHost);
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1065,9 +1071,9 @@ describe('executeOp', () => {
 
     it('startTutorial returns a protocol lockout error when teachingDisabled is true', async () => {
       const snapshot = await startLockGame();
-      const res = await executeOp(lockBotDef, lockedOpts, snapshot, null, {
+      const res = await executeOp(lockBotDef, openOpts, snapshot, null, {
         type: 'startTutorial', player: 1,
-      });
+      }, lockedHost);
 
       expect(res.success).toBe(false);
       expect(res.category).toBe('protocol');
@@ -1083,24 +1089,51 @@ describe('executeOp', () => {
       expect(started.success).toBe(true);
 
       // exitTutorial under the locked options must still succeed.
-      const res = await executeOp(lockBotDef, lockedOpts, started.snapshot, null, {
+      const res = await executeOp(lockBotDef, openOpts, started.snapshot, null, {
         type: 'exitTutorial', player: 1,
-      });
+      }, lockedHost);
 
       expect(res.success).toBe(true);
     });
 
-    it('teachingDisabled:false leaves all three ops functional', async () => {
-      const falseOpts = { ...openOpts, teachingDisabled: false };
+    it('hostOptions teachingDisabled:false leaves all three ops functional', async () => {
+      const openHost = { teachingDisabled: false };
       const snapshot = await startLockGame();
 
-      const hintRes = await executeOp(lockBotDef, falseOpts, snapshot, null, { type: 'hint', seat: 1 });
+      const hintRes = await executeOp(lockBotDef, openOpts, snapshot, null, { type: 'hint', seat: 1 }, openHost);
       expect(hintRes.success).toBe(true);
 
-      const tutRes = await executeOp(lockBotDef, falseOpts, snapshot, null, {
+      const tutRes = await executeOp(lockBotDef, openOpts, snapshot, null, {
+        type: 'startTutorial', player: 1,
+      }, openHost);
+      expect(tutRes.success).toBe(true);
+    });
+
+    // WR-04 (iteration 2): the D-01 non-collision guarantee. A game that
+    // defines its OWN `teachingDisabled` game option must NOT lock out (or
+    // unlock) assist features — only hostOptions controls the lockout.
+    it('a game-defined gameOptions.teachingDisabled has NO effect on assist ops (D-01 non-collision)', async () => {
+      const gameOwnOption = { ...openOpts, teachingDisabled: true };
+      const startRes = await executeOp(lockBotDef, gameOwnOption, null, null, { type: 'start' });
+      expect(startRes.success).toBe(true);
+
+      const hintRes = await executeOp(lockBotDef, gameOwnOption, startRes.snapshot, null, {
+        type: 'hint', seat: 1,
+      });
+      expect(hintRes.success).toBe(true);
+
+      const tutRes = await executeOp(lockBotDef, gameOwnOption, startRes.snapshot, null, {
         type: 'startTutorial', player: 1,
       });
       expect(tutRes.success).toBe(true);
+    });
+
+    it('hostOptions.teachingDisabled does not leak into snapshot.gameOptions', async () => {
+      const startRes = await executeOp(lockBotDef, openOpts, null, null, { type: 'start' }, lockedHost);
+      expect(startRes.success).toBe(true);
+
+      const persistedOptions = (startRes.snapshot as { gameOptions?: Record<string, unknown> }).gameOptions;
+      expect(persistedOptions?.teachingDisabled).toBeUndefined();
     });
 
   });
