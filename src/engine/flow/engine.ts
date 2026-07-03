@@ -511,50 +511,54 @@ export class FlowEngine<G extends Game = Game> {
     // Clear error on success (mirrors resume()'s success-path clear).
     this.actionError = undefined;
 
-    // Check if this player is done (re-evaluate after action)
-    const context = this.createContext();
-    if (config.playerDone) {
-      playerState.completed = config.playerDone(context, player);
-    }
-
-    // Re-evaluate available actions for this player
-    if (!playerState.completed) {
-      const actions = typeof config.actions === 'function'
-        ? config.actions(context, player)
-        : config.actions;
-      playerState.availableActions = actions.filter((availableActionName) => {
-        const action = this.game.getAction(availableActionName);
-        if (!action) return false;
-        return this.game.getAvailableActions(player as any).some((a) => a.name === availableActionName);
-      });
-      // If no available actions left, mark as completed
-      if (playerState.availableActions.length === 0) {
-        playerState.completed = true;
+    // Everything below runs AFTER the action committed its state changes.
+    // playerDone / actions re-eval / allDone are developer callbacks
+    // evaluating live game state — the same failure class as switchOn's on()
+    // (WR-02) — so any throw from here on must surface as FlowHaltedError,
+    // letting GameRunner record the committed action instead of silently
+    // diverging actionHistory from applied game state (WR-06).
+    try {
+      // Check if this player is done (re-evaluate after action)
+      const context = this.createContext();
+      if (config.playerDone) {
+        playerState.completed = config.playerDone(context, player);
       }
-    }
 
-    // Check if all players are done
-    const allDone = config.allDone
-      ? config.allDone(context)
-      : this.awaitingPlayers.every(p => p.completed);
+      // Re-evaluate available actions for this player
+      if (!playerState.completed) {
+        const actions = typeof config.actions === 'function'
+          ? config.actions(context, player)
+          : config.actions;
+        playerState.availableActions = actions.filter((availableActionName) => {
+          const action = this.game.getAction(availableActionName);
+          if (!action) return false;
+          return this.game.getAvailableActions(player as any).some((a) => a.name === availableActionName);
+        });
+        // If no available actions left, mark as completed
+        if (playerState.availableActions.length === 0) {
+          playerState.completed = true;
+        }
+      }
 
-    if (allDone) {
-      // Clear awaiting state and complete the step. The acting player's
-      // action has committed, so wrap flow advancement failures in
-      // FlowHaltedError (same contract as the sequential path, WR-02).
-      this.awaitingInput = false;
-      this.awaitingPlayers = [];
-      frame.completed = true;
-      try {
+      // Check if all players are done
+      const allDone = config.allDone
+        ? config.allDone(context)
+        : this.awaitingPlayers.every(p => p.completed);
+
+      if (allDone) {
+        // Clear awaiting state and complete the step.
+        this.awaitingInput = false;
+        this.awaitingPlayers = [];
+        frame.completed = true;
         return this.run();
-      } catch (error) {
-        if (error instanceof FlowHaltedError) throw error;
-        throw new FlowHaltedError(error);
       }
-    }
 
-    // Still awaiting other players
-    return this.getState();
+      // Still awaiting other players
+      return this.getState();
+    } catch (error) {
+      if (error instanceof FlowHaltedError) throw error;
+      throw new FlowHaltedError(error);
+    }
   }
 
   /**

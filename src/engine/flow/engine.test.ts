@@ -6,6 +6,7 @@ import {
   Player,
   Action,
   FlowEngine,
+  FlowHaltedError,
   sequence,
   loop,
   repeat,
@@ -2254,6 +2255,113 @@ describe('ENG-03 simultaneous action failure signaling', () => {
     const state = engine.resume('test', { choice: 'a' }, 99);
     expect(state.actionError).toContain('not awaiting');
     expect(state.awaitingInput).toBe(true);
+  });
+
+  // WR-06: everything that runs AFTER the action commits in
+  // resumeSimultaneousAction — playerDone, the actions re-eval, allDone, and
+  // flow advancement — is developer-callback code evaluating live game state,
+  // exactly the failure class WR-02 covered on the sequential path. A throw
+  // there must surface as FlowHaltedError so GameRunner records the committed
+  // action; a plain Error would silently diverge actionHistory from applied
+  // game state.
+  it('wraps a post-commit playerDone throw in FlowHaltedError (WR-06)', () => {
+    let committed = false;
+    game.registerAction(
+      Action.create('done').execute(() => {
+        committed = true;
+        return { success: true };
+      })
+    );
+
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['done'],
+        // Setup-time evaluation succeeds; the post-commit evaluation throws.
+        playerDone: () => {
+          if (!committed) return false;
+          throw new Error('playerDone exploded');
+        },
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    let caught: unknown;
+    try {
+      engine.resume('done', {}, 1);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(FlowHaltedError);
+    expect((caught as Error).message).toContain('playerDone exploded');
+  });
+
+  it('wraps a post-commit allDone throw in FlowHaltedError (WR-06)', () => {
+    const acted = new Set<number>();
+    game.registerAction(
+      Action.create('done').execute((args, ctx) => {
+        acted.add(ctx.player.seat);
+        return { success: true };
+      })
+    );
+
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        actions: ['done'],
+        playerDone: (ctx, p) => acted.has(p.seat),
+        // Setup-time evaluation succeeds; the post-commit evaluation throws.
+        allDone: () => {
+          if (acted.size === 0) return false;
+          throw new Error('allDone exploded');
+        },
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    let caught: unknown;
+    try {
+      engine.resume('done', {}, 1);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(FlowHaltedError);
+    expect((caught as Error).message).toContain('allDone exploded');
+  });
+
+  it('wraps a post-commit actions() re-eval throw in FlowHaltedError (WR-06)', () => {
+    let committed = false;
+    game.registerAction(
+      Action.create('done').execute(() => {
+        committed = true;
+        return { success: true };
+      })
+    );
+
+    const flow = defineFlow({
+      root: simultaneousActionStep({
+        // Setup-time evaluations succeed; the post-commit re-eval throws.
+        actions: () => {
+          if (committed) throw new Error('actions re-eval exploded');
+          return ['done'];
+        },
+        playerDone: () => false,
+      }),
+    });
+
+    const engine = new FlowEngine(game, flow);
+    engine.start();
+
+    let caught: unknown;
+    try {
+      engine.resume('done', {}, 1);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(FlowHaltedError);
+    expect((caught as Error).message).toContain('actions re-eval exploded');
   });
 });
 
