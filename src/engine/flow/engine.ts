@@ -43,6 +43,17 @@ interface SerializedFlowElement {
   className: string;
 }
 
+/**
+ * One entry in `executeForEach`'s snapshot-on-first-entry collection (stored in
+ * `frame.data.forEachItems`). Tagging `GameElement` items by `elementId` (rather than
+ * storing a bare number) keeps them unambiguous from a JSON-primitive `number` item —
+ * the same coercion ambiguity class as ENG-05/resolveArgs — and keeps `frame.data`
+ * JSON-plain for checkpoint/restore.
+ */
+type ForEachSnapshotItem =
+  | { elementId: number }
+  | { value: string | number | boolean | null };
+
 function isSerializedFlowElement(value: unknown): value is SerializedFlowElement {
   return (
     typeof value === 'object' &&
@@ -1153,20 +1164,62 @@ export class FlowEngine<G extends Game = Game> {
     config: ForEachConfig,
     context: FlowContext
   ): FlowStepResult {
-    // Get items to iterate
-    const items = typeof config.collection === 'function'
-      ? config.collection(context)
-      : config.collection;
+    // Snapshot the collection exactly once on first entry (mirrors executeEachPlayer's
+    // eligibleSeats pattern) so a loop body that mutates the source collection (removes
+    // or moves items) still visits every original item. GameElements are stored tagged
+    // by JSON-plain id (re-resolved via getElementById each iteration) so a bare-number
+    // primitive item is never mistaken for an element id on re-resolution (the same
+    // ambiguity class as ENG-05/resolveArgs); non-element JSON primitives are stored
+    // as-is. This also keeps frame.data checkpoint-safe (no object refs).
+    if (frame.data?.forEachItems === undefined) {
+      const items = typeof config.collection === 'function'
+        ? config.collection(context)
+        : config.collection;
 
-    const itemIndex = (frame.data?.itemIndex as number) ?? 0;
+      const snapshot = items.map((item): ForEachSnapshotItem => {
+        if (item instanceof GameElement) {
+          return { elementId: item.id };
+        }
+        const type = typeof item;
+        if (type === 'string' || type === 'number' || type === 'boolean' || item === null) {
+          return { value: item as string | number | boolean | null };
+        }
+        throw new Error(
+          `forEach() collection item is not a GameElement or JSON primitive (got ${type}). ` +
+          `Only GameElement instances and string/number/boolean values are supported, ` +
+          `so the loop's per-item snapshot can round-trip through checkpoint/restore.`
+        );
+      });
+
+      frame.data = {
+        ...frame.data,
+        forEachItems: snapshot,
+        itemIndex: 0,
+      };
+    }
+
+    const items = (frame.data.forEachItems as ForEachSnapshotItem[]) ?? [];
+    const itemIndex = (frame.data.itemIndex as number) ?? 0;
 
     if (itemIndex >= items.length) {
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
 
-    // Set current item variable
-    this.variables[config.as] = items[itemIndex];
+    const rawItem = items[itemIndex];
+    if ('elementId' in rawItem) {
+      const element = this.game.getElementById(rawItem.elementId);
+      if (!element) {
+        throw new Error(
+          `forEach() snapshot references element id ${rawItem.elementId}, but it no longer ` +
+          `exists in the game tree (it may have been permanently removed, not just moved). ` +
+          `A loop body must not delete elements it iterates over; move them instead.`
+        );
+      }
+      this.variables[config.as] = element;
+    } else {
+      this.variables[config.as] = rawItem.value;
+    }
 
     this.stack.push({ node: config.do, index: 0, completed: false });
     frame.data = { ...frame.data, itemIndex: itemIndex + 1 };
