@@ -609,6 +609,65 @@ describe('Action Executor', () => {
       expect(receivedCtx!.args.combatantId).toBe(42);
       expect(receivedCtx!.args.sectorId).toBe(7);
     });
+
+    describe('ENG-05 followUp arg resolution', () => {
+      it('does NOT coerce a bare-number non-selection followUp arg into a GameElement (Test A)', () => {
+        // A followUp arg like `turnCount` may happen to hold a numeric value that
+        // collides with a live element's id. It must survive resolveArgs as a plain
+        // number -- coercing it into a GameElement is an ambiguous, corruption-prone
+        // auto-coercion (F12/ENG-05).
+        const deck = game.create(Deck, 'deck');
+        const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
+
+        let receivedTurnCount: unknown;
+        const action = Action.create('test').execute((_args, ctx) => {
+          receivedTurnCount = ctx.args.turnCount;
+        });
+
+        // Deliberately collide the bare-number followUp arg with a live element id.
+        const result = executor.executeAction(action, game.getPlayer(1)!, {
+          turnCount: card.id,
+        });
+
+        expect(result.success).toBe(true);
+        expect(typeof receivedTurnCount).toBe('number');
+        expect(receivedTurnCount).toBe(card.id);
+      });
+
+      it('resolves a {id, className}-shaped non-selection followUp arg to the GameElement (Test B)', () => {
+        const deck = game.create(Deck, 'deck');
+        const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
+
+        let receivedSectorId: unknown;
+        const action = Action.create('test').execute((_args, ctx) => {
+          receivedSectorId = ctx.args.sectorId;
+        });
+
+        const result = executor.executeAction(action, game.getPlayer(1)!, {
+          sectorId: { id: card.id, className: 'Card' },
+        });
+
+        expect(result.success).toBe(true);
+        expect(receivedSectorId).toBe(card);
+      });
+
+      it('still resolves a bare numeric id for a named element selection arg (Test C, control)', () => {
+        const deck = game.create(Deck, 'deck');
+        const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
+
+        let receivedCard: unknown;
+        const action = Action.create('test')
+          .chooseElement('card', { prompt: 'Choose a card', elementClass: Card })
+          .execute((args) => {
+            receivedCard = args.card;
+          });
+
+        const result = executor.executeAction(action, game.getPlayer(1)!, { card: card.id });
+
+        expect(result.success).toBe(true);
+        expect(receivedCard).toBe(card);
+      });
+    });
   });
 
   describe('isActionAvailable', () => {
