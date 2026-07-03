@@ -109,17 +109,28 @@ export function useGame(
       return;
     }
 
-    // Create new connection
+    // Create new connection. connectImmediately is threaded from autoConnect so
+    // useGame({ autoConnect: false }) never opens a socket it has to immediately
+    // kill — GameConnection.connect() honors connectImmediately internally.
     connection = client.connect(id, {
       playerSeat: getPlayerSeat(),
       spectator,
       autoReconnect: true,
+      connectImmediately: autoConnect,
     });
 
-    // Mark setup complete after a short delay to allow connection to establish
-    setTimeout(() => {
-      isSettingUp = false;
-    }, 100);
+    // Clear isSettingUp deterministically when the connection's `opened`
+    // promise settles, rather than guessing with a fixed delay. When
+    // autoConnect is false, `opened` is the connection's still-resolved
+    // default (no socket was dialed), so this clears immediately.
+    connection.opened
+      .then(() => {
+        isSettingUp = false;
+      })
+      .catch((err) => {
+        isSettingUp = false;
+        error.value = err instanceof Error ? err : new Error(String(err));
+      });
 
     // Subscribe to state changes
     connection.onStateChange((newState) => {
@@ -136,11 +147,6 @@ export function useGame(
     connection.onError((err) => {
       error.value = err;
     });
-
-    // Auto-connect is handled by client.connect()
-    if (!autoConnect) {
-      connection.disconnect();
-    }
   };
 
   // Watch for gameId changes
