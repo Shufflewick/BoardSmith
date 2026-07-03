@@ -166,7 +166,12 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   4. `dragProps()` honors its documented `when` option, or the option is removed from the API and docs.
   5. `setBeforeAutoExecute()` either supports multiple hooks or fails loudly when silently replacing a previously registered one.
   6. `session.runner.performAction()` is no longer reachable as an easy wrong path beside `session.performAction()` — persistence/broadcast/checkpoints can't be silently skipped by calling the runner directly.
-**Plans**: TBD
+**Plans**: 5 plans
+- [ ] 134-01-PLAN.md — PROC-01 verification gate: verdicts for F17/F18/F19/F29/F30/F31 before any fix
+- [ ] 134-02-PLAN.md — UIX-01/UIX-02/UIX-05: useActionController start() result+devWarn, fill() multiSelect guard, hook accumulation
+- [ ] 134-03-PLAN.md — UIX-01/UIX-03/UIX-04: GameShell lastError->toast, 0x0 board dev-check, dragProps when-gating
+- [ ] 134-04-PLAN.md — SESS-01: session.runner read-only facade (performAction unreachable)
+- [ ] 134-05-PLAN.md — DOCX-04 doc updates + live browser verification of toast + drag gating
 **UI hint**: yes
 
 ### Phase 135: CLI & Dev Experience
