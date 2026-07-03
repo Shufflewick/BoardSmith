@@ -125,10 +125,11 @@ export class MeepleClient {
    * Check the current matchmaking status for this player.
    */
   async getMatchStatus(): Promise<MatchmakingStatus> {
-    const url = new URL(`${this.config.baseUrl}/matchmaking/status`);
-    url.searchParams.set('playerId', this.playerId);
-
-    const response = await this.fetch(url.pathname + url.search);
+    // Pass a relative path like every other method — this.fetch() prepends
+    // baseUrl, so building an absolute URL here and handing back its
+    // pathname would double-prefix a baseUrl that contains a path.
+    const params = new URLSearchParams({ playerId: this.playerId });
+    const response = await this.fetch(`/matchmaking/status?${params}`);
     const data = await this.parseResponse<MatchmakingStatus>(response);
 
     return {

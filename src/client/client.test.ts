@@ -252,3 +252,20 @@ describe('generatePlayerId (CR-01: single secure minting path)', () => {
     );
   });
 });
+
+describe('getMatchStatus URL construction (WR-07)', () => {
+  it('does not double-prefix a baseUrl that contains a path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ status: 'searching' }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new MeepleClient({ baseUrl: 'https://host.example/api', playerId: 'player-1' });
+      await client.getMatchStatus();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const requestedUrl = fetchMock.mock.calls[0][0] as string;
+      expect(requestedUrl).toBe('https://host.example/api/matchmaking/status?playerId=player-1');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
