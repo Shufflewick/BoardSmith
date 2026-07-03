@@ -71,4 +71,53 @@ F30, F31); Task 2 appends the remaining two (F19, F29 — board sizing and the r
 
 ---
 
-*Task 2 will append F19/UIX-03 and F29/SESS-01 below, plus the gate summary.*
+## F19 / UIX-03 — Zoom container's `width: max-content` silently collapses responsive custom boards to 0×0
+
+**VERDICT: LEGITIMATE**
+
+**Current evidence (re-traced 2026-07-03):**
+
+- `src/ui/components/GameShell.vue:2822` — `.game-shell__zoom-container { width: max-content; ... }`, confirmed via `grep -n "max-content" src/ui/components/GameShell.vue` (single match, exactly this line). This is the container the `#game-board` slot mounts inside, and it is the element `useAutoZoom` measures (`boardEl: zoomContainerEl`).
+- `src/ui/composables/useAutoZoom.ts:34-38` — `computeFitZoom(natural, avail)`: `if (natural.width < 1 || natural.height < 1) return null;` (line 35) followed by the identical guard on `avail` (line 36). The doc comment directly above (line 31) states the null return means "not laid out yet" — i.e., the composable's own documented contract treats a <1px board as a transient pre-layout state, not an error.
+- Cross-referencing `useAutoZoom.ts:85-110` (the `startupDone`/`onBoardResize`/`endStartup`/`SETTLE_MS` state machine): there is no branch anywhere in this file that ever logs, warns, or errors when `computeFitZoom` keeps returning `null` indefinitely — the observer simply keeps waiting. A percentage-width or `container-type: inline-size` board root genuinely has no definite containing width inside a `max-content` ancestor and will report `getBoundingClientRect()` width/height of 0 forever, matching the `natural.width < 1` branch permanently, with zero developer-facing signal.
+
+**Structural-fix evaluation (required by CONTEXT.md before accepting dev-error+docs as the complete fix):** 134-RESEARCH.md's "UIX-03 Structural Fix Evaluation" section (re-read this pass) traces that giving the zoom container (or any wrapper inside it) a definite width would make `measureAndFit()`'s "natural" measurement equal the container's stretched size for every board, not the board's true intrinsic content size — breaking the v4.0 zoom-to-fit `computeFitZoom` calculation (`fit = avail/natural` degenerates to `1` for the stretched dimension) for every game, not just the percentage-width ones. This verdict independently confirms that evaluation: `computeFitZoom`'s formula (useAutoZoom.ts:37) is fundamentally incompatible with a definite-width ancestor. **The structural CSS fix is REJECTED; a loud dev-mode diagnostic + docs is the correct and complete fix**, exactly as CONTEXT.md's fallback clause anticipates.
+
+**Conclusion:** The silent-collapse-and-wait-forever defect is real and current, and the rejection of the structural alternative is independently re-confirmed against current source, not merely inherited from RESEARCH.md.
+
+---
+
+## F29 / SESS-01 — `session.runner.performAction()` is a lookalike wrong path that silently skips persistence/broadcast/checkpoints/tutorials/AI-scheduling
+
+**VERDICT: LEGITIMATE**
+
+**Current evidence (re-traced 2026-07-03):**
+
+- `get runner()` is declared at `src/session/game-session.ts:858`: `get runner(): GameRunner<G> { return this.#runner; }` — returns the raw, fully-mutable `GameRunner` instance with no narrowing.
+- **Exact count and locations of `#runner` assignment sites** (re-grepped this pass, not trusted from the audit or research summary): `grep -n "#runner = " src/session/game-session.ts` returns **5** sites:
+  - `game-session.ts:341` — `this.#runner = runner;` (constructor)
+  - `game-session.ts:379` — `this.#runner = newRunner;`
+  - `game-session.ts:484` — `session.#runner = newRunner;`
+  - `game-session.ts:1462` — `this.#runner = newRunner;`
+  - `game-session.ts:1482` — `this.#runner = newRunner;`
+  This matches 134-RESEARCH.md's count of 5 (not the audit's original implied count of 3) — confirmed independently in this verification pass via direct re-grep of current source, satisfying the must_haves requirement that this count be re-confirmed, not assumed.
+- `GameRunner.performAction` is declared at `src/runtime/runner.ts:155` with the same method name and a compatible call shape (`actionName, player, args`) as `GameSession.performAction`, declared at `src/session/game-session.ts:1336`. `GameSession.performAction` internally calls `this.#runner.performAction(...)` (line 1345) and then performs additional bookkeeping (persistence/broadcast/checkpoints/tutorials/AI-scheduling per the audit's uncontested trap description) that `GameRunner.performAction` alone does not perform.
+- **Zero production consumers reach `.performAction` through `session.runner`:** `grep -rn "\.runner\." src --include="*.ts" --include="*.vue"` (excluding `*.test.ts`) surfaces only `src/testing/test-game.ts` hits — but `TestGame.runner` (declared at `test-game.ts:107`, `readonly runner: GameRunner<G>`) is `TestGame`'s own field wrapping a `GameRunner` directly; it is unrelated to `GameSession.runner` and out of this finding's scope (TestGame is not a `GameSession`). The one other non-test hit, `src/session/stateless-ops.ts:844` (`actionHistory: [...runner.actionHistory]`), operates on a local `runner` parameter, not `session.runner`.
+- Test-file consumers of `GameSession.runner` (re-grepped: `restore-snapshot-authoritative.test.ts`, `teaching.test.ts`, `teaching-disabled-persistence.test.ts`, `stateful-timetravel-authoritative.test.ts`, `stateful-undo-authoritative.test.ts` — 10 call sites across these files) are exclusively read-only: `.game`, `.actionHistory`, `.getSnapshot()`. None call `.performAction()` through `session.runner`.
+
+**Conclusion:** The lookalike-wrong-path defect is real and current; the exact 5-site `#runner` assignment inventory is confirmed by direct re-grep in this pass; zero production consumers call `.performAction` through `session.runner`, confirming the read-only facade fix (per the CONTEXT.md-locked decision) requires no production migration and only type-level (not logic-level) changes to the 10 existing read-only test call sites.
+
+---
+
+## Gate Summary
+
+| Finding | Requirement | Verdict | Fix scope confirmed unblocked |
+|---------|-------------|---------|-------------------------------|
+| F17 | UIX-01 | LEGITIMATE | Yes |
+| F18 | UIX-02 | LEGITIMATE | Yes |
+| F19 | UIX-03 | LEGITIMATE (structural-CSS alternative independently re-confirmed REJECTED) | Yes |
+| F29 | SESS-01 | LEGITIMATE (5 `#runner` sites confirmed, zero production `.performAction` consumers) | Yes |
+| F30 | UIX-04 | LEGITIMATE | Yes |
+| F31 | UIX-05 | LEGITIMATE | Yes |
+
+All six findings are independently re-confirmed against current post-Phase-133 source. No fix code was written or planned in the course of producing this document. Plans 02-05 of Phase 134 are unblocked.
