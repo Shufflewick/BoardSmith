@@ -18,6 +18,19 @@ export interface PublishError {
   statusCode?: number;
 }
 
+/**
+ * Extract a human-readable message from an error response body.
+ * Platform app endpoints (initiate/complete/check-version) return h3-style
+ * { statusMessage, message }; the games worker (upload) returns { error }.
+ */
+function errorMessageFrom(body: Record<string, unknown>, fallback: string): string {
+  for (const field of ['statusMessage', 'message', 'error']) {
+    const value = body[field];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return fallback;
+}
+
 export async function initiatePublish(
   platformUrl: string,
   apiKey: string,
@@ -58,7 +71,7 @@ export async function initiatePublish(
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     const data = body.data as { code?: string } | undefined;
-    const message = (body.statusMessage as string) || (body.message as string) || res.statusText;
+    const message = errorMessageFrom(body, res.statusText);
 
     if (res.status === 409 && data?.code === 'SLUG_TAKEN') {
       throw { kind: 'SLUG_TAKEN', message, statusCode: 409 } satisfies PublishError;
@@ -99,7 +112,7 @@ export async function uploadBundle(
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     throw {
       kind: 'SERVER',
-      message: (body.statusMessage as string) || (body.message as string) || `Upload returned HTTP ${res.status}`,
+      message: errorMessageFrom(body, `Upload returned HTTP ${res.status}`),
       statusCode: res.status,
     } satisfies PublishError;
   }
@@ -130,7 +143,7 @@ export async function completePublish(
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     throw {
       kind: 'SERVER',
-      message: (body.statusMessage as string) || (body.message as string) || `Complete returned HTTP ${res.status}`,
+      message: errorMessageFrom(body, `Complete returned HTTP ${res.status}`),
       statusCode: res.status,
     } satisfies PublishError;
   }
@@ -163,7 +176,7 @@ export async function checkVersionAvailable(
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     const data = body.data as { code?: string } | undefined;
-    const message = (body.statusMessage as string) || res.statusText;
+    const message = errorMessageFrom(body, res.statusText);
 
     if (res.status === 409 && data?.code === 'VERSION_EXISTS') {
       throw { kind: 'VERSION_EXISTS', message, statusCode: 409 } satisfies PublishError;
