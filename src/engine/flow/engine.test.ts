@@ -426,6 +426,38 @@ describe('FlowEngine', () => {
 
       expect(cardNames).toHaveLength(3);
     });
+
+    it('should visit every original item when the loop body mutates the source collection', () => {
+      const deck = game.create(Deck, 'deck');
+      const pile = game.create(Deck, 'pile');
+      const cards = deck.createMany(4, Card, 'card', (i) => ({
+        suit: 'H',
+        rank: String(i + 1),
+        value: i + 1,
+      }));
+      const originalIds = cards.map((c) => c.id);
+
+      const visitedIds: number[] = [];
+
+      const flow = defineFlow({
+        root: forEach({
+          collection: (ctx) => [...ctx.game.all(Card)],
+          as: 'card',
+          do: execute((ctx) => {
+            const card = ctx.get('card') as Card;
+            visitedIds.push(card.id);
+            // Mutate the source collection: move the visited card out of `deck`.
+            card.putInto(pile);
+          }),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      engine.start();
+
+      expect(visitedIds).toHaveLength(originalIds.length);
+      expect(new Set(visitedIds)).toEqual(new Set(originalIds));
+    });
   });
 
   describe('Variables', () => {
