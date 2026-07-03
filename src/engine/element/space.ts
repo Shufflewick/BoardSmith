@@ -269,6 +269,39 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   }
 
   // ============================================
+  // Event Handler Restore (RST-01/F10)
+  // ============================================
+
+  /**
+   * Internal accessor returning this Space's registered `onEnter`/`onExit`
+   * handlers (RST-01/F10). Not part of the public API — `_eventHandlers`
+   * stays private; this is the scoped cross-class accessor (mirrors
+   * `_restoreZoneVisibility` and the codebase's `_t` convention) that lets
+   * `Game.loadSerializedState` capture live handler closures from the
+   * constructor-built tree BEFORE it is discarded on restore. Handlers are
+   * live closures and cannot be serialized, so they must be captured from
+   * the live tree and re-attached to the rebuilt tree by stable identity.
+   */
+  _captureEventHandlers(): {
+    enter: ElementEventHandler<GameElement>[];
+    exit: ElementEventHandler<GameElement>[];
+  } {
+    return this._eventHandlers;
+  }
+
+  /**
+   * Internal accessor for re-attaching previously captured `onEnter`/`onExit`
+   * handlers to a freshly-restored Space instance (RST-01/F10). See
+   * `_captureEventHandlers` for context. Not part of the public API.
+   */
+  _restoreEventHandlers(handlers: {
+    enter: ElementEventHandler<GameElement>[];
+    exit: ElementEventHandler<GameElement>[];
+  }): void {
+    this._eventHandlers = handlers;
+  }
+
+  // ============================================
   // Element Creation (override to trigger events)
   // ============================================
 

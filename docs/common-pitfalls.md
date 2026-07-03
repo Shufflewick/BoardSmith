@@ -1401,6 +1401,13 @@ if (!sector.first(Equipment, { name: 'Loot1' })) {
 this.registerDebug('Element Tree', () => this.debugElementTree());
 ```
 
+`registerDebug` payloads are dev-only: they are only broadcast to clients
+when the session is created with `GameSessionOptions.debugEnabled: true`
+(default `false`). Only register non-secret diagnostics like element counts
+or tree shape this way — never hidden/secret game state (a hand's contents,
+deck order, etc), since enabling `debugEnabled` on a live session broadcasts
+every registered debug entry to all connected players and spectators.
+
 4. **Check the sequence counter** - if it's much higher than element count, elements are being created and removed (normal but worth investigating)
 
 ### Key Diagnostic Values

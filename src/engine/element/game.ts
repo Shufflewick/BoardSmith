@@ -1,4 +1,4 @@
-import { Space } from './space.js';
+import { Space, type ElementEventHandler } from './space.js';
 import { GameElement } from './game-element.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
@@ -1166,14 +1166,22 @@ export class Game<
    * The provided function will be called when debug data is requested.
    * Use this to expose game-specific debug information in the debug panel.
    *
+   * Debug payloads are dev-only: they are only broadcast to clients when the
+   * session is created with `GameSessionOptions.debugEnabled: true` (default
+   * `false`, SEC-04). Do NOT use `registerDebug` to expose hidden/secret game
+   * state (a hand's contents, an opponent's hidden hand, deck order, etc) —
+   * enabling `debugEnabled` on a live/production session would broadcast it
+   * to every connected player and spectator. Prefer non-secret diagnostics
+   * like element counts, tree shape, or public derived state.
+   *
    * @example
    * ```typescript
    * // In game setup
-   * this.registerDebug('Sector Stashes', () =>
+   * this.registerDebug('Sector Stats', () =>
    *   this.all(Sector).map(s => ({
    *     name: s.sectorName,
    *     explored: s.explored,
-   *     stash: s.stash.map(e => e.name)
+   *     itemCount: s.stash.length
    *   }))
    * );
    * ```
@@ -2877,6 +2885,23 @@ export class Game<
       this._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
     }
 
+    // Capture Space onEnter/onExit handlers from the constructor-built tree
+    // BEFORE it is discarded below (RST-01/F10). Handlers are live closures
+    // registered in the game's constructor (e.g. `space.onEnter(fn)`) — they
+    // are correctly excluded from serialization (closures cannot serialize),
+    // but that also means the rebuilt tree below starts with zero handlers
+    // unless we explicitly re-bind them here. Keyed by class name + tree
+    // branch path (stable across the round-trip: the rebuilt tree has the
+    // same shape as the constructor tree that was just serialized).
+    type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
+    const capturedHandlers = new Map<string, CapturedHandlers>();
+    for (const space of this.all(Space)) {
+      const handlers = space._captureEventHandlers();
+      if (handlers.enter.length > 0 || handlers.exit.length > 0) {
+        capturedHandlers.set(`${space.constructor.name}:${space.branch()}`, handlers);
+      }
+    }
+
     // Clear existing children and rebuild the tree from JSON
     this._t.children = [];
     if (json.children) {
@@ -2885,6 +2910,35 @@ export class Game<
         child._t.parent = this;
         (child as GameElement).game = this;
         this._t.children.push(child);
+      }
+    }
+
+    // Re-attach captured handlers to the rebuilt tree by matching identity
+    // key (RST-01/F10). Any handler that cannot be matched is dropped LOUDLY
+    // via devWarn — never silently, since a dropped handler is silent
+    // game-logic loss (e.g. a scoring trigger that stops firing).
+    if (capturedHandlers.size > 0) {
+      const matchedKeys = new Set<string>();
+      for (const space of this.all(Space)) {
+        const key = `${space.constructor.name}:${space.branch()}`;
+        const handlers = capturedHandlers.get(key);
+        if (handlers) {
+          space._restoreEventHandlers(handlers);
+          matchedKeys.add(key);
+        }
+      }
+      for (const key of capturedHandlers.keys()) {
+        if (!matchedKeys.has(key)) {
+          devWarn(
+            `unbound-event-handlers:${key}`,
+            `Space "${key}" had onEnter/onExit handlers registered before a snapshot ` +
+            `restore, but no matching Space was found in the restored tree (matched by ` +
+            `class name + tree branch path). These handlers were dropped, not silently ` +
+            `carried over. This usually means the element tree shape changed between save ` +
+            `and restore (e.g. conditional element creation in the constructor) — make sure ` +
+            `Spaces with onEnter/onExit handlers are always created at the same tree position.`
+          );
+        }
       }
     }
 
