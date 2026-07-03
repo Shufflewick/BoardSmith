@@ -338,3 +338,39 @@ describe('GameConnection.opened teardown (CR-02)', () => {
     connection.disconnect();
   });
 });
+
+describe('connect() over a CLOSING socket (WR-01)', () => {
+  it('detaches the stale socket so its late close event cannot tear down the new connection', () => {
+    const connection = new GameConnection('http://localhost:3000', {
+      gameId: 'game-1',
+      playerId: 'player-1',
+      wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+      autoReconnect: false,
+    });
+
+    connection.connect();
+    const ws1 = (connection as unknown as { ws: FakeWebSocket | null }).ws!;
+    ws1.readyState = FakeWebSocket.OPEN;
+    ws1.onopen?.();
+
+    // Server initiates close: the socket goes CLOSING but its close event
+    // has not been delivered yet, so no cleanup has run and its handlers
+    // are still attached.
+    ws1.readyState = FakeWebSocket.CLOSING;
+
+    // Caller redials. The CLOSING socket fails the OPEN/CONNECTING re-entry
+    // guard, so a fresh socket is dialed.
+    connection.connect();
+    const ws2 = (connection as unknown as { ws: FakeWebSocket | null }).ws!;
+    expect(ws2).not.toBe(ws1);
+
+    // The old socket's close finally completes. Its (stale) onclose must
+    // not fire against the connection — otherwise it rejects the NEW opened
+    // promise and cleans up the NEW socket.
+    ws1.onclose?.({ wasClean: false, code: 1006 });
+
+    expect((connection as unknown as { ws: FakeWebSocket | null }).ws).toBe(ws2);
+    expect(ws2.readyState).not.toBe(FakeWebSocket.CLOSED);
+    connection.disconnect();
+  });
+});

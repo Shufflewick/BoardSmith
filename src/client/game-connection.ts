@@ -113,6 +113,15 @@ export class GameConnection {
       return;
     }
 
+    if (this.ws) {
+      // A stale CLOSING/CLOSED socket may still have handlers attached
+      // (server-initiated close whose close event hasn't been delivered
+      // yet). Detach it before dialing, or its late onclose would fire
+      // against `this` — rejecting the NEW opened promise and cleaning up
+      // the NEW socket.
+      this.cleanup();
+    }
+
     this.setStatus('connecting');
     this.clearReconnectTimer();
 
