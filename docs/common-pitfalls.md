@@ -809,9 +809,14 @@ Named element-typed selections (`chooseElement`/`chooseElements`) are unaffected
 this — a bare numeric ID sent for a declared `element`/`elements` selection still
 resolves to the `GameElement`, since those args are explicitly typed by the developer.
 
-### Why This Happens
+### Why Only the `{id, className}` Shape Resolves
 
-The server resolves numeric args to elements so that most action callbacks "just work" with element objects. However, if your code explicitly calls `getElementById()` on an already-resolved element, it fails.
+A bare number is ambiguous — it may be a count, an index, or an id that just
+happens to collide with a live element's id. Only the explicit serialized-element
+shape (`{id, className}`) is an unambiguous signal that an element reference was
+intended, so only that shape is coerced (ENG-05). The `className` must match the
+element's actual class — a mismatch leaves the arg unresolved (with a dev warning)
+rather than delivering a wrong-class element.
 
 ---
 
