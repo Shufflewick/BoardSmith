@@ -215,6 +215,24 @@ export class ActionExecutor {
             if (element) {
               resolved[selection.name] = element;
             }
+          } else if (Array.isArray(value) && player) {
+            // multiSelect chooseFrom: canonicalize each array item exactly like
+            // the scalar path below, so element IDs / display strings sent by
+            // custom UIs resolve to canonical choice values before validation
+            // and never reach execute() as raw IDs (CR-01). Gated on multiSelect
+            // being configured so a single choice whose VALUE is itself an
+            // array is never corrupted by per-item resolution.
+            if ((selection as ChoiceSelection).multiSelect !== undefined) {
+              const choices = this.getChoices(selection, player, resolved);
+              resolved[selection.name] = value.map((item) => {
+                if (this.isSerializedElement(item)) {
+                  const element = this.game.getElementById((item as { id: number }).id);
+                  return element ?? item;
+                }
+                const smartResolved = this.smartResolveChoiceValue(item, choices);
+                return this.extractChoiceValue(smartResolved);
+              });
+            }
           } else if (player) {
             // Try smart resolution: element ID or display string → actual choice
             // This supports custom UIs sending element IDs for chooseFrom selections
@@ -513,9 +531,15 @@ export class ActionExecutor {
    * 1. Element ID match: if value is a number and a choice is an element with that ID
    * 2. Display match: if value is a string matching a choice's display property
    *
-   * @returns true if the value can be resolved to a valid choice
+   * @returns the matched AnnotatedChoice (so callers can enforce `disabled`),
+   *   or undefined when the value cannot be resolved to any choice. Callers
+   *   MUST check `.disabled` on the match — a smart-resolved value must never
+   *   bypass disabled/tutorial-gate enforcement (CR-01).
    */
-  private trySmartResolveChoice(value: unknown, choices: AnnotatedChoice<unknown>[]): boolean {
+  private trySmartResolveChoice(
+    value: unknown,
+    choices: AnnotatedChoice<unknown>[]
+  ): AnnotatedChoice<unknown> | undefined {
     // Try element ID match or value match for numbers
     if (typeof value === 'number') {
       for (const choice of choices) {
@@ -523,11 +547,11 @@ export class ActionExecutor {
         if (actual && typeof actual === 'object') {
           // Check if choice is an element with matching ID
           if ('id' in actual && (actual as { id: number }).id === value) {
-            return true;
+            return choice;
           }
           // Check if choice has matching 'value' property (for playerChoices pattern)
           if ('value' in actual && (actual as { value: number }).value === value) {
-            return true;
+            return choice;
           }
         }
       }
@@ -548,21 +572,21 @@ export class ActionExecutor {
             if (propValue !== undefined) {
               // Exact match (for value property especially)
               if (propValue === value) {
-                return true;
+                return choice;
               }
               // Case-insensitive string match
               if (typeof propValue === 'string' && propValue.toLowerCase() === lowerValue) {
-                return true;
+                return choice;
               }
             }
           }
         } else if (typeof actual === 'string' && actual.toLowerCase() === lowerValue) {
-          return true;
+          return choice;
         }
       }
     }
 
-    return false;
+    return undefined;
   }
 
   /**
@@ -716,10 +740,18 @@ export class ActionExecutor {
             continue;
           }
           if (!this.annotatedChoicesContain(choices, v)) {
-            // Try smart resolution for choice selections
-            if (selection.type === 'choice' && !this.trySmartResolveChoice(v, choices)) {
-              const validChoicesStr = this.formatValidChoices(choices);
-              errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(v)}. Valid choices: ${validChoicesStr}`);
+            // Try smart resolution for choice selections. A smart-resolved
+            // match must still pass the disabled check (CR-01): resolving an
+            // element ID / display string to a choice must never grant access
+            // to a disabled (including tutorial-gated) choice.
+            if (selection.type === 'choice') {
+              const smartMatch = this.trySmartResolveChoice(v, choices);
+              if (!smartMatch) {
+                const validChoicesStr = this.formatValidChoices(choices);
+                errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(v)}. Valid choices: ${validChoicesStr}`);
+              } else if (smartMatch.disabled !== false) {
+                errors.push(`Selection disabled: ${smartMatch.disabled}`);
+              }
             }
           }
         }
@@ -729,10 +761,16 @@ export class ActionExecutor {
         if (disabledMatch) {
           errors.push(`Selection disabled: ${disabledMatch.disabled}`);
         } else if (!this.annotatedChoicesContain(choices, value)) {
-          // Try smart resolution for choice selections
-          if (selection.type === 'choice' && !this.trySmartResolveChoice(value, choices)) {
-            const validChoicesStr = this.formatValidChoices(choices);
-            errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${validChoicesStr}`);
+          // Try smart resolution for choice selections; a match must still
+          // pass the disabled check (CR-01, same contract as the array path).
+          if (selection.type === 'choice') {
+            const smartMatch = this.trySmartResolveChoice(value, choices);
+            if (!smartMatch) {
+              const validChoicesStr = this.formatValidChoices(choices);
+              errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${validChoicesStr}`);
+            } else if (smartMatch.disabled !== false) {
+              errors.push(`Selection disabled: ${smartMatch.disabled}`);
+            }
           } else if (selection.type === 'element') {
             errors.push(`Invalid selection for ${selection.name}`);
           }

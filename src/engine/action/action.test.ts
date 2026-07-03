@@ -513,6 +513,94 @@ describe('Action Executor', () => {
       expect(result.valid).toBe(true);
       expect(result.errors).toEqual([]);
     });
+
+    // CR-01: multiSelect chooseFrom array items must go through the same
+    // smart-resolution + disabled enforcement as scalar submissions. A custom
+    // UI submitting element IDs (or display strings) in an array must not be
+    // able to select disabled (including tutorial-gated) choices, and
+    // execute() must receive canonical choice values, never raw IDs.
+    it('rejects a disabled element choice submitted by raw ID in a multiSelect array (CR-01)', () => {
+      const deck = game.create(Deck, 'deck');
+      const shielded = deck.create(Card, 'shielded', { suit: 'H', rank: '1', value: 1 });
+      const open1 = deck.create(Card, 'open1', { suit: 'H', rank: '2', value: 2 });
+      const open2 = deck.create(Card, 'open2', { suit: 'H', rank: '3', value: 3 });
+
+      const action = Action.create('attack')
+        .chooseFrom('targets', {
+          choices: () => [shielded, open1, open2],
+          multiSelect: { min: 1, max: 2 },
+          disabled: (c) => (c === shielded ? 'Shielded' : false),
+        })
+        .execute(() => {});
+
+      const rejected = executor.validateSelection(
+        action.selections[0],
+        [shielded.id, open1.id],
+        game.getPlayer(1)!,
+        {}
+      );
+      expect(rejected.valid).toBe(false);
+      expect(rejected.errors.join(' ')).toContain('Selection disabled: Shielded');
+
+      const accepted = executor.validateSelection(
+        action.selections[0],
+        [open1.id, open2.id],
+        game.getPlayer(1)!,
+        {}
+      );
+      expect(accepted.valid).toBe(true);
+    });
+
+    it('resolveArgs canonicalizes element IDs inside a multiSelect array before execute() (CR-01)', () => {
+      const deck = game.create(Deck, 'deck');
+      const c1 = deck.create(Card, 'c1', { suit: 'H', rank: '1', value: 1 });
+      const c2 = deck.create(Card, 'c2', { suit: 'H', rank: '2', value: 2 });
+
+      const action = Action.create('attack')
+        .chooseFrom('targets', { choices: () => [c1, c2], multiSelect: 2 })
+        .execute(() => {});
+
+      const resolved = executor.resolveArgs(action, { targets: [c1.id, c2.id] }, game.getPlayer(1)!);
+      const targets = resolved.targets as unknown[];
+      expect(targets[0]).toBe(c1);
+      expect(targets[1]).toBe(c2);
+    });
+
+    it('resolveArgs canonicalizes {value,label} multiSelect array items to bare values (CR-01)', () => {
+      const action = Action.create('pick')
+        .chooseFrom('opts', {
+          choices: [
+            { value: 'skip', label: 'Skip' },
+            { value: 'go', label: 'Go' },
+          ],
+          multiSelect: 2,
+        })
+        .execute(() => {});
+
+      const resolved = executor.resolveArgs(action, { opts: ['Skip', 'Go'] }, game.getPlayer(1)!);
+      expect(resolved.opts).toEqual(['skip', 'go']);
+    });
+
+    it('rejects a disabled {value,label} choice submitted as its bare value (CR-01 scalar smart-resolution path)', () => {
+      const action = Action.create('pick')
+        .chooseFrom('opt', {
+          choices: [
+            { value: 'skip', label: 'Skip' },
+            { value: 'go', label: 'Go' },
+          ],
+          disabled: (c) => (c.value === 'skip' ? 'Not now' : false),
+        })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        'skip',
+        game.getPlayer(1)!,
+        {}
+      );
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('Selection disabled: Not now');
+    });
   });
 
   describe('validateAction', () => {
