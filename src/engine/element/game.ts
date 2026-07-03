@@ -2774,8 +2774,15 @@ export class Game<
       const ElementClass = element.constructor as typeof GameElement;
       let ownJson = json;
       if (ElementClass.visibleAttributes !== undefined) {
-        const isOwner = element instanceof Player
-          ? element.seat === visibilityPosition
+        // WR-01: duck-type the Player check (matching serializeValue,
+        // currentPlayer and getPlayer in this file) instead of
+        // `instanceof Player` — bundlers (esbuild) can create separate Player
+        // class copies, making instanceof return false and redacting a player
+        // out of their OWN restricted attributes (the exact Pitfall-4 failure
+        // this special case exists to prevent).
+        const isPlayerNode = 'seat' in element && typeof (element as unknown as Player).seat === 'number';
+        const isOwner = isPlayerNode
+          ? (element as unknown as Player).seat === visibilityPosition
           : element.getEffectiveOwner()?.seat === visibilityPosition;
         if (!isOwner) {
           const whitelist = new Set(ElementClass.visibleAttributes);

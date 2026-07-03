@@ -93,6 +93,8 @@ const isOwner = isPlayerNode
   : element.getEffectiveOwner()?.seat === visibilityPosition;
 ```
 
+**Resolution:** status: fixed — replaced `instanceof Player` with the same seat duck-typing used by `serializeValue`/`currentPlayer`/`getPlayer`, exactly as suggested. Covered by the existing Pitfall-4 owner/non-owner tests in `visible-attributes.test.ts` (behavioral parity; the bundler dual-class scenario itself is not reproducible in-process).
+
 ### WR-02: Handler re-binding key (class name + branch path) can silently cross-wire handlers between same-class Spaces when sibling indices shift
 
 **File:** `src/engine/element/game.ts:2896-2943`, `src/engine/element/space.ts:285-302`
