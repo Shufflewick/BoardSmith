@@ -7,9 +7,26 @@ import { buildActionMetadata, buildPickMetadata } from '../engine/element/action
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
+import type { ElementJSON } from '../engine/index.js';
 
 // Re-export so existing consumers (session barrel, external callers) are unchanged
 export { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
+
+/**
+ * Recursively locate a node by element id within an already-filtered
+ * `ElementJSON` tree (SEC-03 / F8). Used to derive `state.players` from the
+ * same per-viewer-filtered `truthView` that backs `state.view`, instead of a
+ * parallel unfiltered `player.toJSON()` pass -- see `buildPlayerState` below.
+ */
+function findElementJSONById(json: ElementJSON, id: number): ElementJSON | undefined {
+  if (json.id === id) return json;
+  if (!json.children) return undefined;
+  for (const child of json.children) {
+    const found = findElementJSONById(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
 
 /**
  * Generate a random 8-character game ID
@@ -232,32 +249,37 @@ export function buildPlayerState(
   const canUndo = isMyTurn && actionsThisTurn > 0 && flowState?.currentPlayer === playerPosition && !hasNonUndoableAction;
 
   // Get the full player data including custom properties (abilities, score, etc.)
-  // from the game's player objects via their toJSON methods.
+  // for the UI.
+  //
+  // SEC-03 (F8): this MUST be derived from `truthView` -- the already
+  // per-viewer-filtered tree that also backs `state.view` -- rather than a
+  // second, unfiltered `player.toJSON()` pass. A raw pass bypasses every
+  // visibility mechanism (zone/element hiding AND the SEC-02
+  // `visibleAttributes` whitelist), broadcasting every custom Player
+  // attribute to every seat and spectator regardless of what the truth view
+  // redacted. Routing through `truthView` makes `state.players` inherit all
+  // of that filtering for free -- one chokepoint, not two parallel channels.
   const allPlayers = runner.game.players;
   const fullPlayerData = allPlayers.map((player: any) => {
-    if (typeof player.toJSON === 'function') {
-      // toJSON returns ElementJSON which puts custom props in `attributes`.
-      // We need to flatten attributes to root level for the UI.
-      const json = player.toJSON() as unknown as {
-        name: string;
-        className: string;
-        id: number;
-        attributes?: Record<string, unknown>;
-        [key: string]: unknown
-      };
-
+    const node = findElementJSONById(truthView, player.id);
+    if (node) {
       // Flatten attributes to root level so UI can access p.color, p.position directly
       const flattened: { name: string; seat: number; [key: string]: unknown } = {
-        ...json,
-        ...(json.attributes || {}),
+        ...node,
+        name: node.name ?? player.name ?? `Player ${player.seat}`,
+        ...(node.attributes || {}),
         // Ensure seat is set (use player.seat, which is the 1-indexed position)
         seat: player.seat,
       };
       delete flattened.attributes;
+      delete flattened.children;
+      delete flattened.childCount;
 
       return flattened;
     }
-    // Fallback for players without toJSON
+    // The Player node itself was filtered out of this viewer's truthView
+    // entirely (e.g. individually hidden) -- fall back to the minimal public
+    // identity rather than leaking anything from the raw player object.
     return { name: player.name ?? `Player ${player.seat}`, seat: player.seat };
   });
 
