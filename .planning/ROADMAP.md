@@ -207,7 +207,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   5. The `WebSocketMessage` union includes every message type actually sent (including `UpdateSlotPlayerOptionsMessage`).
   6. The playerId configuration error message points at a field that actually exists on the config type.
 **Plans**: 5 plans
-- [ ] 136-01-PLAN.md — PROC-01 verification gate: verdicts for F23/F24/F25/F26/F35/F38 before any fix
+- [x] 136-01-PLAN.md — PROC-01 verification gate: verdicts for F23/F24/F25/F26/F35/F38 before any fix
 - [ ] 136-02-PLAN.md — canonical protocol/type foundation: WebSocketMessage union member (SDK-05), delete-and-re-export client types + discriminated WS unions (SDK-04), config-field scaffolding (connectImmediately/connectionTimeout/playerId)
 - [ ] 136-03-PLAN.md — GameConnection lifecycle: opened promise + await-then-send action() (SDK-01), #userDisconnected flag + connectImmediately honoring (SDK-02)
 - [ ] 136-04-PLAN.md — MeepleClient: one throwing error contract via shared helper (SDK-03), awaitable connect() (SDK-01), playerId config + actionable error (SDK-06)
@@ -258,7 +258,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
 | 134. UI & Session Interaction Guardrails | 5/5 | Complete    | 2026-07-03 |
 | 135. CLI & Dev Experience | 6/6 | Complete    | 2026-07-03 |
-| 136. Client SDK & Protocol | 0/TBD | Not started | - |
+| 136. Client SDK & Protocol | 1/5 | In Progress|  |
 | 137. Testing Utilities | 0/TBD | Not started | - |
 | 138. Cross-Repo Migration | 0/TBD | Not started | - |
 | 139. Documentation Audit & Corrections | 0/TBD | Not started | - |

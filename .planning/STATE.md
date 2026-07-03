@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
-stopped_at: "Completed 135-06-PLAN.md (boardsmith dev flags/host/config hardened: CLIX-01/02/04/06, phase 135 complete)"
-last_updated: "2026-07-03T21:36:52.841Z"
-last_activity: 2026-07-03 -- Phase 136 planning complete
+stopped_at: "Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)"
+last_updated: "2026-07-03T21:43:03.003Z"
+last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 31
-  completed_plans: 26
+  completed_plans: 27
   percent: 56
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 136 — client sdk & protocol
+**Current focus:** Phase 136 — Client SDK & Protocol
 
 ## Current Position
 
-Phase: 136
-Plan: Not started
+Phase: 136 (Client SDK & Protocol) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-03 -- Phase 136 planning complete
+Last activity: 2026-07-03
 
-Progress: [██████████] 100%
+Progress: [█████████░] 87%
 
 ## Milestones
 
@@ -152,6 +152,9 @@ Recent decisions affecting current work:
 - [Phase 135-05]: minPlayers/maxPlayers excluded from the allowed-key set (not just playerCount) -- CLIX-01 makes gameDefinition the sole source of truth for player count, and Plan 06 collapses dev.ts's fallback chain to a single gameDefinition read
 - [Phase 135]: [Phase 135-06]: Combined RED+GREEN commits for Tasks 1-3 (interleaved single-function edits, not independently compilable per-task)
 - [Phase 135]: [Phase 135-06]: resolveEffectivePlayerCount keeps the effectivePlayerCount name even though it now errors instead of clamping -- preserves existing devConfig/mpHost call sites
+- [Phase 136]: [Phase 136-01]: All six findings (F23,F24,F25,F26,F35,F38) independently re-verified LEGITIMATE against current post-Phase-135 HEAD; zero REJECTED
+- [Phase 136]: [Phase 136-01]: F25 errorCode scope boundary locked - client error type carries errorCode as optional; lobby-manager.ts changes out of phase scope (zero errorCode fields today)
+- [Phase 136]: [Phase 136-01]: F26 scope boundary locked - barrel re-export chain (client/index.ts re-exports from client/types.ts) requires matching re-export lines on deletion; outgoing WS union narrows to exactly action|ping|getState
 
 ### Pending Todos
 
@@ -163,8 +166,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T18:50:58.531Z
-Stopped at: Completed 135-06-PLAN.md (boardsmith dev flags/host/config hardened: CLIX-01/02/04/06, phase 135 complete)
+Last session: 2026-07-03T21:43:02.996Z
+Stopped at: Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
 
