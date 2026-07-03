@@ -258,7 +258,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
 | 134. UI & Session Interaction Guardrails | 5/5 | Complete    | 2026-07-03 |
 | 135. CLI & Dev Experience | 6/6 | Complete    | 2026-07-03 |
-| 136. Client SDK & Protocol | 5/5 | Complete   | 2026-07-03 |
+| 136. Client SDK & Protocol | 5/5 | Complete    | 2026-07-03 |
 | 137. Testing Utilities | 0/TBD | Not started | - |
 | 138. Cross-Repo Migration | 0/TBD | Not started | - |
 | 139. Documentation Audit & Corrections | 0/TBD | Not started | - |

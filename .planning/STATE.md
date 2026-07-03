@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: verifying
-stopped_at: "Completed 136-05-PLAN.md (Client SDK consumer migration: useGame opened-driven setup, GameShell.vue try/catch-only lobby handlers, docs corrected) — Phase 136 complete"
-last_updated: "2026-07-03T22:19:01.662Z"
+status: ready_to_plan
+stopped_at: Phase 136 complete (5/5) — ready to discuss Phase 137
+last_updated: 2026-07-03T22:52:31.168Z
 last_activity: 2026-07-03
 progress:
   total_phases: 9
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 136 — Client SDK & Protocol
+**Current focus:** Phase 137 — testing utilities
 
 ## Current Position
 
-Phase: 136 (Client SDK & Protocol) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
+Phase: 137
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-07-03
 
 Progress: [██████████] 100%
