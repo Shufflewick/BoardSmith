@@ -466,9 +466,13 @@ export class FlowEngine<G extends Game = Game> {
     this.lastActionResult = result;
 
     if (!result.success) {
-      // Action failed, stay in same state
+      // Action failed, stay in same state and record the error
+      this.actionError = result.error;
       return this.getState();
     }
+
+    // Clear error on success (mirrors resume()'s success-path clear).
+    this.actionError = undefined;
 
     // Check if this player is done (re-evaluate after action)
     const context = this.createContext();
