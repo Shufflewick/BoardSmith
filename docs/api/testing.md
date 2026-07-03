@@ -22,7 +22,7 @@ import {
 
 ### Test Game Creation
 
-- `TestGame` - Test game wrapper around `GameRunner`; also exposes `getPlayerView()` (typed observable state) and `action()` (returns an `ActionBuilder`)
+- `TestGame` - Test game wrapper around `GameRunner`; also exposes `getPlayerView()` (typed observable state) and `action()` (returns an `ActionBuilder`). `doAction()` throws an `ActionExecutionError` (with an actionable `debugActionAvailability` trace) on failure — use `tryAction()` for tests that deliberately exercise the failure path.
 - `createTestGame()` - Convenience function wrapping `TestGame.create()`
 
 ### Action Simulation

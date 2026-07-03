@@ -225,7 +225,9 @@ export function simulateTutorial<G extends Game>(
     }
 
     // Step B: perform the action and assert success.
-    const result = testGame.doAction(moveSeat, move.action, move.args ?? {});
+    // Uses tryAction (not doAction) so the tutorial-specific error message
+    // below (which names the active step id) replaces the generic throw.
+    const result = testGame.tryAction(moveSeat, move.action, move.args ?? {});
     if (!result.success) {
       const activeStep = getActiveStep(testGame.game, moveSeat);
       throw new Error(

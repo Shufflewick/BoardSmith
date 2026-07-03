@@ -52,7 +52,9 @@ export function simulateAction<G extends Game>(
   actionName: string,
   args: Record<string, unknown> = {}
 ): SimulateActionResult {
-  const result = testGame.doAction(playerSeat, actionName, args);
+  // Uses tryAction (not doAction) — this function's documented contract is
+  // "return the result, don't throw."
+  const result = testGame.tryAction(playerSeat, actionName, args);
 
   return {
     ...result,
@@ -380,7 +382,10 @@ export function playUntilComplete<G extends Game>(
         strategy === 'first'
           ? moves[0]
           : moves[Math.floor(rng() * moves.length)];
-      const result = testGame.doAction(seat, move.action, move.args);
+      // Uses tryAction (not doAction) so multi-seat failures can be batched
+      // below before deciding a dead-end -- a throw would lose sibling-seat
+      // diagnostics.
+      const result = testGame.tryAction(seat, move.action, move.args);
       if (result.success) {
         anyMoveMade = true;
         movesExecuted = movesExecuted + 1;

@@ -43,9 +43,8 @@ console.log(space.actions.map(a => a.name)); // e.g. ['ask']
 const moves = enumerateLegalMoves(testGame.game, 1);
 console.log(moves[0]); // { action: 'ask', args: { target: 2, rank: '7' } }
 
-// 4. Submit
-const result = testGame.doAction(1, moves[0].action, moves[0].args);
-if (!result.success) throw new Error(result.error);
+// 4. Submit — throws an ActionExecutionError (with an actionable trace) on failure
+testGame.doAction(1, moves[0].action, moves[0].args);
 
 // 5. Assert — perspective-correct state, hidden info excluded
 const view = testGame.getPlayerView(1);
@@ -60,7 +59,9 @@ import { enumerateLegalMoves } from 'boardsmith';
 ```
 
 `TestGame` (from `boardsmith/testing`) is the recommended entry point for
-headless driving — it wraps `GameRunner` and exposes `doAction`,
+headless driving — it wraps `GameRunner` and exposes `doAction` (throws an
+`ActionExecutionError` on failure), `tryAction` (the never-throw escape
+hatch for tests that deliberately exercise the failure path),
 `getPlayerView`, `getFlowState`, and `getSnapshot` without any server or
 transport concerns. `createTestGame(GameClass, options)` is a thin
 convenience wrapper around `TestGame.create`. See

@@ -399,7 +399,9 @@ async function simulateSingleGame<G extends Game>(
       }
 
       const move = rng.pick(moves);
-      const result = testGame.doAction(actor.seat, move.name, move.args);
+      // Uses tryAction (not doAction) so the consecutiveFailures retry branch
+      // below keeps working as a normal control-flow branch, not a throw.
+      const result = testGame.tryAction(actor.seat, move.name, move.args);
 
       if (result.success) {
         actionCount++;
