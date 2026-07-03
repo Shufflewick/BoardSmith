@@ -503,15 +503,18 @@ export class ActionExecutor {
   }
 
   /**
-   * Detect duplicate items in a multiSelect submission (WR-04). A client
-   * must not be able to satisfy "choose N" by repeating one choice/element.
+   * Detect duplicate items in a multiSelect elements submission (WR-04). A
+   * client must not be able to satisfy "choose N" by repeating one element.
    *
-   * Items that are (or reference) game elements are keyed by element id —
-   * so a raw ID and its resolved element count as the same item — and all
-   * other values are keyed by JSON serialization, matching valuesEqual's
-   * object-equality semantics.
+   * Items are keyed by element id — so a raw ID and its resolved element
+   * count as the same item — which is sound here because GameElement ids are
+   * globally unique. Non-element values fall back to JSON keying, matching
+   * valuesEqual's object-equality semantics. Choice submissions use
+   * hasDuplicateChoiceItems instead: choice values may legitimately repeat
+   * in the choices list, and plain objects sharing an `id` field are not
+   * elements (WR-07).
    */
-  private hasDuplicateItems(items: unknown[]): boolean {
+  private hasDuplicateElementItems(items: unknown[]): boolean {
     const seen = new Set<string>();
     for (const item of items) {
       let key: string;
@@ -524,6 +527,47 @@ export class ActionExecutor {
       }
       if (seen.has(key)) return true;
       seen.add(key);
+    }
+    return false;
+  }
+
+  /**
+   * Detect duplicate items in a multiSelect chooseFrom submission,
+   * multiplicity-aware against the choices list (WR-04, WR-07).
+   *
+   * Values ARE the identity in the wire protocol — there is no per-instance
+   * id for scalar choices — so when the choices list legitimately offers the
+   * same value more than once (e.g. a hand holding two coppers), submitting
+   * that many copies is the only possible encoding of "select both copies"
+   * and must be accepted. Each submitted item is therefore assigned to a
+   * distinct choice slot: an item is a duplicate only when every choice it
+   * identifies (by valuesEqual, or by smart resolution for raw IDs / display
+   * strings) has already been claimed by an earlier item.
+   *
+   * Items matching no choice at all are ignored here — the per-item
+   * validation loop already rejects them with a clear "Invalid selection"
+   * error.
+   */
+  private hasDuplicateChoiceItems(items: unknown[], choices: AnnotatedChoice<unknown>[]): boolean {
+    const claimed = new Array<boolean>(choices.length).fill(false);
+    for (const item of items) {
+      let matching: number[] = [];
+      for (let i = 0; i < choices.length; i++) {
+        if (this.valuesEqual(choices[i].value, item)) matching.push(i);
+      }
+      if (matching.length === 0) {
+        // Raw element ID / display string: resolve to the canonical choice
+        // value first, then claim by that identity.
+        const smartMatch = this.trySmartResolveChoice(item, choices);
+        if (!smartMatch) continue; // invalid item — per-item validation rejects it
+        matching = [];
+        for (let i = 0; i < choices.length; i++) {
+          if (this.valuesEqual(choices[i].value, smartMatch.value)) matching.push(i);
+        }
+      }
+      const free = matching.find(i => !claimed[i]);
+      if (free === undefined) return true; // more copies than the choices offer
+      claimed[free] = true;
     }
     return false;
   }
@@ -816,8 +860,10 @@ export class ActionExecutor {
             errors.push(`Selection "${selection.name}" is multi-select and expected an array, got ${typeof value}: ${JSON.stringify(value)}`);
           } else {
             // Reject duplicates before the count check (WR-04): repeated
-            // items must not satisfy the min bound.
-            if (this.hasDuplicateItems(value)) {
+            // items must not satisfy the min bound. Multiplicity-aware
+            // (WR-07): a value duplicated in the choices list may be
+            // submitted that many times.
+            if (this.hasDuplicateChoiceItems(value, choices)) {
               errors.push(`Selection "${selection.name}" contains duplicate choices`);
             }
             const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
@@ -902,7 +948,7 @@ export class ActionExecutor {
         // Reject duplicates before the count check (WR-04): repeated
         // elements (or repeated IDs of the same element) must not satisfy
         // the min bound.
-        if (Array.isArray(value) && this.hasDuplicateItems(value)) {
+        if (Array.isArray(value) && this.hasDuplicateElementItems(value)) {
           errors.push(`Selection "${selection.name}" contains duplicate elements`);
         }
         const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);

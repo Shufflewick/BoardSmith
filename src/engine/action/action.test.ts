@@ -560,6 +560,85 @@ describe('Action Executor', () => {
       expect(accepted.valid).toBe(true);
     });
 
+    // WR-07: duplicate rejection must be multiplicity-aware. When the choices
+    // list itself offers the same value more than once (values ARE the
+    // identity in the wire protocol -- there is no per-instance id for scalar
+    // choices), submitting that many copies is the ONLY encoding of "select
+    // both copies" and must be accepted. Only more copies than the choices
+    // offer is a duplicate.
+    it('accepts a value duplicated as many times as the choices list offers it (WR-07)', () => {
+      const action = Action.create('discard')
+        .chooseFrom('discards', { choices: ['copper', 'copper', 'estate'], multiSelect: 2 })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        ['copper', 'copper'],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('rejects more copies of a value than the choices list offers (WR-07)', () => {
+      const action = Action.create('discard')
+        .chooseFrom('discards', {
+          choices: ['copper', 'copper', 'estate'],
+          multiSelect: { min: 1, max: 3 },
+        })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        ['copper', 'copper', 'copper'],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('duplicate');
+    });
+
+    it('does not falsely flag distinct object choices that share an id field (WR-07)', () => {
+      const attack = { id: 1, kind: 'attack' };
+      const defend = { id: 1, kind: 'defend' };
+      const action = Action.create('plan')
+        .chooseFrom('orders', { choices: [attack, defend], multiSelect: { min: 2, max: 2 } })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        [attack, defend],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('still rejects an element choice duplicated as element object plus raw ID (WR-07 regression guard)', () => {
+      const deck = game.create(Deck, 'deck');
+      const c1 = deck.create(Card, 'c1', { suit: 'H', rank: '1', value: 1 });
+      const c2 = deck.create(Card, 'c2', { suit: 'H', rank: '2', value: 2 });
+
+      const action = Action.create('pick')
+        .chooseFrom('cards', { choices: () => [c1, c2], multiSelect: { min: 2, max: 2 } })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        action.selections[0],
+        [c1, c1.id],
+        game.getPlayer(1)!,
+        {}
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain('duplicate');
+    });
+
     // CR-01: multiSelect chooseFrom array items must go through the same
     // smart-resolution + disabled enforcement as scalar submissions. A custom
     // UI submitting element IDs (or display strings) in an array must not be
