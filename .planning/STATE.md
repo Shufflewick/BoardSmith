@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: executing
+status: verifying
 stopped_at: v4.5 ROADMAP.md + REQUIREMENTS.md traceability written; STATE.md initialized for the new milestone
-last_updated: "2026-07-03T03:29:21.283Z"
+last_updated: "2026-07-03T03:36:35.909Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 0
+  completed_plans: 5
+  percent: 11
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 131 (Serialization & Restore Fidelity) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-03
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -116,6 +116,7 @@ Recent decisions affecting current work:
 - [Phase 131-02]: Zone-visibility restore tests must use a plain Space (not Deck/Hand): those classes reapply their own constructor default on restore, masking the F1/F7 bug for the common case
 - [Phase 131]: debugEnabled is GameSession-consumer-only (not persisted/CLI-wired, Pitfall 2); added GameSession.displayName/teachingDisabled getters (Rule 2) to make the RST-02 persistence fix observable/testable — Session-scoped host-policy fields mirror the aiConfig round-trip pattern; debug gating opt-in stays scoped to trusted GameSession consumers, matching 131-RESEARCH.md Pitfall 2
 - [Phase 131-04]: visibleAttributes filtering lives inside filterElement's existing fallthrough (single chokepoint, no parallel filter); state.players derived from truthView via findElementJSONById instead of raw player.toJSON()
+- [Phase 131]: Event handler identity key = class name + branch() (tree index path); stable because fromJSON rebuilds children in the same order they were serialized.
 
 ### Pending Todos
 
@@ -127,7 +128,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T03:29:15.469Z
+Last session: 2026-07-03T03:35:32.922Z
 Stopped at: v4.5 ROADMAP.md + REQUIREMENTS.md traceability written; STATE.md initialized for the new milestone
 Resume file: None
 Next action: Break Phase 131 (Serialization & Restore Fidelity) down into plans via `/gsd:plan-phase 131`

@@ -90,7 +90,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 
 ## Phases
 
-- [ ] **Phase 131: Serialization & Restore Fidelity** - Hidden zone visibility, player-state filtering, debug-data gating, and handler/lockout state all survive every snapshot restore path
+- [x] **Phase 131: Serialization & Restore Fidelity** - Hidden zone visibility, player-state filtering, debug-data gating, and handler/lockout state all survive every snapshot restore path (completed 2026-07-03)
 - [ ] **Phase 132: Engine Element & Builder Safety** - putInto, resolveArgs, forEach, and action .build() fail loudly instead of silently corrupting or no-oping
 - [ ] **Phase 133: Engine Flow & Action Validation** - eachPlayer wrap-around, simultaneous-action error surfacing, server-side multiSelect validation, and switchOn fail loudly
 - [ ] **Phase 134: UI & Session Interaction Guardrails** - Custom-UI action failures, multiSelect fill() misuse, responsive board collapse, dragProps/setBeforeAutoExecute, and the runner-bypass footgun are all fixed or surfaced loudly
@@ -118,7 +118,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] 131-02-PLAN.md — SEC-01: serialize `_zoneVisibility` so zone visibility survives every restore path
 - [x] 131-03-PLAN.md — RST-02 + SEC-04: persist teachingDisabled/displayName; gate registerDebug data off by default
 - [x] 131-04-PLAN.md — SEC-02 + SEC-03: implement `visibleAttributes` filtering; route `state.players` through per-viewer filter
-- [ ] 131-05-PLAN.md — RST-01: re-bind onEnter/onExit across restore; correct registerDebug docs (DOCX-04)
+- [x] 131-05-PLAN.md — RST-01: re-bind onEnter/onExit across restore; correct registerDebug docs (DOCX-04)
 
 ### Phase 132: Engine Element & Builder Safety
 **Goal**: Element-tree mutation and action-builder APIs fail loudly on misuse instead of silently corrupting state or shipping a no-op.
@@ -227,7 +227,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
-| 131. Serialization & Restore Fidelity | 4/5 | In Progress|  |
+| 131. Serialization & Restore Fidelity | 5/5 | Complete   | 2026-07-03 |
 | 132. Engine Element & Builder Safety | 0/TBD | Not started | - |
 | 133. Engine Flow & Action Validation | 0/TBD | Not started | - |
 | 134. UI & Session Interaction Guardrails | 0/TBD | Not started | - |

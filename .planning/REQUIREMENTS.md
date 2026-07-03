@@ -31,7 +31,7 @@
 
 ### High/Medium — Restore Fidelity (RST)
 
-- [ ] **RST-01**: `onEnter`/`onExit` handlers registered in the game constructor still fire after snapshot restore (F10)
+- [x] **RST-01**: `onEnter`/`onExit` handlers registered in the game constructor still fire after snapshot restore (F10)
 - [x] **RST-02**: `teachingDisabled` (LOCK-01 anti-cheat lockout) persists across `GameSession.restore()` (F16)
 
 ### Session API (SESS)
@@ -101,7 +101,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | SEC-02 | Phase 131 | Complete |
 | SEC-03 | Phase 131 | Complete |
 | SEC-04 | Phase 131 | Complete |
-| RST-01 | Phase 131 | Pending |
+| RST-01 | Phase 131 | Complete |
 | RST-02 | Phase 131 | Complete |
 | ENG-01 | Phase 132 | Pending |
 | ENG-05 | Phase 132 | Pending |
