@@ -17,7 +17,7 @@ import {
   announceGameOver,
   announceOpponentTurn,
 } from '../composables/liveRegionAnnouncer.js';
-import { MeepleClient, GameConnection, audioService, type LobbyInfo } from '../../client/index.js';
+import { MeepleClient, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
 // HMR Debug logging (disabled in production)
@@ -67,10 +67,13 @@ function getPlayerId(): string {
     return sessionId;
   }
 
-  // Fall back to localStorage
+  // Fall back to localStorage. The playerId is a per-seat capability token
+  // (identity proof on WS connect + host-authorization checks), so it must
+  // be minted by the SDK's single cryptographically-secure minting path —
+  // never Math.random().
   let id = localStorage.getItem(LOCAL_KEY);
   if (!id) {
-    id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    id = generatePlayerId();
     localStorage.setItem(LOCAL_KEY, id);
   }
   return id;
@@ -313,14 +316,14 @@ const isViewingHistory = computed(() => timeTravelState.value !== null);
 const debugHighlightedElementId = ref<number | null>(null);
 provide('debugHighlight', debugHighlightedElementId);
 
-// Create client
+// Create client with our persisted playerId so all API calls (claim
+// position, etc.) use the same ID. Passing it into the constructor (rather
+// than overwriting after construction via setPlayerId) means the client
+// never mints an ID that is immediately discarded.
 const client = new MeepleClient({
   baseUrl: props.apiUrl,
+  playerId: playerId.value,
 });
-
-// Sync the client's playerId with our localStorage-based one
-// This ensures all API calls (claim position, etc.) use the same ID
-client.setPlayerId(playerId.value);
 
 // Initialize audio service with the turn notification sound
 audioService.init({
@@ -1355,8 +1358,9 @@ async function joinGame() {
         // If so, generate a new playerId for this joiner session
         const existingSlot = lobby.slots.find(s => s.playerId === playerId.value);
         if (existingSlot) {
-          // Generate a new unique playerId for this joiner (same-browser scenario)
-          const newPlayerId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+          // Mint a new unique playerId for this joiner (same-browser scenario)
+          // via the SDK's secure minting path — it's a capability token.
+          const newPlayerId = generatePlayerId();
           playerId.value = newPlayerId;
           client.setPlayerId(newPlayerId);
           // Save to sessionStorage so it survives refresh but not browser close

@@ -37,6 +37,35 @@ export class MeepleClientError extends Error {
   }
 }
 
+/**
+ * Mint a new playerId. The playerId is the per-seat capability/identity
+ * proof (see types/protocol.ts), so it MUST be cryptographically
+ * unguessable — never Math.random(). This is the ONE minting path for the
+ * whole SDK; anything that needs a fresh playerId (MeepleClient,
+ * GameShell's persistent identity, same-browser joiner re-mints) must call
+ * this instead of rolling its own.
+ */
+export function generatePlayerId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  // crypto.randomUUID requires a secure context in browsers;
+  // crypto.getRandomValues does not, so fall back to it (e.g. a dev host
+  // reached over plain http on a LAN IP).
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  throw new Error(
+    'No cryptographically secure RNG available to mint a playerId. ' +
+      'Provide an explicit playerId in MeepleClientConfig, or run in an environment ' +
+      'with the Web Crypto API (modern browser or Node 19+).'
+  );
+}
+
 export class MeepleClient {
   private config: Required<MeepleClientConfig>;
   private playerId: string;
@@ -45,7 +74,7 @@ export class MeepleClient {
     // Use the explicit playerId if provided; otherwise mint one. Minting
     // first (before building `this.config`) so `Required<MeepleClientConfig>`
     // always has a concrete value to store.
-    this.playerId = config.playerId ?? this.generatePlayerId();
+    this.playerId = config.playerId ?? generatePlayerId();
 
     this.config = {
       baseUrl: config.baseUrl.replace(/\/$/, ''), // Remove trailing slash
@@ -584,26 +613,6 @@ export class MeepleClient {
     } finally {
       clearTimeout(timeout);
     }
-  }
-
-  private generatePlayerId(): string {
-    // The playerId is the per-seat capability/identity proof (see types/protocol.ts),
-    // so it MUST be cryptographically unguessable — never Math.random().
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-
-    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-      const bytes = new Uint8Array(16);
-      crypto.getRandomValues(bytes);
-      return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    throw new Error(
-      'No cryptographically secure RNG available to mint a playerId. ' +
-        'Provide an explicit playerId in MeepleClientConfig, or run in an environment ' +
-        'with the Web Crypto API (modern browser or Node 19+).'
-    );
   }
 
   private sleep(ms: number): Promise<void> {

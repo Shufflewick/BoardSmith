@@ -151,18 +151,9 @@ describe('MeepleClient identity & connection surface (SDK-01/SDK-06)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('new MeepleClient({baseUrl, playerId}) uses the provided id and never calls generatePlayerId()', () => {
-    const generateSpy = vi.spyOn(
-      MeepleClient.prototype as unknown as { generatePlayerId: () => string },
-      'generatePlayerId'
-    );
-
+  it('new MeepleClient({baseUrl, playerId}) uses the provided id verbatim (no minting overwrites it)', () => {
     const client = new MeepleClient({ baseUrl: 'http://localhost:3000', playerId: 'fixed-id' });
-
     expect(client.getPlayerId()).toBe('fixed-id');
-    expect(generateSpy).not.toHaveBeenCalled();
-
-    generateSpy.mockRestore();
   });
 
   it('the no-Web-Crypto error names the real playerId field on MeepleClientConfig and states Node 19+', () => {
@@ -242,5 +233,22 @@ describe('MeepleClient identity & connection surface (SDK-01/SDK-06)', () => {
     expect(connection).toBeInstanceOf(GameConnection);
     expect(constructed).toBe(false);
     expect(connection.getStatus()).toBe('disconnected');
+  });
+});
+
+describe('generatePlayerId (CR-01: single secure minting path)', () => {
+  it('is exported standalone and mints a crypto-strength id (UUID on this runtime)', async () => {
+    const { generatePlayerId } = await import('./index.js');
+    const id = generatePlayerId();
+    // Node has crypto.randomUUID, so the UUID branch is taken.
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(generatePlayerId()).not.toBe(id);
+  });
+
+  it('MeepleClient without an explicit playerId mints via the same path', () => {
+    const client = new MeepleClient({ baseUrl: 'http://localhost:3000' });
+    expect(client.getPlayerId()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
   });
 });
