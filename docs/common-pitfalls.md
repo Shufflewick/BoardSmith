@@ -761,11 +761,17 @@ class Player extends BasePlayer {
 
 ---
 
-## 10. followUp Args Auto-Resolution
+## 10. followUp Args Element Resolution
 
-### The Problem
+### The Behavior
 
-When using `followUp` to chain actions with pre-filled args, the server **automatically resolves numeric IDs to elements** before calling your callbacks. Your code may expect an ID but receive an element:
+When using `followUp` to chain actions with pre-filled args, the server resolves
+**non-selection args that are `{id, className}`-shaped serialized-element objects**
+into their live `GameElement` before calling your callbacks. A bare numeric ID passed
+as a non-selection arg is **never** auto-resolved — it survives as a plain number,
+because a plain number that happens to collide with a live element's id is not a safe
+signal that the developer meant "this is an element reference" (ENG-05: ambiguous
+coercion was removed as a Pit of Success violation).
 
 ```typescript
 // In explore action execute():
@@ -777,36 +783,31 @@ return {
   }
 };
 
-// In collectEquipment filter() - WRONG assumption:
-filter: (element, ctx) => {
-  // ctx.args.sectorId is NOT a number - it's the resolved Sector element!
-  const sector = game.getElementById(ctx.args.sectorId);  // FAILS - already an object
-  return element.container === sector;
-}
-```
-
-### The Solution
-
-Handle both the numeric-ID and already-resolved-element cases:
-
-```typescript
-function getSector(ctx: any): Sector | undefined {
-  const sectorArg = ctx.args?.sectorId;
-  if (typeof sectorArg === 'number') {
-    return game.getElementById(sectorArg) as Sector | undefined;
-  } else if (sectorArg && typeof sectorArg === 'object' && 'id' in sectorArg) {
-    return sectorArg as Sector;
-  }
-  return undefined;
-}
-
 // In collectEquipment filter():
 filter: (element, ctx) => {
-  const sector = getSector(ctx);
-  if (!sector) return false;
+  // ctx.args.sectorId IS a number here — bare numeric non-selection args are
+  // never coerced into elements. Resolve it explicitly.
+  const sector = game.getElementById(ctx.args.sectorId as number);
   return element.container === sector;
 }
 ```
+
+If you want the server to resolve a followUp arg to an element automatically, pass a
+serialized-element object shape (`{ id: sector.id, className: 'Sector' }`) instead of
+a bare number:
+
+```typescript
+args: { mercId: merc.id, sectorId: { id: sector.id, className: sector.constructor.name } }
+
+// In collectEquipment filter() - ctx.args.sectorId is already the resolved Sector element:
+filter: (element, ctx) => {
+  return element.container === ctx.args.sectorId;
+}
+```
+
+Named element-typed selections (`chooseElement`/`chooseElements`) are unaffected by
+this — a bare numeric ID sent for a declared `element`/`elements` selection still
+resolves to the `GameElement`, since those args are explicitly typed by the developer.
 
 ### Why This Happens
 

@@ -236,21 +236,19 @@ export class ActionExecutor {
       }
     }
 
-    // Second pass: resolve non-selection args that look like element references
-    // This handles followUp args like { sectorId: { id: 145, name: 'Silver Industry' } }
+    // Second pass: resolve non-selection args that unambiguously represent element
+    // references. This handles followUp args like { sectorId: { id: 145, className: 'Sector' } }.
+    // Bare numbers are NEVER coerced here -- a non-selection arg was never declared
+    // element-typed by the developer, so a plain number that happens to collide with a
+    // live element's id must survive as a number (ENG-05: ambiguous, corruption-prone
+    // auto-coercion). Only genuine {id, className}-shaped serialized-element objects
+    // (isSerializedElement) are resolved.
     for (const [key, value] of Object.entries(args)) {
       if (selectionNames.has(key)) continue; // Already processed above
       if (value === undefined) continue;
 
-      // Resolve numeric IDs
-      if (typeof value === 'number') {
-        const element = this.game.getElementById(value);
-        if (element) {
-          resolved[key] = element;
-        }
-      }
       // Resolve serialized element objects (from followUp args)
-      else if (this.looksLikeSerializedElement(value)) {
+      if (this.isSerializedElement(value)) {
         const element = this.game.getElementById((value as { id: number }).id);
         if (element) {
           resolved[key] = element;
