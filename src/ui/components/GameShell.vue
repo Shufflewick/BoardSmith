@@ -1244,7 +1244,7 @@ async function createGame(config?: LobbyConfig) {
       creatorId: playerId.value,
     });
 
-    if (result.success && result.gameId) {
+    if (result.gameId) {
       createdGameId.value = result.gameId;
       playerSeat.value = 1; // Creator defaults to seat 1
       isCreator.value = true;
@@ -1369,21 +1369,22 @@ async function joinGame() {
         if (hasOpenSlots) {
           // Auto-join the lobby (server assigns seat)
           const playerName = getPlayerName() || `Player ${lobby.slots.length + 1}`;
-          const joinResult = await client.joinLobby(gid, playerName);
 
-          if (joinResult.success && joinResult.lobby) {
-            lobbyInfo.value = joinResult.lobby;
+          try {
+            const joinResult = await client.joinLobby(gid, playerName);
+            lobbyInfo.value = joinResult.lobby ?? lobby;
 
             // Check if game started (all slots filled)
-            if (joinResult.lobby.state === 'playing' && joinResult.seat) {
+            if (joinResult.lobby?.state === 'playing' && joinResult.seat) {
               playerSeat.value = joinResult.seat;
               gameId.value = gid;
               currentScreen.value = 'game';
               updateUrl(gid, joinResult.seat);
               return;
             }
-          } else {
+          } catch (joinErr) {
             // Join failed, show lobby anyway so they can try manually
+            console.error('Failed to auto-join lobby:', joinErr);
             lobbyInfo.value = lobby;
           }
 
@@ -1436,21 +1437,19 @@ async function handleJoinLobby(name: string) {
   try {
     const result = await client.joinLobby(createdGameId.value, name);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-      // Save name for future games
-      setPlayerName(name);
+    }
+    // Save name for future games
+    setPlayerName(name);
 
-      // If game started, transition
-      if (result.lobby.state === 'playing' && result.seat) {
-        disconnectFromLobby();
-        playerSeat.value = result.seat;
-        gameId.value = createdGameId.value;
-        currentScreen.value = 'game';
-        updateUrl(createdGameId.value, result.seat);
-      }
-    } else {
-      toast.error(result.error || 'Failed to join lobby.');
+    // If game started, transition
+    if (result.lobby?.state === 'playing' && result.seat) {
+      disconnectFromLobby();
+      playerSeat.value = result.seat;
+      gameId.value = createdGameId.value;
+      currentScreen.value = 'game';
+      updateUrl(createdGameId.value, result.seat);
     }
   } catch (err) {
     console.error('Failed to join lobby:', err);
@@ -1477,7 +1476,7 @@ async function handleSetReady(ready: boolean) {
   try {
     const result = await client.setReady(createdGameId.value, ready);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
 
       // If game started (all ready), transition to game
@@ -1494,9 +1493,6 @@ async function handleSetReady(ready: boolean) {
         currentScreen.value = 'game';
         updateUrl(createdGameId.value, playerSeat.value);
       }
-    } else {
-      console.error('Failed to set ready:', result.error);
-      toast.error(result.error || 'Failed to mark as ready.');
     }
   } catch (err) {
     console.error('Failed to set ready:', err);
@@ -1510,14 +1506,12 @@ async function handleAddSlot() {
   try {
     const result = await client.addSlot(createdGameId.value);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-    } else {
-      toast.error(result.error || 'Failed to add slot');
     }
   } catch (err) {
     console.error('Failed to add slot:', err);
-    toast.error('Failed to add slot');
+    toast.error(err instanceof Error ? err.message : 'Failed to add slot');
   }
 }
 
@@ -1527,14 +1521,12 @@ async function handleRemoveSlot(position: number) {
   try {
     const result = await client.removeSlot(createdGameId.value, position);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-    } else {
-      toast.error(result.error || 'Failed to remove slot');
     }
   } catch (err) {
     console.error('Failed to remove slot:', err);
-    toast.error('Failed to remove slot');
+    toast.error(err instanceof Error ? err.message : 'Failed to remove slot');
   }
 }
 
@@ -1544,14 +1536,12 @@ async function handleSetSlotAI(position: number, isAI: boolean, aiLevel?: string
   try {
     const result = await client.setSlotAI(createdGameId.value, position, isAI, aiLevel);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-    } else {
-      toast.error(result.error || 'Failed to update slot');
     }
   } catch (err) {
     console.error('Failed to set slot AI:', err);
-    toast.error('Failed to update slot');
+    toast.error(err instanceof Error ? err.message : 'Failed to update slot');
   }
 }
 
@@ -1561,14 +1551,12 @@ async function handleKickPlayer(position: number) {
   try {
     const result = await client.kickPlayer(createdGameId.value, position);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-    } else {
-      toast.error(result.error || 'Failed to kick player');
     }
   } catch (err) {
     console.error('Failed to kick player:', err);
-    toast.error('Failed to kick player');
+    toast.error(err instanceof Error ? err.message : 'Failed to kick player');
   }
 }
 
@@ -1578,14 +1566,12 @@ async function handleUpdatePlayerOptions(options: Record<string, unknown>) {
   try {
     const result = await client.updatePlayerOptions(createdGameId.value, options);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-    } else {
-      toast.error(result.error || 'Failed to update options');
     }
   } catch (err) {
     console.error('Failed to update player options:', err);
-    toast.error('Failed to update options');
+    toast.error(err instanceof Error ? err.message : 'Failed to update options');
   }
 }
 
@@ -1595,14 +1581,12 @@ async function handleUpdateGameOptions(options: Record<string, unknown>) {
   try {
     const result = await client.updateGameOptions(createdGameId.value, options);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-    } else {
-      toast.error(result.error || 'Failed to update game options');
     }
   } catch (err) {
     console.error('Failed to update game options:', err);
-    toast.error('Failed to update game options');
+    toast.error(err instanceof Error ? err.message : 'Failed to update game options');
   }
 }
 
@@ -1612,14 +1596,12 @@ async function handleUpdateSlotPlayerOptions(position: number, options: Record<s
   try {
     const result = await client.updateSlotPlayerOptions(createdGameId.value, position, options);
 
-    if (result.success && result.lobby) {
+    if (result.lobby) {
       lobbyInfo.value = result.lobby;
-    } else {
-      toast.error(result.error || 'Failed to update slot options');
     }
   } catch (err) {
     console.error('Failed to update slot player options:', err);
-    toast.error('Failed to update slot options');
+    toast.error(err instanceof Error ? err.message : 'Failed to update slot options');
   }
 }
 

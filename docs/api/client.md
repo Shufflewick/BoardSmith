@@ -18,6 +18,7 @@ import { MeepleClient, GameConnection, audioService } from 'boardsmith/client';
 
 - `MeepleClient` - Main client for connecting to game servers
 - `GameConnection` - Active connection to a game
+- `MeepleClientError` - Thrown by `MeepleClient`'s HTTP methods (game/lobby management) on failure; extends `Error` and carries an optional `errorCode`
 
 ### Audio
 
@@ -49,6 +50,27 @@ import { MeepleClient, GameConnection, audioService } from 'boardsmith/client';
 - `ClaimSeatResponse` - Claim seat response
 - `AudioServiceOptions` - Audio service options
 
+## Error Handling
+
+Every `MeepleClient` HTTP method (game creation, matchmaking, lobby management — `createGame`, `claimSeat`, `joinLobby`, `setReady`, `addSlot`, `removeSlot`, `setSlotAI`, `leavePosition`, `kickPlayer`, `updatePlayerOptions`, `updateSlotPlayerOptions`, `updateGameOptions`, `findMatch`, `getMatchStatus`, `leaveMatchmaking`, `getGameState`, `performAction`, `getHistory`, `restartGame`, `getLobby`, `updateLobbyName`) **throws** a `MeepleClientError` on failure — none of them return a `{ success: false }` value to check. Always call these inside a `try/catch`:
+
+```typescript
+import { MeepleClient, MeepleClientError } from 'boardsmith/client';
+
+const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
+
+try {
+  await client.setReady(gameId, true);
+} catch (error) {
+  if (error instanceof MeepleClientError) {
+    console.error(error.message, error.errorCode);
+  }
+  showErrorToast(error instanceof Error ? error.message : 'Failed to mark as ready.');
+}
+```
+
+`GameConnection.action()` (over the WebSocket, not `MeepleClient`'s HTTP surface) is the one exception: it resolves `{ success: false, error }` for a genuine server-reported action failure (checking `result.success` there is correct), but rejects for connection-level problems (not connected, timed out waiting to open, closed mid-flight) — see [Performing Actions](#performing-actions) below.
+
 ## Examples
 
 ### Basic Client Usage
@@ -61,30 +83,38 @@ const client = new MeepleClient({
   baseUrl: 'https://game.example.com',
 });
 
-// Create a new game
-const { gameId } = await client.createGame({
-  gameType: 'go-fish',
-  playerCount: 3,
-  playerNames: ['Alice', 'Bob', 'Charlie'],
-});
+try {
+  // Create a new game. Lobby/game-management methods throw a
+  // MeepleClientError on failure — always wrap them in try/catch.
+  const { gameId } = await client.createGame({
+    gameType: 'go-fish',
+    playerCount: 3,
+    playerNames: ['Alice', 'Bob', 'Charlie'],
+  });
 
-// Connect to the game
-const connection = client.connect(gameId, {
-  playerSeat: 0,
-});
+  // Connect to the game. connect() returns immediately with a connection
+  // object whose socket is still opening — await `.opened` before relying
+  // on the connection being live (e.g. before sending an action).
+  const connection = client.connect(gameId, {
+    playerSeat: 0,
+  });
+  await connection.opened;
 
-// Subscribe to state changes
-connection.onStateChange((state) => {
-  console.log('Game state updated:', state);
-  console.log('Current player:', state.flowState.currentPlayer);
-  console.log('Is my turn:', state.flowState.currentPlayer === 0);
-});
+  // Subscribe to state changes
+  connection.onStateChange((state) => {
+    console.log('Game state updated:', state);
+    console.log('Current player:', state.flowState.currentPlayer);
+    console.log('Is my turn:', state.flowState.currentPlayer === 0);
+  });
 
-// Perform an action when it's your turn
-await connection.action('ask', {
-  target: 1,
-  rank: '7',
-});
+  // Perform an action when it's your turn
+  await connection.action('ask', {
+    target: 1,
+    rank: '7',
+  });
+} catch (error) {
+  console.error('Failed to start game:', error);
+}
 ```
 
 ### Matchmaking
@@ -108,6 +138,7 @@ if (match.matched) {
   const connection = client.connect(match.gameId!, {
     playerSeat: match.playerSeat!,
   });
+  await connection.opened;
 } else {
   // Waiting for more players
   console.log(`Position ${match.position} in queue`);
@@ -130,6 +161,7 @@ import { MeepleClient } from 'boardsmith/client';
 
 const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
 const connection = client.connect(gameId, { playerSeat: 0 });
+await connection.opened; // wait for the socket to actually open before using it
 
 // State changes
 connection.onStateChange((state) => {
@@ -202,34 +234,42 @@ console.log('Created at:', new Date(history.createdAt));
 ```typescript
 const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
 
-// Create game with lobby
-const { gameId } = await client.createGame({
-  gameType: 'go-fish',
-  playerCount: 4,
-  withLobby: true,
-});
+try {
+  // Create game with lobby. Lobby mutations below all throw
+  // MeepleClientError on failure — wrap them in try/catch, don't check
+  // a `.success` field.
+  const { gameId } = await client.createGame({
+    gameType: 'go-fish',
+    playerCount: 4,
+    withLobby: true,
+  });
 
-// Connect to the lobby (lobby updates arrive over the connection)
-const connection = client.connect(gameId, {
-  spectator: true,
-});
+  // Connect to the lobby (lobby updates arrive over the connection)
+  const connection = client.connect(gameId, {
+    spectator: true,
+  });
+  await connection.opened;
 
-// Listen for lobby updates
-connection.onLobbyChange((lobby) => {
-  console.log('Lobby state:', lobby.state);
-  console.log('Slots:', lobby.slots);
-});
+  // Listen for lobby updates
+  connection.onLobbyChange((lobby) => {
+    console.log('Lobby state:', lobby.state);
+    console.log('Slots:', lobby.slots);
+  });
 
-// Lobby mutations are performed on the client, keyed by game id
+  // Lobby mutations are performed on the client, keyed by game id
 
-// Claim a seat (seats are 1-indexed)
-await client.claimSeat(gameId, 1, 'Alice');
+  // Claim a seat (seats are 1-indexed)
+  await client.claimSeat(gameId, 1, 'Alice');
 
-// Update your display name
-await client.updateLobbyName(gameId, 'Alice the Great');
+  // Update your display name
+  await client.updateLobbyName(gameId, 'Alice the Great');
 
-// Set ready status
-await client.setReady(gameId, true);
+  // Set ready status
+  await client.setReady(gameId, true);
+} catch (error) {
+  console.error('Lobby operation failed:', error);
+  showErrorToast(error instanceof Error ? error.message : 'Lobby operation failed.');
+}
 ```
 
 ### Audio Service
