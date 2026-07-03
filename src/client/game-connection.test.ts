@@ -205,3 +205,97 @@ describe('GameConnection.action() awaits open (SDK-01, PROC-02 regression)', () 
     }
   });
 });
+
+describe('GameConnection disconnect()/connect() symmetry (SDK-02, PROC-02 regression)', () => {
+  it('restores auto-reconnect after disconnect() then connect(): a subsequent unclean close reschedules a reconnect', () => {
+    vi.useFakeTimers();
+    try {
+      const connection = new GameConnection('http://localhost:3000', {
+        gameId: 'game-1',
+        playerId: 'player-1',
+        wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+        autoReconnect: true,
+        reconnectDelay: 10,
+      });
+
+      connection.connect();
+      connection.disconnect();
+      connection.connect();
+
+      const ws = (connection as unknown as { ws: FakeWebSocket | null }).ws!;
+      ws.readyState = FakeWebSocket.OPEN;
+      ws.onopen?.();
+
+      const scheduleReconnectSpy = vi.spyOn(connection, 'connect');
+
+      // Unclean close should trigger scheduleReconnect (not suppressed by the
+      // earlier disconnect(), since connect() should have restored it).
+      ws.onclose?.({ wasClean: false, code: 1006 });
+
+      vi.advanceTimersByTime(1000);
+
+      expect(scheduleReconnectSpy).toHaveBeenCalled();
+      connection.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('disconnect() never mutates config.autoReconnect', () => {
+    const connection = new GameConnection('http://localhost:3000', {
+      gameId: 'game-1',
+      playerId: 'player-1',
+      wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+      autoReconnect: true,
+    });
+
+    connection.connect();
+    connection.disconnect();
+
+    const config = (connection as unknown as { config: { autoReconnect: boolean } }).config;
+    expect(config.autoReconnect).toBe(true);
+  });
+
+  it('while #userDisconnected is set (after disconnect, before connect), scheduleReconnect does not schedule', () => {
+    vi.useFakeTimers();
+    try {
+      const connection = new GameConnection('http://localhost:3000', {
+        gameId: 'game-1',
+        playerId: 'player-1',
+        wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+        autoReconnect: true,
+        reconnectDelay: 10,
+      });
+
+      connection.connect();
+      const ws = (connection as unknown as { ws: FakeWebSocket | null }).ws!;
+      ws.readyState = FakeWebSocket.OPEN;
+      ws.onopen?.();
+
+      connection.disconnect();
+
+      const connectSpy = vi.spyOn(connection, 'connect');
+      // Directly invoke the private scheduleReconnect to prove the guard bails.
+      (connection as unknown as { scheduleReconnect: () => void }).scheduleReconnect();
+      vi.advanceTimersByTime(60000);
+
+      expect(connectSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('constructing/connecting with connectImmediately:false opens no socket', () => {
+    const connection = new GameConnection('http://localhost:3000', {
+      gameId: 'game-1',
+      playerId: 'player-1',
+      wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+      connectImmediately: false,
+    });
+
+    connection.connect();
+
+    const ws = (connection as unknown as { ws: FakeWebSocket | null }).ws;
+    expect(ws).toBeNull();
+  });
+});
