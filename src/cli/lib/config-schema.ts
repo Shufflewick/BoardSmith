@@ -31,7 +31,7 @@ const SUGGESTION_THRESHOLD = 3;
  * Classic dynamic-programming Levenshtein (edit) distance between two
  * strings. O(m*n) time/space — fine for the short key names involved here.
  */
-export function levenshtein(a: string, b: string): number {
+function levenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
   if (m === 0) return n;
