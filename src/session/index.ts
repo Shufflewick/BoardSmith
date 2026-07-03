@@ -115,6 +115,9 @@ export {
   type ActionResult,
   type UndoResult,
   type ElementDiff,
+  // Public return type of `session.runner` (SESS-01 read-only facade) — external
+  // consumers need to name it (e.g. helper fn parameters) without deep imports.
+  type ReadOnlyRunnerFacade,
 } from './game-session.js';
 
 export { AIController } from './ai-controller.js';
