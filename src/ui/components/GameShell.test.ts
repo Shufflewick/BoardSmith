@@ -326,11 +326,15 @@ describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)'
 describe('GameShell — dev-mode board sizing 0×0 console.error (UIX-03)', () => {
   const SETTLE_MS = 300; // mirrors useAutoZoom.ts's exported constant
 
-  /** Minimal fake element exposing only what the production watch reads. */
+  /** Minimal fake element exposing only what the production watch reads.
+   * offsetParent is non-null so the fake counts as RENDERED (the WR-01 hidden-
+   * board guard skips elements whose offsetParent is null — see the real-
+   * element hidden-board test below). */
   function makeFakeZoomContainer(rect: { width: number; height: number }, childCount: number) {
     return {
       getBoundingClientRect: () => rect,
       children: { length: childCount },
+      offsetParent: {},
     } as unknown as HTMLElement;
   }
 
@@ -340,14 +344,21 @@ describe('GameShell — dev-mode board sizing 0×0 console.error (UIX-03)', () =
     const consoleError = (msg: string) => errorCalls.push(msg);
 
     // ── Production watch wiring (mirrors GameShell.vue exactly) ──────────
+    let warned0x0 = false;
+    let pending0x0Check: ReturnType<typeof setTimeout> | undefined;
     watch(gameView, async (view) => {
-      if (!view) return;
+      if (!view || warned0x0) return;
       await nextTick();
-      setTimeout(() => {
+      if (pending0x0Check !== undefined) clearTimeout(pending0x0Check);
+      pending0x0Check = setTimeout(() => {
+        pending0x0Check = undefined;
+        if (warned0x0) return;
         const el = zoomContainerEl.value;
         if (!el || el.children.length === 0) return;
+        if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return;
         const rect = el.getBoundingClientRect();
         if (rect.width < 1 || rect.height < 1) {
+          warned0x0 = true;
           consoleError(
             "Custom board failed to render: the #game-board slot measured 0×0 after game state arrived. " +
             "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
@@ -399,6 +410,57 @@ describe('GameShell — dev-mode board sizing 0×0 console.error (UIX-03)', () =
     vi.useFakeTimers();
     try {
       const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 0) };
+      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
+
+      gameView.value = { children: [] };
+      await nextTick();
+      await nextTick();
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+      expect(errorCalls).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fires only ONCE across repeated gameView broadcasts while the board stays collapsed (WR-01 latch)', async () => {
+    vi.useFakeTimers();
+    try {
+      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 1) };
+      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
+
+      // First broadcast — genuine collapse, one report.
+      gameView.value = { children: [] };
+      await nextTick();
+      await nextTick();
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+      // Two more broadcasts while still collapsed (e.g. an AI-vs-AI dev game)
+      // must NOT re-log — one report per session for a structural CSS bug.
+      gameView.value = { children: [1] };
+      await nextTick();
+      await nextTick();
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+      gameView.value = { children: [2] };
+      await nextTick();
+      await nextTick();
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+
+      expect(errorCalls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT fire for a hidden board (display:none ancestor — offsetParent null), only for a genuinely collapsed one (WR-01)', async () => {
+    vi.useFakeTimers();
+    try {
+      // A real (detached) element: jsdom gives offsetParent === null and a 0×0
+      // rect — exactly what a display:none board reports in a real browser,
+      // even when its sizing CSS is correct. Must not false-positive.
+      const hiddenEl = document.createElement('div');
+      hiddenEl.appendChild(document.createElement('div')); // slot has children
+      const zoomContainerEl = { value: hiddenEl as HTMLElement };
       const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
 
       gameView.value = { children: [] };

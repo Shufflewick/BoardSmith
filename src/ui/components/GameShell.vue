@@ -1821,19 +1821,35 @@ watch(actionController.errorTick, () => {
 // to 0×0 inside the zoom container (`.game-shell__zoom-container { width:
 // max-content }` — DO NOT modify that CSS, the structural fix is rejected per
 // 134-RESEARCH.md: a definite-width ancestor breaks useAutoZoom's fit formula
-// for every board, not just percentage-width ones). Fires once per genuine
-// post-state collapse; gated on BOTH game state having arrived (non-null
-// gameView) AND the slot having mounted children, so the normal pre-layout
-// startup transient (RESEARCH Pitfall 2) never false-positives.
+// for every board, not just percentage-width ones). Fires ONCE per session
+// (WR-01 latch — this reports a structural CSS bug, so re-logging on every
+// state broadcast while collapsed would flood the console in AI-vs-AI dev
+// games); gated on game state having arrived (non-null gameView), the slot
+// having mounted children (RESEARCH Pitfall 2: startup transient), AND the
+// board actually being rendered — a display:none ancestor (v-show behind a
+// modal, dev-host layout state) reports 0×0 rects even when the sizing CSS
+// is correct, so hidden boards are skipped, not reported.
 if (isDevBuild) {
+  let warned0x0 = false;
+  let pending0x0Check: ReturnType<typeof setTimeout> | undefined;
   watch(gameView, async (view) => {
-    if (!view) return;
+    if (!view || warned0x0) return;
     await nextTick();
-    setTimeout(() => {
+    // Only one settle-check in flight at a time — each broadcast would
+    // otherwise leave another SETTLE_MS timer pending.
+    if (pending0x0Check !== undefined) clearTimeout(pending0x0Check);
+    pending0x0Check = setTimeout(() => {
+      pending0x0Check = undefined;
+      if (warned0x0) return;
       const el = zoomContainerEl.value;
       if (!el || el.children.length === 0) return;
+      // Hidden, not collapsed: any display:none ancestor makes offsetParent
+      // null (position:fixed elements also have a null offsetParent but ARE
+      // rendered, so they still get measured).
+      if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return;
       const rect = el.getBoundingClientRect();
       if (rect.width < 1 || rect.height < 1) {
+        warned0x0 = true;
         console.error(
           "Custom board failed to render: the #game-board slot measured 0×0 after game state arrived. " +
           "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
