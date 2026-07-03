@@ -17,6 +17,8 @@ import {
   Player,
   Hand,
   Card,
+  Space,
+  Piece,
   Action,
   defineFlow,
   loop,
@@ -495,4 +497,65 @@ describe('TestGame.getActionSpaceWithChoices — FLOW-02 (Phase 123 Plan 03)', (
   // be SUBMITTED through the gameplay pick path — this introspection helper
   // is display-only. That gameplay rejection is already covered end-to-end by
   // `pick-handler.test.ts` ("PickHandler disabled threading"), not re-tested here.
+});
+
+// ---------------------------------------------------------------------------
+// Fixture: a shuffled deck, for TST-02 seedless-determinism coverage
+// ---------------------------------------------------------------------------
+
+/** Token element shuffled inside the fixture's constructor. */
+class SeedToken extends Piece<SeedFixtureGame> {
+  label!: string;
+}
+
+/**
+ * Minimal game fixture whose constructor shuffles a 10-item deck using the
+ * game's seeded rng — lets TST-02 tests observe whether two seedless
+ * `TestGame.create()` calls produce identical shuffle order.
+ */
+class SeedFixtureGame extends Game<SeedFixtureGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerElements([SeedToken]);
+
+    const deck = this.create(Space, 'deck');
+    for (let i = 0; i < 10; i++) {
+      deck.create(SeedToken, `token-${i}`, { label: `token-${i}` });
+    }
+    deck.shuffle();
+
+    this.registerAction(
+      Action.create<SeedFixtureGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow(defineFlow({ root: actionStep({ actions: ['pass'] }) }));
+  }
+}
+
+describe('deterministic default seed (TST-02)', () => {
+  it('two TestGames created with NO seed option produce identical shuffles', () => {
+    const gameA = TestGame.create(SeedFixtureGame, { playerCount: 1 });
+    const orderA = gameA.game.first(Space, 'deck')!.all(SeedToken).map((t) => t.label);
+
+    const gameB = TestGame.create(SeedFixtureGame, { playerCount: 1 });
+    const orderB = gameB.game.first(Space, 'deck')!.all(SeedToken).map((t) => t.label);
+
+    expect(orderA).toEqual(orderB);
+    // Sanity: shuffle actually reorders (not a no-op on 10 items).
+    expect(orderA).not.toEqual(
+      Array.from({ length: 10 }, (_, i) => `token-${i}`),
+    );
+  });
+
+  it('testGame.seed returns the resolved seed — fixed literal default when unset', () => {
+    const testGame = TestGame.create(SeedFixtureGame, { playerCount: 1 });
+    expect(testGame.seed).toBeTypeOf('string');
+    expect(testGame.seed).not.toMatch(/^test-\d+$/); // not a Date.now()-derived seed
+  });
+
+  it('testGame.seed returns the caller-supplied seed when explicitly set', () => {
+    const testGame = TestGame.create(SeedFixtureGame, { playerCount: 1, seed: 'my-explicit-seed' });
+    expect(testGame.seed).toBe('my-explicit-seed');
+  });
 });
