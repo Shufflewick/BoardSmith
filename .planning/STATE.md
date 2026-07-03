@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
-stopped_at: Completed 134-05-PLAN.md (Phase 134 complete, all 5 plans shipped)
-last_updated: "2026-07-03T18:14:11.515Z"
-last_activity: 2026-07-03 -- Phase 135 planning complete
+stopped_at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
+last_updated: "2026-07-03T18:19:45.367Z"
+last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 26
-  completed_plans: 20
+  completed_plans: 21
   percent: 44
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 135 — cli & dev experience
+**Current focus:** Phase 135 — CLI & Dev Experience
 
 ## Current Position
 
-Phase: 135
-Plan: Not started
+Phase: 135 (CLI & Dev Experience) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-07-03 -- Phase 135 planning complete
+Last activity: 2026-07-03
 
-Progress: [██████████] 100%
+Progress: [████████░░] 81%
 
 ## Milestones
 
@@ -139,6 +139,10 @@ Recent decisions affecting current work:
 - [Phase 134-04]: buildRunnerFacade delegates via closures over the captured runner parameter (not this.#runner) at each of the 5 rebuild sites, keeping the facade referentially in sync with the freshly assigned runner
 - [Phase 134-04]: ts-expect-error test line assigns session.runner.performAction to a local (does not invoke it) since an actual call throws at runtime, already proven by the adjacent runtime-undefined assertion
 - [Phase 134-05]: Browser verification for 134-05's checkpoint performed headlessly via Playwright against go-fish dev host, confirming the Plan 03 ActionPanel-to-GameShell toast chokepoint produces exactly one toast live (no duplicate)
+- [Phase 135]: F21/CLIX-03: the CODE (200MB constant) is wrong, not the comment (50MB) - independently re-confirmed against ~/ShufflewickPubGames/src/upload.ts:4
+- [Phase 135]: F32/CLIX-04: corrected a 135-RESEARCH.md misreading - CONTEXT.md's locked decision is default 127.0.0.1, not 0.0.0.0-stays-default; fix is a real default-value change, not docs-only
+- [Phase 135]: F9/CLIX-01: build.ts's manifest spread is a second silent-forwarding site for playerCount, folded into the same Plan 02 derive-not-duplicate fix
+- [Phase 135]: F34/CLIX-06: --ai validation fix requires relocating the check block to after effectivePlayerCount is computed (dev.ts:393), not an in-place operand swap at dev.ts:302
 
 ### Pending Todos
 
@@ -150,8 +154,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T17:06:02.561Z
-Stopped at: Completed 134-05-PLAN.md (Phase 134 complete, all 5 plans shipped)
+Last session: 2026-07-03T18:19:45.360Z
+Stopped at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
 

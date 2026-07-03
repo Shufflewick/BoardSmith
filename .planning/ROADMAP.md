@@ -187,7 +187,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   5. `boardsmith init -t/--template` either works or is removed from the CLI surface and docs.
   6. `--players` out-of-range/NaN values error loudly instead of silently clamping, and `--ai` validates against the final (post-clamp) player count.
 **Plans**: 6 plans (3 waves)
-- [ ] 135-01-PLAN.md — PROC-01 verify-first gate: per-finding verdicts (F9/F21/F22/F32/F33/F34) in 135-FINDINGS-VERIFICATION.md before any fix
+- [x] 135-01-PLAN.md — PROC-01 verify-first gate: per-finding verdicts (F9/F21/F22/F32/F33/F34) in 135-FINDINGS-VERIFICATION.md before any fix
 - [ ] 135-02-PLAN.md — CLI option surface: remove -t/--template (CLIX-05); correct --host help + register --lan (CLIX-04)
 - [ ] 135-03-PLAN.md — scaffold: drop playerCount + dead $schema from boardsmith.json (CLIX-01/CLIX-02)
 - [ ] 135-04-PLAN.md — build.ts: derive manifest playerCount from gameDefinition (CLIX-01)
@@ -252,7 +252,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 132. Engine Element & Builder Safety | 5/5 | Complete    | 2026-07-03 |
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
 | 134. UI & Session Interaction Guardrails | 5/5 | Complete    | 2026-07-03 |
-| 135. CLI & Dev Experience | 0/TBD | Not started | - |
+| 135. CLI & Dev Experience | 1/6 | In Progress|  |
 | 136. Client SDK & Protocol | 0/TBD | Not started | - |
 | 137. Testing Utilities | 0/TBD | Not started | - |
 | 138. Cross-Repo Migration | 0/TBD | Not started | - |
