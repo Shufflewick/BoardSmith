@@ -95,8 +95,9 @@ try {
   // Connect to the game. connect() returns immediately with a connection
   // object whose socket is still opening — await `.opened` before relying
   // on the connection being live (e.g. before sending an action).
+  // Seats are 1-indexed (seat 0 is not a valid seat and is silently ignored).
   const connection = client.connect(gameId, {
-    playerSeat: 0,
+    playerSeat: 1,
   });
   await connection.opened;
 
@@ -104,7 +105,7 @@ try {
   connection.onStateChange((state) => {
     console.log('Game state updated:', state);
     console.log('Current player:', state.flowState.currentPlayer);
-    console.log('Is my turn:', state.flowState.currentPlayer === 0);
+    console.log('Is my turn:', state.flowState.currentPlayer === 1);
   });
 
   // Perform an action when it's your turn
@@ -126,10 +127,10 @@ const client = new MeepleClient({
   baseUrl: 'https://game.example.com',
 });
 
-// Find a match
+// Find a match. The client's own playerId is sent automatically — set it
+// via `new MeepleClient({ ..., playerId })` if you need a specific identity.
 const match = await client.findMatch('go-fish', {
   playerCount: 4,
-  playerId: 'user-123',
   playerName: 'Alice',
 });
 
@@ -160,7 +161,7 @@ await client.leaveMatchmaking();
 import { MeepleClient } from 'boardsmith/client';
 
 const client = new MeepleClient({ baseUrl: 'https://game.example.com' });
-const connection = client.connect(gameId, { playerSeat: 0 });
+const connection = client.connect(gameId, { playerSeat: 1 }); // seats are 1-indexed
 await connection.opened; // wait for the socket to actually open before using it
 
 // State changes
@@ -241,7 +242,7 @@ try {
   const { gameId } = await client.createGame({
     gameType: 'go-fish',
     playerCount: 4,
-    withLobby: true,
+    useLobby: true,
   });
 
   // Connect to the lobby (lobby updates arrive over the connection)
