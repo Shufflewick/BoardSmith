@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://boardsmith.io/schemas/boardsmith.schema.json",
+  "title": "boardsmith.json",
+  "description": "Single source of truth for the set of top-level keys a boardsmith.json project config may legitimately carry. `src/cli/lib/config-schema.ts` derives ALLOWED_TOP_LEVEL_KEYS from `Object.keys(properties)` below, and `boardsmith validate` / `boardsmith dev` startup use that list to reject unknown/misspelled keys with a did-you-mean suggestion. Do NOT add a key here unless a real read site in src/cli/commands consumes it — see the file:line trace in 135-05-PLAN.md's read_first.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "displayName", "description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Machine-readable game identifier (kebab-case). Scaffold-emitted."
+    },
+    "displayName": {
+      "type": "string",
+      "description": "Human-readable game title. Scaffold-emitted."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short game description. Scaffold-emitted."
+    },
+    "estimatedDuration": {
+      "type": "string",
+      "description": "Human-readable play time estimate (e.g. '15-30 minutes'). Scaffold-emitted."
+    },
+    "complexity": {
+      "type": "number",
+      "description": "Relative complexity rating. Scaffold-emitted."
+    },
+    "categories": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Platform category tags. Scaffold-emitted."
+    },
+    "thumbnail": {
+      "type": "string",
+      "description": "Relative path to the game's thumbnail image. Scaffold-emitted."
+    },
+    "scoreboard": {
+      "type": "object",
+      "description": "Scoreboard stat configuration. Scaffold-emitted."
+    },
+    "ui": {
+      "type": "string",
+      "description": "'auto' or a relative path to a custom .vue UI component. Scaffold-emitted; read by validate.ts and dev.ts."
+    },
+    "gameOptions": {
+      "type": "array",
+      "description": "Game-level option definitions surfaced in the dev host and lobby. Read by dev.ts."
+    },
+    "playerOptions": {
+      "type": "array",
+      "description": "Per-player option definitions surfaced in the dev host and lobby. Read by dev.ts."
+    },
+    "colorPalette": {
+      "type": "array",
+      "description": "Custom per-player color choices. Read by dev.ts."
+    },
+    "paths": {
+      "type": "object",
+      "description": "Optional overrides for the rules/ui source directories (paths.rules, paths.ui). Read by dev.ts, simulate.ts, evolve-ai-weights.ts.",
+      "additionalProperties": false,
+      "properties": {
+        "rules": { "type": "string" },
+        "ui": { "type": "string" }
+      }
+    },
+    "gameId": {
+      "type": "string",
+      "description": "Stable platform game identifier, written back into boardsmith.json by `boardsmith publish` after first publish. Read by publish.ts."
+    },
+    "version": {
+      "type": "string",
+      "description": "Optional manifest version override consumed by build.ts's deriveManifest (defaults to '1.0.0' when absent)."
+    }
+  }
+}
