@@ -221,7 +221,10 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 **Success Criteria** (what must be TRUE):
   1. `TestGame.doAction` failures are loud by default (throws, or an equivalent that can't be silently ignored), and the flagship class-level doc example no longer models ignoring the result.
   2. `TestGame`'s default seed is a fixed literal, not `Date.now()` — no-seed test runs are deterministic and reproducible in CI.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 137-01-PLAN.md — PROC-01 verification gate (F36, F37) → 137-FINDINGS-VERIFICATION.md
+  - [ ] 137-02-PLAN.md — TST-01: doAction throws + tryAction escape hatch, harness call-site migrations, example fixes
+  - [ ] 137-03-PLAN.md — TST-02: fixed default seed, testGame.seed accessor, seed in failure messages
 
 ### Phase 138: Cross-Repo Migration
 **Goal**: Every example game and MERC comply with the full v4.5 API surface, with no lingering references to removed/changed APIs.
