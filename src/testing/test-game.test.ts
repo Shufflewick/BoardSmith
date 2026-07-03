@@ -270,6 +270,44 @@ describe('TestGame.getPlayerView — TEST-01: typed observable state', () => {
 });
 
 // ---------------------------------------------------------------------------
+// TST-01: doAction throw-on-failure + tryAction escape hatch
+// ---------------------------------------------------------------------------
+
+describe('doAction throw-on-failure (TST-01)', () => {
+  it('doAction THROWS when the action is unavailable, naming the action and seat, with an availability trace', () => {
+    const testGame = TestGame.create(FixtureGame, { playerCount: 2, seed: 'tst-01-throw' });
+
+    expect(() => testGame.doAction(1, 'notAnAction', {})).toThrow(/notAnAction/);
+    // The thrown message must name the seat and include an availability/"Why:" trace fragment.
+    try {
+      testGame.doAction(1, 'notAnAction', {});
+      throw new Error('expected doAction to throw');
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain('notAnAction');
+      expect(message).toMatch(/seat 1|player 1/i);
+      expect(message).toMatch(/Why:|Flow position:/);
+    }
+  });
+
+  it('tryAction returns { success: false } WITHOUT throwing for the same unavailable action', () => {
+    const testGame = TestGame.create(FixtureGame, { playerCount: 2, seed: 'tst-01-try' });
+
+    let result: { success: boolean } | undefined;
+    expect(() => {
+      result = testGame.tryAction(1, 'notAnAction', {});
+    }).not.toThrow();
+    expect(result?.success).toBe(false);
+  });
+
+  it('doAction does NOT throw for a valid action and completes normally', () => {
+    const testGame = TestGame.create(FixtureGame, { playerCount: 2, seed: 'tst-01-valid' });
+
+    expect(() => testGame.doAction(1, 'pass', {})).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Fixture: a 2-selection action for FLOW-03 pending-action introspection
 // (Phase 123 Plan 03)
 // ---------------------------------------------------------------------------
