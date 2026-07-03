@@ -66,7 +66,7 @@
 
 ### Testing Utilities (TST)
 
-- [ ] **TST-01**: `TestGame.doAction` failures are loud — throws by default (or equivalent), and the flagship doc example no longer models ignoring the result (F36)
+- [x] **TST-01**: `TestGame.doAction` failures are loud — throws by default (or equivalent), and the flagship doc example no longer models ignoring the result (F36)
 - [ ] **TST-02**: `TestGame`'s default seed is deterministic (fixed literal, not `Date.now()`) (F37)
 
 ### Documentation Corrections (DOCX)
@@ -129,7 +129,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | SDK-04 | Phase 136 | Complete |
 | SDK-05 | Phase 136 | Complete |
 | SDK-06 | Phase 136 | Complete |
-| TST-01 | Phase 137 | Pending |
+| TST-01 | Phase 137 | Complete |
 | TST-02 | Phase 137 | Pending |
 | GAMES-01 | Phase 138 | Pending |
 | GAMES-02 | Phase 138 | Pending |
