@@ -432,6 +432,7 @@ export type WebSocketMessage =
   | LeaveSeatMessage
   | KickPlayerMessage
   | UpdatePlayerOptionsMessage
+  | UpdateSlotPlayerOptionsMessage
   | UpdateGameOptionsMessage;
 
 // ============================================
