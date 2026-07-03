@@ -1,6 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import type { GameDefinition } from '../../session/index.js';
 import { deriveManifest } from './build.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Minimal fixture gameDefinition — only the fields deriveManifest reads
@@ -66,5 +71,24 @@ describe('deriveManifest', () => {
     const manifest = deriveManifest(config, gameDefinition, 1);
 
     expect(manifest.version).toBe('1.0.0');
+  });
+});
+
+// WR-02 regression: `.boardsmith` is a SHARED directory (pack tarballs,
+// evolve-ai-weights' rules-bundle.mjs fallback, a running dev server's runtime
+// bundle). build's temp-dir cleanup must only ever remove a build-owned
+// subdirectory, never the shared parent.
+describe('build temp-dir scoping (WR-02)', () => {
+  const src = readFileSync(join(__dirname, 'build.ts'), 'utf-8');
+
+  it('uses a build-owned subdirectory of .boardsmith as its temp dir', () => {
+    expect(src).toContain("join(cwd, '.boardsmith', 'build-tmp')");
+    // The shared parent must never be the temp dir itself.
+    expect(src).not.toMatch(/tempDir = join\(cwd, '\.boardsmith'\)/);
+  });
+
+  it('only rmSyncs the scoped tempDir, never the shared .boardsmith parent', () => {
+    const rmTargets = [...src.matchAll(/rmSync\(([^,)]+)/g)].map((m) => m[1].trim());
+    expect(rmTargets).toEqual(['tempDir']);
   });
 });

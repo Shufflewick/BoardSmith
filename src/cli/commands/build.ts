@@ -127,16 +127,19 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     // derived from code, never copied from the raw boardsmith.json spread
     // (CLIX-01 / T-135-07 — mirrors simulate.ts:158-167).
     const rulesPath = join(cwd, 'src', 'rules');
-    const tempDir = join(cwd, '.boardsmith');
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
-    }
+    // Command-scoped subdirectory (WR-02): `.boardsmith` is SHARED — pack puts
+    // tarballs in `.boardsmith/tarballs`, evolve-ai-weights reads
+    // `.boardsmith/rules-bundle.mjs`, and a running dev server keeps its
+    // runtime bundle there. Only ever create and delete what build owns.
+    const tempDir = join(cwd, '.boardsmith', 'build-tmp');
+    mkdirSync(tempDir, { recursive: true });
 
     let gameDefinition: GameDefinition;
     try {
       ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
     } finally {
       try {
+        // Removes only build-tmp — never the shared .boardsmith parent.
         rmSync(tempDir, { recursive: true, force: true });
       } catch {
         // best-effort cleanup; do not mask the original error
