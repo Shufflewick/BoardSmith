@@ -3,7 +3,7 @@ import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } fro
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import type { VisibilityMode, VisibilityState } from '../command/visibility.js';
-import { visibilityFromMode } from '../command/visibility.js';
+import { copyVisibilityState, visibilityFromMode } from '../command/visibility.js';
 
 /**
  * Event handler for element enter/exit events
@@ -144,7 +144,10 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   override toJSON(): ElementJSON {
     const json = super.toJSON();
     if (this._zoneVisibility?.explicit) {
-      json.zoneVisibility = this._zoneVisibility;
+      // Emit a COPY — `addZoneVisibleTo`/`hideContentsFrom` mutate
+      // `_zoneVisibility` in place, and a snapshot/checkpoint sharing the
+      // live object would be retroactively corrupted by later mutations (CR-02).
+      json.zoneVisibility = copyVisibilityState(this._zoneVisibility);
     }
     return json;
   }
@@ -157,7 +160,10 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * it without widening Space's public surface.
    */
   _restoreZoneVisibility(state: VisibilityState): void {
-    this._zoneVisibility = state;
+    // Adopt a COPY so the restored Space never shares mutable state with the
+    // snapshot it was restored from (CR-02) — a retained checkpoint may be
+    // restored again, so in-place mutations must never reach it.
+    this._zoneVisibility = copyVisibilityState(state);
   }
 
   // ============================================

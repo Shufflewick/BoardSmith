@@ -63,6 +63,24 @@ export const DEFAULT_VISIBILITY: VisibilityState = {
 };
 
 /**
+ * Deep-copy a VisibilityState.
+ *
+ * Serialization boundaries (toJSON emit / fromJSON adopt) MUST copy rather
+ * than share the live object (CR-02, phase 131): `addVisibleTo` /
+ * `addZoneVisibleTo` / `hideContentsFrom` mutate the state in place, so a
+ * snapshot or checkpoint holding the live reference would be retroactively
+ * corrupted by later mutations, and undo/rewind could never roll a
+ * visibility grant back.
+ */
+export function copyVisibilityState(state: VisibilityState): VisibilityState {
+  return {
+    ...state,
+    ...(state.addPlayers && { addPlayers: [...state.addPlayers] }),
+    ...(state.exceptPlayers && { exceptPlayers: [...state.exceptPlayers] }),
+  };
+}
+
+/**
  * Create visibility state from a mode
  */
 export function visibilityFromMode(mode: VisibilityMode): VisibilityState {

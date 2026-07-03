@@ -11,7 +11,7 @@ import type {
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import type { VisibilityState } from '../command/visibility.js';
-import { DEFAULT_VISIBILITY, canPlayerSee, resolveVisibility } from '../command/visibility.js';
+import { DEFAULT_VISIBILITY, canPlayerSee, copyVisibilityState, resolveVisibility } from '../command/visibility.js';
 
 /**
  * Check if a value is an ElementClass (a GameElement subclass constructor).
@@ -790,9 +790,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       json.name = this.name;
     }
 
-    // Include visibility if explicitly set
+    // Include visibility if explicitly set. Emit a COPY — `addVisibleTo` etc.
+    // mutate `_visibility` in place, and a snapshot/checkpoint sharing the
+    // live object would be retroactively corrupted by later mutations (CR-02).
     if (this._visibility?.explicit) {
-      json.visibility = this._visibility;
+      json.visibility = copyVisibilityState(this._visibility);
     }
 
     if (this._t.children.length > 0) {
@@ -1022,9 +1024,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       element.name = json.name;
     }
 
-    // Restore visibility if present
+    // Restore visibility if present. Adopt a COPY so the restored element
+    // never shares mutable state with the snapshot it was restored from —
+    // a later in-place mutation (addVisibleTo) must not corrupt a retained
+    // checkpoint that may be restored again (CR-02).
     if (json.visibility) {
-      element._visibility = json.visibility;
+      element._visibility = copyVisibilityState(json.visibility);
     }
 
     // Restore zone visibility if present (SEC-01/F1/F7). Space-only, but

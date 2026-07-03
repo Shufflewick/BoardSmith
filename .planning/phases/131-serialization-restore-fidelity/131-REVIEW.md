@@ -77,6 +77,8 @@ settings: this.serializeValue(this.settings, 'settings') as Record<string, unkno
 ```
 and emit copies for `visibility`/`zoneVisibility` (`{ ...this._visibility, addPlayers: [...(this._visibility.addPlayers ?? [])] }` or `structuredClone`). Symmetrically, `loadSerializedState` and `_restoreZoneVisibility`/`fromJSON` should adopt copies, not the JSON objects, so a restored game never shares mutable state with the snapshot it was restored from. Add a regression test: perform an action that calls `game.message()` and `actionTempState().set(...)`, `undoToTurnStart`, assert both are rolled back (no JSON round-trip in the test).
 
+**Resolution:** status: fixed — `Game.toJSON()` now emits `serializeValue` deep copies of `messages`/`settings` (plus copied `animationEvents`); new `copyVisibilityState` helper in `visibility.ts` used at all four visibility boundaries (`GameElement.toJSON`/`fromJSON`, `Space.toJSON`/`_restoreZoneVisibility`); `loadSerializedState` de-aliases `messages`/`settings` via the existing `resolveElementReferences` rebuild (documented) and copies restored animation events. New suite `src/engine/element/checkpoint-aliasing.test.ts` (5 tests, no JSON round-trips; 4 fail pre-fix) covers checkpoint immunity, restore de-aliasing, and live `undoToTurnStart` rollback of messages/settings/zone-visibility grants.
+
 ## Warnings
 
 ### WR-01: SEC-02 ownership check uses `element instanceof Player`, which this file documents as unreliable under bundling

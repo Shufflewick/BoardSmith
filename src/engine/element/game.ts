@@ -2657,15 +2657,29 @@ export class Game<
     animationEvents?: AnimationEvent[];
     animationEventSeq?: number;
   } {
+    // CR-02: the top-level fields below MUST be copies, never live references.
+    // `createActionCheckpoint`/`createSnapshot` store this result as-is, and
+    // the live-session undo/rewind/time-travel paths never JSON-round-trip it.
+    // Emitting `this.messages`/`this.settings` by reference meant every
+    // retained checkpoint shared ONE settings object and ONE messages array
+    // with the live game: post-checkpoint mutations retroactively corrupted
+    // checkpoints, and undo could never roll back `game.message()` output or
+    // `actionTempState()`/`persistentMap()` state. `serializeValue` deep-copies
+    // and also tags element/player references so they survive cold storage.
     return {
       ...super.toJSON(),
       phase: this.phase,
       isFinished: this.isFinished(),
-      messages: this.messages,
-      settings: this.settings,
+      messages: this.serializeValue(this.messages, 'messages') as Array<{
+        text: string;
+        data?: Record<string, unknown>;
+      }>,
+      settings: this.serializeValue(this.settings, 'settings') as Record<string, unknown>,
       // Only include animation events if buffer is non-empty (avoid cluttering empty snapshots)
       ...(this._animationEvents.length > 0 && {
-        animationEvents: this._animationEvents,
+        // Copy the buffer (same CR-02 aliasing concern: the live array is
+        // mutated in place as later events are recorded).
+        animationEvents: this._animationEvents.map((e) => ({ ...e })),
         animationEventSeq: this._animationEventSeq,
       }),
     };
@@ -2884,7 +2898,12 @@ export class Game<
    * snapshot round-trip.
    */
   loadSerializedState(json: ReturnType<Game['toJSON']>): void {
-    // Restore game-level state from JSON
+    // Restore game-level state from JSON. `messages`/`settings` are adopted
+    // here by reference but rebuilt into fresh objects (with element/player
+    // refs and Map/Set shapes resolved) by `resolveElementReferences(this)`
+    // at the end of this method — so a restored game never shares mutable
+    // state with the snapshot it was restored from (CR-02: a retained
+    // checkpoint may be restored again; live mutations must not reach it).
     this.phase = json.phase;
     this.messages = json.messages;
     this.settings = json.settings;
@@ -2892,7 +2911,8 @@ export class Game<
     // Restore animation events if present
     const jsonWithEvents = json as { animationEvents?: AnimationEvent[]; animationEventSeq?: number };
     if (jsonWithEvents.animationEvents) {
-      this._animationEvents = [...jsonWithEvents.animationEvents];
+      // Copy the event objects too (CR-02): the snapshot may be restored again.
+      this._animationEvents = jsonWithEvents.animationEvents.map((e) => ({ ...e }));
       this._animationEventSeq = jsonWithEvents.animationEventSeq ?? 0;
     }
 
