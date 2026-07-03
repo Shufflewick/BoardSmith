@@ -11,10 +11,14 @@ files_reviewed_list:
   - src/engine/flow/turn-order.ts
   - src/runtime/runner.test.ts
 findings:
+  critical: 0
+  warning: 0
+  info: 3
+  total: 3
+fixed:
   critical: 1
   warning: 5
-  info: 3
-  total: 9
+fixed_at: 2026-07-03
 status: issues_found
 ---
 
@@ -55,6 +59,8 @@ Concrete trace: `chooseFrom('targets', { choices: ctx => enemies, multiSelect: 2
 ```
 And in `validateSelection`'s array loop, when `trySmartResolveChoice` matches, additionally verify the matched choice is not disabled (or better: resolve the item to the canonical choice first, then run the existing `valuesEqual`-based disabled check against it). The same disabled-ignoring gap exists in the scalar `trySmartResolveChoice` fallback (line 733) for `{value, label}` choices whose extracted scalar no longer `valuesEqual`s the full choice object — fix `trySmartResolveChoice` to skip (or report) choices with `disabled !== false`.
 
+**Resolution:** Fixed in `154a3be2`. `resolveArgs` now canonicalizes each multiSelect array item exactly like the scalar path (serialized element / element ID / display string → canonical choice value), gated on `multiSelect` being configured so a single choice whose value is itself an array is never corrupted. `trySmartResolveChoice` returns the matched `AnnotatedChoice` instead of a boolean, and both the array and scalar validation paths reject smart-resolved matches with `disabled !== false` via the existing `Selection disabled: <reason>` error. Red-first tests cover disabled-by-ID array submissions, element-ID canonicalization, `{value,label}` array canonicalization, and the scalar smart-resolution disabled gap.
+
 ## Warnings
 
 ### WR-01: Wrap-around silently starts from the wrong player when startingPlayer is filtered out
@@ -63,11 +69,15 @@ And in `validateSelection`'s array loop, when `trySmartResolveChoice` matches, a
 **Issue:** `eligibleSeats` is built from the *filtered* player list, then `startingPlayer` is located in that list; `foundIndex === -1` silently falls back to `startIndex = 0`. With the new wrap-around semantics ("every player gets a turn starting from startingPlayer"), the documented composition `TurnOrder.combine(LEFT_OF_DEALER(...), SKIP_IF(p => p.hasFolded))` (turn-order.ts:160-168) hits this whenever the player left of dealer has folded: the round silently starts from the first seat in the filtered list instead of the next eligible player after the dealer — wrong betting order, no error, no warning. This fallback predates the phase, but the phase changed the semantics that make it consequential, updated the docs to promise startingPlayer-anchored rotation, and added no test for the filter+startingPlayer interplay.
 **Fix:** When `startingPlayer` is not in the filtered list, rotate from the first eligible player at-or-after the starting player's position in the unfiltered order, e.g. find `startIndex` in the *unfiltered* rotated order and then filter — or at minimum `devWarn` on the `foundIndex === -1` fallback. Add a test: 4 players, start from seat 2, seat 2 filtered out → expected order `[3, 4, 1]`, not `[1, 3, 4]`.
 
+**Resolution:** Fixed in `c4c22d54`. `executeEachPlayer` now rotates the unfiltered player order to the starting player first and applies the filter afterwards, so a filtered-out startingPlayer yields the next eligible seat after it (wrap semantics). When startingPlayer is eligible the result is identical to before. Red-first test: 4 players, start seat 2, seat 2 filtered → `[3, 4, 1]`.
+
 ### WR-02: switchOn throw fires after the triggering action has committed — state/history divergence and wedged flow
 
 **File:** `src/engine/flow/engine.ts:1446-1452`, consumed at `src/runtime/runner.ts:196-214`
 **Issue:** When a `switchOn` immediately follows an action step and `config.on(context)` yields an unmatched value (a *runtime* value, not necessarily a static misconfiguration), the throw propagates out of `resume()` **after** `game.performAction` already mutated game state and `awaitingInput` was set false (engine.ts:274-286). `GameRunner.performAction` catches it (runner.ts:198-204), returns `success: false`, and does **not** record the action in `actionHistory` — so game state now diverges from action history (replay/undo/snapshot inconsistency), and every subsequent `resume()` throws `'Flow is not awaiting input'`: the game is permanently wedged. Failing loud here is correct and consistent with the loop maxIterations tripwire convention (audit2 F33), but unlike the loop cap, this one triggers from ordinary game-state values and leaves a committed-but-unrecorded action behind.
 **Fix:** At minimum, document in the error message that the game is unrecoverable and the flow definition must handle all values (or add `default`). Better: evaluate `config.on` reachability before committing, or have `run()`-originated developer-error throws mark the engine as poisoned with a distinct error so the session surfaces "game halted: flow definition error" rather than a per-action failure that looks retryable.
+
+**Resolution:** Fixed in `5d05d87b`. Post-commit flow failures now surface as a distinct `FlowHaltedError` ("Game halted: the flow failed after the action was committed — ... not a retryable player error") raised from a shared `continueAfterCommittedAction` path in `resume()`, `resumeAfterExternalAction()`, and the simultaneous allDone branch. `GameRunner.performAction` catches it and records the committed action in `actionHistory` before returning the failure, restoring the state/history invariant (replay/undo/snapshot consistency). Fail-loud is preserved: the game halts, but the error is clearly non-retryable and the switchOn message now tells the developer to add a matching case or `default`. Extracting the shared path also collapsed the IN-03 dead conditional. Red-first runner test proves the committed action is recorded and the error is marked halted.
 
 ### WR-03: resumeSimultaneousAction throws where resume() records actionError — unmirrored error contract
 
@@ -81,6 +91,8 @@ if (!playerState.availableActions.includes(actionName)) {
 }
 ```
 
+**Resolution:** Fixed in `ce2864b1`. All three pre-flight checks (player not awaiting, player already completed, action not in allow-list) now set `actionError` and return state, exactly mirroring `resume()`'s allow-list handling; the runner surfaces them as `ACTION_EXECUTION_ERROR` instead of `ENGINE_ERROR`. Developer-error throws (no player determinable, invalid player position) remain throws. Red-first tests cover double-submit after completion, out-of-allow-list action, and non-awaiting player.
+
 ### WR-04: multiSelect count enforcement accepts duplicate items
 
 **File:** `src/engine/action/action.ts:747-765` (new choice branch), `src/engine/action/action.ts:827-842` (elements branch, same gap)
@@ -92,6 +104,8 @@ if (seen.size !== value.length) {
   errors.push(`Selection "${selection.name}" contains duplicate choices`);
 }
 ```
+
+**Resolution:** Fixed in `6ca8e31c`. A shared `hasDuplicateItems` helper rejects duplicates before the count check in both the choice and elements multiSelect branches (fail-loud rejection, not silent dedupe). Element-referencing items are keyed by element id — so a raw ID and its resolved element count as the same item, avoiding `JSON.stringify` on circular GameElement structures — and other values are keyed by JSON serialization, matching `valuesEqual` semantics. Red-first tests: `['red','red']` and `[card1, card1]` both rejected with a "duplicate" error.
 
 ### WR-05: LEFT_OF_DEALER JSDoc example calls methods that do not exist
 
@@ -107,6 +121,8 @@ ctx.game.dealerSeat = ctx.game.players.nextAfter(dealer).seat;
 const dealer = ctx.game.getPlayerOrThrow(ctx.game.dealerPosition);
 ctx.game.dealerPosition = ctx.game.nextAfter(dealer).seat;
 ```
+
+**Resolution:** Fixed in `5e89bc71`. The LEFT_OF_DEALER JSDoc example now uses `ctx.game.getPlayerOrThrow(...)` and `ctx.game.nextAfter(...)` (the same APIs the implementation uses) and writes back to `dealerPosition`, the field it reads.
 
 ## Info
 
