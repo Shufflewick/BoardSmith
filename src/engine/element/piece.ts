@@ -79,6 +79,30 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
    * Internal move method called by command executor
    */
   moveToInternal(destination: GameElement, position?: 'first' | 'last'): void {
+    // ENG-01 (phase 132), ALL modes: reject a move onto this element's own
+    // descendant (or itself). Unlike WR-03 below (a dev-only diagnostic for
+    // detached destinations), this is real production tree corruption: an
+    // unconditional splice of `this` out of its current parent followed by
+    // reassigning `this._t.parent = destination` would leave `this` as both
+    // an ancestor and a descendant of `destination`, producing a detached
+    // cycle. Must run BEFORE any mutation below, in every environment.
+    if (destination === this) {
+      throw new Error(
+        `Cannot move "${this.name ?? this.constructor.name}" into itself ` +
+        `(an element is trivially its own descendant). ` +
+        `putInto() destination must not be the element being moved.`
+      );
+    }
+    for (let el: GameElement | undefined = destination._t.parent; el; el = el._t.parent) {
+      if (el === this) {
+        throw new Error(
+          `Cannot move "${this.name ?? this.constructor.name}" into its own descendant ` +
+          `"${destination.name ?? destination.constructor.name}". This would create a ` +
+          `detached cycle in the element tree.`
+        );
+      }
+    }
+
     // WR-03 (phase 131), DEV-only: detect a move into a DETACHED tree. The
     // classic cause is a restored onEnter/onExit handler whose closure
     // captured a constructor-local element (`const scorePile = this.create(...)`):
