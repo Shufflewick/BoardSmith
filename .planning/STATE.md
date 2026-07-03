@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: "Phase 132 Plan 01 complete: PROC-01 verification gate satisfied, fix plans 132-02..05 unblocked"
-last_updated: "2026-07-03T05:18:10.300Z"
+last_updated: "2026-07-03T05:22:01.141Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 10
-  completed_plans: 6
+  completed_plans: 7
   percent: 11
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 132 (Engine Element & Builder Safety) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Milestones
 
@@ -118,6 +118,8 @@ Recent decisions affecting current work:
 - [Phase 131-04]: visibleAttributes filtering lives inside filterElement's existing fallthrough (single chokepoint, no parallel filter); state.players derived from truthView via findElementJSONById instead of raw player.toJSON()
 - [Phase 131]: Event handler identity key = class name + branch() (tree index path); stable because fromJSON rebuilds children in the same order they were serialized.
 - [Phase 132-01]: PROC-01 gate: all four findings (F3/ENG-01, F12/ENG-05, F13/ENG-06, F28/ENG-08) independently re-verified LEGITIMATE against current source before any fix
+- [Phase 132-02]: Self-move error message includes the word 'descendant' (trivially its own descendant) so self and true-descendant cases share one actionable-error shape and one test regex
+- [Phase 132-02]: ENG-01 containment guard kept fully separate from WR-03 (not merged) -- preserves WR-03's distinct dev-only detached-destination diagnostic purpose
 
 ### Pending Todos
 
@@ -129,7 +131,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T05:18:10.292Z
+Last session: 2026-07-03T05:20:50.244Z
 Stopped at: Phase 132 Plan 01 complete: PROC-01 verification gate satisfied, fix plans 132-02..05 unblocked
 Resume file: None
 Next action: Break Phase 131 (Serialization & Restore Fidelity) down into plans via `/gsd:plan-phase 131`
