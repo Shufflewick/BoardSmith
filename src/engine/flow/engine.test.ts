@@ -379,6 +379,48 @@ describe('FlowEngine', () => {
       state = engine.resume('act', {});
       expect(state.currentPlayer).toBe(3);
     });
+
+    describe('ENG-02 startingPlayer wrap-around', () => {
+      it('wraps around the full player list when startingPlayer is non-zero', () => {
+        const fourPlayerGame = new TestGame({ playerCount: 4 });
+        const visitedPlayers: number[] = [];
+
+        const flow = defineFlow({
+          root: eachPlayer({
+            startingPlayer: (ctx) => ctx.game.getPlayerOrThrow(3),
+            do: execute((ctx) => {
+              visitedPlayers.push(ctx.player!.seat);
+            }),
+          }),
+        });
+
+        const engine = new FlowEngine(fourPlayerGame, flow);
+        engine.start();
+
+        // Every player must get a turn this round, starting from seat 3 and
+        // wrapping back around to seats 1 and 2 -- not truncating at the end
+        // of the underlying player list.
+        expect(visitedPlayers).toEqual([3, 4, 1, 2]);
+      });
+
+      it('visits all players in natural order when no startingPlayer is given (control)', () => {
+        const fourPlayerGame = new TestGame({ playerCount: 4 });
+        const visitedPlayers: number[] = [];
+
+        const flow = defineFlow({
+          root: eachPlayer({
+            do: execute((ctx) => {
+              visitedPlayers.push(ctx.player!.seat);
+            }),
+          }),
+        });
+
+        const engine = new FlowEngine(fourPlayerGame, flow);
+        engine.start();
+
+        expect(visitedPlayers).toEqual([1, 2, 3, 4]);
+      });
+    });
   });
 
   describe('ForEach Execution', () => {
