@@ -1348,6 +1348,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       value = (rawValue as { value: unknown }).value;
     }
 
+    // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
+    // Mirrors toggleMultiSelect's reverse guard (useActionController.ts ~1729-1734):
+    // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one
+    // rejects a multiSelect selection from fill() unless the value is already an array.
+    const multiSelectCfg = resolveMultiSelectConfig(selection);
+    if (multiSelectCfg && !Array.isArray(value)) {
+      const error =
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
+        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max}) and requires an array. ` +
+        `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`;
+      lastError.value = error;
+      return { valid: false, error };
+    }
+
     // Handle repeating selections
     if (selection.repeat) {
       return await handleRepeatingFill(selection, value);

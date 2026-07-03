@@ -1570,5 +1570,77 @@ describe('useActionController picks', () => {
       expect(meta).toBeDefined();
       expect(meta!.selections[0].multiSelect).toEqual({ min: 2, max: 3 });
     });
+
+    describe('fill() rejects a scalar for a multiSelect pick (UIX-02)', () => {
+      it('rejects a scalar with the UI-SPEC error and does not mutate state or forward to the server', async () => {
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoExecute: false,
+        });
+
+        await controller.start('discardMultiple');
+        const result = await controller.fill('cards', 5);
+
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain("'cards' is a multiSelect selection");
+        expect(result.error).toContain('min 2, max 3');
+        expect(result.error).toContain('requires an array');
+        expect(controller.lastError.value).toBe(result.error);
+        expect(controller.currentArgs.value.cards).toBeUndefined();
+        expect(sendAction).not.toHaveBeenCalled();
+      });
+
+      it('still accepts an array for a multiSelect pick', async () => {
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoExecute: false,
+        });
+
+        await controller.start('discardMultiple');
+        const result = await controller.fill('cards', [1, 2]);
+
+        expect(result.valid).toBe(true);
+        expect(controller.currentArgs.value.cards).toEqual([1, 2]);
+      });
+
+      it('still accepts a scalar for a non-multiSelect pick', async () => {
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoExecute: false,
+        });
+
+        await controller.start('playCard');
+        const result = await controller.fill('card', 2);
+
+        expect(result.valid).toBe(true);
+        expect(controller.currentArgs.value.card).toBe(2);
+      });
+
+      it('unwraps a single choice-object for a multiSelect pick, then rejects it via the multiSelect guard', async () => {
+        const controller = useActionController({
+          sendAction,
+          availableActions,
+          actionMetadata,
+          isMyTurn,
+          autoExecute: false,
+        });
+
+        await controller.start('discardMultiple');
+        const result = await controller.fill('cards', { value: 1, display: 'Card 1' });
+
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain("'cards' is a multiSelect selection");
+        expect(controller.currentArgs.value.cards).toBeUndefined();
+      });
+    });
   });
 });
