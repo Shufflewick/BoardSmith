@@ -50,10 +50,13 @@ my-game/
 boardsmith dev
 ```
 
-This starts:
-- A Vite dev server on port 5173 (UI)
-- A game server on port 8787 (API/WebSocket)
-- Automatically opens browser tabs for each player
+This starts a Vite dev server (default port 5173) that also hosts the game's
+WebSocket multiplayer host on the same port, and opens one browser tab. Each
+browser tab is a real player — open more tabs to fill more seats (open seats
+play as AI until claimed).
+
+By default the server binds to `127.0.0.1` (local-only). Pass `--lan` to let
+other devices on your network join.
 
 #### Dev Server Options
 
@@ -61,15 +64,21 @@ This starts:
 # Specify number of players
 boardsmith dev --players 3
 
-# Add AI opponents
-boardsmith dev --ai 1              # Player 1 is AI
-boardsmith dev --ai 0 2            # Players 0 and 2 are AI
+# Add AI opponents (player positions are 1-indexed)
+boardsmith dev --ai 2              # Player 2 is AI
+boardsmith dev --ai 1 3            # Players 1 and 3 are AI
 
 # Set AI difficulty
-boardsmith dev --ai 1 --ai-level hard    # easy, medium, hard, expert
+boardsmith dev --ai 2 --ai-level hard    # easy, medium, hard, expert
 
-# Custom ports
-boardsmith dev --port 3000 --worker-port 9000
+# Custom port
+boardsmith dev --port 3000
+
+# Serve to your whole network so other computers can join
+boardsmith dev --lan               # shorthand for --host 0.0.0.0
+
+# Disable teaching aids (AI hint, move heatmap, AI-vs-AI demo, tutorial)
+boardsmith dev --lock-teaching
 ```
 
 ### 3. Run Tests
@@ -86,9 +95,15 @@ boardsmith validate
 ```
 
 This runs:
-- TypeScript compilation checks
-- Configuration validation
-- Random game simulation to detect infinite loops or game-ending bugs
+- Configuration validation (unknown `boardsmith.json` keys are rejected with did-you-mean suggestions)
+- TypeScript compilation checks (`tsc --noEmit`)
+- Security scan for forbidden APIs (network, timers, non-determinism, eval)
+- Asset path check (absolute paths break on the publishing platform)
+- Bundle size limits (rules.js 1MB; compressed bundle zip 50MB)
+- Required files check
+
+To detect infinite loops or game-ending bugs, run `boardsmith simulate` (seeded
+headless batch simulation).
 
 ### 5. Build for Production
 
@@ -130,6 +145,9 @@ The Game class is the heart of your game. It:
 
 ```typescript
 export class MyGame extends Game<MyGame, MyPlayer> {
+  // Tells the engine to construct each player as a MyPlayer
+  static PlayerClass = MyPlayer;
+
   deck!: Deck;
 
   constructor(options: MyGameOptions) {
