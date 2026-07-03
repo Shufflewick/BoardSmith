@@ -18,7 +18,8 @@
  * internal `_eventHandlers` state).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { _clearShownWarnings } from '../../utils/dev.js';
 import {
   Game,
   Player,
@@ -254,5 +255,91 @@ describe('WR-02: handler re-binding does not cross-wire same-class sibling Space
     expect(restored.performAction('aToB', 1, {}).success).toBe(true);
     expect(restored.game.bEnterCount).toBe(bBefore + 1);
     expect(restored.game.aEnterCount).toBe(aBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-03 (iteration 2): a re-bound handler closure that lexically captured a
+// constructor-LOCAL element points at the discarded pre-restore tree after a
+// snapshot restore. The engine cannot fix the closure, but dev mode must
+// warn LOUDLY when the handler moves an element into the detached tree
+// (before this, the element silently vanished from the serialized game).
+// ---------------------------------------------------------------------------
+
+class Coin extends Piece<StaleRefGame> {}
+class Inbox extends Space<StaleRefGame> {}
+class Stash extends Space<StaleRefGame> {}
+
+class StaleRefGame extends Game<StaleRefGame, Player> {
+  inbox!: Inbox;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.inbox = this.create(Inbox, 'inbox');
+    // THE MISTAKE under test: a constructor local captured by the closure
+    // (documented anti-pattern — see Space.onEnter JSDoc / pitfall 21).
+    const stash = this.create(Stash, 'stash');
+    this.inbox.onEnter((coin) => {
+      coin.putInto(stash);
+    }, Coin);
+
+    this.create(Coin, 'coin');
+
+    this.registerAction(
+      Action.create('deliver').execute((_args, ctx) => {
+        const game = ctx.game as StaleRefGame;
+        game.first(Coin)?.putInto(game.inbox);
+        return { success: true };
+      })
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['deliver'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
+          maxMoves: 10,
+        }),
+      })
+    );
+  }
+}
+
+describe('WR-03: dev warning when a restored handler moves an element into a detached tree', () => {
+  function buildStaleRunner(): GameRunner<StaleRefGame> {
+    const runner = new GameRunner<StaleRefGame>({
+      GameClass: StaleRefGame,
+      gameType: 'stale-ref-test',
+      gameOptions: { playerCount: 1, seed: 'stale-ref-seed' },
+    });
+    runner.start();
+    return runner;
+  }
+
+  it('does NOT warn on the live (never-restored) game — the captured local is still attached', () => {
+    _clearShownWarnings();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const runner = buildStaleRunner();
+    expect(runner.performAction('deliver', 1, {}).success).toBe(true);
+
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('detached'));
+    warnSpy.mockRestore();
+  });
+
+  it('warns when the handler fires after a restore and putInto targets the discarded tree', () => {
+    const runner = buildStaleRunner();
+    const snapshot = roundTripJson(runner.getSnapshot());
+    const restored = GameRunner.fromSnapshot<StaleRefGame>(snapshot, StaleRefGame);
+
+    _clearShownWarnings();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(restored.performAction('deliver', 1, {}).success).toBe(true);
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('detached'));
+    warnSpy.mockRestore();
   });
 });

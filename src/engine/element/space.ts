@@ -245,6 +245,27 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
 
   /**
    * Register a callback for when elements enter this space
+   *
+   * **Snapshot-restore constraint (WR-03, phase 131):** handler closures are
+   * captured from the constructor-built tree and re-attached to the rebuilt
+   * tree on every snapshot restore (undo, rewind, cold restore). The closure
+   * itself survives, but any ELEMENT it captured lexically still points at
+   * the discarded pre-restore tree. Reach elements via game attributes or
+   * queries, never via captured locals:
+   *
+   * ```typescript
+   * // WRONG — `scorePile` is a stale reference after any restore; the card
+   * // silently vanishes into the discarded tree:
+   * const scorePile = this.create(Space, 'score');
+   * this.discard.onEnter((card) => card.putInto(scorePile));
+   *
+   * // RIGHT — re-resolved through the live game on every call:
+   * this.scorePile = this.create(Space, 'score');
+   * this.discard.onEnter((card) => card.putInto((card.game as MyGame).scorePile));
+   * ```
+   *
+   * In dev mode, `putInto()` warns when its destination is detached from the
+   * live tree (the signature of this mistake).
    */
   onEnter<T extends GameElement>(
     callback: (element: T) => void,
@@ -255,6 +276,10 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
 
   /**
    * Register a callback for when elements exit this space
+   *
+   * **Snapshot-restore constraint:** same as {@link onEnter} — never capture
+   * elements lexically in the handler closure; reach them via game
+   * attributes or `element.game` queries.
    */
   onExit<T extends GameElement>(
     callback: (element: T) => void,

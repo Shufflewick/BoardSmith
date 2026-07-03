@@ -114,6 +114,8 @@ this.discard.onEnter(card => card.putInto(scorePile)); // scorePile is stale aft
 After restore, the handler fires on the new tree but moves the card into an orphaned parent — the card vanishes from the serialized tree with no error. Handlers that go through re-resolved game attributes (`this.scorePile`) or `ctx`/`element.game` queries are safe, which is why `handler-restore.test.ts` (whose handlers only touch `this.enterCount`) passes. This constraint is not documented anywhere (not in `docs/common-pitfalls.md`, not on `onEnter`/`onExit` JSDoc).
 **Fix:** Document the constraint on `Space.onEnter`/`onExit` and in `docs/common-pitfalls.md` ("handlers must reach elements via `element.game` / game attributes, never via captured locals"), and/or detect it: in dev mode, after re-binding, a `putInto` targeting a parent whose root is not the current game could `devWarn` ("element moved into a detached tree — a restored onEnter/onExit handler is probably holding a stale reference").
 
+**Resolution:** status: fixed — did both halves: (1) constraint documented on `Space.onEnter`/`onExit` JSDoc with WRONG/RIGHT examples and as pitfall 21 in `docs/common-pitfalls.md`; (2) dev-mode detection added in `Piece.moveToInternal` — before every move, the destination's ancestor chain is checked for containment; a detached destination (the stale-closure signature) fires a `devWarn` naming the cause and the fix. Two tests added to `handler-restore.test.ts` (no warn on live game; warn fires post-restore — fails pre-fix).
+
 ### WR-04: Stateless ops read `teachingDisabled` from `gameOptions`, contradicting the D-01 collision-avoidance decision
 
 **File:** `src/session/stateless-ops.ts:566-568, 633-635, 1080-1083`

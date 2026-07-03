@@ -1717,6 +1717,39 @@ game.message(`Rolled ${rolled}!`);
 
 ---
 
+## 21. onEnter/onExit Handlers Must Not Capture Elements Lexically
+
+### The Problem
+
+`Space.onEnter`/`onExit` handler closures are captured from the constructor-built tree and re-attached to the rebuilt tree on every snapshot restore (undo, rewind, cold restore, dev-host op). The closure keeps firing, but any element it captured as a **local variable** still points at the discarded pre-restore tree:
+
+```typescript
+// WRONG — scorePile is a constructor local captured by the closure
+const scorePile = this.create(Space, 'score');
+this.discard.onEnter((card) => card.putInto(scorePile));
+```
+
+After any restore, this handler moves the card into an **orphaned tree**: the card silently vanishes from the serialized game with no error.
+
+### The Solution
+
+Reach elements through the live game — via game attributes or queries — so they re-resolve after restore:
+
+```typescript
+// CORRECT — game attribute, re-pointed at the restored tree automatically
+this.scorePile = this.create(Space, 'score');
+this.discard.onEnter((card) => card.putInto((card.game as MyGame).scorePile));
+```
+
+Handlers that only touch game-level state (`this.enterCount++`) or query via `element.game` are safe.
+
+### Symptoms of This Bug
+
+- An element disappears from all views after an undo/restore, exactly when a handler fires
+- Dev-mode warning: `putInto() destination "..." is detached from the live element tree`
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |

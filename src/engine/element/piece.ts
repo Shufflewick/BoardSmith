@@ -5,6 +5,7 @@ import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import type { VisibilityMode } from '../command/visibility.js';
 import { visibilityFromMode } from '../command/visibility.js';
+import { devWarn, isDevMode } from '../../utils/dev.js';
 
 /**
  * Movable game element. Pieces represent items that can be relocated during play.
@@ -78,6 +79,30 @@ export class Piece<G extends Game = any, P extends Player = any> extends GameEle
    * Internal move method called by command executor
    */
   moveToInternal(destination: GameElement, position?: 'first' | 'last'): void {
+    // WR-03 (phase 131), DEV-only: detect a move into a DETACHED tree. The
+    // classic cause is a restored onEnter/onExit handler whose closure
+    // captured a constructor-local element (`const scorePile = this.create(...)`):
+    // after a snapshot restore the closure still points at the DISCARDED
+    // pre-restore tree, so the moved element silently vanishes from the
+    // serialized game with no error. A detached destination has an ancestor
+    // whose recorded parent no longer contains it (the restore rebuilt the
+    // parent's children). `game.pile` is exempt by construction (no parent).
+    if (isDevMode()) {
+      for (let el: GameElement = destination; el._t.parent; el = el._t.parent) {
+        if (!el._t.parent._t.children.includes(el)) {
+          devWarn(
+            `detached-destination:${destination.name ?? destination.constructor.name}`,
+            `putInto() destination "${destination.name ?? destination.constructor.name}" is detached ` +
+            `from the live element tree — the moved element will NOT appear in the serialized game. ` +
+            `This usually means a restored onEnter/onExit handler is holding a stale reference to an ` +
+            `element from before a snapshot restore. Handlers must reach elements via game attributes ` +
+            `(this.scorePile) or queries (element.game.first(...)), never via captured local variables.`
+          );
+          break;
+        }
+      }
+    }
+
     const oldParent = this._t.parent;
 
     // Remove from current parent
