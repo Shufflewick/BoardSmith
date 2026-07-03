@@ -4,6 +4,7 @@ import {
   suggestKey,
   findUnknownKeys,
 } from '../lib/config-schema.js';
+import { checkMetadataIssues } from './validate.js';
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', async () => {
@@ -47,5 +48,60 @@ describe('config-schema', () => {
   it('findUnknownKeys reports an unknown key with no suggestion when nothing is close', () => {
     const result = findUnknownKeys({ name: 'x', completelyUnrelatedXyz: true });
     expect(result).toEqual([{ key: 'completelyUnrelatedXyz' }]);
+  });
+});
+
+describe('validate.ts checkMetadataIssues', () => {
+  it('fails on an unknown top-level key and names a suggestion', () => {
+    const issues = checkMetadataIssues({
+      name: 'x',
+      displayName: 'X',
+      description: 'desc',
+      gameOption: {},
+    });
+    expect(issues.some((i) => i.includes('gameOption') && i.includes('gameOptions'))).toBe(true);
+  });
+
+  it('fails on a leftover playerCount key with a pointed migration message', () => {
+    const issues = checkMetadataIssues({
+      name: 'x',
+      displayName: 'X',
+      description: 'desc',
+      playerCount: { min: 2, max: 4 },
+    });
+    expect(
+      issues.some((i) => i.includes('playerCount') && i.toLowerCase().includes('gamedefinition')),
+    ).toBe(true);
+  });
+
+  it('does not require playerCount as a top-level key', () => {
+    const issues = checkMetadataIssues({
+      name: 'x',
+      displayName: 'X',
+      description: 'desc',
+    });
+    expect(issues.some((i) => i.includes('Missing required field: playerCount'))).toBe(false);
+  });
+
+  it('PROC-02: pre-fix validate silently PASSES a config carrying an unknown key / playerCount — the new check must flip it to FAIL', () => {
+    const issues = checkMetadataIssues({
+      name: 'x',
+      displayName: 'X',
+      description: 'desc',
+      gameOption: {},
+      playerCount: { min: 2, max: 4 },
+    });
+    expect(issues.length).toBeGreaterThan(0);
+  });
+
+  it('passes a fully valid config with no unknown keys and no playerCount', () => {
+    const issues = checkMetadataIssues({
+      name: 'x',
+      displayName: 'X',
+      description: 'desc',
+      ui: 'auto',
+      gameOptions: [],
+    });
+    expect(issues).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
+import { findUnknownKeys } from '../lib/config-schema.js';
 
 interface ValidationResult {
   name: string;
@@ -83,49 +84,70 @@ export async function validateCommand(): Promise<void> {
   }
 }
 
+/**
+ * Pure metadata-issue checker (T-135-09/T-135-10/T-135-11). Extracted from
+ * validateMetadata so it can be unit-tested directly against a parsed config
+ * object, mirroring build.ts's exported `deriveManifest` pattern.
+ *
+ * player count is NOT validated here (CLIX-01): gameDefinition (compiled
+ * rules) is the sole source of truth for player count. A leftover
+ * `playerCount` key in boardsmith.json is flagged as an unknown/removed key
+ * with a pointed migration message, not required or shape-checked.
+ */
+export function checkMetadataIssues(config: Record<string, unknown>): string[] {
+  const issues: string[] = [];
+
+  // Required fields
+  const required = ['name', 'displayName', 'description'];
+  for (const field of required) {
+    if (!config[field]) {
+      issues.push(`Missing required field: ${field}`);
+    }
+  }
+
+  // Unknown top-level keys — did-you-mean suggestions from the shared
+  // allowed-key set (CLIX-02). `playerCount` gets a pointed migration
+  // message instead of a generic did-you-mean (CLIX-01).
+  for (const { key, suggestion } of findUnknownKeys(config)) {
+    if (key === 'playerCount') {
+      issues.push(
+        "Unknown key 'playerCount' — player count is now derived from your gameDefinition (compiled rules), remove this key from boardsmith.json.",
+      );
+    } else if (suggestion) {
+      issues.push(`Unknown key '${key}' — did you mean '${suggestion}'?`);
+    } else {
+      issues.push(`Unknown key '${key}' — not a recognized boardsmith.json field.`);
+    }
+  }
+
+  // Optional "ui" field — must be "auto" or a relative path to a .vue file
+  // (e.g. "./ui/components/GameTable.vue"). The path must name a component
+  // file so the scaffold can derive a single static import; a bare directory
+  // path like "./ui/" would produce an invalid import in the generated App.vue.
+  if (config.ui !== undefined) {
+    if (typeof config.ui !== 'string') {
+      issues.push('"ui" must be a string: "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
+    } else if (config.ui !== 'auto') {
+      const isRelativeVue =
+        config.ui.startsWith('./') &&
+        config.ui.endsWith('.vue') &&
+        // reject "./.vue" / a path with an empty filename segment
+        (config.ui.split('/').pop()?.replace(/\.vue$/, '').length ?? 0) > 0;
+      if (!isRelativeVue) {
+        issues.push('"ui" must be "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
+      }
+    }
+  }
+
+  return issues;
+}
+
 async function validateMetadata(cwd: string): Promise<ValidationResult> {
   const configPath = join(cwd, 'boardsmith.json');
 
   try {
     const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-    const issues: string[] = [];
-
-    // Required fields
-    const required = ['name', 'displayName', 'description', 'playerCount'];
-    for (const field of required) {
-      if (!config[field]) {
-        issues.push(`Missing required field: ${field}`);
-      }
-    }
-
-    // Player count validation
-    if (config.playerCount) {
-      if (!config.playerCount.min || !config.playerCount.max) {
-        issues.push('playerCount must have min and max');
-      }
-      if (config.playerCount.min > config.playerCount.max) {
-        issues.push('playerCount.min cannot be greater than playerCount.max');
-      }
-    }
-
-    // Optional "ui" field — must be "auto" or a relative path to a .vue file
-    // (e.g. "./ui/components/GameTable.vue"). The path must name a component
-    // file so the scaffold can derive a single static import; a bare directory
-    // path like "./ui/" would produce an invalid import in the generated App.vue.
-    if (config.ui !== undefined) {
-      if (typeof config.ui !== 'string') {
-        issues.push('"ui" must be a string: "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
-      } else if (config.ui !== 'auto') {
-        const isRelativeVue =
-          config.ui.startsWith('./') &&
-          config.ui.endsWith('.vue') &&
-          // reject "./.vue" / a path with an empty filename segment
-          (config.ui.split('/').pop()?.replace(/\.vue$/, '').length ?? 0) > 0;
-        if (!isRelativeVue) {
-          issues.push('"ui" must be "auto" or a relative path to a .vue component (e.g. "./ui/components/GameTable.vue")');
-        }
-      }
-    }
+    const issues = checkMetadataIssues(config);
 
     return {
       name: 'Metadata',
