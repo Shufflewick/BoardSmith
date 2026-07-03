@@ -8,7 +8,7 @@
 
 ### Process (PROC)
 
-- [ ] **PROC-01**: Every finding F1–F38 has a recorded verification verdict (LEGITIMATE with repro/trace evidence, or REJECTED with reasoning) before its fix is planned or written
+- [x] **PROC-01**: Every finding F1–F38 has a recorded verification verdict (LEGITIMATE with repro/trace evidence, or REJECTED with reasoning) before its fix is planned or written
 - [ ] **PROC-02**: Every legitimate finding's fix includes a regression test that fails on the pre-fix code
 
 ### Critical — Hidden-Information Integrity (SEC)
@@ -95,7 +95,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROC-01 | Phase 131 | Pending |
+| PROC-01 | Phase 131 | Complete |
 | PROC-02 | Phase 131 | Pending |
 | SEC-01 | Phase 131 | Pending |
 | SEC-02 | Phase 131 | Pending |
