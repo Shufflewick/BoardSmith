@@ -296,13 +296,15 @@ describe('useDragDrop — dragProps() honors the `when` option (UIX-04)', () => 
     bi = createBoardInteraction();
   });
 
-  it('dragProps(ref, { when: false }) returns { draggable: false } with no drag handlers', () => {
+  it('dragProps(ref, { when: false }) returns inert props: not draggable, no onDragstart, onDragend retained (WR-06)', () => {
     const { api } = mountDragDrop(bi);
     const result = api.dragProps({ id: 1 }, { when: false });
 
-    expect(result).toEqual({ draggable: false });
-    expect((result as Record<string, unknown>).onDragstart).toBeUndefined();
-    expect((result as Record<string, unknown>).onDragend).toBeUndefined();
+    expect(result.draggable).toBe(false);
+    // No dragstart — a NEW drag can never begin from an inert element...
+    expect('onDragstart' in result).toBe(false);
+    // ...but dragend stays attached so a `when` flip mid-drag still cleans up.
+    expect(typeof result.onDragend).toBe('function');
   });
 
   it('dragProps(ref, { when: () => false }) returns inert props (function form evaluated via evalCondition)', () => {
@@ -310,8 +312,60 @@ describe('useDragDrop — dragProps() honors the `when` option (UIX-04)', () => 
     const whenFn = vi.fn(() => false);
     const result = api.dragProps({ id: 1 }, { when: whenFn });
 
-    expect(result).toEqual({ draggable: false });
+    expect(result.draggable).toBe(false);
+    expect('onDragstart' in result).toBe(false);
     expect(whenFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a `when` flip mid-drag still ends the drag: inert dragProps retain onDragend (WR-06)', () => {
+    const { api } = mountDragDrop(bi);
+
+    // Drag starts while `when` is true...
+    const active = api.dragProps({ id: 1 }, { when: true }) as DragProps;
+    active.onDragstart(makeFakeDragEvent() as unknown as DragEvent);
+    expect(bi.isDragging).toBe(true);
+
+    // ...then a broadcast tears down the in-progress action mid-drag, the
+    // caller's canDrag computed flips false, and the component re-renders,
+    // v-binding the INERT props onto the (still-dragging) source element.
+    const inert = api.dragProps({ id: 1 }, { when: false });
+    expect((inert as { draggable: boolean }).draggable).toBe(false);
+    const onDragend = (inert as { onDragend?: () => void }).onDragend;
+    expect(typeof onDragend).toBe('function');
+
+    // When the user releases, dragend fires on the source element — without a
+    // retained handler, endDrag() never runs and isDragging/highlights wedge.
+    onDragend!();
+    expect(bi.isDragging).toBe(false);
+  });
+
+  it('a `when` flip mid-drag still ends the drag for drag().props too (WR-06 parity)', () => {
+    const { api } = mountDragDrop(bi);
+
+    const active = api.drag({ id: 1 }, { when: true }).props as DragProps;
+    active.onDragstart(makeFakeDragEvent() as unknown as DragEvent);
+    expect(bi.isDragging).toBe(true);
+
+    const inert = api.drag({ id: 1 }, { when: false }).props;
+    const onDragend = (inert as { onDragend?: () => void }).onDragend;
+    expect(typeof onDragend).toBe('function');
+
+    onDragend!();
+    expect(bi.isDragging).toBe(false);
+  });
+
+  it('the inert onDragend is a no-op when no drag is in flight (does not fire user onDragEnd)', () => {
+    const { api } = mountDragDrop(bi);
+    const onDragEnd = vi.fn();
+
+    const inert = api.dragProps({ id: 1 }, { when: false, onDragEnd });
+    const handler = (inert as { onDragend?: () => void }).onDragend;
+    expect(typeof handler).toBe('function');
+
+    // No drag in flight — a stray dragend must not run user cleanup or endDrag.
+    handler!();
+    expect(onDragEnd).not.toHaveBeenCalled();
+    expect(bi.isDragging).toBe(false);
   });
 
   it('dragProps(ref) with no options returns the full draggable props unchanged', () => {

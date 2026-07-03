@@ -112,6 +112,19 @@ export interface DragProps {
   onDragend: () => void;
 }
 
+/**
+ * Inert props returned when a drag `when` condition is false. onDragend is
+ * RETAINED (WR-06): if `when` flips false while a drag is in flight (e.g. a
+ * broadcast tears down the in-progress action mid-drag) and the component
+ * re-renders, the release must still end the drag — otherwise
+ * boardInteraction.isDragging and the drop-target/hover highlights wedge.
+ * No onDragstart is attached, so no NEW drag can begin.
+ */
+export interface InertDragProps {
+  draggable: false;
+  onDragend: () => void;
+}
+
 export interface DropProps {
   onDragover: (e: DragEvent) => void;
   onDragenter: (e: DragEvent) => void;
@@ -157,8 +170,9 @@ export interface DropClasses {
  * Combined result from drag() helper - includes props and classes.
  */
 export interface DragResult {
-  /** Props to spread onto the element (empty object if condition is false) */
-  props: DragProps | Record<string, never>;
+  /** Props to spread onto the element (inert props if condition is false —
+   * draggable:false with onDragend retained, see InertDragProps/WR-06) */
+  props: DragProps | InertDragProps;
   /** Classes to apply to the element */
   classes: DragClasses;
 }
@@ -179,7 +193,7 @@ export interface UseDragDropReturn {
    * when it evaluates false, returns inert `{ draggable: false }` with no drag
    * handlers attached, instead of silently ignoring the option.
    */
-  dragProps: (ref: ElementRef, options?: DragOptions) => DragProps | { draggable: false };
+  dragProps: (ref: ElementRef, options?: DragOptions) => DragProps | InertDragProps;
   /** Returns props to make an element a drop target */
   dropProps: (ref: ElementRef) => DropProps;
   /** Check if an element is currently being dragged */
@@ -213,14 +227,28 @@ export interface UseDragDropReturn {
 export function useDragDrop(): UseDragDropReturn {
   const boardInteraction = tryUseBoardInteraction();
 
-  const dragProps = (ref: ElementRef, options?: DragOptions): DragProps | { draggable: false } => {
+  const dragProps = (ref: ElementRef, options?: DragOptions): DragProps | InertDragProps => {
     // UIX-04: honor the documented `when` option (mirrors drag()'s existing
     // inert-props gate) — reuse evalCondition(), don't re-derive when-logic.
     if (!evalCondition(options)) {
-      return { draggable: false };
+      return inertDragProps(options);
     }
     return dragPropsInner(ref, options);
   };
+
+  /** Shared inert shape for both dragProps() and drag() (WR-06): draggable is
+   * off and no dragstart is attached, but onDragend stays wired so a `when`
+   * flip mid-drag still ends the in-flight drag on release. */
+  const inertDragProps = (options?: DragOptions): InertDragProps => ({
+    draggable: false,
+    onDragend: () => {
+      // Only act when a drag is actually in flight — a stray dragend on an
+      // element that never started a drag must not run user cleanup.
+      if (!boardInteraction?.isDragging) return;
+      options?.onDragEnd?.();
+      boardInteraction.endDrag();
+    },
+  });
 
   const dragPropsInner = (ref: ElementRef, options?: DragOptions): DragProps => ({
     draggable: true,
@@ -332,10 +360,11 @@ export function useDragDrop(): UseDragDropReturn {
 
   /**
    * Combined helper for draggable elements - returns props and classes.
-   * Props are conditional (empty object if condition is false).
+   * Props are conditional (inert — draggable:false but onDragend retained —
+   * when the condition is false; see inertDragProps/WR-06).
    */
   const drag = (ref: ElementRef, options?: DragOptions): DragResult => ({
-    props: evalCondition(options) ? dragPropsInner(ref, options) : {},
+    props: evalCondition(options) ? dragPropsInner(ref, options) : inertDragProps(options),
     classes: dragClasses(ref, options),
   });
 
