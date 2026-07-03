@@ -133,7 +133,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 **Plans**: 5 plans
 - [x] 132-01-PLAN.md — PROC-01 verification gate: verdicts for F3/F12/F13/F28 before any fix
 - [x] 132-02-PLAN.md — ENG-01: putInto self/descendant throw in moveToInternal
-- [ ] 132-03-PLAN.md — ENG-05: resolveArgs second pass stops coercing bare numbers
+- [x] 132-03-PLAN.md — ENG-05: resolveArgs second pass stops coercing bare numbers
 - [ ] 132-04-PLAN.md — ENG-06: executeForEach snapshot-on-entry
 - [ ] 132-05-PLAN.md — ENG-08: registerAction throws on handler-less definitions
 
@@ -233,7 +233,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
 | 131. Serialization & Restore Fidelity | 5/5 | Complete    | 2026-07-03 |
-| 132. Engine Element & Builder Safety | 2/5 | In Progress|  |
+| 132. Engine Element & Builder Safety | 3/5 | In Progress|  |
 | 133. Engine Flow & Action Validation | 0/TBD | Not started | - |
 | 134. UI & Session Interaction Guardrails | 0/TBD | Not started | - |
 | 135. CLI & Dev Experience | 0/TBD | Not started | - |
