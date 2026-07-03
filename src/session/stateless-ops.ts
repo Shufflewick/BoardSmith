@@ -216,9 +216,11 @@ function buildViews(runner: GameRunner, playerCount: number): unknown[] {
 // Public observer view. Position 0 is the spectator sentinel (see utils.ts:418):
 // no player has seat 0, so only mode:'all' elements are visible — mode:'owner'/
 // 'hidden' element contents are omitted. includeActionMetadata:false ensures
-// spectators receive no action prompts. MUST be built from the LIVE runner (its
-// zone visibility is set in the game constructor and is NOT serialized, so a
-// fromSnapshot reconstruction would lose it and over-reveal).
+// spectators receive no action prompts. Built from `runner` (the caller's
+// current runner, whether freshly constructed by `handleStart` or restored via
+// `runnerFromSnapshot`/`GameRunner.fromSnapshot`) — zone visibility now
+// round-trips through serialization (SEC-01/F1/F7: `Space.toJSON`/
+// `_restoreZoneVisibility`), so both cases redact identically.
 function buildSpectatorView(runner: GameRunner): unknown {
   return {
     flowState: runner.getFlowState(),

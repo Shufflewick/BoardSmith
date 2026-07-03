@@ -1,5 +1,5 @@
 import { GameElement } from './game-element.js';
-import type { ElementClass, ElementAttributes, ElementContext } from './types.js';
+import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import type { VisibilityMode, VisibilityState } from '../command/visibility.js';
@@ -114,11 +114,50 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   static override unserializableAttributes = [
     ...GameElement.unserializableAttributes,
     '_eventHandlers',
-    '_zoneVisibility',
+    // '_zoneVisibility' intentionally NOT listed here (SEC-01/F1/F7): the
+    // `_`-prefix already excludes it from the generic attribute-loop in
+    // GameElement.toJSON/loadSerializedState, so listing it here was a no-op
+    // for serialization — it only ever gated the (nonexistent) generic
+    // restore path. The explicit `toJSON`/`_restoreZoneVisibility` round-trip
+    // below is the actual serialize/restore mechanism, mirroring how
+    // `_visibility` is handled on GameElement.
   ];
 
   constructor(ctx: Partial<ElementContext>) {
     super(ctx);
+  }
+
+  // ============================================
+  // Serialization (SEC-01/F1/F7)
+  // ============================================
+
+  /**
+   * Serialize this Space, including zone visibility for its contents.
+   * Mirrors GameElement's `_visibility?.explicit` special case exactly:
+   * only explicitly-set zone visibility is emitted (the class default set in
+   * a constructor, e.g. Deck's `contentsHidden()`, is naturally re-applied
+   * when a restored instance re-runs its own constructor via
+   * `GameElement.fromJSON`'s `new ElementClass(ctx)` — but any divergence
+   * from that default, or a runtime change via `contentsHidden()` etc, MUST
+   * round-trip explicitly since the class default cannot reproduce it).
+   */
+  override toJSON(): ElementJSON {
+    const json = super.toJSON();
+    if (this._zoneVisibility?.explicit) {
+      json.zoneVisibility = this._zoneVisibility;
+    }
+    return json;
+  }
+
+  /**
+   * Internal restore hook for `GameElement.fromJSON` (SEC-01/F1/F7). Not
+   * part of the public API — `_zoneVisibility` stays private; this is the
+   * scoped cross-class accessor (mirrors the codebase's `_t` convention for
+   * framework-internal, cross-class state) that lets the base class restore
+   * it without widening Space's public surface.
+   */
+  _restoreZoneVisibility(state: VisibilityState): void {
+    this._zoneVisibility = state;
   }
 
   // ============================================

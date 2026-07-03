@@ -1027,6 +1027,21 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       element._visibility = json.visibility;
     }
 
+    // Restore zone visibility if present (SEC-01/F1/F7). Space-only, but
+    // duck-typed here (rather than an `instanceof Space` check) to avoid a
+    // circular import between game-element.ts and space.ts (Space extends
+    // GameElement). `_restoreZoneVisibility` is Space's scoped internal
+    // accessor — see the comment on that method for why it exists instead of
+    // widening `_zoneVisibility` to public.
+    if (json.zoneVisibility) {
+      const restoreZoneVisibility = (
+        element as unknown as { _restoreZoneVisibility?: (state: typeof json.zoneVisibility) => void }
+      )._restoreZoneVisibility;
+      if (typeof restoreZoneVisibility === 'function') {
+        restoreZoneVisibility.call(element, json.zoneVisibility);
+      }
+    }
+
     // Apply attributes. Skip keys backed by a getter-only accessor (e.g. a
     // `notation` getter that toJSON serializes for the client): the getter
     // recomputes the value from restored coordinates, and assigning to it would

@@ -91,6 +91,14 @@ export type ElementJSON = {
   name?: string;
   attributes: Record<string, unknown>;
   visibility?: VisibilityState;
+  /**
+   * Zone visibility mode for this element's CONTENTS (not the element
+   * itself) — `Space._zoneVisibility`, set via `contentsHidden()` /
+   * `contentsVisibleToOwner()` / `contentsCountOnly()` / `addZoneVisibleTo()`
+   * / `hideContentsFrom()`. Mirrors `visibility` (SEC-01/F1/F7): only
+   * `Space` (and subclasses) emit this field.
+   */
+  zoneVisibility?: VisibilityState;
   children?: ElementJSON[];
   /** For 'count-only' visibility mode, just show the count */
   childCount?: number;
