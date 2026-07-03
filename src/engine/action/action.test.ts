@@ -651,6 +651,30 @@ describe('Action Executor', () => {
         expect(receivedSectorId).toBe(card);
       });
 
+      it('leaves a {id, className} followUp arg unresolved when className does not match the element (Test D)', () => {
+        // className is part of the contract, not just a shape discriminator. If the
+        // id points at an element of a different class than the caller claimed,
+        // resolving by id alone would hand the handler a wrong-class element -- the
+        // same corruption class ENG-05 removed. The arg must survive unresolved so
+        // the mismatch fails loudly downstream (mirrors relinkFlowVariables).
+        const deck = game.create(Deck, 'deck');
+        const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
+
+        let receivedSectorId: unknown;
+        const action = Action.create('test').execute((_args, ctx) => {
+          receivedSectorId = ctx.args.sectorId;
+        });
+
+        const claimed = { id: card.id, className: 'Sector' };
+        const result = executor.executeAction(action, game.getPlayer(1)!, {
+          sectorId: claimed,
+        });
+
+        expect(result.success).toBe(true);
+        expect(receivedSectorId).not.toBe(card);
+        expect(receivedSectorId).toEqual(claimed);
+      });
+
       it('still resolves a bare numeric id for a named element selection arg (Test C, control)', () => {
         const deck = game.create(Deck, 'deck');
         const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });

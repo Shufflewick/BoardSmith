@@ -247,11 +247,23 @@ export class ActionExecutor {
       if (selectionNames.has(key)) continue; // Already processed above
       if (value === undefined) continue;
 
-      // Resolve serialized element objects (from followUp args)
+      // Resolve serialized element objects (from followUp args). className is part
+      // of the contract, not just a shape discriminator: if the id points at an
+      // element of a different class than the caller claimed, resolving by id alone
+      // would hand the handler a wrong-class element (the corruption class ENG-05
+      // removed, one step removed). On mismatch, leave the arg unresolved so it
+      // fails loudly downstream -- mirroring relinkFlowVariables (flow/engine.ts).
       if (this.isSerializedElement(value)) {
-        const element = this.game.getElementById((value as { id: number }).id);
-        if (element) {
+        const serialized = value as { id: number; className: string };
+        const element = this.game.getElementById(serialized.id);
+        if (element && element.constructor.name === serialized.className) {
           resolved[key] = element;
+        } else if (element) {
+          devWarn(
+            `followup-arg-class-mismatch:${key}`,
+            `followUp arg '${key}' claims className '${serialized.className}' but element ` +
+            `${serialized.id} is a ${element.constructor.name}; leaving the arg unresolved.`
+          );
         }
       }
     }
