@@ -476,11 +476,12 @@ export interface UseActionControllerReturn {
    * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *
-   * Replaces any previously set hook (single-slot, not accumulated).
+   * Registers an additional hook; hooks run in registration order. Call the
+   * returned function to unregister this hook.
    */
   setBeforeAutoExecute: (
     hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
-  ) => void;
+  ) => () => void;
 
   // === Animation Gating ===
   /**

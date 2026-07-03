@@ -176,10 +176,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     );
   }
 
-  // Single before-auto-execute hook (REPLACED, not accumulated, via setBeforeAutoExecute)
-  // Stored as ref to allow setting/replacing after creation
-  const beforeAutoExecuteHook = ref<((actionName: string, args: Record<string, unknown>) => void | Promise<void>) | undefined>(
-    initialBeforeAutoExecute
+  // Before-auto-execute hooks (accumulated, via setBeforeAutoExecute). Multiple
+  // independently-registered consumers (e.g. a board component and a player-stats
+  // panel) can each register a hook without clobbering the others; the watcher
+  // awaits them sequentially in registration order.
+  type BeforeAutoExecuteHook = (actionName: string, args: Record<string, unknown>) => void | Promise<void>;
+  const beforeAutoExecuteHooks = ref<BeforeAutoExecuteHook[]>(
+    initialBeforeAutoExecute ? [initialBeforeAutoExecute] : []
   );
 
   // Helper to get current value of potentially reactive options
@@ -852,9 +855,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value) {
-      // Call hook before executing - allows capturing element positions for animations
-      if (beforeAutoExecuteHook.value) {
-        await beforeAutoExecuteHook.value(currentAction.value, buildServerArgs());
+      // Call hooks before executing - allows capturing element positions for animations.
+      // Sequential await (not Promise.all) so ordering is deterministic across hooks.
+      for (const hook of beforeAutoExecuteHooks.value) {
+        await hook(currentAction.value, buildServerArgs());
       }
       executeCurrentAction();
     }
@@ -933,12 +937,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * actionController.setBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *
-   * Note: this REPLACES any previously set hook (single-slot, not accumulated).
+   * Registers an additional hook; hooks run in registration order. Call the
+   * returned function to unregister this hook.
    */
-  function setBeforeAutoExecute(
-    hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
-  ): void {
-    beforeAutoExecuteHook.value = hook;
+  function setBeforeAutoExecute(hook: BeforeAutoExecuteHook): () => void {
+    beforeAutoExecuteHooks.value.push(hook);
+    return () => {
+      const idx = beforeAutoExecuteHooks.value.indexOf(hook);
+      if (idx !== -1) {
+        beforeAutoExecuteHooks.value.splice(idx, 1);
+      }
+    };
   }
 
   // === Methods ===

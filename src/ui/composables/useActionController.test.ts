@@ -583,7 +583,7 @@ describe('useActionController', () => {
       expect(calls).toEqual(['hook:forcedPlay', 'send:forcedPlay']);
     });
 
-    it('setBeforeAutoExecute replaces the previous hook (single-slot)', async () => {
+    it('setBeforeAutoExecute accumulates hooks and runs them in registration order (UIX-05, PROC-02 regression)', async () => {
       const calls: string[] = [];
       const controller = useActionController({
         sendAction,
@@ -601,7 +601,31 @@ describe('useActionController', () => {
       await nextTick();
       await nextTick();
 
-      // Only the most recently set hook fires
+      // Both hooks fire, in registration order (not replace-semantics)
+      expect(calls).toEqual(['first', 'second']);
+    });
+
+    it('setBeforeAutoExecute returns an unregister function that removes only that hook', async () => {
+      const calls: string[] = [];
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoFill: true,
+        autoExecute: true,
+      });
+
+      const unregisterFirst = controller.setBeforeAutoExecute(() => { calls.push('first'); });
+      controller.setBeforeAutoExecute(() => { calls.push('second'); });
+
+      unregisterFirst();
+
+      await controller.start('forcedPlay');
+      await nextTick();
+      await nextTick();
+
+      // Only the still-registered hook fires
       expect(calls).toEqual(['second']);
     });
   });
