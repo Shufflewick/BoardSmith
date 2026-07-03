@@ -120,8 +120,8 @@ export const TurnOrder = {
    *
    * // At end of hand - use nextAfter to handle wrap-around:
    * execute(ctx => {
-   *   const dealer = ctx.game.players.get(ctx.game.dealerPosition);
-   *   ctx.game.dealerSeat = ctx.game.players.nextAfter(dealer).seat;
+   *   const dealer = ctx.game.getPlayerOrThrow(ctx.game.dealerPosition);
+   *   ctx.game.dealerPosition = ctx.game.nextAfter(dealer).seat;
    * })
    * ```
    */
