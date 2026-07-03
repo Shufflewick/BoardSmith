@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
-last_updated: "2026-07-03T18:19:45.367Z"
+last_updated: "2026-07-03T18:24:02.941Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 26
-  completed_plans: 21
+  completed_plans: 22
   percent: 44
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 135 (CLI & Dev Experience) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [████████░░] 81%
+Progress: [█████████░] 85%
 
 ## Milestones
 
@@ -143,6 +143,8 @@ Recent decisions affecting current work:
 - [Phase 135]: F32/CLIX-04: corrected a 135-RESEARCH.md misreading - CONTEXT.md's locked decision is default 127.0.0.1, not 0.0.0.0-stays-default; fix is a real default-value change, not docs-only
 - [Phase 135]: F9/CLIX-01: build.ts's manifest spread is a second silent-forwarding site for playerCount, folded into the same Plan 02 derive-not-duplicate fix
 - [Phase 135]: F34/CLIX-06: --ai validation fix requires relocating the check block to after effectivePlayerCount is computed (dev.ts:393), not an in-place operand swap at dev.ts:302
+- [Phase 135]: InitOptions interface removed entirely rather than emptied -- template was its only field
+- [Phase 135]: dev --host help text corrected to describe the Plan 06 target of a 127.0.0.1 default even though dev.ts runtime binding is unchanged until Plan 06 lands
 
 ### Pending Todos
 
@@ -154,7 +156,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T18:19:45.360Z
+Last session: 2026-07-03T18:23:43.491Z
 Stopped at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
