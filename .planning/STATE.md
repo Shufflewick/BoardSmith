@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: "Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)"
-last_updated: "2026-07-03T21:51:07.665Z"
+last_updated: "2026-07-03T21:59:57.539Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 31
-  completed_plans: 28
+  completed_plans: 29
   percent: 56
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 136 (Client SDK & Protocol) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [█████████░] 90%
+Progress: [█████████░] 94%
 
 ## Milestones
 
@@ -158,6 +158,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 136-02]: protocol.ts gained 7 new HTTP-shape interfaces (LobbyResponse, SetReadyRequest, AddSlotRequest, RemoveSlotRequest, SetSlotAIRequest, UpdateGameOptionsRequest, UpdatePlayerOptionsRequest) since client/types.ts owned these shapes with no protocol.ts twin
 - [Phase ?]: [Phase 136-02]: WebSocketIncomingMessage discriminated union kept client-local (not re-exported from protocol.ts) since protocol.ts's WebSocketMessage union is scoped to client-to-server traffic only
 - [Phase ?]: [Phase 136-02]: Rule 3 auto-fix threaded real defaults (config.playerId ?? generatePlayerId(), connectImmediately ?? true, connectionTimeout ?? 10000) into client.ts/game-connection.ts Required<> literals to keep tsc green; simultaneously closed F38/SDK-06 and corrected Node 16+ to Node 19+ error text
+- [Phase 136-03]: action()'s not-connected/timeout/open-failure paths all reject; only a genuine server-reported action failure resolves {success:false}
+- [Phase 136-03]: connectImmediately gates connect() unconditionally on every call, per the plan's locked acceptance criteria
+- [Phase 136-03]: reconnect() simplified to delegate to connect() since connect() now clears #userDisconnected itself (Pitfall 1)
 
 ### Pending Todos
 
@@ -169,7 +172,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T21:49:48.577Z
+Last session: 2026-07-03T21:59:29.178Z
 Stopped at: Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`

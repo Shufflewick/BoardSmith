@@ -57,7 +57,7 @@
 
 ### Client SDK & Protocol (SDK)
 
-- [ ] **SDK-01**: Callers can await `GameConnection` becoming open (promise/event), and actions sent before open fail loudly rather than resolving `{success:false}` silently (F23)
+- [x] **SDK-01**: Callers can await `GameConnection` becoming open (promise/event), and actions sent before open fail loudly rather than resolving `{success:false}` silently (F23)
 - [x] **SDK-02**: `disconnect()` → `connect()` restores auto-reconnect behavior predictably; the `reconnect()`-only asymmetry is removed or made impossible to miss (F24)
 - [ ] **SDK-03**: `MeepleClient` methods have ONE consistent error contract (all throw or all return results) — no silent raw-JSON failure half (F25)
 - [x] **SDK-04**: Client SDK imports canonical protocol types from `src/types/` instead of redefining them; existing drift (CreateGameRequest, WS message union) resolved (F26)
@@ -123,7 +123,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | CLIX-04 | Phase 135 | Complete |
 | CLIX-05 | Phase 135 | Complete |
 | CLIX-06 | Phase 135 | Complete |
-| SDK-01 | Phase 136 | Pending |
+| SDK-01 | Phase 136 | Complete |
 | SDK-02 | Phase 136 | Complete |
 | SDK-03 | Phase 136 | Pending |
 | SDK-04 | Phase 136 | Complete |
