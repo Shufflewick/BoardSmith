@@ -24,7 +24,6 @@ program
 program
   .command('init <name>')
   .description('Create a new BoardSmith game project')
-  .option('-t, --template <template>', 'Template to use (default: card-game)', 'card-game')
   .action(initCommand);
 
 // Development

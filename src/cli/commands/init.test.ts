@@ -13,7 +13,12 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { generateGameTs, generateTestTs } from './init.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('generateGameTs — scaffolded game template', () => {
   const src = generateGameTs('Demo');
@@ -58,5 +63,34 @@ describe('generateTestTs — scaffolded game test template', () => {
 
   it('does not call setup() — the scaffold game does all setup in its constructor', () => {
     expect(test).not.toContain('game.setup()');
+  });
+});
+
+// PROC-02 regression (F33/CLIX-05): `-t/--template` was a fully silent no-op --
+// it parsed and accepted any string but had zero read sites in initCommand's
+// body, so it could never actually select a template. Per No Backward
+// Compatibility the flag is removed outright (not deprecated). These tests
+// pin the removal at both registration sites so it can't silently reappear.
+describe('init command — no -t/--template surface (CLIX-05 / F33)', () => {
+  it('does not register -t/--template on the init command in cli.ts', () => {
+    const cliSrc = readFileSync(join(__dirname, '..', 'cli.ts'), 'utf-8');
+    const initBlockStart = cliSrc.indexOf(".command('init <name>')");
+    expect(initBlockStart).toBeGreaterThan(-1);
+    const initBlockEnd = cliSrc.indexOf('.action(initCommand)', initBlockStart);
+    expect(initBlockEnd).toBeGreaterThan(initBlockStart);
+    const initBlock = cliSrc.slice(initBlockStart, initBlockEnd);
+    expect(initBlock).not.toContain('--template');
+    expect(initBlock).not.toContain('-t,');
+  });
+
+  it('does not remove the unrelated pack command --target flag', () => {
+    const cliSrc = readFileSync(join(__dirname, '..', 'cli.ts'), 'utf-8');
+    expect(cliSrc).toContain("-t, --target <path>");
+  });
+
+  it('init.ts has no InitOptions.template field (the InitOptions type itself is gone)', () => {
+    const initSrc = readFileSync(join(__dirname, 'init.ts'), 'utf-8');
+    expect(initSrc).not.toContain('template');
+    expect(initSrc).not.toContain('InitOptions');
   });
 });

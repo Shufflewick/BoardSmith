@@ -12,11 +12,7 @@ import {
   type ProjectConfig,
 } from '../lib/project-scaffold.js';
 
-interface InitOptions {
-  template: string;
-}
-
-export async function initCommand(name: string, options: InitOptions): Promise<void> {
+export async function initCommand(name: string): Promise<void> {
   const projectPath = join(process.cwd(), name);
 
   if (existsSync(projectPath)) {
