@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: "Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)"
-last_updated: "2026-07-03T21:59:57.539Z"
+last_updated: "2026-07-03T22:10:07.206Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 31
-  completed_plans: 29
+  completed_plans: 30
   percent: 56
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 136 (Client SDK & Protocol) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [█████████░] 94%
+Progress: [██████████] 97%
 
 ## Milestones
 
@@ -161,6 +161,8 @@ Recent decisions affecting current work:
 - [Phase 136-03]: action()'s not-connected/timeout/open-failure paths all reject; only a genuine server-reported action failure resolves {success:false}
 - [Phase 136-03]: connectImmediately gates connect() unconditionally on every call, per the plan's locked acceptance criteria
 - [Phase 136-03]: reconnect() simplified to delegate to connect() since connect() now clears #userDisconnected itself (Pitfall 1)
+- [Phase 136]: [Phase 136-04]: MeepleClientError extends Error with optional errorCode?: ErrorCode, exported from client barrel; parseResponse<T>() is the single throw-vs-return chokepoint for all 21 non-health HTTP methods
+- [Phase 136]: [Phase 136-04]: Rule 1 fix - wsImplementation was silently dropped by connect(), now threaded alongside connectImmediately/connectionTimeout
 
 ### Pending Todos
 
@@ -172,7 +174,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T21:59:29.178Z
+Last session: 2026-07-03T22:09:08.106Z
 Stopped at: Completed 136-01-PLAN.md (PROC-01 findings verification gate: F23/F24/F25/F26/F35/F38 all LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
