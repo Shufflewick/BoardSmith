@@ -19,6 +19,23 @@ import type {
   JoinLobbyResponse,
   LobbyResponse,
 } from './types.js';
+import type { ErrorCode } from '../types/protocol.js';
+
+/**
+ * Error thrown by every `MeepleClient` HTTP method on `!response.ok` or
+ * `data.success === false`. `errorCode` is OPTIONAL — lobby-manager.ts
+ * populates no `errorCode` today (see 136-FINDINGS-VERIFICATION.md F25), so
+ * this type never fabricates one client-side.
+ */
+export class MeepleClientError extends Error {
+  errorCode?: ErrorCode;
+
+  constructor(message: string, errorCode?: ErrorCode) {
+    super(message);
+    this.name = 'MeepleClientError';
+    this.errorCode = errorCode;
+  }
+}
 
 export class MeepleClient {
   private config: Required<MeepleClientConfig>;
@@ -62,11 +79,7 @@ export class MeepleClient {
       }),
     });
 
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to join matchmaking');
-    }
+    const data = await this.parseResponse<MatchmakingResult & { matched: boolean }>(response);
 
     return {
       matched: data.matched,
@@ -87,11 +100,7 @@ export class MeepleClient {
     url.searchParams.set('playerId', this.playerId);
 
     const response = await this.fetch(url.pathname + url.search);
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to get match status');
-    }
+    const data = await this.parseResponse<MatchmakingStatus>(response);
 
     return {
       status: data.status,
@@ -115,11 +124,7 @@ export class MeepleClient {
       body: JSON.stringify({ playerId: this.playerId }),
     });
 
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to leave matchmaking');
-    }
+    await this.parseResponse<{ success: true }>(response);
   }
 
   /**
@@ -221,7 +226,7 @@ export class MeepleClient {
       body: JSON.stringify(options),
     });
 
-    return await response.json();
+    return await this.parseResponse<CreateGameResponse>(response);
   }
 
   /**
@@ -236,11 +241,7 @@ export class MeepleClient {
       : `/games/${gameId}`;
 
     const response = await this.fetch(url);
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to get game state');
-    }
+    const data = await this.parseResponse<{ flowState: FlowState; state: PlayerState }>(response);
 
     return {
       flowState: data.flowState,
@@ -262,11 +263,7 @@ export class MeepleClient {
       body: JSON.stringify({ action, player, args }),
     });
 
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Action failed');
-    }
+    const data = await this.parseResponse<{ flowState: FlowState; state: PlayerState }>(response);
 
     return {
       flowState: data.flowState,
@@ -282,11 +279,9 @@ export class MeepleClient {
     createdAt: number;
   }> {
     const response = await this.fetch(`/games/${gameId}/history`);
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to get history');
-    }
+    const data = await this.parseResponse<{ actionHistory: unknown[]; createdAt: number }>(
+      response
+    );
 
     return {
       actionHistory: data.actionHistory,
@@ -303,11 +298,7 @@ export class MeepleClient {
       method: 'POST',
     });
 
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to restart game');
-    }
+    const data = await this.parseResponse<{ flowState: FlowState; state: PlayerState }>(response);
 
     return {
       flowState: data.flowState,
@@ -324,11 +315,7 @@ export class MeepleClient {
    */
   async getLobby(gameId: string): Promise<LobbyInfo> {
     const response = await this.fetch(`/games/${gameId}/lobby`);
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to get lobby');
-    }
+    const data = await this.parseResponse<{ lobby: LobbyInfo }>(response);
 
     return data.lobby;
   }
@@ -346,7 +333,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<ClaimSeatResponse>(response);
   }
 
   /**
@@ -361,7 +348,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<JoinLobbyResponse>(response);
   }
 
   /**
@@ -376,11 +363,7 @@ export class MeepleClient {
       }),
     });
 
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to update name');
-    }
+    await this.parseResponse<{ success: true }>(response);
   }
 
   /**
@@ -395,7 +378,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -409,7 +392,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -424,7 +407,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -441,7 +424,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -455,7 +438,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -470,7 +453,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -485,7 +468,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -502,7 +485,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -517,7 +500,7 @@ export class MeepleClient {
       }),
     });
 
-    return await response.json();
+    return await this.parseResponse<LobbyResponse>(response);
   }
 
   /**
@@ -549,6 +532,31 @@ export class MeepleClient {
   // ============================================
   // Private Helpers
   // ============================================
+
+  /**
+   * The ONE shared throw-vs-return chokepoint for every `{success}`-shaped
+   * HTTP response. Checks `response.ok` first so a non-2xx non-JSON body
+   * (e.g. an infrastructure-layer 502) produces an actionable `HTTP {status}`
+   * error instead of an unrelated `SyntaxError` from `.json()`. On a 2xx
+   * response with `data.success === false`, throws a `MeepleClientError`
+   * carrying the server `error` message and an OPTIONAL `errorCode` (never
+   * fabricated client-side — see F25 scope boundary). `health()` is
+   * deliberately NOT routed through this helper — it has no `{success}`
+   * field, it's a pure status probe.
+   */
+  private async parseResponse<T>(response: Response): Promise<T> {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText || 'Request failed'}`);
+    }
+
+    const data = await response.json();
+
+    if (data && data.success === false) {
+      throw new MeepleClientError(data.error || 'Request failed', data.errorCode);
+    }
+
+    return data as T;
+  }
 
   private async fetch(path: string, options: RequestInit = {}): Promise<Response> {
     const url = path.startsWith('http') ? path : `${this.config.baseUrl}${path}`;
