@@ -22,7 +22,11 @@ findings:
   warning: 6
   info: 5
   total: 13
-status: issues_found
+status: resolved
+fixed_at: 2026-07-03
+fix_scope: critical_warning
+fixed: [CR-01, CR-02, WR-01, WR-02, WR-03, WR-04, WR-05, WR-06]
+info_disposition: IN-05 resolved incidentally by WR-06; IN-01..IN-04 open (out of fix scope)
 ---
 
 # Phase 134: Code Review Report
@@ -30,7 +34,7 @@ status: issues_found
 **Reviewed:** 2026-07-03
 **Depth:** standard
 **Files Reviewed:** 13
-**Status:** issues_found
+**Status:** resolved — all Critical + Warning findings fixed 2026-07-03 (fix scope: critical_warning; IN-05 resolved incidentally, IN-01..IN-04 remain open)
 
 ## Summary
 
@@ -70,6 +74,8 @@ watch(actionController.errorTick, () => {
 });
 ```
 
+**Resolution:** Fixed in `77b73ec4` (docs follow-up `e0958560`). All failure sites route through `setError()` which bumps a readonly `errorTick`; GameShell's UIX-01 chokepoint watches `errorTick` and reads the message from `lastError`. Red-first: retry-identical-failure harness test + controller-level `errorTick` test proven RED pre-fix. `custom-ui-guide.md` updated to describe the errorTick mechanism.
+
 ### CR-02: Four fill()-path failures never set lastError — those failures are now fully silent
 
 **File:** `src/ui/composables/useActionController.ts:1338-1345,1437-1439,1543-1545`; comment at `src/ui/components/auto-ui/ActionPanel.vue:686-688`
@@ -90,6 +96,8 @@ if (!currentActionMeta.value) {
 ```
 Then the ActionPanel comment and the guide's guarantee become true.
 
+**Resolution:** Fixed in `0d857bf1`. All four paths now `setError()` before returning; the ActionPanel comment and the custom-ui guide's "every failure surfaces automatically" promise are now true. Red-first: 4 controller tests (one per path, including the broadcast-race "No action in progress" path) proven RED pre-fix.
+
 ## Warnings
 
 ### WR-01: 0×0 board diagnostic re-fires on every game-state broadcast — contradicts its own "fires once" contract; no once-latch, no hidden-board guard
@@ -103,6 +111,8 @@ if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') retur
 ```
 Also `clearTimeout` any prior pending check when the watch re-fires.
 
+**Resolution:** Fixed in `c866e843`. Once-per-session `warned0x0` latch, `clearTimeout` of any prior pending settle-check, and an `offsetParent === null && position !== 'fixed'` hidden-board guard. Red-first: repeated-broadcast latch test + hidden-board (real detached element) test proven RED pre-fix.
+
 ### WR-02: A throwing beforeAutoExecute hook aborts remaining hooks AND execution, permanently wedging the action
 
 **File:** `src/ui/composables/useActionController.ts:856-865`
@@ -115,11 +125,15 @@ for (const hook of [...beforeAutoExecuteHooks.value]) {
 }
 ```
 
+**Resolution:** Fixed in `b472eee4`. Each hook runs in its own try/catch with a loud `console.error('[ActionController] beforeAutoExecute hook failed:', err)`; `executeCurrentAction()` always proceeds. Red-first: throwing-hook test proven RED pre-fix.
+
 ### WR-03: Unregistering a hook during hook iteration skips the next hook
 
 **File:** `src/ui/composables/useActionController.ts:860-862,943-951`
 **Issue:** The watcher iterates `beforeAutoExecuteHooks.value` (the live array) while `setBeforeAutoExecute`'s unregister fn `splice`s that same array. A one-shot hook that unregisters itself inside its own body (a natural pattern: "capture positions for this action only, then remove") shifts the array under the `for...of` index iterator, so the hook registered immediately after it is silently skipped for that execution. Same hazard if hook A unregisters hook B.
 **Fix:** Iterate a snapshot: `for (const hook of [...beforeAutoExecuteHooks.value])` (combines with the WR-02 fix above).
+
+**Resolution:** Fixed in `d70eaf4a`. Watcher iterates `[...beforeAutoExecuteHooks.value]`. Red-first: self-unregistering one-shot hook test proven RED pre-fix.
 
 ### WR-04: Accumulation semantics leak hooks across component remounts — no scope-tied auto-unregister
 
@@ -137,11 +151,15 @@ function setBeforeAutoExecute(hook: BeforeAutoExecuteHook): () => void {
 ```
 (Also verify BoardSmithGames/MERC call sites per the cross-repo rule in CLAUDE.md.)
 
+**Resolution:** Fixed in `304aa361`. `setBeforeAutoExecute` now calls `onScopeDispose(unregister)` when `getCurrentScope()` is active; scope-less registrations keep the manual-unregister contract. JSDoc updated in both the composable and the return type. Cross-repo call sites verified: cribbage `CribbageBoard.vue:539` (setup-scope, self-heals), demo-animation `GameTable.vue:344` (immediate watch in setup, self-heals), MERC `App.vue:126` — all register from component scopes; no game-side changes needed. Red-first: effectScope dispose test proven RED pre-fix.
+
 ### WR-05: ReadOnlyRunnerFacade is not exported from the session module entrypoint
 
 **File:** `src/session/index.ts:112-118`, `src/session/game-session.ts:246`
 **Issue:** `session.runner` now returns `ReadOnlyRunnerFacade<G>`, but the type is only exported from `game-session.ts` and is not re-exported in `src/session/index.ts` (the `export { GameSession, ... }` block omits it). External consumers (games, MERC) that need to name the type of `session.runner` — e.g. a helper function parameter `fn(runner: ReadOnlyRunnerFacade)` — cannot import it from the public `boardsmith/session` surface and are forced into `typeof session.runner` gymnastics or deep imports. A public getter's return type is public API.
 **Fix:** Add `type ReadOnlyRunnerFacade` to the `export { ... } from './game-session.js'` block in `src/session/index.ts`.
+
+**Resolution:** Fixed in `7c4c2373`. `type ReadOnlyRunnerFacade` added to the GameSession export block in `src/session/index.ts` (type-only change; no red-first test — tsc verifies).
 
 ### WR-06: dragProps `when:false` removes the onDragend handler — a `when` flip mid-drag strands boardInteraction in the dragging state
 
@@ -157,6 +175,8 @@ if (!evalCondition(options)) {
 }
 ```
 (Apply the same to `drag()`'s inert branch for parity.)
+
+**Resolution:** Fixed in `e239a958`. Both `dragProps()` and `drag()` now return a shared `InertDragProps` shape (`draggable: false`, no `onDragstart`, `onDragend` retained and guarded to only run user cleanup + `endDrag()` when a drag is actually in flight). This also resolves IN-05 (the two divergent inert shapes are unified). Red-first: mid-drag `when`-flip tests for both `dragProps()` and `drag()` proven RED pre-fix.
 
 ## Info
 
@@ -189,6 +209,8 @@ if (!evalCondition(options)) {
 **File:** `src/ui/composables/useDragDrop.ts:219-221,337-338`
 **Issue:** `dragProps()` with `when:false` returns `{ draggable: false }` while `drag().props` returns `{}` for the same condition. Both work under `v-bind`, but the asymmetry is a small API inconsistency.
 **Fix:** Return the same inert shape from both (whichever survives the WR-06 fix).
+
+**Resolution:** Resolved incidentally by the WR-06 fix (`e239a958`) — both now return the shared `InertDragProps` shape.
 
 ---
 
