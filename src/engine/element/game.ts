@@ -2943,7 +2943,7 @@ export class Game<
       const path: number[] = [];
       let el: GameElement = space;
       while (el._t.parent) {
-        const spaceSiblings = el._t.parent._t.children.filter((c) => c instanceof Space);
+        const spaceSiblings: GameElement[] = el._t.parent._t.children.filter((c) => c instanceof Space);
         path.unshift(spaceSiblings.indexOf(el));
         el = el._t.parent;
       }
