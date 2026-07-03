@@ -85,7 +85,20 @@ export interface ${pascal}Options extends GameOptions {
   seed?: string;
 }
 
+// Declared before ${pascal}Game so the static PlayerClass initializer below can
+// reference it (classes are not hoisted).
+export class ${pascal}Player extends Player<${pascal}Game, ${pascal}Player> {
+  hand!: Hand;
+  score: number = 0;
+  // The player's hand is created by the game after registerElements
+  // (see ${pascal}Game constructor) and assigned to this.hand there.
+}
+
 export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
+  // Tells the engine to construct each player as a ${pascal}Player. The engine
+  // pre-creates players from options.playerCount during super().
+  static PlayerClass = ${pascal}Player;
+
   deck!: Deck;
 
   constructor(options: ${pascal}Options) {
@@ -140,10 +153,6 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
     this.setFlow(createGameFlow(this));
   }
 
-  protected override createPlayer(seat: number, name: string): ${pascal}Player {
-    return new ${pascal}Player(seat, name, this);
-  }
-
   getPlayerHand(player: ${pascal}Player): Hand {
     return this.first(Hand, \`hand-\${player.seat}\`)!;
   }
@@ -163,22 +172,10 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
     return [winner];
   }
 }
-
-export class ${pascal}Player extends Player<${pascal}Game, ${pascal}Player> {
-  hand!: Hand;
-  score: number = 0;
-
-  constructor(seat: number, name: string, game: ${pascal}Game) {
-    super(seat, name);
-    this.game = game;
-    // The player's hand is created by the game after registerElements
-    // (see ${pascal}Game constructor) and assigned to this.hand there.
-  }
-}
 `;
 }
 
-function generateElementsTs(): string {
+export function generateElementsTs(): string {
   return `import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck, Space } from 'boardsmith';
 
 export type Suit = 'H' | 'D' | 'C' | 'S';
@@ -200,7 +197,7 @@ export class PlayArea extends Space {
 `;
 }
 
-function generateActionsTs(pascal: string): string {
+export function generateActionsTs(pascal: string): string {
   return `import { Action, type ActionDefinition } from 'boardsmith';
 import type { ${pascal}Game, ${pascal}Player } from './game.js';
 import { Card } from './elements.js';
@@ -240,7 +237,7 @@ export function createPlayAction(game: ${pascal}Game): ActionDefinition {
 `;
 }
 
-function generateFlowTs(pascal: string): string {
+export function generateFlowTs(pascal: string): string {
   return `import {
   loop,
   eachPlayer,

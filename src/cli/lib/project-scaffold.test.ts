@@ -1,4 +1,9 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
+import ts from 'typescript';
 import {
   generateAppVue,
   generateBoardsmithJson,
@@ -7,6 +12,12 @@ import {
   generateUiIndexTs,
   type ProjectConfig,
 } from './project-scaffold.js';
+import {
+  generateGameTs,
+  generateElementsTs,
+  generateActionsTs,
+  generateFlowTs,
+} from '../commands/init.js';
 
 const config: ProjectConfig = {
   name: 'my-game',
@@ -83,6 +94,54 @@ describe('generateRulesIndexTs', () => {
     const out = generateRulesIndexTs(config);
     expect(out).toContain(`minPlayers: ${config.playerCount.min}`);
     expect(out).toContain(`maxPlayers: ${config.playerCount.max}`);
+  });
+
+  it('re-exports the Player class from game.js, where it is defined (CR-01 regression)', () => {
+    const out = generateRulesIndexTs(config);
+    // MyGamePlayer is defined in game.ts (init.ts generateGameTs), not elements.ts —
+    // re-exporting it from './elements.js' makes every fresh project fail tsc/build.
+    expect(out).toMatch(/export \{[^}]*MyGamePlayer[^}]*\} from '\.\/game\.js'/);
+    expect(out).not.toMatch(/export \{[^}]*MyGamePlayer[^}]*\} from '\.\/elements\.js'/);
+  });
+
+  it('the full generated rules module set type-checks cleanly against the real engine (CR-01 regression)', () => {
+    // Write the exact rules files `boardsmith init` generates and run the same
+    // gate `boardsmith validate` runs (tsc). This is the check that catches an
+    // unresolved re-export like `export { MyGamePlayer } from './elements.js'`
+    // (TS2305) — esbuild silently tolerates missing named re-exports on .ts
+    // files (it cannot know they aren't type-only), which is exactly how
+    // `boardsmith dev` masked the broken scaffold.
+    const dir = mkdtempSync(join(tmpdir(), 'bs-scaffold-compile-'));
+    try {
+      const rulesDir = join(dir, 'rules');
+      mkdirSync(rulesDir, { recursive: true });
+      writeFileSync(join(rulesDir, 'index.ts'), generateRulesIndexTs(config));
+      writeFileSync(join(rulesDir, 'game.ts'), generateGameTs('MyGame'));
+      writeFileSync(join(rulesDir, 'elements.ts'), generateElementsTs());
+      writeFileSync(join(rulesDir, 'actions.ts'), generateActionsTs('MyGame'));
+      writeFileSync(join(rulesDir, 'flow.ts'), generateFlowTs('MyGame'));
+
+      // 'boardsmith' resolves to the same entry the package.json "." export
+      // points at (src/engine/index.ts), matching a real scaffolded project.
+      const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+      const program = ts.createProgram([join(rulesDir, 'index.ts')], {
+        // Mirrors the scaffold's generateTsConfig() compiler options.
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        baseUrl: dir,
+        paths: { boardsmith: [join(repoRoot, 'src', 'engine', 'index.ts')] },
+      });
+      const diagnostics = ts.getPreEmitDiagnostics(program)
+        .filter((d) => d.file && d.file.fileName.startsWith(dir))
+        .map((d) => `${d.file!.fileName.replace(dir, '')} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

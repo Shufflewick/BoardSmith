@@ -227,8 +227,7 @@ app.mount('#app');
  */
 export function generateRulesIndexTs(config: ProjectConfig): string {
   const pascal = toPascalCase(config.name);
-  return `export { ${pascal}Game } from './game.js';
-export { ${pascal}Player } from './elements.js';
+  return `export { ${pascal}Game, ${pascal}Player } from './game.js';
 export * from './elements.js';
 export * from './actions.js';
 export { createGameFlow } from './flow.js';
