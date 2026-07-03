@@ -14,6 +14,7 @@ import {
 } from '../lib/publish-api.js';
 import { buildCommand } from './build.js';
 import { validateCommand } from './validate.js';
+import { describeZipSizeViolation } from '../lib/bundle-limits.js';
 
 interface PublishOptions {
   apiKey?: string;
@@ -118,6 +119,17 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   }
 
   const zip = createZip(fileMap);
+
+  // WR-05: gate on the ACTUAL zip size before any upload — the server rejects
+  // zips over the limit, so an oversized bundle must fail here with an
+  // actionable message instead of round-tripping to the server to fail.
+  const sizeViolation = describeZipSizeViolation(zip.length);
+  if (sizeViolation) {
+    spinner.fail('Packaging failed');
+    console.error(chalk.red(sizeViolation));
+    process.exit(1);
+  }
+
   spinner.succeed(`Packaged ${fileMap.size} files (${formatBytes(zip.length)})`);
 
   if (options.dryRun) {

@@ -1,11 +1,14 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
   suggestKey,
   findUnknownKeys,
 } from '../lib/config-schema.js';
-import { checkMetadataIssues } from './validate.js';
-import { MAX_BUNDLE_SIZE } from '../lib/bundle-limits.js';
+import { checkMetadataIssues, validateBundleSize } from './validate.js';
+import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', async () => {
@@ -135,5 +138,56 @@ describe('bundle-limits', () => {
     // PROC-02: RED against the pre-fix local `maxTotalBundle = 200 * 1024 *
     // 1024` in validate.ts — this asserts the shared, correct constant.
     expect(MAX_BUNDLE_SIZE).toBe(50 * 1024 * 1024);
+  });
+
+  it('describeZipSizeViolation returns null at or under the limit (WR-05)', () => {
+    expect(describeZipSizeViolation(0)).toBeNull();
+    expect(describeZipSizeViolation(MAX_BUNDLE_SIZE)).toBeNull();
+  });
+
+  it('describeZipSizeViolation returns an actionable message naming both sizes when over the limit (WR-05)', () => {
+    const message = describeZipSizeViolation(MAX_BUNDLE_SIZE + 1024 * 1024);
+    expect(message).not.toBeNull();
+    expect(message).toContain('51.0 MB');
+    expect(message).toContain('50.0 MB');
+    expect(message?.toLowerCase()).toContain('reduce');
+  });
+});
+
+describe('validateBundleSize measures the real publish zip, not the raw dist (WR-05)', () => {
+  function makeDist(cwd: string, bigFileBytes: number): void {
+    const distDir = join(cwd, 'dist');
+    mkdirSync(join(distDir, 'rules'), { recursive: true });
+    mkdirSync(join(distDir, 'ui'), { recursive: true });
+    writeFileSync(join(distDir, 'manifest.json'), JSON.stringify({
+      name: 'fixture', playerCount: { min: 2, max: 4 },
+    }));
+    writeFileSync(join(distDir, 'rules', 'rules.js'), 'module.exports = {};\n');
+    writeFileSync(join(distDir, 'ui', 'index.html'), '<!DOCTYPE html><html></html>');
+    // Highly compressible payload: zeros deflate to well under 1% of raw size.
+    writeFileSync(join(distDir, 'ui', 'big.json'), Buffer.alloc(bigFileBytes, 0x30));
+  }
+
+  it('PASSES a dist whose raw size exceeds 50MB but whose zip is far under it (the server gates the zip)', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'bs-bundle-size-'));
+    try {
+      makeDist(cwd, 55 * 1024 * 1024); // raw > 50MB limit, zip ~ tiny
+      const result = await validateBundleSize(cwd);
+      expect(result.passed).toBe(true);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('reports the compressed size in its detail output so the number matches what publish uploads', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'bs-bundle-size-'));
+    try {
+      makeDist(cwd, 1024);
+      const result = await validateBundleSize(cwd);
+      expect(result.passed).toBe(true);
+      expect((result.details ?? []).join('\n')).toMatch(/compressed/i);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });

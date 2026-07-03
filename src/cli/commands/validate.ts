@@ -5,7 +5,8 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
-import { MAX_BUNDLE_SIZE } from '../lib/bundle-limits.js';
+import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
+import { readDistDir, createZip } from '../lib/zip.js';
 
 interface ValidationResult {
   name: string;
@@ -241,12 +242,11 @@ async function validateSecurity(cwd: string): Promise<ValidationResult> {
   };
 }
 
-async function validateBundleSize(cwd: string): Promise<ValidationResult> {
+export async function validateBundleSize(cwd: string): Promise<ValidationResult> {
   // Limits match server-side enforcement:
   //   rules.js: 1MB (executor MAX_BUNDLE_SIZE)
   //   total bundle zip: 50MB (games worker MAX_BUNDLE_SIZE, see bundle-limits.ts)
   const maxRulesJs = 1 * 1024 * 1024; // 1MB - executor limit
-  const maxTotalBundle = MAX_BUNDLE_SIZE; // 50MB - upload limit
 
   const distDir = join(cwd, 'dist');
   const rulesJsPath = join(distDir, 'rules', 'rules.js');
@@ -262,15 +262,29 @@ async function validateBundleSize(cwd: string): Promise<ValidationResult> {
   }
 
   const rulesJsSize = statSync(rulesJsPath).size;
-  const totalSize = getDirSize(distDir);
   const issues: string[] = [];
 
   if (rulesJsSize > maxRulesJs) {
     issues.push(`rules.js (${formatBytes(rulesJsSize)}) exceeds executor limit (${formatBytes(maxRulesJs)})`);
   }
 
-  if (totalSize > maxTotalBundle) {
-    issues.push(`Total bundle (${formatBytes(totalSize)}) exceeds upload limit (${formatBytes(maxTotalBundle)})`);
+  // WR-05: the server enforces the 50MB limit on the uploaded ZIP, so measure
+  // the exact zip `boardsmith publish` would upload — comparing the raw
+  // (uncompressed) dist size against a compressed-size limit falsely rejects
+  // compressible bundles.
+  let zipDetail: string;
+  try {
+    const zip = createZip(readDistDir(distDir));
+    const violation = describeZipSizeViolation(zip.length);
+    if (violation) {
+      issues.push(violation);
+    }
+    zipDetail = `Compressed bundle (publish zip): ${formatBytes(zip.length)} / ${formatBytes(MAX_BUNDLE_SIZE)}`;
+  } catch (error) {
+    // dist/ is incomplete (e.g. missing manifest.json) so the real publish zip
+    // cannot be assembled — publish rebuilds and gates the zip itself.
+    const reason = (error as Error).message.split('\n')[0];
+    zipDetail = `Compressed bundle: not measurable (${reason}) — checked again during publish`;
   }
 
   return {
@@ -279,25 +293,9 @@ async function validateBundleSize(cwd: string): Promise<ValidationResult> {
     message: issues.length > 0 ? 'Bundle size limits exceeded' : '',
     details: issues.length > 0 ? issues : [
       `rules.js: ${formatBytes(rulesJsSize)} / ${formatBytes(maxRulesJs)}`,
-      `Total bundle: ${formatBytes(totalSize)} / ${formatBytes(maxTotalBundle)}`,
+      zipDetail,
     ],
   };
-}
-
-function getDirSize(dir: string): number {
-  if (!existsSync(dir)) return 0;
-
-  let size = 0;
-  const entries = readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      size += getDirSize(fullPath);
-    } else {
-      size += statSync(fullPath).size;
-    }
-  }
-  return size;
 }
 
 async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
