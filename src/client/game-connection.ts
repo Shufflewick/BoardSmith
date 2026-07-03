@@ -66,6 +66,13 @@ export class GameConnection {
   #openPending = false;
 
   /**
+   * Set by `disconnect()`, cleared by `connect()`. Suppresses
+   * `scheduleReconnect()` for a user-initiated disconnect without mutating
+   * `config.autoReconnect` (the caller's config object is never touched).
+   */
+  #userDisconnected = false;
+
+  /**
    * @remarks
    * Constructs and connects natively on Node >=22.4 via `globalThis.WebSocket`.
    * On older Node or other runtimes without a global `WebSocket`, pass
@@ -97,6 +104,15 @@ export class GameConnection {
       return; // Already connected or connecting
     }
 
+    this.#userDisconnected = false;
+
+    if (!this.config.connectImmediately) {
+      // Honor connectImmediately: skip dialing so a caller can construct a
+      // GameConnection without opening a socket it immediately has to kill
+      // (e.g. useGame({ autoConnect: false })).
+      return;
+    }
+
     this.setStatus('connecting');
     this.clearReconnectTimer();
 
@@ -122,13 +138,18 @@ export class GameConnection {
   }
 
   disconnect(): void {
-    this.config.autoReconnect = false; // Prevent auto-reconnect
+    this.#userDisconnected = true;
     this.cleanup();
     this.setStatus('disconnected');
   }
 
+  /**
+   * Resets reconnect state and reconnects immediately. Delegates to
+   * `connect()` for the actual dial + `#userDisconnected` clearing — no
+   * longer maintains a divergent restore path from a plain disconnect() ->
+   * connect() sequence.
+   */
   reconnect(): void {
-    this.config.autoReconnect = true;
     this.reconnectAttempts = 0;
     this.cleanup();
     this.connect();
@@ -419,6 +440,7 @@ export class GameConnection {
   // ============================================
 
   private scheduleReconnect(): void {
+    if (this.#userDisconnected) return;
     if (!this.config.autoReconnect) return;
     if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
       this.setStatus('error');
