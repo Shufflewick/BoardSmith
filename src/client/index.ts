@@ -32,7 +32,7 @@
  */
 
 // Main client
-export { MeepleClient } from './client.js';
+export { MeepleClient, MeepleClientError } from './client.js';
 
 // Game connection
 export { GameConnection } from './game-connection.js';
