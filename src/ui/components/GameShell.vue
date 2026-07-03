@@ -17,7 +17,7 @@ import {
   announceGameOver,
   announceOpponentTurn,
 } from '../composables/liveRegionAnnouncer.js';
-import { MeepleClient, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
+import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
 
 // HMR Debug logging (disabled in production)
@@ -1338,6 +1338,18 @@ function disconnectFromLobby() {
   }
 }
 
+// Decide whether a getLobby() failure means "no lobby — try the legacy
+// direct join" vs. a real error to surface. Mirrored in
+// GameShell.join-fallthrough.test.ts — keep the two in sync.
+// Fall through only when the server answered: HTTP 404 (no lobby support)
+// or MeepleClientError (server-reported game/lobby state error). Network
+// failures and 5xx must reach the user instead of silently degrading.
+function shouldFallThroughToDirectJoin(e: unknown): boolean {
+  const is404 = e instanceof Error && /HTTP 404/.test(e.message);
+  const isClientErr = e instanceof MeepleClientError;
+  return is404 || isClientErr;
+}
+
 async function joinGame() {
   if (!joinGameId.value.trim()) {
     toast.error('Please enter a game code.');
@@ -1405,12 +1417,11 @@ async function joinGame() {
       }
       // Game already started - fall through to direct join
     } catch (e) {
-      // Only fall through if lobby doesn't exist
-      // Re-throw other errors (like joinLobby failures)
-      if (e instanceof Error && !e.message.includes('lobby')) {
+      if (!shouldFallThroughToDirectJoin(e)) {
         throw e;
       }
-      // No lobby info - game might be old-style without lobby
+      // No lobby (404) or server-reported lobby/game-state error — the game
+      // might be old-style without lobby, so try the legacy direct join.
     }
 
     // Direct join (legacy flow or game already playing)
