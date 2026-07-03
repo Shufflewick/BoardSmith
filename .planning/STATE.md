@@ -4,13 +4,13 @@ milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
 status: executing
 stopped_at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
-last_updated: "2026-07-03T18:32:37.732Z"
+last_updated: "2026-07-03T18:41:15.764Z"
 last_activity: 2026-07-03
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
   percent: 44
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 135 (CLI & Dev Experience) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-07-03
 
-Progress: [█████████░] 92%
+Progress: [██████████] 96%
 
 ## Milestones
 
@@ -148,6 +148,8 @@ Recent decisions affecting current work:
 - [Phase 135]: [Phase 135-03]: Removed the dead $schema line from docs/getting-started.md's boardsmith.json example in addition to playerCount, keeping the doc in sync with generateBoardsmithJson's actual output
 - [Phase ?]: deriveManifest sets playerCount AFTER the ...config spread so gameDefinition always wins over stale config (T-135-07)
 - [Phase ?]: protocolVersion typed number (matching BUNDLE_PROTOCOL_VERSION), not string as sketched in the plan interface note
+- [Phase 135-05]: Allowed-key set enumerated from ALL real read sites (validate.ts+build.ts+dev.ts+publish.ts), not just validate.ts/build.ts as read_first suggested -- gameOptions/playerOptions/colorPalette/paths/gameId/version are legitimately consumed by dev.ts/publish.ts and would false-positive as unknown once Plan 06 wires the same schema into dev.ts
+- [Phase 135-05]: minPlayers/maxPlayers excluded from the allowed-key set (not just playerCount) -- CLIX-01 makes gameDefinition the sole source of truth for player count, and Plan 06 collapses dev.ts's fallback chain to a single gameDefinition read
 
 ### Pending Todos
 
@@ -159,7 +161,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-03T18:31:38.727Z
+Last session: 2026-07-03T18:40:01.656Z
 Stopped at: Completed 135-01-PLAN.md (PROC-01 verification gate for Phase 135, all 6 findings LEGITIMATE)
 Resume file: None
 Next action: Break Phase 135 (CLIX) down into plans via `/gsd:plan-phase 135`
