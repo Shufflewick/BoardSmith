@@ -114,3 +114,7 @@ None - no external service configuration required.
 - SEC-01/F1/F7 fully closed: zone visibility now round-trips through every documented restore path with a single authoritative mechanism (no divergent redaction paths).
 - The `Space.toJSON()`/`_restoreZoneVisibility()` pattern established here is the template for the remaining F1/F7-adjacent findings (F10 `onEnter`/`onExit` restore amnesia, F16 `teachingDisabled`/`displayName` restore amnesia) planned for later plans in this phase — same root cause (constructor-applied config discarded by `loadSerializedState`), same fix shape (explicit toJSON emission + fromJSON restore hook).
 - Full suite green (162 files / 2099 tests); no blockers for the next plan in phase 131.
+
+## Self-Check: PASSED
+
+All created/modified files confirmed present on disk; both task commits (`78d40ab`, `78dd7a8`) confirmed present in git log.
