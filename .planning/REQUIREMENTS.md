@@ -27,7 +27,7 @@
 - [x] **ENG-05**: `resolveArgs` no longer coerces arbitrary numeric non-selection args into GameElements (F12)
 - [x] **ENG-06**: `forEach` over a mutated collection no longer silently skips items (snapshot the collection or document + guard the live-mutation case loudly) (F13)
 - [ ] **ENG-07**: `switchOn` with no matching case and no default fails loudly (throw or dev-warn) instead of silently no-oping (F27)
-- [ ] **ENG-08**: An action built without `.execute()` (default no-op) is rejected at build/registration time or requires an explicit opt-in (F28)
+- [x] **ENG-08**: An action built without `.execute()` (default no-op) is rejected at build/registration time or requires an explicit opt-in (F28)
 
 ### High/Medium — Restore Fidelity (RST)
 
@@ -106,7 +106,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | ENG-01 | Phase 132 | Complete |
 | ENG-05 | Phase 132 | Complete |
 | ENG-06 | Phase 132 | Complete |
-| ENG-08 | Phase 132 | Pending |
+| ENG-08 | Phase 132 | Complete |
 | ENG-02 | Phase 133 | Pending |
 | ENG-03 | Phase 133 | Pending |
 | ENG-04 | Phase 133 | Pending |

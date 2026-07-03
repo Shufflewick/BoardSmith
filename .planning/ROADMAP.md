@@ -91,7 +91,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 ## Phases
 
 - [x] **Phase 131: Serialization & Restore Fidelity** - Hidden zone visibility, player-state filtering, debug-data gating, and handler/lockout state all survive every snapshot restore path (completed 2026-07-03)
-- [ ] **Phase 132: Engine Element & Builder Safety** - putInto, resolveArgs, forEach, and action .build() fail loudly instead of silently corrupting or no-oping
+- [x] **Phase 132: Engine Element & Builder Safety** - putInto, resolveArgs, forEach, and action .build() fail loudly instead of silently corrupting or no-oping (completed 2026-07-03)
 - [ ] **Phase 133: Engine Flow & Action Validation** - eachPlayer wrap-around, simultaneous-action error surfacing, server-side multiSelect validation, and switchOn fail loudly
 - [ ] **Phase 134: UI & Session Interaction Guardrails** - Custom-UI action failures, multiSelect fill() misuse, responsive board collapse, dragProps/setBeforeAutoExecute, and the runner-bypass footgun are all fixed or surfaced loudly
 - [ ] **Phase 135: CLI & Dev Experience** - boardsmith.json/gameDefinition source-of-truth, config validation, bundle-size limits, host binding, init templates, and --players/--ai flags are all correct or fail loudly
@@ -135,7 +135,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] 132-02-PLAN.md — ENG-01: putInto self/descendant throw in moveToInternal
 - [x] 132-03-PLAN.md — ENG-05: resolveArgs second pass stops coercing bare numbers
 - [x] 132-04-PLAN.md — ENG-06: executeForEach snapshot-on-entry
-- [ ] 132-05-PLAN.md — ENG-08: registerAction throws on handler-less definitions
+- [x] 132-05-PLAN.md — ENG-08: registerAction throws on handler-less definitions
 
 ### Phase 133: Engine Flow & Action Validation
 **Goal**: Multi-player flow control and multi-step action validation behave correctly and surface failures instead of silently skipping players or accepting invalid input.
@@ -233,7 +233,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
 | 131. Serialization & Restore Fidelity | 5/5 | Complete    | 2026-07-03 |
-| 132. Engine Element & Builder Safety | 4/5 | In Progress|  |
+| 132. Engine Element & Builder Safety | 5/5 | Complete   | 2026-07-03 |
 | 133. Engine Flow & Action Validation | 0/TBD | Not started | - |
 | 134. UI & Session Interaction Guardrails | 0/TBD | Not started | - |
 | 135. CLI & Dev Experience | 0/TBD | Not started | - |
