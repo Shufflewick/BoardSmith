@@ -85,7 +85,9 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
           if (!item) {
             return { success: true };
           }
-          const held = ctx.args.combatantId as Held;
+          // Non-selection followUp args are plain numbers (ENG-05: resolveArgs no
+          // longer coerces bare numbers), so resolve explicitly via getElementById.
+          const held = ctx.game.getElementById(ctx.args.combatantId as number) as Held;
           item.putInto(held);
           return { success: true };
         }),

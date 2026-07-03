@@ -90,9 +90,11 @@ class CollectGame extends Game<CollectGame, Player> {
           }
 
           // Resolve the followUp args (numeric ids -> GameElements) and MOVE the
-          // piece — the mutation under test for snapshot persistence.
-          const held = ctx.args.combatantId as Held;
-          const sector = ctx.args.sectorId as Sector;
+          // piece — the mutation under test for snapshot persistence. Non-selection
+          // followUp args are plain numbers (ENG-05: resolveArgs no longer coerces
+          // bare numbers), so resolve explicitly via getElementById.
+          const held = ctx.game.getElementById(ctx.args.combatantId as number) as Held;
+          const sector = ctx.game.getElementById(ctx.args.sectorId as number) as Sector;
           item.putInto(held);
 
           // More items left -> chain back into collect with plain ids again.
