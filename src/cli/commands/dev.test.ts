@@ -116,6 +116,19 @@ describe('resolveHost (CLIX-04: default 127.0.0.1, --lan/--host 0.0.0.0 opts int
     expect(host).toBe('127.0.0.1');
     expect(isNonLocal).toBe(false);
   });
+
+  it('errors when --lan and --host are combined instead of silently dropping --lan (WR-04)', () => {
+    // Pre-fix, `--lan --host 127.0.0.1` bound local-only and dropped the
+    // security-relevant --lan without any notice — the same silent-ignore
+    // class of defect this phase removed from --ai/--players.
+    expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(DevFlagError);
+    expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(/--lan/);
+    expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(/--host/);
+  });
+
+  it('errors even when --lan and --host agree — pass one or the other', () => {
+    expect(() => resolveHost({ lan: true, host: '0.0.0.0' })).toThrow(DevFlagError);
+  });
 });
 
 describe('multiplayerBannerLine (WR-01: banner must not tell local-only users to join from another computer)', () => {

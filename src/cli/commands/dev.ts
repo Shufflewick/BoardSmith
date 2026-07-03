@@ -106,12 +106,22 @@ export function validateAiSeats(aiPlayers: number[], effectivePlayerCount: numbe
 
 /**
  * CLIX-04 / F32: `boardsmith dev` defaults to 127.0.0.1 (local-only).
- * `--lan` is shorthand for `--host 0.0.0.0`; an explicit `--host` always wins.
- * This REVERSES the previous LAN-by-default (0.0.0.0) — 135-RESEARCH.md's
- * State-of-the-Art table incorrectly stated the default stayed 0.0.0.0; the
- * F32 verdict in 135-FINDINGS-VERIFICATION.md corrects that and governs here.
+ * `--lan` is shorthand for `--host 0.0.0.0`. This REVERSES the previous
+ * LAN-by-default (0.0.0.0) — 135-RESEARCH.md's State-of-the-Art table
+ * incorrectly stated the default stayed 0.0.0.0; the F32 verdict in
+ * 135-FINDINGS-VERIFICATION.md corrects that and governs here.
+ *
+ * WR-04: combining `--lan` with an explicit `--host` ERRORS instead of
+ * silently dropping one — silently ignoring a security-relevant flag is the
+ * same class of defect this phase removed from `--ai`/`--players`.
  */
 export function resolveHost(options: { host?: string; lan?: boolean }): { host: string; isNonLocal: boolean } {
+  if (options.lan && options.host !== undefined) {
+    throw new DevFlagError(
+      `Error: --lan and --host ${options.host} conflict; pass one or the other.\n` +
+        `--lan is shorthand for --host 0.0.0.0 (serve to your whole network).`,
+    );
+  }
   const host = options.host ?? (options.lan ? '0.0.0.0' : '127.0.0.1');
   const isNonLocal = host !== '127.0.0.1' && host !== 'localhost';
   return { host, isNonLocal };
@@ -412,8 +422,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   // CLIX-04: default 127.0.0.1 (local-only); --lan / --host 0.0.0.0 opts into
   // LAN exposure. This REVERSES the previous LAN-by-default (0.0.0.0) per the
-  // F32 verdict in 135-FINDINGS-VERIFICATION.md.
-  const { host, isNonLocal } = resolveHost({ host: options.host, lan: options.lan });
+  // F32 verdict in 135-FINDINGS-VERIFICATION.md. Combining --lan with an
+  // explicit --host errors (WR-04).
+  const { host, isNonLocal } = exitOnDevFlagError(() => resolveHost({ host: options.host, lan: options.lan }));
   const cwd = process.cwd();
 
   if (UNSAFE_PORTS.has(port)) {
