@@ -84,6 +84,43 @@ export interface ActionSpaceWithChoicesView {
 }
 
 /**
+ * Thrown by {@link TestGame.doAction} when the action fails.
+ *
+ * Carries structured fields (the action name, seat, args, and the wrapped
+ * {@link ActionExecutionResult}) so the failure is diagnosable from the
+ * error object alone, in addition to the human-readable `message` which
+ * includes the `debugActionAvailability` trace.
+ */
+export class ActionExecutionError extends Error {
+  /** Always `'ActionExecutionError'` — safe for `error.name` switch/comparisons. */
+  readonly name = 'ActionExecutionError' as const;
+  /** The action name that was attempted */
+  readonly actionName: string;
+  /** The seat that attempted the action (1-indexed) */
+  readonly playerSeat: number;
+  /** The args passed to the action */
+  readonly args: Record<string, unknown>;
+  /** The raw (failed) result from the runner */
+  readonly result: ActionExecutionResult;
+
+  constructor(
+    message: string,
+    actionName: string,
+    playerSeat: number,
+    args: Record<string, unknown>,
+    result: ActionExecutionResult,
+  ) {
+    super(message);
+    this.actionName = actionName;
+    this.playerSeat = playerSeat;
+    this.args = args;
+    this.result = result;
+    // Required for correct instanceof checks when extending built-in classes in TS.
+    Object.setPrototypeOf(this, ActionExecutionError.prototype);
+  }
+}
+
+/**
  * A test game wrapper that provides convenient testing utilities.
  *
  * Wraps a GameRunner and provides methods for performing actions,
@@ -98,9 +135,12 @@ export interface ActionSpaceWithChoicesView {
  *   seed: 'deterministic',
  * });
  *
- * testGame.doAction(1, 'ask', { target: 2, rank: 'K' });
+ * testGame.doAction(1, 'ask', { target: 2, rank: 'K' }); // throws ActionExecutionError on failure
  * expect(testGame.isComplete()).toBe(false);
  * ```
+ *
+ * `doAction` throws when the action fails — use {@link TestGame.tryAction} for
+ * tests that deliberately exercise the failure path.
  */
 export class TestGame<G extends Game = Game> {
   /** The underlying GameRunner instance */
@@ -254,27 +294,91 @@ export class TestGame<G extends Game = Game> {
   }
 
   /**
-   * Perform an action as a player.
+   * Perform an action as a player, never throwing — returns the raw
+   * {@link ActionExecutionResult} even on failure.
+   *
+   * Escape hatch for tests that deliberately exercise the failure path
+   * (e.g. `assertActionFails`, harness loops that treat failure as a normal
+   * control-flow branch). For everything else, prefer {@link TestGame.doAction},
+   * which throws loudly on failure with an actionable trace.
    *
    * @param playerSeat - The player seat performing the action (1-indexed)
    * @param actionName - The name of the action to perform
    * @param args - Arguments for the action
-   * @returns The result of the action execution
+   * @returns The result of the action execution — never throws
    *
    * @example
    * ```typescript
-   * const result = testGame.doAction(1, 'playCard', { card: myCard });
+   * const result = testGame.tryAction(1, 'playCard', { card: myCard });
    * if (!result.success) {
    *   console.error(result.error);
    * }
+   * ```
+   */
+  tryAction(
+    playerSeat: number,
+    actionName: string,
+    args: Record<string, unknown> = {}
+  ): ActionExecutionResult {
+    return this.runner.performAction(actionName, playerSeat, args);
+  }
+
+  /**
+   * Perform an action as a player — THROWS an {@link ActionExecutionError}
+   * when the action fails, naming the action and seat and including the
+   * `debugActionAvailability` trace so the failure is immediately actionable.
+   *
+   * A silently-failing setup move should fail loudly at its origin, not
+   * surface later as a confusing downstream assertion failure — this is
+   * the default for that reason. For tests that deliberately exercise the
+   * failure path, use {@link TestGame.tryAction} instead.
+   *
+   * Note: a future plan (TST-02) appends `testGame.seed` to this message so
+   * a failure can be reproduced deterministically.
+   *
+   * @param playerSeat - The player seat performing the action (1-indexed)
+   * @param actionName - The name of the action to perform
+   * @param args - Arguments for the action
+   * @throws {ActionExecutionError} When the action fails
+   *
+   * @example
+   * ```typescript
+   * testGame.doAction(1, 'playCard', { card: myCard }); // throws on failure
    * ```
    */
   doAction(
     playerSeat: number,
     actionName: string,
     args: Record<string, unknown> = {}
-  ): ActionExecutionResult {
-    return this.runner.performAction(actionName, playerSeat, args);
+  ): void {
+    const result = this.tryAction(playerSeat, actionName, args);
+    if (result.success) return;
+
+    let message =
+      `Action '${actionName}' failed for seat ${playerSeat}: ${result.error ?? 'unknown error'}`;
+
+    // Build the richer debugActionAvailability trace on the failure path only
+    // (no cost on success). Falls back to the plain message above if the seat
+    // has no player (getPlayer throws for an out-of-range seat).
+    try {
+      const player = this.getPlayer(playerSeat);
+      const debugInfo = this.game.debugActionAvailability(actionName, player);
+      const selLines = debugInfo.details.selections
+        .map(s =>
+          `  ${s.passed ? '✓' : '✗'} '${s.name}': ${s.choices} choices${s.note ? ` — ${s.note}` : ''}`
+        )
+        .join('\n');
+      message =
+        `Action '${actionName}' failed for seat ${playerSeat}.\n` +
+        `Error: ${result.error ?? 'unknown error'}${result.errorCode ? ` (${result.errorCode})` : ''}\n` +
+        `Why: ${debugInfo.reason}` +
+        (selLines ? `\nSelections:\n${selLines}` : '') +
+        `\nFlow position: ${this.game.getFlowDebugInfo().describe()}`;
+    } catch {
+      // Fall back to the plain message built above.
+    }
+
+    throw new ActionExecutionError(message, actionName, playerSeat, args, result);
   }
 
   /**
@@ -448,8 +552,7 @@ export class TestGame<G extends Game = Game> {
  *     seed: 'test-seed',
  *   });
  *
- *   const result = game.doAction(1, 'ask', { target: 2, rank: 'K' });
- *   expect(result.success).toBe(true);
+ *   game.doAction(1, 'ask', { target: 2, rank: 'K' }); // throws on failure
  * });
  * ```
  */

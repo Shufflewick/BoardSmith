@@ -273,9 +273,25 @@ describe('TestGame.getPlayerView — TEST-01: typed observable state', () => {
 // TST-01: doAction throw-on-failure + tryAction escape hatch
 // ---------------------------------------------------------------------------
 
+/**
+ * Minimal single-actionStep game fixture for TST-01. FixtureGame's `pass`
+ * flow (a `loop({ while: () => false, ... })`) completes on construction
+ * before any action can be submitted, so a dedicated always-awaiting fixture
+ * is used here to exercise the doAction success path.
+ */
+class TST01Game extends Game<TST01Game, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<TST01Game>('pass').execute(() => ({ success: true })),
+    );
+    this.setFlow(defineFlow({ root: actionStep({ actions: ['pass'] }) }));
+  }
+}
+
 describe('doAction throw-on-failure (TST-01)', () => {
   it('doAction THROWS when the action is unavailable, naming the action and seat, with an availability trace', () => {
-    const testGame = TestGame.create(FixtureGame, { playerCount: 2, seed: 'tst-01-throw' });
+    const testGame = TestGame.create(TST01Game, { playerCount: 2, seed: 'tst-01-throw' });
 
     expect(() => testGame.doAction(1, 'notAnAction', {})).toThrow(/notAnAction/);
     // The thrown message must name the seat and include an availability/"Why:" trace fragment.
@@ -291,7 +307,7 @@ describe('doAction throw-on-failure (TST-01)', () => {
   });
 
   it('tryAction returns { success: false } WITHOUT throwing for the same unavailable action', () => {
-    const testGame = TestGame.create(FixtureGame, { playerCount: 2, seed: 'tst-01-try' });
+    const testGame = TestGame.create(TST01Game, { playerCount: 2, seed: 'tst-01-try' });
 
     let result: { success: boolean } | undefined;
     expect(() => {
@@ -301,9 +317,10 @@ describe('doAction throw-on-failure (TST-01)', () => {
   });
 
   it('doAction does NOT throw for a valid action and completes normally', () => {
-    const testGame = TestGame.create(FixtureGame, { playerCount: 2, seed: 'tst-01-valid' });
+    const testGame = TestGame.create(TST01Game, { playerCount: 2, seed: 'tst-01-valid' });
 
     expect(() => testGame.doAction(1, 'pass', {})).not.toThrow();
+    expect(testGame.isComplete()).toBe(true);
   });
 });
 

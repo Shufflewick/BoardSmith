@@ -85,16 +85,14 @@ export class ActionBuilder {
   /**
    * Execute the fully-built action with accumulated args.
    *
-   * @throws {Error} When the action fails, with a message that names both the
-   *   action and the seat so the failure is immediately actionable.
+   * Delegates to {@link TestGame.doAction}, which throws an `ActionExecutionError`
+   * naming the action and seat and including a `debugActionAvailability` trace
+   * when the action fails.
+   *
+   * @throws {ActionExecutionError} When the action fails.
    */
   execute(): void {
-    const result = this._testGame.doAction(this._seat, this._actionName, this._args);
-    if (!result.success) {
-      throw new Error(
-        `ActionBuilder.execute(): action '${this._actionName}' failed for seat ${this._seat}: ${result.error}`,
-      );
-    }
+    this._testGame.doAction(this._seat, this._actionName, this._args);
   }
 
   /**
