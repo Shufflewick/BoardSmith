@@ -53,7 +53,7 @@
 - [x] **CLIX-03**: Bundle-size validation enforces the actual server limit its comment states (F21)
 - [x] **CLIX-04**: `boardsmith dev` host binding matches its documented default (localhost unless `--host` given), or help text corrected to state 0.0.0.0 with rationale (F32)
 - [x] **CLIX-05**: `boardsmith init -t/--template` either works or is removed from the CLI surface and docs (F33)
-- [ ] **CLIX-06**: `--players` out-of-range/NaN values error loudly instead of silently clamping; `--ai` validates against the final count (F34)
+- [x] **CLIX-06**: `--players` out-of-range/NaN values error loudly instead of silently clamping; `--ai` validates against the final count (F34)
 
 ### Client SDK & Protocol (SDK)
 
@@ -122,7 +122,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | CLIX-03 | Phase 135 | Complete |
 | CLIX-04 | Phase 135 | Complete |
 | CLIX-05 | Phase 135 | Complete |
-| CLIX-06 | Phase 135 | Pending |
+| CLIX-06 | Phase 135 | Complete |
 | SDK-01 | Phase 136 | Pending |
 | SDK-02 | Phase 136 | Pending |
 | SDK-03 | Phase 136 | Pending |

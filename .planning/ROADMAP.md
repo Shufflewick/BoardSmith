@@ -94,7 +94,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] **Phase 132: Engine Element & Builder Safety** - putInto, resolveArgs, forEach, and action .build() fail loudly instead of silently corrupting or no-oping (completed 2026-07-03)
 - [x] **Phase 133: Engine Flow & Action Validation** - eachPlayer wrap-around, simultaneous-action error surfacing, server-side multiSelect validation, and switchOn fail loudly (completed 2026-07-03)
 - [x] **Phase 134: UI & Session Interaction Guardrails** - Custom-UI action failures, multiSelect fill() misuse, responsive board collapse, dragProps/setBeforeAutoExecute, and the runner-bypass footgun are all fixed or surfaced loudly (completed 2026-07-03)
-- [ ] **Phase 135: CLI & Dev Experience** - boardsmith.json/gameDefinition source-of-truth, config validation, bundle-size limits, host binding, init templates, and --players/--ai flags are all correct or fail loudly
+- [x] **Phase 135: CLI & Dev Experience** - boardsmith.json/gameDefinition source-of-truth, config validation, bundle-size limits, host binding, init templates, and --players/--ai flags are all correct or fail loudly (completed 2026-07-03)
 - [ ] **Phase 136: Client SDK & Protocol** - GameConnection is awaitable, reconnect is predictable, MeepleClient has one error contract, and protocol types are canonical
 - [ ] **Phase 137: Testing Utilities** - TestGame.doAction fails loud by default and its default seed is deterministic
 - [ ] **Phase 138: Cross-Repo Migration** - All 8 example games + MERC comply with the changed API surface, every suite green
@@ -192,7 +192,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] 135-03-PLAN.md — scaffold: drop playerCount + dead $schema from boardsmith.json (CLIX-01/CLIX-02)
 - [x] 135-04-PLAN.md — build.ts: derive manifest playerCount from gameDefinition (CLIX-01)
 - [x] 135-05-PLAN.md — validate.ts: unknown-key rejection + did-you-mean + playerCount migration (CLIX-02/CLIX-01); 50MB bundle constant (CLIX-03)
-- [ ] 135-06-PLAN.md — dev.ts: default 127.0.0.1 + non-localhost banner (CLIX-04); fail-fast numeric flags + --ai post-move (CLIX-06); single gameDefinition read (CLIX-01); unknown-key startup warn (CLIX-02)
+- [x] 135-06-PLAN.md — dev.ts: default 127.0.0.1 + non-localhost banner (CLIX-04); fail-fast numeric flags + --ai post-move (CLIX-06); single gameDefinition read (CLIX-01); unknown-key startup warn (CLIX-02)
 
 ### Phase 136: Client SDK & Protocol
 **Goal**: The public client SDK gives callers an awaitable connection lifecycle, one consistent error contract, and types that match the canonical protocol — no silent drops, no forked type drift.
@@ -252,7 +252,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 132. Engine Element & Builder Safety | 5/5 | Complete    | 2026-07-03 |
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
 | 134. UI & Session Interaction Guardrails | 5/5 | Complete    | 2026-07-03 |
-| 135. CLI & Dev Experience | 5/6 | In Progress|  |
+| 135. CLI & Dev Experience | 6/6 | Complete   | 2026-07-03 |
 | 136. Client SDK & Protocol | 0/TBD | Not started | - |
 | 137. Testing Utilities | 0/TBD | Not started | - |
 | 138. Cross-Repo Migration | 0/TBD | Not started | - |
