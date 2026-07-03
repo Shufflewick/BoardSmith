@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: ready_to_plan
-stopped_at: Phase 136 complete (5/5) — ready to discuss Phase 137
-last_updated: 2026-07-03T22:52:31.168Z
-last_activity: 2026-07-03
+status: executing
+stopped_at: "Completed 136-05-PLAN.md (Client SDK consumer migration: useGame opened-driven setup, GameShell.vue try/catch-only lobby handlers, docs corrected) — Phase 136 complete"
+last_updated: "2026-07-03T23:34:58.072Z"
+last_activity: 2026-07-03 -- Phase 137 planning complete
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 31
+  total_plans: 34
   completed_plans: 31
   percent: 67
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 137
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-03
+Status: Ready to execute
+Last activity: 2026-07-03 -- Phase 137 planning complete
 
 Progress: [██████████] 100%
 
