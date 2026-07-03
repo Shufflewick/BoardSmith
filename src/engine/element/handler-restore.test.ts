@@ -164,3 +164,95 @@ describe('RST-01/F10: onEnter/onExit handlers survive snapshot restore', () => {
     expect(restored.game.exitCount).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// WR-02 (iteration 2): handler re-binding must NOT cross-wire same-class
+// sibling Spaces when sibling indices shift. The constructor creates a Piece
+// BEFORE two same-class Spaces, so the piece's departure (a normal in-game
+// move) shifts both Spaces' `branch()` indices by one in the snapshot
+// relative to the fresh constructor tree. Under the old
+// `${className}:${branch()}` key, bucketB's restored key matched bucketA's
+// CAPTURED handlers — bucketB silently received bucketA's onEnter while
+// bucketA got none. The key is now class name + element name + Space-only
+// index path, which is immune to piece movement.
+// ---------------------------------------------------------------------------
+
+class Bucket extends Space<CrossWireGame> {}
+class Chip extends Piece<CrossWireGame> {}
+
+class CrossWireGame extends Game<CrossWireGame, Player> {
+  bucketA!: Bucket;
+  bucketB!: Bucket;
+  aEnterCount = 0;
+  bEnterCount = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    // Piece FIRST so its departure shifts the Spaces' all-sibling indices.
+    this.create(Chip, 'floater');
+    this.bucketA = this.create(Bucket, 'bucketA');
+    this.bucketB = this.create(Bucket, 'bucketB');
+
+    this.bucketA.onEnter(() => {
+      this.aEnterCount++;
+    }, Chip);
+    this.bucketB.onEnter(() => {
+      this.bEnterCount++;
+    }, Chip);
+
+    this.registerAction(
+      Action.create('intoA').execute((_args, ctx) => {
+        const game = ctx.game as CrossWireGame;
+        game.first(Chip)?.putInto(game.bucketA);
+        return { success: true };
+      })
+    );
+    this.registerAction(
+      Action.create('aToB').execute((_args, ctx) => {
+        const game = ctx.game as CrossWireGame;
+        game.bucketA.first(Chip)?.putInto(game.bucketB);
+        return { success: true };
+      })
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['intoA', 'aToB'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
+          maxMoves: 10,
+        }),
+      })
+    );
+  }
+}
+
+describe('WR-02: handler re-binding does not cross-wire same-class sibling Spaces after sibling indices shift', () => {
+  it('each Space keeps ITS OWN handlers after a restore from a snapshot where a sibling piece has moved', () => {
+    const runner = new GameRunner<CrossWireGame>({
+      GameClass: CrossWireGame,
+      gameType: 'handler-crosswire-test',
+      gameOptions: { playerCount: 1, seed: 'crosswire-seed' },
+    });
+    runner.start();
+
+    // Move the floater out of the top level: both buckets' all-sibling branch
+    // indices shift down by one relative to the fresh constructor tree.
+    expect(runner.performAction('intoA', 1, {}).success).toBe(true);
+    expect(runner.game.aEnterCount).toBe(1);
+
+    const snapshot = roundTripJson(runner.getSnapshot());
+    const restored = GameRunner.fromSnapshot<CrossWireGame>(snapshot, CrossWireGame);
+
+    const aBefore = restored.game.aEnterCount;
+    const bBefore = restored.game.bEnterCount;
+
+    // Entering bucketB must fire bucketB's handler — NOT bucketA's. Under the
+    // old branch()-based key this incremented aEnterCount instead.
+    expect(restored.performAction('aToB', 1, {}).success).toBe(true);
+    expect(restored.game.bEnterCount).toBe(bBefore + 1);
+    expect(restored.game.aEnterCount).toBe(aBefore);
+  });
+});

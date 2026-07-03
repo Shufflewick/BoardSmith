@@ -2928,15 +2928,33 @@ export class Game<
     // registered in the game's constructor (e.g. `space.onEnter(fn)`) — they
     // are correctly excluded from serialization (closures cannot serialize),
     // but that also means the rebuilt tree below starts with zero handlers
-    // unless we explicitly re-bind them here. Keyed by class name + tree
-    // branch path (stable across the round-trip: the rebuilt tree has the
-    // same shape as the constructor tree that was just serialized).
+    // unless we explicitly re-bind them here.
+    //
+    // WR-02 (iteration 2): the key is class name + element name + SPACE-ONLY
+    // index path — NOT `branch()`. `branch()` indexes among ALL siblings
+    // including Pieces, and pieces move during play: a snapshot taken after a
+    // piece left a container would shift every subsequent Space's branch
+    // index, silently cross-wiring handlers between same-class sibling Spaces
+    // (seat 1's scoring trigger firing on seat 2's zone). Spaces are
+    // structural — the constructor creates them at fixed positions — so an
+    // index computed over Space siblings only, plus the constructor-assigned
+    // name, is stable across piece movement.
+    const spaceHandlerKey = (space: Space): string => {
+      const path: number[] = [];
+      let el: GameElement = space;
+      while (el._t.parent) {
+        const spaceSiblings = el._t.parent._t.children.filter((c) => c instanceof Space);
+        path.unshift(spaceSiblings.indexOf(el));
+        el = el._t.parent;
+      }
+      return `${space.constructor.name}:${space.name ?? ''}:${path.join('/')}`;
+    };
     type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
     const capturedHandlers = new Map<string, CapturedHandlers>();
     for (const space of this.all(Space)) {
       const handlers = space._captureEventHandlers();
       if (handlers.enter.length > 0 || handlers.exit.length > 0) {
-        capturedHandlers.set(`${space.constructor.name}:${space.branch()}`, handlers);
+        capturedHandlers.set(spaceHandlerKey(space), handlers);
       }
     }
 
@@ -2958,7 +2976,7 @@ export class Game<
     if (capturedHandlers.size > 0) {
       const matchedKeys = new Set<string>();
       for (const space of this.all(Space)) {
-        const key = `${space.constructor.name}:${space.branch()}`;
+        const key = spaceHandlerKey(space);
         const handlers = capturedHandlers.get(key);
         if (handlers) {
           space._restoreEventHandlers(handlers);
@@ -2971,10 +2989,13 @@ export class Game<
             `unbound-event-handlers:${key}`,
             `Space "${key}" had onEnter/onExit handlers registered before a snapshot ` +
             `restore, but no matching Space was found in the restored tree (matched by ` +
-            `class name + tree branch path). These handlers were dropped, not silently ` +
-            `carried over. This usually means the element tree shape changed between save ` +
-            `and restore (e.g. conditional element creation in the constructor) — make sure ` +
-            `Spaces with onEnter/onExit handlers are always created at the same tree position.`
+            `class name + element name + Space-only tree position). These handlers were ` +
+            `dropped, not silently carried over — AND if another Space of the same class ` +
+            `and name now occupies this tree position, it may have absorbed these handlers ` +
+            `instead of its own. This usually means the Space structure changed between ` +
+            `save and restore (e.g. conditional Space creation in the constructor) — make ` +
+            `sure Spaces with onEnter/onExit handlers are always created with stable names ` +
+            `at the same structural position.`
           );
         }
       }
