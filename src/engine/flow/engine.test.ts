@@ -688,6 +688,64 @@ describe('FlowEngine', () => {
 
       expect(state.position.variables.result).toBe('default');
     });
+
+    it('should throw an actionable error when switchOn has no matching case and no default', () => {
+      const flow = defineFlow({
+        root: switchOn({
+          on: () => 'combatt',
+          cases: {
+            draw: setVar('result', 'case-draw'),
+            play: setVar('result', 'case-play'),
+            combat: setVar('result', 'case-combat'),
+          },
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+
+      expect(() => engine.start()).toThrow(/no matching case/);
+      expect(() => engine.start()).toThrow(/combatt/);
+      expect(() => engine.start()).toThrow(/draw/);
+      expect(() => engine.start()).toThrow(/play/);
+      expect(() => engine.start()).toThrow(/combat/);
+    });
+
+    it('should execute the matched branch when switchOn has a matching case (control)', () => {
+      const flow = defineFlow({
+        root: switchOn({
+          on: () => 'play',
+          cases: {
+            draw: setVar('result', 'case-draw'),
+            play: setVar('result', 'case-play'),
+            combat: setVar('result', 'case-combat'),
+          },
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      const state = engine.start();
+
+      expect(state.position.variables.result).toBe('case-play');
+    });
+
+    it('should execute the default branch when switchOn has no matching case but has a default (control)', () => {
+      const flow = defineFlow({
+        root: switchOn({
+          on: () => 'combatt',
+          cases: {
+            draw: setVar('result', 'case-draw'),
+            play: setVar('result', 'case-play'),
+            combat: setVar('result', 'case-combat'),
+          },
+          default: setVar('result', 'default'),
+        }),
+      });
+
+      const engine = new FlowEngine(game, flow);
+      const state = engine.start();
+
+      expect(state.position.variables.result).toBe('default');
+    });
   });
 
   describe('ActionStep', () => {
