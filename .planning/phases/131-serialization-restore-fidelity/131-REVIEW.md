@@ -60,6 +60,8 @@ return { ...ownJson, children: hiddenChildren.length > 0 ? hiddenChildren : unde
 ```
 Add a regression test: Space subclass with `visibleAttributes = ['publicField']` + `contentsHidden()`, assert `secretField` absent from the opponent view.
 
+**Resolution:** status: fixed — SEC-02 whitelist filtering hoisted above the zone-visibility branches in `filterElement`; all three zone early-returns (`hidden`/`count-only`/`owner`) now spread the redacted `ownJson`. 4 regression tests added to `visible-attributes.test.ts` (hidden / count-only / owner-as-non-owner / owner-as-self), verified failing pre-fix.
+
 ### CR-02: `Game.toJSON()` embeds live references — undo/rewind/time-travel silently fail to roll back `settings` and `messages`, and mutations corrupt retained checkpoints
 
 **File:** `src/engine/element/game.ts:2652-2672` (toJSON), `src/engine/element/game.ts:2875-2879` (loadSerializedState); also `src/engine/element/game-element.ts:793-796` (`json.visibility = this._visibility`), `src/engine/element/space.ts:144-150` (`json.zoneVisibility = this._zoneVisibility`)

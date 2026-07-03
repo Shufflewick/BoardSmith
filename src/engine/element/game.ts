@@ -2739,6 +2739,45 @@ export class Game<
         };
       }
 
+      // SEC-02 (F2): enforce `static visibleAttributes`. Public-by-default:
+      // `visibleAttributes === undefined` means every attribute stays visible
+      // (do not flip default semantics -- go-fish's `bookCount`-style custom
+      // attributes must keep working with zero configuration). When declared,
+      // a non-owner's view is redacted down to the whitelist. `Player` is a
+      // special case (Pitfall 4): a top-level Player has no
+      // `getEffectiveOwner()` (that only resolves via a `.player`
+      // back-reference set on a CHILD element pointing at its owning Player),
+      // so a plain owner check would wrongly hide a player's own restricted
+      // attributes from themself. Spectators (`visibilityPosition === -1`)
+      // are non-owners of everything, so they get the most restrictive view.
+      //
+      // CR-01 (iteration 2): this whitelist MUST run BEFORE the zone-visibility
+      // branches below. Those branches early-return `{ ...ownJson, children }`
+      // for the container itself -- if the whitelist ran after them (as it
+      // originally did), a Space that declared `static visibleAttributes` AND
+      // set zone visibility (the most security-conscious combination) would
+      // leak every non-whitelisted container attribute to non-owners.
+      const ElementClass = element.constructor as typeof GameElement;
+      let ownJson = json;
+      if (ElementClass.visibleAttributes !== undefined) {
+        const isOwner = element instanceof Player
+          ? element.seat === visibilityPosition
+          : element.getEffectiveOwner()?.seat === visibilityPosition;
+        if (!isOwner) {
+          const whitelist = new Set(ElementClass.visibleAttributes);
+          const filteredAttrs: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(json.attributes ?? {})) {
+            // `_isCurrent` is framework metadata (Player.toJSON), not a
+            // developer-declared game attribute -- it must always survive
+            // filtering regardless of the whitelist.
+            if (whitelist.has(key) || key === '_isCurrent') {
+              filteredAttrs[key] = value;
+            }
+          }
+          ownJson = { ...json, attributes: filteredAttrs };
+        }
+      }
+
       // Check zone visibility for children (if this is a Space)
       const zoneVisibility = (element as any).getZoneVisibility?.();
 
@@ -2765,7 +2804,9 @@ export class Game<
             }
           }
           return {
-            ...json,
+            // ownJson (not json): the container's own attributes must stay
+            // whitelist-redacted in this early return (CR-01).
+            ...ownJson,
             children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
             childCount: element._t.children.length,
           };
@@ -2790,41 +2831,11 @@ export class Game<
             }
           }
           return {
-            ...json,
+            // ownJson (not json): the container's own attributes must stay
+            // whitelist-redacted in this early return (CR-01).
+            ...ownJson,
             children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
           };
-        }
-      }
-
-      // SEC-02 (F2): enforce `static visibleAttributes`. Public-by-default:
-      // `visibleAttributes === undefined` means every attribute stays visible
-      // (do not flip default semantics -- go-fish's `bookCount`-style custom
-      // attributes must keep working with zero configuration). When declared,
-      // a non-owner's view is redacted down to the whitelist. `Player` is a
-      // special case (Pitfall 4): a top-level Player has no
-      // `getEffectiveOwner()` (that only resolves via a `.player`
-      // back-reference set on a CHILD element pointing at its owning Player),
-      // so a plain owner check would wrongly hide a player's own restricted
-      // attributes from themself. Spectators (`visibilityPosition === -1`)
-      // are non-owners of everything, so they get the most restrictive view.
-      const ElementClass = element.constructor as typeof GameElement;
-      let ownJson = json;
-      if (ElementClass.visibleAttributes !== undefined) {
-        const isOwner = element instanceof Player
-          ? element.seat === visibilityPosition
-          : element.getEffectiveOwner()?.seat === visibilityPosition;
-        if (!isOwner) {
-          const whitelist = new Set(ElementClass.visibleAttributes);
-          const filteredAttrs: Record<string, unknown> = {};
-          for (const [key, value] of Object.entries(json.attributes ?? {})) {
-            // `_isCurrent` is framework metadata (Player.toJSON), not a
-            // developer-declared game attribute -- it must always survive
-            // filtering regardless of the whitelist.
-            if (whitelist.has(key) || key === '_isCurrent') {
-              filteredAttrs[key] = value;
-            }
-          }
-          ownJson = { ...json, attributes: filteredAttrs };
         }
       }
 

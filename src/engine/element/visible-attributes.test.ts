@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Piece } from '../index.js';
+import { Game, Player, Piece, Space } from '../index.js';
 
 // Regression test for audit finding F2 (SEC-02): `static visibleAttributes` is
 // declared (game-element.ts:140) but read nowhere in `filterElement`
@@ -28,6 +28,17 @@ class SecretPlayer extends Player<TestGame, SecretPlayer> {
   static override visibleAttributes = ['publicScore'];
   publicScore = 0;
   secretRole = 'undercover';
+}
+
+// CR-01 (iteration 2): a Space that declares BOTH `static visibleAttributes`
+// AND zone visibility — the most security-conscious combination. The zone
+// branches in `filterElement` early-return for the container, so the
+// whitelist must be applied BEFORE those early returns or the container's
+// own restricted attributes leak to non-owners.
+class RestrictedBoard extends Space<TestGame> {
+  static override visibleAttributes = ['publicField'];
+  publicField = 'board-public';
+  secretPlan = 'owner-only-plan';
 }
 
 class TestGame extends Game<TestGame, SecretPlayer> {
@@ -114,5 +125,67 @@ describe('static visibleAttributes filtering (SEC-02 / F2)', () => {
 
     expect(spectatorNode?.attributes.publicScore).toBe(0);
     expect(spectatorNode?.attributes.secretRole).toBeUndefined();
+  });
+
+  // ── CR-01 (iteration 2): whitelist must survive the zone-visibility early
+  // returns for the CONTAINER's own attributes ─────────────────────────────
+
+  it('contentsHidden() zone: container attributes are still whitelist-redacted for everyone (hidden branch)', () => {
+    const board = game.create(RestrictedBoard, 'board-hidden');
+    board.player = game.getPlayer(1)!;
+    board.contentsHidden();
+    board.create(OpenPiece, 'inner');
+
+    const opponentView = game.toJSONForPlayer(2);
+    const boardJson = findByName(opponentView.children, 'board-hidden');
+
+    expect(boardJson).toBeDefined();
+    expect(boardJson.attributes.publicField).toBe('board-public');
+    expect(boardJson.attributes.secretPlan).toBeUndefined();
+    // The zone branch still anonymizes children.
+    expect(boardJson.childCount).toBe(1);
+    expect(boardJson.children?.[0]?.attributes?.__hidden).toBe(true);
+  });
+
+  it('contentsCountOnly() zone: container attributes are still whitelist-redacted (count-only branch)', () => {
+    const board = game.create(RestrictedBoard, 'board-count');
+    board.player = game.getPlayer(1)!;
+    board.contentsCountOnly();
+
+    const opponentView = game.toJSONForPlayer(2);
+    const boardJson = findByName(opponentView.children, 'board-count');
+
+    expect(boardJson.attributes.publicField).toBe('board-public');
+    expect(boardJson.attributes.secretPlan).toBeUndefined();
+  });
+
+  it('contentsVisibleToOwner() zone: non-owner sees whitelist-redacted container attributes (owner branch)', () => {
+    const board = game.create(RestrictedBoard, 'board-owner');
+    board.player = game.getPlayer(1)!;
+    board.contentsVisibleToOwner();
+    board.create(OpenPiece, 'inner');
+
+    const opponentView = game.toJSONForPlayer(2);
+    const spectatorView = game.toJSONForPlayer(null);
+    const opponentJson = findByName(opponentView.children, 'board-owner');
+    const spectatorJson = findByName(spectatorView.children, 'board-owner');
+
+    expect(opponentJson.attributes.publicField).toBe('board-public');
+    expect(opponentJson.attributes.secretPlan).toBeUndefined();
+    expect(spectatorJson.attributes.secretPlan).toBeUndefined();
+  });
+
+  it('contentsVisibleToOwner() zone: the OWNER still sees all container attributes and real children', () => {
+    const board = game.create(RestrictedBoard, 'board-owner-self');
+    board.player = game.getPlayer(1)!;
+    board.contentsVisibleToOwner();
+    board.create(OpenPiece, 'inner');
+
+    const ownerView = game.toJSONForPlayer(1);
+    const boardJson = findByName(ownerView.children, 'board-owner-self');
+
+    expect(boardJson.attributes.publicField).toBe('board-public');
+    expect(boardJson.attributes.secretPlan).toBe('owner-only-plan');
+    expect(boardJson.children?.[0]?.name).toBe('inner');
   });
 });
