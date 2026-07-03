@@ -200,7 +200,9 @@ export class GameConnection {
       }
     }
 
-    if (this.ws.readyState !== this.#wsCtor.OPEN) {
+    // this.ws can in principle be null again here (awaitReconnect awaited);
+    // the guard below throws for that case after awaitOpen has had its shot.
+    if (this.ws && this.ws.readyState !== this.#wsCtor.OPEN) {
       await this.awaitOpen(actionName);
     }
 
