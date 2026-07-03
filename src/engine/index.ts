@@ -161,6 +161,7 @@ export type {
 // Flow system
 export {
   FlowEngine,
+  FlowHaltedError,
   sequence,
   phase,
   loop,

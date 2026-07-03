@@ -185,6 +185,27 @@ interface ExecutionFrame {
  * const newState = engine.resume('playCard', { card: 42 });
  * ```
  */
+/**
+ * Thrown when the flow throws AFTER the triggering action has already
+ * committed game state (e.g. a switchOn immediately following an action step
+ * whose `on` yields a value with no matching case and no default).
+ *
+ * Failing loud is correct — the flow definition cannot continue — but callers
+ * that maintain an action history (GameRunner) MUST catch this error class
+ * and record the committed action, otherwise action history diverges from
+ * applied game state and replay/undo/snapshot become inconsistent.
+ */
+export class FlowHaltedError extends Error {
+  constructor(cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `Game halted: the flow failed after the action was committed — ${message}. ` +
+      `This is a flow-definition bug, not a retryable player error; the game cannot continue until the flow definition is fixed.`
+    );
+    this.name = 'FlowHaltedError';
+  }
+}
+
 export class FlowEngine<G extends Game = Game> {
   private game: G;
   private definition: FlowDefinition;
@@ -284,12 +305,7 @@ export class FlowEngine<G extends Game = Game> {
     this.actionError = undefined;
     this.awaitingInput = false;
 
-    // Handle action step completion - returns true if should run() immediately (followUp)
-    if (this.handleActionStepCompletion(result)) {
-      return this.run();
-    }
-
-    return this.run();
+    return this.continueAfterCommittedAction(result);
   }
 
   /**
@@ -314,12 +330,26 @@ export class FlowEngine<G extends Game = Game> {
     this.actionError = undefined;
     this.awaitingInput = false;
 
-    // Handle action step completion - returns true if should run() immediately (followUp)
-    if (this.handleActionStepCompletion(result)) {
-      return this.run();
-    }
+    return this.continueAfterCommittedAction(result);
+  }
 
-    return this.run();
+  /**
+   * Advance the flow after a SUCCESSFUL (committed) action.
+   *
+   * Any throw from this point on happens after game state has already been
+   * mutated by the action, so it is wrapped in FlowHaltedError: a distinct,
+   * clearly non-retryable error that lets callers maintaining an action
+   * history (GameRunner) record the committed action before surfacing the
+   * failure — keeping actionHistory consistent with applied state (WR-02).
+   */
+  private continueAfterCommittedAction(result: ActionResult): FlowState {
+    try {
+      this.handleActionStepCompletion(result);
+      return this.run();
+    } catch (error) {
+      if (error instanceof FlowHaltedError) throw error;
+      throw new FlowHaltedError(error);
+    }
   }
 
   // ============================================================================
@@ -502,11 +532,18 @@ export class FlowEngine<G extends Game = Game> {
       : this.awaitingPlayers.every(p => p.completed);
 
     if (allDone) {
-      // Clear awaiting state and complete the step
+      // Clear awaiting state and complete the step. The acting player's
+      // action has committed, so wrap flow advancement failures in
+      // FlowHaltedError (same contract as the sequential path, WR-02).
       this.awaitingInput = false;
       this.awaitingPlayers = [];
       frame.completed = true;
-      return this.run();
+      try {
+        return this.run();
+      } catch (error) {
+        if (error instanceof FlowHaltedError) throw error;
+        throw new FlowHaltedError(error);
+      }
     }
 
     // Still awaiting other players
@@ -1454,7 +1491,8 @@ export class FlowEngine<G extends Game = Game> {
       const availableCases = Object.keys(config.cases).join(', ');
       const namePrefix = config.name ? `switchOn "${config.name}"` : 'switchOn';
       throw new Error(
-        `${namePrefix} got ${JSON.stringify(stringValue)} — no matching case (${availableCases}) and no default`
+        `${namePrefix} got ${JSON.stringify(stringValue)} — no matching case (${availableCases}) and no default. ` +
+        `Add a case for this value or a default branch: the on() callback must be handled for every value it can yield.`
       );
     }
 

@@ -6,6 +6,7 @@ import {
   createPlayerView,
   createAllPlayerViews,
   ActionExecutor,
+  FlowHaltedError,
   type Game,
   type GameOptions,
   type Player,
@@ -196,6 +197,13 @@ export class GameRunner<G extends Game = Game> {
     try {
       flowState = this.game.continueFlow(actionName, args, playerIndex);
     } catch (error) {
+      // FlowHaltedError means the flow threw AFTER the action committed its
+      // state changes. Record the committed action so actionHistory stays
+      // consistent with applied game state (WR-02) — dropping it would make
+      // replay/undo/snapshot diverge from what actually happened.
+      if (error instanceof FlowHaltedError) {
+        this.actionHistory.push(serializedAction);
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),

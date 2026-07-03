@@ -12,6 +12,7 @@ import {
   simultaneousActionStep,
   sequence,
   execute,
+  switchOn,
   type FlowContext,
 } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/index.js';
@@ -164,6 +165,39 @@ class ThrowingFlowGame extends Game<ThrowingFlowGame, Player> {
   }
 }
 
+// WR-02: a switchOn immediately following an action step, whose `on` yields
+// an unmatched runtime value (no matching case, no default). The throw fires
+// AFTER the triggering action has committed game state, so the runner must
+// keep actionHistory consistent with the applied state instead of dropping
+// the committed action (replay/undo/snapshot divergence).
+class UnmatchedSwitchGame extends Game<UnmatchedSwitchGame, Player> {
+  mode = 'initial';
+
+  constructor(options: { playerCount: number; seed?: string }) {
+    super(options);
+
+    const setMode = Action.create('setMode')
+      .prompt('Set mode')
+      .execute((args, ctx) => {
+        (ctx.game as UnmatchedSwitchGame).mode = 'unexpected';
+        return { success: true };
+      });
+    this.registerActions(setMode);
+
+    this.setFlow(defineFlow({
+      root: sequence(
+        actionStep({ actions: ['setMode'] }),
+        switchOn({
+          on: (ctx) => (ctx.game as UnmatchedSwitchGame).mode,
+          cases: {
+            expected: execute(() => {}),
+          },
+        })
+      ),
+    }));
+  }
+}
+
 describe('GameRunner', () => {
   describe('creation', () => {
     it('should create a game runner', () => {
@@ -270,6 +304,31 @@ describe('GameRunner', () => {
       expect(result.success).toBe(false);
       expect(result.errorCode).toBe(ErrorCode.ACTION_EXECUTION_ERROR);
       expect(result.error).toContain('nonexistent-action');
+    });
+
+    it('WR-02: records the committed action in history when the flow halts on an unmatched switchOn value', () => {
+      const haltingRunner = new GameRunner({
+        GameClass: UnmatchedSwitchGame,
+        gameType: 'unmatched-switch-game',
+        gameOptions: { playerCount: 1, seed: 'test' },
+      });
+      haltingRunner.start();
+
+      const result = haltingRunner.performAction('setMode', 1, {});
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe(ErrorCode.ENGINE_ERROR);
+      // The error must be clearly non-retryable: the game is halted by a
+      // flow-definition bug, not a per-action failure.
+      expect(result.error).toContain('halted');
+      expect(result.error).toContain('no matching case');
+
+      // The action committed (game state mutated) before the flow threw, so
+      // it MUST be recorded — otherwise actionHistory diverges from applied
+      // state and replay/undo/snapshot are inconsistent.
+      expect(haltingRunner.game.mode).toBe('unexpected');
+      expect(haltingRunner.actionHistory).toHaveLength(1);
+      expect(haltingRunner.actionHistory[0].name).toBe('setMode');
     });
 
     it('ENG-03: a failing simultaneous action returns {success:false} and is NOT recorded in actionHistory', () => {

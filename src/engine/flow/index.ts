@@ -1,5 +1,5 @@
 // Flow engine
-export { FlowEngine } from './engine.js';
+export { FlowEngine, FlowHaltedError } from './engine.js';
 
 // Builder functions
 export {
