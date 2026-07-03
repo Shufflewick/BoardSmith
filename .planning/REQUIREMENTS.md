@@ -14,8 +14,8 @@
 ### Critical — Hidden-Information Integrity (SEC)
 
 - [x] **SEC-01**: Zone visibility (`contentsHidden`/`contentsVisibleToOwner`/`contentsCountOnly`) survives every snapshot restore path (undo, rewind, `GameSession.restore`, `GameRunner.fromSnapshot`, stateless ops) — `toJSONForPlayer(opponent)` is identical before/after restore, including visibility changed at runtime (F1, F7)
-- [ ] **SEC-02**: `static visibleAttributes` is either implemented (non-listed attributes filtered from non-owners in `toJSONForPlayer`) or deleted entirely, with docs corrected either way — no documented no-op security control remains (F2)
-- [ ] **SEC-03**: `state.players` is routed through the same per-viewer visibility filtering as the board view — custom Player attributes and Player-child elements no longer broadcast unfiltered to all seats and spectators (F8)
+- [x] **SEC-02**: `static visibleAttributes` is either implemented (non-listed attributes filtered from non-owners in `toJSONForPlayer`) or deleted entirely, with docs corrected either way — no documented no-op security control remains (F2)
+- [x] **SEC-03**: `state.players` is routed through the same per-viewer visibility filtering as the board view — custom Player attributes and Player-child elements no longer broadcast unfiltered to all seats and spectators (F8)
 - [x] **SEC-04**: `registerDebug()` data is not broadcast to players/spectators by default — debug payloads are gated (dev-only or explicit opt-in) and the docs no longer model dumping hidden state into it (F15)
 
 ### High — Engine Correctness (ENG)
@@ -98,8 +98,8 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | PROC-01 | Phase 131 | Complete |
 | PROC-02 | Phase 131 | Complete |
 | SEC-01 | Phase 131 | Complete |
-| SEC-02 | Phase 131 | Pending |
-| SEC-03 | Phase 131 | Pending |
+| SEC-02 | Phase 131 | Complete |
+| SEC-03 | Phase 131 | Complete |
 | SEC-04 | Phase 131 | Complete |
 | RST-01 | Phase 131 | Pending |
 | RST-02 | Phase 131 | Complete |
