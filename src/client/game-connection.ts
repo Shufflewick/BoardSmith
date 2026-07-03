@@ -520,6 +520,16 @@ export class GameConnection {
   // ============================================
 
   private cleanup(): void {
+    // Settle a still-pending `opened` promise before detaching handlers:
+    // cleanup() nulls ws.onclose before close(), so the close event that
+    // would have rejected it is swallowed. Without this, disconnect()/
+    // reconnect() mid-handshake strands awaiters forever (and a later
+    // connect() reassigns the resolvers, orphaning them permanently).
+    // #rejectOpen is a no-op when nothing is pending, and the no-op
+    // .catch() attached in connect() prevents unhandled rejections.
+    this.#rejectOpen(
+      new Error('GameConnection: connection closed while the socket was still opening.')
+    );
     this.clearReconnectTimer();
     this.stopPingInterval();
 

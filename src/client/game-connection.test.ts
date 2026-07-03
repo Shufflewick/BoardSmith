@@ -299,3 +299,42 @@ describe('GameConnection disconnect()/connect() symmetry (SDK-02, PROC-02 regres
     expect(ws).toBeNull();
   });
 });
+
+describe('GameConnection.opened teardown (CR-02)', () => {
+  it('disconnect() while CONNECTING rejects the pending opened promise (never strands awaiters)', async () => {
+    const connection = new GameConnection('http://localhost:3000', {
+      gameId: 'game-1',
+      playerId: 'player-1',
+      wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+    });
+
+    connection.connect();
+    const openedPromise = connection.opened;
+
+    // Disconnect while the socket is still CONNECTING. cleanup() nulls
+    // ws.onclose before close(), so no close event will ever reject this
+    // promise — cleanup() itself must do it.
+    connection.disconnect();
+
+    await expect(openedPromise).rejects.toThrow(/closed/i);
+  });
+
+  it('reconnect() while CONNECTING rejects the superseded opened promise instead of orphaning its resolvers', async () => {
+    const connection = new GameConnection('http://localhost:3000', {
+      gameId: 'game-1',
+      playerId: 'player-1',
+      wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+    });
+
+    connection.connect();
+    const firstOpened = connection.opened;
+
+    // reconnect() runs cleanup() then connect(), which reassigns `opened`
+    // and its resolvers. Without a reject in cleanup(), the first promise
+    // becomes permanently unsettleable.
+    connection.reconnect();
+
+    await expect(firstOpened).rejects.toThrow(/closed/i);
+    connection.disconnect();
+  });
+});
