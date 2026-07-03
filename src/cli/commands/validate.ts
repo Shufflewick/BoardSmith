@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
+import { MAX_BUNDLE_SIZE } from '../lib/bundle-limits.js';
 
 interface ValidationResult {
   name: string;
@@ -243,9 +244,9 @@ async function validateSecurity(cwd: string): Promise<ValidationResult> {
 async function validateBundleSize(cwd: string): Promise<ValidationResult> {
   // Limits match server-side enforcement:
   //   rules.js: 1MB (executor MAX_BUNDLE_SIZE)
-  //   total bundle zip: 50MB (games worker MAX_BUNDLE_SIZE)
+  //   total bundle zip: 50MB (games worker MAX_BUNDLE_SIZE, see bundle-limits.ts)
   const maxRulesJs = 1 * 1024 * 1024; // 1MB - executor limit
-  const maxTotalBundle = 200 * 1024 * 1024; // 200MB - upload limit
+  const maxTotalBundle = MAX_BUNDLE_SIZE; // 50MB - upload limit
 
   const distDir = join(cwd, 'dist');
   const rulesJsPath = join(distDir, 'rules', 'rules.js');

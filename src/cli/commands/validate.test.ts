@@ -5,6 +5,7 @@ import {
   findUnknownKeys,
 } from '../lib/config-schema.js';
 import { checkMetadataIssues } from './validate.js';
+import { MAX_BUNDLE_SIZE } from '../lib/bundle-limits.js';
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', async () => {
@@ -103,5 +104,13 @@ describe('validate.ts checkMetadataIssues', () => {
       gameOptions: [],
     });
     expect(issues).toEqual([]);
+  });
+});
+
+describe('bundle-limits', () => {
+  it('MAX_BUNDLE_SIZE is 50MB, matching the authoritative games-worker upload gate', () => {
+    // PROC-02: RED against the pre-fix local `maxTotalBundle = 200 * 1024 *
+    // 1024` in validate.ts — this asserts the shared, correct constant.
+    expect(MAX_BUNDLE_SIZE).toBe(50 * 1024 * 1024);
   });
 });
