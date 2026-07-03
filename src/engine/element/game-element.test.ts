@@ -316,6 +316,38 @@ describe('Piece Movement', () => {
     expect(deck.count(Card)).toBe(4);
     expect(game.pile.count(Card)).toBe(1);
   });
+
+  describe('ENG-01 self/descendant containment', () => {
+    it('throws when moving a piece into its own descendant', () => {
+      const outer = deck.first(Card)!;
+      outer.name = 'outer';
+      const inner = outer.create(Card, 'inner', { suit: 'H', rank: '2', value: 2 });
+
+      expect(() => outer.putInto(inner)).toThrowError(/descendant/);
+      try {
+        outer.putInto(inner);
+      } catch (err) {
+        expect((err as Error).message).toContain('outer');
+        expect((err as Error).message).toContain('inner');
+      }
+    });
+
+    it('throws when moving a piece into itself', () => {
+      const card = deck.first(Card)!;
+      card.name = 'self-card';
+
+      expect(() => card.putInto(card)).toThrowError(/descendant/);
+    });
+
+    it('still succeeds for a legal move (not self, not a descendant)', () => {
+      const card = deck.first(Card)!;
+
+      card.putInto(hand);
+
+      expect(hand._t.children).toContain(card);
+      expect(card._t.parent).toBe(hand);
+    });
+  });
 });
 
 describe('Visibility', () => {
