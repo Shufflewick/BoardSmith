@@ -74,7 +74,7 @@
 - [ ] **DOCX-01**: docs/core-concepts.md no longer teaches the removed event-sourcing command model or nonexistent `element.setAttribute()` (F11)
 - [ ] **DOCX-02**: `registerActions()` JSDoc models the real API (F14)
 - [ ] **DOCX-03**: docs/getting-started.md documents the CLI that actually exists (F20)
-- [ ] **DOCX-04**: Every API changed by this milestone has its docs updated in the same phase as the fix (cross-cutting; grep-verified like v4.4 DOC)
+- [x] **DOCX-04**: Every API changed by this milestone has its docs updated in the same phase as the fix (cross-cutting; grep-verified like v4.4 DOC)
 
 ### Cross-Repo Migration (GAMES)
 
@@ -136,7 +136,7 @@ None deferred from this milestone at definition time. (Fix-level deferrals may e
 | DOCX-01 | Phase 139 | Pending |
 | DOCX-02 | Phase 139 | Pending |
 | DOCX-03 | Phase 139 | Pending |
-| DOCX-04 | Phase 139 | Pending |
+| DOCX-04 | Phase 139 | Complete |
 
 **Coverage:** 42/42 requirements mapped. 100% — no orphans, no duplicates.
 </content>

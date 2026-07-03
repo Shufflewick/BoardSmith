@@ -95,7 +95,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] **Phase 133: Engine Flow & Action Validation** - eachPlayer wrap-around, simultaneous-action error surfacing, server-side multiSelect validation, and switchOn fail loudly (completed 2026-07-03)
 - [x] **Phase 134: UI & Session Interaction Guardrails** - Custom-UI action failures, multiSelect fill() misuse, responsive board collapse, dragProps/setBeforeAutoExecute, and the runner-bypass footgun are all fixed or surfaced loudly (completed 2026-07-03)
 - [x] **Phase 135: CLI & Dev Experience** - boardsmith.json/gameDefinition source-of-truth, config validation, bundle-size limits, host binding, init templates, and --players/--ai flags are all correct or fail loudly (completed 2026-07-03)
-- [ ] **Phase 136: Client SDK & Protocol** - GameConnection is awaitable, reconnect is predictable, MeepleClient has one error contract, and protocol types are canonical
+- [x] **Phase 136: Client SDK & Protocol** - GameConnection is awaitable, reconnect is predictable, MeepleClient has one error contract, and protocol types are canonical (completed 2026-07-03)
 - [ ] **Phase 137: Testing Utilities** - TestGame.doAction fails loud by default and its default seed is deterministic
 - [ ] **Phase 138: Cross-Repo Migration** - All 8 example games + MERC comply with the changed API surface, every suite green
 - [ ] **Phase 139: Documentation Audit & Corrections** - Pure-docs findings fixed and every API changed by this milestone has grep-verified doc updates
@@ -211,7 +211,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
 - [x] 136-02-PLAN.md — canonical protocol/type foundation: WebSocketMessage union member (SDK-05), delete-and-re-export client types + discriminated WS unions (SDK-04), config-field scaffolding (connectImmediately/connectionTimeout/playerId)
 - [x] 136-03-PLAN.md — GameConnection lifecycle: opened promise + await-then-send action() (SDK-01), #userDisconnected flag + connectImmediately honoring (SDK-02)
 - [x] 136-04-PLAN.md — MeepleClient: one throwing error contract via shared helper (SDK-03), awaitable connect() (SDK-01), playerId config + actionable error (SDK-06)
-- [ ] 136-05-PLAN.md — consumer migration: useGame hack removal (SDK-01/02), GameShell.vue try/catch-only (SDK-03), docs/api/client.md corrections (DOCX-04)
+- [x] 136-05-PLAN.md — consumer migration: useGame hack removal (SDK-01/02), GameShell.vue try/catch-only (SDK-03), docs/api/client.md corrections (DOCX-04)
 
 ### Phase 137: Testing Utilities
 **Goal**: `TestGame`'s default behavior matches the library's own deterministic, fail-loud doctrine.
@@ -258,7 +258,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
 | 134. UI & Session Interaction Guardrails | 5/5 | Complete    | 2026-07-03 |
 | 135. CLI & Dev Experience | 6/6 | Complete    | 2026-07-03 |
-| 136. Client SDK & Protocol | 4/5 | In Progress|  |
+| 136. Client SDK & Protocol | 5/5 | Complete   | 2026-07-03 |
 | 137. Testing Utilities | 0/TBD | Not started | - |
 | 138. Cross-Repo Migration | 0/TBD | Not started | - |
 | 139. Documentation Audit & Corrections | 0/TBD | Not started | - |
