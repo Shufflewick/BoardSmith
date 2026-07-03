@@ -182,3 +182,70 @@ describe('useGame stale connection handlers (WR-03)', () => {
     scope.stop();
   });
 });
+
+describe('useGame playerSeat debounce lifecycle (WR-04)', () => {
+  beforeEach(() => {
+    FakeWebSocket.instances = [];
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function setup() {
+    const client = makeClient();
+    const originalConnect = client.connect.bind(client);
+    vi.spyOn(client, 'connect').mockImplementation((gameId, options) =>
+      originalConnect(gameId, {
+        ...options,
+        wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+      })
+    );
+    const playerSeat = ref<number | undefined>(1);
+    const scope = effectScope();
+    scope.run(() => {
+      useGame(client, ref('game-1'), { autoConnect: true, playerSeat });
+    });
+    return { playerSeat, scope };
+  }
+
+  it('rapid consecutive seat changes coalesce into a single reconnect (true trailing-edge debounce)', async () => {
+    const { playerSeat, scope } = setup();
+    FakeWebSocket.instances[0].open();
+    await vi.advanceTimersByTimeAsync(0);
+
+    playerSeat.value = 2;
+    await vi.advanceTimersByTimeAsync(10);
+    playerSeat.value = 3;
+
+    // t=55: under a stacked-timer implementation the first (uncancelled)
+    // timer has already re-dialed. Open whatever socket exists so
+    // isSettingUp clears before the second timer fires.
+    await vi.advanceTimersByTimeAsync(45);
+    FakeWebSocket.instances[1]?.open();
+    await vi.advanceTimersByTimeAsync(15);
+
+    // Exactly one re-dial: the first pending timer was cancelled by the
+    // second seat change.
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    scope.stop();
+  });
+
+  it('a pending debounce timer does not dial a new socket after disposal', async () => {
+    const { playerSeat, scope } = setup();
+    FakeWebSocket.instances[0].open();
+    await vi.advanceTimersByTimeAsync(0);
+
+    playerSeat.value = 2;
+    // Let the watcher flush and schedule the 50ms debounce timer...
+    await vi.advanceTimersByTimeAsync(10);
+    // ...then dispose within the debounce window.
+    scope.stop();
+    await vi.advanceTimersByTimeAsync(100);
+
+    // No new socket may be opened after teardown — nothing would ever
+    // disconnect it.
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+});

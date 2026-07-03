@@ -5,7 +5,7 @@
  * Import from 'boardsmith/client/vue'
  */
 
-import { ref, computed, watch, onUnmounted, shallowRef, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, watch, onUnmounted, onScopeDispose, shallowRef, type Ref, type ComputedRef } from 'vue';
 import { MeepleClient } from './client.js';
 import { GameConnection } from './game-connection.js';
 import { audioService } from './audio.js';
@@ -162,13 +162,22 @@ export function useGame(
 
   // Watch for playerSeat changes if it's a ref
   // Only reconnect if gameId is set AND we're not already setting up
+  let seatDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let isDisposed = false;
   if (isRef(playerSeat)) {
     watch(playerSeat, () => {
       // Skip if no game or if a connection setup is already in progress
       if (!gameIdRef.value || isSettingUp) return;
 
-      // Debounce to avoid race conditions with gameId changes
-      setTimeout(() => {
+      // True trailing-edge debounce: cancel any pending timer so rapid
+      // consecutive seat changes coalesce into a single reconnect instead
+      // of stacking one teardown-and-redial per change.
+      if (seatDebounceTimer) clearTimeout(seatDebounceTimer);
+      seatDebounceTimer = setTimeout(() => {
+        seatDebounceTimer = null;
+        // Never dial after teardown — a socket opened here would have no
+        // owner left to disconnect it.
+        if (isDisposed) return;
         if (gameIdRef.value && !isSettingUp) {
           setupConnection(gameIdRef.value);
         }
@@ -188,8 +197,16 @@ export function useGame(
     previousIsMyTurn.value = newIsMyTurn;
   }, { immediate: true });
 
-  // Cleanup on unmount
-  onUnmounted(() => {
+  // Cleanup on teardown. onScopeDispose fires both on component unmount
+  // (setup() runs inside the component's effect scope) and when a bare
+  // effectScope() is stopped — unlike onUnmounted, which never registers
+  // outside a component instance.
+  onScopeDispose(() => {
+    isDisposed = true;
+    if (seatDebounceTimer) {
+      clearTimeout(seatDebounceTimer);
+      seatDebounceTimer = null;
+    }
     if (connection) {
       connection.disconnect();
       connection = null;
