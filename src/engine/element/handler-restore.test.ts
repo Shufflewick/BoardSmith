@@ -22,6 +22,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { _clearShownWarnings } from '../../utils/dev.js';
 import {
   Game,
+  GameElement,
   Player,
   Piece,
   Space,
@@ -341,5 +342,196 @@ describe('WR-03: dev warning when a restored handler moves an element into a det
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('detached'));
     warnSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-05 (iteration 2): the WR-02 fix computed the identity path over Space
+// siblings only, mapping every NON-Space ancestor (Player, Piece) to `-1` via
+// `spaceSiblings.indexOf(el)`. Two same-class, same-name Spaces nested under
+// DIFFERENT non-Space parents — the natural per-player pattern
+// `player.create(Hand, 'hand')` — therefore produced identical keys
+// (`Hand:hand:-1/0`), the capture map silently overwrote (last writer wins),
+// and BOTH restored hands received the last-captured handler set: moving a
+// card into player 1's hand fired player 2's onEnter. The key now
+// discriminates non-Space ancestors by seat (Players) or class+name (other
+// elements), and any residual collision devWarns and refuses to re-bind
+// instead of silently cross-wiring.
+// ---------------------------------------------------------------------------
+
+class HandCard extends Piece<PerPlayerGame> {}
+class Hand extends Space<PerPlayerGame> {}
+class Deck extends Space<PerPlayerGame> {}
+
+class PerPlayerGame extends Game<PerPlayerGame, Player> {
+  deck!: Deck;
+  p1Enter = 0;
+  p2Enter = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.deck = this.create(Deck, 'deck');
+    this.deck.create(HandCard, 'card1');
+    this.deck.create(HandCard, 'card2');
+
+    // Same class, same name, different non-Space (Player) parents — under
+    // the pre-fix key both collapse to `Hand:hand:-1/0`.
+    const h1 = this.getPlayer(1)!.create(Hand, 'hand');
+    const h2 = this.getPlayer(2)!.create(Hand, 'hand');
+    h1.onEnter(() => {
+      this.p1Enter++;
+    }, HandCard);
+    h2.onEnter(() => {
+      this.p2Enter++;
+    }, HandCard);
+
+    this.registerAction(
+      Action.create('dealTo1').execute((_args, ctx) => {
+        const game = ctx.game as PerPlayerGame;
+        game.deck.first(HandCard)?.putInto(game.getPlayer(1)!.first(Hand)!);
+        return { success: true };
+      })
+    );
+    this.registerAction(
+      Action.create('dealTo2').execute((_args, ctx) => {
+        const game = ctx.game as PerPlayerGame;
+        game.deck.first(HandCard)?.putInto(game.getPlayer(2)!.first(Hand)!);
+        return { success: true };
+      })
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['dealTo1', 'dealTo2'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
+          maxMoves: 10,
+        }),
+      })
+    );
+  }
+}
+
+describe('WR-05: per-player same-name Spaces keep their OWN handlers after restore', () => {
+  function buildPerPlayerRunner(): GameRunner<PerPlayerGame> {
+    const runner = new GameRunner<PerPlayerGame>({
+      GameClass: PerPlayerGame,
+      gameType: 'per-player-hand-test',
+      gameOptions: { playerCount: 2, seed: 'per-player-seed' },
+    });
+    runner.start();
+    return runner;
+  }
+
+  it('sanity: each hand fires only its own handler on the live game', () => {
+    const runner = buildPerPlayerRunner();
+    expect(runner.performAction('dealTo1', 1, {}).success).toBe(true);
+    expect(runner.game.p1Enter).toBe(1);
+    expect(runner.game.p2Enter).toBe(0);
+    expect(runner.performAction('dealTo2', 1, {}).success).toBe(true);
+    expect(runner.game.p2Enter).toBe(1);
+  });
+
+  it("moving a card into player 1's hand after restore fires player 1's handler — not player 2's", () => {
+    const runner = buildPerPlayerRunner();
+    const snapshot = roundTripJson(runner.getSnapshot());
+    const restored = GameRunner.fromSnapshot<PerPlayerGame>(snapshot, PerPlayerGame);
+
+    expect(restored.performAction('dealTo1', 1, {}).success).toBe(true);
+    // Pre-fix: p1Enter stayed 0 and p2Enter became 1 (player 2's handler,
+    // the last-captured one, was wired to BOTH hands).
+    expect(restored.game.p1Enter).toBe(1);
+    expect(restored.game.p2Enter).toBe(0);
+  });
+
+  it("moving a card into player 2's hand after restore fires player 2's handler — not player 1's", () => {
+    const runner = buildPerPlayerRunner();
+    const snapshot = roundTripJson(runner.getSnapshot());
+    const restored = GameRunner.fromSnapshot<PerPlayerGame>(snapshot, PerPlayerGame);
+
+    expect(restored.performAction('dealTo2', 1, {}).success).toBe(true);
+    expect(restored.game.p2Enter).toBe(1);
+    expect(restored.game.p1Enter).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-05 guard: if two handler-bearing Spaces STILL produce the same identity
+// key (same class, same name, indistinguishable ancestors), the restore must
+// devWarn about the ambiguity and refuse to re-bind that key, never silently
+// wire both Spaces to one handler set. Pieces cannot contain Spaces (engine
+// invariant, piece.ts), so the ambiguous ancestors here are two same-class,
+// same-NAME direct GameElement subclass instances.
+// ---------------------------------------------------------------------------
+
+class Gem extends Piece<AmbiguousGame> {}
+class Box extends GameElement<AmbiguousGame> {}
+class Slot extends Space<AmbiguousGame> {}
+
+class AmbiguousGame extends Game<AmbiguousGame, Player> {
+  slotEnter = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    // Two non-Space elements with the SAME class and SAME name, each holding
+    // a same-named handler-bearing Space: no stable identity component can
+    // tell the two slots apart, so their keys collide by construction.
+    const boxA = this.create(Box, 'box');
+    const boxB = this.create(Box, 'box');
+    boxA.create(Slot, 'slot').onEnter(() => {
+      this.slotEnter++;
+    }, Gem);
+    boxB.create(Slot, 'slot').onEnter(() => {
+      this.slotEnter++;
+    }, Gem);
+
+    this.create(Gem, 'gem');
+
+    this.registerAction(
+      Action.create('stash').execute((_args, ctx) => {
+        const game = ctx.game as AmbiguousGame;
+        game.first(Gem)?.putInto(game.first(Box)!.first(Slot)!);
+        return { success: true };
+      })
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['stash'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
+          maxMoves: 10,
+        }),
+      })
+    );
+  }
+}
+
+describe('WR-05 guard: colliding handler keys fail loud and refuse to re-bind', () => {
+  it('devWarns about the ambiguous identity and drops BOTH handler sets instead of cross-wiring', () => {
+    const runner = new GameRunner<AmbiguousGame>({
+      GameClass: AmbiguousGame,
+      gameType: 'ambiguous-key-test',
+      gameOptions: { playerCount: 1, seed: 'ambiguous-seed' },
+    });
+    runner.start();
+
+    const snapshot = roundTripJson(runner.getSnapshot());
+
+    _clearShownWarnings();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const restored = GameRunner.fromSnapshot<AmbiguousGame>(snapshot, AmbiguousGame);
+
+    // Loud: the ambiguity is reported at restore time...
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ambiguous'));
+    warnSpy.mockRestore();
+
+    // ...and neither slot got a (possibly wrong) handler bound.
+    expect(restored.performAction('stash', 1, {}).success).toBe(true);
+    expect(restored.game.slotEnter).toBe(0);
   });
 });

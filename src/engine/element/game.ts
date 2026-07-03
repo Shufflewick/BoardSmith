@@ -2939,24 +2939,61 @@ export class Game<
     // structural — the constructor creates them at fixed positions — so an
     // index computed over Space siblings only, plus the constructor-assigned
     // name, is stable across piece movement.
+    //
+    // WR-05 (iteration 2): NON-Space ancestors need a real discriminator —
+    // `spaceSiblings.indexOf(el)` returns `-1` for a Player or any other
+    // non-Space ancestor, collapsing every such ancestor at the same depth
+    // into one identical segment. That silently cross-wired the natural
+    // per-player pattern `player.create(Hand, 'hand')`: both hands keyed
+    // identically, so after restore a card entering player 1's hand fired
+    // player 2's onEnter. Players are discriminated by seat (the documented
+    // stable cross-restore identity — names can duplicate via
+    // `gameOptions.playerNames`); other non-Space ancestors by class +
+    // constructor-assigned name. (Pieces cannot contain Spaces — see
+    // `Piece.create` — so a moving non-Space ancestor is not a concern.)
     const spaceHandlerKey = (space: Space): string => {
-      const path: number[] = [];
+      const path: string[] = [];
       let el: GameElement = space;
       while (el._t.parent) {
-        const spaceSiblings: GameElement[] = el._t.parent._t.children.filter((c) => c instanceof Space);
-        path.unshift(spaceSiblings.indexOf(el));
+        if (el instanceof Space) {
+          const spaceSiblings: GameElement[] = el._t.parent._t.children.filter((c) => c instanceof Space);
+          path.unshift(String(spaceSiblings.indexOf(el)));
+        } else if ('seat' in el) {
+          // Player ancestor (same seat duck-typing as serializeValue/getPlayer).
+          path.unshift(`${el.constructor.name}[seat:${(el as unknown as { seat: number }).seat}]`);
+        } else {
+          path.unshift(`${el.constructor.name}[${el.name ?? ''}]`);
+        }
         el = el._t.parent;
       }
       return `${space.constructor.name}:${space.name ?? ''}:${path.join('/')}`;
     };
     type CapturedHandlers = { enter: ElementEventHandler<GameElement>[]; exit: ElementEventHandler<GameElement>[] };
     const capturedHandlers = new Map<string, CapturedHandlers>();
+    // WR-05: if two handler-bearing Spaces produce the SAME key, re-binding
+    // is ambiguous. Fail loud and refuse to re-bind that key — never
+    // silently wire both Spaces to one (last-captured) handler set.
+    const ambiguousKeys = new Set<string>();
     for (const space of this.all(Space)) {
       const handlers = space._captureEventHandlers();
       if (handlers.enter.length > 0 || handlers.exit.length > 0) {
-        capturedHandlers.set(spaceHandlerKey(space), handlers);
+        const key = spaceHandlerKey(space);
+        if (capturedHandlers.has(key)) {
+          ambiguousKeys.add(key);
+          devWarn(
+            `ambiguous-event-handler-key:${key}`,
+            `Two or more Spaces with onEnter/onExit handlers share the ambiguous ` +
+            `identity "${key}" (same class, same name, indistinguishable ancestors). ` +
+            `Handler re-binding across a snapshot restore cannot tell them apart, so ` +
+            `their handlers were DROPPED rather than cross-wired — these Spaces will ` +
+            `not fire onEnter/onExit after restore. Give each Space (or its non-Space ` +
+            `ancestor) a unique name so its identity is unambiguous.`
+          );
+        }
+        capturedHandlers.set(key, handlers);
       }
     }
+    for (const key of ambiguousKeys) capturedHandlers.delete(key);
 
     // Clear existing children and rebuild the tree from JSON
     this._t.children = [];
@@ -2979,6 +3016,19 @@ export class Game<
         const key = spaceHandlerKey(space);
         const handlers = capturedHandlers.get(key);
         if (handlers) {
+          // WR-05: if a SECOND restored Space matches an already-bound key
+          // (structure changed between save and restore), re-binding it too
+          // would cross-wire — warn and leave this one unbound.
+          if (matchedKeys.has(key)) {
+            devWarn(
+              `ambiguous-event-handler-rebind:${key}`,
+              `More than one restored Space matches the handler identity "${key}" — ` +
+              `re-binding is ambiguous, so only the first match received the captured ` +
+              `onEnter/onExit handlers. Give each Space (or its non-Space ancestor) a ` +
+              `unique name so its identity is unambiguous.`
+            );
+            continue;
+          }
           space._restoreEventHandlers(handlers);
           matchedKeys.add(key);
         }

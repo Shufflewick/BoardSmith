@@ -324,12 +324,17 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * Internal accessor for re-attaching previously captured `onEnter`/`onExit`
    * handlers to a freshly-restored Space instance (RST-01/F10). See
    * `_captureEventHandlers` for context. Not part of the public API.
+   *
+   * Copies the handler arrays into a fresh container (WR-05): adopting the
+   * captured object by reference would alias `_eventHandlers` between the
+   * captured source and this Space, so a later `onEnter`/`onExit`
+   * registration on one would silently mutate the other.
    */
   _restoreEventHandlers(handlers: {
     enter: ElementEventHandler<GameElement>[];
     exit: ElementEventHandler<GameElement>[];
   }): void {
-    this._eventHandlers = handlers;
+    this._eventHandlers = { enter: [...handlers.enter], exit: [...handlers.exit] };
   }
 
   // ============================================
