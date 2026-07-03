@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v4.5
 milestone_name: "Pit of Success Hardening (Audit #3 Fixes)"
-status: verifying
-stopped_at: "Completed 135-06-PLAN.md (boardsmith dev flags/host/config hardened: CLIX-01/02/04/06, phase 135 complete)"
-last_updated: "2026-07-03T18:50:58.539Z"
+status: ready_to_plan
+stopped_at: Phase 135 complete (6/6) — ready to discuss Phase 136
+last_updated: 2026-07-03T19:23:44.247Z
 last_activity: 2026-07-03
 progress:
   total_phases: 9
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Make board game development fast and correct -- the framework handles multiplayer, AI, and UI so designers focus on game rules.
-**Current focus:** Phase 135 — CLI & Dev Experience
+**Current focus:** Phase 136 — client sdk & protocol
 
 ## Current Position
 
-Phase: 135 (CLI & Dev Experience) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
+Phase: 136
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-07-03
 
 Progress: [██████████] 100%
