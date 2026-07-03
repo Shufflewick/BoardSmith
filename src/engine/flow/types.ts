@@ -1,4 +1,5 @@
 import type { Game } from '../element/game.js';
+import type { GameElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
 import type { ActionDefinition, ActionResult, FollowUpAction } from '../action/types.js';
 
@@ -119,9 +120,16 @@ export interface EachPlayerConfig extends BaseFlowConfig {
 }
 
 /**
- * Configuration for for-each flow
+ * Configuration for for-each flow.
+ *
+ * Items are restricted to `GameElement | string | number | boolean | null`
+ * because the loop snapshots the collection on entry and the per-item snapshot
+ * must round-trip through checkpoint/restore (matches the runtime throw in
+ * `executeForEach`).
  */
-export interface ForEachConfig<T = unknown> extends BaseFlowConfig {
+export interface ForEachConfig<
+  T extends GameElement | string | number | boolean | null = GameElement | string | number | boolean | null,
+> extends BaseFlowConfig {
   /** Items to iterate over */
   collection: T[] | ((context: FlowContext) => T[]);
   /** Variable name to store current item */

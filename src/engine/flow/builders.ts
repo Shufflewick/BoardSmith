@@ -1,4 +1,5 @@
 import type { Player } from '../player/player.js';
+import type { GameElement } from '../element/game-element.js';
 import type {
   FlowNode,
   FlowContext,
@@ -157,6 +158,17 @@ export function eachPlayer(config: {
 /**
  * Iterate through a collection of items
  *
+ * The collection is snapshotted once on loop entry, so a body that mutates the
+ * source collection (moves items, adds items) still visits exactly the original
+ * items. Two restrictions follow from that snapshot round-tripping through
+ * checkpoint/restore:
+ *
+ * - Items must be `GameElement` instances or JSON primitives
+ *   (`string | number | boolean | null`). Other object shapes throw at loop entry.
+ * - A loop body must not permanently delete an element it iterates over (moving
+ *   it — including to the pile via `remove()` — is fine); a deleted element throws
+ *   when its iteration is reached.
+ *
  * @example
  * ```typescript
  * forEach({
@@ -166,7 +178,7 @@ export function eachPlayer(config: {
  * })
  * ```
  */
-export function forEach<T>(config: {
+export function forEach<T extends GameElement | string | number | boolean | null>(config: {
   name?: string;
   collection: T[] | ((context: FlowContext) => T[]);
   as: string;
@@ -176,7 +188,7 @@ export function forEach<T>(config: {
     type: 'for-each',
     config: {
       name: config.name,
-      collection: config.collection as unknown[] | ((context: FlowContext) => unknown[]),
+      collection: config.collection,
       as: config.as,
       do: config.do,
     },
