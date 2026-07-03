@@ -148,7 +148,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   3. `chooseFrom` multiSelect min/max is enforced server-side in `validateSelection` (count + array-type checks), matching the elements branch.
   4. `switchOn` with no matching case and no default fails loudly (throw or dev-warn) instead of silently no-oping.
 **Plans**: 5 plans
-- [ ] 133-01-PLAN.md — PROC-01 verification gate: verdicts for F4/F5/F6/F27 before any fix
+- [x] 133-01-PLAN.md — PROC-01 verification gate: verdicts for F4/F5/F6/F27 before any fix
 - [ ] 133-02-PLAN.md — ENG-02: eachPlayer startingPlayer wrap-around + TurnOrder/dealer doc fixes
 - [ ] 133-03-PLAN.md — ENG-03: resumeSimultaneousAction surfaces actionError (engine + runner)
 - [ ] 133-04-PLAN.md — ENG-04: choice-branch multiSelect count + array-type enforcement
@@ -239,7 +239,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 |-------|-----------------|--------|-----------|
 | 131. Serialization & Restore Fidelity | 5/5 | Complete    | 2026-07-03 |
 | 132. Engine Element & Builder Safety | 5/5 | Complete    | 2026-07-03 |
-| 133. Engine Flow & Action Validation | 0/TBD | Not started | - |
+| 133. Engine Flow & Action Validation | 1/5 | In Progress|  |
 | 134. UI & Session Interaction Guardrails | 0/TBD | Not started | - |
 | 135. CLI & Dev Experience | 0/TBD | Not started | - |
 | 136. Client SDK & Protocol | 0/TBD | Not started | - |
