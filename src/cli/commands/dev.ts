@@ -118,6 +118,18 @@ export function resolveHost(options: { host?: string; lan?: boolean }): { host: 
 }
 
 /**
+ * Host-aware multiplayer banner line. Under the local-only default
+ * (127.0.0.1) no other computer can connect — telling the user to "open the
+ * page on another computer" would send them down a path that fails silently.
+ * Point them at --lan instead; only a non-local bind gets the join message.
+ */
+export function multiplayerBannerLine(isNonLocal: boolean): string {
+  return isNonLocal
+    ? 'Multiplayer: each browser is a player; open the page on another computer to join.'
+    : 'Multiplayer: each browser tab is a player. To let other computers join, restart with --lan.';
+}
+
+/**
  * CLIX-02 / F22: loud (non-exiting) startup warning for unknown top-level
  * `boardsmith.json` keys, reusing the Plan 05 `config-schema` module. `dev`
  * WARNS (does not exit) — `boardsmith validate` is the hard gate.
@@ -734,7 +746,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       console.log(chalk.cyan(`  Network (others can join): ${networkUrl}`));
     }
 
-    console.log(chalk.dim(`  Multiplayer: each browser is a player; open the page on another computer to join.`));
+    console.log(chalk.dim(`  ${multiplayerBannerLine(isNonLocal)}`));
     console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as AI${aiPlayers.length ? `; --ai ${aiPlayers.join(',')} pre-marked` : ''}, level ${aiLevel}).`));
     if (teachingDisabled) {
       console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));

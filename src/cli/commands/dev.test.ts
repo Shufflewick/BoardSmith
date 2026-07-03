@@ -6,6 +6,7 @@ import {
   resolveEffectivePlayerCount,
   validateAiSeats,
   resolveHost,
+  multiplayerBannerLine,
   formatUnknownKeyWarnings,
 } from './dev.js';
 
@@ -114,6 +115,18 @@ describe('resolveHost (CLIX-04: default 127.0.0.1, --lan/--host 0.0.0.0 opts int
     const { host, isNonLocal } = resolveHost({ host: '127.0.0.1' });
     expect(host).toBe('127.0.0.1');
     expect(isNonLocal).toBe(false);
+  });
+});
+
+describe('multiplayerBannerLine (WR-01: banner must not tell local-only users to join from another computer)', () => {
+  it('points local-only binds at --lan instead of the impossible "another computer" instruction', () => {
+    const line = multiplayerBannerLine(false);
+    expect(line).toContain('--lan');
+    expect(line).not.toContain('another computer to join');
+  });
+
+  it('keeps the join-from-another-computer instruction for non-local binds', () => {
+    expect(multiplayerBannerLine(true)).toContain('open the page on another computer to join');
   });
 });
 
