@@ -158,8 +158,17 @@ describe('GameConnection.action() awaits open (SDK-01, PROC-02 regression)', () 
     ws.readyState = FakeWebSocket.OPEN;
     ws.onopen?.();
 
+    // Flush microtasks so action()'s internal await-then-send completes.
+    // onopen also triggers requestState() ('getState'), so poll for the
+    // 'action' message specifically rather than assuming send order.
+    let sentAction: { requestId: string } | undefined;
+    for (let i = 0; i < 10 && !sentAction; i++) {
+      await Promise.resolve();
+      sentAction = ws.sentMessages.map((m) => JSON.parse(m)).find((m) => m.type === 'action');
+    }
+
     // Simulate the server's actionResult response for the request that was sent.
-    const sent = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]);
+    const sent = sentAction!;
     ws.onmessage?.({
       data: JSON.stringify({
         type: 'actionResult',

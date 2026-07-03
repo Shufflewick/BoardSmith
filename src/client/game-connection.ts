@@ -54,6 +54,18 @@ export class GameConnection {
   private requestIdCounter = 0;
 
   /**
+   * Resolves when the current socket finishes its opening handshake; rejects
+   * with an actionable error if the socket errors or closes before opening.
+   * Reassigned on every `connect()` call. A no-op `.catch()` is attached
+   * immediately so callers that rely on `action()`'s internal await (rather
+   * than awaiting `opened` directly) don't trigger an unhandled rejection.
+   */
+  opened: Promise<void> = Promise.resolve();
+  #openedResolve: (() => void) | null = null;
+  #openedReject: ((error: Error) => void) | null = null;
+  #openPending = false;
+
+  /**
    * @remarks
    * Constructs and connects natively on Node >=22.4 via `globalThis.WebSocket`.
    * On older Node or other runtimes without a global `WebSocket`, pass
@@ -88,12 +100,23 @@ export class GameConnection {
     this.setStatus('connecting');
     this.clearReconnectTimer();
 
+    this.opened = new Promise<void>((resolve, reject) => {
+      this.#openedResolve = resolve;
+      this.#openedReject = reject;
+    });
+    this.#openPending = true;
+    // Prevent an unhandled-rejection crash for callers relying on action()'s
+    // internal await instead of awaiting `opened` directly.
+    this.opened.catch(() => {});
+
     try {
       const wsUrl = this.buildWebSocketUrl();
       this.ws = new this.#wsCtor(wsUrl);
       this.setupWebSocketHandlers();
     } catch (error) {
-      this.handleError(error instanceof Error ? error : new Error(String(error)));
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.handleError(err);
+      this.#rejectOpen(err);
       this.scheduleReconnect();
     }
   }
@@ -128,12 +151,24 @@ export class GameConnection {
   }
 
   async action(actionName: string, args: Record<string, unknown> = {}): Promise<ActionResult> {
-    if (!this.ws || this.ws.readyState !== this.#wsCtor.OPEN) {
-      return { success: false, error: 'Not connected' };
-    }
-
     if (this.config.spectator) {
       return { success: false, error: 'Spectators cannot perform actions' };
+    }
+
+    if (!this.ws) {
+      throw new Error(
+        `GameConnection: cannot perform action '${actionName}' — not connected. Call connect() first.`
+      );
+    }
+
+    if (this.ws.readyState !== this.#wsCtor.OPEN) {
+      await this.awaitOpen(actionName);
+    }
+
+    if (!this.ws || this.ws.readyState !== this.#wsCtor.OPEN) {
+      throw new Error(
+        `GameConnection: connection closed while waiting to send action '${actionName}'.`
+      );
     }
 
     // Generate unique request ID
@@ -148,11 +183,14 @@ export class GameConnection {
 
     // Create promise that will be resolved when server responds
     return new Promise<ActionResult>((resolve, reject) => {
-      // Set timeout for action response (10 seconds)
       const timeout = setTimeout(() => {
         this.pendingActions.delete(requestId);
-        resolve({ success: false, error: 'Action timed out waiting for server response' });
-      }, 10000);
+        reject(
+          new Error(
+            `GameConnection: action '${actionName}' timed out waiting for a server response after ${this.config.connectionTimeout}ms.`
+          )
+        );
+      }, this.config.connectionTimeout);
 
       this.pendingActions.set(requestId, { resolve, reject, timeout });
 
@@ -161,9 +199,46 @@ export class GameConnection {
       } catch (err) {
         clearTimeout(timeout);
         this.pendingActions.delete(requestId);
-        resolve({ success: false, error: String(err) });
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
+  }
+
+  /**
+   * Awaits `this.opened`, bounded by `config.connectionTimeout`. Rejects
+   * loudly on timeout or open-failure — never resolves silently.
+   */
+  private async awaitOpen(actionName: string): Promise<void> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(
+          new Error(
+            `GameConnection: timed out waiting for the connection to open before sending action '${actionName}' (connectionTimeout=${this.config.connectionTimeout}ms).`
+          )
+        );
+      }, this.config.connectionTimeout);
+    });
+
+    try {
+      await Promise.race([this.opened, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+  }
+
+  /** Resolves the current `opened` promise, if one is pending. */
+  #resolveOpen(): void {
+    if (!this.#openPending) return;
+    this.#openPending = false;
+    this.#openedResolve?.();
+  }
+
+  /** Rejects the current `opened` promise, if one is pending. */
+  #rejectOpen(error: Error): void {
+    if (!this.#openPending) return;
+    this.#openPending = false;
+    this.#openedReject?.(error);
   }
 
   requestState(): void {
@@ -243,12 +318,16 @@ export class GameConnection {
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
       this.setStatus('connected');
+      this.#resolveOpen();
       this.startPingInterval();
       // Request initial state after connection
       this.requestState();
     };
 
     this.ws.onclose = (event) => {
+      this.#rejectOpen(
+        new Error(`GameConnection: connection to '${this.baseUrl}' closed before opening.`)
+      );
       this.cleanup();
 
       if (event.wasClean) {
@@ -261,6 +340,9 @@ export class GameConnection {
 
     this.ws.onerror = () => {
       // Error details are not available in the error event
+      this.#rejectOpen(
+        new Error(`GameConnection: connection to '${this.baseUrl}' failed before opening.`)
+      );
       this.handleError(new Error('WebSocket error'));
     };
 
@@ -420,9 +502,9 @@ export class GameConnection {
     this.stopPingInterval();
 
     // Reject all pending actions
-    for (const [requestId, pending] of this.pendingActions) {
+    for (const [, pending] of this.pendingActions) {
       clearTimeout(pending.timeout);
-      pending.resolve({ success: false, error: 'Connection closed' });
+      pending.reject(new Error('GameConnection: connection closed while an action was pending.'));
     }
     this.pendingActions.clear();
 
