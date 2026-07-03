@@ -75,6 +75,9 @@ export class Action<
       name,
       selections: [],
       execute: () => {},
+      // No real handler supplied yet; cleared by .execute(fn) below. Only
+      // relevant if the chain terminates via .build() instead of .execute().
+      handlerless: true,
     };
   }
 
@@ -629,11 +632,18 @@ export class Action<
     // boundary (ActionDefinition is non-generic); both are sound because the
     // runtime always passes the args/game this chain declared.
     this.definition.execute = fn as ActionDefinition['execute'];
+    delete this.definition.handlerless;
     return this.definition;
   }
 
   /**
-   * Get the built definition (without execute, for inspection)
+   * Get the built definition (without execute, for inspection).
+   *
+   * The returned definition is still flagged `handlerless` if `.execute(fn)`
+   * was never called — `Game#registerAction()` rejects handler-less
+   * definitions at registration time (ENG-08). `.build()` remains useful for
+   * inspecting a chain (e.g. in tests), but its result must not be registered
+   * as-is unless the chain later calls `.execute(fn)`.
    */
   build(): ActionDefinition {
     return this.definition;

@@ -917,6 +917,12 @@ export class Game<
    * @param action - The action definition to register
    */
   registerAction(action: ActionDefinition): void {
+    if (action.handlerless) {
+      throw new Error(
+        `Action '${action.name}' has no execute handler — end the chain with .execute(fn) before registering it. ` +
+          `.build() alone produces a handler-less definition for inspection only; it must not be registered directly.`,
+      );
+    }
     this._actions.set(action.name, action);
   }
 

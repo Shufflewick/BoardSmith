@@ -458,6 +458,14 @@ export interface ActionDefinition {
    * initial and followUp actions.
    */
   help?: string;
+  /**
+   * Set when the action chain was terminated via `.build()` without ever calling
+   * `.execute(fn)`, meaning `execute` is still the builder's no-op default handler.
+   * `Game#registerAction()` rejects handler-less definitions at registration time
+   * (ENG-08) — `.build()` stays available for inspection, but registering its
+   * result throws unless the chain later calls `.execute(fn)`.
+   */
+  handlerless?: boolean;
 }
 
 /**
