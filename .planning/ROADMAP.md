@@ -168,7 +168,7 @@ Findings cluster into eight fix surfaces plus migration and docs. The critical h
   6. `session.runner.performAction()` is no longer reachable as an easy wrong path beside `session.performAction()` — persistence/broadcast/checkpoints can't be silently skipped by calling the runner directly.
 **Plans**: 5 plans
 - [x] 134-01-PLAN.md — PROC-01 verification gate: verdicts for F17/F18/F19/F29/F30/F31 before any fix
-- [ ] 134-02-PLAN.md — UIX-01/UIX-02/UIX-05: useActionController start() result+devWarn, fill() multiSelect guard, hook accumulation
+- [x] 134-02-PLAN.md — UIX-01/UIX-02/UIX-05: useActionController start() result+devWarn, fill() multiSelect guard, hook accumulation
 - [ ] 134-03-PLAN.md — UIX-01/UIX-03/UIX-04: GameShell lastError->toast, 0x0 board dev-check, dragProps when-gating
 - [ ] 134-04-PLAN.md — SESS-01: session.runner read-only facade (performAction unreachable)
 - [ ] 134-05-PLAN.md — DOCX-04 doc updates + live browser verification of toast + drag gating
@@ -245,7 +245,7 @@ Phases execute in numeric order: 131 → 132 → 133 → 134 → 135 → 136 →
 | 131. Serialization & Restore Fidelity | 5/5 | Complete    | 2026-07-03 |
 | 132. Engine Element & Builder Safety | 5/5 | Complete    | 2026-07-03 |
 | 133. Engine Flow & Action Validation | 5/5 | Complete    | 2026-07-03 |
-| 134. UI & Session Interaction Guardrails | 1/5 | In Progress|  |
+| 134. UI & Session Interaction Guardrails | 2/5 | In Progress|  |
 | 135. CLI & Dev Experience | 0/TBD | Not started | - |
 | 136. Client SDK & Protocol | 0/TBD | Not started | - |
 | 137. Testing Utilities | 0/TBD | Not started | - |
