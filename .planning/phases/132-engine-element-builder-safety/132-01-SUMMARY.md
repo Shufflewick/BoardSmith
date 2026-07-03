@@ -94,3 +94,11 @@ PROC-01 gate satisfied for Phase 132. Plans 132-02 (ENG-01 `moveToInternal` fix)
 ---
 *Phase: 132-engine-element-builder-safety*
 *Completed: 2026-07-03*
+
+## Self-Check: PASSED
+
+- FOUND: .planning/phases/132-engine-element-builder-safety/132-FINDINGS-VERIFICATION.md
+- FOUND: .planning/phases/132-engine-element-builder-safety/132-01-SUMMARY.md
+- FOUND commit: ec78b3a5
+- FOUND commit: b8815177
+- Verified: 4 VERDICT: lines present in 132-FINDINGS-VERIFICATION.md
