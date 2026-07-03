@@ -738,6 +738,31 @@ export class ActionExecutor {
           }
         }
       }
+
+      // Enforce multiSelect min/max bounds on choice selections (ENG-04/F6).
+      // Structurally identical to the elements-branch enforcement below, except
+      // a non-array value must be REJECTED outright when multiSelect is
+      // configured -- unlike the elements branch, a bare choice is not a valid
+      // shorthand for a multiSelect-configured chooseFrom.
+      if (selection.type === 'choice') {
+        const multiSelect = (selection as ChoiceSelection).multiSelect;
+        const multiSelectConfig = typeof multiSelect === 'function' ? multiSelect(context) : multiSelect;
+        if (multiSelectConfig !== undefined) {
+          if (!Array.isArray(value)) {
+            errors.push(`Selection "${selection.name}" is multi-select and expected an array, got ${typeof value}: ${JSON.stringify(value)}`);
+          } else {
+            const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
+            const max = typeof multiSelectConfig === 'number' ? multiSelectConfig : multiSelectConfig.max;
+            const count = value.length;
+            if (count < min) {
+              errors.push(`Selection "${selection.name}" requires at least ${min} choice${min === 1 ? '' : 's'}, got ${count}`);
+            }
+            if (max !== undefined && count > max) {
+              errors.push(`Selection "${selection.name}" requires at most ${max} choice${max === 1 ? '' : 's'}, got ${count}`);
+            }
+          }
+        }
+      }
     }
 
     // Validate elements selection (new "pit of success" type)
