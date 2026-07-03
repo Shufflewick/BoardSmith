@@ -20,7 +20,12 @@ findings:
   warning: 7
   info: 8
   total: 17
-status: issues_found
+fixed_at: 2026-07-03T22:44:50Z
+fixed:
+  critical: 2
+  warning: 7
+  info: 0
+status: resolved
 ---
 
 # Phase 136: Code Review Report
@@ -61,6 +66,8 @@ const newPlayerId = crypto.randomUUID();
 ```
 Better (pit of success): pass the stored id into the constructor — `new MeepleClient({ baseUrl: props.apiUrl, playerId: getPlayerId() ?? undefined })` — and let `generatePlayerId()` be the only minting path, persisting `client.getPlayerId()` back to localStorage.
 
+**Resolution:** Fixed in `26f3b8c2`. `generatePlayerId()` extracted from MeepleClient as the SDK's one exported minting path (crypto.randomUUID with getRandomValues fallback for insecure contexts, actionable error otherwise); both GameShell minting sites use it, and the persisted id is passed into the MeepleClient constructor instead of overwriting via setPlayerId. Tests added in client.test.ts.
+
 ### CR-02: `opened` promise stranded forever by disconnect()/reconnect() while CONNECTING
 
 **File:** `src/client/game-connection.ts:140-156, 522-544`
@@ -84,6 +91,8 @@ private cleanup(): void {
 ```
 (`#rejectOpen` is already a no-op when nothing is pending, so this is safe on every cleanup path; the no-op `.catch()` attached in `connect()` prevents unhandled rejections.)
 
+**Resolution:** Fixed in `d064bb38`. `cleanup()` now rejects a pending `opened` before detaching handlers. Red-first tests added for disconnect()-while-CONNECTING and reconnect()-while-CONNECTING (both timed out stranded pre-fix).
+
 ## Warnings
 
 ### WR-01: connect() over a CLOSING socket lets stale handlers tear down the new connection
@@ -102,6 +111,8 @@ connect(): void {
   ...
 }
 ```
+
+**Resolution:** Fixed in `6bd52437`. `connect()` runs `cleanup()` on any leftover socket before dialing. Red-first test: stale CLOSING socket's late onclose destroyed the new socket pre-fix.
 
 ### WR-02: joinGame lobby fall-through string-matches error prose the new error contract no longer guarantees
 
@@ -127,6 +138,8 @@ Under the new `parseResponse` contract, `getLobby()` against a server without lo
 ```
 (Or better: have the server populate `errorCode` for "no lobby" and switch on it.)
 
+**Resolution:** Fixed in `fc96d803`. Extracted `shouldFallThroughToDirectJoin()` (HTTP 404 or MeepleClientError → fall through; network/5xx → rethrow) with a mirrored canary test (`GameShell.join-fallthrough.test.ts`) per the established GameShell test pattern; RED pre-fix for the 404 and MeepleClientError shapes.
+
 ### WR-03: vue.ts stale `opened` handlers are not guarded by connection identity
 
 **File:** `src/client/vue.ts:126-133`
@@ -143,11 +156,15 @@ thisConnection.opened
   });
 ```
 
+**Resolution:** Fixed in `d81a815e` exactly as suggested (connection-identity guard in both handlers). Red-first test: gameId switch mid-handshake wrote a stale error and let the seat watcher re-dial pre-fix.
+
 ### WR-04: playerSeat-watcher debounce timer survives unmount and stacks
 
 **File:** `src/client/vue.ts:159-171`
 **Issue:** The 50ms debounce `setTimeout` is never stored or cancelled. (a) If the component unmounts within the window, the callback still runs `setupConnection(gameIdRef.value)` *after* `onUnmounted` already disconnected — opening a brand-new WebSocket that nothing will ever disconnect (socket + memory leak). (b) Rapid consecutive seat changes queue multiple timers, each tearing down and re-dialing a connection ("debounce" is actually a delay, not a debounce).
 **Fix:** Track the handle, clear it on re-trigger and in `onUnmounted`, and guard the callback with an `isUnmounted` flag set in `onUnmounted`.
+
+**Resolution:** Fixed in `93cca93e`. Handle tracked, cancelled on re-trigger (true trailing-edge debounce) and on teardown, with an `isDisposed` guard. Teardown moved from `onUnmounted` to `onScopeDispose` so cleanup also runs outside a component instance (onUnmounted never registers there — making the leak testable). Red-first tests for both the timer stacking and the post-disposal dial.
 
 ### WR-05: docs/api/client.md teaches APIs that don't exist or silently misbehave
 
@@ -158,11 +175,15 @@ thisConnection.opened
 - Lines 99/107: `connect(gameId, { playerSeat: 0 })` — seats are 1-indexed; `buildWebSocketUrl` only appends the `player` param when `playerSeat >= 1`, so seat 0 is silently dropped and the comment `currentPlayer === 0` reinforces the off-by-one.
 **Fix:** `withLobby` → `useLobby`; drop `playerId` from the findMatch example (note it's set via `MeepleClientConfig.playerId`); use `playerSeat: 1` and `currentPlayer === 1` in the connect examples.
 
+**Resolution:** Fixed in `6a722727` as suggested, plus a fourth drift the review didn't cite: the `playerSeat: 0` in the Connection Event Handling example (client.md:164) had the same off-by-one.
+
 ### WR-06: action() during auto-reconnect backoff throws a misleading "Call connect() first" error
 
 **File:** `src/client/game-connection.ts:179-183`
 **Issue:** After an unclean close, `cleanup()` nulls `this.ws` and `scheduleReconnect()` arms a timer. An `action()` call in that backoff window hits the `!this.ws` guard and throws `"not connected. Call connect() first."` — wrong advice (auto-reconnect is already in progress; calling `connect()` is unnecessary and resets nothing) and inconsistent with the CONNECTING window, where `action()` patiently awaits `opened`. Error messages must be actionable (CLAUDE.md).
 **Fix:** When `status === 'reconnecting'`, either await the next `opened` bounded by `connectionTimeout` (symmetric with the CONNECTING path), or throw an error that says reconnection is in progress and the action should be retried.
+
+**Resolution:** Fixed in `d4c8725e` (+ null-narrowing follow-up `1f3fb0ea`). Took the symmetric option: `action()` during backoff awaits the in-progress reconnect via a new `awaitReconnect()` (onConnectionChange-driven, bounded by connectionTimeout; rejects loudly on timeout, clean disconnect, or reconnect exhaustion). Red-first test: pre-fix it threw "Call connect() first" during the backoff window.
 
 ### WR-07: getMatchStatus double-prefixes baseUrl when it contains a path
 
@@ -174,7 +195,11 @@ const params = new URLSearchParams({ playerId: this.playerId });
 const response = await this.fetch(`/matchmaking/status?${params}`);
 ```
 
+**Resolution:** Fixed in `67d2d979` exactly as suggested. Red-first test: `baseUrl = 'https://host.example/api'` produced `/api/api/matchmaking/status` pre-fix.
+
 ## Info
+
+_Info findings below were out of fix scope (fix_scope: critical + warning) and remain open._
 
 ### IN-01: MeepleClient.config.playerId goes stale after setPlayerId()
 
