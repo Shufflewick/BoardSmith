@@ -374,3 +374,68 @@ describe('connect() over a CLOSING socket (WR-01)', () => {
     connection.disconnect();
   });
 });
+
+describe('action() during auto-reconnect backoff (WR-06)', () => {
+  it('awaits the in-progress reconnect and sends, instead of throwing "Call connect() first"', async () => {
+    vi.useFakeTimers();
+    try {
+      const connection = new GameConnection('http://localhost:3000', {
+        gameId: 'game-1',
+        playerId: 'player-1',
+        wsImplementation: FakeWebSocket as unknown as typeof WebSocket,
+        autoReconnect: true,
+        reconnectDelay: 10,
+      });
+
+      connection.connect();
+      const ws1 = (connection as unknown as { ws: FakeWebSocket | null }).ws!;
+      ws1.readyState = FakeWebSocket.OPEN;
+      ws1.onopen?.();
+
+      // Unclean close: cleanup() nulls this.ws and scheduleReconnect() arms
+      // a backoff timer — status is now 'reconnecting'.
+      ws1.readyState = FakeWebSocket.CLOSED;
+      ws1.onclose?.({ wasClean: false, code: 1006 });
+      expect(connection.getStatus()).toBe('reconnecting');
+
+      // An action in the backoff window must NOT throw the misleading
+      // "Call connect() first" — reconnection is already in progress.
+      const actionPromise = connection.action('doThing', { foo: 'bar' });
+      // Surface an early rejection deterministically instead of unhandled.
+      let earlyError: Error | null = null;
+      actionPromise.catch((e) => {
+        earlyError = e;
+      });
+
+      // Let the reconnect timer fire and the new socket open.
+      await vi.advanceTimersByTimeAsync(30);
+      expect(earlyError).toBeNull();
+      const ws2 = (connection as unknown as { ws: FakeWebSocket | null }).ws!;
+      expect(ws2).not.toBe(ws1);
+      ws2.readyState = FakeWebSocket.OPEN;
+      ws2.onopen?.();
+
+      // Flush microtasks so action()'s await-then-send completes.
+      let sentAction: { requestId: string } | undefined;
+      for (let i = 0; i < 10 && !sentAction; i++) {
+        await vi.advanceTimersByTimeAsync(0);
+        sentAction = ws2.sentMessages.map((m) => JSON.parse(m)).find((m) => m.type === 'action');
+      }
+      expect(sentAction).toBeDefined();
+
+      ws2.onmessage?.({
+        data: JSON.stringify({
+          type: 'actionResult',
+          requestId: sentAction!.requestId,
+          success: true,
+        }),
+      });
+
+      const result = await actionPromise;
+      expect(result.success).toBe(true);
+      connection.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

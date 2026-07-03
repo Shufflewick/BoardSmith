@@ -186,9 +186,18 @@ export class GameConnection {
     }
 
     if (!this.ws) {
-      throw new Error(
-        `GameConnection: cannot perform action '${actionName}' — not connected. Call connect() first.`
-      );
+      if (this.status === 'reconnecting') {
+        // The socket dropped uncleanly and an automatic reconnect is
+        // already in progress — telling the caller to connect() would be
+        // wrong advice. Wait for the reconnect, bounded by
+        // connectionTimeout (symmetric with the CONNECTING window handled
+        // by awaitOpen below).
+        await this.awaitReconnect(actionName);
+      } else {
+        throw new Error(
+          `GameConnection: cannot perform action '${actionName}' — not connected. Call connect() first.`
+        );
+      }
     }
 
     if (this.ws.readyState !== this.#wsCtor.OPEN) {
@@ -255,6 +264,44 @@ export class GameConnection {
     } finally {
       clearTimeout(timeoutHandle);
     }
+  }
+
+  /**
+   * Awaits the completion of an in-progress automatic reconnect, bounded
+   * by `config.connectionTimeout`. Resolves once the connection reaches
+   * 'connected'; rejects loudly on timeout, a clean disconnect, or
+   * reconnect exhaustion ('error') — never resolves silently.
+   */
+  private awaitReconnect(actionName: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        unsubscribe();
+        reject(
+          new Error(
+            `GameConnection: timed out waiting for the automatic reconnect to complete before sending action '${actionName}' (connectionTimeout=${this.config.connectionTimeout}ms).`
+          )
+        );
+      }, this.config.connectionTimeout);
+
+      const unsubscribe = this.onConnectionChange((status) => {
+        if (status === 'connected') {
+          clearTimeout(timeout);
+          unsubscribe();
+          resolve();
+        } else if (status === 'disconnected' || status === 'error') {
+          clearTimeout(timeout);
+          unsubscribe();
+          reject(
+            new Error(
+              `GameConnection: connection ${
+                status === 'error' ? 'failed (reconnect attempts exhausted)' : 'was closed'
+              } while waiting to send action '${actionName}'.`
+            )
+          );
+        }
+        // 'connecting'/'reconnecting': keep waiting.
+      });
+    });
   }
 
   /** Resolves the current `opened` promise, if one is pending. */
