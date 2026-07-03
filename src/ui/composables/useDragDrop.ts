@@ -174,8 +174,12 @@ export interface DropResult {
 }
 
 export interface UseDragDropReturn {
-  /** Returns props to make an element draggable */
-  dragProps: (ref: ElementRef, options?: DragOptions) => DragProps;
+  /**
+   * Returns props to make an element draggable. Honors `options.when` (UIX-04):
+   * when it evaluates false, returns inert `{ draggable: false }` with no drag
+   * handlers attached, instead of silently ignoring the option.
+   */
+  dragProps: (ref: ElementRef, options?: DragOptions) => DragProps | { draggable: false };
   /** Returns props to make an element a drop target */
   dropProps: (ref: ElementRef) => DropProps;
   /** Check if an element is currently being dragged */
@@ -209,7 +213,16 @@ export interface UseDragDropReturn {
 export function useDragDrop(): UseDragDropReturn {
   const boardInteraction = tryUseBoardInteraction();
 
-  const dragProps = (ref: ElementRef, options?: DragOptions): DragProps => ({
+  const dragProps = (ref: ElementRef, options?: DragOptions): DragProps | { draggable: false } => {
+    // UIX-04: honor the documented `when` option (mirrors drag()'s existing
+    // inert-props gate) — reuse evalCondition(), don't re-derive when-logic.
+    if (!evalCondition(options)) {
+      return { draggable: false };
+    }
+    return dragPropsInner(ref, options);
+  };
+
+  const dragPropsInner = (ref: ElementRef, options?: DragOptions): DragProps => ({
     draggable: true,
     onDragstart: (e: DragEvent) => {
       if (!boardInteraction) {
@@ -322,7 +335,7 @@ export function useDragDrop(): UseDragDropReturn {
    * Props are conditional (empty object if condition is false).
    */
   const drag = (ref: ElementRef, options?: DragOptions): DragResult => ({
-    props: evalCondition(options) ? dragProps(ref, options) : {},
+    props: evalCondition(options) ? dragPropsInner(ref, options) : {},
     classes: dragClasses(ref, options),
   });
 

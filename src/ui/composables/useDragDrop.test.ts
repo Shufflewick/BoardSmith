@@ -55,7 +55,7 @@ import {
   provideBoardInteraction,
   type ElementRef,
 } from './useBoardInteraction.js';
-import { useDragDrop, type UseDragDropReturn } from './useDragDrop.js';
+import { useDragDrop, type UseDragDropReturn, type DragProps } from './useDragDrop.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 
 type BoardInteractionInstance = ReturnType<typeof createBoardInteraction>;
@@ -154,7 +154,7 @@ describe('useDragDrop — API-level parity path (shared BoardInteraction contrac
     const ref: ElementRef = { id: 7 };
     const fakeEvent = makeFakeDragEvent();
 
-    api.dragProps(ref).onDragstart(fakeEvent as unknown as DragEvent);
+    (api.dragProps(ref) as DragProps).onDragstart(fakeEvent as unknown as DragEvent);
 
     expect(bi.isDragging).toBe(true);
     expect(bi.isDraggedElement(ref)).toBe(true);
@@ -190,7 +190,7 @@ describe('useDragDrop — event-level path (drag-event-shaped plain objects)', (
     const el = document.createElement('div');
     const fakeEvent = makeFakeDragEvent({ currentTarget: el });
 
-    api.dragProps({ id: 3 }).onDragstart(fakeEvent as unknown as DragEvent);
+    (api.dragProps({ id: 3 }) as DragProps).onDragstart(fakeEvent as unknown as DragEvent);
 
     expect(fakeEvent.dataTransfer.setData).toHaveBeenCalledWith(
       'boardsmith/element',
@@ -259,7 +259,7 @@ describe('useDragDrop — no-provider degrade-gracefully path (unchanged design)
     const fakeEvent = makeFakeDragEvent();
 
     expect(() =>
-      api.dragProps({ id: 1 }).onDragstart(fakeEvent as unknown as DragEvent),
+      (api.dragProps({ id: 1 }) as DragProps).onDragstart(fakeEvent as unknown as DragEvent),
     ).not.toThrow();
 
     expect(warnCallsContaining(warnSpy, 'useDragDrop')).toBe(1);
@@ -275,5 +275,68 @@ describe('useDragDrop — no-provider degrade-gracefully path (unchanged design)
 
     expect(result).toBe(false);
     expect(warnCallsContaining(warnSpy, 'useDragDrop')).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. dragProps() honors the documented `when` option (UIX-04, Plan 134-03 Task 3)
+//
+// Prior behavior: dragProps() always returned { draggable: true, ... } and
+// silently ignored options.when — a developer calling
+// dragProps(ref, { when: canDrag(card) }) (the documented "Full API" pattern)
+// got an element that stayed draggable regardless of `when`. dragProps() now
+// reuses the existing evalCondition() helper (already used by dragClasses()/
+// drag()) to gate on `when`, returning inert props when it evaluates false.
+// ---------------------------------------------------------------------------
+
+describe('useDragDrop — dragProps() honors the `when` option (UIX-04)', () => {
+  let bi: BoardInteractionInstance;
+
+  beforeEach(() => {
+    bi = createBoardInteraction();
+  });
+
+  it('dragProps(ref, { when: false }) returns { draggable: false } with no drag handlers', () => {
+    const { api } = mountDragDrop(bi);
+    const result = api.dragProps({ id: 1 }, { when: false });
+
+    expect(result).toEqual({ draggable: false });
+    expect((result as Record<string, unknown>).onDragstart).toBeUndefined();
+    expect((result as Record<string, unknown>).onDragend).toBeUndefined();
+  });
+
+  it('dragProps(ref, { when: () => false }) returns inert props (function form evaluated via evalCondition)', () => {
+    const { api } = mountDragDrop(bi);
+    const whenFn = vi.fn(() => false);
+    const result = api.dragProps({ id: 1 }, { when: whenFn });
+
+    expect(result).toEqual({ draggable: false });
+    expect(whenFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('dragProps(ref) with no options returns the full draggable props unchanged', () => {
+    const { api } = mountDragDrop(bi);
+    const result = api.dragProps({ id: 1 }) as DragProps;
+
+    expect(result.draggable).toBe(true);
+    expect(typeof result.onDragstart).toBe('function');
+    expect(typeof result.onDragend).toBe('function');
+  });
+
+  it('dragProps(ref, { when: true }) returns the full draggable props unchanged', () => {
+    const { api } = mountDragDrop(bi);
+    const result = api.dragProps({ id: 1 }, { when: true }) as DragProps;
+
+    expect(result.draggable).toBe(true);
+    expect(typeof result.onDragstart).toBe('function');
+    expect(typeof result.onDragend).toBe('function');
+  });
+
+  it('dragProps(ref, { when: () => true }) returns the full draggable props unchanged', () => {
+    const { api } = mountDragDrop(bi);
+    const result = api.dragProps({ id: 1 }, { when: () => true }) as DragProps;
+
+    expect(result.draggable).toBe(true);
+    expect(typeof result.onDragstart).toBe('function');
   });
 });
