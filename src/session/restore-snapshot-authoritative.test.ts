@@ -404,3 +404,91 @@ describe('BL-01: GameSession.restore() re-supplies tutorialDefinition', () => {
     expect(disabledActions).toEqual({});
   });
 });
+
+// ---------------------------------------------------------------------------
+// SEC-01/F1/F7 companion assertion (case d of the D-SEC-01 coverage contract
+// in plan 131-02): GameSession.restore() must preserve `Space._zoneVisibility`
+// so a hidden zone stays hidden to the opponent after a cold restore. This is
+// the session-layer restore path — the other four paths (fromSnapshot, undo,
+// rewind, stateless-ops) are asserted in
+// src/engine/element/zone-visibility-restore.test.ts.
+//
+// Uses a plain `Space` (not `Deck`/`Hand`): those classes set their OWN
+// zone-visibility default in their own constructors (F32 secure-by-default),
+// so a restore that does `new ElementClass(ctx)` incidentally re-applies that
+// default and would mask the F1/F7 bug for the common case. A plain `Space`
+// has no built-in default (effectively visible to all), so explicitly
+// diverging via `contentsHidden()` genuinely exercises the restore path.
+// ---------------------------------------------------------------------------
+
+class SecretCard extends Piece<ZoneGame> {
+  suit!: string;
+}
+
+class SecretZone extends Space<ZoneGame> {}
+
+class ZoneGame extends Game<ZoneGame, Player> {
+  hiddenZone!: SecretZone;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.hiddenZone = this.create(SecretZone, 'hidden-zone');
+    this.hiddenZone.contentsHidden();
+    this.hiddenZone.createMany(3, SecretCard, 'card', (i) => ({ suit: ['H', 'S', 'D'][i] }));
+
+    this.registerAction(Action.create('noop').execute(() => ({ success: true })));
+
+    this.setFlow(
+      defineFlow({
+        root: actionStep({
+          actions: ['noop'],
+          player: (ctx) => ctx.game.getPlayer(1)!,
+          repeatUntil: () => false,
+          maxMoves: 5,
+        }),
+      })
+    );
+  }
+}
+
+class ZoneJsonRoundTripStorage implements StorageAdapter {
+  saved: string | null = null;
+  async save(state: StoredGameState): Promise<void> {
+    this.saved = JSON.stringify(state);
+  }
+  async load(): Promise<StoredGameState | null> {
+    return this.saved ? (JSON.parse(this.saved) as StoredGameState) : null;
+  }
+}
+
+describe('SEC-01/F1/F7 companion: GameSession.restore() preserves zone visibility', () => {
+  it('opponent view of a hidden zone is byte-identical before/after GameSession.restore()', async () => {
+    const storage = new ZoneJsonRoundTripStorage();
+    const session = GameSession.create<ZoneGame>({
+      gameType: 'zone-vis-session-test',
+      GameClass: ZoneGame,
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'sec01-seed',
+      storage,
+    });
+
+    const before = JSON.stringify(session.runner.game.toJSONForPlayer(2));
+
+    // Persist the live snapshot so storage carries the hidden-zone state
+    // (mirrors the BL-01 tests above — session.create()'s initial snapshot
+    // predates any later mutation, so re-snapshot before saving).
+    session.storedState.snapshot = session.runner.getSnapshot();
+    await storage.save(session.storedState);
+
+    const loaded = await storage.load();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.snapshot).toBeDefined();
+
+    const restored = GameSession.restore<ZoneGame>(loaded!, ZoneGame);
+
+    const after = JSON.stringify(restored.runner.game.toJSONForPlayer(2));
+    expect(after).toBe(before);
+  });
+});
