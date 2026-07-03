@@ -95,3 +95,11 @@ ENG-01 (F3) is fully resolved: `putInto()` onto self or a descendant throws an a
 ---
 *Phase: 132-engine-element-builder-safety*
 *Completed: 2026-07-03*
+
+## Self-Check: PASSED
+
+- FOUND: src/engine/element/piece.ts
+- FOUND: src/engine/element/game-element.test.ts
+- FOUND: .planning/phases/132-engine-element-builder-safety/132-02-SUMMARY.md
+- FOUND commit: 8811072 (test)
+- FOUND commit: edfa335 (feat)
