@@ -86,10 +86,68 @@ describe('TMPL-01/02/03 — shared enum & step-name invariants', () => {
   });
 });
 
-// TODO(Plan 02): describe('TMPL-01 — CHUNK.template.md') / describe('TMPL-01 — SKETCH.template.md')
-// asserting the same step-name/status-enum strings appear identically in the templates
-// themselves (cross-file consistency with state-machine.md), plus each template's own
-// required-headings / parse-contract content.
+describe('TMPL-01 — exact step names & status enum', () => {
+  const chunkTemplate = read('templates/CHUNK.template.md');
+  const sketchTemplate = read('templates/SKETCH.template.md');
+
+  it('CHUNK.template.md contains every exact status-enum token', () => {
+    expect(chunkTemplate).toContain('proposed');
+    expect(chunkTemplate).toContain('approved');
+    expect(chunkTemplate).toContain('built');
+    expect(chunkTemplate).toContain('verified');
+    expect(chunkTemplate).toContain('verified (user-waived)');
+    expect(chunkTemplate).toContain('stale — re-derive before build');
+  });
+
+  it('CHUNK.template.md contains the exact full-ceremony step-name list', () => {
+    expect(chunkTemplate).toContain(
+      'investigate, redteam, ask, build, test, audit, repair, playtest, revise, close'
+    );
+  });
+
+  it('CHUNK.template.md contains the exact light-path step-name list', () => {
+    expect(chunkTemplate).toContain('build, test, playtest');
+  });
+
+  it('SKETCH.template.md contains the `ui:` tag values', () => {
+    expect(sketchTemplate).toMatch(/none *\| *touches *\| *major/);
+  });
+
+  it('SKETCH.template.md contains the "Variants (deferred)" heading', () => {
+    expect(sketchTemplate).toContain('Variants (deferred)');
+  });
+});
+
+describe('TMPL-03 — CHUNK/SKETCH ↔ state-machine consistency', () => {
+  const chunkTemplate = read('templates/CHUNK.template.md');
+  const sketchTemplate = read('templates/SKETCH.template.md');
+  const stateMachine = read('state-machine.md');
+
+  it('CHUNK.template.md and state-machine.md list the identical exact step-name string', () => {
+    const stepNames = 'investigate, redteam, ask, build, test, audit, repair, playtest, revise, close';
+    expect(chunkTemplate).toContain(stepNames);
+    expect(stateMachine).toContain(stepNames);
+  });
+
+  it('CHUNK.template.md and SKETCH.template.md both carry an authority pointer to state-machine.md', () => {
+    expect(chunkTemplate).toContain('state-machine.md');
+    expect(sketchTemplate).toContain('state-machine.md');
+  });
+});
+
+describe('TMPL-02 — parse contract (CHUNK/SKETCH)', () => {
+  const chunkTemplate = read('templates/CHUNK.template.md');
+  const sketchTemplate = read('templates/SKETCH.template.md');
+
+  it('CHUNK.template.md contains an authoritative `Status:` line', () => {
+    expect(chunkTemplate).toContain('Status: proposed');
+  });
+
+  it('SKETCH.template.md documents its derived-status pointer', () => {
+    expect(sketchTemplate).toContain('DERIVED');
+    expect(sketchTemplate).toContain('CHUNK.md');
+  });
+});
 
 // TODO(Plan 03): describe('TMPL-01 — RULINGS.template.md'), describe('TMPL-01 — DECISIONS.template.md'),
 // describe('TMPL-01 — DESIGN.template.md'), describe('TMPL-01 — ASSETS.template.md')
