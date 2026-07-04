@@ -32,9 +32,11 @@ Rules for generating safe names:
 init` does NOT sanitize its argument (pass it "Robot Arena 3000" and it will happily create a
 directory with spaces and derive a broken class name). The CLI's `toPascalCase`/`toDisplayName`
 helpers (`src/cli/lib/project-scaffold.ts`) split only on `-`/`_`: they derive the Class and
-Display names *from an already-kebab-cased name*, so do not re-derive those two — but the
-kebab-casing itself is entirely your job. Use the derived Project Name (kebab-case) as `<name>`
-in every command below.
+Display names *from an already-kebab-cased name*, so do not re-derive the Class name — but the
+kebab-casing itself is entirely your job, and the CLI's Display Name derivation is **lossy**
+(punctuation and casing are destroyed by the kebab-case round trip), so it must be reconciled
+after `init` — see "Display Name correction" below. Use the derived Project Name (kebab-case)
+as `<name>` in every command below.
 
 ## Directory Framing — `init` Always Creates a New Subdirectory
 
@@ -55,6 +57,15 @@ npx boardsmith init <name>   # ALWAYS creates ./<name>/ ; errors if it already e
 
 If the directory already exists, stop and ask the designer how to proceed (rename, or confirm the
 existing directory should be reused via a different flow) rather than guessing.
+
+**Display Name correction (immediately after `init` succeeds):** `init` sets
+`boardsmith.json`'s `displayName` by round-tripping the kebab-case argument through
+`toDisplayName` (`src/cli/commands/init.ts`), which is lossy for any name with punctuation
+or nonstandard casing — "The Duke's Gambit" kebab-cases to `the-duke-s-gambit` and
+round-trips to "The Duke S Gambit". Compare `boardsmith.json`'s `displayName` to the Display
+Name as the designer wrote it; if they differ, edit `boardsmith.json` to the designer's
+original. This correction applies ONLY to `displayName` — it is user-facing verbatim text.
+Do not touch the Class name: "do not re-derive" (above) still governs it.
 
 ## Verification Sequence
 
