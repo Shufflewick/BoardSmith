@@ -59,7 +59,11 @@ This is the TMPL-03 authority rule.
 
 ## Cold-Resume Parse Contract
 
-A state file's authoritative status lives on one line matching `Status: <enum-value>` (case-sensitive), at the location its template documents.
+Not every state file carries a status. The files that do are CHUNK.md (its authoritative status line) and SKETCH.md (one derived per-chunk pointer per entry); RULINGS.md, DECISIONS.md, DESIGN.md, and ASSETS.md carry no status line at all, and their parse contracts do not require one. Where a status is carried, it lives on one line matching `Status: <enum-value>` (case-sensitive), at the location its template documents:
+
+- CHUNK.md: exactly one authoritative line, `Status: <enum-value>`.
+- SKETCH.md detailed entries: `- Status (derived from chunks/<slug>/CHUNK.md): <enum-value>` — the `(derived from ...)` qualifier is what distinguishes a derived pointer from CHUNK.md's authoritative line.
+- SKETCH.md tail (sketch-level-only) entries: exactly `- Status: proposed (sketch-level — no CHUNK.md yet)`; when a tail entry is detailed, this line is rewritten to the derived form above.
 
 **If a state file does not parse against its template — required headings missing, malformed, or a `Status:` line that doesn't match a recognized enum value — the session STOPS and asks the user. It never guesses the intended state.**
 
@@ -76,7 +80,10 @@ Every `bs-` skill, on entry, runs a consistency check before doing any other wor
    directories for sketch-level tail entries; a tail entry gains its `chunks/<slug>/` directory
    when it is detailed at a close gate.
 2. Every `chunks/<slug>/` directory has a corresponding entry in SKETCH.md.
-3. All statuses parse against the Status Enum above.
+3. All statuses parse against a recognized value: the Status Enum above, the CHUNK-level stale
+   marker (`stale — re-derive before build`), or — in SKETCH.md tail entries only — the
+   sketch-level marker `proposed (sketch-level — no CHUNK.md yet)`. Any of these three is a
+   valid parse; anything else is a parse failure (stop and ask).
 4. There is no stale session lock (see Session Lock below).
 
 Any problems found are reported to the user, who confirms how to proceed, before the skill continues.

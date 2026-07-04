@@ -50,7 +50,13 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      chunk's close gate. Each entry: what it builds, cited rulebook sections, a `ui:` tag
      (none|touches|major), a derived status pointer (copy chunks/<slug>/CHUNK.md's Status line —
      do not re-decide it here), and an outcome-based human test script (state outcomes, not
-     gestures — "move a pawn one space; the board reflects it", not "click the pawn twice"). -->
+     gestures — "move a pawn one space; the board reflects it", not "click the pawn twice").
+
+     Status-line grammar (exactly two forms, machine-distinguishable — see state-machine.md
+     "Cold-Resume Parse Contract"):
+     - Detailed entry: "- Status (derived from chunks/<slug>/CHUNK.md): <enum-value>"
+     - Tail entry:     "- Status: proposed (sketch-level — no CHUNK.md yet)"
+     No other Status-line form is valid in this file. -->
 
 ### <!-- slug -->
 - What it builds: <!-- one-line description -->
