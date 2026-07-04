@@ -13,7 +13,7 @@
 
 ### File Templates (TMPL)
 
-- [ ] **TMPL-01**: Skills ship literal file templates for SKETCH.md, CHUNK.md, RULINGS.md, DECISIONS.md, DESIGN.md, and ASSETS.md with exact step names and status enums
+- [x] **TMPL-01**: Skills ship literal file templates for SKETCH.md, CHUNK.md, RULINGS.md, DECISIONS.md, DESIGN.md, and ASSETS.md with exact step names and status enums
 - [x] **TMPL-02**: A resumed session that finds a state file not parsing against its template stops and asks the user instead of guessing
 - [x] **TMPL-03**: Chunk status authority rules are enforced (CHUNK.md owns its status; SKETCH.md is derived; CHUNK.md wins on contradiction; write order CHUNK→SKETCH)
 
@@ -83,7 +83,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | LIB-01 | Phase 140 | Complete |
-| TMPL-01 | Phase 141 | Pending |
+| TMPL-01 | Phase 141 | Complete |
 | TMPL-02 | Phase 141 | Complete |
 | TMPL-03 | Phase 141 | Complete |
 | INGEST-01 | Phase 142 | Pending |

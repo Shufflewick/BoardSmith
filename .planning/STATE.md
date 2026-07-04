@@ -4,13 +4,13 @@ milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
 status: executing
 stopped_at: Completed 141-01-PLAN.md
-last_updated: "2026-07-04T18:48:06.246Z"
+last_updated: "2026-07-04T18:53:02.360Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 10
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 141 (File Templates & State-Machine Authority) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-04
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 75%
 
 ## Milestones
 
@@ -191,6 +191,9 @@ Recent decisions affecting current work:
 - [Phase 140]: useAnnouncer/provideAnnouncer/createAnnouncer mirrors the createAnimationEvents/useAnimationEvents provide-inject shape — Writes through GameShell's existing politeMessage/assertiveMessage refs and postMessage relay with no new DOM nodes; useAnnouncer() never returns undefined (no-op + devWarn once outside a GameShell tree)
 - [Phase 141]: state-machine.md is standalone full content (not a thin pointer) per CONTEXT.md's locked decision -- every bs- skill cites it rather than duplicating rules
 - [Phase 141]: templates.test.ts describe blocks named by requirement ID (TMPL-03, TMPL-02) so -t selectors work; no markdown parser added, plain string assertions suffice
+- [Phase 141-02]: CHUNK.template.md restates the ui: tag (redundant-but-safe) so a CHUNK-only session knows whether the a11y floor applies without re-reading SKETCH.md
+- [Phase 141-02]: SKETCH.template.md records the UI Strategy decision (custom-from-chunk-1 vs autoui-with-cutover) at ingest time, since DESIGN.md doesn't exist until the first UI chunk's ask
+- [Phase 141-02]: Drift test asserts CHUNK.template.md and state-machine.md contain the byte-identical step-name string; both new templates carry a literal state-machine.md pointer
 
 ### Pending Todos
 
@@ -202,7 +205,7 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T18:48:06.239Z
+Last session: 2026-07-04T18:51:47.501Z
 Stopped at: Completed 141-01-PLAN.md
 Resume file: None
 Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
