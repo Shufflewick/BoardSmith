@@ -56,7 +56,7 @@ Requirements cluster into eight fix surfaces following the plan's own build orde
 **Plans**: 3 plans
 - [x] 141-01-PLAN.md — state-machine.md authority-rules doc + drift-test scaffold
 - [x] 141-02-PLAN.md — CHUNK.template.md + SKETCH.template.md (status-bearing templates) + cross-file agreement test
-- [ ] 141-03-PLAN.md — RULINGS/DECISIONS/DESIGN/ASSETS ledger templates + full drift test
+- [x] 141-03-PLAN.md — RULINGS/DECISIONS/DESIGN/ASSETS ledger templates + full drift test
 
 #### Phase 142: `/bs-ingest-rules`
 **Goal**: A designer can turn a rulebook (or a from-scratch interview) into a scaffolded, compiling project with an approved sketch, ready for the first chunk.
@@ -157,7 +157,7 @@ Phases execute in numeric order: 140 → 141 → 142 → 143 → 144 → 145 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 140. Library Prerequisite — useAnnouncer() | 1/1 | Complete    | 2026-07-04 |
-| 141. File Templates & State-Machine Authority | 2/3 | In Progress|  |
+| 141. File Templates & State-Machine Authority | 3/3 | Complete   | 2026-07-04 |
 | 142. `/bs-ingest-rules` | 0/TBD | Not started | - |
 | 143. `/bs-build-chunk` — Interpretation & Ask Gate | 0/TBD | Not started | - |
 | 144. `/bs-build-chunk` — Build & Test with UI Floor | 0/TBD | Not started | - |

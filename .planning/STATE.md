@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.6
 milestone_name: BS Skills (Rulebook-Driven Game Building)
-status: executing
-stopped_at: Completed 141-01-PLAN.md
-last_updated: "2026-07-04T18:53:02.360Z"
+status: verifying
+stopped_at: Completed 141-03-PLAN.md
+last_updated: "2026-07-04T18:58:51.675Z"
 last_activity: 2026-07-04
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
-  percent: 10
+  completed_plans: 4
+  percent: 20
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 141 (File Templates & State-Machine Authority) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-04
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Milestones
 
@@ -194,6 +194,7 @@ Recent decisions affecting current work:
 - [Phase 141-02]: CHUNK.template.md restates the ui: tag (redundant-but-safe) so a CHUNK-only session knows whether the a11y floor applies without re-reading SKETCH.md
 - [Phase 141-02]: SKETCH.template.md records the UI Strategy decision (custom-from-chunk-1 vs autoui-with-cutover) at ingest time, since DESIGN.md doesn't exist until the first UI chunk's ask
 - [Phase 141-02]: Drift test asserts CHUNK.template.md and state-machine.md contain the byte-identical step-name string; both new templates carry a literal state-machine.md pointer
+- [Phase 141-03]: templates.test.ts describe blocks named by requirement ID (TMPL-01, TMPL-02) extended for RULINGS/DECISIONS/DESIGN/ASSETS; ledgers use numbered append-only sections (Ruling N / Decision N) rather than flat tables, matching CHUNK.template.md's Revision Rounds pattern
 
 ### Pending Todos
 
@@ -205,8 +206,8 @@ None yet for v4.5.
 
 ## Session Continuity
 
-Last session: 2026-07-04T18:51:47.501Z
-Stopped at: Completed 141-01-PLAN.md
+Last session: 2026-07-04T18:58:51.667Z
+Stopped at: Completed 141-03-PLAN.md
 Resume file: None
 Next action: Break Phase 140 (Library Prerequisite — useAnnouncer()) down into plans via `/gsd:plan-phase 140`
 
